@@ -4,3 +4,4 @@
 *.mexw64
 *.mex
 .DS_Store
+.worktrees/
