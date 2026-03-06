@@ -68,6 +68,44 @@ classdef FastPlotToolbar < handle
             end
             print(obj.hFigure, '-dpng', '-r150', filepath);
         end
+
+        function setCrosshair(obj, on)
+            if on
+                if strcmp(obj.Mode, 'cursor')
+                    obj.cleanupCursor();
+                    set(obj.hCursorBtn, 'State', 'off');
+                end
+                obj.Mode = 'crosshair';
+                set(obj.hCrosshairBtn, 'State', 'on');
+                zoom(obj.hFigure, 'off');
+                obj.SavedCallbacks.WindowButtonMotionFcn = get(obj.hFigure, 'WindowButtonMotionFcn');
+                set(obj.hFigure, 'WindowButtonMotionFcn', @(s,e) obj.onMouseMove());
+            else
+                obj.cleanupCrosshair();
+                obj.Mode = 'none';
+                set(obj.hCrosshairBtn, 'State', 'off');
+                zoom(obj.hFigure, 'on');
+            end
+        end
+
+        function setCursor(obj, on)
+            if on
+                if strcmp(obj.Mode, 'crosshair')
+                    obj.cleanupCrosshair();
+                    set(obj.hCrosshairBtn, 'State', 'off');
+                end
+                obj.Mode = 'cursor';
+                set(obj.hCursorBtn, 'State', 'on');
+                zoom(obj.hFigure, 'off');
+                obj.SavedCallbacks.WindowButtonDownFcn = get(obj.hFigure, 'WindowButtonDownFcn');
+                set(obj.hFigure, 'WindowButtonDownFcn', @(s,e) obj.onMouseClick());
+            else
+                obj.cleanupCursor();
+                obj.Mode = 'none';
+                set(obj.hCursorBtn, 'State', 'off');
+                zoom(obj.hFigure, 'on');
+            end
+        end
     end
 
     methods (Access = private)
@@ -108,21 +146,147 @@ classdef FastPlotToolbar < handle
                 'ClickedCallback', @(s,e) obj.onExportPNG());
         end
 
-        % --- Placeholder callbacks (implemented in subsequent tasks) ---
         function onCursorOn(obj)
-            obj.Mode = 'cursor';
+            obj.setCursor(true);
         end
 
         function onCursorOff(obj)
-            obj.Mode = 'none';
+            obj.setCursor(false);
         end
 
         function onCrosshairOn(obj)
-            obj.Mode = 'crosshair';
+            obj.setCrosshair(true);
         end
 
         function onCrosshairOff(obj)
-            obj.Mode = 'none';
+            obj.setCrosshair(false);
+        end
+
+        function onMouseMove(obj)
+            if ~strcmp(obj.Mode, 'crosshair'); return; end
+            [~, ax] = obj.getActiveTarget();
+            if isempty(ax)
+                obj.hideCrosshairLines();
+                return;
+            end
+            cp = get(ax, 'CurrentPoint');
+            xp = cp(1,1); yp = cp(1,2);
+            xlims = get(ax, 'XLim');
+            ylims = get(ax, 'YLim');
+            if xp < xlims(1) || xp > xlims(2) || yp < ylims(1) || yp > ylims(2)
+                obj.hideCrosshairLines();
+                return;
+            end
+            if isempty(obj.hCrosshairH) || ~ishandle(obj.hCrosshairH)
+                hold(ax, 'on');
+                obj.hCrosshairH = line(xlims, [yp yp], 'Parent', ax, ...
+                    'Color', [0.5 0.5 0.5], 'LineStyle', ':', ...
+                    'HandleVisibility', 'off', 'HitTest', 'off');
+                obj.hCrosshairV = line([xp xp], ylims, 'Parent', ax, ...
+                    'Color', [0.5 0.5 0.5], 'LineStyle', ':', ...
+                    'HandleVisibility', 'off', 'HitTest', 'off');
+                obj.hCrosshairTxt = text(xlims(2), ylims(2), '', 'Parent', ax, ...
+                    'FontSize', 8, 'HorizontalAlignment', 'right', ...
+                    'VerticalAlignment', 'top', 'BackgroundColor', 'w', ...
+                    'EdgeColor', [0.5 0.5 0.5], 'Margin', 2, ...
+                    'HandleVisibility', 'off', 'HitTest', 'off');
+            else
+                set(obj.hCrosshairH, 'Parent', ax, 'XData', xlims, 'YData', [yp yp]);
+                set(obj.hCrosshairV, 'Parent', ax, 'XData', [xp xp], 'YData', ylims);
+                set(obj.hCrosshairTxt, 'Parent', ax, ...
+                    'Position', [xlims(2), ylims(2), 0], ...
+                    'String', sprintf('x=%.4g  y=%.4g', xp, yp));
+            end
+        end
+
+        function onMouseClick(obj)
+            if ~strcmp(obj.Mode, 'cursor'); return; end
+            [fp, ax] = obj.getActiveTarget();
+            if isempty(fp); return; end
+            cp = get(ax, 'CurrentPoint');
+            xp = cp(1,1); yp = cp(1,2);
+            [sx, sy, lineIdx] = obj.snapToNearest(fp, xp, yp);
+            if isempty(sx); return; end
+            if ~isempty(obj.hCursorDot) && ishandle(obj.hCursorDot)
+                delete(obj.hCursorDot);
+                delete(obj.hCursorTxt);
+            end
+            hold(ax, 'on');
+            lineColor = get(fp.Lines(lineIdx).hLine, 'Color');
+            obj.hCursorDot = line(sx, sy, 'Parent', ax, ...
+                'LineStyle', 'none', 'Marker', 'o', 'MarkerSize', 8, ...
+                'Color', lineColor, 'MarkerFaceColor', lineColor, ...
+                'HandleVisibility', 'off', 'HitTest', 'off');
+            label = sprintf('(%.4g, %.4g)', sx, sy);
+            obj.hCursorTxt = text(sx, sy, label, 'Parent', ax, ...
+                'FontSize', 8, 'VerticalAlignment', 'bottom', ...
+                'HorizontalAlignment', 'left', ...
+                'BackgroundColor', 'w', 'EdgeColor', [0.5 0.5 0.5], ...
+                'Margin', 3, 'HandleVisibility', 'off', 'HitTest', 'off');
+        end
+
+        function hideCrosshairLines(obj)
+            if ~isempty(obj.hCrosshairH) && ishandle(obj.hCrosshairH)
+                set(obj.hCrosshairH, 'Visible', 'off');
+                set(obj.hCrosshairV, 'Visible', 'off');
+                set(obj.hCrosshairTxt, 'Visible', 'off');
+            end
+        end
+
+        function cleanupCrosshair(obj)
+            if ~isempty(obj.hCrosshairH) && ishandle(obj.hCrosshairH)
+                delete(obj.hCrosshairH);
+                delete(obj.hCrosshairV);
+                delete(obj.hCrosshairTxt);
+            end
+            obj.hCrosshairH = [];
+            obj.hCrosshairV = [];
+            obj.hCrosshairTxt = [];
+            if isfield(obj.SavedCallbacks, 'WindowButtonMotionFcn')
+                set(obj.hFigure, 'WindowButtonMotionFcn', obj.SavedCallbacks.WindowButtonMotionFcn);
+            end
+        end
+
+        function cleanupCursor(obj)
+            if ~isempty(obj.hCursorDot) && ishandle(obj.hCursorDot)
+                delete(obj.hCursorDot);
+                delete(obj.hCursorTxt);
+            end
+            obj.hCursorDot = [];
+            obj.hCursorTxt = [];
+            if isfield(obj.SavedCallbacks, 'WindowButtonDownFcn')
+                set(obj.hFigure, 'WindowButtonDownFcn', obj.SavedCallbacks.WindowButtonDownFcn);
+            end
+        end
+
+        function [sx, sy, lineIdx] = snapToNearest(~, fp, xClick, yClick)
+            sx = []; sy = []; lineIdx = [];
+            bestDist = Inf;
+            ax = fp.hAxes;
+            xlims = get(ax, 'XLim');
+            ylims = get(ax, 'YLim');
+            xRange = xlims(2) - xlims(1);
+            yRange = ylims(2) - ylims(1);
+            if xRange == 0; xRange = 1; end
+            if yRange == 0; yRange = 1; end
+            for i = 1:numel(fp.Lines)
+                xData = fp.Lines(i).X;
+                yData = fp.Lines(i).Y;
+                idx = binary_search(xData, xClick, 'left');
+                idx = max(1, min(idx, numel(xData)));
+                for j = max(1, idx-1):min(numel(xData), idx+1)
+                    if isnan(yData(j)); continue; end
+                    dx = (xData(j) - xClick) / xRange;
+                    dy = (yData(j) - yClick) / yRange;
+                    d = dx^2 + dy^2;
+                    if d < bestDist
+                        bestDist = d;
+                        sx = xData(j);
+                        sy = yData(j);
+                        lineIdx = i;
+                    end
+                end
+            end
         end
 
         function onToggleGrid(obj)

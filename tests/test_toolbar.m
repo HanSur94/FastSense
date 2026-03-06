@@ -98,5 +98,29 @@ function test_toolbar()
     delete(tmpFile);
     close(fp.hFigure);
 
-    fprintf('    All 9 toolbar tests passed.\n');
+    % testCrosshairMode
+    fp = FastPlot();
+    fp.addLine(1:100, rand(1,100));
+    fp.render();
+    tb = FastPlotToolbar(fp);
+    assert(strcmp(tb.Mode, 'none'), 'testCrosshairMode: initial mode');
+    tb.setCrosshair(true);
+    assert(strcmp(tb.Mode, 'crosshair'), 'testCrosshairMode: on');
+    tb.setCrosshair(false);
+    assert(strcmp(tb.Mode, 'none'), 'testCrosshairMode: off');
+    close(fp.hFigure);
+
+    % testCrosshairMutualExclusion
+    fp = FastPlot();
+    fp.addLine(1:100, rand(1,100));
+    fp.render();
+    tb = FastPlotToolbar(fp);
+    tb.setCursor(true);
+    assert(strcmp(tb.Mode, 'cursor'), 'testMutualExcl: cursor on');
+    tb.setCrosshair(true);
+    assert(strcmp(tb.Mode, 'crosshair'), 'testMutualExcl: crosshair replaces cursor');
+    assert(strcmp(get(tb.hCursorBtn, 'State'), 'off'), 'testMutualExcl: cursor btn off');
+    close(fp.hFigure);
+
+    fprintf('    All 11 toolbar tests passed.\n');
 end
