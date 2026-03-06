@@ -70,5 +70,47 @@ function test_figure_layout()
     assert(threw, 'testOutOfBoundsTileErrors');
     close(fig.hFigure);
 
-    fprintf('    All 7 figure layout tests passed.\n');
+    % testTileSpanning
+    fig = FastPlotFigure(2, 2);
+    fig.setTileSpan(1, [1 2]);  % tile 1 spans both columns
+    fp1 = fig.tile(1);
+    fp1.addLine(1:50, rand(1,50));
+    fp1.render();
+    pos = get(fp1.hAxes, 'Position');
+    % Spanning tile should be wider than half the figure
+    assert(pos(3) > 0.4, 'testTileSpanning: wide enough');
+    close(fig.hFigure);
+
+    % testFigureThemePassedToTiles
+    fig = FastPlotFigure(2, 1, 'Theme', 'dark');
+    fp = fig.tile(1);
+    assert(all(fp.Theme.Background < [0.2 0.2 0.2]), 'testFigureThemePassedToTiles');
+    close(fig.hFigure);
+
+    % testTileThemeOverride
+    fig = FastPlotFigure(2, 1, 'Theme', 'dark');
+    fig.setTileTheme(1, struct('AxesColor', [0.3 0 0]));
+    fp = fig.tile(1);
+    assert(isequal(fp.Theme.AxesColor, [0.3 0 0]), 'testTileThemeOverride: AxesColor');
+    assert(all(fp.Theme.Background < [0.2 0.2 0.2]), 'testTileThemeOverride: inherits bg');
+    close(fig.hFigure);
+
+    % testFigureProperties
+    fig = FastPlotFigure(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
+    name = get(fig.hFigure, 'Name');
+    assert(strcmp(name, 'MyDash'), 'testFigureProperties: Name');
+    close(fig.hFigure);
+
+    % testTileLabels
+    fig = FastPlotFigure(2, 1);
+    fp = fig.tile(1);
+    fp.addLine(1:50, rand(1,50));
+    fp.render();
+    fig.tileTitle(1, 'My Title');
+    fig.tileYLabel(1, 'Y Axis');
+    fig.tileXLabel(1, 'X Axis');
+    % No error = pass
+    close(fig.hFigure);
+
+    fprintf('    All 12 figure layout tests passed.\n');
 end
