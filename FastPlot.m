@@ -72,7 +72,7 @@ classdef FastPlot < handle
                     'X and Y must have the same number of elements.');
             end
 
-            % Fast monotonicity check
+            % Fast monotonicity check (vectorized)
             if numel(x) > 1
                 dx = diff(x);
                 % NaN diffs (NaN neighbors) are fine — only check real decreases
@@ -168,7 +168,7 @@ classdef FastPlot < handle
 
             % Create or use axes
             if isempty(obj.ParentAxes)
-                obj.hFigure = figure();
+                obj.hFigure = figure('Visible', 'off');
                 obj.hAxes = axes('Parent', obj.hFigure);
             else
                 obj.hAxes = obj.ParentAxes;
@@ -220,17 +220,12 @@ classdef FastPlot < handle
                 obj.Lines(i).hLine = h;
             end
 
-            % --- Compute full X range (fast: sorted X, just find first/last non-NaN) ---
+            % --- Compute full X range (X is sorted, just check endpoints) ---
             xmin = Inf; xmax = -Inf;
             for i = 1:numel(obj.Lines)
                 xi = obj.Lines(i).X;
-                % First non-NaN
-                idx1 = find(~isnan(xi), 1, 'first');
-                idx2 = find(~isnan(xi), 1, 'last');
-                if ~isempty(idx1)
-                    if xi(idx1) < xmin; xmin = xi(idx1); end
-                    if xi(idx2) > xmax; xmax = xi(idx2); end
-                end
+                if xi(1) < xmin; xmin = xi(1); end
+                if xi(end) > xmax; xmax = xi(end); end
             end
 
             % --- Render threshold lines and violation markers (per threshold) ---
@@ -250,14 +245,15 @@ classdef FastPlot < handle
                 set(hT, 'UserData', udT);
                 obj.Thresholds(t).hLine = hT;
 
-                % Violation markers
+                % Violation markers (use already-downsampled data)
                 if T.ShowViolations
                     vxAll = [];
                     vyAll = [];
                     for i = 1:numel(obj.Lines)
+                        xd = get(obj.Lines(i).hLine, 'XData');
+                        yd = get(obj.Lines(i).hLine, 'YData');
                         [vx, vy] = compute_violations( ...
-                            obj.Lines(i).X, obj.Lines(i).Y, ...
-                            T.Value, T.Direction);
+                            xd, yd, T.Value, T.Direction);
                         if ~isempty(vx)
                             vxAll = [vxAll, vx, NaN]; %#ok<AGROW>
                             vyAll = [vyAll, vy, NaN]; %#ok<AGROW>
@@ -284,13 +280,13 @@ classdef FastPlot < handle
                 end
             end
 
-            % --- Set static axis limits (avoid extracting all non-NaN) ---
+            % --- Set static axis limits (use downsampled data, not full raw) ---
             ymin = Inf; ymax = -Inf;
             for i = 1:numel(obj.Lines)
-                yi = obj.Lines(i).Y;
-                yiMin = min(yi(~isnan(yi)));
-                yiMax = max(yi(~isnan(yi)));
-                if ~isempty(yiMin)
+                yd = get(obj.Lines(i).hLine, 'YData');
+                yiMin = min(yd);
+                yiMax = max(yd);
+                if ~isnan(yiMin)
                     if yiMin < ymin; ymin = yiMin; end
                     if yiMax > ymax; ymax = yiMax; end
                 end
@@ -320,6 +316,11 @@ classdef FastPlot < handle
             end
 
             hold(obj.hAxes, 'off');
+
+            % Show figure now that setup is complete
+            if isempty(obj.ParentAxes)
+                set(obj.hFigure, 'Visible', 'on');
+            end
             drawnow;
         end
     end
