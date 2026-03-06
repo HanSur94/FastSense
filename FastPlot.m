@@ -32,7 +32,8 @@ classdef FastPlot < handle
         Shadings   = struct('X', {}, 'Y1', {}, 'Y2', {}, ...
                             'FaceColor', {}, 'FaceAlpha', {}, ...
                             'EdgeColor', {}, 'DisplayName', {}, ...
-                            'hPatch', {})
+                            'hPatch', {}, ...
+                            'CacheX', {}, 'CacheY1', {}, 'CacheY2', {})
         IsRendered    = false
         hFigure       = []
         hAxes         = []
@@ -303,6 +304,9 @@ classdef FastPlot < handle
             s.EdgeColor   = 'none';
             s.DisplayName = '';
             s.hPatch      = [];
+            s.CacheX      = [];
+            s.CacheY1     = [];
+            s.CacheY2     = [];
 
             for k = 1:2:numel(varargin)
                 switch lower(varargin{k})
@@ -400,11 +404,31 @@ classdef FastPlot < handle
                 obj.Bands(i).hPatch = hP;
             end
 
-            % --- Render shaded regions ---
+            % --- Render shaded regions (downsample for initial render) ---
+            shadingCacheSize = 10000; % pre-downsample cache for fast zoom
             for i = 1:numel(obj.Shadings)
                 S = obj.Shadings(i);
-                patchX = [S.X, fliplr(S.X)];
-                patchY = [S.Y1, fliplr(S.Y2)];
+                if numel(S.X) > shadingCacheSize * 2
+                    % Build cache from raw, then render from cache
+                    [cx, cy1] = minmax_downsample(S.X, S.Y1, shadingCacheSize);
+                    [~,  cy2] = minmax_downsample(S.X, S.Y2, shadingCacheSize);
+                    obj.Shadings(i).CacheX  = cx;
+                    obj.Shadings(i).CacheY1 = cy1;
+                    obj.Shadings(i).CacheY2 = cy2;
+                    % Downsample cache to screen resolution
+                    [xd, y1d] = minmax_downsample(cx, cy1, obj.PixelWidth);
+                    [~,  y2d] = minmax_downsample(cx, cy2, obj.PixelWidth);
+                    patchX = [xd, fliplr(xd)];
+                    patchY = [y1d, fliplr(y2d)];
+                elseif numel(S.X) > obj.MIN_POINTS_FOR_DOWNSAMPLE
+                    [xd, y1d] = minmax_downsample(S.X, S.Y1, obj.PixelWidth);
+                    [~,  y2d] = minmax_downsample(S.X, S.Y2, obj.PixelWidth);
+                    patchX = [xd, fliplr(xd)];
+                    patchY = [y1d, fliplr(y2d)];
+                else
+                    patchX = [S.X, fliplr(S.X)];
+                    patchY = [S.Y1, fliplr(S.Y2)];
+                end
                 hP = patch(patchX, patchY, S.FaceColor, ...
                     'Parent', obj.hAxes, ...
                     'FaceAlpha', S.FaceAlpha, ...
@@ -651,16 +675,27 @@ classdef FastPlot < handle
                     continue;
                 end
 
-                nTotal = numel(S.X);
-                idxStart = binary_search(S.X, xlims(1), 'left');
-                idxEnd   = binary_search(S.X, xlims(2), 'right');
+                % Use pre-downsampled cache if available (much faster for large data)
+                if ~isempty(S.CacheX)
+                    srcX  = S.CacheX;
+                    srcY1 = S.CacheY1;
+                    srcY2 = S.CacheY2;
+                else
+                    srcX  = S.X;
+                    srcY1 = S.Y1;
+                    srcY2 = S.Y2;
+                end
+
+                nTotal = numel(srcX);
+                idxStart = binary_search(srcX, xlims(1), 'left');
+                idxEnd   = binary_search(srcX, xlims(2), 'right');
                 idxStart = max(1, idxStart - 1);
                 idxEnd   = min(nTotal, idxEnd + 1);
                 nVis = idxEnd - idxStart + 1;
 
-                xVis  = S.X(idxStart:idxEnd);
-                y1Vis = S.Y1(idxStart:idxEnd);
-                y2Vis = S.Y2(idxStart:idxEnd);
+                xVis  = srcX(idxStart:idxEnd);
+                y1Vis = srcY1(idxStart:idxEnd);
+                y2Vis = srcY2(idxStart:idxEnd);
 
                 if nVis > obj.MIN_POINTS_FOR_DOWNSAMPLE
                     [xd, y1d] = minmax_downsample(xVis, y1Vis, pw);
