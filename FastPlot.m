@@ -13,6 +13,7 @@ classdef FastPlot < handle
         ParentAxes = []       % axes handle, empty = create new
         LinkGroup  = ''       % string ID for linked zoom/pan
         Theme      = []       % theme struct (from FastPlotTheme)
+        XType      = 'numeric'   % 'numeric' or 'datenum'
     end
 
     properties (SetAccess = private)
@@ -92,6 +93,14 @@ classdef FastPlot < handle
             if ~isrow(x); x = x(:)'; end
             if ~isrow(y); y = y(:)'; end
 
+            % Detect and convert datetime input
+            if isa(x, 'datetime')
+                x = datenum(x);
+                if strcmp(obj.XType, 'numeric')
+                    obj.XType = 'datenum';
+                end
+            end
+
             % Validate sizes match
             if numel(x) ~= numel(y)
                 error('FastPlot:sizeMismatch', ...
@@ -119,6 +128,13 @@ classdef FastPlot < handle
                 val = varargin{k+1};
                 if strcmpi(key, 'DownsampleMethod')
                     dsMethod = val;
+                elseif strcmpi(key, 'XType')
+                    if strcmp(obj.XType, 'numeric') || strcmp(obj.XType, val)
+                        obj.XType = val;
+                    else
+                        error('FastPlot:mixedXType', ...
+                            'All lines must use the same XType.');
+                    end
                 else
                     opts.(key) = val;
                 end
