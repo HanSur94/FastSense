@@ -4,6 +4,9 @@ function test_toolbar()
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
 
+    close all force;
+    drawnow;
+
     % testConstructorWithFastPlot
     fp = FastPlot();
     fp.addLine(1:100, rand(1,100));

@@ -77,14 +77,14 @@ classdef FastPlotToolbar < handle
                 end
                 obj.Mode = 'crosshair';
                 set(obj.hCrosshairBtn, 'State', 'on');
-                zoom(obj.hFigure, 'off');
+                try zoom(obj.hFigure, 'off'); catch; end
                 obj.SavedCallbacks.WindowButtonMotionFcn = get(obj.hFigure, 'WindowButtonMotionFcn');
                 set(obj.hFigure, 'WindowButtonMotionFcn', @(s,e) obj.onMouseMove());
             else
                 obj.cleanupCrosshair();
                 obj.Mode = 'none';
                 set(obj.hCrosshairBtn, 'State', 'off');
-                zoom(obj.hFigure, 'on');
+                try zoom(obj.hFigure, 'on'); catch; end
             end
         end
 
@@ -96,14 +96,14 @@ classdef FastPlotToolbar < handle
                 end
                 obj.Mode = 'cursor';
                 set(obj.hCursorBtn, 'State', 'on');
-                zoom(obj.hFigure, 'off');
+                try zoom(obj.hFigure, 'off'); catch; end
                 obj.SavedCallbacks.WindowButtonDownFcn = get(obj.hFigure, 'WindowButtonDownFcn');
                 set(obj.hFigure, 'WindowButtonDownFcn', @(s,e) obj.onMouseClick());
             else
                 obj.cleanupCursor();
                 obj.Mode = 'none';
                 set(obj.hCursorBtn, 'State', 'off');
-                zoom(obj.hFigure, 'on');
+                try zoom(obj.hFigure, 'on'); catch; end
             end
         end
 

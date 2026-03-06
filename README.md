@@ -70,6 +70,36 @@ fp = FastPlot('Theme', 'dark');       % 5 presets: default, dark, light, industr
 fp = FastPlot('Theme', struct('Background', [0 0 0], 'FontSize', 14));  % custom overrides
 ```
 
+### Toolbar
+
+Attach an interactive toolbar to any FastPlot or FastPlotFigure:
+
+```matlab
+fp = FastPlot('Theme', 'dark');
+fp.addLine(x, y1, 'DisplayName', 'Sine');
+fp.addLine(x, y2, 'DisplayName', 'Cosine');
+fp.render();
+tb = FastPlotToolbar(fp);
+
+% Also works with dashboards
+fig = FastPlotFigure(1, 2);
+% ... add lines, render ...
+tb = FastPlotToolbar(fig);
+```
+
+**Toolbar buttons:** Data Cursor (click to snap), Crosshair (hover tracking), Toggle Grid, Toggle Legend, Autoscale Y (fits visible data), Export PNG.
+
+**Programmatic API:**
+
+```matlab
+tb.toggleGrid();           % toggle grid on all axes
+tb.toggleLegend();         % toggle legend on all axes
+tb.autoscaleY();           % fit Y to visible X range
+tb.exportPNG('out.png');   % export at 150 DPI
+tb.setCrosshair(true);     % enable crosshair mode
+tb.setCursor(true);        % enable data cursor mode
+```
+
 ## Installation
 
 ```bash
@@ -365,6 +395,7 @@ fp.render();
 | `example_uneven_sampling.m` | Variable-rate event-driven data |
 | `example_dashboard.m` | Tiled dashboard with bands, shading, and markers |
 | `example_themes.m` | All 5 theme presets side by side |
+| `example_toolbar.m` | Interactive toolbar with data cursor, crosshair, and export |
 | `benchmark.m` | FastPlot vs plot() performance comparison |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
 
@@ -391,6 +422,7 @@ run_all_examples
 ```
 FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, render)
 FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
+FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export)
 FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
 ├── private/
 │   ├── binary_search.m       O(log n) find visible range (MEX dispatch)
@@ -403,8 +435,8 @@ FastPlotTheme.m               Theme presets and palette system (5 presets, 3 pal
 │       ├── minmax_core_mex.c
 │       └── lttb_core_mex.c
 ├── build_mex.m               MEX compilation script
-├── tests/                    18 test suites
-└── examples/                 15 demos + benchmarks
+├── tests/                    19 test suites
+└── examples/                 16 demos + benchmarks
 ```
 
 **Zoom/pan pipeline:**
