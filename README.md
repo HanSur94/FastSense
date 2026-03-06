@@ -44,6 +44,32 @@ fp.render();
 
 Zoom and pan interactively — FastPlot re-downsamples automatically.
 
+### Dashboard Layout
+
+```matlab
+fig = FastPlotFigure(2, 2, 'Theme', 'dark');
+fig.setTileSpan(1, [1 2]);  % tile 1 spans both columns
+
+fp1 = fig.tile(1);
+fp1.addLine(x, temperature);
+fp1.addBand(85, 95, 'FaceColor', [1 0.3 0.3], 'FaceAlpha', 0.15);
+fp1.addThreshold(90, 'Direction', 'upper', 'ShowViolations', true);
+
+fp2 = fig.tile(3);
+fp2.addLine(x, pressure);
+fp2.addShaded(x, upper_bound, lower_bound, 'FaceColor', [0.3 0.7 1]);
+
+fig.renderAll();
+fig.tileTitle(1, 'Temperature');
+```
+
+### Theming
+
+```matlab
+fp = FastPlot('Theme', 'dark');       % 5 presets: default, dark, light, industrial, scientific
+fp = FastPlot('Theme', struct('Background', [0 0 0], 'FontSize', 14));  % custom overrides
+```
+
 ## Installation
 
 ```bash
@@ -94,12 +120,15 @@ If MEX files are not compiled, FastPlot automatically uses the pure-MATLAB imple
 fp = FastPlot();
 fp = FastPlot('Parent', axesHandle);
 fp = FastPlot('LinkGroup', 'group1');
+fp = FastPlot('Theme', 'dark');
+fp = FastPlot('Theme', struct('Background', [0 0 0]));
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `Parent` | axes handle | Embed in existing axes (for subplots) |
 | `LinkGroup` | string | ID for synchronized zoom/pan across instances |
+| `Theme` | string or struct | Theme preset name or custom theme struct |
 
 ### `addLine(x, y, ...)` — Add a Data Line
 
@@ -141,6 +170,60 @@ fp.addThreshold(-2.0, 'Direction', 'lower', 'ShowViolations', true, 'Color', [1 
 | `LineStyle` | string | `'--'` | Line style |
 | `Label` | string | `''` | Legend label |
 
+### `addBand(yLow, yHigh, ...)` — Horizontal Band Fill
+
+```matlab
+fp.addBand(85, 95, 'FaceColor', [1 0.3 0.3], 'FaceAlpha', 0.15, 'Label', 'High Alarm');
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `yLow` | scalar | (required) | Lower Y bound |
+| `yHigh` | scalar | (required) | Upper Y bound |
+| `FaceColor` | RGB triplet | theme ThresholdColor | Fill color |
+| `FaceAlpha` | scalar | theme BandAlpha | Fill transparency |
+| `EdgeColor` | RGB or `'none'` | `'none'` | Edge color |
+| `Label` | string | `''` | Label for the band |
+
+### `addShaded(x, y1, y2, ...)` — Fill Between Curves
+
+```matlab
+fp.addShaded(x, upper_bound, lower_bound, 'FaceColor', [0 0.5 1], 'FaceAlpha', 0.2);
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `x` | double vector | (required) | Monotonically increasing X data |
+| `y1` | double vector | (required) | Upper curve Y data |
+| `y2` | double vector | (required) | Lower curve Y data |
+| `FaceColor` | RGB triplet | `[0 0.45 0.74]` | Fill color |
+| `FaceAlpha` | scalar | `0.15` | Fill transparency |
+
+Shaded regions are downsampled on zoom, just like data lines.
+
+### `addFill(x, y, ...)` — Area Fill to Baseline
+
+```matlab
+fp.addFill(x, y, 'Baseline', 0, 'FaceColor', [0 0.5 1], 'FaceAlpha', 0.2);
+```
+
+Sugar for `addShaded` — fills from the curve `y` down to a constant baseline (default 0).
+
+### `addMarker(x, y, ...)` — Custom Event Markers
+
+```matlab
+fp.addMarker([50 150 250], [3 3 3], 'Marker', 'v', 'MarkerSize', 10, 'Color', [1 0 0]);
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `x` | double vector | (required) | Marker X positions |
+| `y` | double vector | (required) | Marker Y positions |
+| `Marker` | char | `'o'` | Marker shape |
+| `MarkerSize` | scalar | `6` | Marker size |
+| `Color` | RGB triplet | theme ThresholdColor | Marker color |
+| `Label` | string | `''` | Label for the markers |
+
 ### `render()` — Render the Plot
 
 ```matlab
@@ -156,6 +239,60 @@ Must be called after all lines and thresholds are added. Creates the figure, per
 | `fp.hFigure` | Handle to the figure window |
 | `fp.hAxes` | Handle to the axes |
 | `fp.Lines(i).hLine` | Handle to the i-th line graphics object |
+
+### `FastPlotFigure(rows, cols, ...)` — Dashboard Layout
+
+```matlab
+fig = FastPlotFigure(2, 2);
+fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Dashboard');
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rows` | integer | Number of tile rows |
+| `cols` | integer | Number of tile columns |
+| `Theme` | string or struct | Theme applied to all tiles |
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `fig.tile(n)` | Get/create FastPlot for tile n (lazy, returns same instance on repeat calls) |
+| `fig.setTileSpan(n, [rows cols])` | Set row/column span for tile n |
+| `fig.setTileTheme(n, struct(...))` | Override theme fields for tile n |
+| `fig.renderAll()` | Render all tiles, show figure |
+| `fig.tileTitle(n, str)` | Set title for tile n |
+| `fig.tileXLabel(n, str)` | Set X label for tile n |
+| `fig.tileYLabel(n, str)` | Set Y label for tile n |
+
+Theme inheritance: element override > tile theme > figure theme > 'default' preset.
+
+### `FastPlotTheme(preset, ...)` — Theme Presets
+
+```matlab
+t = FastPlotTheme('dark');
+t = FastPlotTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
+t = FastPlotTheme(struct('Background', [0 0 0]));  % struct merged with defaults
+```
+
+**Built-in presets:** `default`, `dark`, `light`, `industrial`, `scientific`
+
+**Color palettes:** `vibrant` (default), `muted`, `colorblind` (Wong 2011)
+
+| Field | Description |
+|-------|-------------|
+| `Background` | Figure background color |
+| `AxesColor` | Axes background color |
+| `ForegroundColor` | Text and axis color |
+| `GridColor`, `GridAlpha`, `GridStyle` | Grid appearance |
+| `FontName`, `FontSize`, `TitleFontSize` | Typography |
+| `LineWidth` | Default line width |
+| `LineColorOrder` | Nx3 color matrix or palette name |
+| `ThresholdColor`, `ThresholdStyle` | Default threshold appearance |
+| `ViolationMarker`, `ViolationSize` | Violation marker defaults |
+| `BandAlpha` | Default band fill transparency |
+
+Lines are auto-colored from `LineColorOrder` — no need to specify colors manually.
 
 ## Linked Axes
 
@@ -226,6 +363,8 @@ fp.render();
 | `example_ecg.m` | 5M ECG signal with arrhythmia detection |
 | `example_multi_sensor_linked.m` | 4-channel linked monitoring dashboard |
 | `example_uneven_sampling.m` | Variable-rate event-driven data |
+| `example_dashboard.m` | Tiled dashboard with bands, shading, and markers |
+| `example_themes.m` | All 5 theme presets side by side |
 | `benchmark.m` | FastPlot vs plot() performance comparison |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
 
@@ -250,7 +389,9 @@ run_all_examples
 ## Architecture
 
 ```
-FastPlot.m                    Main class (constructor, addLine, addThreshold, render, zoom callbacks)
+FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, render)
+FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
+FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
 ├── private/
 │   ├── binary_search.m       O(log n) find visible range (MEX dispatch)
 │   ├── minmax_downsample.m   NaN-aware MinMax downsampling (MEX dispatch)
@@ -262,8 +403,8 @@ FastPlot.m                    Main class (constructor, addLine, addThreshold, re
 │       ├── minmax_core_mex.c
 │       └── lttb_core_mex.c
 ├── build_mex.m               MEX compilation script
-├── tests/                    12 test suites
-└── examples/                 13 demos + benchmarks
+├── tests/                    18 test suites
+└── examples/                 15 demos + benchmarks
 ```
 
 **Zoom/pan pipeline:**
@@ -307,7 +448,7 @@ Running test_multi_threshold...     PASSED
 Running test_render...              PASSED
 Running test_zoom_pan...            PASSED
 
-=== Results: 12/12 passed, 0 failed ===
+=== Results: 18/18 passed, 0 failed ===
 ```
 
 ### Single test
@@ -326,7 +467,7 @@ From the terminal (Octave):
 octave --no-gui --eval "addpath('tests'); addpath('private'); test_zoom_pan;"
 ```
 
-Available test files: `test_add_line`, `test_add_threshold`, `test_binary_search`, `test_compute_violations`, `test_linked_axes`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_zoom_pan`.
+Available test files: `test_add_line`, `test_add_threshold`, `test_add_band`, `test_add_marker`, `test_add_shaded`, `test_binary_search`, `test_compute_violations`, `test_fastplot_theme`, `test_figure_layout`, `test_linked_axes`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_theme`, `test_zoom_pan`.
 
 ## Benchmarks
 
