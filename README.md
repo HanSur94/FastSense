@@ -265,10 +265,21 @@ FastPlot.m                    Main class (constructor, addLine, addThreshold, re
 
 ## Running Tests
 
+### All tests
+
+From the MATLAB or Octave command window:
+
 ```matlab
 cd FastPlot
 addpath('tests'); addpath('private');
 run_all_tests();
+```
+
+From the terminal (Octave):
+
+```bash
+cd FastPlot
+octave --no-gui --eval "addpath('tests'); addpath('private'); run_all_tests();"
 ```
 
 ```
@@ -286,6 +297,58 @@ Running test_render...              PASSED
 Running test_zoom_pan...            PASSED
 
 === Results: 12/12 passed, 0 failed ===
+```
+
+### Single test
+
+Run any individual test file directly:
+
+```matlab
+cd FastPlot
+addpath('tests'); addpath('private');
+test_zoom_pan;
+```
+
+From the terminal (Octave):
+
+```bash
+octave --no-gui --eval "addpath('tests'); addpath('private'); test_zoom_pan;"
+```
+
+Available test files: `test_add_line`, `test_add_threshold`, `test_binary_search`, `test_compute_violations`, `test_linked_axes`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_zoom_pan`.
+
+## Benchmarks
+
+### Render + zoom + memory benchmark
+
+Compares FastPlot vs standard `plot()` across data sizes from 10K to 50M points:
+
+```matlab
+cd FastPlot/examples
+benchmark;
+```
+
+From the terminal (Octave):
+
+```bash
+cd FastPlot
+octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark;"
+```
+
+### Zoom/pan latency benchmark
+
+Measures per-frame latency at multiple zoom levels with forced GPU flush:
+
+```matlab
+cd FastPlot/examples
+benchmark_zoom;
+```
+
+From the terminal (Octave):
+
+```bash
+cd FastPlot
+octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark_zoom;"
 ```
 
 ## License
