@@ -44,5 +44,16 @@ function test_toolbar()
             sprintf('testAllIconNames: %s', names{i}));
     end
 
-    fprintf('    All 5 toolbar skeleton tests passed.\n');
+    % testToggleGrid
+    fp = FastPlot();
+    fp.addLine(1:100, rand(1,100));
+    fp.render();
+    tb = FastPlotToolbar(fp);
+    gridBefore = get(fp.hAxes, 'XGrid');
+    tb.toggleGrid();
+    gridAfter = get(fp.hAxes, 'XGrid');
+    assert(~strcmp(gridBefore, gridAfter), 'testToggleGrid: should toggle');
+    close(fp.hFigure);
+
+    fprintf('    All 6 toolbar tests passed.\n');
 end

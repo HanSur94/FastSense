@@ -42,6 +42,12 @@ classdef FastPlotToolbar < handle
 
             obj.createToolbar();
         end
+
+        function toggleGrid(obj)
+            for i = 1:numel(obj.FastPlots)
+                obj.toggleGridOnAxes(obj.FastPlots{i}.hAxes);
+            end
+        end
     end
 
     methods (Access = private)
@@ -100,6 +106,22 @@ classdef FastPlotToolbar < handle
         end
 
         function onToggleGrid(obj)
+            [~, ax] = obj.getActiveTarget();
+            if isempty(ax)
+                for i = 1:numel(obj.FastPlots)
+                    obj.toggleGridOnAxes(obj.FastPlots{i}.hAxes);
+                end
+            else
+                obj.toggleGridOnAxes(ax);
+            end
+        end
+
+        function toggleGridOnAxes(~, ax)
+            if strcmp(get(ax, 'XGrid'), 'on')
+                grid(ax, 'off');
+            else
+                grid(ax, 'on');
+            end
         end
 
         function onToggleLegend(obj)
