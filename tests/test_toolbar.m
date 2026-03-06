@@ -71,5 +71,21 @@ function test_toolbar()
     assert(~strcmp(vis1, vis2), 'testToggleLegend: should toggle');
     close(fp.hFigure);
 
-    fprintf('    All 7 toolbar tests passed.\n');
+    % testAutoscaleY
+    fp = FastPlot();
+    y = [zeros(1,50), 10*ones(1,50)];
+    fp.addLine(1:100, y);
+    fp.render();
+    tb = FastPlotToolbar(fp);
+    % Zoom into first half (all zeros)
+    set(fp.hAxes, 'XLim', [1 50]);
+    drawnow;
+    tb.autoscaleY();
+    ylims = get(fp.hAxes, 'YLim');
+    % Y range should be tight around 0, not spanning 0-10
+    assert(ylims(2) < 5, ...
+        sprintf('testAutoscaleY: YLim(2) should be < 5, got %.1f', ylims(2)));
+    close(fp.hFigure);
+
+    fprintf('    All 8 toolbar tests passed.\n');
 end

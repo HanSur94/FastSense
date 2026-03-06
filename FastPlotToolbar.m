@@ -54,6 +54,12 @@ classdef FastPlotToolbar < handle
                 obj.toggleLegendOnAxes(obj.FastPlots{i}.hAxes);
             end
         end
+
+        function autoscaleY(obj)
+            for i = 1:numel(obj.FastPlots)
+                obj.autoscaleYOnAxes(obj.FastPlots{i});
+            end
+        end
     end
 
     methods (Access = private)
@@ -151,6 +157,41 @@ classdef FastPlotToolbar < handle
         end
 
         function onAutoscaleY(obj)
+            [fp, ~] = obj.getActiveTarget();
+            if isempty(fp)
+                for i = 1:numel(obj.FastPlots)
+                    obj.autoscaleYOnAxes(obj.FastPlots{i});
+                end
+            else
+                obj.autoscaleYOnAxes(fp);
+            end
+        end
+
+        function autoscaleYOnAxes(~, fp)
+            ax = fp.hAxes;
+            xlims = get(ax, 'XLim');
+            ymin = Inf; ymax = -Inf;
+            for i = 1:numel(fp.Lines)
+                xData = fp.Lines(i).X;
+                yData = fp.Lines(i).Y;
+                idxStart = binary_search(xData, xlims(1), 'left');
+                idxEnd   = binary_search(xData, xlims(2), 'right');
+                idxStart = max(1, idxStart);
+                idxEnd   = min(numel(xData), idxEnd);
+                ySlice = yData(idxStart:idxEnd);
+                ySlice = ySlice(~isnan(ySlice));
+                if ~isempty(ySlice)
+                    lo = min(ySlice);
+                    hi = max(ySlice);
+                    if lo < ymin; ymin = lo; end
+                    if hi > ymax; ymax = hi; end
+                end
+            end
+            if isfinite(ymin) && isfinite(ymax)
+                yPad = (ymax - ymin) * 0.05;
+                if yPad == 0; yPad = 1; end
+                set(ax, 'YLim', [ymin - yPad, ymax + yPad]);
+            end
         end
 
         function onExportPNG(obj)
