@@ -229,7 +229,23 @@ fp.render();
 | `benchmark.m` | FastPlot vs plot() performance comparison |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
 
-Run all examples:
+### Interactive demo
+
+Opens all 10 example plots for interactive exploration. Zoom and pan on any figure as long as you want — press Enter to close all and exit:
+
+```matlab
+cd FastPlot/examples
+demo_all
+```
+
+From the terminal (Octave):
+
+```bash
+cd FastPlot
+octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); demo_all;"
+```
+
+### Run all examples (non-interactive)
 
 ```matlab
 cd FastPlot/examples
