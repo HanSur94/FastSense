@@ -12,6 +12,7 @@ classdef FastPlot < handle
     properties (Access = public)
         ParentAxes = []       % axes handle, empty = create new
         LinkGroup  = ''       % string ID for linked zoom/pan
+        Theme      = []       % theme struct (from FastPlotTheme)
     end
 
     properties (SetAccess = private)
@@ -33,6 +34,7 @@ classdef FastPlot < handle
         PixelWidth    = 1920  % cached axes width in pixels
         IsPropagating = false % guard against re-entrant link propagation
         HasLimitRate  = []    % cached: does drawnow support 'limitrate'?
+        ColorIndex    = 0     % tracks auto color cycling position
     end
 
     properties (Constant, Access = private)
@@ -49,7 +51,18 @@ classdef FastPlot < handle
                         obj.ParentAxes = varargin{k+1};
                     case 'linkgroup'
                         obj.LinkGroup = varargin{k+1};
+                    case 'theme'
+                        val = varargin{k+1};
+                        if ischar(val) || isstruct(val)
+                            obj.Theme = FastPlotTheme(val);
+                        else
+                            obj.Theme = val;
+                        end
                 end
+            end
+            % Default theme if none set
+            if isempty(obj.Theme)
+                obj.Theme = FastPlotTheme('default');
             end
         end
 
@@ -180,6 +193,7 @@ classdef FastPlot < handle
 
             hold(obj.hAxes, 'on');
             obj.PixelWidth = obj.getAxesPixelWidth();
+            obj.applyTheme();
 
             % --- Render data lines ---
             for i = 1:numel(obj.Lines)
@@ -329,6 +343,32 @@ classdef FastPlot < handle
     end
 
     methods (Access = private)
+        function applyTheme(obj)
+            t = obj.Theme;
+
+            % Figure background (only if we own the figure)
+            if isempty(obj.ParentAxes)
+                set(obj.hFigure, 'Color', t.Background);
+            end
+
+            % Axes
+            set(obj.hAxes, 'Color', t.AxesColor);
+            set(obj.hAxes, 'XColor', t.ForegroundColor);
+            set(obj.hAxes, 'YColor', t.ForegroundColor);
+            set(obj.hAxes, 'FontName', t.FontName);
+            set(obj.hAxes, 'FontSize', t.FontSize);
+
+            % Grid
+            if strcmp(t.GridStyle, 'none') || t.GridAlpha == 0
+                grid(obj.hAxes, 'off');
+            else
+                grid(obj.hAxes, 'on');
+                set(obj.hAxes, 'GridColor', t.GridColor);
+                set(obj.hAxes, 'GridAlpha', t.GridAlpha);
+                set(obj.hAxes, 'GridLineStyle', t.GridStyle);
+            end
+        end
+
         function onXLimChanged(obj, ~, ~)
             if ~obj.IsRendered || ~ishandle(obj.hAxes) || obj.IsPropagating
                 return;
