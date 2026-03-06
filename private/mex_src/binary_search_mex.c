@@ -40,7 +40,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
                           "direction must be a char array.");
     }
 
-    const double *x = mxGetDoubles(prhs[0]);
+    const double *x = mxGetPr(prhs[0]);
     const double val = mxGetScalar(prhs[1]);
     const size_t n = mxGetNumberOfElements(prhs[0]);
 

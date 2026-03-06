@@ -2,4 +2,5 @@
 *.mexmaca64
 *.mexa64
 *.mexw64
+*.mex
 .DS_Store

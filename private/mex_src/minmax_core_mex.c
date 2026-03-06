@@ -33,8 +33,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
                           "x and y must be real double arrays.");
     }
 
-    const double *x = mxGetDoubles(prhs[0]);
-    const double *y = mxGetDoubles(prhs[1]);
+    const double *x = mxGetPr(prhs[0]);
+    const double *y = mxGetPr(prhs[1]);
     const size_t n = mxGetNumberOfElements(prhs[0]);
     const size_t nb = (size_t)mxGetScalar(prhs[2]);
 
@@ -45,8 +45,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
     /* Allocate output */
     plhs[0] = mxCreateDoubleMatrix(1, outLen, mxREAL);
     plhs[1] = mxCreateDoubleMatrix(1, outLen, mxREAL);
-    double *xOut = mxGetDoubles(plhs[0]);
-    double *yOut = mxGetDoubles(plhs[1]);
+    double *xOut = mxGetPr(plhs[0]);
+    double *yOut = mxGetPr(plhs[1]);
 
     size_t b;
     for (b = 0; b < nb; b++) {
