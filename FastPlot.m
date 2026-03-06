@@ -160,8 +160,8 @@ classdef FastPlot < handle
             t.Value          = value;
             t.Direction      = 'upper';
             t.ShowViolations = false;
-            t.Color          = [0.8 0 0];
-            t.LineStyle      = '--';
+            t.Color          = obj.Theme.ThresholdColor;
+            t.LineStyle      = obj.Theme.ThresholdStyle;
             t.Label          = '';
             t.hLine          = [];
             t.hMarkers       = [];

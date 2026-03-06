@@ -73,5 +73,16 @@ function test_fastplot_theme()
     expected2 = fp.Theme.LineColorOrder(1, :);
     assert(isequal(fp.Lines(2).Options.Color, expected2), 'testExplicitColorSkipsCycle: auto gets first');
 
-    fprintf('    All 9 theme integration tests passed.\n');
+    % testThresholdUsesThemeDefaults
+    fp = FastPlot('Theme', struct('ThresholdColor', [0 1 0], 'ThresholdStyle', ':'));
+    fp.addThreshold(5.0);
+    assert(isequal(fp.Thresholds(1).Color, [0 1 0]), 'testThresholdThemeDefaults: Color');
+    assert(strcmp(fp.Thresholds(1).LineStyle, ':'), 'testThresholdThemeDefaults: Style');
+
+    % testThresholdExplicitOverridesTheme
+    fp = FastPlot('Theme', struct('ThresholdColor', [0 1 0]));
+    fp.addThreshold(5.0, 'Color', [1 0 0]);
+    assert(isequal(fp.Thresholds(1).Color, [1 0 0]), 'testThresholdOverride: Color');
+
+    fprintf('    All 11 theme integration tests passed.\n');
 end
