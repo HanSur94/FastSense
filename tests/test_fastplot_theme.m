@@ -54,5 +54,24 @@ function test_fastplot_theme()
     assert(ishandle(fp.hAxes), 'testBackwardCompatNoTheme');
     close(fp.hFigure);
 
-    fprintf('    All 7 theme integration tests passed.\n');
+    % testAutoColorCycling
+    fp = FastPlot();
+    fp.addLine(1:10, rand(1,10));
+    fp.addLine(1:10, rand(1,10));
+    fp.addLine(1:10, rand(1,10));
+    c1 = fp.Lines(1).Options.Color;
+    c2 = fp.Lines(2).Options.Color;
+    c3 = fp.Lines(3).Options.Color;
+    assert(~isequal(c1, c2), 'testAutoColorCycling: colors 1 and 2 differ');
+    assert(~isequal(c2, c3), 'testAutoColorCycling: colors 2 and 3 differ');
+
+    % testExplicitColorSkipsCycle
+    fp = FastPlot();
+    fp.addLine(1:10, rand(1,10), 'Color', [1 0 0]);
+    fp.addLine(1:10, rand(1,10));
+    assert(isequal(fp.Lines(1).Options.Color, [1 0 0]), 'testExplicitColorSkipsCycle: explicit');
+    expected2 = fp.Theme.LineColorOrder(1, :);
+    assert(isequal(fp.Lines(2).Options.Color, expected2), 'testExplicitColorSkipsCycle: auto gets first');
+
+    fprintf('    All 9 theme integration tests passed.\n');
 end

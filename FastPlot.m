@@ -112,6 +112,14 @@ classdef FastPlot < handle
                 k = k + 2;
             end
 
+            % Auto-assign color from theme palette if not explicitly set
+            if ~isfield(opts, 'Color')
+                obj.ColorIndex = obj.ColorIndex + 1;
+                palette = obj.Theme.LineColorOrder;
+                idx = mod(obj.ColorIndex - 1, size(palette, 1)) + 1;
+                opts.Color = palette(idx, :);
+            end
+
             % Build line struct
             lineStruct.X = x;
             lineStruct.Y = y;
