@@ -15,8 +15,7 @@ fprintf('Datetime example: %d points (~11.6 days, 1-second resolution)...\n', n)
 tic;
 
 fp = FastPlot('Theme', 'dark');
-fp.addLine(x, y, 'DisplayName', 'Sensor', 'XType', 'datenum');
-fp.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
+fp.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
 fp.render();
 title(fp.hAxes, 'Datetime Axis — zoom to see format change');
 
