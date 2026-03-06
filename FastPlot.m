@@ -26,6 +26,9 @@ classdef FastPlot < handle
         Bands      = struct('YLow', {}, 'YHigh', {}, 'FaceColor', {}, ...
                             'FaceAlpha', {}, 'EdgeColor', {}, 'Label', {}, ...
                             'hPatch', {})
+        Markers    = struct('X', {}, 'Y', {}, 'Marker', {}, ...
+                            'MarkerSize', {}, 'Color', {}, 'Label', {}, ...
+                            'hLine', {})
         IsRendered    = false
         hFigure       = []
         hAxes         = []
@@ -220,6 +223,47 @@ classdef FastPlot < handle
             end
         end
 
+        function addMarker(obj, x, y, varargin)
+            %ADDMARKER Add custom event markers at specific positions.
+            %   fp.addMarker(x, y)
+            %   fp.addMarker(x, y, 'Marker', 'v', 'MarkerSize', 8, 'Color', [1 0 0])
+
+            if obj.IsRendered
+                error('FastPlot:alreadyRendered', ...
+                    'Cannot add markers after render() has been called.');
+            end
+
+            if ~isrow(x); x = x(:)'; end
+            if ~isrow(y); y = y(:)'; end
+
+            m.X          = x;
+            m.Y          = y;
+            m.Marker     = 'o';
+            m.MarkerSize = 6;
+            m.Color      = obj.Theme.ThresholdColor;
+            m.Label      = '';
+            m.hLine      = [];
+
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'marker'
+                        m.Marker = varargin{k+1};
+                    case 'markersize'
+                        m.MarkerSize = varargin{k+1};
+                    case 'color'
+                        m.Color = varargin{k+1};
+                    case 'label'
+                        m.Label = varargin{k+1};
+                end
+            end
+
+            if isempty(obj.Markers)
+                obj.Markers = m;
+            else
+                obj.Markers(end+1) = m;
+            end
+        end
+
         function render(obj)
             %RENDER Create the plot with all configured lines and thresholds.
 
@@ -363,6 +407,24 @@ classdef FastPlot < handle
                     set(hM, 'UserData', udM);
                     obj.Thresholds(t).hMarkers = hM;
                 end
+            end
+
+            % --- Render custom markers (front layer) ---
+            for i = 1:numel(obj.Markers)
+                M = obj.Markers(i);
+                hM = line(M.X, M.Y, 'Parent', obj.hAxes, ...
+                    'LineStyle', 'none', ...
+                    'Marker', M.Marker, ...
+                    'MarkerSize', M.MarkerSize, ...
+                    'Color', M.Color, ...
+                    'HandleVisibility', 'off');
+                udM.FastPlot = struct( ...
+                    'Type', 'marker', ...
+                    'Name', M.Label, ...
+                    'LineIndex', [], ...
+                    'ThresholdValue', []);
+                set(hM, 'UserData', udM);
+                obj.Markers(i).hLine = hM;
             end
 
             % --- Set static axis limits (use downsampled data, not full raw) ---
