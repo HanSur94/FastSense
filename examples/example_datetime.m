@@ -12,15 +12,23 @@ y = 20 + 5*sin(t * 2*pi - pi/2) ...  % daily cycle (peak at midday)
     + 0.1*randn(1,n);                 % sensor noise
 
 fprintf('Datetime example: %d points (~11.6 days, 1-second resolution)...\n', n);
+
+%% Plot 1: With datetime X axis
 tic;
+fp1 = FastPlot('Theme', 'dark');
+fp1.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
+fp1.render();
+title(fp1.hAxes, 'With datenum — zoom to see format change');
+tb1 = FastPlotToolbar(fp1);
+fprintf('Datetime plot rendered in %.3f seconds.\n', toc);
 
-fp = FastPlot('Theme', 'dark');
-fp.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
-fp.render();
-title(fp.hAxes, 'Datetime Axis — zoom to see format change');
+%% Plot 2: Same data, plain numeric X axis (for comparison)
+tic;
+fp2 = FastPlot('Theme', 'dark');
+fp2.addLine(x, y, 'DisplayName', 'Temperature');
+fp2.render();
+title(fp2.hAxes, 'Without datenum — same data, raw numeric axis');
+tb2 = FastPlotToolbar(fp2);
+fprintf('Numeric plot rendered in %.3f seconds.\n', toc);
 
-tb = FastPlotToolbar(fp);
-
-fprintf('Rendered in %.3f seconds.\n', toc);
-fprintf('Zoom in: tick labels adapt from "mmm dd HH:MM" to "HH:MM" to "HH:MM:SS"\n');
-fprintf('Try the crosshair and data cursor — they show datetime values too.\n');
+fprintf('Compare both windows — same data, different X axis formatting.\n');
