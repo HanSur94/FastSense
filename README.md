@@ -100,6 +100,28 @@ tb.setCrosshair(true);     % enable crosshair mode
 tb.setCursor(true);        % enable data cursor mode
 ```
 
+### Datetime Axes
+
+Pass `datenum` values as X data with `'XType', 'datenum'` to get auto-formatted date/time tick labels:
+
+```matlab
+x = datenum(2024,1,1) + (0:99999)/86400;  % 1-second resolution
+y = sin((1:100000) * 2*pi/3600);
+
+fp = FastPlot();
+fp.addLine(x, y, 'XType', 'datenum');
+fp.render();
+```
+
+Tick labels auto-adapt to zoom level: `Jan 15 10:00` when zoomed out, `10:30:15` when zoomed in. The toolbar crosshair and data cursor also display datetime values.
+
+In MATLAB, you can also pass `datetime` objects directly — they are auto-converted to `datenum`:
+
+```matlab
+dt = datetime(2024,1,1) + hours(0:999);
+fp.addLine(dt, y);  % XType set automatically
+```
+
 ## Installation
 
 ```bash
