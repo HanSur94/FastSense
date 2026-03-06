@@ -65,5 +65,13 @@ function test_datetime()
     assert(hasSeconds, 'testTickFormatZoom: should show seconds when zoomed');
     close(fp.hFigure);
 
+    % testToolbarFormatX
+    % Verify the static helper returns date string for datenum XType
+    xVal = datenum(2024, 3, 15, 10, 30, 45);
+    result = FastPlotToolbar.formatX(xVal, 'datenum');
+    assert(any(result == ':'), 'testToolbarFormatX: should contain colon');
+    resultNum = FastPlotToolbar.formatX(42.5, 'numeric');
+    assert(~any(resultNum == ':'), 'testToolbarFormatXNum: should not contain colon');
+
     fprintf('    All datetime tests passed.\n');
 end

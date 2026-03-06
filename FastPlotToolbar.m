@@ -194,7 +194,7 @@ classdef FastPlotToolbar < handle
 
         function onMouseMove(obj)
             if ~strcmp(obj.Mode, 'crosshair'); return; end
-            [~, ax] = obj.getActiveTarget();
+            [fp, ax] = obj.getActiveTarget();
             if isempty(ax)
                 obj.hideCrosshairLines();
                 return;
@@ -225,7 +225,8 @@ classdef FastPlotToolbar < handle
                 set(obj.hCrosshairV, 'Parent', ax, 'XData', [xp xp], 'YData', ylims);
                 set(obj.hCrosshairTxt, 'Parent', ax, ...
                     'Position', [xlims(2), ylims(2), 0], ...
-                    'String', sprintf('x=%.4g  y=%.4g', xp, yp));
+                    'String', sprintf('x=%s  y=%.4g', ...
+                        FastPlotToolbar.formatX(xp, obj.getXType(fp)), yp));
             end
         end
 
@@ -247,7 +248,8 @@ classdef FastPlotToolbar < handle
                 'LineStyle', 'none', 'Marker', 'o', 'MarkerSize', 8, ...
                 'Color', lineColor, 'MarkerFaceColor', lineColor, ...
                 'HandleVisibility', 'off', 'HitTest', 'off');
-            label = sprintf('(%.4g, %.4g)', sx, sy);
+            label = sprintf('(%s, %.4g)', ...
+                FastPlotToolbar.formatX(sx, obj.getXType(fp)), sy);
             obj.hCursorTxt = text(sx, sy, label, 'Parent', ax, ...
                 'FontSize', 8, 'VerticalAlignment', 'bottom', ...
                 'HorizontalAlignment', 'left', ...
@@ -292,6 +294,14 @@ classdef FastPlotToolbar < handle
     end
 
     methods (Access = private)
+        function xtype = getXType(~, fp)
+            if ~isempty(fp) && isprop(fp, 'XType')
+                xtype = fp.XType;
+            else
+                xtype = 'numeric';
+            end
+        end
+
         function onToggleGrid(obj)
             [~, ax] = obj.getActiveTarget();
             if isempty(ax)
@@ -399,6 +409,15 @@ classdef FastPlotToolbar < handle
     end
 
     methods (Static)
+        function str = formatX(xVal, xtype)
+            %FORMATX Format an X value for display based on XType.
+            if strcmp(xtype, 'datenum')
+                str = datestr(xVal, 'mmm dd HH:MM:SS');
+            else
+                str = sprintf('%.4g', xVal);
+            end
+        end
+
         function icon = makeIcon(name)
             %MAKEICON Generate a 16x16x3 RGB icon for toolbar buttons.
             icon = ones(16, 16, 3) * 0.94;  % light gray background
