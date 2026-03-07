@@ -11,14 +11,14 @@
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
 
 nDashboards = 20;
-nPointsPerTile = 500000;
+nPointsPerTile = 10000000;
 nTiles = 9;
 totalPtsPerDash = nTiles * nPointsPerTile;
 
 fprintf('\n================================================================\n');
 fprintf('  FastPlot Benchmark: %d Dashboards x 3x3 tiles\n', nDashboards);
-fprintf('  %dK points per tile, %.1fM per dashboard, %.0fM total\n', ...
-    nPointsPerTile/1e3, totalPtsPerDash/1e6, nDashboards*totalPtsPerDash/1e6);
+fprintf('  %.0fM points per tile, %.0fM per dashboard, %.0fM total\n', ...
+    nPointsPerTile/1e6, totalPtsPerDash/1e6, nDashboards*totalPtsPerDash/1e6);
 fprintf('================================================================\n\n');
 
 % Signal configs: name, frequency multiplier, offset, noise scale
@@ -110,7 +110,7 @@ avg_reduction = (1 - avg_pts / totalPtsPerDash) * 100;
 
 fprintf('  Dashboards:        %d\n', nDashboards);
 fprintf('  Tiles per dash:    %d (3x3)\n', nTiles);
-fprintf('  Points per tile:   %dK\n', nPointsPerTile/1e3);
+fprintf('  Points per tile:   %.0fM\n', nPointsPerTile/1e6);
 fprintf('  Total points:      %.0fM\n', nDashboards * totalPtsPerDash / 1e6);
 fprintf('\n');
 fprintf('  Avg create time:   %.3f s\n', avg_create);
