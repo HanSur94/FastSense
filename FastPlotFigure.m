@@ -7,6 +7,11 @@ classdef FastPlotFigure < handle
         Grid       = [1 1]      % [rows, cols]
         Theme      = []         % FastPlotTheme struct
         hFigure    = []         % figure handle
+        LiveViewMode = ''          % 'preserve' | 'follow' | 'reset'
+        LiveFile       = ''        % path to .mat file
+        LiveUpdateFcn  = []        % @(fig, data) callback
+        LiveIsActive   = false     % whether polling is running
+        LiveInterval   = 2.0       % poll interval in seconds
     end
 
     properties (SetAccess = private)
@@ -15,6 +20,8 @@ classdef FastPlotFigure < handle
         TileSpans  = {}         % cell array of [rowSpan, colSpan]
         TileThemes = {}         % cell array of theme override structs
         IsRendered = false
+        LiveTimer      = []        % timer object
+        LiveFileDate   = 0         % last known file datenum
     end
 
     properties (Constant, Access = private)
@@ -157,9 +164,154 @@ classdef FastPlotFigure < handle
             %RENDER Alias for renderAll.
             obj.renderAll();
         end
+
+        function startLive(obj, filepath, updateFcn, varargin)
+            %STARTLIVE Start live mode on the dashboard.
+            if obj.LiveIsActive
+                obj.stopLive();
+            end
+
+            obj.LiveFile = filepath;
+            obj.LiveUpdateFcn = updateFcn;
+
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'interval'
+                        obj.LiveInterval = varargin{k+1};
+                    case 'viewmode'
+                        obj.LiveViewMode = varargin{k+1};
+                end
+            end
+
+            if isempty(obj.LiveViewMode)
+                obj.LiveViewMode = 'preserve';
+            end
+
+            % Set view mode on all tiles
+            for i = 1:numel(obj.Tiles)
+                if ~isempty(obj.Tiles{i})
+                    obj.Tiles{i}.LiveViewMode = obj.LiveViewMode;
+                end
+            end
+
+            if exist(obj.LiveFile, 'file')
+                d = dir(obj.LiveFile);
+                obj.LiveFileDate = d.datenum;
+            end
+
+            % Create and start timer (MATLAB only; Octave lacks timer)
+            try
+                obj.LiveTimer = timer( ...
+                    'ExecutionMode', 'fixedSpacing', ...
+                    'Period', obj.LiveInterval, ...
+                    'TimerFcn', @(~,~) obj.onLiveTimer(), ...
+                    'ErrorFcn', @(~,~) []);
+                start(obj.LiveTimer);
+            catch
+                % Octave: no timer — use runLive() for blocking poll loop
+            end
+
+            obj.LiveIsActive = true;
+
+            existingDeleteFcn = get(obj.hFigure, 'DeleteFcn');
+            set(obj.hFigure, 'DeleteFcn', @(s,e) obj.onFigureCloseLive(existingDeleteFcn, s, e));
+        end
+
+        function stopLive(obj)
+            %STOPLIVE Stop live polling.
+            if ~isempty(obj.LiveTimer)
+                try
+                    stop(obj.LiveTimer);
+                    delete(obj.LiveTimer);
+                catch
+                end
+            end
+            obj.LiveTimer = [];
+            obj.LiveIsActive = false;
+        end
+
+        function refresh(obj)
+            %REFRESH Manual one-shot reload.
+            if isempty(obj.LiveFile) || isempty(obj.LiveUpdateFcn)
+                error('FastPlotFigure:noLiveSource', ...
+                    'No live source configured.');
+            end
+            if ~exist(obj.LiveFile, 'file')
+                warning('FastPlotFigure:fileNotFound', 'File not found: %s', obj.LiveFile);
+                return;
+            end
+            try
+                data = load(obj.LiveFile);
+                obj.LiveUpdateFcn(obj, data);
+            catch
+            end
+            d = dir(obj.LiveFile);
+            obj.LiveFileDate = d.datenum;
+        end
+
+        function setViewMode(obj, mode)
+            %SETVIEWMODE Set view mode on all tiles.
+            obj.LiveViewMode = mode;
+            for i = 1:numel(obj.Tiles)
+                if ~isempty(obj.Tiles{i})
+                    obj.Tiles{i}.LiveViewMode = mode;
+                end
+            end
+        end
+
+        function runLive(obj)
+            %RUNLIVE Blocking poll loop for live mode (Octave compatibility).
+            if ~obj.LiveIsActive
+                return;
+            end
+
+            % On MATLAB, the timer is already running
+            if ~isempty(obj.LiveTimer) && ~isstruct(obj.LiveTimer)
+                return;
+            end
+
+            cleanupObj = onCleanup(@() obj.stopLive());
+
+            while obj.LiveIsActive && ishandle(obj.hFigure)
+                try
+                    if exist(obj.LiveFile, 'file')
+                        d = dir(obj.LiveFile);
+                        if d.datenum > obj.LiveFileDate
+                            obj.LiveFileDate = d.datenum;
+                            data = load(obj.LiveFile);
+                            obj.LiveUpdateFcn(obj, data);
+                        end
+                    end
+                catch
+                end
+                drawnow;
+                pause(obj.LiveInterval);
+            end
+        end
     end
 
     methods (Access = private)
+        function onLiveTimer(obj)
+            if ~exist(obj.LiveFile, 'file'); return; end
+            try
+                d = dir(obj.LiveFile);
+                if d.datenum > obj.LiveFileDate
+                    obj.LiveFileDate = d.datenum;
+                    data = load(obj.LiveFile);
+                    obj.LiveUpdateFcn(obj, data);
+                    drawnow;
+                end
+            catch
+            end
+        end
+
+        function onFigureCloseLive(obj, existingDeleteFcn, src, evt)
+            obj.stopLive();
+            if ~isempty(existingDeleteFcn) && isa(existingDeleteFcn, 'function_handle')
+                existingDeleteFcn(src, evt);
+            end
+        end
+
         function ax = createTileAxes(obj, n)
             pos = obj.computeTilePosition(n);
             ax = axes('Parent', obj.hFigure, 'Position', pos);

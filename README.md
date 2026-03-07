@@ -87,7 +87,7 @@ fig = FastPlotFigure(1, 2);
 tb = FastPlotToolbar(fig);
 ```
 
-**Toolbar buttons:** Data Cursor (click to snap), Crosshair (hover tracking), Toggle Grid, Toggle Legend, Autoscale Y (fits visible data), Export PNG.
+**Toolbar buttons:** Data Cursor (click to snap), Crosshair (hover tracking), Toggle Grid, Toggle Legend, Autoscale Y (fits visible data), Export PNG, Refresh Data, Live Mode toggle.
 
 **Programmatic API:**
 
@@ -98,6 +98,73 @@ tb.autoscaleY();           % fit Y to visible X range
 tb.exportPNG('out.png');   % export at 150 DPI
 tb.setCrosshair(true);     % enable crosshair mode
 tb.setCursor(true);        % enable data cursor mode
+```
+
+### Live Mode
+
+Watch a `.mat` file for changes and auto-refresh the plot:
+
+```matlab
+% Create and render a plot
+fp = FastPlot();
+fp.addLine(x, y, 'DisplayName', 'Sensor');
+fp.render();
+
+% Start live mode — polls file every 2 seconds
+fp.startLive('data.mat', @(fp, d) fp.updateData(1, d.x, d.y), ...
+    'Interval', 2, 'ViewMode', 'preserve');
+
+% Stop live mode
+fp.stopLive();
+
+% Manual one-shot refresh
+fp.refresh();
+```
+
+Works with dashboards too:
+
+```matlab
+fig = FastPlotFigure(2, 1, 'Theme', 'dark');
+fp1 = fig.tile(1); fp1.addLine(x, pressure);
+fp2 = fig.tile(2); fp2.addLine(x, temperature);
+fig.renderAll();
+
+fig.startLive('sensors.mat', @(fig, d) updateAll(fig, d), ...
+    'Interval', 1.5, 'ViewMode', 'follow');
+
+tb = FastPlotToolbar(fig);  % adds Live toggle + Refresh buttons
+
+function updateAll(fig, d)
+    fig.tile(1).updateData(1, d.time, d.pressure);
+    fig.tile(2).updateData(1, d.time, d.temperature);
+end
+```
+
+**Live mode methods:**
+
+| Method | Description |
+|--------|-------------|
+| `startLive(file, updateFcn, ...)` | Start polling a `.mat` file for changes |
+| `stopLive()` | Stop live polling |
+| `refresh()` | Manual one-shot reload from file |
+| `updateData(lineIdx, newX, newY)` | Replace data for a line and re-downsample |
+| `setViewMode(mode)` | Change view mode at runtime |
+| `runLive()` | Blocking poll loop (Octave); no-op on MATLAB |
+
+**Options for `startLive`:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `Interval` | `2.0` | Poll interval in seconds |
+| `ViewMode` | `'preserve'` | `'preserve'` (keep zoom), `'follow'` (scroll to latest), `'reset'` (fit all data) |
+
+**Toolbar buttons:** The Live toggle button starts/stops polling. The Refresh button triggers a one-shot reload.
+
+**Octave compatibility:** Octave lacks MATLAB's `timer`, so call `runLive()` after `startLive()` to enter a blocking poll loop. The GUI stays responsive (zoom/pan work). Exit by closing the figure or pressing Ctrl+C.
+
+```matlab
+fp.startLive('data.mat', @(fp, d) fp.updateData(1, d.x, d.y));
+fp.runLive();  % blocks on Octave, no-op on MATLAB
 ```
 
 ## Installation
@@ -396,6 +463,7 @@ fp.render();
 | `example_dashboard.m` | Tiled dashboard with bands, shading, and markers |
 | `example_themes.m` | All 5 theme presets side by side |
 | `example_toolbar.m` | Interactive toolbar with data cursor, crosshair, and export |
+| `example_live.m` | Live mode dashboard with file-watching auto-refresh |
 | `benchmark.m` | FastPlot vs plot() performance comparison |
 | `benchmark_dashboard.m` | FastPlotFigure vs subplot() dashboard creation |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
@@ -423,7 +491,7 @@ run_all_examples
 ```
 FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, render)
 FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
-FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export)
+FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export, refresh, live)
 FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
 ├── private/
 │   ├── binary_search.m       O(log n) find visible range (MEX dispatch)
@@ -436,8 +504,8 @@ FastPlotTheme.m               Theme presets and palette system (5 presets, 3 pal
 │       ├── minmax_core_mex.c
 │       └── lttb_core_mex.c
 ├── build_mex.m               MEX compilation script
-├── tests/                    19 test suites
-└── examples/                 16 demos + benchmarks
+├── tests/                    20 test suites
+└── examples/                 17 demos + benchmarks
 ```
 
 **Zoom/pan pipeline:**
@@ -500,7 +568,7 @@ From the terminal (Octave):
 octave --no-gui --eval "addpath('tests'); addpath('private'); test_zoom_pan;"
 ```
 
-Available test files: `test_add_line`, `test_add_threshold`, `test_add_band`, `test_add_marker`, `test_add_shaded`, `test_binary_search`, `test_compute_violations`, `test_fastplot_theme`, `test_figure_layout`, `test_linked_axes`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_theme`, `test_zoom_pan`.
+Available test files: `test_add_line`, `test_add_threshold`, `test_add_band`, `test_add_marker`, `test_add_shaded`, `test_binary_search`, `test_compute_violations`, `test_fastplot_theme`, `test_figure_layout`, `test_linked_axes`, `test_live`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_theme`, `test_toolbar`, `test_zoom_pan`.
 
 ## Benchmarks
 
