@@ -618,7 +618,17 @@ classdef FastPlot < handle
             obj.CachedXLim = get(obj.hAxes, 'XLim');
 
             % --- Install listeners ---
-            addlistener(obj.hAxes, 'xlim', @(s,e) obj.onXLimChanged(s,e));
+            % R2025b+: property PostSet listener (documented API)
+            % R2020b-R2024b: undocumented 'xlim' event
+            % Octave: no property listeners — skip gracefully
+            try
+                addlistener(obj.hAxes, 'XLim', 'PostSet', @(s,e) obj.onXLimChanged(s,e));
+            catch
+                try
+                    addlistener(obj.hAxes, 'xlim', @(s,e) obj.onXLimChanged(s,e));
+                catch
+                end
+            end
             set(obj.hFigure, 'ResizeFcn', @(s,e) obj.onResize(s,e));
 
             % Enable zoom and pan
@@ -804,10 +814,11 @@ classdef FastPlot < handle
                 obj.LiveFileDate = d.datenum;
             end
 
-            % Record metadata file date
+            % Record metadata file date and do initial load
             if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
                 d = dir(obj.MetadataFile);
                 obj.MetadataFileDate = d.datenum;
+                obj.loadMetadataFile();
             end
 
             % Create and start timer (MATLAB only; Octave lacks timer)

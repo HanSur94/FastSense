@@ -215,6 +215,7 @@ classdef FastPlotFigure < handle
             if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
                 d = dir(obj.MetadataFile);
                 obj.MetadataFileDate = d.datenum;
+                obj.loadMetadataFile();
             end
 
             % Create and start timer (MATLAB only; Octave lacks timer)
