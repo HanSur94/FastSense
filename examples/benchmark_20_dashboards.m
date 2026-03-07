@@ -50,8 +50,17 @@ colors = [
 times_create = zeros(1, nDashboards);
 times_render = zeros(1, nDashboards);
 pts_rendered = zeros(1, nDashboards);
+ram_usage_mb = zeros(1, nDashboards);
+
+% Get MATLAB PID for memory monitoring
+pid = feature('getpid');
 
 x = linspace(0, 3600, nPointsPerTile);
+
+% Baseline RAM
+[~, baseRAM] = system(sprintf('ps -o rss= -p %d', pid));
+baseRAM_MB = str2double(strtrim(baseRAM)) / 1024;
+fprintf('  Baseline RAM: %.0f MB\n\n', baseRAM_MB);
 
 for d = 1:nDashboards
     % --- Create dashboard and add data ---
@@ -102,9 +111,14 @@ for d = 1:nDashboards
     times_render(d) = t_render;
     t_total = t_create + t_render;
 
+    % Measure RAM
+    [~, curRAM] = system(sprintf('ps -o rss= -p %d', pid));
+    ram_usage_mb(d) = str2double(strtrim(curRAM)) / 1024;
+
     reduction = (1 - total_pts / totalPtsPerDash) * 100;
-    fprintf('  Dashboard %2d/%d: create %.3fs + render %.3fs = %.3fs  (%d pts rendered, %.1f%% reduction)\n', ...
-        d, nDashboards, t_create, t_render, t_total, total_pts, reduction);
+    fprintf('  Dashboard %2d/%d: create %.3fs + render %.3fs = %.3fs  (%d pts, %.1f%% red.)  RAM: %.0f MB (+%.0f)\n', ...
+        d, nDashboards, t_create, t_render, t_total, total_pts, reduction, ...
+        ram_usage_mb(d), ram_usage_mb(d) - baseRAM_MB);
 
 end
 
@@ -137,4 +151,9 @@ fprintf('  Throughput:        %.1fM pts/s\n', totalPtsPerDash/1e6/avg_total);
 fprintf('\n');
 fprintf('  Total wall time:   %.1f s for %d dashboards\n', ...
     sum(times_create + times_render), nDashboards);
+fprintf('\n');
+fprintf('  RAM baseline:      %.0f MB\n', baseRAM_MB);
+fprintf('  RAM final:         %.0f MB\n', ram_usage_mb(end));
+fprintf('  RAM delta:         +%.0f MB\n', ram_usage_mb(end) - baseRAM_MB);
+fprintf('  RAM per dashboard: ~%.0f MB\n', (ram_usage_mb(end) - baseRAM_MB) / nDashboards);
 fprintf('\n================================================================\n');
