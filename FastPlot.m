@@ -502,17 +502,15 @@ classdef FastPlot < handle
                 % Create line object
                 h = line(xd, yd, 'Parent', obj.hAxes);
 
-                % Apply user options
-                opts = L.Options;
-                fnames = fieldnames(opts);
-                for f = 1:numel(fnames)
-                    set(h, fnames{f}, opts.(fnames{f}));
+                % Apply user options (batch — single graphics update)
+                if ~isempty(fieldnames(L.Options))
+                    set(h, L.Options);
                 end
 
                 % Tag with UserData
                 displayName = '';
-                if isfield(opts, 'DisplayName')
-                    displayName = opts.DisplayName;
+                if isfield(L.Options, 'DisplayName')
+                    displayName = L.Options.DisplayName;
                 end
                 ud.FastPlot = struct( ...
                     'Type', 'data_line', ...
