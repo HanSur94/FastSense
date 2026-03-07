@@ -1,21 +1,21 @@
 % example_live.m — Interactive live mode demo (GUI)
 %
-% Opens a visible dashboard, then simulates 10 data updates with pauses
-% so you can watch the plot update in real time.
+% Opens a dashboard with large data (500K+ points), starts timer-based
+% live mode, and simulates 20 data updates so you can watch downsampling
+% and live polling in action.
 %
 % Usage:
-%   octave examples/example_live.m     (with GUI)
-%   Run from MATLAB command window
+%   >> cd /path/to/FastPlot
+%   >> run examples/example_live.m
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
 
-fprintf('=== FastPlot Live Mode Demo ===\n\n');
+fprintf('\n=== FastPlot Live Mode Demo (Large Data) ===\n\n');
 
 % --- Create initial data and save to .mat ---
 tmpFile = fullfile(tempdir, 'fastplot_live_demo.mat');
-nPoints = 100000;
-x = linspace(0, 100, nPoints);
+nPoints = 500000;
+x = linspace(0, 200, nPoints);
 s.time = x;
 s.pressure = sin(x * 2*pi/10) + 0.3*randn(1, nPoints);
 s.temperature = 50 + 5*cos(x * 2*pi/20) + 0.5*randn(1, nPoints);
@@ -39,33 +39,48 @@ fig.tileTitle(2, 'Temperature');
 tb = FastPlotToolbar(fig);
 drawnow;
 
-fprintf('Dashboard open. Simulating 10 live data updates (2s apart)...\n');
+fprintf('Dashboard open. Starting live mode with 20 updates (2s apart)...\n');
 fprintf('Watch the plot update! Close the figure to stop early.\n\n');
 
-% --- Simulate a background process updating the .mat file ---
-for i = 1:10
+% --- Start timer-based live mode ---
+fig.startLive(tmpFile, @updateTiles, 'Interval', 1.5, 'ViewMode', 'follow');
+
+nUpdates = 20;
+for i = 1:nUpdates
     pause(2);
     if ~ishandle(fig.hFigure)
         fprintf('Figure closed.\n');
         break;
     end
 
-    % New data: more points, shifted signals
-    nNew = nPoints + i * 10000;
-    s.time = linspace(0, 100 + i*10, nNew);
-    s.pressure = sin(s.time * 2*pi/10) + 0.3*randn(1, nNew) + 0.15*i;
-    s.temperature = 50 + 5*cos(s.time * 2*pi/20) + 0.5*randn(1, nNew) + 0.3*i;
+    % Grow dataset: add 50K points per update, shift signals
+    nNew = nPoints + i * 50000;
+    s.time = linspace(0, 200 + i*20, nNew);
+    s.pressure = sin(s.time * 2*pi/10) + 0.3*randn(1, nNew) + 0.1*i;
+    s.temperature = 50 + 5*cos(s.time * 2*pi/20) + 0.5*randn(1, nNew) + 0.2*i;
 
-    % Write updated data to .mat file
+    % Write updated data — the timer will pick it up automatically
     save(tmpFile, '-struct', 's');
 
-    % Update the plot (this is what startLive/runLive does automatically)
-    fig.tile(1).updateData(1, s.time, s.pressure);
-    fig.tile(2).updateData(1, s.time, s.temperature);
-    drawnow;
+    fprintf('  Update %2d/%d: %7d points, t=[0..%d], pressure +%.1f\n', ...
+        i, nUpdates, nNew, 200 + i*20, 0.1*i);
+end
 
-    fprintf('  Update %d/%d: %d points, t=[0..%d]\n', i, 10, nNew, 100 + i*10);
+% Wait for last timer tick to process
+pause(3);
+drawnow;
+
+if ishandle(fig.hFigure)
+    fig.stopLive();
 end
 
 fprintf('\nDemo complete. Figure stays open — zoom and pan to explore.\n');
 fprintf('Temp file: %s\n', tmpFile);
+
+
+%% --- Local functions ---
+
+function updateTiles(f, d)
+    f.tile(1).updateData(1, d.time, d.pressure);
+    f.tile(2).updateData(1, d.time, d.temperature);
+end
