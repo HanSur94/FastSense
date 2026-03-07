@@ -208,7 +208,7 @@ classdef FastPlotFigure < handle
                     'ErrorFcn', @(~,~) []);
                 start(obj.LiveTimer);
             catch
-                obj.LiveTimer = struct('Tag', 'OctavePlaceholder');
+                % Octave: no timer — use runLive() for blocking poll loop
             end
 
             obj.LiveIsActive = true;
@@ -219,7 +219,7 @@ classdef FastPlotFigure < handle
 
         function stopLive(obj)
             %STOPLIVE Stop live polling.
-            if ~isempty(obj.LiveTimer) && ~isstruct(obj.LiveTimer)
+            if ~isempty(obj.LiveTimer)
                 try
                     stop(obj.LiveTimer);
                     delete(obj.LiveTimer);
@@ -256,6 +256,36 @@ classdef FastPlotFigure < handle
                 if ~isempty(obj.Tiles{i})
                     obj.Tiles{i}.LiveViewMode = mode;
                 end
+            end
+        end
+
+        function runLive(obj)
+            %RUNLIVE Blocking poll loop for live mode (Octave compatibility).
+            if ~obj.LiveIsActive
+                return;
+            end
+
+            % On MATLAB, the timer is already running
+            if ~isempty(obj.LiveTimer) && ~isstruct(obj.LiveTimer)
+                return;
+            end
+
+            cleanupObj = onCleanup(@() obj.stopLive());
+
+            while obj.LiveIsActive && ishandle(obj.hFigure)
+                try
+                    if exist(obj.LiveFile, 'file')
+                        d = dir(obj.LiveFile);
+                        if d.datenum > obj.LiveFileDate
+                            obj.LiveFileDate = d.datenum;
+                            data = load(obj.LiveFile);
+                            obj.LiveUpdateFcn(obj, data);
+                        end
+                    end
+                catch
+                end
+                drawnow;
+                pause(obj.LiveInterval);
             end
         end
     end
