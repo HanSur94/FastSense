@@ -14,6 +14,7 @@ classdef FastPlot < handle
         LinkGroup  = ''       % string ID for linked zoom/pan
         Theme      = []       % theme struct (from FastPlotTheme)
         Verbose    = false       % print diagnostics to console
+        LiveViewMode = ''  % 'preserve' | 'follow' | 'reset' (empty = no view mode applied)
     end
 
     properties (SetAccess = private)
@@ -631,9 +632,78 @@ classdef FastPlot < handle
             end
             drawnow;
         end
+
+        function updateData(obj, lineIdx, newX, newY, skipViewMode)
+            %UPDATEDATA Replace data for a line and re-downsample.
+            %   fp.updateData(1, newX, newY)
+
+            if ~obj.IsRendered
+                error('FastPlot:notRendered', ...
+                    'Cannot update data before render() has been called.');
+            end
+            if lineIdx < 1 || lineIdx > numel(obj.Lines)
+                error('FastPlot:indexOutOfRange', ...
+                    'Line index %d is out of range (1-%d).', lineIdx, numel(obj.Lines));
+            end
+
+            % Force row vectors
+            if ~isrow(newX); newX = newX(:)'; end
+            if ~isrow(newY); newY = newY(:)'; end
+
+            if numel(newX) ~= numel(newY)
+                error('FastPlot:sizeMismatch', ...
+                    'X and Y must have the same number of elements.');
+            end
+
+            % Replace raw data
+            obj.Lines(lineIdx).X = newX;
+            obj.Lines(lineIdx).Y = newY;
+            obj.Lines(lineIdx).HasNaN = any(isnan(newY));
+
+            % Clear pyramid cache (will rebuild lazily)
+            obj.Lines(lineIdx).Pyramid = {};
+
+            % Apply view mode before re-downsample
+            if nargin < 5 || ~skipViewMode
+                obj.applyViewMode(newX);
+            end
+
+            % Re-downsample and update display
+            obj.updateLines();
+            obj.updateShadings();
+            obj.updateViolations();
+
+            obj.drawnowLimitRate();
+        end
     end
 
     methods (Access = private)
+        function applyViewMode(obj, newX)
+            %APPLYVIEWMODE Adjust axes limits based on LiveViewMode.
+            if isempty(obj.LiveViewMode)
+                return;
+            end
+
+            switch obj.LiveViewMode
+                case 'preserve'
+                    % Do nothing — keep current zoom
+                    return;
+
+                case 'follow'
+                    currentXLim = get(obj.hAxes, 'XLim');
+                    windowWidth = currentXLim(2) - currentXLim(1);
+                    newXMax = newX(end);
+                    newXLim = [newXMax - windowWidth, newXMax];
+                    set(obj.hAxes, 'XLim', newXLim);
+                    obj.CachedXLim = newXLim;
+
+                case 'reset'
+                    newXLim = [newX(1), newX(end)];
+                    set(obj.hAxes, 'XLim', newXLim);
+                    obj.CachedXLim = newXLim;
+            end
+        end
+
         function applyTheme(obj)
             t = obj.Theme;
 
