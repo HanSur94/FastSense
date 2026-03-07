@@ -22,6 +22,7 @@ classdef FastPlot < handle
         MetadataFile      = ''        % path to separate .mat file for metadata
         MetadataVars      = {}        % cell array of variable names to extract
         MetadataLineIndex = 1         % which line index to attach metadata to
+        DeferDraw = false             % skip drawnow during batch render
     end
 
     properties (SetAccess = private)
@@ -650,11 +651,13 @@ classdef FastPlot < handle
 
             hold(obj.hAxes, 'off');
 
-            % Show figure now that setup is complete
-            if isempty(obj.ParentAxes)
-                set(obj.hFigure, 'Visible', 'on');
+            % Show figure and flush — unless deferred (dashboard batch render)
+            if ~obj.DeferDraw
+                if isempty(obj.ParentAxes)
+                    set(obj.hFigure, 'Visible', 'on');
+                end
+                drawnow;
             end
-            drawnow;
         end
 
         function result = lookupMetadata(obj, lineIdx, xValue)

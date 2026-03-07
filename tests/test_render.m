@@ -85,7 +85,18 @@ function test_render()
     assert(strcmp(get(fp.hAxes, 'YLimMode'), 'manual'), 'testStaticAxisLimits: YLimMode');
     close(fp.hFigure);
 
-    fprintf('    All 8 render tests passed.\n');
+    % testDeferDraw
+    fig = figure('Visible', 'off');
+    ax = axes('Parent', fig);
+    fp = FastPlot('Parent', ax);
+    fp.addLine(1:100, rand(1,100));
+    fp.DeferDraw = true;
+    fp.render();
+    assert(fp.IsRendered, 'testDeferDraw: should be rendered');
+    assert(ishandle(fp.Lines(1).hLine), 'testDeferDraw: line created');
+    close(fig);
+
+    fprintf('    All 9 render tests passed.\n');
 end
 
 function result = isfigure(h)
