@@ -397,6 +397,7 @@ fp.render();
 | `example_themes.m` | All 5 theme presets side by side |
 | `example_toolbar.m` | Interactive toolbar with data cursor, crosshair, and export |
 | `benchmark.m` | FastPlot vs plot() performance comparison |
+| `benchmark_dashboard.m` | FastPlotFigure vs subplot() dashboard creation |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
 
 ### Interactive demo
@@ -534,6 +535,32 @@ From the terminal (Octave):
 cd FastPlot
 octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark_zoom;"
 ```
+
+### Dashboard creation benchmark
+
+Compares `FastPlotFigure` vs standard `subplot()` for 1x1, 2x2, and 3x3 layouts:
+
+```matlab
+cd FastPlot/examples
+benchmark_dashboard;
+```
+
+From the terminal (Octave):
+
+```bash
+cd FastPlot
+octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark_dashboard;"
+```
+
+Benchmarked on Apple M4 with GNU Octave 11, 10M points per tile:
+
+| Layout | subplot() | FastPlotFigure | Speedup | Point Reduction |
+|--------|-----------|----------------|---------|-----------------|
+| 1x1 (single) | 0.195 s | 0.187 s | 1.0x | 100.0% |
+| 2x2 (4 tiles) | 0.451 s | 0.377 s | 1.2x | 100.0% |
+| 3x3 (9 tiles) | 0.964 s | 0.709 s | 1.4x | 100.0% |
+
+FastPlot's advantage grows with more tiles — downsampled rendering cost stays flat while `subplot()` scales linearly with total points. FastPlot also includes thresholds and violation markers that `subplot()` does not.
 
 ## License
 
