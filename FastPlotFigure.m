@@ -12,6 +12,10 @@ classdef FastPlotFigure < handle
         LiveUpdateFcn  = []        % @(fig, data) callback
         LiveIsActive   = false     % whether polling is running
         LiveInterval   = 2.0       % poll interval in seconds
+        MetadataFile      = ''        % path to metadata .mat file
+        MetadataVars      = {}        % variable names to extract
+        MetadataLineIndex = 1         % line index within the tile
+        MetadataTileIndex = 1         % which tile to attach metadata to
     end
 
     properties (SetAccess = private)
@@ -22,6 +26,7 @@ classdef FastPlotFigure < handle
         IsRendered = false
         LiveTimer      = []        % timer object
         LiveFileDate   = 0         % last known file datenum
+        MetadataFileDate  = 0         % last known metadata file datenum
     end
 
     properties (Constant, Access = private)
@@ -180,6 +185,14 @@ classdef FastPlotFigure < handle
                         obj.LiveInterval = varargin{k+1};
                     case 'viewmode'
                         obj.LiveViewMode = varargin{k+1};
+                    case 'metadatafile'
+                        obj.MetadataFile = varargin{k+1};
+                    case 'metadatavars'
+                        obj.MetadataVars = varargin{k+1};
+                    case 'metadatalineindex'
+                        obj.MetadataLineIndex = varargin{k+1};
+                    case 'metadatatileindex'
+                        obj.MetadataTileIndex = varargin{k+1};
                 end
             end
 
@@ -197,6 +210,11 @@ classdef FastPlotFigure < handle
             if exist(obj.LiveFile, 'file')
                 d = dir(obj.LiveFile);
                 obj.LiveFileDate = d.datenum;
+            end
+
+            if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
+                d = dir(obj.MetadataFile);
+                obj.MetadataFileDate = d.datenum;
             end
 
             % Create and start timer (MATLAB only; Octave lacks timer)
@@ -247,6 +265,13 @@ classdef FastPlotFigure < handle
             end
             d = dir(obj.LiveFile);
             obj.LiveFileDate = d.datenum;
+
+            % Load metadata file if configured
+            obj.loadMetadataFile();
+            if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
+                dm = dir(obj.MetadataFile);
+                obj.MetadataFileDate = dm.datenum;
+            end
         end
 
         function setViewMode(obj, mode)
@@ -300,6 +325,51 @@ classdef FastPlotFigure < handle
                     data = load(obj.LiveFile);
                     obj.LiveUpdateFcn(obj, data);
                     drawnow;
+                end
+            catch
+            end
+
+            % Check metadata file
+            if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
+                try
+                    dm = dir(obj.MetadataFile);
+                    if dm.datenum > obj.MetadataFileDate
+                        obj.MetadataFileDate = dm.datenum;
+                        obj.loadMetadataFile();
+                    end
+                catch
+                end
+            end
+        end
+
+        function loadMetadataFile(obj)
+            if isempty(obj.MetadataFile) || isempty(obj.MetadataVars)
+                return;
+            end
+            if ~exist(obj.MetadataFile, 'file')
+                return;
+            end
+            try
+                data = load(obj.MetadataFile);
+                meta = struct();
+                if isfield(data, 'datenum')
+                    meta.datenum = data.datenum;
+                elseif isfield(data, 'datetime')
+                    meta.datenum = data.datetime;
+                else
+                    return;
+                end
+                for i = 1:numel(obj.MetadataVars)
+                    varName = obj.MetadataVars{i};
+                    if isfield(data, varName)
+                        meta.(varName) = data.(varName);
+                    end
+                end
+                tileIdx = obj.MetadataTileIndex;
+                lineIdx = obj.MetadataLineIndex;
+                if tileIdx >= 1 && tileIdx <= numel(obj.Tiles) && ~isempty(obj.Tiles{tileIdx})
+                    fp = obj.Tiles{tileIdx};
+                    fp.setLineMetadata(lineIdx, meta);
                 end
             catch
             end

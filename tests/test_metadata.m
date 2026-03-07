@@ -25,8 +25,10 @@ function test_metadata()
     testStartLiveWithMetadataFile();
     testLiveMetadataFilePolling();
     testRefreshLoadsMetadataFile();
+    testFigureStartLiveWithMetadata();
+    testFigureRefreshLoadsMetadata();
 
-    fprintf('    All 18 metadata tests passed.\n');
+    fprintf('    All 20 metadata tests passed.\n');
 end
 
 function testAddLineWithMetadata()
@@ -280,5 +282,60 @@ function testRefreshLoadsMetadataFile()
     assert(strcmp(fp.Lines(1).Metadata.operator{1}, 'Alice'), 'refreshMeta: operator');
 
     close(fp.hFigure);
+    delete(tmpData); delete(tmpMeta);
+end
+
+function testFigureStartLiveWithMetadata()
+    fig = FastPlotFigure(1, 1);
+    fp1 = fig.tile(1); fp1.addLine(1:100, rand(1,100));
+    fig.renderAll();
+
+    tmpData = [tempname, '.mat'];
+    s.x = 1:100; s.y = rand(1,100);
+    save(tmpData, '-struct', 's');
+
+    tmpMeta = [tempname, '.mat'];
+    m.datenum = [1, 50];
+    m.operator = {'Alice', 'Bob'};
+    save(tmpMeta, '-struct', 'm');
+
+    fig.startLive(tmpData, @(fig, d) fig.tile(1).updateData(1, d.x, d.y), ...
+        'MetadataFile', tmpMeta, 'MetadataVars', {'operator'}, ...
+        'MetadataLineIndex', 1, 'MetadataTileIndex', 1);
+
+    assert(strcmp(fig.MetadataFile, tmpMeta), 'figStartLiveMeta: file');
+    assert(isequal(fig.MetadataVars, {'operator'}), 'figStartLiveMeta: vars');
+
+    fig.stopLive();
+    close(fig.hFigure);
+    delete(tmpData); delete(tmpMeta);
+end
+
+function testFigureRefreshLoadsMetadata()
+    fig = FastPlotFigure(1, 1);
+    fp1 = fig.tile(1); fp1.addLine(1:100, zeros(1,100));
+    fig.renderAll();
+
+    tmpData = [tempname, '.mat'];
+    s.x = 1:100; s.y = ones(1,100) * 7;
+    save(tmpData, '-struct', 's');
+
+    tmpMeta = [tempname, '.mat'];
+    m.datenum = [1, 50];
+    m.operator = {'Alice', 'Bob'};
+    save(tmpMeta, '-struct', 'm');
+
+    fig.LiveFile = tmpData;
+    fig.LiveUpdateFcn = @(fig, d) fig.tile(1).updateData(1, d.x, d.y);
+    fig.MetadataFile = tmpMeta;
+    fig.MetadataVars = {'operator'};
+    fig.MetadataLineIndex = 1;
+    fig.MetadataTileIndex = 1;
+    fig.refresh();
+
+    fp1 = fig.tile(1);
+    assert(~isempty(fp1.Lines(1).Metadata), 'figRefreshMeta: has metadata');
+    assert(strcmp(fp1.Lines(1).Metadata.operator{1}, 'Alice'), 'figRefreshMeta: operator');
+    close(fig.hFigure);
     delete(tmpData); delete(tmpMeta);
 end
