@@ -17,11 +17,13 @@ function test_live()
     testRefreshLoadsFile();
     testSetViewMode();
     testStartLiveRequiresRender();
+    testRunLiveExitsWhenNotActive();
     testFigureStartLive();
     testFigureStopLive();
     testFigureRefresh();
+    testFigureRunLiveExitsWhenNotActive();
 
-    fprintf('    All 13 live mode tests passed.\n');
+    fprintf('    All 15 live mode tests passed.\n');
 end
 
 function testUpdateDataReplacesLineData()
@@ -194,6 +196,19 @@ function testStartLiveRequiresRender()
     assert(threw, 'startLive: should throw before render');
 end
 
+function testRunLiveExitsWhenNotActive()
+    fp = FastPlot();
+    fp.addLine(1:100, rand(1,100));
+    fp.render();
+
+    % runLive should return immediately when LiveIsActive is false
+    tic;
+    fp.runLive();
+    elapsed = toc;
+    assert(elapsed < 1, 'runLive: should return immediately when not active');
+    close(fp.hFigure);
+end
+
 function testFigureStartLive()
     fig = FastPlotFigure(1, 2);
     fp1 = fig.tile(1); fp1.addLine(1:100, rand(1,100));
@@ -251,4 +266,16 @@ function testFigureRefresh()
     assert(all(fig.tile(1).Lines(1).Y == 99), 'fig refresh: data should be 99');
     close(fig.hFigure);
     delete(tmpFile);
+end
+
+function testFigureRunLiveExitsWhenNotActive()
+    fig = FastPlotFigure(1, 1);
+    fp1 = fig.tile(1); fp1.addLine(1:100, rand(1,100));
+    fig.renderAll();
+
+    tic;
+    fig.runLive();
+    elapsed = toc;
+    assert(elapsed < 1, 'fig runLive: should return immediately when not active');
+    close(fig.hFigure);
 end

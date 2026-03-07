@@ -730,8 +730,7 @@ classdef FastPlot < handle
                     'ErrorFcn', @(~,~) []);
                 start(obj.LiveTimer);
             catch
-                % Octave: no timer support — use manual refresh() instead
-                obj.LiveTimer = struct('Tag', 'OctavePlaceholder');
+                % Octave: no timer — use runLive() for blocking poll loop
             end
 
             obj.LiveIsActive = true;
@@ -748,7 +747,7 @@ classdef FastPlot < handle
 
         function stopLive(obj)
             %STOPLIVE Stop live mode polling.
-            if ~isempty(obj.LiveTimer) && ~isstruct(obj.LiveTimer)
+            if ~isempty(obj.LiveTimer)
                 try
                     stop(obj.LiveTimer);
                     delete(obj.LiveTimer);
@@ -790,6 +789,58 @@ classdef FastPlot < handle
         function setViewMode(obj, mode)
             %SETVIEWMODE Change the live view mode at runtime.
             obj.LiveViewMode = mode;
+        end
+
+        function runLive(obj)
+            %RUNLIVE Blocking poll loop for live mode (Octave compatibility).
+            %   On MATLAB, this is a no-op (timer handles polling).
+            %   On Octave, blocks until figure is closed or Ctrl+C.
+            %
+            %   Usage:
+            %     fp.startLive('data.mat', @updateFcn);
+            %     fp.runLive();  % blocks on Octave, no-op on MATLAB
+
+            if ~obj.LiveIsActive
+                return;
+            end
+
+            % On MATLAB, the timer is already running — nothing to do
+            if ~isempty(obj.LiveTimer) && ~isstruct(obj.LiveTimer)
+                return;
+            end
+
+            % Octave: blocking poll loop
+            cleanupObj = onCleanup(@() obj.stopLive());
+
+            if obj.Verbose
+                fprintf('[FastPlot] runLive: entering poll loop (%.1fs interval)\n', obj.LiveInterval);
+            end
+
+            while obj.LiveIsActive && ishandle(obj.hFigure)
+                try
+                    if exist(obj.LiveFile, 'file')
+                        d = dir(obj.LiveFile);
+                        if d.datenum > obj.LiveFileDate
+                            obj.LiveFileDate = d.datenum;
+                            data = load(obj.LiveFile);
+                            obj.LiveUpdateFcn(obj, data);
+                            if obj.Verbose
+                                fprintf('[FastPlot] live update: %s\n', datestr(now, 'HH:MM:SS'));
+                            end
+                        end
+                    end
+                catch e
+                    if obj.Verbose
+                        fprintf('[FastPlot] runLive error: %s\n', e.message);
+                    end
+                end
+                drawnow;
+                pause(obj.LiveInterval);
+            end
+
+            if obj.Verbose
+                fprintf('[FastPlot] runLive: exited poll loop\n');
+            end
         end
     end
 
