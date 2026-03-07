@@ -128,9 +128,21 @@ classdef FastPlotToolbar < handle
                 set(obj.hLiveBtn, 'State', 'off');
             else
                 if ~isempty(target.LiveFile) && ~isempty(target.LiveUpdateFcn)
-                    target.startLive(target.LiveFile, target.LiveUpdateFcn, ...
-                        'Interval', target.LiveInterval, ...
-                        'ViewMode', target.LiveViewMode);
+                    args = {'Interval', target.LiveInterval, ...
+                            'ViewMode', target.LiveViewMode};
+                    if ~isempty(target.MetadataFile)
+                        args = [args, 'MetadataFile', target.MetadataFile];
+                    end
+                    if ~isempty(target.MetadataVars)
+                        args = [args, 'MetadataVars', {target.MetadataVars}];
+                    end
+                    if isprop(target, 'MetadataLineIndex')
+                        args = [args, 'MetadataLineIndex', target.MetadataLineIndex];
+                    end
+                    if isprop(target, 'MetadataTileIndex') && isa(target, 'FastPlotFigure')
+                        args = [args, 'MetadataTileIndex', target.MetadataTileIndex];
+                    end
+                    target.startLive(target.LiveFile, target.LiveUpdateFcn, args{:});
                     set(obj.hLiveBtn, 'State', 'on');
                 end
             end

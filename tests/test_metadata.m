@@ -27,8 +27,9 @@ function test_metadata()
     testRefreshLoadsMetadataFile();
     testFigureStartLiveWithMetadata();
     testFigureRefreshLoadsMetadata();
+    testToolbarLiveToggleWithMetadata();
 
-    fprintf('    All 20 metadata tests passed.\n');
+    fprintf('    All 21 metadata tests passed.\n');
 end
 
 function testAddLineWithMetadata()
@@ -337,5 +338,36 @@ function testFigureRefreshLoadsMetadata()
     assert(~isempty(fp1.Lines(1).Metadata), 'figRefreshMeta: has metadata');
     assert(strcmp(fp1.Lines(1).Metadata.operator{1}, 'Alice'), 'figRefreshMeta: operator');
     close(fig.hFigure);
+    delete(tmpData); delete(tmpMeta);
+end
+
+function testToolbarLiveToggleWithMetadata()
+    fp = FastPlot();
+    fp.addLine(1:100, rand(1,100));
+    fp.render();
+
+    tmpData = [tempname, '.mat'];
+    s.x = 1:100; s.y = rand(1,100);
+    save(tmpData, '-struct', 's');
+
+    tmpMeta = [tempname, '.mat'];
+    m.datenum = [1, 50];
+    m.operator = {'Alice', 'Bob'};
+    save(tmpMeta, '-struct', 'm');
+
+    fp.LiveFile = tmpData;
+    fp.LiveUpdateFcn = @(fp, d) fp.updateData(1, d.x, d.y);
+    fp.MetadataFile = tmpMeta;
+    fp.MetadataVars = {'operator'};
+    fp.MetadataLineIndex = 1;
+
+    tb = FastPlotToolbar(fp);
+    tb.toggleLive();
+    assert(fp.LiveIsActive, 'toolbarLiveMeta: should be active');
+
+    tb.toggleLive();
+    assert(~fp.LiveIsActive, 'toolbarLiveMeta: should be inactive');
+
+    close(fp.hFigure);
     delete(tmpData); delete(tmpMeta);
 end
