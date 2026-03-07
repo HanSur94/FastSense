@@ -17,6 +17,8 @@ classdef FastPlotToolbar < handle
         hCursorDot    = []    % data cursor marker
         hCursorTxt    = []    % data cursor text box
         SavedCallbacks = struct() % saved figure callbacks to restore
+        hLiveBtn      = []    % uitoggletool handle for live mode
+        hRefreshBtn   = []    % uipushtool handle for refresh
     end
 
     methods (Access = public)
@@ -107,6 +109,28 @@ classdef FastPlotToolbar < handle
             end
         end
 
+        function refresh(obj)
+            %REFRESH Trigger a manual data refresh.
+            obj.Target.refresh();
+        end
+
+        function toggleLive(obj)
+            %TOGGLELIVE Toggle live mode on/off.
+            target = obj.Target;
+
+            if target.LiveIsActive
+                target.stopLive();
+                set(obj.hLiveBtn, 'State', 'off');
+            else
+                if ~isempty(target.LiveFile) && ~isempty(target.LiveUpdateFcn)
+                    target.startLive(target.LiveFile, target.LiveUpdateFcn, ...
+                        'Interval', target.LiveInterval, ...
+                        'ViewMode', target.LiveViewMode);
+                    set(obj.hLiveBtn, 'State', 'on');
+                end
+            end
+        end
+
         function [sx, sy, lineIdx] = snapToNearest(~, fp, xClick, yClick)
             sx = []; sy = []; lineIdx = [];
             bestDist = Inf;
@@ -174,6 +198,29 @@ classdef FastPlotToolbar < handle
                 'CData', FastPlotToolbar.makeIcon('export'), ...
                 'TooltipString', 'Export PNG', ...
                 'ClickedCallback', @(s,e) obj.onExportPNG());
+
+            obj.hRefreshBtn = uipushtool(obj.hToolbar, ...
+                'CData', FastPlotToolbar.makeIcon('refresh'), ...
+                'TooltipString', 'Refresh Data', ...
+                'ClickedCallback', @(s,e) obj.onRefresh());
+
+            obj.hLiveBtn = uitoggletool(obj.hToolbar, ...
+                'CData', FastPlotToolbar.makeIcon('live'), ...
+                'TooltipString', 'Live Mode', ...
+                'OnCallback',  @(s,e) obj.onLiveOn(), ...
+                'OffCallback', @(s,e) obj.onLiveOff());
+        end
+
+        function onRefresh(obj)
+            obj.refresh();
+        end
+
+        function onLiveOn(obj)
+            obj.toggleLive();
+        end
+
+        function onLiveOff(obj)
+            obj.toggleLive();
         end
 
         function onCursorOn(obj)
@@ -462,6 +509,32 @@ classdef FastPlotToolbar < handle
                         for c = [7 8 9]
                             if (r-8)^2 + (c-8)^2 <= 2
                                 icon(r, c, :) = reshape(fg,1,1,3);
+                            end
+                        end
+                    end
+
+                case 'refresh'
+                    % Circular arrow
+                    icon(4, 7:11, :) = repmat(reshape(fg,1,1,3), 1, 5, 1);
+                    icon(12, 5:9, :) = repmat(reshape(fg,1,1,3), 1, 5, 1);
+                    icon(5:7, 5, :)  = repmat(reshape(fg,1,1,3), 3, 1, 1);
+                    icon(9:11, 11, :) = repmat(reshape(fg,1,1,3), 3, 1, 1);
+                    icon(5, 6, :) = reshape(fg,1,1,3);
+                    icon(11, 10, :) = reshape(fg,1,1,3);
+                    % Arrow heads
+                    icon(3, 11:13, :) = repmat(reshape(fg,1,1,3), 1, 3, 1);
+                    icon(4, 12, :) = reshape(fg,1,1,3);
+                    icon(5, 13, :) = reshape(fg,1,1,3);
+                    icon(13, 3:5, :) = repmat(reshape(fg,1,1,3), 1, 3, 1);
+                    icon(12, 4, :) = reshape(fg,1,1,3);
+                    icon(11, 3, :) = reshape(fg,1,1,3);
+
+                case 'live'
+                    % Filled circle (recording dot)
+                    for r = 5:11
+                        for c = 5:11
+                            if (r-8)^2 + (c-8)^2 <= 9
+                                icon(r, c, :) = reshape([0.8 0.1 0.1],1,1,3);
                             end
                         end
                     end
