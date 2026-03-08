@@ -91,14 +91,14 @@ classdef FastPlot < handle
         hFigure       = []
         hAxes         = []
         IsDatetime    = false % true if X data was datetime (converted to datenum)
-        hRefineTimer  = []    % one-shot timer for deferred minmax refinement
-        IsRefined     = true  % false while showing coarse stride preview
     end
 
     % ======================== PRIVATE STATE ==============================
     % Internal bookkeeping: listeners, caches, timers, and flags.
     properties (Access = private)
         Listeners     = []    % event listeners (XLim, resize)
+        hRefineTimer  = []    % one-shot timer for deferred minmax refinement
+        IsRefined     = true  % false while showing coarse stride preview
         CachedXLim    = []    % for lazy recomputation
         FullXLim      = []    % full data range for Home button restore
         FullYLim      = []    % full data Y range for Home button restore
@@ -1271,7 +1271,10 @@ classdef FastPlot < handle
 
             obj.IsRefined = true;
             obj.stopRefineTimer();
-            drawnow;
+            obj.updateViolations();
+            if ~obj.DeferDraw
+                drawnow;
+            end
         end
 
         function stopRefineTimer(obj)
