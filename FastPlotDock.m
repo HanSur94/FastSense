@@ -15,7 +15,7 @@ classdef FastPlotDock < handle
     end
 
     properties (Constant, Access = private)
-        TAB_BAR_HEIGHT = 0.04  % normalized height for tab bar
+        TAB_BAR_HEIGHT = 0.03  % normalized height for tab bar
     end
 
     methods (Access = public)
@@ -135,12 +135,11 @@ classdef FastPlotDock < handle
             if ~isempty(obj.hTabButtons)
                 nTabs = numel(obj.hTabButtons);
                 tabH = obj.TAB_BAR_HEIGHT;
-                btnWidth = min(0.15, 0.95 / nTabs);
-                startX = 0.025;
+                btnWidth = 1 / nTabs;
                 for i = 1:nTabs
                     if ishandle(obj.hTabButtons{i})
                         set(obj.hTabButtons{i}, 'Position', ...
-                            [startX + (i-1)*btnWidth, 1 - tabH, btnWidth, tabH]);
+                            [(i-1)*btnWidth, 1 - tabH, btnWidth, tabH]);
                     end
                 end
             end
@@ -179,25 +178,25 @@ classdef FastPlotDock < handle
         end
 
         function addTabButton(obj, idx)
-            nTabs = numel(obj.Tabs);
             tabH = obj.TAB_BAR_HEIGHT;
-            btnWidth = min(0.15, 0.95 / nTabs);
-            startX = 0.025;
+            nTabs = numel(obj.Tabs);
+            btnWidth = 1 / nTabs;
 
             btn = uicontrol(obj.hFigure, ...
                 'Style', 'togglebutton', ...
                 'String', obj.Tabs(idx).Name, ...
                 'Units', 'normalized', ...
-                'Position', [startX + (idx-1)*btnWidth, 1 - tabH, btnWidth, tabH], ...
+                'Position', [(idx-1)*btnWidth, 1 - tabH, btnWidth, tabH], ...
                 'FontSize', 9, ...
                 'Callback', @(s,e) obj.onTabClick(idx));
             obj.hTabButtons{idx} = btn;
 
             % Reposition all buttons to account for new count
+            btnWidth = 1 / numel(obj.hTabButtons);
             for i = 1:numel(obj.hTabButtons)
                 if ishandle(obj.hTabButtons{i})
                     set(obj.hTabButtons{i}, 'Position', ...
-                        [startX + (i-1)*btnWidth, 1 - tabH, btnWidth, tabH]);
+                        [(i-1)*btnWidth, 1 - tabH, btnWidth, tabH]);
                 end
             end
 
@@ -250,13 +249,13 @@ classdef FastPlotDock < handle
             if ~ishandle(btn); return; end
             if active
                 set(btn, 'Value', 1, ...
-                    'BackgroundColor', obj.Theme.Background * 0.8 + [0.05 0.1 0.2], ...
-                    'ForegroundColor', obj.Theme.ForegroundColor, ...
+                    'BackgroundColor', [1 1 1], ...
+                    'ForegroundColor', [0 0 0], ...
                     'FontWeight', 'bold');
             else
                 set(btn, 'Value', 0, ...
-                    'BackgroundColor', obj.Theme.Background, ...
-                    'ForegroundColor', obj.Theme.ForegroundColor * 0.7, ...
+                    'BackgroundColor', [0.94 0.94 0.94], ...
+                    'ForegroundColor', [0.4 0.4 0.4], ...
                     'FontWeight', 'normal');
             end
         end
