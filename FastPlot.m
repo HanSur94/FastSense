@@ -91,6 +91,8 @@ classdef FastPlot < handle
         hFigure       = []
         hAxes         = []
         IsDatetime    = false % true if X data was datetime (converted to datenum)
+        hRefineTimer  = []    % one-shot timer for deferred minmax refinement
+        IsRefined     = true  % false while showing coarse stride preview
     end
 
     % ======================== PRIVATE STATE ==============================
@@ -105,8 +107,6 @@ classdef FastPlot < handle
         HasLimitRate  = []    % cached: does drawnow support 'limitrate'?
         DeferredTimer = []    % timer for deferred Home button re-downsample
         ColorIndex    = 0     % tracks auto color cycling position
-        hRefineTimer  = []    % one-shot timer for deferred minmax refinement
-        IsRefined     = true  % false while showing coarse stride preview
         LiveTimer      = []        % timer object for live polling
         LiveFileDate   = 0         % last known file modification datenum
         MetadataFileDate  = 0         % last known metadata file datenum
@@ -927,6 +927,8 @@ classdef FastPlot < handle
             %     'MetadataVars'      — cell array of variable names
             %     'MetadataLineIndex' — which line receives metadata
 
+            obj.stopRefineTimer();
+
             if ~obj.IsRendered
                 error('FastPlot:notRendered', ...
                     'Cannot start live mode before render() has been called.');
@@ -1273,7 +1275,7 @@ classdef FastPlot < handle
         end
 
         function stopRefineTimer(obj)
-            %STOPREFINETIEMR Stop and delete the refinement timer.
+            %STOPREFINETIMER Stop and delete the refinement timer.
             if ~isempty(obj.hRefineTimer)
                 try
                     stop(obj.hRefineTimer);
