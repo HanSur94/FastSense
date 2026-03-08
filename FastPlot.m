@@ -52,9 +52,12 @@ classdef FastPlot < handle
     properties (Access = private)
         Listeners     = []    % event listeners (XLim, resize)
         CachedXLim    = []    % for lazy recomputation
+        FullXLim      = []    % full data range for Home button restore
+        FullYLim      = []    % full data Y range for Home button restore
         PixelWidth    = 1920  % cached axes width in pixels
         IsPropagating = false % guard against re-entrant link propagation
         HasLimitRate  = []    % cached: does drawnow support 'limitrate'?
+        DeferredTimer = []    % timer for deferred Home button re-downsample
         ColorIndex    = 0     % tracks auto color cycling position
         LiveTimer      = []        % timer object for live polling
         LiveFileDate   = 0         % last known file modification datenum
@@ -634,12 +637,21 @@ classdef FastPlot < handle
             set(obj.hAxes, 'XLimMode', 'manual');
             set(obj.hAxes, 'YLimMode', 'manual');
 
+            obj.FullXLim = [xmin, xmax];
+            obj.FullYLim = [ymin - yPad, ymax + yPad];
             obj.CachedXLim = get(obj.hAxes, 'XLim');
 
+            % Invisible anchor line spanning full X range.
+            % Ensures MATLAB auto-XLim computation covers full data even
+            % when visible lines are downsampled to a zoomed sub-range.
+            line(obj.hAxes, [xmin xmax], [NaN NaN], ...
+                'HandleVisibility', 'off', 'Visible', 'off', ...
+                'Tag', 'FastPlotAnchor', ...
+                'XLimInclude', 'on', 'YLimInclude', 'off');
+
             % --- Install listeners ---
-            % R2025b+: property PostSet listener (documented API)
-            % R2020b-R2024b: undocumented 'xlim' event
-            % Octave: no property listeners — skip gracefully
+            % XLim PostSet: primary listener for zoom/pan (R2025b+)
+            % Fallback: undocumented 'xlim' event (R2020b-R2024b)
             try
                 addlistener(obj.hAxes, 'XLim', 'PostSet', @(s,e) obj.onXLimChanged(s,e));
             catch
@@ -647,6 +659,18 @@ classdef FastPlot < handle
                     addlistener(obj.hAxes, 'xlim', @(s,e) obj.onXLimChanged(s,e));
                 catch
                 end
+            end
+            % XLimMode PostSet: catches resetplotview (Home button) and
+            % XLimMode='auto'. Both bypass XLim PostSet but DO fire
+            % XLimMode PostSet — and XLim is already updated at that point.
+            try
+                addlistener(obj.hAxes, 'XLimMode', 'PostSet', @(s,e) obj.onXLimModeChanged());
+            catch
+            end
+            % Store initial view so Home button has correct XLim target
+            try
+                resetplotview(obj.hAxes, 'SaveCurrentView');
+            catch
             end
             % Only set figure-level callbacks when we own the figure
             if isempty(obj.ParentAxes)
@@ -878,6 +902,10 @@ classdef FastPlot < handle
             end
             obj.LiveTimer = [];
             obj.LiveIsActive = false;
+            if ~isempty(obj.DeferredTimer)
+                try stop(obj.DeferredTimer); delete(obj.DeferredTimer); catch; end
+                obj.DeferredTimer = [];
+            end
 
             if obj.Verbose
                 fprintf('[FastPlot] live mode stopped\n');
@@ -1143,6 +1171,69 @@ classdef FastPlot < handle
 
             obj.drawnowLimitRate();
             if obj.Verbose; fflush(stdout); end
+        end
+
+        function onXLimModeChanged(obj)
+            %ONXLIMMODECHANGED Catch XLim changes that bypass XLim PostSet.
+            %   resetplotview (Home) and XLimMode='auto' fire XLimMode PostSet
+            %   but NOT XLim PostSet. resetplotview defers XLim change until
+            %   after callbacks return, so we schedule a deferred check.
+            if ~obj.IsRendered || ~ishandle(obj.hAxes) || obj.IsPropagating
+                return;
+            end
+
+            % XLimMode='auto': handle immediately (XLim auto-computed from
+            % anchor line spans full range, but we want exact FullXLim)
+            if strcmp(get(obj.hAxes, 'XLimMode'), 'auto') && ~isempty(obj.FullXLim)
+                obj.IsPropagating = true;
+                try
+                    set(obj.hAxes, 'XLim', obj.FullXLim);
+                    set(obj.hAxes, 'XLimMode', 'manual');
+                    if ~isempty(obj.FullYLim)
+                        set(obj.hAxes, 'YLim', obj.FullYLim);
+                        set(obj.hAxes, 'YLimMode', 'manual');
+                    end
+                    obj.CachedXLim = obj.FullXLim;
+                    obj.updateLines();
+                    obj.updateShadings();
+                    obj.updateViolations();
+                catch
+                end
+                obj.IsPropagating = false;
+                return;
+            end
+
+            % resetplotview path: XLim hasn't changed yet at this point
+            % (deferred by MATLAB). Schedule a check on next event loop.
+            obj.scheduleDeferredXLimCheck();
+        end
+
+        function scheduleDeferredXLimCheck(obj)
+            %SCHEDULEDEFERREDXLIMCHECK One-shot timer to catch deferred XLim changes.
+            if ~isempty(obj.DeferredTimer) && isvalid(obj.DeferredTimer)
+                stop(obj.DeferredTimer);
+                delete(obj.DeferredTimer);
+            end
+            obj.DeferredTimer = timer('ExecutionMode', 'singleShot', ...
+                'StartDelay', 0.01, ...
+                'TimerFcn', @(~,~) obj.deferredXLimCheck());
+            start(obj.DeferredTimer);
+        end
+
+        function deferredXLimCheck(obj)
+            %DEFERREDXLIMCHECK Check if XLim changed after resetplotview.
+            if ~ishandle(obj.hAxes) || obj.IsPropagating
+                return;
+            end
+            newXLim = get(obj.hAxes, 'XLim');
+            if ~isempty(obj.CachedXLim) && all(abs(newXLim - obj.CachedXLim) < eps)
+                return;
+            end
+            obj.CachedXLim = newXLim;
+            obj.updateLines();
+            obj.updateShadings();
+            obj.updateViolations();
+            drawnow;
         end
 
         function onResize(obj, ~, ~)
