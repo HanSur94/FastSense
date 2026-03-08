@@ -102,28 +102,35 @@ fp.addThreshold(600, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'Pea
 dock.addTab(fig4, 'Electrical Grid');
 
 % =========================================================================
-% Tab 5: Environment (2x2)
+% Tab 5: Environment (2x2) — uses datenum X axis for datetime ticks
 % =========================================================================
 fig5 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
+t0 = datenum(2026, 3, 8, 0, 0, 0);  % midnight today
+t1 = datenum(2026, 3, 8, 23, 59, 59);
+
 fp = fig5.tile(1);
-n = 1e6; x = linspace(0, 86400, n);
-fp.addLine(x, 22 + 4*sin(x*2*pi/86400) + 0.5*randn(1,n), 'DisplayName', 'Room Temp');
+n = 1e6; x = linspace(t0, t1, n);
+secs = (x - t0) * 86400;
+fp.addLine(x, 22 + 4*sin(secs*2*pi/86400) + 0.5*randn(1,n), 'DisplayName', 'Room Temp');
 fp.addBand(20, 25, 'FaceColor', [0.2 0.6 1], 'FaceAlpha', 0.1);
 
 fp = fig5.tile(2);
-n = 800000; x = linspace(0, 86400, n);
-fp.addLine(x, 45 + 15*sin(x*2*pi/43200) + 5*randn(1,n), 'DisplayName', 'Humidity %');
+n = 800000; x = linspace(t0, t1, n);
+secs = (x - t0) * 86400;
+fp.addLine(x, 45 + 15*sin(secs*2*pi/43200) + 5*randn(1,n), 'DisplayName', 'Humidity %');
 fp.addThreshold(65, 'Direction', 'upper', 'ShowViolations', true);
 
 fp = fig5.tile(3);
-n = 500000; x = linspace(0, 86400, n);
-fp.addLine(x, 35 + 8*sin(x*2*pi/7200) + 3*randn(1,n), 'DisplayName', 'dB Level');
+n = 500000; x = linspace(t0, t1, n);
+secs = (x - t0) * 86400;
+fp.addLine(x, 35 + 8*sin(secs*2*pi/7200) + 3*randn(1,n), 'DisplayName', 'dB Level');
 fp.addThreshold(50, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'Loud');
 
 fp = fig5.tile(4);
-n = 600000; x = linspace(0, 86400, n);
-co2 = 400 + 100*sin(x*2*pi/43200) + 20*randn(1,n);
+n = 600000; x = linspace(t0, t1, n);
+secs = (x - t0) * 86400;
+co2 = 400 + 100*sin(secs*2*pi/43200) + 20*randn(1,n);
 fp.addLine(x, co2, 'DisplayName', 'CO2 (ppm)');
 fp.addThreshold(800, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'Ventilate');
 
@@ -161,13 +168,18 @@ fig4.tileTitle(3, 'Load (800K pts)');
 fig4.tileXLabel(3, 'Time (s)'); fig4.tileYLabel(3, 'Power (kW)');
 
 fig5.tileTitle(1, 'Room Temperature (1M pts)');
-fig5.tileXLabel(1, 'Time (s)'); fig5.tileYLabel(1, 'Temp (°C)');
+fig5.tileYLabel(1, 'Temp (°C)');
 fig5.tileTitle(2, 'Humidity (800K pts)');
-fig5.tileXLabel(2, 'Time (s)'); fig5.tileYLabel(2, 'RH (%)');
+fig5.tileYLabel(2, 'RH (%)');
 fig5.tileTitle(3, 'Noise Level (500K pts)');
-fig5.tileXLabel(3, 'Time (s)'); fig5.tileYLabel(3, 'Level (dB)');
+fig5.tileYLabel(3, 'Level (dB)');
 fig5.tileTitle(4, 'CO2 (600K pts)');
-fig5.tileXLabel(4, 'Time (s)'); fig5.tileYLabel(4, 'CO2 (ppm)');
+fig5.tileYLabel(4, 'CO2 (ppm)');
+
+% Format Environment tab X axes as datetime (HH:MM)
+for i = 1:4
+    datetick(fig5.tile(i).hAxes, 'x', 'HH:MM', 'keeplimits');
+end
 
 elapsed = toc;
 fprintf('Docked tabs rendered in %.2f seconds (~%.1fM total pts).\n', elapsed, 21.2);
