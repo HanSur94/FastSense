@@ -24,7 +24,11 @@ fig1 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 fp = fig1.tile(1);
 n = 2e6; t = linspace(t0, t1, n); s = sec(t);
-fp.addLine(t, 72 + 6*sin(s*2*pi/600) + 1.5*randn(1,n), 'DisplayName', 'Sensor A');
+meta1.datenum  = datenum([t0, t0+minutes(15), t0+minutes(30), t0+minutes(45)]);
+meta1.operator = {'Alice', 'Bob', 'Alice', 'Charlie'};
+meta1.shift    = {'Day', 'Day', 'Day', 'Night'};
+meta1.status   = {'normal', 'calibrating', 'normal', 'maintenance'};
+fp.addLine(t, 72 + 6*sin(s*2*pi/600) + 1.5*randn(1,n), 'DisplayName', 'Sensor A', 'Metadata', meta1);
 fp.addLine(t, 68 + 5*sin(s*2*pi/600 + 0.5) + 1.2*randn(1,n), 'DisplayName', 'Sensor B');
 fp.addThreshold(82, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'High');
 
@@ -79,7 +83,10 @@ fp.addBand(180, 260, 'FaceColor', [0.2 0.8 0.4], 'FaceAlpha', 0.08);
 
 fp = fig3.tile(2);
 n = 1e6; t = linspace(t0, t1, n); s = sec(t);
-fp.addLine(t, 55 + 10*sin(s*2*pi/1800) + 2*randn(1,n), 'DisplayName', 'Oil Temp');
+meta3.datenum  = datenum([t0, t0+minutes(20), t0+minutes(40)]);
+meta3.oil_type = {'Synthetic 5W-30', 'Synthetic 5W-30', 'Mineral 10W-40'};
+meta3.filter   = {'new', 'used', 'new'};
+fp.addLine(t, 55 + 10*sin(s*2*pi/1800) + 2*randn(1,n), 'DisplayName', 'Oil Temp', 'Metadata', meta3);
 fp.addThreshold(70, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'Overheat');
 
 dock.addTab(fig3, 'Hydraulics');
