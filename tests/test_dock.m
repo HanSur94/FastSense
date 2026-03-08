@@ -142,5 +142,43 @@ function test_dock()
     assert(strcmp(get(dock.Tabs(2).Panel, 'Visible'), 'on'), 'testAddTabAfterRender: new tab visible');
     close(dock.hFigure);
 
-    fprintf('    All 9 dock tests passed.\n');
+    % testRemoveTab
+    dock = FastPlotDock('Theme', 'dark');
+    fig1 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig1.tile(1); fp.addLine(1:50, rand(1,50));
+    dock.addTab(fig1, 'Tab A');
+
+    fig2 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig2.tile(1); fp.addLine(1:50, rand(1,50));
+    dock.addTab(fig2, 'Tab B');
+
+    fig3 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig3.tile(1); fp.addLine(1:50, rand(1,50));
+    dock.addTab(fig3, 'Tab C');
+    dock.render();
+
+    assert(numel(dock.Tabs) == 3, 'testRemoveTab: 3 tabs');
+    assert(dock.ActiveTab == 1, 'testRemoveTab: tab 1 active');
+
+    % Remove middle tab
+    dock.removeTab(2);
+    assert(numel(dock.Tabs) == 2, 'testRemoveTab: 2 tabs after remove');
+    assert(numel(dock.hTabButtons) == 2, 'testRemoveTab: 2 buttons');
+    assert(numel(dock.hCloseButtons) == 2, 'testRemoveTab: 2 close buttons');
+    assert(strcmp(dock.Tabs(2).Name, 'Tab C'), 'testRemoveTab: Tab C is now idx 2');
+
+    % Remove active tab
+    dock.selectTab(1);
+    dock.removeTab(1);
+    assert(numel(dock.Tabs) == 1, 'testRemoveTab: 1 tab left');
+    assert(dock.ActiveTab == 1, 'testRemoveTab: active adjusted');
+    assert(strcmp(dock.Tabs(1).Name, 'Tab C'), 'testRemoveTab: Tab C remains');
+
+    % Remove last tab
+    dock.removeTab(1);
+    assert(isempty(dock.Tabs), 'testRemoveTab: no tabs left');
+    assert(dock.ActiveTab == 0, 'testRemoveTab: active is 0');
+    close(dock.hFigure);
+
+    fprintf('    All 10 dock tests passed.\n');
 end

@@ -12,6 +12,7 @@ classdef FastPlotDock < handle
         Tabs      = struct('Name', {}, 'Figure', {}, 'Toolbar', {}, 'Panel', {})
         ActiveTab = 0          % index of currently visible tab
         hTabButtons = {}       % cell array of uicontrol handles
+        hCloseButtons = {}     % cell array of close button handles
     end
 
     properties (Constant, Access = private)
@@ -128,17 +129,74 @@ classdef FastPlotDock < handle
             obj.ActiveTab = n;
         end
 
+        function removeTab(obj, n)
+            %REMOVETAB Close and remove tab n.
+            if n < 1 || n > numel(obj.Tabs)
+                return;
+            end
+
+            % Stop live mode on the tab's figure
+            if ~isempty(obj.Tabs(n).Figure)
+                try obj.Tabs(n).Figure.stopLive(); catch; end
+            end
+
+            % Delete panel (and all child axes)
+            if ~isempty(obj.Tabs(n).Panel) && ishandle(obj.Tabs(n).Panel)
+                delete(obj.Tabs(n).Panel);
+            end
+
+            % Delete toolbar
+            tb = obj.Tabs(n).Toolbar;
+            if ~isempty(tb) && ~isempty(tb.hToolbar) && ishandle(tb.hToolbar)
+                delete(tb.hToolbar);
+            end
+
+            % Delete tab button and close button
+            if n <= numel(obj.hTabButtons) && ishandle(obj.hTabButtons{n})
+                delete(obj.hTabButtons{n});
+            end
+            if n <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{n})
+                delete(obj.hCloseButtons{n});
+            end
+
+            % Remove from arrays
+            obj.Tabs(n) = [];
+            obj.hTabButtons(n) = [];
+            obj.hCloseButtons(n) = [];
+
+            if isempty(obj.Tabs)
+                obj.ActiveTab = 0;
+                return;
+            end
+
+            % Adjust active tab index
+            if obj.ActiveTab == n
+                newActive = min(n, numel(obj.Tabs));
+                obj.ActiveTab = 0;  % reset so selectTab shows it
+                obj.selectTab(newActive);
+            elseif obj.ActiveTab > n
+                obj.ActiveTab = obj.ActiveTab - 1;
+            end
+
+            % Rebuild button layout and re-bind callbacks
+            obj.rebuildTabBar();
+        end
+
         function recomputeLayout(obj)
-            %RECOMPUTELAYOUT Reposition tab buttons on resize.
-            %   Axes inside panels auto-resize via normalized units.
+            %RECOMPUTELAYOUT Reposition tab and close buttons on resize.
             if ~isempty(obj.hTabButtons)
                 nTabs = numel(obj.hTabButtons);
                 tabH = obj.TAB_BAR_HEIGHT;
+                closeW = 0.02;
                 btnWidth = 1 / nTabs;
                 for i = 1:nTabs
                     if ishandle(obj.hTabButtons{i})
                         set(obj.hTabButtons{i}, 'Position', ...
-                            [(i-1)*btnWidth, 1 - tabH, btnWidth, tabH]);
+                            [(i-1)*btnWidth, 1 - tabH, btnWidth - closeW, tabH]);
+                    end
+                    if i <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{i})
+                        set(obj.hCloseButtons{i}, 'Position', ...
+                            [i*btnWidth - closeW, 1 - tabH, closeW, tabH]);
                     end
                 end
             end
@@ -171,6 +229,7 @@ classdef FastPlotDock < handle
 
         function createTabBar(obj)
             obj.hTabButtons = {};
+            obj.hCloseButtons = {};
             for i = 1:numel(obj.Tabs)
                 obj.addTabButton(i);
             end
@@ -180,27 +239,53 @@ classdef FastPlotDock < handle
             tabH = obj.TAB_BAR_HEIGHT;
             nTabs = numel(obj.Tabs);
             btnWidth = 1 / nTabs;
+            closeW = 0.02;
 
             btn = uicontrol(obj.hFigure, ...
                 'Style', 'togglebutton', ...
                 'String', obj.Tabs(idx).Name, ...
                 'Units', 'normalized', ...
-                'Position', [(idx-1)*btnWidth, 1 - tabH, btnWidth, tabH], ...
+                'Position', [(idx-1)*btnWidth, 1 - tabH, btnWidth - closeW, tabH], ...
                 'FontSize', 9, ...
                 'Callback', @(s,e) obj.onTabClick(idx));
             obj.hTabButtons{idx} = btn;
 
+            cbtn = uicontrol(obj.hFigure, ...
+                'Style', 'pushbutton', ...
+                'String', 'x', ...
+                'Units', 'normalized', ...
+                'Position', [idx*btnWidth - closeW, 1 - tabH, closeW, tabH], ...
+                'FontSize', 8, ...
+                'BackgroundColor', [0.94 0.94 0.94], ...
+                'ForegroundColor', [0.5 0.5 0.5], ...
+                'Callback', @(s,e) obj.removeTab(idx));
+            obj.hCloseButtons{idx} = cbtn;
+
             % Reposition all buttons to account for new count
-            btnWidth = 1 / numel(obj.hTabButtons);
-            for i = 1:numel(obj.hTabButtons)
-                if ishandle(obj.hTabButtons{i})
-                    set(obj.hTabButtons{i}, 'Position', ...
-                        [(i-1)*btnWidth, 1 - tabH, btnWidth, tabH]);
-                end
-            end
+            obj.recomputeLayout();
 
             % Style active/inactive
             obj.styleTabButton(idx, idx == obj.ActiveTab);
+        end
+
+        function rebuildTabBar(obj)
+            %REBUILDTABBAR Delete and recreate all tab/close buttons.
+            %   Needed after removeTab to fix callback indices.
+            for i = 1:numel(obj.hTabButtons)
+                if ishandle(obj.hTabButtons{i}); delete(obj.hTabButtons{i}); end
+            end
+            for i = 1:numel(obj.hCloseButtons)
+                if ishandle(obj.hCloseButtons{i}); delete(obj.hCloseButtons{i}); end
+            end
+            obj.hTabButtons = {};
+            obj.hCloseButtons = {};
+            for i = 1:numel(obj.Tabs)
+                obj.addTabButton(i);
+            end
+            % Re-style active tab
+            if obj.ActiveTab >= 1 && obj.ActiveTab <= numel(obj.Tabs)
+                obj.styleTabButton(obj.ActiveTab, true);
+            end
         end
 
         function onTabClick(obj, idx)
