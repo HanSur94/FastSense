@@ -13,6 +13,7 @@ classdef FastPlotDock < handle
         ActiveTab = 0          % index of currently visible tab
         hTabButtons = {}       % cell array of uicontrol handles
         hCloseButtons = {}     % cell array of close button handles
+        hUndockButtons = {}    % cell array of undock button handles
     end
 
     properties (Constant, Access = private)
@@ -151,9 +152,12 @@ classdef FastPlotDock < handle
                 delete(tb.hToolbar);
             end
 
-            % Delete tab button and close button
+            % Delete tab button, undock button, and close button
             if n <= numel(obj.hTabButtons) && ishandle(obj.hTabButtons{n})
                 delete(obj.hTabButtons{n});
+            end
+            if n <= numel(obj.hUndockButtons) && ishandle(obj.hUndockButtons{n})
+                delete(obj.hUndockButtons{n});
             end
             if n <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{n})
                 delete(obj.hCloseButtons{n});
@@ -162,6 +166,7 @@ classdef FastPlotDock < handle
             % Remove from arrays
             obj.Tabs(n) = [];
             obj.hTabButtons(n) = [];
+            obj.hUndockButtons(n) = [];
             obj.hCloseButtons(n) = [];
 
             if isempty(obj.Tabs)
@@ -182,21 +187,110 @@ classdef FastPlotDock < handle
             obj.rebuildTabBar();
         end
 
+        function undockTab(obj, n)
+            %UNDOCKTAB Pop tab n out into its own standalone figure.
+            if n < 1 || n > numel(obj.Tabs)
+                return;
+            end
+
+            fig = obj.Tabs(n).Figure;
+            tabName = obj.Tabs(n).Name;
+            panel = obj.Tabs(n).Panel;
+
+            % Stop live mode before undocking
+            if ~isempty(fig)
+                try fig.stopLive(); catch; end
+            end
+
+            % Delete the dock's toolbar for this tab
+            tb = obj.Tabs(n).Toolbar;
+            if ~isempty(tb) && ~isempty(tb.hToolbar) && ishandle(tb.hToolbar)
+                delete(tb.hToolbar);
+            end
+
+            % Create a new standalone figure
+            newFig = figure('Visible', 'off', ...
+                'Color', obj.Theme.Background, ...
+                'Name', tabName);
+
+            % Reparent all tile axes from dock panel to new figure
+            fig.hFigure = newFig;
+            fig.ParentFigure = [];
+            fig.ContentOffset = [0, 0, 1, 1];
+            for j = 1:numel(fig.TileAxes)
+                if ~isempty(fig.TileAxes{j}) && ishandle(fig.TileAxes{j})
+                    set(fig.TileAxes{j}, 'Parent', newFig);
+                    % Recompute position for standalone layout
+                    pos = fig.computeTilePosition(j);
+                    set(fig.TileAxes{j}, 'Position', pos);
+                end
+            end
+
+            % Delete the now-empty panel (don't delete children — they moved)
+            if ~isempty(panel) && ishandle(panel)
+                delete(panel);
+            end
+
+            % Delete tab button, close button, undock button
+            if n <= numel(obj.hTabButtons) && ishandle(obj.hTabButtons{n})
+                delete(obj.hTabButtons{n});
+            end
+            if n <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{n})
+                delete(obj.hCloseButtons{n});
+            end
+            if n <= numel(obj.hUndockButtons) && ishandle(obj.hUndockButtons{n})
+                delete(obj.hUndockButtons{n});
+            end
+
+            % Remove from arrays
+            obj.Tabs(n) = [];
+            obj.hTabButtons(n) = [];
+            obj.hCloseButtons(n) = [];
+            obj.hUndockButtons(n) = [];
+
+            % Create toolbar on the new standalone figure
+            FastPlotToolbar(fig);
+
+            % Show the new figure
+            set(newFig, 'Visible', 'on');
+            drawnow;
+
+            % Handle remaining dock tabs
+            if isempty(obj.Tabs)
+                obj.ActiveTab = 0;
+                return;
+            end
+
+            if obj.ActiveTab == n
+                newActive = min(n, numel(obj.Tabs));
+                obj.ActiveTab = 0;
+                obj.selectTab(newActive);
+            elseif obj.ActiveTab > n
+                obj.ActiveTab = obj.ActiveTab - 1;
+            end
+
+            obj.rebuildTabBar();
+        end
+
         function recomputeLayout(obj)
-            %RECOMPUTELAYOUT Reposition tab and close buttons on resize.
+            %RECOMPUTELAYOUT Reposition tab, undock, and close buttons on resize.
             if ~isempty(obj.hTabButtons)
                 nTabs = numel(obj.hTabButtons);
                 tabH = obj.TAB_BAR_HEIGHT;
-                closeW = 0.02;
+                smallW = 0.02;  % width for close and undock buttons
                 btnWidth = 1 / nTabs;
                 for i = 1:nTabs
                     if ishandle(obj.hTabButtons{i})
                         set(obj.hTabButtons{i}, 'Position', ...
-                            [(i-1)*btnWidth, 1 - tabH, btnWidth - closeW, tabH]);
+                            [(i-1)*btnWidth, 1 - tabH, btnWidth - 2*smallW, tabH]);
+                    end
+                    if i <= numel(obj.hUndockButtons) && ishandle(obj.hUndockButtons{i})
+                        set(obj.hUndockButtons{i}, 'Position', ...
+                            [i*btnWidth - 2*smallW, 1 - tabH, smallW, tabH]);
                     end
                     if i <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{i})
                         set(obj.hCloseButtons{i}, 'Position', ...
-                            [i*btnWidth - closeW, 1 - tabH, closeW, tabH]);
+                            [i*btnWidth - smallW, 1 - tabH, smallW, tabH]);
                     end
                 end
             end
@@ -230,6 +324,7 @@ classdef FastPlotDock < handle
         function createTabBar(obj)
             obj.hTabButtons = {};
             obj.hCloseButtons = {};
+            obj.hUndockButtons = {};
             for i = 1:numel(obj.Tabs)
                 obj.addTabButton(i);
             end
@@ -239,22 +334,34 @@ classdef FastPlotDock < handle
             tabH = obj.TAB_BAR_HEIGHT;
             nTabs = numel(obj.Tabs);
             btnWidth = 1 / nTabs;
-            closeW = 0.02;
+            smallW = 0.02;
 
             btn = uicontrol(obj.hFigure, ...
                 'Style', 'togglebutton', ...
                 'String', obj.Tabs(idx).Name, ...
                 'Units', 'normalized', ...
-                'Position', [(idx-1)*btnWidth, 1 - tabH, btnWidth - closeW, tabH], ...
+                'Position', [(idx-1)*btnWidth, 1 - tabH, btnWidth - 2*smallW, tabH], ...
                 'FontSize', 9, ...
                 'Callback', @(s,e) obj.onTabClick(idx));
             obj.hTabButtons{idx} = btn;
+
+            ubtn = uicontrol(obj.hFigure, ...
+                'Style', 'pushbutton', ...
+                'String', '^', ...
+                'Units', 'normalized', ...
+                'Position', [idx*btnWidth - 2*smallW, 1 - tabH, smallW, tabH], ...
+                'FontSize', 8, ...
+                'TooltipString', 'Undock tab', ...
+                'BackgroundColor', [0.94 0.94 0.94], ...
+                'ForegroundColor', [0.4 0.4 0.6], ...
+                'Callback', @(s,e) obj.undockTab(idx));
+            obj.hUndockButtons{idx} = ubtn;
 
             cbtn = uicontrol(obj.hFigure, ...
                 'Style', 'pushbutton', ...
                 'String', 'x', ...
                 'Units', 'normalized', ...
-                'Position', [idx*btnWidth - closeW, 1 - tabH, closeW, tabH], ...
+                'Position', [idx*btnWidth - smallW, 1 - tabH, smallW, tabH], ...
                 'FontSize', 8, ...
                 'BackgroundColor', [0.94 0.94 0.94], ...
                 'ForegroundColor', [0.5 0.5 0.5], ...
@@ -269,16 +376,20 @@ classdef FastPlotDock < handle
         end
 
         function rebuildTabBar(obj)
-            %REBUILDTABBAR Delete and recreate all tab/close buttons.
-            %   Needed after removeTab to fix callback indices.
+            %REBUILDTABBAR Delete and recreate all tab/close/undock buttons.
+            %   Needed after removeTab/undockTab to fix callback indices.
             for i = 1:numel(obj.hTabButtons)
                 if ishandle(obj.hTabButtons{i}); delete(obj.hTabButtons{i}); end
             end
             for i = 1:numel(obj.hCloseButtons)
                 if ishandle(obj.hCloseButtons{i}); delete(obj.hCloseButtons{i}); end
             end
+            for i = 1:numel(obj.hUndockButtons)
+                if ishandle(obj.hUndockButtons{i}); delete(obj.hUndockButtons{i}); end
+            end
             obj.hTabButtons = {};
             obj.hCloseButtons = {};
+            obj.hUndockButtons = {};
             for i = 1:numel(obj.Tabs)
                 obj.addTabButton(i);
             end

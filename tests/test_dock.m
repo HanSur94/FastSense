@@ -165,6 +165,7 @@ function test_dock()
     assert(numel(dock.Tabs) == 2, 'testRemoveTab: 2 tabs after remove');
     assert(numel(dock.hTabButtons) == 2, 'testRemoveTab: 2 buttons');
     assert(numel(dock.hCloseButtons) == 2, 'testRemoveTab: 2 close buttons');
+    assert(numel(dock.hUndockButtons) == 2, 'testRemoveTab: 2 undock buttons');
     assert(strcmp(dock.Tabs(2).Name, 'Tab C'), 'testRemoveTab: Tab C is now idx 2');
 
     % Remove active tab
@@ -180,5 +181,35 @@ function test_dock()
     assert(dock.ActiveTab == 0, 'testRemoveTab: active is 0');
     close(dock.hFigure);
 
-    fprintf('    All 10 dock tests passed.\n');
+    % testUndockTab
+    dock = FastPlotDock('Theme', 'dark');
+    fig1 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig1.tile(1); fp.addLine(1:50, rand(1,50), 'DisplayName', 'Line A');
+    dock.addTab(fig1, 'Tab A');
+
+    fig2 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig2.tile(1); fp.addLine(1:50, rand(1,50), 'DisplayName', 'Line B');
+    dock.addTab(fig2, 'Tab B');
+
+    fig3 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig3.tile(1); fp.addLine(1:50, rand(1,50), 'DisplayName', 'Line C');
+    dock.addTab(fig3, 'Tab C');
+    dock.render();
+
+    assert(numel(dock.Tabs) == 3, 'testUndockTab: 3 tabs');
+
+    % Undock tab 2
+    dock.undockTab(2);
+    assert(numel(dock.Tabs) == 2, 'testUndockTab: 2 tabs after undock');
+    assert(numel(dock.hTabButtons) == 2, 'testUndockTab: 2 buttons');
+    assert(numel(dock.hUndockButtons) == 2, 'testUndockTab: 2 undock buttons');
+    assert(strcmp(dock.Tabs(2).Name, 'Tab C'), 'testUndockTab: Tab C is now idx 2');
+    % The undocked figure should exist as a standalone window
+    assert(ishandle(fig2.hFigure), 'testUndockTab: undocked figure exists');
+    assert(fig2.hFigure ~= dock.hFigure, 'testUndockTab: different figure');
+    assert(strcmp(get(fig2.hFigure, 'Visible'), 'on'), 'testUndockTab: undocked visible');
+    close(fig2.hFigure);
+    close(dock.hFigure);
+
+    fprintf('    All 11 dock tests passed.\n');
 end
