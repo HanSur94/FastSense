@@ -44,6 +44,27 @@ classdef FastPlotDock < handle
                 'Color', obj.Theme.Background, figOpts{:});
         end
 
+        function addTab(obj, fig, name)
+            %ADDTAB Register a FastPlotFigure as a tab.
+            %   dock.addTab(fig, 'Tab Name')
+
+            % Ensure the figure renders into our window
+            if isempty(fig.ParentFigure) || fig.ParentFigure ~= obj.hFigure
+                fig.ParentFigure = obj.hFigure;
+                fig.hFigure = obj.hFigure;
+            end
+
+            % Set content offset to leave room for tab bar
+            tabH = obj.TAB_BAR_HEIGHT;
+            fig.ContentOffset = [0, 0, 1, 1 - tabH];
+
+            % Append to tabs
+            idx = numel(obj.Tabs) + 1;
+            obj.Tabs(idx).Name = name;
+            obj.Tabs(idx).Figure = fig;
+            obj.Tabs(idx).Toolbar = [];
+        end
+
         function delete(obj)
             % Stop all live timers before closing
             for i = 1:numel(obj.Tabs)
