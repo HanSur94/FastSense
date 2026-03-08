@@ -2,11 +2,33 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut)
 %LTTB_DOWNSAMPLE Largest Triangle Three Buckets downsampling.
 %   [xOut, yOut] = lttb_downsample(x, y, numOut)
 %
-%   Selects numOut points that best preserve the visual shape of the data
-%   by maximizing the triangle area formed between consecutive selected points.
+%   Reduces a time series to numOut points while preserving visual shape.
+%   For each bucket, selects the point that maximizes the triangle area
+%   formed with the previously selected point and the average of the next
+%   bucket — producing perceptually accurate downsampled plots.
 %
-%   Handles NaN gaps: splits into segments, distributes output points
-%   proportionally, then rejoins with NaN separators.
+%   NaN handling:
+%     Splits data at NaN boundaries, allocates output points proportional
+%     to segment length, downsamples each segment independently, and
+%     rejoins with NaN separators.
+%
+%   Inputs:
+%     x      — sorted numeric row vector of timestamps
+%     y      — numeric row vector of values (same length as x)
+%     numOut — desired number of output points
+%
+%   Outputs:
+%     xOut — downsampled X values (row vector)
+%     yOut — downsampled Y values (row vector)
+%
+%   If n <= numOut, returns data unchanged.
+%   Uses MEX (lttb_core_mex) when available for speed.
+%
+%   Reference:
+%     Steinarsson, S. (2013). "Downsampling Time Series for Visual
+%     Representation." MSc thesis, University of Iceland.
+%
+%   See also minmax_downsample, binary_search.
 
     persistent useMex;
     if isempty(useMex)
@@ -84,7 +106,12 @@ end
 
 
 function [xOut, yOut] = lttb_core(x, y, numOut)
-%LTTB_CORE Core LTTB on a contiguous (no NaN) segment. Vectorized inner loop.
+%LTTB_CORE Core LTTB algorithm on a contiguous (no NaN) segment.
+%   [xOut, yOut] = lttb_core(x, y, numOut)
+%
+%   Always keeps first and last points. For each intermediate bucket,
+%   selects the point maximizing triangle area with the previous selected
+%   point and the next bucket's centroid. Uses vectorized area computation.
     n = numel(x);
 
     xOut = zeros(1, numOut);

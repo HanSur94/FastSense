@@ -1,8 +1,33 @@
 classdef FastPlotFigure < handle
     %FASTPLOTFIGURE Tiled layout manager for FastPlot dashboards.
+    %   Creates a grid of FastPlot tiles in a single figure window with
+    %   configurable spacing, per-tile theme overrides, and tile spanning.
+    %   Supports live mode that synchronizes file polling across all tiles.
+    %
     %   fig = FastPlotFigure(rows, cols)
     %   fig = FastPlotFigure(rows, cols, 'Theme', 'dark')
+    %   fig = FastPlotFigure(rows, cols, 'ParentFigure', hFig)
+    %
+    %   Constructor options (name-value):
+    %     'Theme'        — theme preset name, struct, or FastPlotTheme
+    %     'ParentFigure' — existing figure handle (skip figure creation)
+    %     Any additional name-value pairs are passed to figure().
+    %
+    %   Example — 2x2 dashboard:
+    %     fig = FastPlotFigure(2, 2, 'Theme', 'dark');
+    %     fig.tile(1).addLine(x1, y1); fig.tile(2).addLine(x2, y2);
+    %     fig.tile(3).addLine(x3, y3); fig.tile(4).addLine(x4, y4);
+    %     fig.renderAll();
+    %
+    %   Example — tile spanning:
+    %     fig = FastPlotFigure(2, 2);
+    %     fig.setTileSpan(1, [1, 2]);  % tile 1 spans full width
+    %     fig.tile(1).addLine(x, y);
+    %     fig.renderAll();
+    %
+    %   See also FastPlot, FastPlotDock, FastPlotTheme, FastPlotToolbar.
 
+    % ========================= PUBLIC PROPERTIES =========================
     properties (Access = public)
         Grid       = [1 1]      % [rows, cols]
         Theme      = []         % FastPlotTheme struct
@@ -20,6 +45,7 @@ classdef FastPlotFigure < handle
         MetadataTileIndex = 1         % which tile to attach metadata to
     end
 
+    % ====================== INTERNAL STATE ===============================
     properties (SetAccess = private)
         Tiles      = {}         % cell array of FastPlot instances
         TileAxes   = {}         % cell array of axes handles
@@ -31,6 +57,8 @@ classdef FastPlotFigure < handle
         MetadataFileDate  = 0         % last known metadata file datenum
     end
 
+    % ====================== LAYOUT SETTINGS ==============================
+    % Normalized spacing for the tile grid. Override before render().
     properties (Access = public)
         Padding = 0.06    % normalized padding around edges
         GapH    = 0.05    % horizontal gap between tiles
@@ -39,11 +67,20 @@ classdef FastPlotFigure < handle
 
     methods (Access = public)
         function obj = FastPlotFigure(rows, cols, varargin)
+            %FASTPLOTFIGURE Construct a tiled dashboard.
+            %   fig = FastPlotFigure(rows, cols)
+            %   fig = FastPlotFigure(rows, cols, 'Theme', 'dark')
+            %
+            %   rows, cols — grid dimensions
+            %   Remaining name-value pairs: 'Theme', 'ParentFigure', or
+            %   any valid figure property (e.g. 'Name', 'Position').
+
             % Load cached defaults
             cfg = getDefaults();
             obj.Padding = cfg.DashboardPadding;
             obj.GapH = cfg.DashboardGapH;
             obj.GapV = cfg.DashboardGapV;
+            obj.LiveInterval = cfg.LiveInterval;
 
             obj.Grid = [rows, cols];
             nTiles = rows * cols;
@@ -62,32 +99,13 @@ classdef FastPlotFigure < handle
             conDefaults.ParentFigure = [];
             [conOpts, figOpts] = parseOpts(conDefaults, varargin);
 
-            % Resolve theme
-            val = conOpts.Theme;
-            if ~isempty(val)
-                if ischar(val) || isstruct(val)
-                    obj.Theme = FastPlotTheme(val);
-                else
-                    obj.Theme = val;
-                end
-            end
+            obj.Theme = resolveTheme(conOpts.Theme, cfg.Theme);
             obj.ParentFigure = conOpts.ParentFigure;
-
-            if isempty(obj.Theme)
-                obj.Theme = FastPlotTheme(cfg.Theme);
-            end
-
-            % Convert unmatched struct to name-value cell array for figure()
-            figOptNames = fieldnames(figOpts);
-            figOptsCell = {};
-            for i = 1:numel(figOptNames)
-                figOptsCell{end+1} = figOptNames{i};    %#ok<AGROW>
-                figOptsCell{end+1} = figOpts.(figOptNames{i});  %#ok<AGROW>
-            end
 
             if ~isempty(obj.ParentFigure)
                 obj.hFigure = obj.ParentFigure;
             else
+                figOptsCell = struct2nvpairs(figOpts);
                 obj.hFigure = figure('Visible', 'off', ...
                     'Color', obj.Theme.Background, figOptsCell{:});
             end
@@ -108,10 +126,7 @@ classdef FastPlotFigure < handle
                 % Merge figure theme with tile-level overrides
                 tileTheme = obj.Theme;
                 if ~isempty(obj.TileThemes{n})
-                    fnames = fieldnames(obj.TileThemes{n});
-                    for i = 1:numel(fnames)
-                        tileTheme.(fnames{i}) = obj.TileThemes{n}.(fnames{i});
-                    end
+                    tileTheme = mergeTheme(tileTheme, obj.TileThemes{n});
                 end
 
                 fp = FastPlot('Parent', ax, 'Theme', tileTheme);
@@ -193,6 +208,20 @@ classdef FastPlotFigure < handle
 
         function startLive(obj, filepath, updateFcn, varargin)
             %STARTLIVE Start live mode on the dashboard.
+            %   fig.startLive(filepath, updateFcn)
+            %   fig.startLive(filepath, updateFcn, 'Interval', 1)
+            %
+            %   Starts a timer that polls filepath. On change, loads the
+            %   .mat file and calls updateFcn(fig, data). Sets the view
+            %   mode on all tiles.
+            %
+            %   Options (name-value):
+            %     'Interval'          — poll period in seconds
+            %     'ViewMode'          — 'preserve'|'follow'|'reset'
+            %     'MetadataFile'      — path to metadata .mat file
+            %     'MetadataVars'      — cell array of variable names
+            %     'MetadataLineIndex' — line index for metadata
+            %     'MetadataTileIndex' — tile index for metadata
             if obj.LiveIsActive
                 obj.stopLive();
             end
@@ -334,6 +363,8 @@ classdef FastPlotFigure < handle
         end
     end
 
+    % ======================== PRIVATE METHODS ============================
+    % Timer callbacks, metadata loading, axes creation, and layout math.
     methods (Access = private)
         function onLiveTimer(obj)
             if ~exist(obj.LiveFile, 'file'); return; end
@@ -362,35 +393,13 @@ classdef FastPlotFigure < handle
         end
 
         function loadMetadataFile(obj)
-            if isempty(obj.MetadataFile) || isempty(obj.MetadataVars)
-                return;
-            end
-            if ~exist(obj.MetadataFile, 'file')
-                return;
-            end
-            try
-                data = load(obj.MetadataFile);
-                meta = struct();
-                if isfield(data, 'datenum')
-                    meta.datenum = data.datenum;
-                elseif isfield(data, 'datetime')
-                    meta.datenum = data.datetime;
-                else
-                    return;
-                end
-                for i = 1:numel(obj.MetadataVars)
-                    varName = obj.MetadataVars{i};
-                    if isfield(data, varName)
-                        meta.(varName) = data.(varName);
-                    end
-                end
+            meta = loadMetaStruct(obj.MetadataFile, obj.MetadataVars);
+            if ~isempty(meta)
                 tileIdx = obj.MetadataTileIndex;
                 lineIdx = obj.MetadataLineIndex;
                 if tileIdx >= 1 && tileIdx <= numel(obj.Tiles) && ~isempty(obj.Tiles{tileIdx})
-                    fp = obj.Tiles{tileIdx};
-                    fp.setLineMetadata(lineIdx, meta);
+                    obj.Tiles{tileIdx}.setLineMetadata(lineIdx, meta);
                 end
-            catch
             end
         end
 
@@ -410,6 +419,10 @@ classdef FastPlotFigure < handle
 
     methods (Access = public, Hidden = true)
         function pos = computeTilePosition(obj, n)
+            %COMPUTETILEPOSITION Calculate normalized [x y w h] for tile n.
+            %   Accounts for grid position, padding, gaps, tile spanning,
+            %   and ContentOffset. Uses top-left origin row ordering
+            %   converted to MATLAB's bottom-left coordinate system.
             rows = obj.Grid(1);
             cols = obj.Grid(2);
             span = obj.TileSpans{n};

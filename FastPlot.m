@@ -1,14 +1,54 @@
 classdef FastPlot < handle
     %FASTPLOT Ultra-fast time series plotting with dynamic downsampling.
-    %   Handles 1K to 100M data points with fluid zoom/pan.
-    %   Uses MinMax downsampling to reduce data to screen resolution.
+    %   FastPlot renders 1K to 100M data points with fluid zoom/pan by
+    %   dynamically downsampling data to screen resolution using MinMax or
+    %   LTTB algorithms. A multi-level pyramid cache provides instant
+    %   re-downsample on zoom without touching raw data.
+    %
+    %   Features:
+    %     - Automatic MinMax/LTTB downsampling to pixel resolution
+    %     - Pyramid-based zoom for O(1) re-downsample on pan/zoom
+    %     - Linked zoom/pan across multiple plots via LinkGroup
+    %     - Threshold lines with automatic violation markers
+    %     - Horizontal bands, shaded regions, and area fills
+    %     - Live mode: poll a .mat file and auto-refresh on change
+    %     - Metadata attachment and forward-fill lookup by X value
+    %     - Datetime X-axis support with auto-formatting
+    %     - Theme-based styling via FastPlotTheme
     %
     %   Usage:
     %     fp = FastPlot();
     %     fp.addLine(x, y, 'DisplayName', 'Sensor1');
     %     fp.addThreshold(4.5, 'Direction', 'upper', 'ShowViolations', true);
     %     fp.render();
+    %
+    %   Constructor options (name-value):
+    %     'Parent'        — axes handle (default: create new figure)
+    %     'LinkGroup'     — string ID for linked zoom/pan across plots
+    %     'Theme'         — theme preset name, struct, or FastPlotTheme
+    %     'Verbose'       — logical, print diagnostics (default: false)
+    %     'MinPointsForDownsample' — threshold for raw vs downsampled
+    %     'DownsampleFactor'       — points per pixel (default: 2)
+    %     'PyramidReduction'       — compression per pyramid level
+    %     'DefaultDownsampleMethod' — 'minmax' or 'lttb'
+    %     'LiveInterval'  — poll interval in seconds (default: 2.0)
+    %
+    %   Example — linked zoom across two plots:
+    %     fp1 = FastPlot('LinkGroup', 'group1');
+    %     fp1.addLine(x, y1, 'DisplayName', 'Temp');
+    %     fp1.render();
+    %     fp2 = FastPlot('LinkGroup', 'group1');
+    %     fp2.addLine(x, y2, 'DisplayName', 'Pressure');
+    %     fp2.render();
+    %
+    %   Example — live mode:
+    %     fp = FastPlot(); fp.addLine(x, y); fp.render();
+    %     fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
+    %
+    %   See also FastPlotFigure, FastPlotDock, FastPlotTheme, FastPlotToolbar.
 
+    % ========================= PUBLIC PROPERTIES =========================
+    % User-configurable settings. Set before calling render().
     properties (Access = public)
         ParentAxes = []       % axes handle, empty = create new
         LinkGroup  = ''       % string ID for linked zoom/pan
@@ -25,6 +65,9 @@ classdef FastPlot < handle
         DeferDraw = false             % skip drawnow during batch render
     end
 
+    % ====================== INTERNAL DATA STORAGE ========================
+    % Struct arrays holding line data, annotations, and graphics handles.
+    % SetAccess = private prevents external modification of plot state.
     properties (SetAccess = private)
         Lines      = struct('X', {}, 'Y', {}, 'Options', {}, ...
                             'DownsampleMethod', {}, 'hLine', {}, ...
@@ -50,6 +93,8 @@ classdef FastPlot < handle
         IsDatetime    = false % true if X data was datetime (converted to datenum)
     end
 
+    % ======================== PRIVATE STATE ==============================
+    % Internal bookkeeping: listeners, caches, timers, and flags.
     properties (Access = private)
         Listeners     = []    % event listeners (XLim, resize)
         CachedXLim    = []    % for lazy recomputation
@@ -65,29 +110,35 @@ classdef FastPlot < handle
         MetadataFileDate  = 0         % last known metadata file datenum
     end
 
+    % ===================== PERFORMANCE TUNING ============================
+    % Configurable performance parameters. Override via constructor or
+    % set before calling render().
     properties (Access = public)
         MinPointsForDownsample = 5000  % below this, plot raw data
         DownsampleFactor = 2           % points per pixel (min + max)
         PyramidReduction = 100         % reduction factor per pyramid level
+        DefaultDownsampleMethod = 'minmax'  % 'minmax' or 'lttb'
     end
 
     methods (Access = public)
         function obj = FastPlot(varargin)
-            % Load cached defaults
+            %FASTPLOT Construct a FastPlot instance.
+            %   fp = FastPlot()
+            %   fp = FastPlot('Parent', ax, 'Theme', 'dark')
+            %   fp = FastPlot('LinkGroup', 'g1', 'Verbose', true)
+            %
+            %   All options are name-value pairs. Defaults are loaded from
+            %   FastPlotDefaults and can be overridden per-instance.
             cfg = getDefaults();
-            obj.MinPointsForDownsample = cfg.MinPointsForDownsample;
-            obj.DownsampleFactor = cfg.DownsampleFactor;
-            obj.PyramidReduction = cfg.PyramidReduction;
-            obj.Verbose = cfg.Verbose;
-
-            % Parse constructor arguments
             defaults.Parent = [];
             defaults.LinkGroup = '';
             defaults.Theme = [];
-            defaults.Verbose = obj.Verbose;
-            defaults.MinPointsForDownsample = obj.MinPointsForDownsample;
-            defaults.DownsampleFactor = obj.DownsampleFactor;
-            defaults.PyramidReduction = obj.PyramidReduction;
+            defaults.Verbose = cfg.Verbose;
+            defaults.MinPointsForDownsample = cfg.MinPointsForDownsample;
+            defaults.DownsampleFactor = cfg.DownsampleFactor;
+            defaults.PyramidReduction = cfg.PyramidReduction;
+            defaults.DefaultDownsampleMethod = cfg.DefaultDownsampleMethod;
+            defaults.LiveInterval = cfg.LiveInterval;
             [opts, ~] = parseOpts(defaults, varargin);
 
             obj.ParentAxes = opts.Parent;
@@ -96,19 +147,9 @@ classdef FastPlot < handle
             obj.MinPointsForDownsample = opts.MinPointsForDownsample;
             obj.DownsampleFactor = opts.DownsampleFactor;
             obj.PyramidReduction = opts.PyramidReduction;
-
-            % Resolve theme
-            val = opts.Theme;
-            if ~isempty(val)
-                if ischar(val) || isstruct(val)
-                    obj.Theme = FastPlotTheme(val);
-                else
-                    obj.Theme = val;
-                end
-            end
-            if isempty(obj.Theme)
-                obj.Theme = FastPlotTheme(cfg.Theme);
-            end
+            obj.DefaultDownsampleMethod = opts.DefaultDownsampleMethod;
+            obj.LiveInterval = opts.LiveInterval;
+            obj.Theme = resolveTheme(opts.Theme, cfg.Theme);
         end
 
         function resetColorIndex(obj)
@@ -164,7 +205,7 @@ classdef FastPlot < handle
             end
 
             % Parse name-value pairs via shared helper
-            knownDefaults.DownsampleMethod = getDefaults().DefaultDownsampleMethod;
+            knownDefaults.DownsampleMethod = obj.DefaultDownsampleMethod;
             knownDefaults.Metadata = [];
             knownDefaults.AssumeSorted = false;
             knownDefaults.HasNaN = [];
@@ -387,28 +428,27 @@ classdef FastPlot < handle
             catch
             end
 
-            baseline = 0;
-            filteredArgs = {};
-            k = 1;
-            while k <= numel(varargin)
-                if strcmpi(varargin{k}, 'Baseline')
-                    baseline = varargin{k+1};
-                    k = k + 2;
-                else
-                    filteredArgs{end+1} = varargin{k};   %#ok<AGROW>
-                    filteredArgs{end+1} = varargin{k+1};  %#ok<AGROW>
-                    k = k + 2;
-                end
-            end
+            fillDefaults.Baseline = 0;
+            [fillOpts, shadedArgs] = parseOpts(fillDefaults, varargin, obj.Verbose);
 
             if ~isrow(x); x = x(:)'; end
             if ~isrow(y); y = y(:)'; end
-            y2 = ones(size(x)) * baseline;
-            obj.addShaded(x, y, y2, filteredArgs{:});
+            y2 = ones(size(x)) * fillOpts.Baseline;
+            shadedNV = struct2nvpairs(shadedArgs);
+            obj.addShaded(x, y, y2, shadedNV{:});
         end
 
         function render(obj)
-            %RENDER Create the plot with all configured lines and thresholds.
+            %RENDER Create the plot with all configured lines and annotations.
+            %   fp.render()
+            %
+            %   Finalizes the plot: creates axes (if needed), applies the
+            %   theme, downsamples all lines to screen resolution, draws
+            %   bands/shadings/thresholds/markers, sets axis limits, and
+            %   installs zoom/pan listeners. Can only be called once.
+            %
+            %   After render(), use updateData() for live updates and
+            %   addLine()/addThreshold() will error.
 
             if obj.Verbose; renderTic = tic; end
 
@@ -780,8 +820,13 @@ classdef FastPlot < handle
 
         function updateData(obj, lineIdx, newX, newY, varargin)
             %UPDATEDATA Replace data for a line and re-downsample.
-            %   fp.updateData(1, newX, newY)
-            %   fp.updateData(1, newX, newY, 'Metadata', meta)
+            %   fp.updateData(lineIdx, newX, newY)
+            %   fp.updateData(lineIdx, newX, newY, 'Metadata', meta)
+            %   fp.updateData(lineIdx, newX, newY, 'SkipViewMode', true)
+            %
+            %   Replaces the raw X/Y data for lineIdx, clears its pyramid
+            %   cache, applies the current LiveViewMode, and re-downsamples
+            %   all lines, shadings, and violation markers to the display.
 
             if ~obj.IsRendered
                 error('FastPlot:notRendered', ...
@@ -845,8 +890,21 @@ classdef FastPlot < handle
 
         function startLive(obj, filepath, updateFcn, varargin)
             %STARTLIVE Start live mode — poll a .mat file for changes.
-            %   fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y))
-            %   fp.startLive('data.mat', updateFcn, 'Interval', 2, 'ViewMode', 'preserve')
+            %   fp.startLive(filepath, updateFcn)
+            %   fp.startLive(filepath, updateFcn, 'Interval', 2)
+            %   fp.startLive(filepath, updateFcn, 'ViewMode', 'follow')
+            %
+            %   Starts a timer that polls filepath for modification. When
+            %   the file changes, it loads the .mat and calls:
+            %     updateFcn(fp, data)
+            %   where data is the loaded struct.
+            %
+            %   Options (name-value):
+            %     'Interval'          — poll period in seconds (default: 2)
+            %     'ViewMode'          — 'preserve'|'follow'|'reset'
+            %     'MetadataFile'      — path to metadata .mat file
+            %     'MetadataVars'      — cell array of variable names
+            %     'MetadataLineIndex' — which line receives metadata
 
             if ~obj.IsRendered
                 error('FastPlot:notRendered', ...
@@ -1038,6 +1096,9 @@ classdef FastPlot < handle
         end
     end
 
+    % ======================== PRIVATE METHODS ============================
+    % Internal helpers: timer callbacks, view mode, theme, listeners,
+    % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
         function onLiveTimer(obj)
             %ONLIVETIMER Timer callback — check file and refresh if changed.
@@ -1076,33 +1137,12 @@ classdef FastPlot < handle
 
         function loadMetadataFile(obj)
             %LOADMETADATAFILE Load metadata from the metadata file.
-            if isempty(obj.MetadataFile) || isempty(obj.MetadataVars)
-                return;
-            end
-            if ~exist(obj.MetadataFile, 'file')
-                return;
-            end
-            try
-                data = load(obj.MetadataFile);
-                meta = struct();
-                if isfield(data, 'datenum')
-                    meta.datenum = data.datenum;
-                elseif isfield(data, 'datetime')
-                    meta.datenum = data.datetime;
-                else
-                    return;
-                end
-                for i = 1:numel(obj.MetadataVars)
-                    varName = obj.MetadataVars{i};
-                    if isfield(data, varName)
-                        meta.(varName) = data.(varName);
-                    end
-                end
+            meta = loadMetaStruct(obj.MetadataFile, obj.MetadataVars);
+            if ~isempty(meta)
                 idx = obj.MetadataLineIndex;
                 if idx >= 1 && idx <= numel(obj.Lines)
                     obj.Lines(idx).Metadata = meta;
                 end
-            catch
             end
         end
 
@@ -1143,6 +1183,8 @@ classdef FastPlot < handle
         end
 
         function applyTheme(obj)
+            %APPLYTHEME Apply the current Theme struct to axes and figure.
+            %   Sets background, foreground, grid, and font properties.
             t = obj.Theme;
 
             % Figure background (only if we own the figure)
@@ -1279,6 +1321,9 @@ classdef FastPlot < handle
         end
 
         function updateShadings(obj)
+            %UPDATESHADINGS Re-downsample shaded regions for current view.
+            %   Uses pre-computed cache when available (large datasets),
+            %   otherwise downsamples directly from raw data.
             pw = obj.PixelWidth;
             xlims = get(obj.hAxes, 'XLim');
 
@@ -1325,6 +1370,10 @@ classdef FastPlot < handle
         end
 
         function updateLines(obj)
+            %UPDATELINES Re-downsample all lines for the current view.
+            %   Uses pyramid levels when available for fast zoom. Selects
+            %   the coarsest pyramid level with enough resolution, then
+            %   downsamples the visible slice to screen pixel width.
             pw = obj.PixelWidth;
             xlims = get(obj.hAxes, 'XLim');
             target = 2 * pw;
@@ -1448,6 +1497,9 @@ classdef FastPlot < handle
         end
 
         function updateViolations(obj)
+            %UPDATEVIOLATIONS Recompute violation markers from displayed data.
+            %   Uses the already-downsampled line data to find threshold
+            %   violations, avoiding re-scanning the full raw dataset.
             for t = 1:numel(obj.Thresholds)
                 if ~obj.Thresholds(t).ShowViolations || isempty(obj.Thresholds(t).hMarkers)
                     continue;
@@ -1494,6 +1546,9 @@ classdef FastPlot < handle
         end
 
         function drawnowLimitRate(obj)
+            %DRAWNOWLIMITRATE Flush graphics with rate limiting when available.
+            %   Uses drawnow('limitrate') on MATLAB for 60fps cap.
+            %   Falls back to plain drawnow on Octave.
             if isempty(obj.HasLimitRate)
                 obj.HasLimitRate = exist('OCTAVE_VERSION', 'builtin') == 0;
             end
@@ -1505,6 +1560,9 @@ classdef FastPlot < handle
         end
 
         function pw = getAxesPixelWidth(obj)
+            %GETAXESPIXELWIDTH Return the axes width in pixels.
+            %   Temporarily switches to pixel units, reads Position(3),
+            %   then restores original units. Minimum returned: 100.
             oldUnits = get(obj.hAxes, 'Units');
             set(obj.hAxes, 'Units', 'pixels');
             pos = get(obj.hAxes, 'Position');
@@ -1513,6 +1571,8 @@ classdef FastPlot < handle
         end
 
         function propagateXLim(obj, newXLim)
+            %PROPAGATEXLIM Sync XLim to all members of the link group.
+            %   Sets IsPropagating guard to prevent re-entrant callbacks.
             members = FastPlot.getLinkRegistry('get', obj.LinkGroup, []);
             for i = 1:numel(members)
                 other = members{i};
@@ -1529,6 +1589,8 @@ classdef FastPlot < handle
         end
     end
 
+    % ======================== STATIC HELPERS =============================
+    % Persistent registry for linked FastPlot groups.
     methods (Static, Access = private)
         function registry = getLinkRegistry(action, group, obj)
             %GETLINKREGISTRY Persistent registry for linked FastPlot instances.
@@ -1565,9 +1627,10 @@ classdef FastPlot < handle
         end
     end
 
+    % ======================== PUBLIC STATIC ==============================
     methods (Static)
-        function clearDefaultsCache()
-            %CLEARDEFAULTSCACHE Force reload of FastPlotDefaults.
+        function resetDefaults()
+            %RESETDEFAULTS Force reload of FastPlotDefaults on next use.
             clearDefaultsCache();
         end
     end

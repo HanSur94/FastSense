@@ -2,12 +2,28 @@ function build_mex()
 %BUILD_MEX Compile FastPlot MEX files with platform-appropriate SIMD flags.
 %   build_mex()
 %
-%   Detects CPU architecture and best available compiler, sets flags for
-%   AVX2/SSE2/NEON, and compiles all MEX source files from private/mex_src/
-%   into private/.
+%   Compiles all C source files in private/mex_src/ into MEX binaries in
+%   private/. FastPlot falls back to pure MATLAB when MEX files are not
+%   available, so compilation is optional but recommended for performance.
 %
-%   Compiler priority: GCC (better auto-vectorization) > Clang > default.
-%   Safe to re-run — overwrites existing MEX binaries.
+%   Architecture detection:
+%     x86_64  — AVX2 + FMA flags (SSE2 fallback if AVX2 unsupported)
+%     arm64   — ARM NEON (default on Apple Silicon)
+%     unknown — scalar fallback (-O3 only)
+%
+%   Compiler selection:
+%     1. GCC (Homebrew) — preferred for auto-vectorization
+%     2. System default (Clang) — fallback
+%
+%   MEX files compiled:
+%     binary_search_mex  — fast binary search on sorted arrays
+%     minmax_core_mex    — vectorized min/max downsampling kernel
+%     lttb_core_mex      — LTTB triangle-area selection kernel
+%
+%   Safe to re-run — overwrites existing binaries. Reports success/failure
+%   count. Failed compilations fall back to MATLAB implementations.
+%
+%   See also binary_search, minmax_downsample, lttb_downsample.
 
     rootDir = fileparts(mfilename('fullpath'));
     srcDir  = fullfile(rootDir, 'private', 'mex_src');
@@ -113,7 +129,12 @@ end
 
 
 function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler)
-%COMPILE_MEX Compile a single MEX file, using Octave mkoctfile or MATLAB mex.
+%COMPILE_MEX Compile a single MEX file with the given flags.
+%   compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler)
+%
+%   Uses mkoctfile on Octave, mex on MATLAB. If compiler is non-empty,
+%   overrides the default C compiler (CC environment variable on Octave,
+%   CC= flag on MATLAB).
     if exist('OCTAVE_VERSION', 'builtin')
         % Octave: use mkoctfile
         args = {'--mex', include_flag};
@@ -139,7 +160,12 @@ end
 
 
 function [gcc_path, gcc_name] = find_gcc()
-%FIND_GCC Search for GCC (not Apple Clang disguised as gcc).
+%FIND_GCC Search for a real GCC installation (not Apple Clang).
+%   [gcc_path, gcc_name] = find_gcc()
+%
+%   Checks Homebrew paths (/opt/homebrew/bin, /usr/local/bin) for
+%   gcc-10 through gcc-15, then verifies the system gcc is from FSF.
+%   Returns empty strings if no real GCC is found.
     gcc_path = '';
     gcc_name = '';
 

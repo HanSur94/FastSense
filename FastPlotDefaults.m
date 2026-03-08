@@ -1,12 +1,32 @@
 function cfg = FastPlotDefaults()
 %FASTPLOTDEFAULTS User-editable default settings for FastPlot.
-%   Edit this file to change global defaults for all FastPlot instances.
-%   These values are loaded once per MATLAB session and cached.
-%   Call clearDefaultsCache() to force a reload after editing.
+%   cfg = FastPlotDefaults()
 %
-%   Example: change default theme to dark and increase font size:
-%       cfg.Theme = 'dark';
-%       cfg.FontSize = 14;   (set in the theme, not here)
+%   Returns a struct of global defaults used by FastPlot, FastPlotFigure,
+%   and FastPlotDock. Edit this file to customize behavior project-wide.
+%
+%   Values are loaded once per MATLAB session via getDefaults() and cached
+%   in a persistent variable. Call clearDefaultsCache() to force a reload
+%   after editing this file.
+%
+%   Settings:
+%     Theme                    — preset name or struct (default: 'default')
+%     Verbose                  — print diagnostics (default: false)
+%     MinPointsForDownsample   — raw plot threshold (default: 5000)
+%     DownsampleFactor         — points per pixel (default: 2)
+%     PyramidReduction         — compression per level (default: 100)
+%     DefaultDownsampleMethod  — 'minmax' or 'lttb' (default: 'minmax')
+%     LiveInterval             — poll interval in seconds (default: 2.0)
+%     DashboardPadding         — figure edge padding (default: 0.06)
+%     DashboardGapH            — horizontal tile gap (default: 0.05)
+%     DashboardGapV            — vertical tile gap (default: 0.07)
+%     TabBarHeight             — dock tab bar height (default: 0.03)
+%
+%   Example — switch to dark theme with LTTB downsampling:
+%     cfg.Theme = 'dark';
+%     cfg.DefaultDownsampleMethod = 'lttb';
+%
+%   See also getDefaults, clearDefaultsCache, FastPlotTheme.
 
     % --- Theme ---
     cfg.Theme = 'default';              % preset name or struct
@@ -19,6 +39,9 @@ function cfg = FastPlotDefaults()
 
     % --- Line Defaults ---
     cfg.DefaultDownsampleMethod = 'minmax';  % 'minmax' or 'lttb'
+
+    % --- Live Mode ---
+    cfg.LiveInterval = 2.0;                  % poll interval in seconds
 
     % --- Dashboard Layout (normalized units) ---
     cfg.DashboardPadding = 0.06;        % padding around figure edges

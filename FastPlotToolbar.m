@@ -1,12 +1,33 @@
 classdef FastPlotToolbar < handle
-    %FASTPLOTTOOLBAR Custom toolbar for FastPlot figures.
-    %   tb = FastPlotToolbar(fp)        — attach to a FastPlot
-    %   tb = FastPlotToolbar(fig)       — attach to a FastPlotFigure
+    %FASTPLOTTOOLBAR Interactive toolbar for FastPlot and FastPlotFigure.
+    %   Adds a uitoolbar with data cursor, crosshair, grid/legend toggles,
+    %   Y-axis autoscale, PNG export, live mode controls, and metadata
+    %   display. Integrates with MATLAB's built-in datacursormode for
+    %   enhanced tooltips.
+    %
+    %   tb = FastPlotToolbar(fp)   — attach to a FastPlot instance
+    %   tb = FastPlotToolbar(fig)  — attach to a FastPlotFigure instance
+    %
+    %   Toolbar buttons:
+    %     Data Cursor  — click to snap to nearest data point, shows value
+    %     Crosshair    — tracks mouse position with coordinate readout
+    %     Grid         — toggle grid on/off (active axes or all)
+    %     Legend        — toggle legend visibility
+    %     Autoscale Y  — fit Y-axis to visible data range
+    %     Export PNG   — save figure as PNG with file dialog
+    %     Refresh      — manual one-shot data reload
+    %     Live Mode    — toggle automatic file polling
+    %     Metadata     — show/hide metadata in data cursor tooltips
+    %
+    %   See also FastPlot, FastPlotFigure, FastPlotDock.
 
+    % ========================= PUBLIC STATE ==============================
     properties (SetAccess = private, GetAccess = public)
         MetadataEnabled = false  % whether metadata is shown in tooltips
     end
 
+    % ====================== INTERNAL STATE ===============================
+    % Graphics handles, mode tracking, and saved callbacks.
     properties (SetAccess = private)
         Target        = []    % FastPlot or FastPlotFigure
         hFigure       = []    % figure handle
@@ -28,6 +49,12 @@ classdef FastPlotToolbar < handle
 
     methods (Access = public)
         function obj = FastPlotToolbar(target)
+            %FASTPLOTTOOLBAR Construct and attach a toolbar to a plot target.
+            %   tb = FastPlotToolbar(fp)   — FastPlot instance
+            %   tb = FastPlotToolbar(fig)  — FastPlotFigure instance
+            %
+            %   Resolves the figure handle, collects all FastPlot instances,
+            %   creates the uitoolbar, and installs the datacursor callback.
             obj.Target = target;
 
             % Resolve figure handle and FastPlot instances
@@ -52,24 +79,30 @@ classdef FastPlotToolbar < handle
         end
 
         function toggleGrid(obj)
+            %TOGGLEGRID Toggle grid visibility on all managed axes.
             for i = 1:numel(obj.FastPlots)
                 obj.toggleGridOnAxes(obj.FastPlots{i}.hAxes);
             end
         end
 
         function toggleLegend(obj)
+            %TOGGLELEGEND Toggle legend visibility on all managed axes.
             for i = 1:numel(obj.FastPlots)
                 obj.toggleLegendOnAxes(obj.FastPlots{i}.hAxes);
             end
         end
 
         function autoscaleY(obj)
+            %AUTOSCALEY Fit Y-axis limits to visible data on all axes.
             for i = 1:numel(obj.FastPlots)
                 obj.autoscaleYOnAxes(obj.FastPlots{i});
             end
         end
 
         function exportPNG(obj, filepath)
+            %EXPORTPNG Save figure as PNG image at 150 DPI.
+            %   tb.exportPNG()          — opens file dialog
+            %   tb.exportPNG(filepath)  — saves directly to path
             if nargin < 2
                 obj.onExportPNG();
                 return;
@@ -78,6 +111,9 @@ classdef FastPlotToolbar < handle
         end
 
         function setCrosshair(obj, on)
+            %SETCROSSHAIR Enable or disable crosshair tracking mode.
+            %   tb.setCrosshair(true)  — activate crosshair, disable zoom
+            %   tb.setCrosshair(false) — deactivate, re-enable zoom
             if on
                 if strcmp(obj.Mode, 'cursor')
                     obj.cleanupCursor();
@@ -97,6 +133,9 @@ classdef FastPlotToolbar < handle
         end
 
         function setCursor(obj, on)
+            %SETCURSOR Enable or disable data cursor snap mode.
+            %   tb.setCursor(true)  — activate cursor, disable zoom
+            %   tb.setCursor(false) — deactivate, re-enable zoom
             if on
                 if strcmp(obj.Mode, 'crosshair')
                     obj.cleanupCrosshair();
@@ -150,6 +189,9 @@ classdef FastPlotToolbar < handle
         end
 
         function setMetadata(obj, on)
+            %SETMETADATA Enable or disable metadata display in tooltips.
+            %   tb.setMetadata(true)  — show metadata fields in cursor
+            %   tb.setMetadata(false) — hide metadata
             obj.MetadataEnabled = on;
             setappdata(obj.hFigure, 'FastPlotMetadataEnabled', on);
             if on
@@ -183,6 +225,12 @@ classdef FastPlotToolbar < handle
         end
 
         function [sx, sy, lineIdx] = snapToNearest(~, fp, xClick, yClick)
+            %SNAPTONEAREST Find the closest data point to a click position.
+            %   [sx, sy, lineIdx] = tb.snapToNearest(fp, xClick, yClick)
+            %
+            %   Uses binary search on X and normalized distance metric to
+            %   find the nearest point across all lines. Returns coordinates
+            %   and line index of the closest match.
             sx = []; sy = []; lineIdx = [];
             bestDist = Inf;
             ax = fp.hAxes;
@@ -213,6 +261,8 @@ classdef FastPlotToolbar < handle
         end
     end
 
+    % ======================== PRIVATE METHODS ============================
+    % Mouse event handlers, crosshair/cursor drawing, and cleanup.
     methods (Access = private)
         function createToolbar(obj)
             obj.hToolbar = uitoolbar(obj.hFigure);
@@ -281,15 +331,11 @@ classdef FastPlotToolbar < handle
         end
 
         function onMetadataOn(obj)
-            obj.MetadataEnabled = true;
-            setappdata(obj.hFigure, 'FastPlotMetadataEnabled', true);
-            obj.refreshDataCursors();
+            obj.setMetadata(true);
         end
 
         function onMetadataOff(obj)
-            obj.MetadataEnabled = false;
-            setappdata(obj.hFigure, 'FastPlotMetadataEnabled', false);
-            obj.refreshDataCursors();
+            obj.setMetadata(false);
         end
 
         function onCursorOn(obj)
@@ -407,6 +453,7 @@ classdef FastPlotToolbar < handle
 
     end
 
+    % ================ PRIVATE HELPERS (grid/legend/export) ===============
     methods (Access = private)
         function onToggleGrid(obj)
             [~, ax] = obj.getActiveTarget();
@@ -609,9 +656,16 @@ classdef FastPlotToolbar < handle
         end
     end
 
+    % ======================== STATIC METHODS =============================
+    % Icon generation for toolbar buttons.
     methods (Static)
         function icon = makeIcon(name)
             %MAKEICON Generate a 16x16x3 RGB icon for toolbar buttons.
+            %   icon = FastPlotToolbar.makeIcon(name)
+            %
+            %   Draws simple pixel-art icons on a light gray background.
+            %   Available names: 'cursor', 'crosshair', 'grid', 'legend',
+            %   'autoscale', 'export', 'refresh', 'live', 'metadata'.
             icon = ones(16, 16, 3) * 0.94;  % light gray background
             fg = [0.2 0.2 0.2];  % dark foreground
 

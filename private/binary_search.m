@@ -1,10 +1,24 @@
 function idx = binary_search(x, val, direction)
 %BINARY_SEARCH Find index in sorted array via binary search.
-%   idx = binary_search(x, val, 'left')  — first index where x >= val
-%   idx = binary_search(x, val, 'right') — last index where x <= val
+%   idx = binary_search(x, val, 'left')
+%   idx = binary_search(x, val, 'right')
 %
-%   Clamps to [1, numel(x)] — never returns out-of-bounds.
-%   Uses MEX implementation if available, otherwise pure MATLAB.
+%   For 'left': returns the first index where x(idx) >= val.
+%   For 'right': returns the last index where x(idx) <= val.
+%
+%   Result is clamped to [1, numel(x)] — never returns out-of-bounds.
+%   Uses compiled MEX (binary_search_mex) when available for speed,
+%   otherwise falls back to pure MATLAB implementation.
+%
+%   Inputs:
+%     x         — sorted numeric vector (ascending)
+%     val       — scalar value to search for
+%     direction — 'left' or 'right'
+%
+%   Output:
+%     idx — integer index into x
+%
+%   See also minmax_downsample, lttb_downsample.
 
     persistent useMex;
     if isempty(useMex)

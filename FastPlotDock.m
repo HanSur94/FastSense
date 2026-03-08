@@ -1,13 +1,37 @@
 classdef FastPlotDock < handle
     %FASTPLOTDOCK Tabbed container for multiple FastPlotFigure dashboards.
+    %   Manages multiple FastPlotFigure instances as switchable tabs in a
+    %   single window. Each tab has its own panel, toolbar, close button,
+    %   and undock button. Tabs can be dynamically added, removed, or
+    %   popped out into standalone figures.
+    %
     %   dock = FastPlotDock()
+    %   dock = FastPlotDock('Theme', 'dark')
     %   dock = FastPlotDock('Theme', 'dark', 'Name', 'My Dock')
+    %
+    %   Constructor options (name-value):
+    %     'Theme' — theme preset name, struct, or FastPlotTheme
+    %     Any additional name-value pairs are passed to figure().
+    %
+    %   Example:
+    %     dock = FastPlotDock('Theme', 'dark', 'Name', 'Dashboard');
+    %     fig1 = FastPlotFigure(2, 1, 'ParentFigure', dock.hFigure);
+    %     fig1.tile(1).addLine(x, y1); fig1.tile(2).addLine(x, y2);
+    %     dock.addTab(fig1, 'Temperature');
+    %     fig2 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    %     fig2.tile(1).addLine(x, y3);
+    %     dock.addTab(fig2, 'Pressure');
+    %     dock.render();
+    %
+    %   See also FastPlotFigure, FastPlot, FastPlotToolbar, FastPlotTheme.
 
+    % ========================= PUBLIC PROPERTIES =========================
     properties (Access = public)
         Theme     = []         % FastPlotTheme struct
         hFigure   = []         % shared figure handle
     end
 
+    % ====================== INTERNAL STATE ===============================
     properties (SetAccess = private)
         Tabs      = struct('Name', {}, 'Figure', {}, 'Toolbar', {}, 'Panel', {})
         ActiveTab = 0          % index of currently visible tab
@@ -16,39 +40,27 @@ classdef FastPlotDock < handle
         hUndockButtons = {}    % cell array of undock button handles
     end
 
+    % ====================== LAYOUT SETTINGS ==============================
     properties (Access = public)
         TabBarHeight = 0.03   % normalized height of tab bar
     end
 
     methods (Access = public)
         function obj = FastPlotDock(varargin)
+            %FASTPLOTDOCK Construct a tabbed dock container.
+            %   dock = FastPlotDock()
+            %   dock = FastPlotDock('Theme', 'dark', 'Name', 'My Dock')
+            %
+            %   Creates a figure with a tab bar. Use addTab() to register
+            %   FastPlotFigure instances, then call render().
             cfg = getDefaults();
             obj.TabBarHeight = cfg.TabBarHeight;
 
             conDefaults.Theme = [];
             [conOpts, figOpts] = parseOpts(conDefaults, varargin);
+            obj.Theme = resolveTheme(conOpts.Theme, cfg.Theme);
 
-            val = conOpts.Theme;
-            if ~isempty(val)
-                if ischar(val) || isstruct(val)
-                    obj.Theme = FastPlotTheme(val);
-                else
-                    obj.Theme = val;
-                end
-            end
-
-            if isempty(obj.Theme)
-                obj.Theme = FastPlotTheme(cfg.Theme);
-            end
-
-            % Convert unmatched struct to name-value cell for figure()
-            figOptNames = fieldnames(figOpts);
-            figOptsCell = {};
-            for i = 1:numel(figOptNames)
-                figOptsCell{end+1} = figOptNames{i};    %#ok<AGROW>
-                figOptsCell{end+1} = figOpts.(figOptNames{i});  %#ok<AGROW>
-            end
-
+            figOptsCell = struct2nvpairs(figOpts);
             obj.hFigure = figure('Visible', 'off', ...
                 'Color', obj.Theme.Background, figOptsCell{:});
             set(obj.hFigure, 'SizeChangedFcn', @(s,e) obj.recomputeLayout());
@@ -196,6 +208,11 @@ classdef FastPlotDock < handle
 
         function undockTab(obj, n)
             %UNDOCKTAB Pop tab n out into its own standalone figure.
+            %   dock.undockTab(n)
+            %
+            %   Creates a new figure, reparents all tile axes from the
+            %   dock panel, creates a fresh toolbar, and removes the tab
+            %   from the dock. Live mode is stopped before undocking.
             if n < 1 || n > numel(obj.Tabs)
                 return;
             end
@@ -304,7 +321,7 @@ classdef FastPlotDock < handle
         end
 
         function delete(obj)
-            % Stop all live timers before closing
+            %DELETE Clean up dock: stop all live timers and close figure.
             for i = 1:numel(obj.Tabs)
                 if ~isempty(obj.Tabs(i).Figure)
                     try obj.Tabs(i).Figure.stopLive(); catch; end
@@ -316,6 +333,8 @@ classdef FastPlotDock < handle
         end
     end
 
+    % ======================== PRIVATE METHODS ============================
+    % Tab bar UI creation, axes reparenting, visibility, and styling.
     methods (Access = private)
         function reparentAxes(obj, idx)
             %REPARENTAXES Move all tile axes into the tab's panel.
@@ -338,6 +357,8 @@ classdef FastPlotDock < handle
         end
 
         function addTabButton(obj, idx)
+            %ADDTABBUTTON Create tab, undock, and close buttons for one tab.
+            %   Positions buttons proportionally across the tab bar.
             tabH = obj.TabBarHeight;
             nTabs = numel(obj.Tabs);
             btnWidth = 1 / nTabs;

@@ -3,11 +3,30 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
 %   [xOut, yOut] = minmax_downsample(x, y, numBuckets)
 %   [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
 %
-%   Splits data at NaN boundaries, downsamples each contiguous segment
-%   independently, and rejoins with NaN separators.
+%   Divides the data into numBuckets equal-width bins and keeps only the
+%   minimum and maximum Y values per bin, preserving X monotonicity.
+%   This produces 2*numBuckets output points that accurately represent
+%   the signal envelope.
+%
+%   NaN handling:
+%     Splits data at NaN boundaries, downsamples each contiguous segment
+%     independently with proportional bucket allocation, and rejoins with
+%     NaN separators to preserve gap rendering.
+%
+%   Inputs:
+%     x          — sorted numeric row vector of timestamps
+%     y          — numeric row vector of values (same length as x)
+%     numBuckets — desired number of bins (output ≈ 2*numBuckets points)
+%     hasNaN     — (optional) logical, skip NaN scan when known false
+%
+%   Outputs:
+%     xOut — downsampled X values (row vector)
+%     yOut — downsampled Y values (row vector)
 %
 %   If total non-NaN points <= 2*numBuckets, returns data unchanged.
-%   Optional hasNaN flag skips the NaN scan when known false.
+%   Uses MEX (minmax_core_mex) when available for speed.
+%
+%   See also lttb_downsample, binary_search.
 
     persistent useMex;
     if isempty(useMex)
@@ -106,7 +125,11 @@ end
 
 
 function [xOut, yOut] = minmax_core(segX, segY, nb)
-%MINMAX_CORE Vectorized min/max downsampling of a contiguous segment.
+%MINMAX_CORE Vectorized min/max downsampling of a contiguous (no NaN) segment.
+%   [xOut, yOut] = minmax_core(segX, segY, nb)
+%
+%   Reshapes data into a matrix of nb columns, finds min/max per column,
+%   handles remainder points, and interleaves results in X-monotonic order.
     segLen = numel(segY);
     bucketSize = floor(segLen / nb);
 

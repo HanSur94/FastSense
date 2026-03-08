@@ -1,8 +1,43 @@
 function theme = FastPlotTheme(preset, varargin)
 %FASTPLOTTHEME Return a theme struct for FastPlot styling.
-%   theme = FastPlotTheme()              — returns 'default' preset
-%   theme = FastPlotTheme('dark')        — returns named preset
-%   theme = FastPlotTheme('dark', 'FontSize', 14) — preset with overrides
+%   theme = FastPlotTheme()
+%   theme = FastPlotTheme(presetName)
+%   theme = FastPlotTheme(presetName, Name, Value, ...)
+%   theme = FastPlotTheme(structOverrides)
+%
+%   Creates a theme struct that controls the visual appearance of FastPlot,
+%   FastPlotFigure, and FastPlotDock instances.
+%
+%   Inputs:
+%     presetName — one of: 'default', 'dark', 'light', 'industrial',
+%                  'scientific'
+%     struct     — a struct of partial overrides (merged with 'default')
+%     Name,Value — override any theme field after loading the preset
+%
+%   Theme fields:
+%     Background      — [r g b] figure background color
+%     AxesColor       — [r g b] axes background color
+%     ForegroundColor — [r g b] text, tick, and label color
+%     GridColor       — [r g b] grid line color
+%     GridAlpha       — scalar, grid transparency (0-1)
+%     GridStyle       — char, grid line style ('-', ':', '--', 'none')
+%     FontName        — char, font family name
+%     FontSize        — scalar, base font size in points
+%     TitleFontSize   — scalar, title font size in points
+%     LineWidth       — scalar, default line width
+%     LineColorOrder  — Nx3 matrix or palette name ('vibrant', 'muted',
+%                       'colorblind')
+%     ThresholdColor  — [r g b] default threshold line color
+%     ThresholdStyle  — char, threshold line style
+%     ViolationMarker — char, marker symbol for violations
+%     ViolationSize   — scalar, violation marker size
+%     BandAlpha       — scalar, band fill transparency (0-1)
+%
+%   Example:
+%     t = FastPlotTheme('dark', 'FontSize', 14, 'LineWidth', 1.5);
+%     fp = FastPlot('Theme', t);
+%
+%   See also FastPlot, FastPlotFigure, FastPlotDefaults.
 
     if nargin == 0
         preset = 'default';
@@ -15,10 +50,8 @@ function theme = FastPlotTheme(preset, varargin)
         theme = getPreset(preset);
     end
 
-    % Apply name-value overrides
-    for k = 1:2:numel(varargin)
-        theme.(varargin{k}) = varargin{k+1};
-    end
+    % Apply name-value overrides (case-insensitive, warns on unknown keys)
+    [theme, ~] = parseOpts(theme, varargin);
 
     % Resolve named palettes to Nx3 matrices
     if ischar(theme.LineColorOrder)
@@ -27,6 +60,8 @@ function theme = FastPlotTheme(preset, varargin)
 end
 
 function t = getPreset(name)
+%GETPRESET Return a complete theme struct for the given preset name.
+%   Each preset defines all theme fields. Unknown names error.
     switch lower(name)
         case 'default'
             t = struct( ...
@@ -130,6 +165,9 @@ function t = getPreset(name)
 end
 
 function colors = getPalette(name)
+%GETPALETTE Return an Nx3 RGB color matrix for the named palette.
+%   Available palettes: 'vibrant', 'muted', 'colorblind'.
+%   The colorblind palette follows Wong (2011) recommendations.
     switch lower(name)
         case 'vibrant'
             colors = [ ...
@@ -168,13 +206,5 @@ function colors = getPalette(name)
         otherwise
             error('FastPlotTheme:unknownPalette', ...
                 'Unknown palette: ''%s''. Use ''vibrant'', ''muted'', or ''colorblind''.', name);
-    end
-end
-
-function result = mergeTheme(base, overrides)
-    result = base;
-    fnames = fieldnames(overrides);
-    for i = 1:numel(fnames)
-        result.(fnames{i}) = overrides.(fnames{i});
     end
 end
