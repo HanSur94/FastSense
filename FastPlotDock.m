@@ -90,20 +90,19 @@ classdef FastPlotDock < handle
                 return;
             end
 
-            % Render all figures, reparent axes into panels
+            % Render all figures, reparent axes into panels,
+            % create toolbars but immediately hide non-active ones
             for i = 1:numel(obj.Tabs)
                 obj.Tabs(i).Figure.renderAll();
                 obj.reparentAxes(i);
                 obj.Tabs(i).Toolbar = FastPlotToolbar(obj.Tabs(i).Figure);
+                obj.setTabVisible(i, false);
             end
 
             % Create the tab bar buttons
             obj.createTabBar();
 
-            % Hide all tabs, then show the first one
-            for i = 1:numel(obj.Tabs)
-                obj.setTabVisible(i, false);
-            end
+            % Show the first tab
             obj.selectTab(1);
 
             set(obj.hFigure, 'Visible', 'on');
