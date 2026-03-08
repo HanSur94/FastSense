@@ -105,6 +105,8 @@ classdef FastPlot < handle
         HasLimitRate  = []    % cached: does drawnow support 'limitrate'?
         DeferredTimer = []    % timer for deferred Home button re-downsample
         ColorIndex    = 0     % tracks auto color cycling position
+        hRefineTimer  = []    % one-shot timer for deferred minmax refinement
+        IsRefined     = true  % false while showing coarse stride preview
         LiveTimer      = []        % timer object for live polling
         LiveFileDate   = 0         % last known file modification datenum
         MetadataFileDate  = 0         % last known metadata file datenum
@@ -544,13 +546,11 @@ classdef FastPlot < handle
                 L = obj.Lines(i);
                 numBuckets = obj.PixelWidth;
 
-                % Downsample
+                % Fast stride preview for large datasets (refined async)
                 if numel(L.X) > obj.MinPointsForDownsample
-                    if strcmp(L.DownsampleMethod, 'lttb')
-                        [xd, yd] = lttb_downsample(L.X, L.Y, numBuckets);
-                    else
-                        [xd, yd] = minmax_downsample(L.X, L.Y, numBuckets, L.HasNaN);
-                    end
+                    K = max(1, floor(numel(L.X) / (2 * numBuckets)));
+                    xd = L.X(1:K:end);
+                    yd = L.Y(1:K:end);
                 else
                     xd = L.X;
                     yd = L.Y;
@@ -750,6 +750,27 @@ classdef FastPlot < handle
             end
 
             obj.IsRendered = true;
+
+            % Start async refinement if any line used stride preview
+            hasLargeLines = false;
+            for i = 1:numel(obj.Lines)
+                if numel(obj.Lines(i).X) > obj.MinPointsForDownsample
+                    hasLargeLines = true;
+                    break;
+                end
+            end
+            if hasLargeLines
+                obj.IsRefined = false;
+                try
+                    obj.hRefineTimer = timer('ExecutionMode', 'singleShot', ...
+                        'StartDelay', 0.01, ...
+                        'TimerFcn', @(~,~) obj.refineLines());
+                    start(obj.hRefineTimer);
+                catch
+                    % Octave or timer unavailable: refine synchronously
+                    obj.refineLines();
+                end
+            end
 
             if obj.Verbose
                 totalPts = 0;
@@ -976,6 +997,7 @@ classdef FastPlot < handle
 
         function stopLive(obj)
             %STOPLIVE Stop live mode polling.
+            obj.stopRefineTimer();
             if ~isempty(obj.LiveTimer)
                 try
                     stop(obj.LiveTimer);
@@ -993,6 +1015,12 @@ classdef FastPlot < handle
             if obj.Verbose
                 fprintf('[FastPlot] live mode stopped\n');
             end
+        end
+
+        function delete(obj)
+            %DELETE Clean up timers.
+            obj.stopRefineTimer();
+            try obj.stopLive(); catch; end
         end
 
         function refresh(obj)
@@ -1210,9 +1238,61 @@ classdef FastPlot < handle
             end
         end
 
+        function refineLines(obj)
+            %REFINELINES Replace stride preview with proper downsampled data.
+            if ~obj.IsRendered || ~ishandle(obj.hAxes)
+                return;
+            end
+
+            pw = obj.getAxesPixelWidth();
+            for i = 1:numel(obj.Lines)
+                L = obj.Lines(i);
+                if numel(L.X) <= obj.MinPointsForDownsample
+                    continue;
+                end
+                if ~ishandle(L.hLine)
+                    continue;
+                end
+
+                if strcmp(L.DownsampleMethod, 'lttb')
+                    [xd, yd] = lttb_downsample(L.X, L.Y, pw);
+                else
+                    [xd, yd] = minmax_downsample(L.X, L.Y, pw, L.HasNaN);
+                end
+                set(L.hLine, 'XData', xd, 'YData', yd);
+
+                if obj.Verbose
+                    fprintf('[FastPlot] refine: line %d: %d pts -> %d displayed\n', ...
+                        i, numel(L.X), numel(xd));
+                end
+            end
+
+            obj.IsRefined = true;
+            obj.stopRefineTimer();
+            drawnow;
+        end
+
+        function stopRefineTimer(obj)
+            %STOPREFINETIEMR Stop and delete the refinement timer.
+            if ~isempty(obj.hRefineTimer)
+                try
+                    stop(obj.hRefineTimer);
+                    delete(obj.hRefineTimer);
+                catch
+                end
+                obj.hRefineTimer = [];
+            end
+        end
+
         function onXLimChanged(obj, ~, ~)
             if ~obj.IsRendered || ~ishandle(obj.hAxes) || obj.IsPropagating
                 return;
+            end
+
+            % Cancel pending refinement — zoom/pan triggers proper downsample
+            if ~obj.IsRefined
+                obj.stopRefineTimer();
+                obj.IsRefined = true;
             end
 
             newXLim = get(obj.hAxes, 'XLim');

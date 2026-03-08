@@ -97,7 +97,35 @@ function test_render()
     assert(strcmp(get(fig, 'Visible'), 'off'), 'testDeferDraw: figure stays invisible');
     close(fig);
 
-    fprintf('    All 9 render tests passed.\n');
+    % testStridePreviewLargeData
+    fp = FastPlot();
+    x = 1:100000;
+    y = sin(x/1000);
+    fp.addLine(x, y, 'DisplayName', 'Big');
+    fp.render();
+    xd = get(fp.Lines(1).hLine, 'XData');
+    assert(numel(xd) < numel(x), 'testStridePreview: should be downsampled');
+    assert(numel(xd) > 100, 'testStridePreview: should have reasonable points');
+    close(fp.hFigure);
+
+    % testSmallDataNoStride
+    fp = FastPlot();
+    fp.addLine(1:100, rand(1,100), 'DisplayName', 'Small');
+    fp.render();
+    xd = get(fp.Lines(1).hLine, 'XData');
+    assert(numel(xd) == 100, 'testSmallDataNoStride: all points shown');
+    close(fp.hFigure);
+
+    % testRefineTimerCleanupOnDelete
+    fp = FastPlot();
+    fp.addLine(1:100000, rand(1,100000));
+    fp.render();
+    fig = fp.hFigure;
+    delete(fp);
+    close(fig);
+    % No error means timer was cleaned up properly
+
+    fprintf('    All 12 render tests passed.\n');
 end
 
 function result = isfigure(h)
