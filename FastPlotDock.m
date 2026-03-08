@@ -97,8 +97,6 @@ classdef FastPlotDock < handle
             end
             obj.selectTab(1);
 
-            % Enable zoom once for the shared figure
-            zoom(obj.hFigure, 'on');
 
             set(obj.hFigure, 'Visible', 'on');
             drawnow;
