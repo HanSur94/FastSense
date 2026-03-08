@@ -135,24 +135,39 @@ dock.addTab(fig5, 'Environment');
 dock.render();
 
 fig1.tileTitle(1, 'Temperature (2M pts)');
+fig1.tileXLabel(1, 'Time (s)'); fig1.tileYLabel(1, 'Temp (°F)');
 fig1.tileTitle(2, 'Coolant Flow (1M pts)');
+fig1.tileXLabel(2, 'Time (s)'); fig1.tileYLabel(2, 'Flow (L/min)');
 fig1.tileTitle(3, 'Reactor Pressure (500K pts)');
+fig1.tileXLabel(3, 'Time (s)'); fig1.tileYLabel(3, 'Pressure (kPa)');
 fig1.tileTitle(4, 'Vibration (800K pts)');
+fig1.tileXLabel(4, 'Time (s)'); fig1.tileYLabel(4, 'Amplitude (g)');
 
 fig2.tileTitle(1, 'Motor Current (3M pts)');
+fig2.tileXLabel(1, 'Time (s)'); fig2.tileYLabel(1, 'Current (A)');
 fig2.tileTitle(2, 'RPM — LTTB (1M pts)');
+fig2.tileXLabel(2, 'Time (s)'); fig2.tileYLabel(2, 'RPM');
 
 fig3.tileTitle(1, 'Hydraulic Pressure (1.5M pts)');
+fig3.tileXLabel(1, 'Time (s)'); fig3.tileYLabel(1, 'Pressure (bar)');
 fig3.tileTitle(2, 'Oil Temperature (1M pts)');
+fig3.tileXLabel(2, 'Time (s)'); fig3.tileYLabel(2, 'Temp (°C)');
 
 fig4.tileTitle(1, 'Three-Phase Voltage (2M pts)');
+fig4.tileXLabel(1, 'Time (s)'); fig4.tileYLabel(1, 'Voltage (V)');
 fig4.tileTitle(2, 'Grid Frequency (1M pts)');
+fig4.tileXLabel(2, 'Time (s)'); fig4.tileYLabel(2, 'Freq (Hz)');
 fig4.tileTitle(3, 'Load (800K pts)');
+fig4.tileXLabel(3, 'Time (s)'); fig4.tileYLabel(3, 'Power (kW)');
 
 fig5.tileTitle(1, 'Room Temperature (1M pts)');
+fig5.tileXLabel(1, 'Time (s)'); fig5.tileYLabel(1, 'Temp (°C)');
 fig5.tileTitle(2, 'Humidity (800K pts)');
+fig5.tileXLabel(2, 'Time (s)'); fig5.tileYLabel(2, 'RH (%)');
 fig5.tileTitle(3, 'Noise Level (500K pts)');
+fig5.tileXLabel(3, 'Time (s)'); fig5.tileYLabel(3, 'Level (dB)');
 fig5.tileTitle(4, 'CO2 (600K pts)');
+fig5.tileXLabel(4, 'Time (s)'); fig5.tileYLabel(4, 'CO2 (ppm)');
 
 elapsed = toc;
 fprintf('Docked tabs rendered in %.2f seconds (~%.1fM total pts).\n', elapsed, 21.2);
