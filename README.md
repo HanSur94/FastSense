@@ -167,6 +167,40 @@ fp.startLive('data.mat', @(fp, d) fp.updateData(1, d.x, d.y));
 fp.runLive();  % blocks on Octave, no-op on MATLAB
 ```
 
+### Docked Tabs
+
+Dock multiple dashboards into a single tabbed window with instant tab switching:
+
+```matlab
+dock = FastPlotDock('Theme', 'dark', 'Name', 'Control Room', ...
+    'Position', [50 50 1400 800]);
+
+% Dashboard 1: Temperature (2x2 grid)
+fig1 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fp = fig1.tile(1); fp.addLine(x, temperature);
+fp = fig1.tile(2); fp.addLine(x, coolant);
+fp = fig1.tile(3); fp.addLine(x, pressure);
+fp = fig1.tile(4); fp.addLine(x, vibration);
+dock.addTab(fig1, 'Temperature');
+
+% Dashboard 2: Power (1x2 grid)
+fig2 = FastPlotFigure(1, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fp = fig2.tile(1); fp.addLine(x, current);
+fp = fig2.tile(2); fp.addLine(x, rpm);
+dock.addTab(fig2, 'Power Systems');
+
+dock.render();
+dock.selectTab(2);  % switch to Power tab programmatically
+```
+
+Tabs can also be added after rendering — the new tab is immediately available for switching.
+
+**Features:**
+- Toggle buttons at the top act as the tab bar
+- Tab switching shows/hides all axes, children, labels, and toolbar controls
+- Automatic resize handling recomputes all tile positions
+- Closing the window stops all live timers across all tabs
+
 ## Installation
 
 ```bash
@@ -364,6 +398,29 @@ fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Dashboard');
 
 Theme inheritance: element override > tile theme > figure theme > 'default' preset.
 
+### `FastPlotDock(...)` — Tabbed Container
+
+```matlab
+dock = FastPlotDock();
+dock = FastPlotDock('Theme', 'dark', 'Name', 'My Dock', 'Position', [50 50 1400 800]);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `Theme` | string or struct | Theme preset name or custom theme struct |
+| Any figure property | varies | Passed through to the underlying `figure()` call |
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `dock.addTab(fig, name)` | Register a FastPlotFigure as a tab (works before or after render) |
+| `dock.render()` | Render all tabs, create tab bar, show first tab |
+| `dock.selectTab(n)` | Switch to tab n |
+| `dock.recomputeLayout()` | Recalculate all tile positions (called automatically on resize) |
+
+Each tab's `FastPlotFigure` should be created with `'ParentFigure', dock.hFigure` to share the dock's window.
+
 ### `FastPlotTheme(preset, ...)` — Theme Presets
 
 ```matlab
@@ -464,6 +521,7 @@ fp.render();
 | `example_themes.m` | All 5 theme presets side by side |
 | `example_toolbar.m` | Interactive toolbar with data cursor, crosshair, and export |
 | `example_live.m` | Live mode dashboard with file-watching auto-refresh |
+| `example_dock.m` | Two dashboards docked in a single tabbed window |
 | `benchmark.m` | FastPlot vs plot() performance comparison |
 | `benchmark_dashboard.m` | FastPlotFigure vs subplot() dashboard creation |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
@@ -491,6 +549,7 @@ run_all_examples
 ```
 FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, render)
 FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
+FastPlotDock.m                Tabbed container for multiple dashboards (addTab, selectTab, render)
 FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export, refresh, live)
 FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
 ├── private/
@@ -504,8 +563,8 @@ FastPlotTheme.m               Theme presets and palette system (5 presets, 3 pal
 │       ├── minmax_core_mex.c
 │       └── lttb_core_mex.c
 ├── build_mex.m               MEX compilation script
-├── tests/                    20 test suites
-└── examples/                 17 demos + benchmarks
+├── tests/                    22 test suites
+└── examples/                 18 demos + benchmarks
 ```
 
 **Zoom/pan pipeline:**
@@ -568,7 +627,7 @@ From the terminal (Octave):
 octave --no-gui --eval "addpath('tests'); addpath('private'); test_zoom_pan;"
 ```
 
-Available test files: `test_add_line`, `test_add_threshold`, `test_add_band`, `test_add_marker`, `test_add_shaded`, `test_binary_search`, `test_compute_violations`, `test_fastplot_theme`, `test_figure_layout`, `test_linked_axes`, `test_live`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_theme`, `test_toolbar`, `test_zoom_pan`.
+Available test files: `test_add_line`, `test_add_threshold`, `test_add_band`, `test_add_marker`, `test_add_shaded`, `test_binary_search`, `test_compute_violations`, `test_dock`, `test_fastplot_theme`, `test_figure_layout`, `test_linked_axes`, `test_live`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_theme`, `test_toolbar`, `test_zoom_pan`.
 
 ## Benchmarks
 
