@@ -52,5 +52,44 @@ function test_dock()
     assert(strcmp(get(fig2.tile(1).hAxes, 'Visible'), 'off'), 'testRender: tab B hidden');
     close(dock.hFigure);
 
-    fprintf('    All 4 dock tests passed.\n');
+    % testSelectTab
+    dock = FastPlotDock('Theme', 'dark');
+    fig1 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig1.tile(1); fp.addLine(1:50, rand(1,50));
+    dock.addTab(fig1, 'Tab A');
+
+    fig2 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig2.tile(1); fp.addLine(1:50, rand(1,50));
+    dock.addTab(fig2, 'Tab B');
+    dock.render();
+
+    % Switch to tab 2
+    dock.selectTab(2);
+    assert(dock.ActiveTab == 2, 'testSelectTab: active is 2');
+    assert(strcmp(get(fig1.tile(1).hAxes, 'Visible'), 'off'), 'testSelectTab: tab A hidden');
+    assert(strcmp(get(fig2.tile(1).hAxes, 'Visible'), 'on'), 'testSelectTab: tab B visible');
+
+    % Switch back to tab 1
+    dock.selectTab(1);
+    assert(dock.ActiveTab == 1, 'testSelectTab: active is 1');
+    assert(strcmp(get(fig1.tile(1).hAxes, 'Visible'), 'on'), 'testSelectTab: tab A visible again');
+    assert(strcmp(get(fig2.tile(1).hAxes, 'Visible'), 'off'), 'testSelectTab: tab B hidden again');
+    close(dock.hFigure);
+
+    % testSelectTabOutOfBounds
+    dock = FastPlotDock();
+    fig1 = FastPlotFigure(1, 1, 'ParentFigure', dock.hFigure);
+    fp = fig1.tile(1); fp.addLine(1:50, rand(1,50));
+    dock.addTab(fig1, 'Only Tab');
+    dock.render();
+    threw = false;
+    try
+        dock.selectTab(5);
+    catch
+        threw = true;
+    end
+    assert(threw, 'testSelectTabOutOfBounds: should error');
+    close(dock.hFigure);
+
+    fprintf('    All 6 dock tests passed.\n');
 end
