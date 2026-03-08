@@ -546,11 +546,21 @@ classdef FastPlot < handle
                 L = obj.Lines(i);
                 numBuckets = obj.PixelWidth;
 
-                % Fast stride preview for large datasets (refined async)
+                % Downsample for display
                 if numel(L.X) > obj.MinPointsForDownsample
-                    K = max(1, floor(numel(L.X) / (2 * numBuckets)));
-                    xd = L.X(1:K:end);
-                    yd = L.Y(1:K:end);
+                    if obj.DeferDraw
+                        % Synchronous downsample for batched render (no preview visible)
+                        if strcmp(L.DownsampleMethod, 'lttb')
+                            [xd, yd] = lttb_downsample(L.X, L.Y, numBuckets);
+                        else
+                            [xd, yd] = minmax_downsample(L.X, L.Y, numBuckets, L.HasNaN);
+                        end
+                    else
+                        % Fast stride preview (refined async via timer)
+                        K = max(1, floor(numel(L.X) / (2 * numBuckets)));
+                        xd = L.X(1:K:end);
+                        yd = L.Y(1:K:end);
+                    end
                 else
                     xd = L.X;
                     yd = L.Y;
@@ -759,7 +769,7 @@ classdef FastPlot < handle
                     break;
                 end
             end
-            if hasLargeLines
+            if hasLargeLines && ~obj.DeferDraw
                 obj.IsRefined = false;
                 try
                     obj.hRefineTimer = timer('ExecutionMode', 'singleShot', ...
