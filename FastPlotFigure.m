@@ -7,6 +7,7 @@ classdef FastPlotFigure < handle
         Grid       = [1 1]      % [rows, cols]
         Theme      = []         % FastPlotTheme struct
         hFigure    = []         % figure handle
+        ParentFigure = []      % external figure handle (skip figure creation)
         LiveViewMode = ''          % 'preserve' | 'follow' | 'reset'
         LiveFile       = ''        % path to .mat file
         LiveUpdateFcn  = []        % @(fig, data) callback
@@ -60,6 +61,8 @@ classdef FastPlotFigure < handle
                         else
                             obj.Theme = val;
                         end
+                    case 'parentfigure'
+                        obj.ParentFigure = varargin{k+1};
                     otherwise
                         figOpts{end+1} = varargin{k};   %#ok<AGROW>
                         figOpts{end+1} = varargin{k+1};  %#ok<AGROW>
@@ -70,8 +73,12 @@ classdef FastPlotFigure < handle
                 obj.Theme = FastPlotTheme('default');
             end
 
-            obj.hFigure = figure('Visible', 'off', ...
-                'Color', obj.Theme.Background, figOpts{:});
+            if ~isempty(obj.ParentFigure)
+                obj.hFigure = obj.ParentFigure;
+            else
+                obj.hFigure = figure('Visible', 'off', ...
+                    'Color', obj.Theme.Background, figOpts{:});
+            end
         end
 
         function fp = tile(obj, n)

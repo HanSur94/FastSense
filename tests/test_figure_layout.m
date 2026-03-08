@@ -126,5 +126,15 @@ function test_figure_layout()
     assert(strcmp(get(fig.hFigure, 'Visible'), 'on'), 'testRenderAllDefersDraw: visible');
     close(fig.hFigure);
 
-    fprintf('    All 13 figure layout tests passed.\n');
+    % testParentFigure
+    hParent = figure('Visible', 'off');
+    fig = FastPlotFigure(2, 1, 'ParentFigure', hParent);
+    assert(fig.hFigure == hParent, 'testParentFigure: should use parent figure');
+    fp = fig.tile(1);
+    fp.addLine(1:50, rand(1,50));
+    fp.render();
+    assert(get(fp.hAxes, 'Parent') == hParent, 'testParentFigure: axes in parent');
+    close(hParent);
+
+    fprintf('    All 14 figure layout tests passed.\n');
 end
