@@ -669,6 +669,14 @@ classdef FastPlot < handle
                 end
             end
 
+            % Box on by default
+            set(obj.hAxes, 'Box', 'on');
+
+            % Legend: show only when multiple data lines
+            if numel(obj.Lines) > 1
+                legend(obj.hAxes, 'show', 'Location', 'best');
+            end
+
             % Invisible anchor line spanning full X range.
             % Ensures MATLAB auto-XLim computation covers full data even
             % when visible lines are downsampled to a zoomed sub-range.
