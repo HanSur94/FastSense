@@ -14,7 +14,7 @@ function test_sensor_resolve()
     s.addStateChannel(sc);
 
     % Threshold of 10 only applies when machine == 1 (timestamps 10-20)
-    s.addThresholdRule(@(st) st.machine == 1, 10, 'Direction', 'upper', 'Label', 'HH');
+    s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
 
     s.resolve();
 
@@ -38,8 +38,8 @@ function test_sensor_resolve()
     sc.Y = [0 1];
     s.addStateChannel(sc);
 
-    s.addThresholdRule(@(st) st.mode == 0, 50, 'Direction', 'upper', 'Label', 'Normal HH');
-    s.addThresholdRule(@(st) st.mode == 1, 40, 'Direction', 'upper', 'Label', 'Strict HH');
+    s.addThresholdRule(struct('mode', 0), 50, 'Direction', 'upper', 'Label', 'Normal HH');
+    s.addThresholdRule(struct('mode', 1), 40, 'Direction', 'upper', 'Label', 'Strict HH');
 
     s.resolve();
 
@@ -57,7 +57,7 @@ function test_sensor_resolve()
     s.addStateChannel(sc1);
     s.addStateChannel(sc2);
 
-    s.addThresholdRule(@(st) st.machine == 1 && st.zone == 1, 40, ...
+    s.addThresholdRule(struct('machine', 1, 'zone', 1), 40, ...
         'Direction', 'upper', 'Label', 'Combo alarm');
 
     s.resolve();
@@ -75,7 +75,7 @@ function test_sensor_resolve()
     s = Sensor('pressure');
     s.X = 1:10;
     s.Y = [1 2 3 4 5 6 7 8 9 10];
-    s.addThresholdRule(@(st) true, 5, 'Direction', 'upper', 'Label', 'Static');
+    s.addThresholdRule(struct(), 5, 'Direction', 'upper', 'Label', 'Static');
     s.resolve();
     assert(numel(s.ResolvedThresholds) == 1, 'testNoState: threshold count');
     viol = s.ResolvedViolations(1);
@@ -88,8 +88,8 @@ function test_sensor_resolve()
     sc = StateChannel('machine');
     sc.X = [1 10]; sc.Y = [0 1];
     s.addStateChannel(sc);
-    s.addThresholdRule(@(st) st.machine == 0, 50, 'Direction', 'upper');
-    s.addThresholdRule(@(st) st.machine == 1, 80, 'Direction', 'upper');
+    s.addThresholdRule(struct('machine', 0), 50, 'Direction', 'upper');
+    s.addThresholdRule(struct('machine', 1), 80, 'Direction', 'upper');
     active = s.getThresholdsAt(5);
     assert(numel(active) == 1 && active(1).Value == 50, 'testGetThresholdsAt: state 0');
     active = s.getThresholdsAt(15);

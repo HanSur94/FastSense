@@ -22,7 +22,7 @@ function test_add_sensor()
     sc = StateChannel('machine');
     sc.X = [1 50]; sc.Y = [0 1];
     s.addStateChannel(sc);
-    s.addThresholdRule(@(st) st.machine == 1, 10, 'Direction', 'upper', 'Label', 'HH');
+    s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
     s.resolve();
 
     fp = FastPlot();
@@ -33,7 +33,7 @@ function test_add_sensor()
     s = Sensor('temp', 'Name', 'Temperature');
     s.X = 1:50;
     s.Y = rand(1, 50);
-    s.addThresholdRule(@(st) true, 5, 'Direction', 'upper');
+    s.addThresholdRule(struct(), 5, 'Direction', 'upper');
     s.resolve();
 
     fp = FastPlot();

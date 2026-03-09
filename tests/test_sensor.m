@@ -32,16 +32,16 @@ function test_sensor()
 
     % testAddThresholdRule
     s = Sensor('pressure');
-    s.addThresholdRule(@(st) st.machine == 1, 50, 'Direction', 'upper', 'Label', 'HH');
+    s.addThresholdRule(struct('machine', 1), 50, 'Direction', 'upper', 'Label', 'HH');
     assert(numel(s.ThresholdRules) == 1, 'testAddThresholdRule: count');
     assert(s.ThresholdRules{1}.Value == 50, 'testAddThresholdRule: value');
     assert(strcmp(s.ThresholdRules{1}.Label, 'HH'), 'testAddThresholdRule: label');
 
     % testAddMultipleRules
     s = Sensor('pressure');
-    s.addThresholdRule(@(st) st.m == 1, 50, 'Direction', 'upper');
-    s.addThresholdRule(@(st) st.m == 2, 80, 'Direction', 'upper');
-    s.addThresholdRule(@(st) st.m == 1, 10, 'Direction', 'lower');
+    s.addThresholdRule(struct('m', 1), 50, 'Direction', 'upper');
+    s.addThresholdRule(struct('m', 2), 80, 'Direction', 'upper');
+    s.addThresholdRule(struct('m', 1), 10, 'Direction', 'lower');
     assert(numel(s.ThresholdRules) == 3, 'testMultipleRules: count');
 
     fprintf('    All 5 sensor tests passed.\n');

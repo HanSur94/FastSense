@@ -59,9 +59,10 @@ function build_mex()
 
     % Files to compile: {source_name, output_name}
     mex_files = {
-        'binary_search_mex.c',  'binary_search_mex'
-        'minmax_core_mex.c',    'minmax_core_mex'
-        'lttb_core_mex.c',      'lttb_core_mex'
+        'binary_search_mex.c',          'binary_search_mex'
+        'minmax_core_mex.c',            'minmax_core_mex'
+        'lttb_core_mex.c',              'lttb_core_mex'
+        'compute_violations_mex.c',     'compute_violations_mex'
     };
 
     fprintf('\n');
@@ -109,6 +110,10 @@ function build_mex()
     if n_fail > 0
         fprintf('(%d failed — MATLAB fallback will be used for those.)\n', n_fail);
     end
+
+    % Copy shared MEX files to SensorThreshold/private so they're accessible there
+    sensorPrivDir = fullfile(rootDir, '..', 'SensorThreshold', 'private');
+    copy_mex_to(outDir, sensorPrivDir, 'compute_violations_mex');
 end
 
 
@@ -134,6 +139,22 @@ function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compil
             mex_args = [['CC=' compiler], mex_args];
         end
         mex(mex_args{:});
+    end
+end
+
+
+function copy_mex_to(srcDir, destDir, name)
+%COPY_MEX_TO Copy a compiled MEX file to another directory.
+    d = dir(fullfile(srcDir, [name '.*']));
+    for i = 1:numel(d)
+        src = fullfile(srcDir, d(i).name);
+        dst = fullfile(destDir, d(i).name);
+        [ok, msg] = copyfile(src, dst);
+        if ok
+            fprintf('Copied %s → %s\n', d(i).name, destDir);
+        else
+            fprintf('Warning: failed to copy %s: %s\n', d(i).name, msg);
+        end
     end
 end
 

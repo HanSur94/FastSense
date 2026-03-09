@@ -4,7 +4,7 @@ function test_threshold_rule()
     add_sensor_path();
 
     % testConstructorDefaults
-    rule = ThresholdRule(@(st) st.x == 1, 50);
+    rule = ThresholdRule(struct('x', 1), 50);
     assert(rule.Value == 50, 'testConstructorDefaults: Value');
     assert(strcmp(rule.Direction, 'upper'), 'testConstructorDefaults: Direction default');
     assert(isempty(rule.Label), 'testConstructorDefaults: Label default');
@@ -12,7 +12,7 @@ function test_threshold_rule()
     assert(strcmp(rule.LineStyle, '--'), 'testConstructorDefaults: LineStyle default');
 
     % testConstructorWithOptions
-    rule = ThresholdRule(@(st) st.x > 2, 100, ...
+    rule = ThresholdRule(struct('x', 2), 100, ...
         'Direction', 'lower', 'Label', 'Low Alarm', ...
         'Color', [1 0 0], 'LineStyle', ':');
     assert(rule.Value == 100, 'testConstructorWithOptions: Value');
@@ -21,17 +21,15 @@ function test_threshold_rule()
     assert(isequal(rule.Color, [1 0 0]), 'testConstructorWithOptions: Color');
     assert(strcmp(rule.LineStyle, ':'), 'testConstructorWithOptions: LineStyle');
 
-    % testConditionEvaluation
-    rule = ThresholdRule(@(st) st.machine == 1 && st.zone == 0, 50);
-    st.machine = 1; st.zone = 0;
-    assert(rule.ConditionFn(st) == true, 'testConditionEval: true case');
-    st.machine = 2; st.zone = 0;
-    assert(rule.ConditionFn(st) == false, 'testConditionEval: false case');
+    % testConditionEvaluation (via matchesState)
+    rule = ThresholdRule(struct('machine', 1, 'zone', 0), 50);
+    assert(rule.matchesState(struct('machine', 1, 'zone', 0)) == true, 'testConditionEval: true case');
+    assert(rule.matchesState(struct('machine', 2, 'zone', 0)) == false, 'testConditionEval: false case');
 
     % testInvalidDirection
     threw = false;
     try
-        ThresholdRule(@(st) true, 50, 'Direction', 'sideways');
+        ThresholdRule(struct(), 50, 'Direction', 'sideways');
     catch
         threw = true;
     end
