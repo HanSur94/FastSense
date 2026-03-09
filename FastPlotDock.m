@@ -417,9 +417,11 @@ classdef FastPlotDock < handle
                 if ~isempty(obj.Tabs(i).Panel) && ishandle(obj.Tabs(i).Panel)
                     set(obj.Tabs(i).Panel, 'BackgroundColor', obj.Theme.Background);
                 end
-                if obj.Tabs(i).IsRendered && ~isempty(obj.Tabs(i).Figure)
+                if ~isempty(obj.Tabs(i).Figure)
                     obj.Tabs(i).Figure.Theme = obj.Theme;
-                    obj.Tabs(i).Figure.reapplyTheme();
+                    if obj.Tabs(i).IsRendered
+                        obj.Tabs(i).Figure.reapplyTheme();
+                    end
                 end
             end
         end

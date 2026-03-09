@@ -350,7 +350,7 @@ classdef FastPlotToolbar < handle
             %ONTHEMECLICK Open a context menu with available themes.
 
             % Clean up any previously created theme menus
-            delete(findobj(obj.hFigure, 'Type', 'uicontextmenu'));
+            delete(findobj(obj.hFigure, 'Type', 'uicontextmenu', 'Tag', 'FastPlotThemeMenu'));
 
             builtins = {'default', 'dark', 'light', 'industrial', 'scientific'};
 
@@ -366,7 +366,7 @@ classdef FastPlotToolbar < handle
             currentTheme = obj.getCurrentThemeName();
 
             % Build context menu
-            hMenu = uicontextmenu('Parent', obj.hFigure);
+            hMenu = uicontextmenu('Parent', obj.hFigure, 'Tag', 'FastPlotThemeMenu');
 
             for i = 1:numel(builtins)
                 label = builtins{i};
