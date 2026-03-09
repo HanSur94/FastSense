@@ -26,7 +26,10 @@ function test_sensor_registry()
     % testList — should not error
     SensorRegistry.list();
 
-    fprintf('    All 4 sensor_registry tests passed.\n');
+    % testPrintTable — should not error
+    SensorRegistry.printTable();
+
+    fprintf('    All 5 sensor_registry tests passed.\n');
 end
 
 function add_sensor_path()

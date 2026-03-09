@@ -88,9 +88,59 @@ classdef SensorRegistry
             end
             fprintf('\n');
         end
+
+        function printTable()
+            %PRINTTABLE Print a detailed table of all registered sensors.
+            %   SensorRegistry.printTable() prints a formatted table with
+            %   columns: Key, Name, ID, Source, MatFile, #States, #Rules, #Points.
+
+            map = SensorRegistry.catalog();
+            keys = sort(map.keys());
+            nSensors = numel(keys);
+
+            if nSensors == 0
+                fprintf('No sensors registered.\n');
+                return;
+            end
+
+            % Header
+            fprintf('\n');
+            fprintf('  %-20s %-25s %6s  %-20s %-20s %7s %6s %8s\n', ...
+                'Key', 'Name', 'ID', 'Source', 'MatFile', '#States', '#Rules', '#Points');
+            fprintf('  %s\n', repmat('-', 1, 118));
+
+            % Rows
+            for i = 1:nSensors
+                s = map(keys{i});
+                name = s.Name;
+                if isempty(name); name = ''; end
+
+                idStr = '';
+                if ~isempty(s.ID); idStr = num2str(s.ID); end
+
+                nStates = numel(s.StateChannels);
+                nRules  = numel(s.ThresholdRules);
+                nPts    = numel(s.X);
+
+                fprintf('  %-20s %-25s %6s  %-20s %-20s %7d %6d %8d\n', ...
+                    SensorRegistry.truncStr(keys{i}, 20), ...
+                    SensorRegistry.truncStr(name, 25), ...
+                    idStr, ...
+                    SensorRegistry.truncStr(s.Source, 20), ...
+                    SensorRegistry.truncStr(s.MatFile, 20), ...
+                    nStates, nRules, nPts);
+            end
+            fprintf('\n  %d sensor(s) total.\n\n', nSensors);
+        end
     end
 
     methods (Static, Access = private)
+        function s = truncStr(s, maxLen)
+            if numel(s) > maxLen
+                s = [s(1:maxLen-2), '..'];
+            end
+        end
+
         function map = catalog()
             %CATALOG Define all sensors here. Cached via persistent variable.
             %   map = SensorRegistry.catalog() returns a containers.Map
