@@ -39,12 +39,17 @@ function test_toolbar()
     assert(isequal(size(icons), [16 16 3]), 'testIconsAre16x16x3');
 
     % testAllIconNames
-    names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', 'export', 'refresh', 'live'};
+    names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', 'export', 'refresh', 'live', 'metadata', 'theme'};
     for i = 1:numel(names)
         icon = FastPlotToolbar.makeIcon(names{i});
         assert(isequal(size(icon), [16 16 3]), ...
             sprintf('testAllIconNames: %s', names{i}));
     end
+
+    % testIconCaching
+    icon1 = FastPlotToolbar.makeIcon('grid');
+    icon2 = FastPlotToolbar.makeIcon('grid');
+    assert(isequal(icon1, icon2), 'testIconCaching: cached icon should match');
 
     % testToggleGrid
     fp = FastPlot();
@@ -148,7 +153,7 @@ function test_toolbar()
     testToolbarRefreshButton();
     testToolbarLiveToggle();
 
-    fprintf('    All 15 toolbar tests passed.\n');
+    fprintf('    All 16 toolbar tests passed.\n');
 end
 
 function testToolbarRefreshButton()

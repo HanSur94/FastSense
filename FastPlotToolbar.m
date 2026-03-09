@@ -268,6 +268,7 @@ classdef FastPlotToolbar < handle
     % Mouse event handlers, crosshair/cursor drawing, and cleanup.
     methods (Access = private)
         function createToolbar(obj)
+            FastPlotToolbar.initIcons();
             obj.hToolbar = uitoolbar(obj.hFigure);
 
             % Buttons: cursor, crosshair, grid, legend, autoscale, export
@@ -833,7 +834,15 @@ classdef FastPlotToolbar < handle
             %
             %   Draws simple pixel-art icons on a light gray background.
             %   Available names: 'cursor', 'crosshair', 'grid', 'legend',
-            %   'autoscale', 'export', 'refresh', 'live', 'metadata'.
+            %   'autoscale', 'export', 'refresh', 'live', 'metadata', 'theme'.
+            persistent cache
+            if isempty(cache)
+                cache = containers.Map();
+            end
+            if cache.isKey(name)
+                icon = cache(name);
+                return
+            end
             bg = 0.94;  % light gray background
             icon = ones(16, 16, 3) * bg;
             fg = [0.2 0.2 0.2];  % dark foreground
@@ -971,6 +980,16 @@ classdef FastPlotToolbar < handle
                         icon(pr+1, pc, :) = reshape(clr, 1, 1, 3);
                         icon(pr+1, pc+1, :) = reshape(clr, 1, 1, 3);
                     end
+            end
+            cache(name) = icon;
+        end
+
+        function initIcons()
+            %INITICONS Pre-warm the icon cache for all toolbar buttons.
+            names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', ...
+                     'export', 'refresh', 'live', 'metadata', 'theme'};
+            for i = 1:numel(names)
+                FastPlotToolbar.makeIcon(names{i});
             end
         end
     end
