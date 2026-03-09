@@ -402,6 +402,78 @@ classdef FastPlot < handle
             end
         end
 
+        function addSensor(obj, sensor, varargin)
+            %ADDSENSOR Add a resolved Sensor's data and thresholds to the plot.
+            %   fp.addSensor(s)
+            %   fp.addSensor(s, 'ShowThresholds', true, 'ShowStateShading', true)
+            %
+            %   The sensor must have X and Y populated (via load() or direct
+            %   assignment) and resolve() must have been called if thresholds
+            %   are used.
+
+            if obj.IsRendered
+                error('FastPlot:alreadyRendered', ...
+                    'Cannot add sensors after render() has been called.');
+            end
+
+            defaults.ShowThresholds = true;
+            defaults.ShowStateShading = false;
+            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
+
+            % Determine display name: prefer Name, fall back to Key
+            displayName = sensor.Name;
+            if isempty(displayName)
+                displayName = sensor.Key;
+            end
+
+            % Add sensor data as a line
+            obj.addLine(sensor.X, sensor.Y, 'DisplayName', displayName);
+
+            % Add resolved thresholds as stepped lines + violation markers
+            if parsed.ShowThresholds && ~isempty(sensor.ResolvedThresholds)
+                for i = 1:numel(sensor.ResolvedThresholds)
+                    th = sensor.ResolvedThresholds(i);
+
+                    % Add stepped threshold line (only where condition is active)
+                    thLabel = th.Label;
+                    if isempty(thLabel)
+                        thLabel = sprintf('Threshold %d', i);
+                    end
+
+                    thColor = th.Color;
+                    if isempty(thColor)
+                        thColor = obj.Theme.ThresholdColor;
+                    end
+
+                    thStyle = th.LineStyle;
+                    if isempty(thStyle)
+                        thStyle = obj.Theme.ThresholdStyle;
+                    end
+
+                    % Add threshold as a line (NaN gaps where inactive)
+                    obj.addLine(th.X, th.Y, ...
+                        'DisplayName', thLabel, ...
+                        'Color', thColor, ...
+                        'LineStyle', thStyle, ...
+                        'LineWidth', 1.5);
+
+                    % Add violation markers if any
+                    viol = sensor.ResolvedViolations(i);
+                    if ~isempty(viol.X)
+                        obj.addMarker(viol.X, viol.Y, ...
+                            'Color', thColor, ...
+                            'Marker', 'o', ...
+                            'MarkerSize', 4);
+                    end
+                end
+            end
+
+            % Add state shading bands
+            if parsed.ShowStateShading && ~isempty(fieldnames(sensor.ResolvedStateBands))
+                % Future: add bands via obj.addBand() for each state region
+            end
+        end
+
         function addMarker(obj, x, y, varargin)
             %ADDMARKER Add custom event markers at specific positions.
             %   fp.addMarker(x, y)
