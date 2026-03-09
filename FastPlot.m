@@ -481,6 +481,10 @@ classdef FastPlot < handle
             obj.PixelWidth = obj.getAxesPixelWidth();
             obj.applyTheme();
 
+            % Apply axis scale (linear or log)
+            set(obj.hAxes, 'XScale', obj.XScale);
+            set(obj.hAxes, 'YScale', obj.YScale);
+
             % --- Compute full X range (X is sorted, just check endpoints) ---
             xmin = Inf; xmax = -Inf;
             for i = 1:numel(obj.Lines)
@@ -609,6 +613,15 @@ classdef FastPlot < handle
                 end
             end
 
+            if obj.Verbose && strcmp(obj.YScale, 'log')
+                for i = 1:numel(obj.Lines)
+                    nNonPos = sum(obj.Lines(i).Y <= 0);
+                    if nNonPos > 0
+                        fprintf('[FastPlot] warning: line %d has %d non-positive values (clipped on log scale)\n', i, nNonPos);
+                    end
+                end
+            end
+
             % --- Render threshold lines and violation markers (per threshold) ---
             for t = 1:numel(obj.Thresholds)
                 T = obj.Thresholds(t);
@@ -690,26 +703,49 @@ classdef FastPlot < handle
             end
 
             % --- Set static axis limits (use downsampled data, not full raw) ---
-            ymin = Inf; ymax = -Inf;
-            for i = 1:numel(obj.Lines)
-                yd = get(obj.Lines(i).hLine, 'YData');
-                yiMin = min(yd);
-                yiMax = max(yd);
-                if ~isnan(yiMin)
-                    if yiMin < ymin; ymin = yiMin; end
-                    if yiMax > ymax; ymax = yiMax; end
+            if strcmp(obj.YScale, 'log')
+                % Log Y: exclude non-positive, use multiplicative padding
+                ymin = Inf; ymax = -Inf;
+                for i = 1:numel(obj.Lines)
+                    yd = get(obj.Lines(i).hLine, 'YData');
+                    yd = yd(yd > 0 & ~isnan(yd));
+                    if ~isempty(yd)
+                        yiMin = min(yd);
+                        yiMax = max(yd);
+                        if yiMin < ymin; ymin = yiMin; end
+                        if yiMax > ymax; ymax = yiMax; end
+                    end
                 end
+                if isinf(ymin)
+                    ymin = 0.1; ymax = 1;
+                end
+                yPadFactor = 1.1;
+                yLimLow = ymin / yPadFactor;
+                yLimHigh = ymax * yPadFactor;
+            else
+                ymin = Inf; ymax = -Inf;
+                for i = 1:numel(obj.Lines)
+                    yd = get(obj.Lines(i).hLine, 'YData');
+                    yiMin = min(yd);
+                    yiMax = max(yd);
+                    if ~isnan(yiMin)
+                        if yiMin < ymin; ymin = yiMin; end
+                        if yiMax > ymax; ymax = yiMax; end
+                    end
+                end
+                yPad = (ymax - ymin) * 0.05;
+                if yPad == 0; yPad = 1; end
+                yLimLow = ymin - yPad;
+                yLimHigh = ymax + yPad;
             end
-            yPad = (ymax - ymin) * 0.05;
-            if yPad == 0; yPad = 1; end
 
             set(obj.hAxes, 'XLim', [xmin, xmax]);
-            set(obj.hAxes, 'YLim', [ymin - yPad, ymax + yPad]);
+            set(obj.hAxes, 'YLim', [yLimLow, yLimHigh]);
             set(obj.hAxes, 'XLimMode', 'manual');
             set(obj.hAxes, 'YLimMode', 'manual');
 
             obj.FullXLim = [xmin, xmax];
-            obj.FullYLim = [ymin - yPad, ymax + yPad];
+            obj.FullYLim = [yLimLow, yLimHigh];
             obj.CachedXLim = get(obj.hAxes, 'XLim');
 
             % Auto-format datetime axis if any line was added with datetime X
