@@ -322,6 +322,21 @@ classdef FastPlot < handle
                 end
             end
 
+            % Add vertical connectors at threshold transitions
+            if showThresholds && ~isempty(sensor.ResolvedConnectors)
+                for i = 1:numel(sensor.ResolvedConnectors)
+                    conn = sensor.ResolvedConnectors(i);
+                    connColor = conn.Color;
+                    if isempty(connColor)
+                        connColor = obj.Theme.ThresholdColor;
+                    end
+                    obj.addLine(conn.X, conn.Y, ...
+                        'Color', connColor, ...
+                        'LineStyle', '-', ...
+                        'LineWidth', 1.5);
+                end
+            end
+
             % Add state shading bands
             if showStateShading && ~isempty(fieldnames(sensor.ResolvedStateBands))
                 % Future: add bands via obj.addBand() for each state region

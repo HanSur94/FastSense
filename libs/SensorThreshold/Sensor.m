@@ -20,6 +20,7 @@ classdef Sensor < handle
         ResolvedThresholds  % struct: precomputed threshold time series
         ResolvedViolations  % struct: precomputed violation points
         ResolvedStateBands  % struct: precomputed state region bands
+        ResolvedConnectors  % struct array: vertical connectors at threshold transitions
     end
 
     methods
@@ -37,6 +38,7 @@ classdef Sensor < handle
             obj.ResolvedThresholds = struct();
             obj.ResolvedViolations = struct();
             obj.ResolvedStateBands = struct();
+            obj.ResolvedConnectors = [];
 
             for i = 1:2:numel(varargin)
                 switch varargin{i}
@@ -80,6 +82,7 @@ classdef Sensor < handle
                 obj.ResolvedThresholds = [];
                 obj.ResolvedViolations = [];
                 obj.ResolvedStateBands = [];
+                obj.ResolvedConnectors = [];
                 return;
             end
 
@@ -167,6 +170,51 @@ classdef Sensor < handle
             obj.ResolvedThresholds = resolvedTh;
             obj.ResolvedViolations = resolvedViol;
             obj.ResolvedStateBands = struct(); % placeholder for state shading
+
+            % Build vertical connectors at threshold level transitions
+            connectors = [];
+            for dir = {'upper', 'lower'}
+                d = dir{1};
+                % Find rules matching this direction
+                ruleIdx = [];
+                for r = 1:numel(resolvedTh)
+                    if strcmp(resolvedTh(r).Direction, d)
+                        ruleIdx(end+1) = r;
+                    end
+                end
+                if numel(ruleIdx) < 2; continue; end
+
+                % At each time point, determine the active value and color
+                nT = numel(timeGrid);
+                activeVal = NaN(1, nT);
+                activeColor = cell(1, nT);
+                for k = 1:nT
+                    for ri = ruleIdx
+                        if ~isnan(resolvedTh(ri).Y(k))
+                            activeVal(k) = resolvedTh(ri).Y(k);
+                            activeColor{k} = resolvedTh(ri).Color;
+                            break;
+                        end
+                    end
+                end
+
+                % Find transitions where value changes
+                for k = 2:nT
+                    if ~isnan(activeVal(k-1)) && ~isnan(activeVal(k)) ...
+                            && activeVal(k-1) ~= activeVal(k)
+                        conn.X = [timeGrid(k), timeGrid(k)];
+                        conn.Y = [activeVal(k-1), activeVal(k)];
+                        conn.Color = activeColor{k};
+                        conn.Direction = d;
+                        if isempty(connectors)
+                            connectors = conn;
+                        else
+                            connectors(end+1) = conn;
+                        end
+                    end
+                end
+            end
+            obj.ResolvedConnectors = connectors;
         end
 
         function active = getThresholdsAt(obj, t)
