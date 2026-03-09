@@ -243,9 +243,7 @@ classdef FastPlotToolbar < handle
             else
                 set(obj.hLiveBtn, 'State', 'off');
             end
-            if obj.MetadataEnabled
-                setappdata(obj.hFigure, 'FastPlotMetadataEnabled', true);
-            end
+            setappdata(obj.hFigure, 'FastPlotMetadataEnabled', obj.MetadataEnabled);
 
             % Reinstall datacursor callback
             obj.installDataCursorCallback();
