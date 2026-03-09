@@ -53,7 +53,7 @@ classdef FastPlot < handle
     %     fp = FastPlot(); fp.addLine(x, y); fp.render();
     %     fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
     %
-    %   Example — distribute figures on screen (requires distFig from File Exchange):
+    %   Example — distribute figures on screen (bundled in vendor/):
     %     FastPlot.distFig()                         % auto-arrange all figures
     %     FastPlot.distFig('Rows', 2, 'Cols', 3)     % 2x3 grid
     %
@@ -1982,12 +1982,10 @@ classdef FastPlot < handle
             %DISTFIG Distribute figure windows across the screen.
             %   FastPlot.distFig() arranges all open figures automatically.
             %   FastPlot.distFig('Rows',2,'Cols',3) uses a 2x3 grid.
-            %   All arguments are passed to distFig from MATLAB File Exchange.
-            %   Install: mathworks.com/matlabcentral/fileexchange/37176
+            %   All arguments are passed to distFig (bundled in vendor/).
+            vendorDir = fullfile(fileparts(mfilename('fullpath')), 'vendor', 'distFig');
             if ~exist('distFig', 'file')
-                error('FastPlot:distFigNotFound', ...
-                    ['distFig is not on the MATLAB path. Install it from:\n' ...
-                     'https://www.mathworks.com/matlabcentral/fileexchange/37176-distribute-figures']);
+                addpath(vendorDir);
             end
             distFig(varargin{:});
         end

@@ -1,9 +1,7 @@
 %% FastPlot.distFig — Distribute figures across the screen
 % Creates a mix of standalone plots, a dashboard, and a docked figure,
 % then uses FastPlot.distFig() to tile them neatly on screen.
-%
-% Requires: distFig from MATLAB File Exchange
-%   https://www.mathworks.com/matlabcentral/fileexchange/37176
+% distFig is bundled in vendor/ (BSD license, by Anders Simonsen).
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
 
