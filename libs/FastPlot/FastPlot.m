@@ -2039,12 +2039,18 @@ classdef FastPlot < handle
                 vyCell = cell(1, nLines);
                 nViols = 0;
                 for i = 1:nLines
+                    if obj.Lines(i).IsStatic; continue; end
                     % Use already-downsampled data from the line handle
                     xd = get(obj.Lines(i).hLine, 'XData');
                     yd = get(obj.Lines(i).hLine, 'YData');
 
-                    [vx, vy] = compute_violations(xd, yd, ...
-                        obj.Thresholds(t).Value, obj.Thresholds(t).Direction);
+                    if isempty(obj.Thresholds(t).X)
+                        [vx, vy] = compute_violations(xd, yd, ...
+                            obj.Thresholds(t).Value, obj.Thresholds(t).Direction);
+                    else
+                        [vx, vy] = compute_violations_dynamic(xd, yd, ...
+                            obj.Thresholds(t).X, obj.Thresholds(t).Y, obj.Thresholds(t).Direction);
+                    end
                     if ~isempty(vx)
                         nViols = nViols + 1;
                         vxCell{nViols} = [vx, NaN];
@@ -2058,17 +2064,21 @@ classdef FastPlot < handle
                     % Remove trailing NaN, then pixel-density cull
                     xl = get(obj.hAxes, 'XLim');
                     pw = diff(xl) / obj.PixelWidth;
-                    [vxCulled, vyCulled] = downsample_violations(vxAll(1:end-1), vyAll(1:end-1), pw, obj.Thresholds(t).Value, xl(1));
+                    if isempty(obj.Thresholds(t).X)
+                        thVal = obj.Thresholds(t).Value;
+                    else
+                        thVal = median(obj.Thresholds(t).Y(~isnan(obj.Thresholds(t).Y)));
+                    end
+                    [vxCulled, vyCulled] = downsample_violations(vxAll(1:end-1), vyAll(1:end-1), pw, thVal, xl(1));
                     set(obj.Thresholds(t).hMarkers, 'XData', vxCulled, 'YData', vyCulled);
                     if obj.Verbose
-                        fprintf('[FastPlot]   violations T%d (%.4g): %d markers\n', ...
-                            t, obj.Thresholds(t).Value, numel(vxCulled));
+                        fprintf('[FastPlot]   violations T%d: %d markers\n', ...
+                            t, numel(vxCulled));
                     end
                 else
                     set(obj.Thresholds(t).hMarkers, 'XData', NaN, 'YData', NaN);
                     if obj.Verbose
-                        fprintf('[FastPlot]   violations T%d (%.4g): 0 markers\n', ...
-                            t, obj.Thresholds(t).Value);
+                        fprintf('[FastPlot]   violations T%d: 0 markers\n', t);
                     end
                 end
             end
