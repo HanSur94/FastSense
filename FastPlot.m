@@ -511,7 +511,6 @@ classdef FastPlot < handle
         end
 
         function render(obj, progressBar)
-            if nargin < 2; progressBar = []; end
             %RENDER Create the plot with all configured lines and annotations.
             %   fp.render()
             %
@@ -522,6 +521,8 @@ classdef FastPlot < handle
             %
             %   After render(), use updateData() for live updates and
             %   addLine()/addThreshold() will error.
+
+            if nargin < 2; progressBar = []; end
 
             if obj.Verbose; renderTic = tic; end
 
@@ -679,7 +680,7 @@ classdef FastPlot < handle
                         i, numel(L.X), numel(xd), obj.PixelWidth);
                 end
                 if ~isempty(progressBar)
-                    progressBar.update(2, i, numel(obj.Lines), 'Lines');
+                    progressBar.update(2, i, numel(obj.Lines));
                 end
             end
 

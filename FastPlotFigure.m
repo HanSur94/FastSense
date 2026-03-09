@@ -209,18 +209,23 @@ classdef FastPlotFigure < handle
                 cpb = [];
             end
 
-            for k = 1:nTiles
-                i = tilesToRender(k);
-                if ~isempty(cpb)
-                    cpb.update(1, k-1, nTiles, 'Overall');
-                    cpb.update(2, 0, max(numel(obj.Tiles{i}.Lines), 1), sprintf('Tile %d', i));
+            try
+                for k = 1:nTiles
+                    i = tilesToRender(k);
+                    if ~isempty(cpb)
+                        cpb.update(1, k-1, nTiles, 'Overall');
+                        cpb.update(2, 0, max(numel(obj.Tiles{i}.Lines), 1), sprintf('Tile %d', i));
+                    end
+                    obj.Tiles{i}.DeferDraw = true;
+                    obj.Tiles{i}.render(cpb);
+                    obj.Tiles{i}.DeferDraw = false;
+                    if ~isempty(cpb)
+                        cpb.update(1, k, nTiles, 'Overall');
+                    end
                 end
-                obj.Tiles{i}.DeferDraw = true;
-                obj.Tiles{i}.render(cpb);
-                obj.Tiles{i}.DeferDraw = false;
-                if ~isempty(cpb)
-                    cpb.update(1, k, nTiles, 'Overall');
-                end
+            catch err
+                if ~isempty(cpb); cpb.finish(); end
+                rethrow(err);
             end
 
             if ~isempty(cpb)

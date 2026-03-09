@@ -56,10 +56,11 @@ classdef ConsoleProgressBar < handle
         %     current  — current progress value
         %     total    — total value (defines 100%)
         %     label    — string label shown to the left of the bar
-            if nargin < 5; label = ''; end
             obj.Currents(barIndex) = current;
             obj.Totals(barIndex)   = total;
-            obj.Labels{barIndex}   = label;
+            if nargin >= 5
+                obj.Labels{barIndex} = label;
+            end
             if obj.IsStarted
                 obj.printBars();
             end
@@ -78,24 +79,25 @@ classdef ConsoleProgressBar < handle
     methods (Access = private)
         function printBars(obj)
         %PRINTBARS Redraw all bar lines using ANSI escape codes.
-            filled = char(9608);  % Unicode full block
-            empty  = char(9617);  % Unicode light shade
+            ESC    = char(27);     % ANSI escape character
+            filled = char(9608);   % Unicode full block
+            empty  = char(9617);   % Unicode light shade
 
             % Move cursor up to overwrite previous output
             if obj.LinesWritten > 0
-                fprintf('\033[%dA', obj.LinesWritten);
+                fprintf('%s[%dA', ESC, obj.LinesWritten);
             end
 
             for k = 1:obj.NumBars
                 % Clear the current line
-                fprintf('\033[2K');
+                fprintf('%s[2K', ESC);
 
-                % Pad label to 12 characters
+                % Pad label to 12 characters (ASCII labels only)
                 lbl = obj.Labels{k};
                 if numel(lbl) > 12
                     lbl = lbl(1:12);
                 end
-                lbl = pad(lbl, 12);
+                lbl = sprintf('%-12s', lbl);
 
                 cur = obj.Currents(k);
                 tot = obj.Totals(k);
