@@ -100,107 +100,27 @@ tb.setCrosshair(true);     % enable crosshair mode
 tb.setCursor(true);        % enable data cursor mode
 ```
 
-### Live Mode
+### Datetime Axes
 
-Watch a `.mat` file for changes and auto-refresh the plot:
+Pass `datenum` values as X data with `'XType', 'datenum'` to get auto-formatted date/time tick labels:
 
 ```matlab
-% Create and render a plot
+x = datenum(2024,1,1) + (0:99999)/86400;  % 1-second resolution
+y = sin((1:100000) * 2*pi/3600);
+
 fp = FastPlot();
-fp.addLine(x, y, 'DisplayName', 'Sensor');
+fp.addLine(x, y, 'XType', 'datenum');
 fp.render();
-
-% Start live mode — polls file every 2 seconds
-fp.startLive('data.mat', @(fp, d) fp.updateData(1, d.x, d.y), ...
-    'Interval', 2, 'ViewMode', 'preserve');
-
-% Stop live mode
-fp.stopLive();
-
-% Manual one-shot refresh
-fp.refresh();
 ```
 
-Works with dashboards too:
+Tick labels auto-adapt to zoom level: `Jan 15 10:00` when zoomed out, `10:30:15` when zoomed in. The toolbar crosshair and data cursor also display datetime values.
+
+In MATLAB, you can also pass `datetime` objects directly — they are auto-converted to `datenum`:
 
 ```matlab
-fig = FastPlotFigure(2, 1, 'Theme', 'dark');
-fp1 = fig.tile(1); fp1.addLine(x, pressure);
-fp2 = fig.tile(2); fp2.addLine(x, temperature);
-fig.renderAll();
-
-fig.startLive('sensors.mat', @(fig, d) updateAll(fig, d), ...
-    'Interval', 1.5, 'ViewMode', 'follow');
-
-tb = FastPlotToolbar(fig);  % adds Live toggle + Refresh buttons
-
-function updateAll(fig, d)
-    fig.tile(1).updateData(1, d.time, d.pressure);
-    fig.tile(2).updateData(1, d.time, d.temperature);
-end
+dt = datetime(2024,1,1) + hours(0:999);
+fp.addLine(dt, y);  % XType set automatically
 ```
-
-**Live mode methods:**
-
-| Method | Description |
-|--------|-------------|
-| `startLive(file, updateFcn, ...)` | Start polling a `.mat` file for changes |
-| `stopLive()` | Stop live polling |
-| `refresh()` | Manual one-shot reload from file |
-| `updateData(lineIdx, newX, newY)` | Replace data for a line and re-downsample |
-| `setViewMode(mode)` | Change view mode at runtime |
-| `runLive()` | Blocking poll loop (Octave); no-op on MATLAB |
-
-**Options for `startLive`:**
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `Interval` | `2.0` | Poll interval in seconds |
-| `ViewMode` | `'preserve'` | `'preserve'` (keep zoom), `'follow'` (scroll to latest), `'reset'` (fit all data) |
-
-**Toolbar buttons:** The Live toggle button starts/stops polling. The Refresh button triggers a one-shot reload.
-
-**Octave compatibility:** Octave lacks MATLAB's `timer`, so call `runLive()` after `startLive()` to enter a blocking poll loop. The GUI stays responsive (zoom/pan work). Exit by closing the figure or pressing Ctrl+C.
-
-```matlab
-fp.startLive('data.mat', @(fp, d) fp.updateData(1, d.x, d.y));
-fp.runLive();  % blocks on Octave, no-op on MATLAB
-```
-
-### Docked Tabs
-
-Dock multiple dashboards into a single tabbed window with instant tab switching:
-
-```matlab
-dock = FastPlotDock('Theme', 'dark', 'Name', 'Control Room', ...
-    'Position', [50 50 1400 800]);
-
-% Dashboard 1: Temperature (2x2 grid)
-fig1 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
-fp = fig1.tile(1); fp.addLine(x, temperature);
-fp = fig1.tile(2); fp.addLine(x, coolant);
-fp = fig1.tile(3); fp.addLine(x, pressure);
-fp = fig1.tile(4); fp.addLine(x, vibration);
-dock.addTab(fig1, 'Temperature');
-
-% Dashboard 2: Power (1x2 grid)
-fig2 = FastPlotFigure(1, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
-fp = fig2.tile(1); fp.addLine(x, current);
-fp = fig2.tile(2); fp.addLine(x, rpm);
-dock.addTab(fig2, 'Power Systems');
-
-dock.render();
-dock.selectTab(2);  % switch to Power tab programmatically
-```
-
-Tabs can also be added after rendering — the new tab is immediately available for switching.
-
-**Features:**
-- Toggle buttons at the top act as the tab bar
-- Tab switching shows/hides all axes, children, labels, and toolbar controls
-- Automatic resize handling recomputes all tile positions
-- Closing the window stops all live timers across all tabs
-
 ## Installation
 
 ```bash

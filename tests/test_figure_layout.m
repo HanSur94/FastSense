@@ -1,7 +1,8 @@
 function test_figure_layout()
 %TEST_FIGURE_LAYOUT Tests for FastPlotFigure layout manager.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     % testConstruction
     fig = FastPlotFigure(2, 3);
@@ -111,42 +112,5 @@ function test_figure_layout()
     % No error = pass
     close(fig.hFigure);
 
-    % testRenderAllDefersDraw
-    fig = FastPlotFigure(2, 2);
-    for i = 1:4
-        fp = fig.tile(i);
-        fp.addLine(1:50, rand(1,50));
-    end
-    fig.renderAll();
-    for i = 1:4
-        fp = fig.tile(i);
-        assert(fp.IsRendered, sprintf('testRenderAllDefersDraw: tile %d rendered', i));
-        assert(ishandle(fp.Lines(1).hLine), sprintf('testRenderAllDefersDraw: tile %d line', i));
-    end
-    assert(strcmp(get(fig.hFigure, 'Visible'), 'on'), 'testRenderAllDefersDraw: visible');
-    close(fig.hFigure);
-
-    % testParentFigure
-    hParent = figure('Visible', 'off');
-    fig = FastPlotFigure(2, 1, 'ParentFigure', hParent);
-    assert(fig.hFigure == hParent, 'testParentFigure: should use parent figure');
-    fp = fig.tile(1);
-    fp.addLine(1:50, rand(1,50));
-    fp.render();
-    assert(get(fp.hAxes, 'Parent') == hParent, 'testParentFigure: axes in parent');
-    close(hParent);
-
-    % testContentOffset
-    fig = FastPlotFigure(1, 1);
-    fig.ContentOffset = [0.05 0.05 0.9 0.85];
-    fp = fig.tile(1);
-    fp.addLine(1:50, rand(1,50));
-    fp.render();
-    pos = get(fp.hAxes, 'Position');
-    % Tile should be within the content offset region
-    assert(pos(2) >= 0.04, sprintf('testContentOffset: bottom %.3f >= 0.04', pos(2)));
-    assert(pos(2) + pos(4) <= 0.95, sprintf('testContentOffset: top %.3f <= 0.95', pos(2)+pos(4)));
-    close(fig.hFigure);
-
-    fprintf('    All 15 figure layout tests passed.\n');
+    fprintf('    All 12 figure layout tests passed.\n');
 end

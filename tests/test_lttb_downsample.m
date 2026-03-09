@@ -1,7 +1,8 @@
 function test_lttb_downsample()
 %TEST_LTTB_DOWNSAMPLE Tests for lttb_downsample private function.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     % testOutputSize
     x = 1:1000;

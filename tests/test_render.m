@@ -1,7 +1,8 @@
 function test_render()
 %TEST_RENDER Tests for FastPlot.render method.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     % testCreatesNewFigure
     fp = FastPlot();
@@ -85,47 +86,7 @@ function test_render()
     assert(strcmp(get(fp.hAxes, 'YLimMode'), 'manual'), 'testStaticAxisLimits: YLimMode');
     close(fp.hFigure);
 
-    % testDeferDraw
-    fig = figure('Visible', 'off');
-    ax = axes('Parent', fig);
-    fp = FastPlot('Parent', ax);
-    fp.addLine(1:100, rand(1,100));
-    fp.DeferDraw = true;
-    fp.render();
-    assert(fp.IsRendered, 'testDeferDraw: should be rendered');
-    assert(ishandle(fp.Lines(1).hLine), 'testDeferDraw: line created');
-    assert(strcmp(get(fig, 'Visible'), 'off'), 'testDeferDraw: figure stays invisible');
-    close(fig);
-
-    % testStridePreviewLargeData
-    fp = FastPlot();
-    x = 1:100000;
-    y = sin(x/1000);
-    fp.addLine(x, y, 'DisplayName', 'Big');
-    fp.render();
-    xd = get(fp.Lines(1).hLine, 'XData');
-    assert(numel(xd) < numel(x), 'testStridePreview: should be downsampled');
-    assert(numel(xd) > 100, 'testStridePreview: should have reasonable points');
-    close(fp.hFigure);
-
-    % testSmallDataNoStride
-    fp = FastPlot();
-    fp.addLine(1:100, rand(1,100), 'DisplayName', 'Small');
-    fp.render();
-    xd = get(fp.Lines(1).hLine, 'XData');
-    assert(numel(xd) == 100, 'testSmallDataNoStride: all points shown');
-    close(fp.hFigure);
-
-    % testRefineTimerCleanupOnDelete
-    fp = FastPlot();
-    fp.addLine(1:100000, rand(1,100000));
-    fp.render();
-    fig = fp.hFigure;
-    delete(fp);
-    close(fig);
-    % No error means timer was cleaned up properly
-
-    fprintf('    All 12 render tests passed.\n');
+    fprintf('    All 8 render tests passed.\n');
 end
 
 function result = isfigure(h)

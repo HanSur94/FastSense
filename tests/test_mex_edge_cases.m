@@ -2,7 +2,8 @@ function test_mex_edge_cases()
 %TEST_MEX_EDGE_CASES Edge case tests for MEX functions.
 %   Skips if MEX files are not compiled.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     has_bs  = (exist('binary_search_mex', 'file') == 3);
     has_mm  = (exist('minmax_core_mex', 'file') == 3);

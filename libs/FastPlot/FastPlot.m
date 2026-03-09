@@ -1,92 +1,26 @@
 classdef FastPlot < handle
     %FASTPLOT Ultra-fast time series plotting with dynamic downsampling.
-    %   FastPlot renders 1K to 100M data points with fluid zoom/pan by
-    %   dynamically downsampling data to screen resolution using MinMax or
-    %   LTTB algorithms. A multi-level pyramid cache provides instant
-    %   re-downsample on zoom without touching raw data.
-    %
-    %   Features:
-    %     - Automatic MinMax/LTTB downsampling to pixel resolution
-    %     - Pyramid-based zoom for O(1) re-downsample on pan/zoom
-    %     - Linked zoom/pan across multiple plots via LinkGroup
-    %     - Threshold lines with automatic violation markers
-    %     - Horizontal bands, shaded regions, and area fills
-    %     - Live mode: poll a .mat file and auto-refresh on change
-    %     - Metadata attachment and forward-fill lookup by X value
-    %     - Datetime X-axis support with auto-formatting
-    %     - Logarithmic axis support (X, Y, or both)
-    %     - Theme-based styling via FastPlotTheme
+    %   Handles 1K to 100M data points with fluid zoom/pan.
+    %   Uses MinMax downsampling to reduce data to screen resolution.
     %
     %   Usage:
     %     fp = FastPlot();
     %     fp.addLine(x, y, 'DisplayName', 'Sensor1');
     %     fp.addThreshold(4.5, 'Direction', 'upper', 'ShowViolations', true);
     %     fp.render();
-    %
-    %   Constructor options (name-value):
-    %     'Parent'        — axes handle (default: create new figure)
-    %     'LinkGroup'     — string ID for linked zoom/pan across plots
-    %     'Theme'         — theme preset name, struct, or FastPlotTheme
-    %     'Verbose'       — logical, print diagnostics (default: false)
-    %     'MinPointsForDownsample' — threshold for raw vs downsampled
-    %     'DownsampleFactor'       — points per pixel (default: 2)
-    %     'PyramidReduction'       — compression per pyramid level
-    %     'DefaultDownsampleMethod' — 'minmax' or 'lttb'
-    %     'XScale'        — 'linear' or 'log' (default: 'linear')
-    %     'YScale'        — 'linear' or 'log' (default: 'linear')
-    %     'LiveInterval'  — poll interval in seconds (default: 2.0)
-    %
-    %   Example — linked zoom across two plots:
-    %     fp1 = FastPlot('LinkGroup', 'group1');
-    %     fp1.addLine(x, y1, 'DisplayName', 'Temp');
-    %     fp1.render();
-    %     fp2 = FastPlot('LinkGroup', 'group1');
-    %     fp2.addLine(x, y2, 'DisplayName', 'Pressure');
-    %     fp2.render();
-    %
-    %   Example — logarithmic Y axis:
-    %     fp = FastPlot('YScale', 'log');
-    %     fp.addLine(1:1000, logspace(-1, 3, 1000));
-    %     fp.render();
-    %
-    %   Example — live mode:
-    %     fp = FastPlot(); fp.addLine(x, y); fp.render();
-    %     fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
-    %
-    %   Example — distribute figures on screen (bundled in vendor/):
-    %     FastPlot.distFig()                         % auto-arrange all figures
-    %     FastPlot.distFig('Rows', 2, 'Cols', 3)     % 2x3 grid
-    %
-    %   See also FastPlotFigure, FastPlotDock, FastPlotTheme, FastPlotToolbar.
 
-    % ========================= PUBLIC PROPERTIES =========================
-    % User-configurable settings. Set before calling render().
     properties (Access = public)
         ParentAxes = []       % axes handle, empty = create new
         LinkGroup  = ''       % string ID for linked zoom/pan
         Theme      = []       % theme struct (from FastPlotTheme)
+        XType      = 'numeric'   % 'numeric' or 'datenum'
         Verbose    = false       % print diagnostics to console
-        LiveViewMode = ''  % 'preserve' | 'follow' | 'reset' (empty = no view mode applied)
-        LiveFile       = ''        % path to .mat file for live mode
-        LiveUpdateFcn  = []        % @(fp, data) callback for live updates
-        LiveIsActive   = false     % whether live polling is running
-        LiveInterval   = 2.0       % poll interval in seconds
-        MetadataFile      = ''        % path to separate .mat file for metadata
-        MetadataVars      = {}        % cell array of variable names to extract
-        MetadataLineIndex = 1         % which line index to attach metadata to
-        DeferDraw = false             % skip drawnow during batch render
-        ShowProgress = true           % show console progress bar during render
-        XScale = 'linear'             % 'linear' or 'log' — X axis scale
-        YScale = 'linear'             % 'linear' or 'log' — Y axis scale
     end
 
-    % ====================== INTERNAL DATA STORAGE ========================
-    % Struct arrays holding line data, annotations, and graphics handles.
-    % SetAccess = private prevents external modification of plot state.
     properties (SetAccess = private)
         Lines      = struct('X', {}, 'Y', {}, 'Options', {}, ...
                             'DownsampleMethod', {}, 'hLine', {}, ...
-                            'Pyramid', {}, 'HasNaN', {}, 'Metadata', {})
+                            'Pyramid', {}, 'HasNaN', {})
         Thresholds = struct('Value', {}, 'Direction', {}, ...
                             'ShowViolations', {}, 'Color', {}, ...
                             'LineStyle', {}, 'Label', {}, ...
@@ -105,149 +39,46 @@ classdef FastPlot < handle
         IsRendered    = false
         hFigure       = []
         hAxes         = []
-        IsDatetime    = false % true if X data was datetime (converted to datenum)
     end
 
-    % ======================== PRIVATE STATE ==============================
-    % Internal bookkeeping: listeners, caches, timers, and flags.
     properties (Access = private)
         Listeners     = []    % event listeners (XLim, resize)
-        hRefineTimer  = []    % one-shot timer for deferred minmax refinement
-        IsRefined     = true  % false while showing coarse stride preview
         CachedXLim    = []    % for lazy recomputation
-        FullXLim      = []    % full data range for Home button restore
-        FullYLim      = []    % full data Y range for Home button restore
         PixelWidth    = 1920  % cached axes width in pixels
         IsPropagating = false % guard against re-entrant link propagation
         HasLimitRate  = []    % cached: does drawnow support 'limitrate'?
-        DeferredTimer = []    % timer for deferred Home button re-downsample
         ColorIndex    = 0     % tracks auto color cycling position
-        LiveTimer      = []        % timer object for live polling
-        LiveFileDate   = 0         % last known file modification datenum
-        MetadataFileDate  = 0         % last known metadata file datenum
     end
 
-    % ===================== PERFORMANCE TUNING ============================
-    % Configurable performance parameters. Override via constructor or
-    % set before calling render().
-    properties (Access = public)
-        MinPointsForDownsample = 5000  % below this, plot raw data
-        DownsampleFactor = 2           % points per pixel (min + max)
-        PyramidReduction = 100         % reduction factor per pyramid level
-        DefaultDownsampleMethod = 'minmax'  % 'minmax' or 'lttb'
+    properties (Constant, Access = private)
+        MIN_POINTS_FOR_DOWNSAMPLE = 5000  % below this, plot raw data
+        DOWNSAMPLE_FACTOR = 2             % points per pixel (min + max)
+        PYRAMID_REDUCTION = 100           % reduction factor per pyramid level
     end
 
     methods (Access = public)
         function obj = FastPlot(varargin)
-            %FASTPLOT Construct a FastPlot instance.
-            %   fp = FastPlot()
-            %   fp = FastPlot('Parent', ax, 'Theme', 'dark')
-            %   fp = FastPlot('LinkGroup', 'g1', 'Verbose', true)
-            %
-            %   All options are name-value pairs. Defaults are loaded from
-            %   FastPlotDefaults and can be overridden per-instance.
-            cfg = getDefaults();
-            defaults.Parent = [];
-            defaults.LinkGroup = '';
-            defaults.Theme = [];
-            defaults.Verbose = cfg.Verbose;
-            defaults.MinPointsForDownsample = cfg.MinPointsForDownsample;
-            defaults.DownsampleFactor = cfg.DownsampleFactor;
-            defaults.PyramidReduction = cfg.PyramidReduction;
-            defaults.DefaultDownsampleMethod = cfg.DefaultDownsampleMethod;
-            defaults.LiveInterval = cfg.LiveInterval;
-            defaults.XScale = cfg.XScale;
-            defaults.YScale = cfg.YScale;
-            [opts, ~] = parseOpts(defaults, varargin);
-
-            obj.ParentAxes = opts.Parent;
-            obj.LinkGroup = opts.LinkGroup;
-            obj.Verbose = opts.Verbose;
-            obj.MinPointsForDownsample = opts.MinPointsForDownsample;
-            obj.DownsampleFactor = opts.DownsampleFactor;
-            obj.PyramidReduction = opts.PyramidReduction;
-            obj.DefaultDownsampleMethod = opts.DefaultDownsampleMethod;
-            obj.LiveInterval = opts.LiveInterval;
-            obj.XScale = opts.XScale;
-            obj.YScale = opts.YScale;
-            obj.Theme = resolveTheme(opts.Theme, cfg.Theme);
-        end
-
-        function resetColorIndex(obj)
-            %RESETCOLORINDEX Reset the auto color cycling counter.
-            %   fp.resetColorIndex()
-            %   Next addLine() call without explicit Color will use the first
-            %   color from the theme palette.
-            obj.ColorIndex = 0;
-        end
-
-        function reapplyTheme(obj)
-            %REAPPLYTHEME Re-apply the current Theme to axes and figure.
-            %   Use after changing fp.Theme to update existing visuals.
-            if ~obj.IsRendered; return; end
-            obj.applyTheme();
-            % Update existing line widths
-            for i = 1:numel(obj.Lines)
-                if ~isempty(obj.Lines(i).hLine) && ishandle(obj.Lines(i).hLine)
-                    set(obj.Lines(i).hLine, 'LineWidth', obj.Theme.LineWidth);
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'parent'
+                        obj.ParentAxes = varargin{k+1};
+                    case 'linkgroup'
+                        obj.LinkGroup = varargin{k+1};
+                    case 'theme'
+                        val = varargin{k+1};
+                        if ischar(val) || isstruct(val)
+                            obj.Theme = FastPlotTheme(val);
+                        else
+                            obj.Theme = val;
+                        end
+                    case 'verbose'
+                        obj.Verbose = varargin{k+1};
                 end
             end
-        end
-
-        function setScale(obj, varargin)
-            %SETSCALE Set axis scale (linear or log) for X and/or Y.
-            %   fp.setScale('YScale', 'log')
-            %   fp.setScale('XScale', 'log', 'YScale', 'linear')
-            %
-            %   Can be called before or after render(). After render(), updates
-            %   the axes and re-downsamples all lines.
-
-            p = struct('XScale', obj.XScale, 'YScale', obj.YScale);
-            [opts, ~] = parseOpts(p, varargin);
-
-            % Validate
-            validScales = {'linear', 'log'};
-            if ~ismember(opts.XScale, validScales)
-                error('FastPlot:invalidScale', 'XScale must be ''linear'' or ''log''.');
+            % Default theme if none set
+            if isempty(obj.Theme)
+                obj.Theme = FastPlotTheme('default');
             end
-            if ~ismember(opts.YScale, validScales)
-                error('FastPlot:invalidScale', 'YScale must be ''linear'' or ''log''.');
-            end
-
-            xChanged = ~strcmp(opts.XScale, obj.XScale);
-            yChanged = ~strcmp(opts.YScale, obj.YScale);
-
-            obj.XScale = opts.XScale;
-            obj.YScale = opts.YScale;
-
-            if ~obj.IsRendered
-                return;
-            end
-
-            % Apply to axes
-            set(obj.hAxes, 'XScale', obj.XScale);
-            set(obj.hAxes, 'YScale', obj.YScale);
-
-            % Invalidate pyramid caches where needed
-            if xChanged
-                % Log X changes bucketing — invalidate all pyramids
-                for i = 1:numel(obj.Lines)
-                    obj.Lines(i).Pyramid = {};
-                end
-            elseif yChanged
-                % Log Y only affects LTTB pyramids (minmax is order-invariant)
-                for i = 1:numel(obj.Lines)
-                    if strcmp(obj.Lines(i).DownsampleMethod, 'lttb')
-                        obj.Lines(i).Pyramid = {};
-                    end
-                end
-            end
-
-            % Re-downsample
-            obj.updateLines();
-            obj.updateShadings();
-            obj.updateViolations();
-            obj.drawnowLimitRate();
         end
 
         function addLine(obj, x, y, varargin)
@@ -261,19 +92,17 @@ classdef FastPlot < handle
                     'Cannot add lines after render() has been called.');
             end
 
-            % Convert datetime X to datenum for internal use
-            try
-                if isdatetime(x)
-                    x = datenum(x);
-                    obj.IsDatetime = true;
-                end
-            catch
-                % Octave: isdatetime may not exist — skip gracefully
-            end
-
             % Force row vectors (avoid copy if already row)
             if ~isrow(x); x = x(:)'; end
             if ~isrow(y); y = y(:)'; end
+
+            % Detect and convert datetime input
+            if isa(x, 'datetime')
+                x = datenum(x);
+                if strcmp(obj.XType, 'numeric')
+                    obj.XType = 'datenum';
+                end
+            end
 
             % Validate sizes match
             if numel(x) ~= numel(y)
@@ -281,31 +110,38 @@ classdef FastPlot < handle
                     'X and Y must have the same number of elements.');
             end
 
-            % Parse name-value pairs via shared helper
-            knownDefaults.DownsampleMethod = obj.DefaultDownsampleMethod;
-            knownDefaults.Metadata = [];
-            knownDefaults.AssumeSorted = false;
-            knownDefaults.HasNaN = [];
-            [known, passthrough] = parseOpts(knownDefaults, varargin, obj.Verbose);
-
-            dsMethod = known.DownsampleMethod;
-            meta = known.Metadata;
-            assumeSorted = known.AssumeSorted;
-            hasNaNOverride = known.HasNaN;
-            opts = passthrough;
-
             % Monotonicity check (chunked vectorized — limits peak memory)
-            if ~assumeSorted
-                chunkSize = 1000000;
-                nX = numel(x);
-                for ci = 1:chunkSize:nX-1
-                    ce = min(ci + chunkSize, nX);
-                    dx = diff(x(ci:ce));
-                    if any(dx(~isnan(dx)) < 0)
-                        error('FastPlot:nonMonotonicX', ...
-                            'X must be monotonically increasing.');
-                    end
+            chunkSize = 1000000;
+            nX = numel(x);
+            for ci = 1:chunkSize:nX-1
+                ce = min(ci + chunkSize, nX);
+                dx = diff(x(ci:ce));
+                if any(dx(~isnan(dx)) < 0)
+                    error('FastPlot:nonMonotonicX', ...
+                        'X must be monotonically increasing.');
                 end
+            end
+
+            % Parse name-value pairs manually (avoid inputParser overhead)
+            dsMethod = 'minmax';
+            opts = struct();
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                val = varargin{k+1};
+                if strcmpi(key, 'DownsampleMethod')
+                    dsMethod = val;
+                elseif strcmpi(key, 'XType')
+                    if strcmp(obj.XType, 'numeric') || strcmp(obj.XType, val)
+                        obj.XType = val;
+                    else
+                        error('FastPlot:mixedXType', ...
+                            'All lines must use the same XType.');
+                    end
+                else
+                    opts.(key) = val;
+                end
+                k = k + 2;
             end
 
             % Auto-assign color from theme palette if not explicitly set
@@ -323,12 +159,7 @@ classdef FastPlot < handle
             lineStruct.Options = opts;
             lineStruct.hLine = [];
             lineStruct.Pyramid = {};
-            if ~isempty(hasNaNOverride)
-                lineStruct.HasNaN = hasNaNOverride;
-            else
-                lineStruct.HasNaN = any(isnan(y));
-            end
-            lineStruct.Metadata = meta;
+            lineStruct.HasNaN = any(isnan(y));
 
             % Append
             if isempty(obj.Lines)
@@ -348,21 +179,31 @@ classdef FastPlot < handle
                     'Cannot add thresholds after render() has been called.');
             end
 
-            defaults.Direction = 'upper';
-            defaults.ShowViolations = false;
-            defaults.Color = obj.Theme.ThresholdColor;
-            defaults.LineStyle = obj.Theme.ThresholdStyle;
-            defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
-
+            % Defaults
             t.Value          = value;
-            t.Direction      = parsed.Direction;
-            t.ShowViolations = parsed.ShowViolations;
-            t.Color          = parsed.Color;
-            t.LineStyle      = parsed.LineStyle;
-            t.Label          = parsed.Label;
+            t.Direction      = 'upper';
+            t.ShowViolations = false;
+            t.Color          = obj.Theme.ThresholdColor;
+            t.LineStyle      = obj.Theme.ThresholdStyle;
+            t.Label          = '';
             t.hLine          = [];
             t.hMarkers       = [];
+
+            % Manual name-value parsing (avoid inputParser overhead)
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'direction'
+                        t.Direction = varargin{k+1};
+                    case 'showviolations'
+                        t.ShowViolations = varargin{k+1};
+                    case 'color'
+                        t.Color = varargin{k+1};
+                    case 'linestyle'
+                        t.LineStyle = varargin{k+1};
+                    case 'label'
+                        t.Label = varargin{k+1};
+                end
+            end
 
             if isempty(obj.Thresholds)
                 obj.Thresholds = t;
@@ -381,19 +222,26 @@ classdef FastPlot < handle
                     'Cannot add bands after render() has been called.');
             end
 
-            defaults.FaceColor = obj.Theme.ThresholdColor;
-            defaults.FaceAlpha = obj.Theme.BandAlpha;
-            defaults.EdgeColor = 'none';
-            defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
-
             b.YLow      = yLow;
             b.YHigh     = yHigh;
-            b.FaceColor = parsed.FaceColor;
-            b.FaceAlpha = parsed.FaceAlpha;
-            b.EdgeColor = parsed.EdgeColor;
-            b.Label     = parsed.Label;
+            b.FaceColor = obj.Theme.ThresholdColor;
+            b.FaceAlpha = obj.Theme.BandAlpha;
+            b.EdgeColor = 'none';
+            b.Label     = '';
             b.hPatch    = [];
+
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'facecolor'
+                        b.FaceColor = varargin{k+1};
+                    case 'facealpha'
+                        b.FaceAlpha = varargin{k+1};
+                    case 'edgecolor'
+                        b.EdgeColor = varargin{k+1};
+                    case 'label'
+                        b.Label = varargin{k+1};
+                end
+            end
 
             if isempty(obj.Bands)
                 obj.Bands = b;
@@ -416,9 +264,16 @@ classdef FastPlot < handle
                     'Cannot add sensors after render() has been called.');
             end
 
-            defaults.ShowThresholds = true;
-            defaults.ShowStateShading = false;
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
+            showThresholds = true;
+            showStateShading = false;
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'showthresholds'
+                        showThresholds = varargin{k+1};
+                    case 'showstateshading'
+                        showStateShading = varargin{k+1};
+                end
+            end
 
             % Determine display name: prefer Name, fall back to Key
             displayName = sensor.Name;
@@ -430,11 +285,10 @@ classdef FastPlot < handle
             obj.addLine(sensor.X, sensor.Y, 'DisplayName', displayName);
 
             % Add resolved thresholds as stepped lines + violation markers
-            if parsed.ShowThresholds && ~isempty(sensor.ResolvedThresholds)
+            if showThresholds && ~isempty(sensor.ResolvedThresholds)
                 for i = 1:numel(sensor.ResolvedThresholds)
                     th = sensor.ResolvedThresholds(i);
 
-                    % Add stepped threshold line (only where condition is active)
                     thLabel = th.Label;
                     if isempty(thLabel)
                         thLabel = sprintf('Threshold %d', i);
@@ -469,7 +323,7 @@ classdef FastPlot < handle
             end
 
             % Add state shading bands
-            if parsed.ShowStateShading && ~isempty(fieldnames(sensor.ResolvedStateBands))
+            if showStateShading && ~isempty(fieldnames(sensor.ResolvedStateBands))
                 % Future: add bands via obj.addBand() for each state region
             end
         end
@@ -487,19 +341,26 @@ classdef FastPlot < handle
             if ~isrow(x); x = x(:)'; end
             if ~isrow(y); y = y(:)'; end
 
-            defaults.Marker = 'o';
-            defaults.MarkerSize = 6;
-            defaults.Color = obj.Theme.ThresholdColor;
-            defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
-
             m.X          = x;
             m.Y          = y;
-            m.Marker     = parsed.Marker;
-            m.MarkerSize = parsed.MarkerSize;
-            m.Color      = parsed.Color;
-            m.Label      = parsed.Label;
+            m.Marker     = 'o';
+            m.MarkerSize = 6;
+            m.Color      = obj.Theme.ThresholdColor;
+            m.Label      = '';
             m.hLine      = [];
+
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'marker'
+                        m.Marker = varargin{k+1};
+                    case 'markersize'
+                        m.MarkerSize = varargin{k+1};
+                    case 'color'
+                        m.Color = varargin{k+1};
+                    case 'label'
+                        m.Label = varargin{k+1};
+                end
+            end
 
             if isempty(obj.Markers)
                 obj.Markers = m;
@@ -538,23 +399,30 @@ classdef FastPlot < handle
                 end
             end
 
-            defaults.FaceColor = [0 0.45 0.74];
-            defaults.FaceAlpha = 0.15;
-            defaults.EdgeColor = 'none';
-            defaults.DisplayName = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
-
             s.X           = x;
             s.Y1          = y1;
             s.Y2          = y2;
-            s.FaceColor   = parsed.FaceColor;
-            s.FaceAlpha   = parsed.FaceAlpha;
-            s.EdgeColor   = parsed.EdgeColor;
-            s.DisplayName = parsed.DisplayName;
+            s.FaceColor   = [0 0.45 0.74];
+            s.FaceAlpha   = 0.15;
+            s.EdgeColor   = 'none';
+            s.DisplayName = '';
             s.hPatch      = [];
             s.CacheX      = [];
             s.CacheY1     = [];
             s.CacheY2     = [];
+
+            for k = 1:2:numel(varargin)
+                switch lower(varargin{k})
+                    case 'facecolor'
+                        s.FaceColor = varargin{k+1};
+                    case 'facealpha'
+                        s.FaceAlpha = varargin{k+1};
+                    case 'edgecolor'
+                        s.EdgeColor = varargin{k+1};
+                    case 'displayname'
+                        s.DisplayName = varargin{k+1};
+                end
+            end
 
             if isempty(obj.Shadings)
                 obj.Shadings = s;
@@ -568,47 +436,28 @@ classdef FastPlot < handle
             %   fp.addFill(x, y)
             %   fp.addFill(x, y, 'Baseline', -1, 'FaceColor', [0 0.5 1])
 
-            % Convert datetime X to datenum
-            try
-                if isdatetime(x)
-                    x = datenum(x);
-                    obj.IsDatetime = true;
+            baseline = 0;
+            filteredArgs = {};
+            k = 1;
+            while k <= numel(varargin)
+                if strcmpi(varargin{k}, 'Baseline')
+                    baseline = varargin{k+1};
+                    k = k + 2;
+                else
+                    filteredArgs{end+1} = varargin{k};   %#ok<AGROW>
+                    filteredArgs{end+1} = varargin{k+1};  %#ok<AGROW>
+                    k = k + 2;
                 end
-            catch
             end
-
-            fillDefaults.Baseline = 0;
-            [fillOpts, shadedArgs] = parseOpts(fillDefaults, varargin, obj.Verbose);
 
             if ~isrow(x); x = x(:)'; end
             if ~isrow(y); y = y(:)'; end
-            y2 = ones(size(x)) * fillOpts.Baseline;
-            shadedNV = struct2nvpairs(shadedArgs);
-            obj.addShaded(x, y, y2, shadedNV{:});
+            y2 = ones(size(x)) * baseline;
+            obj.addShaded(x, y, y2, filteredArgs{:});
         end
 
-        function render(obj, progressBar)
-            %RENDER Create the plot with all configured lines and annotations.
-            %   fp.render()
-            %
-            %   Finalizes the plot: creates axes (if needed), applies the
-            %   theme, downsamples all lines to screen resolution, draws
-            %   bands/shadings/thresholds/markers, sets axis limits, and
-            %   installs zoom/pan listeners. Can only be called once.
-            %
-            %   After render(), use updateData() for live updates and
-            %   addLine()/addThreshold() will error.
-
-            if nargin < 2; progressBar = []; end
-
-            % Create local progress bar for standalone render
-            ownProgressBar = false;
-            if isempty(progressBar) && obj.ShowProgress && numel(obj.Lines) > 0
-                progressBar = ConsoleProgressBar(0);
-                progressBar.update(0, numel(obj.Lines), 'Rendering');
-                progressBar.start();
-                ownProgressBar = true;
-            end
+        function render(obj)
+            %RENDER Create the plot with all configured lines and thresholds.
 
             if obj.Verbose; renderTic = tic; end
 
@@ -628,20 +477,10 @@ classdef FastPlot < handle
                 obj.hAxes = obj.ParentAxes;
                 obj.hFigure = ancestor(obj.hAxes, 'figure');
             end
-            % Lock axes to its assigned position (prevent MATLAB padding)
-            try
-                set(obj.hAxes, 'PositionConstraint', 'innerposition');
-            catch
-                set(obj.hAxes, 'ActivePositionProperty', 'position');
-            end
 
             hold(obj.hAxes, 'on');
             obj.PixelWidth = obj.getAxesPixelWidth();
             obj.applyTheme();
-
-            % Apply axis scale (linear or log)
-            set(obj.hAxes, 'XScale', obj.XScale);
-            set(obj.hAxes, 'YScale', obj.YScale);
 
             % --- Compute full X range (X is sorted, just check endpoints) ---
             xmin = Inf; xmax = -Inf;
@@ -686,7 +525,7 @@ classdef FastPlot < handle
                     [~,  y2d] = minmax_downsample(cx, cy2, obj.PixelWidth);
                     patchX = [xd, fliplr(xd)];
                     patchY = [y1d, fliplr(y2d)];
-                elseif numel(S.X) > obj.MinPointsForDownsample
+                elseif numel(S.X) > obj.MIN_POINTS_FOR_DOWNSAMPLE
                     [xd, y1d] = minmax_downsample(S.X, S.Y1, obj.PixelWidth);
                     [~,  y2d] = minmax_downsample(S.X, S.Y2, obj.PixelWidth);
                     patchX = [xd, fliplr(xd)];
@@ -714,22 +553,12 @@ classdef FastPlot < handle
                 L = obj.Lines(i);
                 numBuckets = obj.PixelWidth;
 
-                % Downsample for display
-                logXFlag = strcmp(obj.XScale, 'log');
-                logYFlag = strcmp(obj.YScale, 'log');
-                if numel(L.X) > obj.MinPointsForDownsample
-                    if obj.DeferDraw
-                        % Synchronous downsample for batched render (no preview visible)
-                        if strcmp(L.DownsampleMethod, 'lttb')
-                            [xd, yd] = lttb_downsample(L.X, L.Y, numBuckets, logXFlag, logYFlag);
-                        else
-                            [xd, yd] = minmax_downsample(L.X, L.Y, numBuckets, L.HasNaN, logXFlag);
-                        end
+                % Downsample
+                if numel(L.X) > obj.MIN_POINTS_FOR_DOWNSAMPLE
+                    if strcmp(L.DownsampleMethod, 'lttb')
+                        [xd, yd] = lttb_downsample(L.X, L.Y, numBuckets);
                     else
-                        % Fast stride preview (refined async via timer)
-                        K = max(1, floor(numel(L.X) / (2 * numBuckets)));
-                        xd = L.X(1:K:end);
-                        yd = L.Y(1:K:end);
+                        [xd, yd] = minmax_downsample(L.X, L.Y, numBuckets, L.HasNaN);
                     end
                 else
                     xd = L.X;
@@ -739,30 +568,23 @@ classdef FastPlot < handle
                 % Create line object
                 h = line(xd, yd, 'Parent', obj.hAxes);
 
-                % Apply user options (batch — single graphics update)
-                if ~isempty(fieldnames(L.Options))
-                    try
-                        set(h, L.Options);
-                    catch
-                        % Octave fallback: struct form not supported
-                        fnames = fieldnames(L.Options);
-                        for f = 1:numel(fnames)
-                            set(h, fnames{f}, L.Options.(fnames{f}));
-                        end
-                    end
+                % Apply user options
+                opts = L.Options;
+                fnames = fieldnames(opts);
+                for f = 1:numel(fnames)
+                    set(h, fnames{f}, opts.(fnames{f}));
                 end
 
                 % Tag with UserData
                 displayName = '';
-                if isfield(L.Options, 'DisplayName')
-                    displayName = L.Options.DisplayName;
+                if isfield(opts, 'DisplayName')
+                    displayName = opts.DisplayName;
                 end
                 ud.FastPlot = struct( ...
                     'Type', 'data_line', ...
                     'Name', displayName, ...
                     'LineIndex', i, ...
                     'ThresholdValue', []);
-                ud.FastPlotInstance = obj;
                 set(h, 'UserData', ud);
 
                 obj.Lines(i).hLine = h;
@@ -770,18 +592,6 @@ classdef FastPlot < handle
                 if obj.Verbose
                     fprintf('[FastPlot] render: line %d: %d pts -> %d displayed (pw=%d)\n', ...
                         i, numel(L.X), numel(xd), obj.PixelWidth);
-                end
-                if ~isempty(progressBar)
-                    progressBar.update(i, numel(obj.Lines));
-                end
-            end
-
-            if obj.Verbose && strcmp(obj.YScale, 'log')
-                for i = 1:numel(obj.Lines)
-                    nNonPos = sum(obj.Lines(i).Y <= 0);
-                    if nNonPos > 0
-                        fprintf('[FastPlot] warning: line %d has %d non-positive values (clipped on log scale)\n', i, nNonPos);
-                    end
                 end
             end
 
@@ -866,144 +676,41 @@ classdef FastPlot < handle
             end
 
             % --- Set static axis limits (use downsampled data, not full raw) ---
-            if strcmp(obj.YScale, 'log')
-                % Log Y: exclude non-positive, use multiplicative padding
-                ymin = Inf; ymax = -Inf;
-                for i = 1:numel(obj.Lines)
-                    yd = get(obj.Lines(i).hLine, 'YData');
-                    yd = yd(yd > 0 & ~isnan(yd));
-                    if ~isempty(yd)
-                        yiMin = min(yd);
-                        yiMax = max(yd);
-                        if yiMin < ymin; ymin = yiMin; end
-                        if yiMax > ymax; ymax = yiMax; end
-                    end
+            ymin = Inf; ymax = -Inf;
+            for i = 1:numel(obj.Lines)
+                yd = get(obj.Lines(i).hLine, 'YData');
+                yiMin = min(yd);
+                yiMax = max(yd);
+                if ~isnan(yiMin)
+                    if yiMin < ymin; ymin = yiMin; end
+                    if yiMax > ymax; ymax = yiMax; end
                 end
-                if isinf(ymin)
-                    ymin = 0.1; ymax = 1;
-                end
-                yPadFactor = 1.1;
-                yLimLow = ymin / yPadFactor;
-                yLimHigh = ymax * yPadFactor;
-            else
-                ymin = Inf; ymax = -Inf;
-                for i = 1:numel(obj.Lines)
-                    yd = get(obj.Lines(i).hLine, 'YData');
-                    yiMin = min(yd);
-                    yiMax = max(yd);
-                    if ~isnan(yiMin)
-                        if yiMin < ymin; ymin = yiMin; end
-                        if yiMax > ymax; ymax = yiMax; end
-                    end
-                end
-                yPad = (ymax - ymin) * 0.05;
-                if yPad == 0; yPad = 1; end
-                yLimLow = ymin - yPad;
-                yLimHigh = ymax + yPad;
             end
+            yPad = (ymax - ymin) * 0.05;
+            if yPad == 0; yPad = 1; end
 
             set(obj.hAxes, 'XLim', [xmin, xmax]);
-            set(obj.hAxes, 'YLim', [yLimLow, yLimHigh]);
+            set(obj.hAxes, 'YLim', [ymin - yPad, ymax + yPad]);
             set(obj.hAxes, 'XLimMode', 'manual');
             set(obj.hAxes, 'YLimMode', 'manual');
 
-            obj.FullXLim = [xmin, xmax];
-            obj.FullYLim = [yLimLow, yLimHigh];
+            obj.updateDatetimeTicks();
+
             obj.CachedXLim = get(obj.hAxes, 'XLim');
 
-            % Auto-format datetime axis if any line was added with datetime X
-            if obj.IsDatetime
-                try
-                    datetick(obj.hAxes, 'x', 'keeplimits');
-                catch
-                end
-            end
-
-            % Box on by default
-            set(obj.hAxes, 'Box', 'on');
-
-            % Legend: show only when multiple data lines
-            if numel(obj.Lines) > 1
-                legend(obj.hAxes, 'show', 'Location', 'best');
-            end
-
-            % Invisible anchor line spanning full X range.
-            % Ensures MATLAB auto-XLim computation covers full data even
-            % when visible lines are downsampled to a zoomed sub-range.
-            line(obj.hAxes, [xmin xmax], [NaN NaN], ...
-                'HandleVisibility', 'off', 'Visible', 'off', ...
-                'Tag', 'FastPlotAnchor', ...
-                'XLimInclude', 'on', 'YLimInclude', 'off');
-
             % --- Install listeners ---
-            % XLim PostSet: primary listener for zoom/pan (R2025b+)
-            % Fallback: undocumented 'xlim' event (R2020b-R2024b)
             try
                 addlistener(obj.hAxes, 'XLim', 'PostSet', @(s,e) obj.onXLimChanged(s,e));
             catch
-                try
-                    addlistener(obj.hAxes, 'xlim', @(s,e) obj.onXLimChanged(s,e));
-                catch
-                end
+                % Octave / older MATLAB fallback
+                addlistener(obj.hAxes, 'xlim', @(s,e) obj.onXLimChanged(s,e));
             end
-            % XLimMode PostSet: catches resetplotview (Home button) and
-            % XLimMode='auto'. Both bypass XLim PostSet but DO fire
-            % XLimMode PostSet — and XLim is already updated at that point.
-            try
-                addlistener(obj.hAxes, 'XLimMode', 'PostSet', @(s,e) obj.onXLimModeChanged());
-            catch
-            end
-            % Store initial view so Home button has correct XLim target
-            try
-                resetplotview(obj.hAxes, 'SaveCurrentView');
-            catch
-            end
-            % Loupe: double-click to open standalone enlarged view (all modes)
-            loupeCb = @(s,e) obj.onAxesDoubleClick(e);
-            set(obj.hAxes, 'ButtonDownFcn', loupeCb);
-            ch = get(obj.hAxes, 'Children');
-            for ci = 1:numel(ch)
-                try set(ch(ci), 'ButtonDownFcn', loupeCb); catch; end
-            end
+            set(obj.hFigure, 'ResizeFcn', @(s,e) obj.onResize(s,e));
 
-            % Only set figure-level callbacks when we own the figure
-            if isempty(obj.ParentAxes)
-                set(obj.hFigure, 'ResizeFcn', @(s,e) obj.onResize(s,e));
-                hZoom = zoom(obj.hFigure);
-                set(hZoom, 'ButtonDownFilter', ...
-                    @(src,evt) obj.loupeButtonFilter());
-                set(hZoom, 'Enable', 'on');
-            end
+            % Enable zoom and pan
+            zoom(obj.hFigure, 'on');
 
             obj.IsRendered = true;
-
-            % Start async refinement if any line used stride preview
-            hasLargeLines = false;
-            for i = 1:numel(obj.Lines)
-                if numel(obj.Lines(i).X) > obj.MinPointsForDownsample
-                    hasLargeLines = true;
-                    break;
-                end
-            end
-            if hasLargeLines && ~obj.DeferDraw
-                obj.IsRefined = false;
-                try
-                    obj.hRefineTimer = timer('ExecutionMode', 'singleShot', ...
-                        'StartDelay', 0.01, ...
-                        'TimerFcn', @(~,~) obj.refineLines());
-                    start(obj.hRefineTimer);
-                catch
-                    % Octave or timer unavailable: refine synchronously
-                    obj.refineLines();
-                end
-            end
-
-            if obj.Verbose
-                totalPts = 0;
-                for i = 1:numel(obj.Lines); totalPts = totalPts + numel(obj.Lines(i).X); end
-                fprintf('[FastPlot] render complete: %d total pts, pw=%d, %.3fs\n', ...
-                    totalPts, obj.PixelWidth, toc(renderTic));
-            end
 
             % Register in link group
             if ~isempty(obj.LinkGroup)
@@ -1012,516 +719,23 @@ classdef FastPlot < handle
 
             hold(obj.hAxes, 'off');
 
-            % Finish standalone progress bar
-            if ownProgressBar
-                progressBar.finish();
-            elseif ~isempty(progressBar)
-                progressBar.freeze();
+            % Show figure now that setup is complete
+            if isempty(obj.ParentAxes)
+                set(obj.hFigure, 'Visible', 'on');
             end
-
-            % Show figure and flush — unless deferred (dashboard batch render)
-            if ~obj.DeferDraw
-                if isempty(obj.ParentAxes)
-                    set(obj.hFigure, 'Visible', 'on');
-                end
-                drawnow;
-            end
-        end
-
-        function result = lookupMetadata(obj, lineIdx, xValue)
-            %LOOKUPMETADATA Get active metadata at a given X value (forward-fill).
-            %   result = fp.lookupMetadata(lineIdx, xValue)
-            %   Returns struct with one value per metadata field, or [] if none.
-
-            result = [];
-            if lineIdx < 1 || lineIdx > numel(obj.Lines)
-                return;
-            end
-            meta = obj.Lines(lineIdx).Metadata;
-            if isempty(meta)
-                return;
-            end
-
-            % Binary search for largest datenum <= xValue
-            timestamps = meta.datenum;
-            idx = binary_search(timestamps, xValue, 'left');
-            idx = min(idx, numel(timestamps));
-
-            % Ensure we have the largest value <= xValue
-            if timestamps(idx) > xValue
-                idx = idx - 1;
-            end
-            if idx < 1
-                return;
-            end
-
-            % Build result struct with all non-datenum fields
-            fields = fieldnames(meta);
-            result = struct();
-            for i = 1:numel(fields)
-                f = fields{i};
-                if strcmp(f, 'datenum')
-                    continue;
-                end
-                val = meta.(f);
-                if iscell(val)
-                    result.(f) = val{idx};
-                else
-                    result.(f) = val(idx);
-                end
-            end
-        end
-
-        function updateData(obj, lineIdx, newX, newY, varargin)
-            %UPDATEDATA Replace data for a line and re-downsample.
-            %   fp.updateData(lineIdx, newX, newY)
-            %   fp.updateData(lineIdx, newX, newY, 'Metadata', meta)
-            %   fp.updateData(lineIdx, newX, newY, 'SkipViewMode', true)
-            %
-            %   Replaces the raw X/Y data for lineIdx, clears its pyramid
-            %   cache, applies the current LiveViewMode, and re-downsamples
-            %   all lines, shadings, and violation markers to the display.
-
-            if ~obj.IsRendered
-                error('FastPlot:notRendered', ...
-                    'Cannot update data before render() has been called.');
-            end
-            if lineIdx < 1 || lineIdx > numel(obj.Lines)
-                error('FastPlot:indexOutOfRange', ...
-                    'Line index %d is out of range (1-%d).', lineIdx, numel(obj.Lines));
-            end
-
-            % Force row vectors
-            if ~isrow(newX); newX = newX(:)'; end
-            if ~isrow(newY); newY = newY(:)'; end
-
-            if numel(newX) ~= numel(newY)
-                error('FastPlot:sizeMismatch', ...
-                    'X and Y must have the same number of elements.');
-            end
-
-            % Parse optional name-value pairs
-            % Handle legacy positional boolean argument
-            skipViewMode = false;
-            newMeta = [];
-            hasMeta = false;
-            if ~isempty(varargin) && (islogical(varargin{1}) || isnumeric(varargin{1}))
-                skipViewMode = varargin{1};
-            else
-                updateDefaults.Metadata = [];
-                updateDefaults.SkipViewMode = false;
-                [updateOpts, ~] = parseOpts(updateDefaults, varargin, obj.Verbose);
-                skipViewMode = updateOpts.SkipViewMode;
-                newMeta = updateOpts.Metadata;
-                hasMeta = ~isempty(newMeta);
-            end
-
-            % Replace raw data
-            obj.Lines(lineIdx).X = newX;
-            obj.Lines(lineIdx).Y = newY;
-            obj.Lines(lineIdx).HasNaN = any(isnan(newY));
-
-            % Clear pyramid cache (will rebuild lazily)
-            obj.Lines(lineIdx).Pyramid = {};
-
-            % Update metadata if provided
-            if hasMeta
-                obj.Lines(lineIdx).Metadata = newMeta;
-            end
-
-            % Apply view mode before re-downsample
-            if ~skipViewMode
-                obj.applyViewMode(newX);
-            end
-
-            % Re-downsample and update display
-            obj.updateLines();
-            obj.updateShadings();
-            obj.updateViolations();
-
-            obj.drawnowLimitRate();
-        end
-
-        function startLive(obj, filepath, updateFcn, varargin)
-            %STARTLIVE Start live mode — poll a .mat file for changes.
-            %   fp.startLive(filepath, updateFcn)
-            %   fp.startLive(filepath, updateFcn, 'Interval', 2)
-            %   fp.startLive(filepath, updateFcn, 'ViewMode', 'follow')
-            %
-            %   Starts a timer that polls filepath for modification. When
-            %   the file changes, it loads the .mat and calls:
-            %     updateFcn(fp, data)
-            %   where data is the loaded struct.
-            %
-            %   Options (name-value):
-            %     'Interval'          — poll period in seconds (default: 2)
-            %     'ViewMode'          — 'preserve'|'follow'|'reset'
-            %     'MetadataFile'      — path to metadata .mat file
-            %     'MetadataVars'      — cell array of variable names
-            %     'MetadataLineIndex' — which line receives metadata
-
-            obj.stopRefineTimer();
-
-            if ~obj.IsRendered
-                error('FastPlot:notRendered', ...
-                    'Cannot start live mode before render() has been called.');
-            end
-
-            % Stop existing live mode if active
-            if obj.LiveIsActive
-                obj.stopLive();
-            end
-
-            obj.LiveFile = filepath;
-            obj.LiveUpdateFcn = updateFcn;
-
-            % Parse options
-            liveDefaults.Interval = obj.LiveInterval;
-            liveDefaults.ViewMode = '';
-            liveDefaults.MetadataFile = obj.MetadataFile;
-            liveDefaults.MetadataVars = obj.MetadataVars;
-            liveDefaults.MetadataLineIndex = obj.MetadataLineIndex;
-            [liveOpts, ~] = parseOpts(liveDefaults, varargin, obj.Verbose);
-            obj.LiveInterval = liveOpts.Interval;
-            obj.LiveViewMode = liveOpts.ViewMode;
-            obj.MetadataFile = liveOpts.MetadataFile;
-            obj.MetadataVars = liveOpts.MetadataVars;
-            obj.MetadataLineIndex = liveOpts.MetadataLineIndex;
-
-            % Default view mode if not set
-            if isempty(obj.LiveViewMode)
-                obj.LiveViewMode = 'preserve';
-            end
-
-            % Record current file date
-            if exist(obj.LiveFile, 'file')
-                d = dir(obj.LiveFile);
-                obj.LiveFileDate = d.datenum;
-            end
-
-            % Record metadata file date and do initial load
-            if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
-                d = dir(obj.MetadataFile);
-                obj.MetadataFileDate = d.datenum;
-                obj.loadMetadataFile();
-            end
-
-            % Create and start timer (MATLAB only; Octave lacks timer)
-            try
-                obj.LiveTimer = timer( ...
-                    'ExecutionMode', 'fixedSpacing', ...
-                    'Period', obj.LiveInterval, ...
-                    'TimerFcn', @(~,~) obj.onLiveTimer(), ...
-                    'ErrorFcn', @(~,~) []);
-                start(obj.LiveTimer);
-            catch
-                % Octave: no timer — use runLive() for blocking poll loop
-            end
-
-            obj.LiveIsActive = true;
-
-            % Install cleanup on figure close
-            existingDeleteFcn = get(obj.hFigure, 'DeleteFcn');
-            set(obj.hFigure, 'DeleteFcn', @(s,e) obj.onFigureCloseLive(existingDeleteFcn, s, e));
-
-            if obj.Verbose
-                fprintf('[FastPlot] live mode started: %s (%.1fs interval, %s mode)\n', ...
-                    filepath, obj.LiveInterval, obj.LiveViewMode);
-            end
-        end
-
-        function stopLive(obj)
-            %STOPLIVE Stop live mode polling.
-            obj.stopRefineTimer();
-            if ~isempty(obj.LiveTimer)
-                try
-                    stop(obj.LiveTimer);
-                    delete(obj.LiveTimer);
-                catch
-                end
-            end
-            obj.LiveTimer = [];
-            obj.LiveIsActive = false;
-            if ~isempty(obj.DeferredTimer)
-                try stop(obj.DeferredTimer); delete(obj.DeferredTimer); catch; end
-                obj.DeferredTimer = [];
-            end
-
-            if obj.Verbose
-                fprintf('[FastPlot] live mode stopped\n');
-            end
-        end
-
-        function delete(obj)
-            %DELETE Clean up timers.
-            obj.stopRefineTimer();
-            try obj.stopLive(); catch; end
-        end
-
-        function refresh(obj)
-            %REFRESH Manual one-shot reload from LiveFile.
-            if isempty(obj.LiveFile) || isempty(obj.LiveUpdateFcn)
-                error('FastPlot:noLiveSource', ...
-                    'No live source configured. Call startLive() first or set LiveFile and LiveUpdateFcn.');
-            end
-            if ~exist(obj.LiveFile, 'file')
-                warning('FastPlot:fileNotFound', 'Live file not found: %s', obj.LiveFile);
-                return;
-            end
-
-            try
-                data = load(obj.LiveFile);
-                obj.LiveUpdateFcn(obj, data);
-            catch e
-                if obj.Verbose
-                    fprintf('[FastPlot] refresh error: %s\n', e.message);
-                end
-            end
-
-            d = dir(obj.LiveFile);
-            obj.LiveFileDate = d.datenum;
-
-            % Load metadata file if configured
-            obj.loadMetadataFile();
-            if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
-                dm = dir(obj.MetadataFile);
-                obj.MetadataFileDate = dm.datenum;
-            end
-        end
-
-        function setViewMode(obj, mode)
-            %SETVIEWMODE Change the live view mode at runtime.
-            obj.LiveViewMode = mode;
-        end
-
-        function runLive(obj)
-            %RUNLIVE Blocking poll loop for live mode (Octave compatibility).
-            %   On MATLAB, this is a no-op (timer handles polling).
-            %   On Octave, blocks until figure is closed or Ctrl+C.
-            %
-            %   Usage:
-            %     fp.startLive('data.mat', @updateFcn);
-            %     fp.runLive();  % blocks on Octave, no-op on MATLAB
-
-            if ~obj.LiveIsActive
-                return;
-            end
-
-            % On MATLAB, the timer is already running — nothing to do
-            if ~isempty(obj.LiveTimer) && ~isstruct(obj.LiveTimer)
-                return;
-            end
-
-            % Octave: blocking poll loop
-            cleanupObj = onCleanup(@() obj.stopLive());
-
-            if obj.Verbose
-                fprintf('[FastPlot] runLive: entering poll loop (%.1fs interval)\n', obj.LiveInterval);
-            end
-
-            while obj.LiveIsActive && ishandle(obj.hFigure)
-                try
-                    if exist(obj.LiveFile, 'file')
-                        d = dir(obj.LiveFile);
-                        if d.datenum > obj.LiveFileDate
-                            obj.LiveFileDate = d.datenum;
-                            data = load(obj.LiveFile);
-                            obj.LiveUpdateFcn(obj, data);
-                            if obj.Verbose
-                                fprintf('[FastPlot] live update: %s\n', datestr(now, 'HH:MM:SS'));
-                            end
-                        end
-                    end
-                catch e
-                    if obj.Verbose
-                        fprintf('[FastPlot] runLive error: %s\n', e.message);
-                    end
-                end
-                drawnow;
-                pause(obj.LiveInterval);
-            end
-
-            if obj.Verbose
-                fprintf('[FastPlot] runLive: exited poll loop\n');
-            end
-        end
-
-        function onLiveTimerPublic(obj)
-            %ONLIVETIMERPUBLIC Public wrapper for testing live timer callback.
-            obj.onLiveTimer();
-        end
-
-        function setLineMetadata(obj, lineIdx, meta)
-            %SETLINEMETADATA Set metadata on a line (used by FastPlotFigure).
-            if lineIdx >= 1 && lineIdx <= numel(obj.Lines)
-                obj.Lines(lineIdx).Metadata = meta;
-            end
-        end
-
-        function openLoupe(obj)
-            %OPENLOUPE Open a standalone enlarged copy of this tile.
-            title_str = get(get(obj.hAxes, 'Title'), 'String');
-            if isempty(title_str); title_str = 'FastPlot'; end
-
-            fp = FastPlot();
-            fp.Theme = obj.Theme;
-            for i = 1:numel(obj.Lines)
-                L = obj.Lines(i);
-                x = L.X; y = L.Y;
-                if obj.IsDatetime
-                    x = datetime(x, 'ConvertFrom', 'datenum');
-                end
-                nvp = struct2nvpairs(L.Options);
-                if ~isempty(L.Metadata)
-                    nvp = [nvp, {'Metadata', L.Metadata}];
-                end
-                if ~strcmp(L.DownsampleMethod, 'minmax')
-                    nvp = [nvp, {'DownsampleMethod', L.DownsampleMethod}];
-                end
-                fp.addLine(x, y, nvp{:});
-            end
-            for i = 1:numel(obj.Thresholds)
-                T = obj.Thresholds(i);
-                fp.addThreshold(T.Value, 'Direction', T.Direction, ...
-                    'ShowViolations', T.ShowViolations, ...
-                    'Color', T.Color, 'LineStyle', T.LineStyle, ...
-                    'Label', T.Label);
-            end
-            for i = 1:numel(obj.Bands)
-                B = obj.Bands(i);
-                fp.addBand(B.YLow, B.YHigh, 'FaceColor', B.FaceColor, ...
-                    'FaceAlpha', B.FaceAlpha, 'Label', B.Label);
-            end
-            for i = 1:numel(obj.Shadings)
-                S = obj.Shadings(i);
-                x = S.X; y1 = S.Y1; y2 = S.Y2;
-                if obj.IsDatetime
-                    x = datetime(x, 'ConvertFrom', 'datenum');
-                end
-                fp.addShaded(x, y1, y2, 'FaceColor', S.FaceColor, ...
-                    'FaceAlpha', S.FaceAlpha, 'DisplayName', S.DisplayName);
-            end
-            for i = 1:numel(obj.Markers)
-                M = obj.Markers(i);
-                x = M.X; y = M.Y;
-                if obj.IsDatetime
-                    x = datetime(x, 'ConvertFrom', 'datenum');
-                end
-                fp.addMarker(x, y, 'Marker', M.Marker, ...
-                    'MarkerSize', M.MarkerSize, 'Color', M.Color, ...
-                    'Label', M.Label);
-            end
-            % Defer drawnow so the figure appears once at the correct zoom
-            fp.DeferDraw = true;
-            fp.render();
-            fp.DeferDraw = false;
-            set(fp.hFigure, 'Name', title_str);
-
-            % Preserve zoom state from source tile
-            set(fp.hAxes, 'XLim', get(obj.hAxes, 'XLim'), ...
-                           'YLim', get(obj.hAxes, 'YLim'));
-
-            % Size loupe to match source figure, offset so it doesn't overlap
-            srcPos = get(ancestor(obj.hAxes, 'figure'), 'Position');
-            set(fp.hFigure, 'Position', srcPos + [30 -30 0 0]);
-
-            tb = FastPlotToolbar(fp);
-            setappdata(fp.hFigure, 'FastPlotToolbar', tb);
-
-            set(fp.hFigure, 'Visible', 'on');
             drawnow;
+
+            if obj.Verbose
+                totalPts = 0;
+                for i = 1:numel(obj.Lines); totalPts = totalPts + numel(obj.Lines(i).X); end
+                fprintf('[FastPlot] render complete: %d total pts, pw=%d, %.3fs\n', ...
+                    totalPts, obj.PixelWidth, toc(renderTic));
+            end
         end
     end
 
-    % ======================== PRIVATE METHODS ============================
-    % Internal helpers: timer callbacks, view mode, theme, listeners,
-    % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
-        function onLiveTimer(obj)
-            %ONLIVETIMER Timer callback — check file and refresh if changed.
-            if ~exist(obj.LiveFile, 'file')
-                return;
-            end
-            try
-                d = dir(obj.LiveFile);
-                if d.datenum > obj.LiveFileDate
-                    obj.LiveFileDate = d.datenum;
-                    data = load(obj.LiveFile);
-                    obj.LiveUpdateFcn(obj, data);
-                    obj.drawnowLimitRate();
-                    if obj.Verbose
-                        fprintf('[FastPlot] live update: %s\n', datestr(now, 'HH:MM:SS'));
-                    end
-                end
-            catch e
-                if obj.Verbose
-                    fprintf('[FastPlot] live timer error: %s\n', e.message);
-                end
-            end
-
-            % Check metadata file
-            if ~isempty(obj.MetadataFile) && exist(obj.MetadataFile, 'file')
-                try
-                    dm = dir(obj.MetadataFile);
-                    if dm.datenum > obj.MetadataFileDate
-                        obj.MetadataFileDate = dm.datenum;
-                        obj.loadMetadataFile();
-                    end
-                catch
-                end
-            end
-        end
-
-        function loadMetadataFile(obj)
-            %LOADMETADATAFILE Load metadata from the metadata file.
-            meta = loadMetaStruct(obj.MetadataFile, obj.MetadataVars);
-            if ~isempty(meta)
-                idx = obj.MetadataLineIndex;
-                if idx >= 1 && idx <= numel(obj.Lines)
-                    obj.Lines(idx).Metadata = meta;
-                end
-            end
-        end
-
-        function onFigureCloseLive(obj, existingDeleteFcn, src, evt)
-            %ONFIGURECLOSELIVE Cleanup timer when figure closes.
-            obj.stopLive();
-            if ~isempty(existingDeleteFcn)
-                if isa(existingDeleteFcn, 'function_handle')
-                    existingDeleteFcn(src, evt);
-                end
-            end
-        end
-
-        function applyViewMode(obj, newX)
-            %APPLYVIEWMODE Adjust axes limits based on LiveViewMode.
-            if isempty(obj.LiveViewMode)
-                return;
-            end
-
-            switch obj.LiveViewMode
-                case 'preserve'
-                    % Do nothing — keep current zoom
-                    return;
-
-                case 'follow'
-                    currentXLim = get(obj.hAxes, 'XLim');
-                    windowWidth = currentXLim(2) - currentXLim(1);
-                    newXMax = newX(end);
-                    newXLim = [newXMax - windowWidth, newXMax];
-                    set(obj.hAxes, 'XLim', newXLim);
-                    obj.CachedXLim = newXLim;
-
-                case 'reset'
-                    newXLim = [newX(1), newX(end)];
-                    set(obj.hAxes, 'XLim', newXLim);
-                    obj.CachedXLim = newXLim;
-            end
-        end
-
         function applyTheme(obj)
-            %APPLYTHEME Apply the current Theme struct to axes and figure.
-            %   Sets background, foreground, grid, and font properties.
             t = obj.Theme;
 
             % Figure background (only if we own the figure)
@@ -1547,85 +761,9 @@ classdef FastPlot < handle
             end
         end
 
-        function refineLines(obj)
-            %REFINELINES Replace stride preview with proper downsampled data.
-            if ~obj.IsRendered || ~ishandle(obj.hAxes)
-                return;
-            end
-
-            pw = obj.getAxesPixelWidth();
-            logXFlag = strcmp(obj.XScale, 'log');
-            logYFlag = strcmp(obj.YScale, 'log');
-            for i = 1:numel(obj.Lines)
-                L = obj.Lines(i);
-                if numel(L.X) <= obj.MinPointsForDownsample
-                    continue;
-                end
-                if ~ishandle(L.hLine)
-                    continue;
-                end
-
-                if strcmp(L.DownsampleMethod, 'lttb')
-                    [xd, yd] = lttb_downsample(L.X, L.Y, pw, logXFlag, logYFlag);
-                else
-                    [xd, yd] = minmax_downsample(L.X, L.Y, pw, L.HasNaN, logXFlag);
-                end
-                set(L.hLine, 'XData', xd, 'YData', yd);
-
-                if obj.Verbose
-                    fprintf('[FastPlot] refine: line %d: %d pts -> %d displayed\n', ...
-                        i, numel(L.X), numel(xd));
-                end
-            end
-
-            obj.IsRefined = true;
-            obj.stopRefineTimer();
-            obj.updateViolations();
-            if ~obj.DeferDraw
-                drawnow;
-            end
-        end
-
-        function stopRefineTimer(obj)
-            %STOPREFINETIMER Stop and delete the refinement timer.
-            if ~isempty(obj.hRefineTimer)
-                try
-                    stop(obj.hRefineTimer);
-                    delete(obj.hRefineTimer);
-                catch
-                end
-                obj.hRefineTimer = [];
-            end
-        end
-
-        function onAxesDoubleClick(obj, ~)
-            %ONAXESDOUBLECLICK Open loupe on double-click.
-            if ~strcmp(get(ancestor(obj.hAxes, 'figure'), 'SelectionType'), 'open')
-                return;
-            end
-            obj.openLoupe();
-        end
-
-        function flag = loupeButtonFilter(obj)
-            %LOUPEBUTTONFILTER Intercept double-clicks before zoom handles them.
-            %   Returns true to block zoom (opens loupe), false to let zoom proceed.
-            if strcmp(get(obj.hFigure, 'SelectionType'), 'open')
-                obj.openLoupe();
-                flag = true;
-            else
-                flag = false;
-            end
-        end
-
         function onXLimChanged(obj, ~, ~)
             if ~obj.IsRendered || ~ishandle(obj.hAxes) || obj.IsPropagating
                 return;
-            end
-
-            % Cancel pending refinement — zoom/pan triggers proper downsample
-            if ~obj.IsRefined
-                obj.stopRefineTimer();
-                obj.IsRefined = true;
             end
 
             newXLim = get(obj.hAxes, 'XLim');
@@ -1637,7 +775,13 @@ classdef FastPlot < handle
             obj.CachedXLim = newXLim;
 
             if obj.Verbose
-                fprintf('[FastPlot] onXLimChanged: range=[%.4g, %.4g]\n', newXLim(1), newXLim(2));
+                xRange = newXLim(2) - newXLim(1);
+                if strcmp(obj.XType, 'datenum')
+                    fprintf('[FastPlot] onXLimChanged: range=[%s, %s] (%.2g days)\n', ...
+                        datestr(newXLim(1), 'mmm dd HH:MM'), datestr(newXLim(2), 'mmm dd HH:MM'), xRange);
+                else
+                    fprintf('[FastPlot] onXLimChanged: range=[%.4g, %.4g]\n', newXLim(1), newXLim(2));
+                end
             end
 
             obj.updateLines();
@@ -1650,70 +794,7 @@ classdef FastPlot < handle
             end
 
             obj.drawnowLimitRate();
-            if obj.Verbose; fflush(stdout); end
-        end
-
-        function onXLimModeChanged(obj)
-            %ONXLIMMODECHANGED Catch XLim changes that bypass XLim PostSet.
-            %   resetplotview (Home) and XLimMode='auto' fire XLimMode PostSet
-            %   but NOT XLim PostSet. resetplotview defers XLim change until
-            %   after callbacks return, so we schedule a deferred check.
-            if ~obj.IsRendered || ~ishandle(obj.hAxes) || obj.IsPropagating
-                return;
-            end
-
-            % XLimMode='auto': handle immediately (XLim auto-computed from
-            % anchor line spans full range, but we want exact FullXLim)
-            if strcmp(get(obj.hAxes, 'XLimMode'), 'auto') && ~isempty(obj.FullXLim)
-                obj.IsPropagating = true;
-                try
-                    set(obj.hAxes, 'XLim', obj.FullXLim);
-                    set(obj.hAxes, 'XLimMode', 'manual');
-                    if ~isempty(obj.FullYLim)
-                        set(obj.hAxes, 'YLim', obj.FullYLim);
-                        set(obj.hAxes, 'YLimMode', 'manual');
-                    end
-                    obj.CachedXLim = obj.FullXLim;
-                    obj.updateLines();
-                    obj.updateShadings();
-                    obj.updateViolations();
-                catch
-                end
-                obj.IsPropagating = false;
-                return;
-            end
-
-            % resetplotview path: XLim hasn't changed yet at this point
-            % (deferred by MATLAB). Schedule a check on next event loop.
-            obj.scheduleDeferredXLimCheck();
-        end
-
-        function scheduleDeferredXLimCheck(obj)
-            %SCHEDULEDEFERREDXLIMCHECK One-shot timer to catch deferred XLim changes.
-            if ~isempty(obj.DeferredTimer) && isvalid(obj.DeferredTimer)
-                stop(obj.DeferredTimer);
-                delete(obj.DeferredTimer);
-            end
-            obj.DeferredTimer = timer('ExecutionMode', 'singleShot', ...
-                'StartDelay', 0.01, ...
-                'TimerFcn', @(~,~) obj.deferredXLimCheck());
-            start(obj.DeferredTimer);
-        end
-
-        function deferredXLimCheck(obj)
-            %DEFERREDXLIMCHECK Check if XLim changed after resetplotview.
-            if ~ishandle(obj.hAxes) || obj.IsPropagating
-                return;
-            end
-            newXLim = get(obj.hAxes, 'XLim');
-            if ~isempty(obj.CachedXLim) && all(abs(newXLim - obj.CachedXLim) < eps)
-                return;
-            end
-            obj.CachedXLim = newXLim;
-            obj.updateLines();
-            obj.updateShadings();
-            obj.updateViolations();
-            drawnow;
+            obj.updateDatetimeTicks();
         end
 
         function onResize(obj, ~, ~)
@@ -1729,14 +810,10 @@ classdef FastPlot < handle
                 obj.updateLines();
                 obj.updateShadings();
                 obj.drawnowLimitRate();
-                if obj.Verbose; fflush(stdout); end
             end
         end
 
         function updateShadings(obj)
-            %UPDATESHADINGS Re-downsample shaded regions for current view.
-            %   Uses pre-computed cache when available (large datasets),
-            %   otherwise downsamples directly from raw data.
             pw = obj.PixelWidth;
             xlims = get(obj.hAxes, 'XLim');
 
@@ -1768,7 +845,7 @@ classdef FastPlot < handle
                 y1Vis = srcY1(idxStart:idxEnd);
                 y2Vis = srcY2(idxStart:idxEnd);
 
-                if nVis > obj.MinPointsForDownsample
+                if nVis > obj.MIN_POINTS_FOR_DOWNSAMPLE
                     [xd, y1d] = minmax_downsample(xVis, y1Vis, pw);
                     [~, y2d]  = minmax_downsample(xVis, y2Vis, pw);
                     patchX = [xd, fliplr(xd)];
@@ -1783,15 +860,9 @@ classdef FastPlot < handle
         end
 
         function updateLines(obj)
-            %UPDATELINES Re-downsample all lines for the current view.
-            %   Uses pyramid levels when available for fast zoom. Selects
-            %   the coarsest pyramid level with enough resolution, then
-            %   downsamples the visible slice to screen pixel width.
             pw = obj.PixelWidth;
             xlims = get(obj.hAxes, 'XLim');
             target = 2 * pw;
-            logXFlag = strcmp(obj.XScale, 'log');
-            logYFlag = strcmp(obj.YScale, 'log');
 
             for i = 1:numel(obj.Lines)
                 nTotal = numel(obj.Lines(i).X);
@@ -1803,7 +874,7 @@ classdef FastPlot < handle
                 idxEnd   = min(nTotal, idxEnd + 1);
                 nVis = idxEnd - idxStart + 1;
 
-                if nVis <= obj.MinPointsForDownsample
+                if nVis <= obj.MIN_POINTS_FOR_DOWNSAMPLE
                     % Small enough to plot raw
                     xd = obj.Lines(i).X(idxStart:idxEnd);
                     yd = obj.Lines(i).Y(idxStart:idxEnd);
@@ -1827,11 +898,11 @@ classdef FastPlot < handle
                     end
 
                     % Downsample visible slice to screen resolution
-                    if numel(xVis) > obj.MinPointsForDownsample
+                    if numel(xVis) > obj.MIN_POINTS_FOR_DOWNSAMPLE
                         if strcmp(obj.Lines(i).DownsampleMethod, 'lttb')
-                            [xd, yd] = lttb_downsample(xVis, yVis, pw, logXFlag, logYFlag);
+                            [xd, yd] = lttb_downsample(xVis, yVis, pw);
                         else
-                            [xd, yd] = minmax_downsample(xVis, yVis, pw, obj.Lines(i).HasNaN, logXFlag);
+                            [xd, yd] = minmax_downsample(xVis, yVis, pw, obj.Lines(i).HasNaN);
                         end
                     else
                         xd = xVis;
@@ -1857,7 +928,7 @@ classdef FastPlot < handle
             %SELECTPYRAMIDLEVEL Pick the smallest pyramid level with enough
             %   resolution for the visible range. Builds levels lazily.
             visFrac = nVis / nTotal;
-            R = obj.PyramidReduction;
+            R = obj.PYRAMID_REDUCTION;
 
             % How many levels could exist?
             maxLevels = 0;
@@ -1886,7 +957,7 @@ classdef FastPlot < handle
 
         function buildPyramidLevel(obj, lineIdx, level)
             %BUILDPYRAMIDLEVEL Build a pyramid level from the nearest source.
-            R = obj.PyramidReduction;
+            R = obj.PYRAMID_REDUCTION;
 
             % Ensure cell array is large enough
             if numel(obj.Lines(lineIdx).Pyramid) < level
@@ -1907,15 +978,11 @@ classdef FastPlot < handle
             end
 
             numBuckets = max(1, round(numel(srcX) / R));
-            logXFlag = strcmp(obj.XScale, 'log');
-            [px, py] = minmax_downsample(srcX, srcY, numBuckets, false, logXFlag);
+            [px, py] = minmax_downsample(srcX, srcY, numBuckets);
             obj.Lines(lineIdx).Pyramid{level} = struct('X', px, 'Y', py);
         end
 
         function updateViolations(obj)
-            %UPDATEVIOLATIONS Recompute violation markers from displayed data.
-            %   Uses the already-downsampled line data to find threshold
-            %   violations, avoiding re-scanning the full raw dataset.
             for t = 1:numel(obj.Thresholds)
                 if ~obj.Thresholds(t).ShowViolations || isempty(obj.Thresholds(t).hMarkers)
                     continue;
@@ -1961,10 +1028,32 @@ classdef FastPlot < handle
             end
         end
 
+        function updateDatetimeTicks(obj)
+            if ~strcmp(obj.XType, 'datenum'); return; end
+            xlims = get(obj.hAxes, 'XLim');
+            xRange = xlims(2) - xlims(1);  % in days
+
+            if xRange > 1
+                fmt = 'mmm dd HH:MM';
+            elseif xRange > 1/60     % > 1 minute
+                fmt = 'HH:MM';
+            else
+                fmt = 'HH:MM:SS';
+            end
+
+            ticks = get(obj.hAxes, 'XTick');
+            labels = cell(size(ticks));
+            for i = 1:numel(ticks)
+                labels{i} = datestr(ticks(i), fmt);
+            end
+            set(obj.hAxes, 'XTickLabel', labels);
+
+            if obj.Verbose
+                fprintf('[FastPlot]   ticks: %d labels, fmt=''%s''\n', numel(ticks), fmt);
+            end
+        end
+
         function drawnowLimitRate(obj)
-            %DRAWNOWLIMITRATE Flush graphics with rate limiting when available.
-            %   Uses drawnow('limitrate') on MATLAB for 60fps cap.
-            %   Falls back to plain drawnow on Octave.
             if isempty(obj.HasLimitRate)
                 obj.HasLimitRate = exist('OCTAVE_VERSION', 'builtin') == 0;
             end
@@ -1976,9 +1065,6 @@ classdef FastPlot < handle
         end
 
         function pw = getAxesPixelWidth(obj)
-            %GETAXESPIXELWIDTH Return the axes width in pixels.
-            %   Temporarily switches to pixel units, reads Position(3),
-            %   then restores original units. Minimum returned: 100.
             oldUnits = get(obj.hAxes, 'Units');
             set(obj.hAxes, 'Units', 'pixels');
             pos = get(obj.hAxes, 'Position');
@@ -1987,8 +1073,6 @@ classdef FastPlot < handle
         end
 
         function propagateXLim(obj, newXLim)
-            %PROPAGATEXLIM Sync XLim to all members of the link group.
-            %   Sets IsPropagating guard to prevent re-entrant callbacks.
             members = FastPlot.getLinkRegistry('get', obj.LinkGroup, []);
             for i = 1:numel(members)
                 other = members{i};
@@ -2005,8 +1089,6 @@ classdef FastPlot < handle
         end
     end
 
-    % ======================== STATIC HELPERS =============================
-    % Persistent registry for linked FastPlot groups.
     methods (Static, Access = private)
         function registry = getLinkRegistry(action, group, obj)
             %GETLINKREGISTRY Persistent registry for linked FastPlot instances.
@@ -2040,26 +1122,6 @@ classdef FastPlot < handle
                     end
             end
             registry = [];
-        end
-    end
-
-    % ======================== PUBLIC STATIC ==============================
-    methods (Static)
-        function resetDefaults()
-            %RESETDEFAULTS Force reload of FastPlotDefaults on next use.
-            clearDefaultsCache();
-        end
-
-        function distFig(varargin)
-            %DISTFIG Distribute figure windows across the screen.
-            %   FastPlot.distFig() arranges all open figures automatically.
-            %   FastPlot.distFig('Rows',2,'Cols',3) uses a 2x3 grid.
-            %   All arguments are passed to distFig (bundled in vendor/).
-            vendorDir = fullfile(fileparts(mfilename('fullpath')), 'vendor', 'distFig');
-            if ~exist('distFig', 'file')
-                addpath(vendorDir);
-            end
-            distFig(varargin{:});
         end
     end
 end

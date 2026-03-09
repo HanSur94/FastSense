@@ -1,7 +1,9 @@
 function test_binary_search()
 %TEST_BINARY_SEARCH Tests for binary_search private function.
 
-    add_private_path();
+    % We need access to the private function via the FastPlot directory
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     x = [1 3 5 7 9];
 

@@ -1,7 +1,7 @@
 function test_theme()
 %TEST_THEME Tests for FastPlotTheme function.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
     % testDefaultPreset
     t = FastPlotTheme('default');

@@ -1,7 +1,8 @@
 function test_toolbar()
 %TEST_TOOLBAR Tests for FastPlotToolbar class.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     close all force;
     drawnow;
@@ -30,8 +31,8 @@ function test_toolbar()
     fp.render();
     tb = FastPlotToolbar(fp);
     children = get(tb.hToolbar, 'Children');
-    assert(numel(children) == 9, ...
-        sprintf('testToolbarHasNineButtons: got %d', numel(children)));
+    assert(numel(children) == 6, ...
+        sprintf('testToolbarHasSixButtons: got %d', numel(children)));
     close(fp.hFigure);
 
     % testIconsAre16x16x3
@@ -39,17 +40,12 @@ function test_toolbar()
     assert(isequal(size(icons), [16 16 3]), 'testIconsAre16x16x3');
 
     % testAllIconNames
-    names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', 'export', 'refresh', 'live', 'metadata', 'theme'};
+    names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', 'export'};
     for i = 1:numel(names)
         icon = FastPlotToolbar.makeIcon(names{i});
         assert(isequal(size(icon), [16 16 3]), ...
             sprintf('testAllIconNames: %s', names{i}));
     end
-
-    % testIconCaching
-    icon1 = FastPlotToolbar.makeIcon('grid');
-    icon2 = FastPlotToolbar.makeIcon('grid');
-    assert(isequal(icon1, icon2), 'testIconCaching: cached icon should match');
 
     % testToggleGrid
     fp = FastPlot();
@@ -150,65 +146,5 @@ function test_toolbar()
     assert(sy == 30, sprintf('testSnapToNearest: y should be 30, got %g', sy));
     close(fp.hFigure);
 
-    % testRebind
-    fp1 = FastPlot();
-    fp1.addLine(1:100, rand(1,100));
-    fp1.render();
-    tb = FastPlotToolbar(fp1);
-    hToolbar1 = tb.hToolbar;
-    fig2 = FastPlotFigure(1, 1);
-    fig2.tile(1).addLine(1:50, rand(1,50));
-    fig2.renderAll();
-    tb.rebind(fig2);
-    assert(tb.hToolbar == hToolbar1, 'testRebind: toolbar handle should be reused');
-    assert(strcmp(tb.Mode, 'none'), 'testRebind: mode should reset to none');
-    close(fp1.hFigure);
-    close(fig2.hFigure);
-
-    testToolbarRefreshButton();
-    testToolbarLiveToggle();
-
-    fprintf('    All 17 toolbar tests passed.\n');
-end
-
-function testToolbarRefreshButton()
-    fp = FastPlot();
-    fp.addLine(1:100, zeros(1,100));
-    fp.render();
-
-    tmpFile = [tempname, '.mat'];
-    s.x = 1:100; s.y = ones(1,100) * 7;
-    save(tmpFile, '-struct', 's');
-
-    fp.LiveFile = tmpFile;
-    fp.LiveUpdateFcn = @(fp, d) fp.updateData(1, d.x, d.y);
-
-    tb = FastPlotToolbar(fp);
-    tb.refresh();
-
-    assert(all(fp.Lines(1).Y == 7), 'testToolbarRefresh: data should be 7');
-    close(fp.hFigure);
-    delete(tmpFile);
-end
-
-function testToolbarLiveToggle()
-    fp = FastPlot();
-    fp.addLine(1:100, rand(1,100));
-    fp.render();
-
-    tmpFile = [tempname, '.mat'];
-    s.x = 1:100; s.y = rand(1,100);
-    save(tmpFile, '-struct', 's');
-
-    fp.LiveFile = tmpFile;
-    fp.LiveUpdateFcn = @(fp, d) fp.updateData(1, d.x, d.y);
-
-    tb = FastPlotToolbar(fp);
-    tb.toggleLive();
-    assert(fp.LiveIsActive, 'testToolbarLive: should be active after toggle on');
-    tb.toggleLive();
-    assert(~fp.LiveIsActive, 'testToolbarLive: should be inactive after toggle off');
-
-    close(fp.hFigure);
-    delete(tmpFile);
+    fprintf('    All 13 toolbar tests passed.\n');
 end

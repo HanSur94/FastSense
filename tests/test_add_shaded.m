@@ -1,7 +1,8 @@
 function test_add_shaded()
 %TEST_ADD_SHADED Tests for FastPlot.addShaded method.
 
-    add_private_path();
+    run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+    add_fastplot_private_path();
 
     % testAddShaded
     x = 1:100;
