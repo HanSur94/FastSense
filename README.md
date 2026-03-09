@@ -4,6 +4,48 @@ Ultra-fast time series plotting for MATLAB and GNU Octave. Plot 100M+ data point
 
 FastPlot dynamically downsamples your data to screen resolution on every zoom/pan interaction. Instead of pushing millions of points to the GPU, it renders only ~4000 points — preserving visual fidelity while keeping the UI responsive.
 
+## Table of Contents
+
+- [Why FastPlot?](#why-fastplot)
+- [Performance](#performance)
+- [Quick Start](#quick-start)
+  - [Dashboard Layout](#dashboard-layout)
+  - [Theming](#theming)
+  - [Toolbar](#toolbar)
+  - [Datetime Axes](#datetime-axes)
+  - [Sensor Thresholds](#sensor-thresholds)
+- [Installation](#installation)
+  - [Optional: Build MEX Accelerators](#optional-build-mex-accelerators)
+- [Requirements](#requirements)
+- [API Reference](#api-reference)
+  - [`FastPlot()` — Constructor](#fastplot--constructor)
+  - [`addLine(x, y, ...)` — Add a Data Line](#addlinex-y---add-a-data-line)
+  - [`addThreshold(value, ...)` — Add a Threshold Line](#addthresholdvalue---add-a-threshold-line)
+  - [`addBand(yLow, yHigh, ...)` — Horizontal Band Fill](#addbandylow-yhigh---horizontal-band-fill)
+  - [`addShaded(x, y1, y2, ...)` — Fill Between Curves](#addshadedx-y1-y2---fill-between-curves)
+  - [`addFill(x, y, ...)` — Area Fill to Baseline](#addfillx-y---area-fill-to-baseline)
+  - [`addMarker(x, y, ...)` — Custom Event Markers](#addmarkerx-y---custom-event-markers)
+  - [`addSensor(sensor, ...)` — Add a Sensor Object](#addsensorsensor---add-a-sensor-object)
+  - [`setScale(...)` — Change Axis Scale](#setscale--change-axis-scale)
+  - [`render()` — Render the Plot](#render--render-the-plot)
+  - [Live Mode](#live-mode)
+  - [Properties](#properties-read-only-after-render)
+  - [`FastPlotFigure(rows, cols, ...)` — Dashboard Layout](#fastplotfigurerows-cols---dashboard-layout)
+  - [`FastPlotDock(...)` — Tabbed Container](#fastplotdock--tabbed-container)
+  - [`Sensor(key, ...)` — Sensor Data Object](#sensorkey---sensor-data-object)
+  - [`ThresholdRule(condition, value, ...)` — Condition-Dependent Threshold](#thresholdrulecondition-value---condition-dependent-threshold)
+  - [`StateChannel(key)` — Time-Varying State](#statechannelkey--time-varying-state)
+  - [`SensorRegistry` — Predefined Sensor Catalog](#sensorregistry--predefined-sensor-catalog)
+  - [`FastPlotTheme(preset, ...)` — Theme Presets](#fastplotthemepreset---theme-presets)
+- [Linked Axes](#linked-axes)
+- [Handling NaN Gaps](#handling-nan-gaps)
+- [Uneven Sampling](#uneven-sampling)
+- [Examples](#examples)
+- [Architecture](#architecture)
+- [Running Tests](#running-tests)
+- [Benchmarks](#benchmarks)
+- [License](#license)
+
 ## Why FastPlot?
 
 | | Standard `plot()` | FastPlot |
@@ -44,6 +86,8 @@ fp.render();
 
 Zoom and pan interactively — FastPlot re-downsamples automatically.
 
+![Basic plot with threshold lines and violation markers](docs/images/basic_thresholds.png)
+
 ### Dashboard Layout
 
 ```matlab
@@ -63,12 +107,16 @@ fig.renderAll();
 fig.tileTitle(1, 'Temperature');
 ```
 
+![Tiled dashboard with bands, thresholds, and multiple subplots](docs/images/dashboard.png)
+
 ### Theming
 
 ```matlab
 fp = FastPlot('Theme', 'dark');       % 5 presets: default, dark, light, industrial, scientific
 fp = FastPlot('Theme', struct('Background', [0 0 0], 'FontSize', 14));  % custom overrides
 ```
+
+![All 5 built-in theme presets side by side](docs/images/themes.png)
 
 ### Toolbar
 
@@ -115,6 +163,8 @@ fp.render();
 
 Tick labels auto-adapt to zoom level: `Jan 15 10:00` when zoomed out, `10:30:15` when zoomed in. The toolbar crosshair and data cursor also display datetime values.
 
+![Datetime axis with auto-formatted tick labels](docs/images/datetime_axes.png)
+
 In MATLAB, you can also pass `datetime` objects directly — they are auto-converted to `datenum`:
 
 ```matlab
@@ -150,6 +200,8 @@ fp = FastPlot('Theme', 'dark');
 fp.addSensor(s);
 fp.render();
 ```
+
+![Condition-dependent sensor thresholds with step-function lines](docs/images/sensor_thresholds.png)
 
 Use `SensorRegistry` for predefined sensor catalogs:
 
@@ -281,6 +333,8 @@ fp.addBand(85, 95, 'FaceColor', [1 0.3 0.3], 'FaceAlpha', 0.15, 'Label', 'High A
 | `FaceAlpha` | scalar | theme BandAlpha | Fill transparency |
 | `EdgeColor` | RGB or `'none'` | `'none'` | Edge color |
 | `Label` | string | `''` | Label for the band |
+
+![Industrial 4-level alarm bands (HH/H/L/LL) with dark theme](docs/images/alarm_bands.png)
 
 ### `addShaded(x, y1, y2, ...)` — Fill Between Curves
 
@@ -530,6 +584,8 @@ fp2.render();
 
 Zooming on either subplot updates the other. Each subplot re-downsamples independently.
 
+![Three linked subplots with synchronized zoom](docs/images/linked_axes.png)
+
 ## Handling NaN Gaps
 
 FastPlot handles missing data natively. NaN values in Y create visual gaps:
@@ -545,6 +601,8 @@ fp.render();
 ```
 
 Each contiguous non-NaN segment is downsampled independently and rejoined with NaN separators.
+
+![NaN gap handling with sensor dropouts](docs/images/nan_gaps.png)
 
 ## Uneven Sampling
 

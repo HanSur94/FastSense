@@ -1011,7 +1011,7 @@ classdef FastPlot < handle
                         @(src,evt) obj.loupeButtonFilter());
                     set(hZoom, 'Enable', 'on');
                 catch
-                    % Octave: zoom() doesn't return an object
+                    % Octave / headless: zoom() doesn't return an object
                     try zoom(obj.hFigure, 'on'); catch; end
                 end
             end
