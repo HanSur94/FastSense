@@ -60,5 +60,11 @@ classdef Event
             obj.RmsValue = rmsVal;
             obj.StdValue = stdVal;
         end
+
+        function obj = escalateTo(obj, newLabel, newThresholdValue)
+            %ESCALATETOP Escalate event to a higher severity threshold.
+            obj.ThresholdLabel = newLabel;
+            obj.ThresholdValue = newThresholdValue;
+        end
     end
 end

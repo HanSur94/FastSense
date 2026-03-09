@@ -13,6 +13,7 @@ classdef EventConfig < handle
         OnEventStart      % function handle: callback
         ThresholdColors   % containers.Map: label -> [R G B]
         AutoOpenViewer    % logical: auto-open EventViewer after detection
+        EscalateSeverity  % logical: escalate events to higher thresholds (default true)
     end
 
     methods
@@ -24,6 +25,7 @@ classdef EventConfig < handle
             obj.OnEventStart = [];
             obj.ThresholdColors = containers.Map();
             obj.AutoOpenViewer = false;
+            obj.EscalateSeverity = true;
         end
 
         function addSensor(obj, sensor)
@@ -77,6 +79,11 @@ classdef EventConfig < handle
                 end
             end
 
+            % Post-detection severity escalation
+            if obj.EscalateSeverity && ~isempty(events)
+                events = obj.escalateEvents(events);
+            end
+
             if obj.AutoOpenViewer && ~isempty(events)
                 if isempty(obj.ThresholdColors) || obj.ThresholdColors.Count == 0
                     EventViewer(events, obj.SensorData);
@@ -84,6 +91,90 @@ classdef EventConfig < handle
                     EventViewer(events, obj.SensorData, obj.ThresholdColors);
                 end
             end
+        end
+    end
+
+    methods (Access = private)
+        function events = escalateEvents(obj, events)
+            %ESCALATEEVENTS Escalate events whose peak exceeds a higher threshold.
+
+            % Build threshold map: key = 'SensorName|Direction' -> struct array {Label, Value}
+            threshMap = containers.Map();
+            for i = 1:numel(obj.Sensors)
+                s = obj.Sensors{i};
+                if ~isempty(s.Name); sName = s.Name; else; sName = s.Key; end
+                if isempty(s.ResolvedThresholds); continue; end
+                for j = 1:numel(s.ResolvedThresholds)
+                    th = s.ResolvedThresholds(j);
+                    if strcmp(th.Direction, 'upper'); dir = 'high'; else; dir = 'low'; end
+                    key = [sName, '|', dir];
+                    validY = th.Y(~isnan(th.Y));
+                    if isempty(validY); continue; end
+                    entry.Label = th.Label;
+                    entry.Value = validY(1);
+                    if threshMap.isKey(key)
+                        threshMap(key) = [threshMap(key), entry];
+                    else
+                        threshMap(key) = entry;
+                    end
+                end
+            end
+
+            % Escalate each event
+            for i = 1:numel(events)
+                ev = events(i);
+                key = [ev.SensorName, '|', ev.Direction];
+                if ~threshMap.isKey(key); continue; end
+
+                thresholds = threshMap(key);
+                bestLabel = ev.ThresholdLabel;
+                bestValue = ev.ThresholdValue;
+
+                for j = 1:numel(thresholds)
+                    th = thresholds(j);
+                    if strcmp(ev.Direction, 'high')
+                        % For 'high': escalate if peak exceeds a higher threshold
+                        if th.Value > ev.ThresholdValue && ev.PeakValue >= th.Value
+                            if th.Value > bestValue
+                                bestValue = th.Value;
+                                bestLabel = th.Label;
+                            end
+                        end
+                    else
+                        % For 'low': escalate if peak is below a lower threshold
+                        if th.Value < ev.ThresholdValue && ev.PeakValue <= th.Value
+                            if th.Value < bestValue
+                                bestValue = th.Value;
+                                bestLabel = th.Label;
+                            end
+                        end
+                    end
+                end
+
+                if ~strcmp(bestLabel, ev.ThresholdLabel)
+                    events(i) = ev.escalateTo(bestLabel, bestValue);
+                end
+            end
+
+            % Deduplicate: remove events contained within another with same label
+            remove = false(1, numel(events));
+            for i = 1:numel(events)
+                if remove(i); continue; end
+                for j = i+1:numel(events)
+                    if remove(j); continue; end
+                    ei = events(i); ej = events(j);
+                    if ~strcmp(ei.SensorName, ej.SensorName); continue; end
+                    if ~strcmp(ei.ThresholdLabel, ej.ThresholdLabel); continue; end
+                    % Check containment
+                    if ei.StartTime <= ej.StartTime && ei.EndTime >= ej.EndTime
+                        remove(j) = true;
+                    elseif ej.StartTime <= ei.StartTime && ej.EndTime >= ei.EndTime
+                        remove(i) = true;
+                        break;
+                    end
+                end
+            end
+            events = events(~remove);
         end
     end
 end
