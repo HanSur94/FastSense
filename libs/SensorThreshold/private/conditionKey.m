@@ -4,7 +4,12 @@ function key = conditionKey(condStruct)
     fields = sort(fieldnames(condStruct));
     parts = cell(1, numel(fields));
     for i = 1:numel(fields)
-        parts{i} = sprintf('%s=%g', fields{i}, condStruct.(fields{i}));
+        val = condStruct.(fields{i});
+        if ischar(val) || isstring(val)
+            parts{i} = sprintf('%s=%s', fields{i}, val);
+        else
+            parts{i} = sprintf('%s=%g', fields{i}, val);
+        end
     end
     if isempty(parts)
         key = '__empty__';

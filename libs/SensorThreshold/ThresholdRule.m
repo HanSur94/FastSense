@@ -64,9 +64,22 @@ classdef ThresholdRule
             tf = true;
             for f = 1:numel(fields)
                 key = fields{f};
-                if ~isfield(st, key) || st.(key) ~= obj.Condition.(key)
+                if ~isfield(st, key)
                     tf = false;
                     return;
+                end
+                condVal = obj.Condition.(key);
+                stVal = st.(key);
+                if ischar(condVal) || isstring(condVal)
+                    if ~strcmp(condVal, stVal)
+                        tf = false;
+                        return;
+                    end
+                else
+                    if stVal ~= condVal
+                        tf = false;
+                        return;
+                    end
                 end
             end
         end
