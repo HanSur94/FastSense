@@ -103,4 +103,17 @@ function test_log_scale()
     assert(threw, 'testSetScaleInvalidValue: should error');
 
     fprintf('    All 5 setScale tests passed.\n');
+
+    % testMinMaxLogXBucketing
+    % On a log X axis, linear bucketing under-samples the left side.
+    % With log bucketing, points should be more evenly distributed visually.
+    x = logspace(0, 6, 10000);  % 1 to 1e6, log-spaced
+    y = sin(log10(x));
+    [xd_lin, ~] = minmax_downsample(x, y, 100);
+    [xd_log, ~] = minmax_downsample(x, y, 100, false, true);
+    % Log bucketing should have more points in the low-X region
+    nLow_lin = sum(xd_lin < 1000);  % first 3 decades
+    nLow_log = sum(xd_log < 1000);
+    assert(nLow_log > nLow_lin, 'testMinMaxLogXBucketing: log should have more low-X points');
+    fprintf('    MinMax logX bucketing test passed.\n');
 end

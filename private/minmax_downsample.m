@@ -1,7 +1,8 @@
-function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
+function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN, logX)
 %MINMAX_DOWNSAMPLE Reduce time series to min/max pairs per bucket.
 %   [xOut, yOut] = minmax_downsample(x, y, numBuckets)
 %   [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
+%   [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN, logX)
 %
 %   Divides the data into numBuckets equal-width bins and keeps only the
 %   minimum and maximum Y values per bin, preserving X monotonicity.
@@ -18,6 +19,7 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
 %     y          — numeric row vector of values (same length as x)
 %     numBuckets — desired number of bins (output ≈ 2*numBuckets points)
 %     hasNaN     — (optional) logical, skip NaN scan when known false
+%     logX       — (optional) logical, use log-spaced bucket edges
 %
 %   Outputs:
 %     xOut — downsampled X values (row vector)
@@ -39,6 +41,9 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
     if nargin < 4
         hasNaN = any(isnan(y));
     end
+    if nargin < 5
+        logX = false;
+    end
 
     if ~hasNaN
         if n <= 2 * numBuckets
@@ -46,7 +51,9 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
             yOut = y;
             return;
         end
-        if useMex
+        if logX
+            [xOut, yOut] = minmax_core_logx(x, y, numBuckets);
+        elseif useMex
             [xOut, yOut] = minmax_core_mex(x, y, numBuckets);
         else
             [xOut, yOut] = minmax_core(x, y, numBuckets);
@@ -102,7 +109,9 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN)
             yOut(pos+1:pos+segLen) = segY;
             pos = pos + segLen;
         else
-            if useMex
+            if logX
+                [sx, sy] = minmax_core_logx(segX, segY, nb);
+            elseif useMex
                 [sx, sy] = minmax_core_mex(segX, segY, nb);
             else
                 [sx, sy] = minmax_core(segX, segY, nb);
@@ -181,4 +190,48 @@ function [xOut, yOut] = minmax_core(segX, segY, nb)
     yOut(odd(~minFirst))  = yMaxVals(~minFirst);
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
+end
+
+
+function [xOut, yOut] = minmax_core_logx(segX, segY, nb)
+%MINMAX_CORE_LOGX Min/max downsampling with logarithmically-spaced buckets.
+%   Bucket edges are uniform in log10(X) space, giving visually even
+%   distribution on a log X axis.
+    logMin = log10(segX(1));
+    logMax = log10(segX(end));
+    logEdges = linspace(logMin, logMax, nb + 1);
+    edges = 10 .^ logEdges;
+
+    xOut = zeros(1, 2*nb);
+    yOut = zeros(1, 2*nb);
+    pos = 0;
+
+    for b = 1:nb
+        if b == nb
+            mask = segX >= edges(b) & segX <= edges(b+1);
+        else
+            mask = segX >= edges(b) & segX < edges(b+1);
+        end
+
+        if ~any(mask)
+            continue;
+        end
+
+        bx = segX(mask);
+        by = segY(mask);
+
+        [yMinVal, iMin] = min(by);
+        [yMaxVal, iMax] = max(by);
+
+        if iMin <= iMax
+            pos = pos + 1; xOut(pos) = bx(iMin); yOut(pos) = yMinVal;
+            pos = pos + 1; xOut(pos) = bx(iMax); yOut(pos) = yMaxVal;
+        else
+            pos = pos + 1; xOut(pos) = bx(iMax); yOut(pos) = yMaxVal;
+            pos = pos + 1; xOut(pos) = bx(iMin); yOut(pos) = yMinVal;
+        end
+    end
+
+    xOut = xOut(1:pos);
+    yOut = yOut(1:pos);
 end
