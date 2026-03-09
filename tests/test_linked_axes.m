@@ -1,8 +1,14 @@
 function test_linked_axes()
 %TEST_LINKED_AXES Tests for linked axes zoom propagation.
+%   Requires PostSet listeners (MATLAB only, skipped on Octave).
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
     add_fastplot_private_path();
+
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('    SKIPPED: Octave lacks PostSet listeners for axes properties.\n');
+        return;
+    end
 
     % testLinkedZoomPropagates
     fig = figure('Visible', 'off');

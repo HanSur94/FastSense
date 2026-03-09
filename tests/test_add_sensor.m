@@ -27,7 +27,10 @@ function test_add_sensor()
 
     fp = FastPlot();
     fp.addSensor(s, 'ShowThresholds', true);
-    assert(numel(fp.Lines) >= 2, 'testWithThresholds: line + threshold line(s)');
+    assert(numel(fp.Lines) == 1, 'testWithThresholds: only data line');
+    assert(numel(fp.Thresholds) >= 1, 'testWithThresholds: threshold(s) added');
+    assert(fp.Thresholds(1).ShowViolations == true, 'testWithThresholds: ShowViolations on');
+    assert(~isempty(fp.Thresholds(1).X), 'testWithThresholds: time-varying threshold');
 
     % testAddSensorNoThresholds — ShowThresholds false
     s = Sensor('temp', 'Name', 'Temperature');
@@ -39,6 +42,7 @@ function test_add_sensor()
     fp = FastPlot();
     fp.addSensor(s, 'ShowThresholds', false);
     assert(numel(fp.Lines) == 1, 'testNoThresholds: only data line');
+    assert(numel(fp.Thresholds) == 0, 'testNoThresholds: no thresholds');
 
     % testAddSensorUsesKeyAsFallbackName
     s = Sensor('flow_rate');

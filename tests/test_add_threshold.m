@@ -41,5 +41,25 @@ function test_add_threshold()
     fp.addThreshold(3.0);
     assert(numel(fp.Thresholds) == 3, 'testMultipleThresholds');
 
-    fprintf('    All 5 addThreshold tests passed.\n');
+    % testTimeVaryingThreshold
+    fp = FastPlot();
+    thX = [0 10 20 30];
+    thY = [5.0 5.0 7.0 7.0];
+    fp.addThreshold(thX, thY, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'StepTh');
+    assert(numel(fp.Thresholds) == 1, 'testTimeVarying: count');
+    assert(isempty(fp.Thresholds(1).Value), 'testTimeVarying: Value should be empty');
+    assert(isequal(fp.Thresholds(1).X, thX), 'testTimeVarying: X');
+    assert(isequal(fp.Thresholds(1).Y, thY), 'testTimeVarying: Y');
+    assert(strcmp(fp.Thresholds(1).Direction, 'upper'), 'testTimeVarying: direction');
+    assert(fp.Thresholds(1).ShowViolations == true, 'testTimeVarying: ShowViolations');
+
+    % testMixedThresholds — scalar and time-varying coexist
+    fp = FastPlot();
+    fp.addThreshold(4.5);
+    fp.addThreshold([0 10], [3.0 5.0], 'Direction', 'lower');
+    assert(numel(fp.Thresholds) == 2, 'testMixed: count');
+    assert(fp.Thresholds(1).Value == 4.5, 'testMixed: scalar Value');
+    assert(isempty(fp.Thresholds(2).Value), 'testMixed: tv Value empty');
+
+    fprintf('    All 7 addThreshold tests passed.\n');
 end

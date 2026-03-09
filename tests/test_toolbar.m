@@ -25,14 +25,14 @@ function test_toolbar()
     assert(~isempty(tb.hToolbar), 'testConstructorWithFPFigure: hToolbar');
     close(fig.hFigure);
 
-    % testToolbarHasSixButtons
+    % testToolbarHasAllButtons (cursor, crosshair, grid, legend, autoscale, export, refresh, live, metadata, theme)
     fp = FastPlot();
     fp.addLine(1:100, rand(1,100));
     fp.render();
     tb = FastPlotToolbar(fp);
     children = get(tb.hToolbar, 'Children');
-    assert(numel(children) == 6, ...
-        sprintf('testToolbarHasSixButtons: got %d', numel(children)));
+    assert(numel(children) == 10, ...
+        sprintf('testToolbarHasAllButtons: got %d', numel(children)));
     close(fp.hFigure);
 
     % testIconsAre16x16x3

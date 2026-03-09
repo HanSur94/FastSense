@@ -87,7 +87,8 @@ classdef FastPlot < handle
         Lines      = struct('X', {}, 'Y', {}, 'Options', {}, ...
                             'DownsampleMethod', {}, 'hLine', {}, ...
                             'Pyramid', {}, 'HasNaN', {}, 'Metadata', {})
-        Thresholds = struct('Value', {}, 'Direction', {}, ...
+        Thresholds = struct('Value', {}, 'X', {}, 'Y', {}, ...
+                            'Direction', {}, ...
                             'ShowViolations', {}, 'Color', {}, ...
                             'LineStyle', {}, 'Label', {}, ...
                             'hLine', {}, 'hMarkers', {})
@@ -105,6 +106,7 @@ classdef FastPlot < handle
         IsRendered    = false
         hFigure       = []
         hAxes         = []
+        XType         = 'numeric' % 'numeric' or 'datenum'
         IsDatetime    = false % true if X data was datetime (converted to datenum)
     end
 
@@ -268,6 +270,7 @@ classdef FastPlot < handle
                 if isdatetime(x)
                     x = datenum(x);
                     obj.IsDatetime = true;
+                    obj.XType = 'datenum';
                 end
             catch
                 % Octave: isdatetime may not exist — skip gracefully
@@ -288,7 +291,14 @@ classdef FastPlot < handle
             knownDefaults.Metadata = [];
             knownDefaults.AssumeSorted = false;
             knownDefaults.HasNaN = [];
+            knownDefaults.XType = 'numeric';
             [known, passthrough] = parseOpts(knownDefaults, varargin, obj.Verbose);
+
+            % Set XType if explicitly provided
+            if strcmp(known.XType, 'datenum')
+                obj.XType = 'datenum';
+                obj.IsDatetime = true;
+            end
 
             dsMethod = known.DownsampleMethod;
             meta = known.Metadata;
@@ -375,31 +385,42 @@ classdef FastPlot < handle
                         thLabel = sprintf('Threshold %d', i);
                     end
                     [thColor, thStyle] = obj.resolveThresholdStyle(th.Color, th.LineStyle);
-                    obj.addLine(th.X, th.Y, ...
-                        'DisplayName', thLabel, ...
+                    obj.addThreshold(th.X, th.Y, ...
+                        'Direction', th.Direction, ...
+                        'ShowViolations', true, ...
+                        'Label', thLabel, ...
                         'Color', thColor, ...
-                        'LineStyle', thStyle, ...
-                        'LineWidth', 1.5);
-                    viol = sensor.ResolvedViolations(i);
-                    if ~isempty(viol.X)
-                        obj.addMarker(viol.X, viol.Y, ...
-                            'Color', thColor, ...
-                            'Marker', 'o', ...
-                            'MarkerSize', 4);
-                    end
+                        'LineStyle', thStyle);
                 end
-                obj.addThresholdConnectors(resolvedTh);
             end
         end
 
-        function addThreshold(obj, value, varargin)
-            %ADDTHRESHOLD Add a horizontal threshold line.
+        function addThreshold(obj, varargin)
+            %ADDTHRESHOLD Add a threshold line (scalar or time-varying).
             %   fp.addThreshold(4.5)
             %   fp.addThreshold(4.5, 'Direction', 'upper', 'ShowViolations', true)
+            %   fp.addThreshold(thX, thY, 'Direction', 'upper', 'ShowViolations', true)
 
             if obj.IsRendered
                 error('FastPlot:alreadyRendered', ...
                     'Cannot add thresholds after render() has been called.');
+            end
+
+            % Detect scalar vs time-varying
+            if nargin >= 3 && isnumeric(varargin{1}) && isnumeric(varargin{2}) && numel(varargin{1}) > 1
+                % Time-varying: addThreshold(thX, thY, ...)
+                thX = varargin{1};
+                thY = varargin{2};
+                if ~isrow(thX); thX = thX(:)'; end
+                if ~isrow(thY); thY = thY(:)'; end
+                nvPairs = varargin(3:end);
+                isTimeVarying = true;
+            else
+                % Scalar: addThreshold(value, ...)
+                thX = [];
+                thY = [];
+                nvPairs = varargin(2:end);
+                isTimeVarying = false;
             end
 
             defaults.Direction = 'upper';
@@ -407,9 +428,17 @@ classdef FastPlot < handle
             defaults.Color = obj.Theme.ThresholdColor;
             defaults.LineStyle = obj.Theme.ThresholdStyle;
             defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
+            [parsed, ~] = parseOpts(defaults, nvPairs, obj.Verbose);
 
-            t.Value          = value;
+            t.Value          = [];
+            t.X              = [];
+            t.Y              = [];
+            if isTimeVarying
+                t.X = thX;
+                t.Y = thY;
+            else
+                t.Value = varargin{1};
+            end
             t.Direction      = parsed.Direction;
             t.ShowViolations = parsed.ShowViolations;
             t.Color          = parsed.Color;
@@ -772,10 +801,21 @@ classdef FastPlot < handle
                 T = obj.Thresholds(t);
 
                 % Threshold line
-                hT = line([xmin, xmax], [T.Value, T.Value], 'Parent', obj.hAxes, ...
-                    'Color', T.Color, ...
-                    'LineStyle', T.LineStyle, ...
-                    'HandleVisibility', 'off');
+                if isempty(T.X)
+                    % Scalar threshold — horizontal line
+                    hT = line([xmin, xmax], [T.Value, T.Value], 'Parent', obj.hAxes, ...
+                        'Color', T.Color, ...
+                        'LineStyle', T.LineStyle, ...
+                        'LineWidth', 1.5, ...
+                        'HandleVisibility', 'off');
+                else
+                    % Time-varying threshold — step-function line
+                    hT = line(T.X, T.Y, 'Parent', obj.hAxes, ...
+                        'Color', T.Color, ...
+                        'LineStyle', T.LineStyle, ...
+                        'LineWidth', 1.5, ...
+                        'HandleVisibility', 'off');
+                end
                 udT.FastPlot = struct( ...
                     'Type', 'threshold', ...
                     'Name', T.Label, ...
@@ -793,8 +833,11 @@ classdef FastPlot < handle
                     for i = 1:nLines
                         xd = get(obj.Lines(i).hLine, 'XData');
                         yd = get(obj.Lines(i).hLine, 'YData');
-                        [vx, vy] = compute_violations( ...
-                            xd, yd, T.Value, T.Direction);
+                        if isempty(T.X)
+                            [vx, vy] = compute_violations(xd, yd, T.Value, T.Direction);
+                        else
+                            [vx, vy] = compute_violations_dynamic(xd, yd, T.X, T.Y, T.Direction);
+                        end
                         if ~isempty(vx)
                             nViols = nViols + 1;
                             vxCell{nViols} = [vx, NaN];
@@ -809,7 +852,12 @@ classdef FastPlot < handle
                         % Pixel-density cull: keep 1 violation per pixel column
                         xl = get(obj.hAxes, 'XLim');
                         pw = diff(xl) / obj.PixelWidth;
-                        [vxAll, vyAll] = downsample_violations(vxAll, vyAll, pw, T.Value, xl(1));
+                        if isempty(T.X)
+                            thVal = T.Value;
+                        else
+                            thVal = median(T.Y(~isnan(T.Y)));
+                        end
+                        [vxAll, vyAll] = downsample_violations(vxAll, vyAll, pw, thVal, xl(1));
                     else
                         vxAll = NaN;
                         vyAll = NaN;
@@ -827,8 +875,13 @@ classdef FastPlot < handle
                     obj.Thresholds(t).hMarkers = hM;
 
                     if obj.Verbose
-                        fprintf('[FastPlot] render: threshold %.4g: %d violation markers\n', ...
-                            T.Value, numel(vxAll));
+                        if isempty(T.X)
+                            fprintf('[FastPlot] render: threshold %.4g: %d violation markers\n', ...
+                                T.Value, numel(vxAll));
+                        else
+                            fprintf('[FastPlot] render: time-varying threshold "%s": %d violation markers\n', ...
+                                T.Label, numel(vxAll));
+                        end
                     end
                 end
             end
@@ -897,12 +950,9 @@ classdef FastPlot < handle
             obj.FullYLim = [yLimLow, yLimHigh];
             obj.CachedXLim = get(obj.hAxes, 'XLim');
 
-            % Auto-format datetime axis if any line was added with datetime X
-            if obj.IsDatetime
-                try
-                    datetick(obj.hAxes, 'x', 'keeplimits');
-                catch
-                end
+            % Auto-format datetime axis
+            if strcmp(obj.XType, 'datenum')
+                obj.updateDatetimeTicks();
             end
 
             % Box on by default
@@ -961,7 +1011,8 @@ classdef FastPlot < handle
                         @(src,evt) obj.loupeButtonFilter());
                     set(hZoom, 'Enable', 'on');
                 catch
-                    % zoom() may fail in headless / --no-gui mode
+                    % Octave / headless: zoom() doesn't return an object
+                    try zoom(obj.hFigure, 'on'); catch; end
                 end
             end
 
@@ -1439,47 +1490,6 @@ classdef FastPlot < handle
             end
         end
 
-        function addThresholdConnectors(obj, resolvedTh)
-            %ADDTHRESHOLDCONNECTORS Add vertical connectors at threshold transitions.
-            for dir = {'upper', 'lower'}
-                d = dir{1};
-                ruleIdx = [];
-                for r = 1:numel(resolvedTh)
-                    if strcmp(resolvedTh(r).Direction, d)
-                        ruleIdx(end+1) = r; %#ok<AGROW>
-                    end
-                end
-                if numel(ruleIdx) < 2; continue; end
-                nT = numel(resolvedTh(ruleIdx(1)).X);
-                yMat = NaN(numel(ruleIdx), nT);
-                for j = 1:numel(ruleIdx)
-                    yMat(j, :) = resolvedTh(ruleIdx(j)).Y;
-                end
-                activeVal = NaN(1, nT);
-                activeRuleRow = zeros(1, nT);
-                for j = 1:numel(ruleIdx)
-                    mask = isnan(activeVal) & ~isnan(yMat(j, :));
-                    activeVal(mask) = yMat(j, mask);
-                    activeRuleRow(mask) = j;
-                end
-                bothValid = ~isnan(activeVal(1:end-1)) & ~isnan(activeVal(2:end));
-                transIdx = find(bothValid & diff(activeVal) ~= 0) + 1;
-                timeGrid = resolvedTh(ruleIdx(1)).X;
-                for j = 1:numel(transIdx)
-                    k = transIdx(j);
-                    ri = ruleIdx(activeRuleRow(k));
-                    [connColor, connStyle] = obj.resolveThresholdStyle( ...
-                        resolvedTh(ri).Color, resolvedTh(ri).LineStyle);
-                    obj.addLine([timeGrid(k), timeGrid(k)], ...
-                        [activeVal(k-1), activeVal(k)], ...
-                        'Color', connColor, ...
-                        'LineStyle', connStyle, ...
-                        'LineWidth', 1.5, ...
-                        'HandleVisibility', 'off');
-                end
-            end
-        end
-
         function onLiveTimer(obj)
             %ONLIVETIMER Timer callback — check file and refresh if changed.
             if ~exist(obj.LiveFile, 'file')
@@ -1686,6 +1696,11 @@ classdef FastPlot < handle
             obj.updateLines();
             obj.updateShadings();
             obj.updateViolations();
+
+            % Update datetime tick labels for new zoom level
+            if strcmp(obj.XType, 'datenum')
+                obj.updateDatetimeTicks();
+            end
 
             % Propagate to linked axes
             if ~isempty(obj.LinkGroup)
@@ -1991,12 +2006,18 @@ classdef FastPlot < handle
                 vyCell = cell(1, nLines);
                 nViols = 0;
                 for i = 1:nLines
+                    if obj.Lines(i).IsStatic; continue; end
                     % Use already-downsampled data from the line handle
                     xd = get(obj.Lines(i).hLine, 'XData');
                     yd = get(obj.Lines(i).hLine, 'YData');
 
-                    [vx, vy] = compute_violations(xd, yd, ...
-                        obj.Thresholds(t).Value, obj.Thresholds(t).Direction);
+                    if isempty(obj.Thresholds(t).X)
+                        [vx, vy] = compute_violations(xd, yd, ...
+                            obj.Thresholds(t).Value, obj.Thresholds(t).Direction);
+                    else
+                        [vx, vy] = compute_violations_dynamic(xd, yd, ...
+                            obj.Thresholds(t).X, obj.Thresholds(t).Y, obj.Thresholds(t).Direction);
+                    end
                     if ~isempty(vx)
                         nViols = nViols + 1;
                         vxCell{nViols} = [vx, NaN];
@@ -2010,18 +2031,52 @@ classdef FastPlot < handle
                     % Remove trailing NaN, then pixel-density cull
                     xl = get(obj.hAxes, 'XLim');
                     pw = diff(xl) / obj.PixelWidth;
-                    [vxCulled, vyCulled] = downsample_violations(vxAll(1:end-1), vyAll(1:end-1), pw, obj.Thresholds(t).Value, xl(1));
+                    if isempty(obj.Thresholds(t).X)
+                        thVal = obj.Thresholds(t).Value;
+                    else
+                        thVal = median(obj.Thresholds(t).Y(~isnan(obj.Thresholds(t).Y)));
+                    end
+                    [vxCulled, vyCulled] = downsample_violations(vxAll(1:end-1), vyAll(1:end-1), pw, thVal, xl(1));
                     set(obj.Thresholds(t).hMarkers, 'XData', vxCulled, 'YData', vyCulled);
                     if obj.Verbose
-                        fprintf('[FastPlot]   violations T%d (%.4g): %d markers\n', ...
-                            t, obj.Thresholds(t).Value, numel(vxCulled));
+                        fprintf('[FastPlot]   violations T%d: %d markers\n', ...
+                            t, numel(vxCulled));
                     end
                 else
                     set(obj.Thresholds(t).hMarkers, 'XData', NaN, 'YData', NaN);
                     if obj.Verbose
-                        fprintf('[FastPlot]   violations T%d (%.4g): 0 markers\n', ...
-                            t, obj.Thresholds(t).Value);
+                        fprintf('[FastPlot]   violations T%d: 0 markers\n', t);
                     end
+                end
+            end
+        end
+
+        function updateDatetimeTicks(obj)
+            %UPDATEDATETIMETICKS Format X tick labels based on visible range.
+            %   Selects date format based on zoom level:
+            %     > 1 day:  'mmm dd HH:MM'
+            %     1h-1d:    'HH:MM'
+            %     1m-1h:    'HH:MM'
+            %     < 1 min:  'HH:MM:SS'
+            if ~ishandle(obj.hAxes); return; end
+            try
+                xl = get(obj.hAxes, 'XLim');
+                span = diff(xl);  % in days (datenum units)
+                if span > 1
+                    fmt = 'mmm dd HH:MM';
+                elseif span > 1/24  % > 1 hour
+                    fmt = 'HH:MM';
+                elseif span > 1/1440  % > 1 minute
+                    fmt = 'HH:MM';
+                else
+                    fmt = 'HH:MM:SS';
+                end
+                datetick(obj.hAxes, 'x', fmt, 'keeplimits');
+            catch
+                % Fallback: plain datetick
+                try
+                    datetick(obj.hAxes, 'x', 'keeplimits');
+                catch
                 end
             end
         end

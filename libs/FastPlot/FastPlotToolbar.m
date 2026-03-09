@@ -1036,5 +1036,20 @@ classdef FastPlotToolbar < handle
                 FastPlotToolbar.makeIcon(names{i});
             end
         end
+
+        function s = formatX(xVal, xType)
+            %FORMATX Format an X value based on XType.
+            %   s = FastPlotToolbar.formatX(xVal, 'datenum')
+            %   s = FastPlotToolbar.formatX(xVal, 'numeric')
+            if strcmp(xType, 'datenum')
+                try
+                    s = datestr(xVal, 'mmm dd HH:MM:SS');
+                catch
+                    s = sprintf('%.6g', xVal);
+                end
+            else
+                s = sprintf('%.6g', xVal);
+            end
+        end
     end
 end

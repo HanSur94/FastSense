@@ -82,29 +82,31 @@ function test_multi_threshold()
 
     close(fp.hFigure);
 
-    % testViolationsUpdateOnZoomPerThreshold
-    fp = FastPlot();
-    y = [zeros(1,100), 1.5*ones(1,100), zeros(1,100), 2.5*ones(1,100), zeros(1,100)];
-    x = 1:500;
-    fp.addLine(x, y);
-    fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
-    fp.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', [1 0.6 0]);
-    fp.render();
+    % testViolationsUpdateOnZoomPerThreshold (MATLAB only — needs PostSet listeners)
+    if ~exist('OCTAVE_VERSION', 'builtin')
+        fp = FastPlot();
+        y = [zeros(1,100), 1.5*ones(1,100), zeros(1,100), 2.5*ones(1,100), zeros(1,100)];
+        x = 1:500;
+        fp.addLine(x, y);
+        fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
+        fp.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', [1 0.6 0]);
+        fp.render();
 
-    % Zoom to region with only warning violations (x=101:200, y=1.5)
-    set(fp.hAxes, 'XLim', [90 210]);
-    drawnow;
-    pause(0.2);
+        % Zoom to region with only warning violations (x=101:200, y=1.5)
+        set(fp.hAxes, 'XLim', [90 210]);
+        drawnow;
+        pause(0.2);
 
-    vx_alarm = get(fp.Thresholds(1).hMarkers, 'XData');
-    vx_alarm = vx_alarm(~isnan(vx_alarm));
-    assert(numel(vx_alarm) == 0, 'Alarm markers should be empty in warning-only region');
+        vx_alarm = get(fp.Thresholds(1).hMarkers, 'XData');
+        vx_alarm = vx_alarm(~isnan(vx_alarm));
+        assert(numel(vx_alarm) == 0, 'Alarm markers should be empty in warning-only region');
 
-    vx_warn = get(fp.Thresholds(2).hMarkers, 'XData');
-    vx_warn = vx_warn(~isnan(vx_warn));
-    assert(numel(vx_warn) > 0, 'Warning markers should show in warning region');
+        vx_warn = get(fp.Thresholds(2).hMarkers, 'XData');
+        vx_warn = vx_warn(~isnan(vx_warn));
+        assert(numel(vx_warn) > 0, 'Warning markers should show in warning region');
 
-    close(fp.hFigure);
+        close(fp.hFigure);
+    end
 
     % testUserDataTagging
     fp = FastPlot();

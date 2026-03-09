@@ -84,8 +84,13 @@ classdef ConsoleProgressBar < handle
     methods (Access = private)
         function printBar(obj)
         %PRINTBAR Redraw the bar using backspace to erase previous output.
-            filled = char(9608);
-            empty  = char(9617);
+            if exist('OCTAVE_VERSION', 'builtin')
+                filled = '#';
+                empty  = '-';
+            else
+                filled = char(9608);  % █
+                empty  = char(9617);  % ░
+            end
 
             prefix = repmat(' ', 1, obj.Indent);
 

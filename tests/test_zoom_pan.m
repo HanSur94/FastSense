@@ -1,8 +1,14 @@
 function test_zoom_pan()
 %TEST_ZOOM_PAN Tests for zoom/pan callbacks.
+%   Requires PostSet listeners (MATLAB only, skipped on Octave).
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
     add_fastplot_private_path();
+
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('    SKIPPED: Octave lacks PostSet listeners for axes properties.\n');
+        return;
+    end
 
     % testZoomUpdatesPlottedData
     fp = FastPlot();

@@ -45,25 +45,27 @@ function test_datetime()
     assert(hasTime, 'testTickLabels: should have time-formatted labels');
     close(fp.hFigure);
 
-    % testTickFormatChangesOnZoom
-    fp = FastPlot();
-    x = datenum(2024,1,1) + (0:9999)/86400;  % ~0.1s resolution
-    fp.addLine(x, rand(1,10000), 'XType', 'datenum');
-    fp.render();
-    % Zoom to 30 seconds
-    set(fp.hAxes, 'XLim', [x(1), x(1) + 30/86400]);
-    drawnow;
-    labels = get(fp.hAxes, 'XTickLabel');
-    % Should show seconds (HH:MM:SS format)
-    hasSeconds = false;
-    for i = 1:numel(labels)
-        if sum(labels{i} == ':') >= 2
-            hasSeconds = true;
-            break;
+    % testTickFormatChangesOnZoom (MATLAB only — Octave lacks PostSet listeners)
+    if ~exist('OCTAVE_VERSION', 'builtin')
+        fp = FastPlot();
+        x = datenum(2024,1,1) + (0:9999)/86400;  % ~0.1s resolution
+        fp.addLine(x, rand(1,10000), 'XType', 'datenum');
+        fp.render();
+        % Zoom to 30 seconds
+        set(fp.hAxes, 'XLim', [x(1), x(1) + 30/86400]);
+        drawnow;
+        labels = get(fp.hAxes, 'XTickLabel');
+        % Should show seconds (HH:MM:SS format)
+        hasSeconds = false;
+        for i = 1:numel(labels)
+            if sum(labels{i} == ':') >= 2
+                hasSeconds = true;
+                break;
+            end
         end
+        assert(hasSeconds, 'testTickFormatZoom: should show seconds when zoomed');
+        close(fp.hFigure);
     end
-    assert(hasSeconds, 'testTickFormatZoom: should show seconds when zoomed');
-    close(fp.hFigure);
 
     % testToolbarFormatX
     % Verify the static helper returns date string for datenum XType
