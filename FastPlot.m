@@ -53,6 +53,10 @@ classdef FastPlot < handle
     %     fp = FastPlot(); fp.addLine(x, y); fp.render();
     %     fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
     %
+    %   Example — distribute figures on screen (requires distFig from File Exchange):
+    %     FastPlot.distFig()                         % auto-arrange all figures
+    %     FastPlot.distFig('Rows', 2, 'Cols', 3)     % 2x3 grid
+    %
     %   See also FastPlotFigure, FastPlotDock, FastPlotTheme, FastPlotToolbar.
 
     % ========================= PUBLIC PROPERTIES =========================
@@ -71,6 +75,7 @@ classdef FastPlot < handle
         MetadataVars      = {}        % cell array of variable names to extract
         MetadataLineIndex = 1         % which line index to attach metadata to
         DeferDraw = false             % skip drawnow during batch render
+        ShowProgress = true           % show console progress bar during render
         XScale = 'linear'             % 'linear' or 'log' — X axis scale
         YScale = 'linear'             % 'linear' or 'log' — Y axis scale
     end
@@ -524,6 +529,15 @@ classdef FastPlot < handle
 
             if nargin < 2; progressBar = []; end
 
+            % Create local progress bar for standalone render
+            ownProgressBar = false;
+            if isempty(progressBar) && obj.ShowProgress && numel(obj.Lines) > 0
+                progressBar = ConsoleProgressBar(1);
+                progressBar.update(1, 0, numel(obj.Lines), 'Rendering');
+                progressBar.start();
+                ownProgressBar = true;
+            end
+
             if obj.Verbose; renderTic = tic; end
 
             if obj.IsRendered
@@ -680,7 +694,8 @@ classdef FastPlot < handle
                         i, numel(L.X), numel(xd), obj.PixelWidth);
                 end
                 if ~isempty(progressBar)
-                    progressBar.update(2, i, numel(obj.Lines));
+                    barIdx = 1 + ~ownProgressBar; % bar 1 standalone, bar 2 from dashboard
+                    progressBar.update(barIdx, i, numel(obj.Lines));
                 end
             end
 
@@ -919,6 +934,11 @@ classdef FastPlot < handle
             end
 
             hold(obj.hAxes, 'off');
+
+            % Finish standalone progress bar
+            if ownProgressBar
+                progressBar.finish();
+            end
 
             % Show figure and flush — unless deferred (dashboard batch render)
             if ~obj.DeferDraw
@@ -1949,6 +1969,20 @@ classdef FastPlot < handle
         function resetDefaults()
             %RESETDEFAULTS Force reload of FastPlotDefaults on next use.
             clearDefaultsCache();
+        end
+
+        function distFig(varargin)
+            %DISTFIG Distribute figure windows across the screen.
+            %   FastPlot.distFig() arranges all open figures automatically.
+            %   FastPlot.distFig('Rows',2,'Cols',3) uses a 2x3 grid.
+            %   All arguments are passed to distFig from MATLAB File Exchange.
+            %   Install: mathworks.com/matlabcentral/fileexchange/37176
+            if ~exist('distFig', 'file')
+                error('FastPlot:distFigNotFound', ...
+                    ['distFig is not on the MATLAB path. Install it from:\n' ...
+                     'https://www.mathworks.com/matlabcentral/fileexchange/37176-distribute-figures']);
+            end
+            distFig(varargin{:});
         end
     end
 end

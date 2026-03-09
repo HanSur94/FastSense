@@ -217,6 +217,7 @@ classdef FastPlotFigure < handle
                         cpb.update(2, 0, max(numel(obj.Tiles{i}.Lines), 1), sprintf('Tile %d', i));
                     end
                     obj.Tiles{i}.DeferDraw = true;
+                    obj.Tiles{i}.ShowProgress = false;
                     obj.Tiles{i}.render(cpb);
                     obj.Tiles{i}.DeferDraw = false;
                     if ~isempty(cpb)
