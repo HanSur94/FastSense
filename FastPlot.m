@@ -532,7 +532,7 @@ classdef FastPlot < handle
             % Create local progress bar for standalone render
             ownProgressBar = false;
             if isempty(progressBar) && obj.ShowProgress && numel(obj.Lines) > 0
-                progressBar = ConsoleProgressBar();
+                progressBar = ConsoleProgressBar(0);
                 progressBar.update(0, numel(obj.Lines), 'Rendering');
                 progressBar.start();
                 ownProgressBar = true;
@@ -937,6 +937,8 @@ classdef FastPlot < handle
             % Finish standalone progress bar
             if ownProgressBar
                 progressBar.finish();
+            elseif ~isempty(progressBar)
+                progressBar.freeze();
             end
 
             % Show figure and flush — unless deferred (dashboard batch render)
