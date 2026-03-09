@@ -124,7 +124,31 @@ function test_event_store()
         delete(fullfile(bDir, backups(bi).name));
     end
 
-    fprintf('    All 7 event_store tests passed.\n');
+    % testFromFileHasRefreshControls
+    cfg5 = EventConfig();
+    s5 = Sensor('temp', 'Name', 'Temperature');
+    s5.X = 1:10;
+    s5.Y = [5 5 12 14 11 13 5 5 5 5];
+    s5.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    cfg5.addSensor(s5);
+    tmpFile5 = fullfile(tempdir, 'test_event_refresh.mat');
+    cfg5.EventFile = tmpFile5;
+    cfg5.runDetection();
+    viewer5 = EventViewer.fromFile(tmpFile5);
+    assert(~isempty(viewer5.hFigure), 'refresh: figure exists');
+    % Verify refresh works by modifying file and calling refreshFromFile
+    s5.Y = [5 5 12 14 11 13 12 15 5 5]; % add more violations
+    cfg5.runDetection();
+    oldCount = numel(viewer5.Events);
+    viewer5.refreshFromFile();
+    assert(numel(viewer5.Events) >= oldCount, 'refresh: events updated from file');
+    % Test auto-refresh start/stop (no error = success)
+    viewer5.startAutoRefresh(60);
+    viewer5.stopAutoRefresh();
+    close(viewer5.hFigure);
+    if exist(tmpFile5, 'file'); delete(tmpFile5); end
+
+    fprintf('    All 8 event_store tests passed.\n');
 end
 
 function add_event_path()

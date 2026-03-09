@@ -21,6 +21,12 @@ classdef EventViewer < handle
         FilteredEvents  % currently displayed events after filtering
         BarRects        % rectangle handles for hover detection
         BarEvents       % Event objects corresponding to BarRects
+        SourceFile      % char: path to .mat file (for refresh)
+        RefreshTimer    % timer object for auto-refresh
+        hRefreshBtn     % push button: manual refresh
+        hAutoCheck      % checkbox: auto-refresh toggle
+        hIntervalEdit   % edit field: refresh interval in seconds
+        hStatusLabel    % text: last refresh timestamp
     end
 
     methods
@@ -58,6 +64,72 @@ classdef EventViewer < handle
             %GETTHRESHOLDLABELS Get unique threshold labels from events.
             labels = unique(arrayfun(@(e) e.ThresholdLabel, obj.Events, 'UniformOutput', false));
         end
+
+        function refreshFromFile(obj)
+            %REFRESHFROMFILE Reload events from the source .mat file.
+            if isempty(obj.SourceFile)
+                return;
+            end
+            if ~exist(obj.SourceFile, 'file')
+                return;
+            end
+
+            data = load(obj.SourceFile);
+            if ~isfield(data, 'events')
+                return;
+            end
+
+            obj.Events = data.events;
+            if isfield(data, 'sensorData')
+                obj.SensorData = data.sensorData;
+            end
+            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) ...
+                    && ~isempty(fieldnames(data.thresholdColors))
+                fields = fieldnames(data.thresholdColors);
+                obj.ThresholdColors = containers.Map();
+                for i = 1:numel(fields)
+                    entry = data.thresholdColors.(fields{i});
+                    obj.ThresholdColors(entry.label) = entry.rgb;
+                end
+            end
+
+            obj.applyFilters();
+
+            % Update status
+            if ~isempty(obj.hStatusLabel) && ishandle(obj.hStatusLabel)
+                set(obj.hStatusLabel, 'String', ...
+                    sprintf('Last refresh: %s  |  %d events', ...
+                    datestr(now, 'HH:MM:SS'), numel(obj.Events))); %#ok<TNOW1,DATST>
+            end
+
+            % Update title
+            if isfield(data, 'timestamp')
+                set(obj.hFigure, 'Name', ...
+                    sprintf('Event Viewer — %s', char(data.timestamp)));
+            end
+        end
+
+        function startAutoRefresh(obj, interval)
+            %STARTAUTOREFRESH Start polling the source file at given interval.
+            %   obj.startAutoRefresh(5)  % refresh every 5 seconds
+            if isempty(obj.SourceFile)
+                return;
+            end
+            obj.stopAutoRefresh();
+            obj.RefreshTimer = timer('ExecutionMode', 'fixedRate', ...
+                'Period', interval, ...
+                'TimerFcn', @(~,~) obj.onAutoRefreshTick());
+            start(obj.RefreshTimer);
+        end
+
+        function stopAutoRefresh(obj)
+            %STOPAUTOREFRESH Stop the auto-refresh timer.
+            if ~isempty(obj.RefreshTimer) && isvalid(obj.RefreshTimer)
+                stop(obj.RefreshTimer);
+                delete(obj.RefreshTimer);
+            end
+            obj.RefreshTimer = [];
+        end
     end
 
     methods (Static)
@@ -90,6 +162,8 @@ classdef EventViewer < handle
             end
 
             viewer = EventViewer(events, sensorData, thresholdColors);
+            viewer.SourceFile = filepath;
+            viewer.buildRefreshToolbar();
 
             if isfield(data, 'timestamp')
                 set(viewer.hFigure, 'Name', ...
@@ -338,6 +412,84 @@ classdef EventViewer < handle
             end
 
             set(obj.hTooltip, 'Visible', 'off');
+        end
+
+        function buildRefreshToolbar(obj)
+            %BUILDREFRESHTOOLBAR Add refresh controls below the filter row.
+            % Shift table down slightly to make room
+            set(obj.hTable, 'Position', [0.05 0.03 0.9 0.40]);
+
+            % Refresh button
+            obj.hRefreshBtn = uicontrol('Parent', obj.hFigure, 'Style', 'pushbutton', ...
+                'String', 'Refresh', ...
+                'Units', 'normalized', 'Position', [0.55 0.48 0.07 0.03], ...
+                'Callback', @(~,~) obj.refreshFromFile());
+
+            % Auto-refresh checkbox
+            obj.hAutoCheck = uicontrol('Parent', obj.hFigure, 'Style', 'checkbox', ...
+                'String', 'Auto', ...
+                'Units', 'normalized', 'Position', [0.63 0.48 0.05 0.03], ...
+                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8], ...
+                'Value', 0, ...
+                'Callback', @(~,~) obj.onAutoCheckChanged());
+
+            % Interval label
+            uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
+                'String', 'every', ...
+                'Units', 'normalized', 'Position', [0.68 0.48 0.03 0.03], ...
+                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8]);
+
+            % Interval edit
+            obj.hIntervalEdit = uicontrol('Parent', obj.hFigure, 'Style', 'edit', ...
+                'String', '5', ...
+                'Units', 'normalized', 'Position', [0.71 0.48 0.04 0.03], ...
+                'Callback', @(~,~) obj.onAutoCheckChanged());
+
+            % Seconds label
+            uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
+                'String', 's', ...
+                'Units', 'normalized', 'Position', [0.75 0.48 0.015 0.03], ...
+                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8]);
+
+            % Status label
+            obj.hStatusLabel = uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
+                'String', sprintf('%d events  |  file: %s', numel(obj.Events), obj.SourceFile), ...
+                'Units', 'normalized', 'Position', [0.05 0.44 0.9 0.03], ...
+                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.6 0.6 0.6], ...
+                'HorizontalAlignment', 'left', 'FontSize', 8);
+
+            % Stop timer and clean up on figure close
+            set(obj.hFigure, 'DeleteFcn', @(~,~) obj.onFigureClose());
+        end
+
+        function onAutoCheckChanged(obj)
+            if get(obj.hAutoCheck, 'Value')
+                intervalStr = get(obj.hIntervalEdit, 'String');
+                interval = str2double(intervalStr);
+                if isnan(interval) || interval < 1
+                    interval = 5;
+                    set(obj.hIntervalEdit, 'String', '5');
+                end
+                obj.startAutoRefresh(interval);
+            else
+                obj.stopAutoRefresh();
+            end
+        end
+
+        function onAutoRefreshTick(obj)
+            try
+                if isvalid(obj) && ishandle(obj.hFigure)
+                    obj.refreshFromFile();
+                else
+                    obj.stopAutoRefresh();
+                end
+            catch
+                obj.stopAutoRefresh();
+            end
+        end
+
+        function onFigureClose(obj)
+            obj.stopAutoRefresh();
         end
 
         function onRowClick(obj, ~, evt)
