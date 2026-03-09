@@ -150,10 +150,25 @@ function test_toolbar()
     assert(sy == 30, sprintf('testSnapToNearest: y should be 30, got %g', sy));
     close(fp.hFigure);
 
+    % testRebind
+    fp1 = FastPlot();
+    fp1.addLine(1:100, rand(1,100));
+    fp1.render();
+    tb = FastPlotToolbar(fp1);
+    hToolbar1 = tb.hToolbar;
+    fig2 = FastPlotFigure(1, 1);
+    fig2.tile(1).addLine(1:50, rand(1,50));
+    fig2.renderAll();
+    tb.rebind(fig2);
+    assert(tb.hToolbar == hToolbar1, 'testRebind: toolbar handle should be reused');
+    assert(strcmp(tb.Mode, 'none'), 'testRebind: mode should reset to none');
+    close(fp1.hFigure);
+    close(fig2.hFigure);
+
     testToolbarRefreshButton();
     testToolbarLiveToggle();
 
-    fprintf('    All 16 toolbar tests passed.\n');
+    fprintf('    All 17 toolbar tests passed.\n');
 end
 
 function testToolbarRefreshButton()

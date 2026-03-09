@@ -205,6 +205,52 @@ classdef FastPlotToolbar < handle
             obj.refreshDataCursors();
         end
 
+        function rebind(obj, target)
+            %REBIND Switch toolbar to a new target without recreating HG objects.
+            %   tb.rebind(newTarget)
+            %
+            %   Cleans up any active mode, updates the target and figure
+            %   references, and syncs toggle button states.
+
+            % Clean up active interactive mode
+            if strcmp(obj.Mode, 'crosshair')
+                obj.cleanupCrosshair();
+            elseif strcmp(obj.Mode, 'cursor')
+                obj.cleanupCursor();
+            end
+            obj.Mode = 'none';
+            set(obj.hCursorBtn, 'State', 'off');
+            set(obj.hCrosshairBtn, 'State', 'off');
+
+            % Update target references
+            obj.Target = target;
+            if isa(target, 'FastPlotFigure')
+                obj.hFigure = target.hFigure;
+                obj.FastPlots = {};
+                for i = 1:numel(target.Tiles)
+                    if ~isempty(target.Tiles{i})
+                        obj.FastPlots{end+1} = target.Tiles{i};
+                    end
+                end
+            elseif isa(target, 'FastPlot')
+                obj.hFigure = target.hFigure;
+                obj.FastPlots = {target};
+            end
+
+            % Sync toggle states to new target
+            if target.LiveIsActive
+                set(obj.hLiveBtn, 'State', 'on');
+            else
+                set(obj.hLiveBtn, 'State', 'off');
+            end
+            if obj.MetadataEnabled
+                setappdata(obj.hFigure, 'FastPlotMetadataEnabled', true);
+            end
+
+            % Reinstall datacursor callback
+            obj.installDataCursorCallback();
+        end
+
         function label = buildCursorLabel(obj, fp, sx, sy, lineIdx)
             %BUILDCURSORLABEL Build the text label for data cursor.
             label = sprintf('(%.4g, %.4g)', sx, sy);
