@@ -45,6 +45,7 @@ classdef FastPlotToolbar < handle
         hLiveBtn      = []    % uitoggletool handle for live mode
         hRefreshBtn   = []    % uipushtool handle for refresh
         hMetadataBtn  = []    % uitoggletool handle for metadata
+        hThemeBtn     = []    % uipushtool handle for theme selector
     end
 
     methods (Access = public)
@@ -318,6 +319,11 @@ classdef FastPlotToolbar < handle
                 'TooltipString', 'Metadata', ...
                 'OnCallback',  @(s,e) obj.onMetadataOn(), ...
                 'OffCallback', @(s,e) obj.onMetadataOff());
+
+            obj.hThemeBtn = uipushtool(obj.hToolbar, ...
+                'CData', FastPlotToolbar.makeIcon('theme'), ...
+                'TooltipString', 'Change Theme', ...
+                'ClickedCallback', @(s,e) obj.onThemeClick());
         end
 
         function onRefresh(obj)
@@ -338,6 +344,137 @@ classdef FastPlotToolbar < handle
 
         function onMetadataOff(obj)
             obj.setMetadata(false);
+        end
+
+        function onThemeClick(obj)
+            %ONTHEMECLICK Open a context menu with available themes.
+            builtins = {'default', 'dark', 'light', 'industrial', 'scientific'};
+
+            % Get custom themes
+            cfg = getDefaults();
+            if isfield(cfg, 'CustomThemes')
+                customNames = fieldnames(cfg.CustomThemes);
+            else
+                customNames = {};
+            end
+
+            % Determine current theme name
+            currentTheme = obj.getCurrentThemeName();
+
+            % Build context menu
+            hMenu = uicontextmenu('Parent', obj.hFigure);
+
+            for i = 1:numel(builtins)
+                label = builtins{i};
+                if strcmpi(label, currentTheme)
+                    checked = 'on';
+                else
+                    checked = 'off';
+                end
+                uimenu(hMenu, 'Label', label, 'Checked', checked, ...
+                    'Callback', @(s,e) obj.applyThemeByName(label));
+            end
+
+            if ~isempty(customNames)
+                for i = 1:numel(customNames)
+                    label = customNames{i};
+                    if strcmpi(label, currentTheme)
+                        checked = 'on';
+                    else
+                        checked = 'off';
+                    end
+                    sep = 'off';
+                    if i == 1; sep = 'on'; end
+                    uimenu(hMenu, 'Label', label, 'Checked', checked, ...
+                        'Separator', sep, ...
+                        'Callback', @(s,e) obj.applyThemeByName(label));
+                end
+            end
+
+            % Position and show the menu near the mouse
+            figPos = get(obj.hFigure, 'CurrentPoint');
+            set(hMenu, 'Position', figPos, 'Visible', 'on');
+        end
+
+        function name = getCurrentThemeName(obj)
+            %GETCURRENTTHEMENAME Return the name of the current theme, or ''.
+            name = '';
+            target = obj.Target;
+            if isa(target, 'FastPlotFigure') || isa(target, 'FastPlot')
+                currentTheme = target.Theme;
+            else
+                return;
+            end
+            if isempty(currentTheme); return; end
+
+            % Check built-in presets
+            presets = {'default', 'dark', 'light', 'industrial', 'scientific'};
+            for i = 1:numel(presets)
+                ref = FastPlotTheme(presets{i});
+                if obj.themesEqual(currentTheme, ref)
+                    name = presets{i};
+                    return;
+                end
+            end
+
+            % Check custom themes
+            cfg = getDefaults();
+            if isfield(cfg, 'CustomThemes')
+                customs = fieldnames(cfg.CustomThemes);
+                for i = 1:numel(customs)
+                    ref = mergeTheme(FastPlotTheme('default'), cfg.CustomThemes.(customs{i}));
+                    if obj.themesEqual(currentTheme, ref)
+                        name = customs{i};
+                        return;
+                    end
+                end
+            end
+        end
+
+        function eq = themesEqual(~, a, b)
+            %THEMESEQUAL Compare two theme structs by key visual fields.
+            eq = false;
+            if ~isstruct(a) || ~isstruct(b); return; end
+            fields = {'Background', 'AxesColor', 'ForegroundColor', 'GridColor', ...
+                      'GridAlpha', 'GridStyle', 'FontName', 'FontSize'};
+            for i = 1:numel(fields)
+                f = fields{i};
+                if ~isfield(a, f) || ~isfield(b, f); return; end
+                if isnumeric(a.(f))
+                    if ~isequal(round(a.(f)*1000), round(b.(f)*1000)); return; end
+                else
+                    if ~strcmp(a.(f), b.(f)); return; end
+                end
+            end
+            eq = true;
+        end
+
+        function applyThemeByName(obj, name)
+            %APPLYTHEMEBYNAME Resolve theme by name and apply to hierarchy.
+            cfg = getDefaults();
+
+            % Resolve: check custom themes first, then built-in
+            if isfield(cfg, 'CustomThemes') && isfield(cfg.CustomThemes, name)
+                newTheme = mergeTheme(FastPlotTheme('default'), cfg.CustomThemes.(name));
+            else
+                newTheme = FastPlotTheme(name);
+            end
+
+            target = obj.Target;
+            if isa(target, 'FastPlotFigure')
+                % Check if the figure belongs to a dock (via AppData)
+                dock = getappdata(obj.hFigure, 'FastPlotDock');
+                if ~isempty(dock) && isa(dock, 'FastPlotDock')
+                    dock.Theme = newTheme;
+                    dock.reapplyTheme();
+                else
+                    target.Theme = newTheme;
+                    target.reapplyTheme();
+                end
+            elseif isa(target, 'FastPlot')
+                target.Theme = newTheme;
+                target.reapplyTheme();
+            end
         end
 
         function onCursorOn(obj)
@@ -779,6 +916,40 @@ classdef FastPlotToolbar < handle
                     icon(6, 9:10, :) = repmat(reshape(fg,1,1,3), 1, 2, 1);
                     icon(5, 10:11, :) = repmat(reshape(fg,1,1,3), 1, 2, 1);
                     icon(4, 11:12, :) = repmat(reshape(fg,1,1,3), 1, 2, 1);
+
+                case 'theme'
+                    % Paint palette shape
+                    cx = 8; cy = 8;
+                    for r = 3:13
+                        for c = 3:14
+                            dx = (c - cx) / 5.5;
+                            dy = (r - cy) / 5;
+                            d = dx^2 + dy^2;
+                            if d <= 1.0 && d >= 0.72
+                                icon(r, c, :) = reshape(fg, 1, 1, 3);
+                            end
+                        end
+                    end
+                    % Thumb hole
+                    for r = 10:12
+                        for c = 5:7
+                            dx = (c - 6); dy = (r - 11);
+                            if dx^2 + dy^2 <= 1.5
+                                icon(r, c, :) = reshape([0.94 0.94 0.94], 1, 1, 3);
+                            end
+                        end
+                    end
+                    % Paint dots (4 colors)
+                    colors = {[0.85 0.2 0.2], [0.2 0.6 0.2], [0.2 0.3 0.85], [0.9 0.7 0.1]};
+                    positions = {[5 8], [5 11], [7 12], [9 11]};
+                    for i = 1:4
+                        pr = positions{i}(1); pc = positions{i}(2);
+                        clr = colors{i};
+                        icon(pr, pc, :) = reshape(clr, 1, 1, 3);
+                        icon(pr, pc+1, :) = reshape(clr, 1, 1, 3);
+                        icon(pr+1, pc, :) = reshape(clr, 1, 1, 3);
+                        icon(pr+1, pc+1, :) = reshape(clr, 1, 1, 3);
+                    end
             end
         end
     end
