@@ -43,6 +43,7 @@ classdef FastPlotFigure < handle
         MetadataVars      = {}        % variable names to extract
         MetadataLineIndex = 1         % line index within the tile
         MetadataTileIndex = 1         % which tile to attach metadata to
+        ShowProgress     = true      % show console progress bar during renderAll
     end
 
     % ====================== INTERNAL STATE ===============================
@@ -190,13 +191,42 @@ classdef FastPlotFigure < handle
 
         function renderAll(obj)
             %RENDERALL Render all tiles that haven't been rendered yet.
+
+            % Collect tiles that need rendering
+            tilesToRender = [];
             for i = 1:numel(obj.Tiles)
                 if ~isempty(obj.Tiles{i}) && ~obj.Tiles{i}.IsRendered
-                    obj.Tiles{i}.DeferDraw = true;
-                    obj.Tiles{i}.render();
-                    obj.Tiles{i}.DeferDraw = false;
+                    tilesToRender(end+1) = i; %#ok<AGROW>
                 end
             end
+            nTiles = numel(tilesToRender);
+
+            % Create progress bar if enabled
+            if obj.ShowProgress && nTiles > 0
+                cpb = ConsoleProgressBar(2);
+                cpb.start();
+            else
+                cpb = [];
+            end
+
+            for k = 1:nTiles
+                i = tilesToRender(k);
+                if ~isempty(cpb)
+                    cpb.update(1, k-1, nTiles, 'Overall');
+                    cpb.update(2, 0, max(numel(obj.Tiles{i}.Lines), 1), sprintf('Tile %d', i));
+                end
+                obj.Tiles{i}.DeferDraw = true;
+                obj.Tiles{i}.render(cpb);
+                obj.Tiles{i}.DeferDraw = false;
+                if ~isempty(cpb)
+                    cpb.update(1, k, nTiles, 'Overall');
+                end
+            end
+
+            if ~isempty(cpb)
+                cpb.finish();
+            end
+
             set(obj.hFigure, 'Visible', 'on');
             drawnow;
         end

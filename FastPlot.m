@@ -510,7 +510,8 @@ classdef FastPlot < handle
             obj.addShaded(x, y, y2, shadedNV{:});
         end
 
-        function render(obj)
+        function render(obj, progressBar)
+            if nargin < 2; progressBar = []; end
             %RENDER Create the plot with all configured lines and annotations.
             %   fp.render()
             %
@@ -676,6 +677,9 @@ classdef FastPlot < handle
                 if obj.Verbose
                     fprintf('[FastPlot] render: line %d: %d pts -> %d displayed (pw=%d)\n', ...
                         i, numel(L.X), numel(xd), obj.PixelWidth);
+                end
+                if ~isempty(progressBar)
+                    progressBar.update(2, i, numel(obj.Lines), 'Lines');
                 end
             end
 
