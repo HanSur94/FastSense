@@ -28,7 +28,7 @@ Benchmarked on Apple M4 with GNU Octave 11, 10M data points:
 ## Quick Start
 
 ```matlab
-addpath('FastPlot');
+setup;  % adds libs/FastPlot and libs/SensorThreshold to path
 
 % Generate data
 x = linspace(0, 100, 1e7);
@@ -121,6 +121,44 @@ In MATLAB, you can also pass `datetime` objects directly — they are auto-conve
 dt = datetime(2024,1,1) + hours(0:999);
 fp.addLine(dt, y);  % XType set automatically
 ```
+
+### Sensor Thresholds
+
+Define sensors with condition-dependent thresholds that change based on machine state:
+
+```matlab
+setup;
+
+% Create a sensor with state-dependent thresholds
+s = Sensor('pressure', 'Name', 'Chamber Pressure');
+s.X = linspace(0, 100, 1e6);
+s.Y = randn(1, 1e6) * 10 + 50;
+
+% Add a state channel (e.g., machine mode)
+sc = StateChannel('machine');
+sc.X = [0 30 60 80];
+sc.Y = [0 1 2 1];     % idle=0, run=1, boost=2
+s.addStateChannel(sc);
+
+% Thresholds that depend on machine state
+s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
+s.addThresholdRule(struct('machine', 2), 55, 'Direction', 'upper', 'Label', 'Boost HI');
+s.resolve();
+
+% Plot with one call
+fp = FastPlot('Theme', 'dark');
+fp.addSensor(s);
+fp.render();
+```
+
+Use `SensorRegistry` for predefined sensor catalogs:
+
+```matlab
+SensorRegistry.list();
+s = SensorRegistry.get('pressure');
+sensors = SensorRegistry.getMultiple({'pressure', 'temperature'});
+```
+
 ## Installation
 
 ```bash
@@ -128,7 +166,8 @@ git clone https://github.com/HanSur94/FastPlot.git
 ```
 
 ```matlab
-addpath('FastPlot');
+cd FastPlot
+setup;
 ```
 
 No toolbox dependencies. Works out of the box with pure MATLAB code.
@@ -138,7 +177,7 @@ No toolbox dependencies. Works out of the box with pure MATLAB code.
 For maximum performance, compile the C MEX files with SIMD intrinsics:
 
 ```matlab
-cd FastPlot
+cd FastPlot/libs/FastPlot
 build_mex()
 ```
 
@@ -150,8 +189,9 @@ SIMD target: ARM NEON
 Compiling binary_search_mex.c ... OK
 Compiling minmax_core_mex.c ... OK
 Compiling lttb_core_mex.c ... OK
+Compiling compute_violations_mex.c ... OK
 
-3/3 MEX files compiled successfully.
+4/4 MEX files compiled successfully.
 ```
 
 Requires a C compiler (Xcode on macOS, GCC on Linux, MSVC on Windows). The build script auto-detects GCC for better optimization and falls back to the system compiler. Uses AVX2 on x86_64 and NEON on ARM64.
@@ -180,6 +220,12 @@ fp = FastPlot('Theme', struct('Background', [0 0 0]));
 | `Parent` | axes handle | Embed in existing axes (for subplots) |
 | `LinkGroup` | string | ID for synchronized zoom/pan across instances |
 | `Theme` | string or struct | Theme preset name or custom theme struct |
+| `XScale` | `'linear'` or `'log'` | X-axis scale (default `'linear'`) |
+| `YScale` | `'linear'` or `'log'` | Y-axis scale (default `'linear'`) |
+| `DefaultDownsampleMethod` | `'minmax'` or `'lttb'` | Default downsampling for all lines |
+| `DownsampleFactor` | integer | Points per pixel (default 2) |
+| `LiveInterval` | double | Polling interval in seconds for live mode |
+| `Verbose` | logical | Print diagnostics |
 
 ### `addLine(x, y, ...)` — Add a Data Line
 
@@ -275,6 +321,30 @@ fp.addMarker([50 150 250], [3 3 3], 'Marker', 'v', 'MarkerSize', 10, 'Color', [1
 | `Color` | RGB triplet | theme ThresholdColor | Marker color |
 | `Label` | string | `''` | Label for the markers |
 
+### `addSensor(sensor, ...)` — Add a Sensor Object
+
+```matlab
+fp.addSensor(s);
+fp.addSensor(s, 'ShowThresholds', true);
+fp.addSensor(s, 'ShowThresholds', false);
+```
+
+Adds a resolved `Sensor`'s data line and its resolved threshold step-function lines and violation markers in one call. The sensor must have `X` and `Y` set and `resolve()` called before adding.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sensor` | Sensor | (required) | A resolved Sensor object |
+| `ShowThresholds` | logical | `true` | Also plot resolved threshold lines |
+
+### `setScale(...)` — Change Axis Scale
+
+```matlab
+fp.setScale('YScale', 'log');
+fp.setScale('XScale', 'log', 'YScale', 'linear');
+```
+
+Can be called before or after `render()`. After render, updates the axes and re-downsamples all lines with scale-aware bucket spacing.
+
 ### `render()` — Render the Plot
 
 ```matlab
@@ -282,6 +352,17 @@ fp.render();
 ```
 
 Must be called after all lines and thresholds are added. Creates the figure, performs initial downsampling, installs zoom/pan listeners, and draws everything.
+
+### Live Mode
+
+```matlab
+fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
+fp.startLive('data.mat', updateFcn, 'Interval', 2, 'ViewMode', 'follow');
+fp.stopLive();
+fp.updateData(lineIdx, newX, newY);
+```
+
+Polls a `.mat` file for changes and auto-refreshes. View modes: `'preserve'` (keep current view), `'follow'` (scroll to latest), `'reset'` (show all).
 
 ### Properties (read-only after render)
 
@@ -296,6 +377,7 @@ Must be called after all lines and thresholds are added. Creates the figure, per
 ```matlab
 fig = FastPlotFigure(2, 2);
 fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Dashboard');
+fig = FastPlotFigure(rows, cols, 'ParentFigure', hFig);
 ```
 
 | Parameter | Type | Description |
@@ -303,6 +385,7 @@ fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Dashboard');
 | `rows` | integer | Number of tile rows |
 | `cols` | integer | Number of tile columns |
 | `Theme` | string or struct | Theme applied to all tiles |
+| `ParentFigure` | figure handle | Share an existing figure (for docking) |
 
 **Methods:**
 
@@ -340,6 +423,63 @@ dock = FastPlotDock('Theme', 'dark', 'Name', 'My Dock', 'Position', [50 50 1400 
 | `dock.recomputeLayout()` | Recalculate all tile positions (called automatically on resize) |
 
 Each tab's `FastPlotFigure` should be created with `'ParentFigure', dock.hFigure` to share the dock's window.
+
+### `Sensor(key, ...)` — Sensor Data Object
+
+```matlab
+s = Sensor('pressure');
+s = Sensor('pressure', 'Name', 'Chamber Pressure', 'ID', 101);
+s = Sensor('pressure', 'MatFile', 'data.mat', 'KeyName', 'p_chamber');
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | string | Unique sensor identifier |
+| `Name` | string | Human-readable display name |
+| `ID` | numeric | Sensor ID |
+| `MatFile` | string | Path to .mat file |
+| `KeyName` | string | Field name in .mat file (defaults to `key`) |
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `s.addStateChannel(sc)` | Attach a `StateChannel` to this sensor |
+| `s.addThresholdRule(cond, val, ...)` | Add a condition-dependent threshold rule |
+| `s.resolve()` | Precompute threshold time series, violations, and state bands |
+
+### `ThresholdRule(condition, value, ...)` — Condition-Dependent Threshold
+
+```matlab
+rule = ThresholdRule(struct('machine', 1), 50);
+rule = ThresholdRule(struct(), 50);  % empty condition = always active
+rule = ThresholdRule(struct('machine', 1), 50, 'Direction', 'upper', 'Label', 'HH');
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `condition` | struct | (required) | State keys/values that activate this rule |
+| `value` | scalar | (required) | Threshold value |
+| `Direction` | `'upper'` or `'lower'` | `'upper'` | Violation direction |
+| `Label` | string | `''` | Display label |
+| `Color` | RGB triplet | `[]` | Override color (empty = use theme) |
+
+### `StateChannel(key)` — Time-Varying State
+
+```matlab
+sc = StateChannel('machine');
+sc.X = [0 20 40 60];     % time points
+sc.Y = [0 1 2 1];        % state values at those times
+s.addStateChannel(sc);
+```
+
+### `SensorRegistry` — Predefined Sensor Catalog
+
+```matlab
+SensorRegistry.list();                            % print all available sensors
+s = SensorRegistry.get('pressure');               % retrieve by key
+sensors = SensorRegistry.getMultiple({'pressure', 'temperature'});
+```
 
 ### `FastPlotTheme(preset, ...)` — Theme Presets
 
@@ -438,17 +578,26 @@ fp.render();
 | `example_multi_sensor_linked.m` | 4-channel linked monitoring dashboard |
 | `example_uneven_sampling.m` | Variable-rate event-driven data |
 | `example_dashboard.m` | Tiled dashboard with bands, shading, and markers |
+| `example_dashboard_9tile.m` | 3x3 tiled dashboard layout |
 | `example_themes.m` | All 5 theme presets side by side |
 | `example_toolbar.m` | Interactive toolbar with data cursor, crosshair, and export |
-| `example_live.m` | Live mode dashboard with file-watching auto-refresh |
+| `example_datetime.m` | Datetime X-axis with auto-formatted tick labels |
 | `example_dock.m` | Two dashboards docked in a single tabbed window |
+| `example_sensor_registry.m` | SensorRegistry API: list, get, getMultiple |
+| `example_sensor_static.m` | Static threshold plotting with Sensor objects |
+| `example_sensor_threshold.m` | Condition-dependent thresholds |
+| `example_sensor_multi_state.m` | Multi-state sensor thresholds |
+| `example_sensor_dashboard.m` | Sensor data in a tiled dashboard |
+| `example_stress_test.m` | 5-tab dock with 26 sensors and 60M data points |
+| `example_visual_features.m` | Visual feature showcase |
 | `benchmark.m` | FastPlot vs plot() performance comparison |
-| `benchmark_dashboard.m` | FastPlotFigure vs subplot() dashboard creation |
 | `benchmark_zoom.m` | Per-frame zoom/pan latency analysis |
+| `benchmark_features.m` | Feature-specific performance benchmarks |
+| `benchmark_resolve.m` | Sensor.resolve() optimization benchmark |
 
 ### Interactive demo
 
-Opens all 10 example plots for interactive exploration. Zoom and pan on any figure as long as you want — press Enter to close all and exit:
+Opens all example plots for interactive exploration. Zoom and pan on any figure as long as you want — press Enter to close all and exit:
 
 ```matlab
 cd FastPlot/examples
@@ -467,24 +616,34 @@ run_all_examples
 ## Architecture
 
 ```
-FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, render)
-FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
-FastPlotDock.m                Tabbed container for multiple dashboards (addTab, selectTab, render)
-FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export, refresh, live)
-FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
-├── private/
-│   ├── binary_search.m       O(log n) find visible range (MEX dispatch)
-│   ├── minmax_downsample.m   NaN-aware MinMax downsampling (MEX dispatch)
-│   ├── lttb_downsample.m     NaN-aware LTTB downsampling (MEX dispatch)
-│   ├── compute_violations.m  Threshold violation detection
-│   └── mex_src/
-│       ├── simd_utils.h      SIMD abstraction (AVX2/SSE2/NEON/scalar)
-│       ├── binary_search_mex.c
-│       ├── minmax_core_mex.c
-│       └── lttb_core_mex.c
-├── build_mex.m               MEX compilation script
-├── tests/                    22 test suites
-└── examples/                 18 demos + benchmarks
+setup.m                               Path setup (adds both libraries)
+libs/
+├── FastPlot/
+│   ├── FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, addSensor, render)
+│   ├── FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
+│   ├── FastPlotDock.m                Tabbed container for multiple dashboards (addTab, selectTab, render)
+│   ├── FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export, refresh, live)
+│   ├── FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
+│   ├── build_mex.m                   MEX compilation script
+│   └── private/
+│       ├── binary_search.m           O(log n) find visible range (MEX dispatch)
+│       ├── minmax_downsample.m       NaN-aware MinMax downsampling (MEX dispatch)
+│       ├── lttb_downsample.m         NaN-aware LTTB downsampling (MEX dispatch)
+│       ├── compute_violations.m      Threshold violation detection (MEX dispatch)
+│       └── mex_src/
+│           ├── simd_utils.h          SIMD abstraction (AVX2/SSE2/NEON/scalar)
+│           ├── binary_search_mex.c
+│           ├── minmax_core_mex.c
+│           ├── lttb_core_mex.c
+│           └── compute_violations_mex.c
+├── SensorThreshold/
+│   ├── Sensor.m                      Sensor data + state channels + threshold rules
+│   ├── SensorRegistry.m              Catalog of predefined sensors
+│   ├── ThresholdRule.m               Condition-value threshold pairs
+│   ├── StateChannel.m                Time-varying state (machine mode, etc.)
+│   └── private/                      Segment-based resolution helpers
+├── tests/                            30 test suites
+└── examples/                         28 demos + benchmarks
 ```
 
 **Zoom/pan pipeline:**
@@ -503,7 +662,8 @@ From the MATLAB or Octave command window:
 
 ```matlab
 cd FastPlot
-addpath('tests'); addpath('private');
+setup;
+addpath('tests');
 run_all_tests();
 ```
 
@@ -511,24 +671,37 @@ From the terminal (Octave):
 
 ```bash
 cd FastPlot
-octave --no-gui --eval "addpath('tests'); addpath('private'); run_all_tests();"
+octave --no-gui --eval "setup; addpath('tests'); run_all_tests();"
 ```
 
 ```
-Running test_add_line...            PASSED
-Running test_add_threshold...       PASSED
-Running test_binary_search...       PASSED
-Running test_compute_violations...  PASSED
-Running test_linked_axes...         PASSED
-Running test_lttb_downsample...     PASSED
-Running test_mex_edge_cases...      PASSED
-Running test_mex_parity...          PASSED
-Running test_minmax_downsample...   PASSED
-Running test_multi_threshold...     PASSED
-Running test_render...              PASSED
-Running test_zoom_pan...            PASSED
+Running test_add_line...              PASSED
+Running test_add_threshold...         PASSED
+Running test_add_band...              PASSED
+Running test_add_marker...            PASSED
+Running test_add_shaded...            PASSED
+Running test_add_sensor...            PASSED
+Running test_binary_search...         PASSED
+Running test_compute_violations...    PASSED
+Running test_datetime...              PASSED
+Running test_fastplot_theme...        PASSED
+Running test_figure_layout...         PASSED
+Running test_linked_axes...           PASSED
+Running test_lttb_downsample...       PASSED
+Running test_mex_edge_cases...        PASSED
+Running test_mex_parity...            PASSED
+Running test_minmax_downsample...     PASSED
+Running test_multi_threshold...       PASSED
+Running test_render...                PASSED
+Running test_sensor...                PASSED
+Running test_sensor_registry...       PASSED
+Running test_sensor_resolve...        PASSED
+Running test_state_channel...         PASSED
+Running test_threshold_rule...        PASSED
+Running test_toolbar...               PASSED
+Running test_zoom_pan...              PASSED
 
-=== Results: 18/18 passed, 0 failed ===
+=== Results: 30/30 passed, 0 failed ===
 ```
 
 ### Single test
@@ -537,23 +710,22 @@ Run any individual test file directly:
 
 ```matlab
 cd FastPlot
-addpath('tests'); addpath('private');
+setup;
+addpath('tests');
 test_zoom_pan;
 ```
 
 From the terminal (Octave):
 
 ```bash
-octave --no-gui --eval "addpath('tests'); addpath('private'); test_zoom_pan;"
+octave --no-gui --eval "setup; addpath('tests'); test_zoom_pan;"
 ```
-
-Available test files: `test_add_line`, `test_add_threshold`, `test_add_band`, `test_add_marker`, `test_add_shaded`, `test_binary_search`, `test_compute_violations`, `test_dock`, `test_fastplot_theme`, `test_figure_layout`, `test_linked_axes`, `test_live`, `test_lttb_downsample`, `test_mex_edge_cases`, `test_mex_parity`, `test_minmax_downsample`, `test_multi_threshold`, `test_render`, `test_theme`, `test_toolbar`, `test_zoom_pan`.
 
 ## Benchmarks
 
 ### Render + zoom + memory benchmark
 
-Compares FastPlot vs standard `plot()` across data sizes from 10K to 50M points:
+Compares FastPlot vs standard `plot()` across data sizes from 10K to 100M points:
 
 ```matlab
 cd FastPlot/examples
@@ -564,7 +736,7 @@ From the terminal (Octave):
 
 ```bash
 cd FastPlot
-octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark;"
+octave --no-gui --eval "setup; addpath('examples'); benchmark;"
 ```
 
 ### Zoom/pan latency benchmark
@@ -580,23 +752,7 @@ From the terminal (Octave):
 
 ```bash
 cd FastPlot
-octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark_zoom;"
-```
-
-### Dashboard creation benchmark
-
-Compares `FastPlotFigure` vs standard `subplot()` for 1x1, 2x2, and 3x3 layouts:
-
-```matlab
-cd FastPlot/examples
-benchmark_dashboard;
-```
-
-From the terminal (Octave):
-
-```bash
-cd FastPlot
-octave --no-gui --eval "addpath('.'); addpath('private'); addpath('examples'); benchmark_dashboard;"
+octave --no-gui --eval "setup; addpath('examples'); benchmark_zoom;"
 ```
 
 Benchmarked on Apple M4 with GNU Octave 11, 10M points per tile:
