@@ -7,8 +7,8 @@
 %   4. Close the figure or press Ctrl+C to stop
 
 addpath(fileparts(mfilename('fullpath')));  % examples/ dir (for updateDashboard.m)
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
 
 dataFile = fullfile(tempdir, 'fastplot_live_data.mat');
 

@@ -4,8 +4,8 @@
 % showing how the plot adapts to new data.
 % Output: demo_live_step0.png through demo_live_step5.png
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
 
 outDir = fullfile(fileparts(mfilename('fullpath')), '..', 'demo_output');
 if ~exist(outDir, 'dir'); mkdir(outDir); end

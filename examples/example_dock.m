@@ -2,7 +2,7 @@
 % Five dashboards docked in a single window with tab switching.
 % All tabs use datetime X axes (auto-detected by FastPlot).
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 % Suppress MATLAB Variable Editor warnings during datetime/linspace
 wState = warning('off', 'all');

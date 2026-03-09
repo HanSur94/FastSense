@@ -10,9 +10,9 @@ function add_private_path()
 %   Tests that only use class methods (FastPlot, etc.) work on all versions.
 
     projRoot = fullfile(fileparts(mfilename('fullpath')), '..');
-    addpath(projRoot);
+    run(fullfile(projRoot, 'setup.m'));
 
-    privDir = fullfile(projRoot, 'private');
+    privDir = fullfile(projRoot, 'libs', 'FastPlot', 'private');
     w = warning('off', 'all');
     addpath(privDir);
     warning(w);

@@ -9,7 +9,7 @@
 %   >> cd /path/to/FastPlot
 %   >> run examples/benchmark_20_dashboards.m
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 nDashboards = 20;
 nPointsPerTile = 10000000;

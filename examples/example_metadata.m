@@ -3,8 +3,8 @@
 %   Shows how to attach metadata to a line and view it
 %   in the data cursor tooltip.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
 
 % Generate sample time series
 x = linspace(0, 100, 10000);

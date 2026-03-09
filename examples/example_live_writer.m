@@ -5,7 +5,7 @@
 %   2. Run this script: octave --no-gui examples/example_live_writer.m
 %   3. Watch the dashboard update as this script writes new data
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 dataFile = fullfile(tempdir, 'fastplot_live_data.mat');
 nUpdates = 20;

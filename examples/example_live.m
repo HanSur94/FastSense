@@ -8,7 +8,7 @@
 %   >> cd /path/to/FastPlot
 %   >> run examples/example_live.m
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 fprintf('\n=== FastPlot Live Mode Demo (Large Data) ===\n\n');
 

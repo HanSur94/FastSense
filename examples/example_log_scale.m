@@ -3,9 +3,9 @@
 
 fp = mfilename('fullpath');
 if ~isempty(fp)
-    addpath(fullfile(fileparts(fp), '..'));
+    run(fullfile(fileparts(fp), '..', 'setup.m'));
 else
-    addpath(fullfile(pwd, '..'));
+    run(fullfile(pwd, '..', 'setup.m'));
 end
 
 %% 1. Log Y — Frequency spectrum (most common use case)

@@ -3,6 +3,11 @@ function results = run_all_tests()
 %   Finds all test_*.m files in the tests directory and runs them.
 
     test_dir = fileparts(mfilename('fullpath'));
+
+    % Ensure libs are on path
+    repo_root = fileparts(test_dir);
+    run(fullfile(repo_root, 'setup.m'));
+
     files = dir(fullfile(test_dir, 'test_*.m'));
 
     total = 0;

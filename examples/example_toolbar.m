@@ -2,7 +2,7 @@
 % Demonstrates the interactive toolbar: data cursor, crosshair,
 % grid toggle, legend toggle, autoscale Y, and PNG export.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 n = 1e6;
 x = linspace(0, 100, n);

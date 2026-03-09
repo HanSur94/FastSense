@@ -10,8 +10,8 @@
 %   6. FastPlotFigure tiled dashboard overhead
 %   7. Combined: all features together vs baseline
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
 
 sizes  = [1e4, 1e5, 1e6, 5e6, 10e6];
 labels = {'10K', '100K', '1M', '5M', '10M'};

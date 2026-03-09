@@ -3,7 +3,7 @@
 % then uses FastPlot.distFig() to tile them neatly on screen.
 % distFig is bundled in vendor/ (BSD license, by Anders Simonsen).
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 fprintf('distFig example: creating 4 figure windows...\n');
 tic;

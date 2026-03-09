@@ -1,7 +1,7 @@
 %% FastPlot Unevenly Sampled Data — Event-driven acquisition
 % Demonstrates that FastPlot handles non-uniform X spacing correctly
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 % Simulate event-driven data: high rate during events, sparse between
 fprintf('Generating unevenly sampled data...\n');

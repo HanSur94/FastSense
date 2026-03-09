@@ -1,7 +1,7 @@
 %% FastPlot Dashboard — Tiled layout with themes and visual enhancements
 % Demonstrates FastPlotFigure, theming, bands, shading, and markers
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 n = 1e6;
 x = linspace(0, 300, n);

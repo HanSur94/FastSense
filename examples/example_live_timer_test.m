@@ -8,7 +8,7 @@
 %   >> cd /path/to/FastPlot
 %   >> run examples/example_live_timer_test.m
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
 
 fprintf('\n=== Dashboard Live Timer Test ===\n\n');
 

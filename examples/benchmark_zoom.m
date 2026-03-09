@@ -2,8 +2,8 @@
 % Measures per-frame latency for individual zoom and pan operations.
 % Forces GPU flush with getframe() to get true frame delivery time.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
+run(fullfile(fileparts(mfilename('fullpath')), '..', 'setup.m'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
 
 sizes = [1e5, 1e6, 10e6, 50e6];
 labels = {'100K', '1M', '10M', '50M'};
