@@ -1,8 +1,55 @@
 function theme = FastPlotTheme(preset, varargin)
 %FASTPLOTTHEME Return a theme struct for FastPlot styling.
-%   theme = FastPlotTheme()              — returns 'default' preset
-%   theme = FastPlotTheme('dark')        — returns named preset
-%   theme = FastPlotTheme('dark', 'FontSize', 14) — preset with overrides
+%   theme = FASTPLOTTHEME() returns the 'default' theme preset.
+%
+%   theme = FASTPLOTTHEME(preset) returns the named preset. Valid preset
+%   names are 'default', 'dark', 'light', 'industrial', and 'scientific'.
+%
+%   theme = FASTPLOTTHEME(preset, Name, Value) returns the named preset
+%   with individual fields overridden by the supplied name-value pairs.
+%
+%   theme = FASTPLOTTHEME(S) where S is a struct uses S as a set of
+%   overrides on top of the 'default' preset. Missing fields are filled
+%   from 'default'.
+%
+%   Inputs:
+%     preset   — char or struct; a preset name ('default', 'dark',
+%                'light', 'industrial', 'scientific') or a partial struct
+%                of theme fields to merge onto the default (optional,
+%                default: 'default')
+%     varargin — name-value pairs of theme fields to override after
+%                the preset is loaded (optional)
+%
+%   Output:
+%     theme — struct with the following fields:
+%       Background      — 1x3 RGB; figure background color
+%       AxesColor       — 1x3 RGB; axes background color
+%       ForegroundColor — 1x3 RGB; text and tick color
+%       GridColor       — 1x3 RGB; grid line color
+%       GridAlpha       — double in [0,1]; grid transparency
+%       GridStyle       — char; grid line style ('-', ':', '--', 'none')
+%       FontName        — char; font family name
+%       FontSize        — double; axes label font size in points
+%       TitleFontSize   — double; title font size in points
+%       LineWidth       — double; default line width in points
+%       LineColorOrder  — Nx3 RGB matrix or palette name ('vibrant',
+%                         'muted', 'colorblind'); resolved to Nx3 before
+%                         return
+%       ThresholdColor  — 1x3 RGB; color for threshold lines
+%       ThresholdStyle  — char; threshold line style
+%       ViolationMarker — char; marker symbol for violation points
+%       ViolationSize   — double; marker size for violations in points
+%       BandAlpha       — double in [0,1]; transparency of shaded bands
+%
+%   Example:
+%     theme = FastPlotTheme('dark', 'FontSize', 14, 'LineWidth', 1.5);
+%
+%   Example — struct override:
+%     overrides.FontSize = 14;
+%     overrides.GridAlpha = 0.5;
+%     theme = FastPlotTheme(overrides);
+%
+%   See also FastPlotDefaults, getDefaults.
 
     if nargin == 0
         preset = 'default';
@@ -27,6 +74,18 @@ function theme = FastPlotTheme(preset, varargin)
 end
 
 function t = getPreset(name)
+%GETPRESET Return a complete theme struct for the named preset.
+%   t = getPreset(name) returns a struct containing all theme fields
+%   populated with values appropriate for the requested visual style.
+%
+%   Input:
+%     name — char; one of 'default', 'dark', 'light', 'industrial',
+%            'scientific' (case-insensitive)
+%
+%   Output:
+%     t — struct; fully populated theme (see FastPlotTheme for fields)
+%
+%   Throws FastPlotTheme:unknownPreset if the name is not recognized.
     switch lower(name)
         case 'default'
             t = struct( ...
@@ -130,6 +189,19 @@ function t = getPreset(name)
 end
 
 function colors = getPalette(name)
+%GETPALETTE Return an Nx3 RGB color matrix for the named palette.
+%   colors = getPalette(name) returns an 8x3 matrix of RGB triplets
+%   for the requested color palette.
+%
+%   Input:
+%     name — char; one of 'vibrant', 'muted', 'colorblind'
+%            (case-insensitive). The 'colorblind' palette follows the
+%            Wong (2011) colorblind-safe palette.
+%
+%   Output:
+%     colors — 8x3 double; each row is an [R G B] triplet in [0,1]
+%
+%   Throws FastPlotTheme:unknownPalette if the name is not recognized.
     switch lower(name)
         case 'vibrant'
             colors = [ ...
@@ -172,6 +244,18 @@ function colors = getPalette(name)
 end
 
 function result = mergeTheme(base, overrides)
+%MERGETHEME Merge override fields onto a base theme struct.
+%   result = mergeTheme(base, overrides) copies every field from
+%   overrides into base, replacing existing values or adding new ones.
+%   Fields present in base but absent from overrides are preserved.
+%
+%   Inputs:
+%     base      — struct; complete theme to use as the starting point
+%     overrides — struct; partial theme whose fields take precedence
+%
+%   Output:
+%     result — struct; merged theme with the same field set as base
+%              plus any additional fields from overrides
     result = base;
     fnames = fieldnames(overrides);
     for i = 1:numel(fnames)

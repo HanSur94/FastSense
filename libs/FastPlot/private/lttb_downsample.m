@@ -1,41 +1,48 @@
 function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
 %LTTB_DOWNSAMPLE Largest Triangle Three Buckets downsampling.
-%   [xOut, yOut] = lttb_downsample(x, y, numOut)
-%   [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
+%   [xOut, yOut] = LTTB_DOWNSAMPLE(x, y, numOut) reduces a time series to
+%   numOut points while preserving the visual shape of the signal. For each
+%   bucket, the algorithm selects the point that maximizes the triangle
+%   area formed with the previously selected point and the centroid of the
+%   next bucket, producing perceptually accurate downsampled plots.
 %
-%   Reduces a time series to numOut points while preserving visual shape.
-%   For each bucket, selects the point that maximizes the triangle area
-%   formed with the previously selected point and the average of the next
-%   bucket — producing perceptually accurate downsampled plots.
+%   [xOut, yOut] = LTTB_DOWNSAMPLE(x, y, numOut, logX, logY) uses
+%   log-transformed coordinates for the area computation when logX or logY
+%   is true, yielding visually accurate point selection on logarithmic
+%   axes. Output values remain in original (linear) space.
 %
-%   When logX or logY is true, area computation uses log-transformed
-%   coordinates for visually accurate selection on log axes.
+%   This function is a private helper for FastPlot.
+%
+%   Inputs:
+%     x      — sorted numeric row vector of X coordinates (ascending)
+%     y      — numeric row vector of Y values (same length as x)
+%     numOut — positive integer, desired number of output points
+%     logX   — (optional) logical scalar. When true, area computation uses
+%              log10(X). Default: false.
+%     logY   — (optional) logical scalar. When true, area computation uses
+%              log10(Y). Default: false.
+%
+%   Outputs:
+%     xOut — downsampled X values (row vector, length <= numOut)
+%     yOut — downsampled Y values (row vector, same length as xOut)
 %
 %   NaN handling:
 %     Splits data at NaN boundaries, allocates output points proportional
-%     to segment length, downsamples each segment independently, and
-%     rejoins with NaN separators.
+%     to each segment's length (minimum 2 per segment), downsamples each
+%     segment independently via lttb_core, and rejoins with NaN separators
+%     to preserve gap rendering in plots.
 %
-%   Inputs:
-%     x      — sorted numeric row vector of timestamps
-%     y      — numeric row vector of values (same length as x)
-%     numOut — desired number of output points
-%     logX   — (optional) logical, use log10(X) for area computation
-%     logY   — (optional) logical, use log10(Y) for area computation
-%
-%   Outputs:
-%     xOut — downsampled X values (row vector)
-%     yOut — downsampled Y values (row vector)
-%
-%   If n <= numOut, returns data unchanged.
-%   Uses MEX (lttb_core_mex) when available for speed (linear mode only).
+%   If n <= numOut, returns data unchanged (no downsampling needed).
+%   Uses MEX (lttb_core_mex) when compiled and available, for linear mode
+%   only (logX == false && logY == false).
 %
 %   Reference:
 %     Steinarsson, S. (2013). "Downsampling Time Series for Visual
 %     Representation." MSc thesis, University of Iceland.
 %
-%   See also minmax_downsample, binary_search.
+%   See also minmax_downsample, binary_search, lttb_core_mex.
 
+    % Check once whether the compiled MEX is available on this machine
     persistent useMex;
     if isempty(useMex)
         useMex = (exist('lttb_core_mex', 'file') == 3);
@@ -44,14 +51,14 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
     n = numel(y);
     isNan = isnan(y);
 
-    % All NaN
+    % All-NaN data: nothing meaningful to downsample
     if all(isNan)
         xOut = x;
         yOut = y;
         return;
     end
 
-    % Passthrough if too few
+    % Passthrough: data already within budget
     if n <= numOut
         xOut = x;
         yOut = y;
@@ -61,7 +68,8 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
     if nargin < 4; logX = false; end
     if nargin < 5; logY = false; end
 
-    % Find contiguous non-NaN segments
+    % ---- Detect contiguous non-NaN segments ----
+    % Sentinel-padded diff trick (same approach as minmax_downsample)
     nanMask = [true, isNan, true];
     edges = diff(nanMask);
     segStarts = find(edges == -1);
@@ -70,10 +78,10 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
     segLens = segEnds - segStarts + 1;
     totalValid = sum(segLens);
 
-    % Distribute output points proportionally
+    % Distribute output points proportionally (min 2 per segment for LTTB)
     segOuts = max(2, round(numOut * segLens / totalValid));
 
-    % Pre-allocate
+    % Pre-allocate output with NaN fill (NaN separators come for free)
     maxOut = sum(segOuts) + (numSegs - 1);
     xOut = NaN(1, maxOut);
     yOut = NaN(1, maxOut);
@@ -88,13 +96,17 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
         nout = segOuts(s);
 
         if segLen <= nout
+            % Segment is small enough — copy directly
             xOut(pos+1:pos+segLen) = segX;
             yOut(pos+1:pos+segLen) = segY;
             pos = pos + segLen;
         else
+            % Downsample this segment
             if useMex && ~logX && ~logY
+                % MEX path: fastest, linear mode only
                 [sx, sy] = lttb_core_mex(segX, segY, nout);
             else
+                % MATLAB path: supports log-transformed area computation
                 [sx, sy] = lttb_core(segX, segY, nout, logX, logY);
             end
             nPts = numel(sx);
@@ -103,12 +115,13 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
             pos = pos + nPts;
         end
 
+        % Leave a NaN gap between segments (pre-allocated as NaN)
         if s < numSegs
             pos = pos + 1;
-            % NaN separator already in pre-allocated array
         end
     end
 
+    % Trim pre-allocated tail
     xOut = xOut(1:pos);
     yOut = yOut(1:pos);
 end
@@ -116,21 +129,51 @@ end
 
 function [xOut, yOut] = lttb_core(x, y, numOut, logX, logY)
 %LTTB_CORE Core LTTB algorithm on a contiguous (no NaN) segment.
-%   [xOut, yOut] = lttb_core(x, y, numOut, logX, logY)
+%   [xOut, yOut] = LTTB_CORE(x, y, numOut, logX, logY) performs the
+%   Largest Triangle Three Buckets point selection on a NaN-free data
+%   segment. The first and last points are always kept. For each
+%   intermediate bucket, the point maximizing the triangle area with the
+%   previously selected point and the next bucket's centroid is chosen.
 %
-%   Always keeps first and last points. For each intermediate bucket,
-%   selects the point maximizing triangle area with the previous selected
-%   point and the next bucket's centroid. Uses vectorized area computation.
-%   When logX/logY are true, area computation uses log-transformed
-%   coordinates but output values remain in original space.
+%   This function is a local helper for lttb_downsample.
+%
+%   Inputs:
+%     x      — sorted numeric row vector of X coordinates (no NaN)
+%     y      — numeric row vector of Y values (no NaN, same length as x)
+%     numOut — positive integer >= 2, desired number of output points
+%     logX   — (optional) logical. Use log10(X) for area computation.
+%              Default: false.
+%     logY   — (optional) logical. Use log10(Y) for area computation.
+%              Default: false.
+%
+%   Outputs:
+%     xOut — 1-by-numOut row vector of selected X values
+%     yOut — 1-by-numOut row vector of selected Y values
+%
+%   Algorithm:
+%     1. Divide the N-2 interior points into (numOut-2) equal-sized
+%        buckets (fractional boundaries handled via floor).
+%     2. For bucket i, compute the centroid (avgX, avgY) of the *next*
+%        bucket (look-ahead).
+%     3. For each candidate point in bucket i, compute the triangle area
+%        formed by (previousSelected, candidate, centroid) using the
+%        cross-product formula:
+%          area = |((px - ax)*(cy - py) - (px - cx)*(ay - py))| / 2
+%        The factor of 2 is omitted since only relative magnitude matters.
+%     4. Select the candidate with the largest area.
+%     5. When logX/logY are true, area computation uses log-transformed
+%        coordinates but output values remain in original space.
+%
+%   See also lttb_downsample, lttb_core_mex.
+
     if nargin < 4; logX = false; end
     if nargin < 5; logY = false; end
 
     n = numel(x);
 
-    % For area computation, use log-transformed coordinates
+    % Build log-transformed coordinate arrays for area computation
     if logX
-        xArea = log10(max(x, eps));
+        xArea = log10(max(x, eps));  % clamp to eps to avoid log10(0)
     else
         xArea = x;
     end
@@ -140,6 +183,7 @@ function [xOut, yOut] = lttb_core(x, y, numOut, logX, logY)
         yArea = y;
     end
 
+    % Pre-allocate output; first and last points are always kept
     xOut = zeros(1, numOut);
     yOut = zeros(1, numOut);
     xOut(1) = x(1);
@@ -147,30 +191,39 @@ function [xOut, yOut] = lttb_core(x, y, numOut, logX, logY)
     xOut(numOut) = x(n);
     yOut(numOut) = y(n);
 
+    % Fractional bucket size for the (numOut-2) interior buckets
     bucketSize = (n - 2) / (numOut - 2);
 
     prevSelectedIdx = 1;
 
     for i = 2:numOut-1
+        % Current bucket range (indices into x/y)
         bStart = floor((i-2) * bucketSize) + 2;
         bEnd   = min(floor((i-1) * bucketSize) + 1, n-1);
 
+        % Next bucket range (for centroid / look-ahead)
         nStart = floor((i-1) * bucketSize) + 2;
         nEnd   = min(floor(i * bucketSize) + 1, n-1);
         if nEnd < nStart
             nEnd = nStart;
         end
+
+        % Centroid of the next bucket (the "third point" of the triangle)
         avgX = mean(xArea(nStart:nEnd));
         avgY = mean(yArea(nStart:nEnd));
 
-        % Vectorized triangle area for all candidates in bucket
+        % Vectorized triangle area for all candidates in the current bucket
         pX = xArea(prevSelectedIdx);
         pY = yArea(prevSelectedIdx);
         candidates = bStart:bEnd;
-        areas = abs((pX - avgX) .* (yArea(candidates) - pY) - (pX - xArea(candidates)) .* (avgY - pY));
+        areas = abs((pX - avgX) .* (yArea(candidates) - pY) ...
+                   - (pX - xArea(candidates)) .* (avgY - pY));
+
+        % Pick the candidate with the largest triangle area
         [~, bestLocal] = max(areas);
         bestIdx = candidates(bestLocal);
 
+        % Store the selected point in original (non-log) coordinates
         xOut(i) = x(bestIdx);
         yOut(i) = y(bestIdx);
         prevSelectedIdx = bestIdx;

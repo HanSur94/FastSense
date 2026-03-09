@@ -1,14 +1,36 @@
 function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol, segBounds, dataEnd)
 %MERGERESOLVEDBYLABEL Merge resolved thresholds sharing the same Label+Direction.
-%   Rules covering different state conditions with the same label produce
-%   separate entries during resolve(). This function:
-%     1. Overlays their values (fills NaN gaps between condition groups)
-%     2. Converts to step-function format for correct rendering
-%     3. Merges corresponding violation arrays
+%   [mergedTh, mergedViol] = MERGERESOLVEDBYLABEL(resolvedTh, resolvedViol, segBounds, dataEnd)
+%   consolidates threshold and violation entries that were produced by
+%   different condition groups during Sensor.resolve() but logically
+%   represent the same threshold line (same Label and Direction).
 %
-%   Step-function format: duplicate X at boundaries for sharp steps,
-%   NaN separators between non-contiguous active segments.
+%   The merge involves three operations per group:
+%     1. Overlay Y values: fill NaN gaps in one entry with non-NaN values
+%        from sibling entries, producing a single composite Y array that
+%        covers all active segments for the shared label.
+%     2. Convert to step-function format via toStepFunction(), which
+%        duplicates X at boundaries for sharp vertical steps and inserts
+%        NaN separators between non-contiguous active regions.
+%     3. Concatenate and time-sort the violation X/Y arrays from all
+%        sibling entries.
+%
+%   Unlabeled entries (empty Label) are never merged; each receives a
+%   unique synthetic key to keep them separate.
+%
+%   Inputs:
+%     resolvedTh   — struct array of threshold entries from resolve()
+%     resolvedViol — struct array of violation entries (same length)
+%     segBounds    — 1xS double, segment boundary timestamps
+%     dataEnd      — scalar double, timestamp of the last sensor sample
+%
+%   Outputs:
+%     mergedTh   — struct array, one entry per unique Label+Direction
+%     mergedViol — struct array, companion violation data (same length)
+%
+%   See also Sensor.resolve, appendResults, buildThresholdEntry.
 
+    % Pass through when there is nothing to merge
     if isempty(resolvedTh)
         mergedTh = resolvedTh;
         mergedViol = resolvedViol;
@@ -17,18 +39,20 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
 
     nEntries = numel(resolvedTh);
 
-    % Build merge keys from Label+Direction
+    % --- Build merge keys from Label + Direction ---
+    % Labeled entries with the same label and direction share a key;
+    % unlabeled entries get unique synthetic keys to prevent merging.
     mergeKeys = cell(1, nEntries);
     for i = 1:nEntries
         lbl = resolvedTh(i).Label;
         if isempty(lbl)
-            % Don't merge unlabeled entries — give unique key
             mergeKeys{i} = sprintf('__unlabeled_%d__', i);
         else
             mergeKeys{i} = [lbl '|' resolvedTh(i).Direction];
         end
     end
 
+    % Group entries by their merge key (stable preserves original order)
     [uniqueKeys, ~, groupIdx] = unique(mergeKeys, 'stable');
     nGroups = numel(uniqueKeys);
 
@@ -38,23 +62,25 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
     for g = 1:nGroups
         members = find(groupIdx == g);
 
-        % Start with first member's Y array
+        % --- Overlay Y arrays from all members ---
+        % Start with the first member as the base; fill its NaN positions
+        % with non-NaN values contributed by subsequent members.
         base = resolvedTh(members(1));
         mergedY = base.Y;
 
-        % Overlay non-NaN values from other members
         for m = 2:numel(members)
             otherY = resolvedTh(members(m)).Y;
+            % Only fill positions that are still NaN in the accumulator
             fill = isnan(mergedY) & ~isnan(otherY);
             mergedY(fill) = otherY(fill);
         end
 
-        % Convert to step-function format
+        % --- Convert composite Y to step-function format ---
         [stepX, stepY] = toStepFunction(segBounds, mergedY, dataEnd);
         base.X = stepX;
         base.Y = stepY;
 
-        % Merge violation arrays from all members
+        % --- Merge violation arrays from all members ---
         allViolX = [];
         allViolY = [];
         for m = 1:numel(members)
@@ -62,6 +88,7 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
             allViolX = [allViolX, v.X];
             allViolY = [allViolY, v.Y];
         end
+        % Sort merged violations chronologically
         if numel(allViolX) > 1
             [allViolX, sortIdx] = sort(allViolX);
             allViolY = allViolY(sortIdx);
@@ -77,18 +104,42 @@ end
 
 function [stepX, stepY] = toStepFunction(segBounds, values, dataEnd)
 %TOSTEPFUNCTION Convert segment boundary values to step-function arrays.
-%   Each segment becomes a horizontal line [segStart, segEnd] at its value.
-%   Contiguous segments with different values create vertical steps at the
-%   shared boundary. Non-contiguous active segments get NaN separators.
+%   [stepX, stepY] = TOSTEPFUNCTION(segBounds, values, dataEnd) transforms
+%   a segment-boundary representation (one value per boundary) into a
+%   piecewise-constant plot-ready representation where each segment is a
+%   horizontal line from segStart to segEnd.
+%
+%   Rendering rules:
+%     - Active segments (non-NaN value) emit two X/Y points:
+%       [segStart, value] and [segEnd, value].
+%     - Contiguous active segments share a boundary; the shared X is
+%       duplicated to produce a vertical step between differing values.
+%     - Non-contiguous active segments (separated by NaN gaps) are joined
+%       by NaN separators so that the plot line breaks between them.
+%
+%   Inputs:
+%     segBounds — 1xS double, segment boundary timestamps
+%     values    — 1xS double, threshold value at each boundary (NaN =
+%                 inactive)
+%     dataEnd   — scalar double, end-of-data timestamp (used as the right
+%                 edge of the last segment)
+%
+%   Outputs:
+%     stepX — 1xP double, X coordinates for plotting
+%     stepY — 1xP double, Y coordinates for plotting
+%
+%   See also mergeResolvedByLabel.
 
     nB = numel(segBounds);
-    parts = {};  % cell array of {X_array, Y_array} pairs
+    parts = {};  % Cell array of {X_array, Y_array} pairs (one per contiguous run)
 
     for k = 1:nB
+        % Skip inactive (NaN) segments
         if isnan(values(k))
             continue;
         end
 
+        % Determine the right edge of this segment
         segStart = segBounds(k);
         if k < nB
             segEnd = segBounds(k + 1);
@@ -96,40 +147,45 @@ function [stepX, stepY] = toStepFunction(segBounds, values, dataEnd)
             segEnd = dataEnd;
         end
 
-        % Check if this continues from the previous part (contiguous boundary)
+        % Decide whether to extend the previous contiguous part or start new
         if ~isempty(parts) && parts{end}{1}(end) == segStart
-            % Contiguous — extend with step at shared boundary
+            % Contiguous with the previous part: append a step at the
+            % shared boundary by duplicating the boundary X coordinate.
             parts{end}{1} = [parts{end}{1}, segStart, segEnd];
             parts{end}{2} = [parts{end}{2}, values(k), values(k)];
         else
-            % New disconnected part
+            % Start a new disconnected part (gap in active segments)
             parts{end+1} = {[segStart, segEnd], [values(k), values(k)]};
         end
     end
 
+    % Handle the case where no segments are active
     if isempty(parts)
         stepX = [];
         stepY = [];
         return;
     end
 
-    % Concatenate parts with NaN separators between non-contiguous groups
+    % Fast path: single contiguous run needs no NaN separators
     if numel(parts) == 1
         stepX = parts{1}{1};
         stepY = parts{1}{2};
         return;
     end
 
+    % --- Concatenate parts with NaN separators ---
+    % Pre-compute total output length: sum of part lengths + (nParts - 1) NaNs
     totalLen = 0;
     for p = 1:numel(parts)
         totalLen = totalLen + numel(parts{p}{1});
     end
-    totalLen = totalLen + numel(parts) - 1;  % NaN separators
+    totalLen = totalLen + numel(parts) - 1;  % NaN separators between parts
 
     stepX = zeros(1, totalLen);
     stepY = zeros(1, totalLen);
     idx = 1;
     for p = 1:numel(parts)
+        % Insert NaN separator before the second and subsequent parts
         if p > 1
             stepX(idx) = NaN;
             stepY(idx) = NaN;

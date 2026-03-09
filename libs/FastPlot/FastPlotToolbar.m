@@ -20,6 +20,35 @@ classdef FastPlotToolbar < handle
     %     Metadata     — show/hide metadata in data cursor tooltips
     %     Violations   — toggle violation marker visibility
     %
+    %   FastPlotToolbar Properties:
+    %     MetadataEnabled — whether metadata fields are shown in tooltips
+    %
+    %   FastPlotToolbar Methods:
+    %     FastPlotToolbar — construct and attach toolbar to a plot target
+    %     toggleGrid      — toggle grid visibility on all managed axes
+    %     toggleLegend    — toggle legend visibility on all managed axes
+    %     autoscaleY      — fit Y-axis limits to visible data on all axes
+    %     exportPNG       — save figure as PNG image at 150 DPI
+    %     setCrosshair    — enable or disable crosshair tracking mode
+    %     setCursor       — enable or disable data cursor snap mode
+    %     refresh         — trigger a manual data refresh
+    %     toggleLive      — toggle live mode on/off
+    %     setMetadata     — enable or disable metadata display in tooltips
+    %     rebind          — switch toolbar to a new target without recreating HG objects
+    %     buildCursorLabel — build the text label for data cursor
+    %     snapToNearest   — find the closest data point to a click position
+    %
+    %   Static Methods:
+    %     makeIcon  — generate a 16x16x3 RGB icon for toolbar buttons
+    %     initIcons — pre-warm the icon cache for all toolbar buttons
+    %     formatX   — format an X value based on XType
+    %
+    %   Example:
+    %     fp = FastPlot('Parent', ax);
+    %     fp.addLine(x, y);
+    %     fp.render();
+    %     tb = FastPlotToolbar(fp);
+    %
     %   See also FastPlot, FastPlotFigure, FastPlotDock.
 
     % ========================= PUBLIC STATE ==============================
@@ -207,6 +236,26 @@ classdef FastPlotToolbar < handle
             obj.refreshDataCursors();
         end
 
+        function setViolationsVisible(obj, on)
+            %SETVIOLATIONSVISIBLE Toggle violation markers on all tiles.
+            %   setViolationsVisible(obj, on) iterates over all managed
+            %   FastPlot instances and calls setViolationsVisible(on) on
+            %   each, then syncs the toolbar toggle button state.
+            %
+            %   Input:
+            %     on — logical, true to show markers, false to hide
+            %
+            %   See also FastPlot.setViolationsVisible.
+            for i = 1:numel(obj.FastPlots)
+                obj.FastPlots{i}.setViolationsVisible(on);
+            end
+            if on
+                set(obj.hViolationsBtn, 'State', 'on');
+            else
+                set(obj.hViolationsBtn, 'State', 'off');
+            end
+        end
+
         function rebind(obj, target)
             %REBIND Switch toolbar to a new target without recreating HG objects.
             %   tb.rebind(newTarget)
@@ -247,7 +296,8 @@ classdef FastPlotToolbar < handle
             end
             setappdata(obj.hFigure, 'FastPlotMetadataEnabled', obj.MetadataEnabled);
 
-            % Sync violations toggle to first FastPlot's state
+            % Sync violations toggle to first tile's state (all tiles
+            % share the same ViolationsVisible after any toolbar action)
             if ~isempty(obj.FastPlots)
                 if obj.FastPlots{1}.ViolationsVisible
                     set(obj.hViolationsBtn, 'State', 'on');
@@ -323,6 +373,10 @@ classdef FastPlotToolbar < handle
     % Mouse event handlers, crosshair/cursor drawing, and cleanup.
     methods (Access = private)
         function createToolbar(obj)
+            %CREATETOOLBAR Build the uitoolbar and all its buttons.
+            %   Creates toggle and push tools for cursor, crosshair, grid,
+            %   legend, autoscale, export, refresh, live mode, metadata,
+            %   violations, and theme selection. Pre-warms the icon cache.
             FastPlotToolbar.initIcons();
             obj.hToolbar = uitoolbar(obj.hFigure);
 
@@ -390,39 +444,46 @@ classdef FastPlotToolbar < handle
         end
 
         function onRefresh(obj)
+            %ONREFRESH Callback: forward refresh button click to refresh().
             obj.refresh();
         end
 
         function onLiveOn(obj)
+            %ONLIVEON Callback: forward live toggle-on to toggleLive().
             obj.toggleLive();
         end
 
         function onLiveOff(obj)
+            %ONLIVEOFF Callback: forward live toggle-off to toggleLive().
             obj.toggleLive();
         end
 
         function onMetadataOn(obj)
+            %ONMETADATAON Callback: enable metadata display in tooltips.
             obj.setMetadata(true);
         end
 
         function onMetadataOff(obj)
+            %ONMETADATAOFF Callback: disable metadata display in tooltips.
             obj.setMetadata(false);
         end
 
         function onViolationsOn(obj)
-            for i = 1:numel(obj.FastPlots)
-                obj.FastPlots{i}.setViolationsVisible(true);
-            end
+            %ONVIOLATIONSON Callback: show violation markers on all tiles.
+            obj.setViolationsVisible(true);
         end
 
         function onViolationsOff(obj)
-            for i = 1:numel(obj.FastPlots)
-                obj.FastPlots{i}.setViolationsVisible(false);
-            end
+            %ONVIOLATIONSOFF Callback: hide violation markers on all tiles.
+            obj.setViolationsVisible(false);
         end
 
         function onThemeClick(obj)
-            %ONTHEMECLICK Open a popup with available themes.
+            %ONTHEMECLICK Open a popup with available themes and apply selection.
+            %   Creates a modal listbox figure near the mouse position showing
+            %   built-in and custom themes. The active theme is prefixed with a
+            %   checkmark. Selecting a theme closes the popup and applies it
+            %   to the target (and its parent dock, if any).
 
             builtins = {'default', 'dark', 'light', 'industrial', 'scientific'};
 
@@ -481,6 +542,7 @@ classdef FastPlotToolbar < handle
                 'Callback', @(s,e) onSelect(s));
 
             function onSelect(src)
+                %ONSELECT Listbox callback: apply the selected theme.
                 idx = get(src, 'Value');
                 name = allNames{idx};
                 if isempty(name)
@@ -493,6 +555,13 @@ classdef FastPlotToolbar < handle
 
         function name = getCurrentThemeName(obj)
             %GETCURRENTTHEMENAME Return the name of the current theme, or ''.
+            %   name = getCurrentThemeName(obj) compares the target's current
+            %   theme struct against all built-in presets and custom themes
+            %   from getDefaults(). Returns the matching name, or '' if no
+            %   match is found.
+            %
+            %   Output:
+            %     name — theme name string (e.g. 'dark') or ''
             name = '';
             target = obj.Target;
             if isa(target, 'FastPlotFigure') || isa(target, 'FastPlot')
@@ -528,6 +597,18 @@ classdef FastPlotToolbar < handle
 
         function eq = themesEqual(~, a, b)
             %THEMESEQUAL Compare two theme structs by key visual fields.
+            %   eq = themesEqual(obj, a, b) checks equality of Background,
+            %   AxesColor, ForegroundColor, GridColor, GridAlpha, GridStyle,
+            %   FontName, and FontSize between two theme structs. Numeric
+            %   fields are compared at 3 decimal places; string fields use
+            %   strcmp.
+            %
+            %   Inputs:
+            %     a — first theme struct
+            %     b — second theme struct
+            %
+            %   Output:
+            %     eq — true if all key fields match
             eq = false;
             if ~isstruct(a) || ~isstruct(b); return; end
             fields = {'Background', 'AxesColor', 'ForegroundColor', 'GridColor', ...
@@ -546,6 +627,14 @@ classdef FastPlotToolbar < handle
 
         function applyThemeByName(obj, name)
             %APPLYTHEMEBYNAME Resolve theme by name and apply to hierarchy.
+            %   applyThemeByName(obj, name) resolves a theme by name
+            %   (checking custom themes from getDefaults first, then
+            %   built-in FastPlotTheme presets). The resolved theme is
+            %   applied to the target and, if the target belongs to a
+            %   FastPlotDock (via AppData), to the entire dock hierarchy.
+            %
+            %   Input:
+            %     name — theme name string (e.g. 'dark', 'scientific')
             cfg = getDefaults();
 
             % Resolve: check custom themes first, then built-in
@@ -573,22 +662,30 @@ classdef FastPlotToolbar < handle
         end
 
         function onCursorOn(obj)
+            %ONCURSORON Callback: activate data cursor snap mode.
             obj.setCursor(true);
         end
 
         function onCursorOff(obj)
+            %ONCURSOROFF Callback: deactivate data cursor snap mode.
             obj.setCursor(false);
         end
 
         function onCrosshairOn(obj)
+            %ONCROSSHAIRON Callback: activate crosshair tracking mode.
             obj.setCrosshair(true);
         end
 
         function onCrosshairOff(obj)
+            %ONCROSSHAIROFF Callback: deactivate crosshair tracking mode.
             obj.setCrosshair(false);
         end
 
         function onMouseMove(obj)
+            %ONMOUSEMOVE Update crosshair lines and coordinate readout.
+            %   Called on WindowButtonMotionFcn when crosshair mode is
+            %   active. Draws horizontal/vertical tracking lines and a text
+            %   label showing the current cursor position in data coordinates.
             if ~strcmp(obj.Mode, 'crosshair'); return; end
             [~, ax] = obj.getActiveTarget();
             if isempty(ax)
@@ -626,6 +723,10 @@ classdef FastPlotToolbar < handle
         end
 
         function onMouseClick(obj)
+            %ONMOUSECLICK Handle mouse click in cursor or crosshair mode.
+            %   On double-click, opens a loupe view on the active tile.
+            %   In cursor mode, snaps to the nearest data point and draws
+            %   a marker dot with a text label (including metadata if enabled).
             % Double-click opens loupe regardless of mode
             if strcmp(get(obj.hFigure, 'SelectionType'), 'open')
                 [fp, ~] = obj.getActiveTarget();
@@ -658,6 +759,9 @@ classdef FastPlotToolbar < handle
         end
 
         function hideCrosshairLines(obj)
+            %HIDECROSSHAIRLINES Hide crosshair lines and text without deleting.
+            %   Sets Visible='off' on the horizontal/vertical lines and the
+            %   coordinate text annotation. Used when the mouse exits the axes.
             if ~isempty(obj.hCrosshairH) && ishandle(obj.hCrosshairH)
                 set(obj.hCrosshairH, 'Visible', 'off');
                 set(obj.hCrosshairV, 'Visible', 'off');
@@ -666,6 +770,10 @@ classdef FastPlotToolbar < handle
         end
 
         function cleanupCrosshair(obj)
+            %CLEANUPCROSSHAIR Delete crosshair graphics and restore callbacks.
+            %   Removes the horizontal line, vertical line, and text annotation,
+            %   then restores the original WindowButtonMotionFcn and
+            %   WindowButtonDownFcn callbacks saved before crosshair activation.
             if ~isempty(obj.hCrosshairH) && ishandle(obj.hCrosshairH)
                 delete(obj.hCrosshairH);
                 delete(obj.hCrosshairV);
@@ -683,6 +791,9 @@ classdef FastPlotToolbar < handle
         end
 
         function cleanupCursor(obj)
+            %CLEANUPCURSOR Delete cursor marker dot/text and restore callbacks.
+            %   Removes the snap-to-point dot and label, then restores
+            %   the original WindowButtonDownFcn callback.
             if ~isempty(obj.hCursorDot) && ishandle(obj.hCursorDot)
                 delete(obj.hCursorDot);
                 delete(obj.hCursorTxt);
@@ -699,6 +810,9 @@ classdef FastPlotToolbar < handle
     % ================ PRIVATE HELPERS (grid/legend/export) ===============
     methods (Access = private)
         function onToggleGrid(obj)
+            %ONTOGGLEGRID Callback: toggle grid on active axes or all tiles.
+            %   If the mouse is over an axes, toggles that axes only;
+            %   otherwise toggles grid on every managed FastPlot axes.
             [~, ax] = obj.getActiveTarget();
             if isempty(ax)
                 for i = 1:numel(obj.FastPlots)
@@ -710,6 +824,12 @@ classdef FastPlotToolbar < handle
         end
 
         function toggleGridOnAxes(~, ax)
+            %TOGGLEGRIDONAXES Toggle XGrid/YGrid on a single axes handle.
+            %   toggleGridOnAxes(obj, ax) turns the grid off if currently on,
+            %   and on if currently off.
+            %
+            %   Input:
+            %     ax — axes handle to toggle
             if strcmp(get(ax, 'XGrid'), 'on')
                 grid(ax, 'off');
             else
@@ -718,6 +838,9 @@ classdef FastPlotToolbar < handle
         end
 
         function onToggleLegend(obj)
+            %ONTOGGLELEGEND Callback: toggle legend on active axes or all tiles.
+            %   If the mouse is over an axes, toggles that legend only;
+            %   otherwise toggles legend on every managed FastPlot axes.
             [~, ax] = obj.getActiveTarget();
             if isempty(ax)
                 for i = 1:numel(obj.FastPlots)
@@ -729,6 +852,12 @@ classdef FastPlotToolbar < handle
         end
 
         function toggleLegendOnAxes(~, ax)
+            %TOGGLELEGENDONAXES Toggle legend visibility on a single axes.
+            %   toggleLegendOnAxes(obj, ax) shows the legend if hidden, hides
+            %   it if visible. Retrieves the legend handle via legend(ax).
+            %
+            %   Input:
+            %     ax — axes handle whose legend to toggle
             hLeg = legend(ax);
             if strcmp(get(hLeg, 'Visible'), 'on')
                 set(hLeg, 'Visible', 'off');
@@ -738,6 +867,9 @@ classdef FastPlotToolbar < handle
         end
 
         function onAutoscaleY(obj)
+            %ONAUTOSCALEY Callback: autoscale Y on active axes or all tiles.
+            %   If the mouse is over an axes, autoscales that axes only;
+            %   otherwise autoscales every managed FastPlot axes.
             [fp, ~] = obj.getActiveTarget();
             if isempty(fp)
                 for i = 1:numel(obj.FastPlots)
@@ -749,6 +881,13 @@ classdef FastPlotToolbar < handle
         end
 
         function autoscaleYOnAxes(~, fp)
+            %AUTOSCALEYONAXES Fit Y-axis limits to visible data on one FastPlot.
+            %   autoscaleYOnAxes(obj, fp) examines all lines in fp, finds the
+            %   min/max Y values within the current X-axis limits using binary
+            %   search, and sets YLim with 5% padding.
+            %
+            %   Input:
+            %     fp — FastPlot instance whose axes to autoscale
             ax = fp.hAxes;
             xlims = get(ax, 'XLim');
             ymin = Inf; ymax = -Inf;
@@ -776,6 +915,9 @@ classdef FastPlotToolbar < handle
         end
 
         function onExportPNG(obj)
+            %ONEXPORTPNG Open a file dialog and export the figure as PNG.
+            %   Prompts the user with uiputfile, then calls exportPNG()
+            %   with the selected path. Does nothing if the dialog is cancelled.
             [fname, fpath] = uiputfile('*.png', 'Export as PNG');
             if isequal(fname, 0); return; end
             fullpath = fullfile(fpath, fname);
@@ -784,6 +926,14 @@ classdef FastPlotToolbar < handle
 
         function [fp, ax] = getActiveTarget(obj)
             %GETACTIVETARGET Find the FastPlot instance under the mouse.
+            %   [fp, ax] = getActiveTarget(obj) checks the current mouse
+            %   position against all managed FastPlot axes (in pixel units).
+            %   Returns the FastPlot instance and axes handle if the mouse
+            %   is inside an axes, or empty arrays if outside all axes.
+            %
+            %   Outputs:
+            %     fp — FastPlot instance under cursor, or []
+            %     ax — axes handle under cursor, or []
             fp = [];
             ax = [];
             cp = get(obj.hFigure, 'CurrentPoint');
@@ -805,6 +955,9 @@ classdef FastPlotToolbar < handle
 
         function installDataCursorCallback(obj)
             %INSTALLDATACURSORCALLBACK Set UpdateFcn on MATLAB datacursormode.
+            %   Installs dataCursorUpdateFcn as the UpdateFcn for the
+            %   figure's datacursormode. Silently ignores errors on Octave
+            %   or platforms that do not support datacursormode.
             try
                 dcm = datacursormode(obj.hFigure);
                 set(dcm, 'UpdateFcn', @(tip, evt) obj.dataCursorUpdateFcn(tip, evt));
@@ -815,6 +968,8 @@ classdef FastPlotToolbar < handle
 
         function refreshDataCursors(obj)
             %REFRESHDATACURSORS Force existing data tips to re-evaluate.
+            %   Calls updateDataCursors on the datacursormode so that
+            %   already-placed tips pick up metadata enable/disable changes.
             try
                 dcm = datacursormode(obj.hFigure);
                 updateDataCursors(dcm);
@@ -824,6 +979,16 @@ classdef FastPlotToolbar < handle
 
         function txt = dataCursorUpdateFcn(obj, ~, evt)
             %DATACURSORUPDATEFCN Custom tooltip for MATLAB data cursor.
+            %   txt = dataCursorUpdateFcn(obj, ~, evt) is installed as the
+            %   datacursormode UpdateFcn. It formats X/Y coordinates
+            %   (datetime-aware), includes the line's DisplayName, and
+            %   appends metadata fields when metadata display is enabled.
+            %
+            %   Input:
+            %     evt — data cursor event object with Position and Target
+            %
+            %   Output:
+            %     txt — cell array of strings for the tooltip
             try
                 pos = get(evt, 'Position');
             catch
@@ -1060,7 +1225,7 @@ classdef FastPlotToolbar < handle
                     warnColor = [0.9 0.4 0.1];  % orange
                     % Triangle outline: rows 3-13, centered at col 8
                     for r = 3:13
-                        halfW = round((r - 3) * 5 / 10);
+                        halfW = round((r - 3) / 2);
                         cL = 8 - halfW;
                         cR = 8 + halfW;
                         if cL >= 1 && cR <= 16

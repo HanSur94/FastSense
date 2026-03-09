@@ -157,11 +157,11 @@ function test_toolbar()
     hM = fp.Thresholds(1).hMarkers;
     assert(strcmp(get(hM, 'Visible'), 'on'), 'testViolationsToggle: markers visible');
     % Toggle off via toolbar callback
-    fp.setViolationsVisible(false);
+    tb.setViolationsVisible(false);
     assert(~fp.ViolationsVisible, 'testViolationsToggle: now false');
     assert(strcmp(get(hM, 'Visible'), 'off'), 'testViolationsToggle: markers hidden');
     % Toggle back on
-    fp.setViolationsVisible(true);
+    tb.setViolationsVisible(true);
     assert(strcmp(get(hM, 'Visible'), 'on'), 'testViolationsToggle: markers back');
     close(fp.hFigure);
 

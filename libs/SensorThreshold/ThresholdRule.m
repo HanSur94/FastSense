@@ -1,26 +1,73 @@
 classdef ThresholdRule
     %THRESHOLDRULE Defines a condition-value pair for dynamic thresholds.
-    %   rule = ThresholdRule(struct('machine', 1), 50)
-    %   rule = ThresholdRule(struct('machine', 1, 'vacuum', 2), 50, 'Direction', 'upper')
+    %   ThresholdRule pairs a state-condition struct with a numeric
+    %   threshold value.  A rule is "active" when every field in its
+    %   Condition struct matches the current system state (implicit AND).
+    %   An empty condition struct() means the rule is always active
+    %   (unconditional threshold).
     %
-    %   The condition struct defines required state values (implicit AND).
-    %   An empty struct() means the threshold is always active.
+    %   The Direction property determines whether the threshold is an
+    %   upper limit ('upper' -- violation when sensor > Value) or a lower
+    %   limit ('lower' -- violation when sensor < Value).
+    %
+    %   ThresholdRule Properties:
+    %     Condition — struct whose field names are state channel keys and
+    %                 whose values are the required state for activation
+    %     Value     — numeric threshold value when the condition is met
+    %     Direction — 'upper' or 'lower'; defines the violation sense
+    %     Label     — human-readable display label for plots/legends
+    %     Color     — 1x3 RGB triplet (empty = defer to theme default)
+    %     LineStyle — char line-style token for rendering (default '--')
+    %
+    %   ThresholdRule Methods:
+    %     ThresholdRule — Constructor; condition, value, and name-value opts
+    %     matchesState  — Test whether a state struct satisfies the condition
+    %
+    %   Example:
+    %     rule = ThresholdRule(struct('machine', 1), 50, ...
+    %         'Direction', 'upper', 'Label', 'Pressure HH');
+    %     tf = rule.matchesState(struct('machine', 1));  % true
+    %     tf = rule.matchesState(struct('machine', 2));  % false
+    %
+    %   See also Sensor, StateChannel, conditionKey.
 
     properties (Constant)
-        DIRECTIONS = {'upper', 'lower'}
+        DIRECTIONS = {'upper', 'lower'}  % Allowed direction values
     end
 
     properties
         Condition   % struct: field names = state channel keys, values = required state
         Value       % numeric: threshold value when condition is true
-        Direction   % char: 'upper' or 'lower'
-        Label       % char: display label
+        Direction   % char: 'upper' or 'lower' violation direction
+        Label       % char: display label for plots and legends
         Color       % 1x3 double: RGB color (empty = use theme default)
-        LineStyle   % char: line style
+        LineStyle   % char: MATLAB line-style specifier (e.g., '--', ':')
     end
 
     methods
         function obj = ThresholdRule(condition, value, varargin)
+            %THRESHOLDRULE Construct a ThresholdRule object.
+            %   rule = ThresholdRule(condition, value) creates a rule with
+            %   default direction 'upper', empty label, and dashed line.
+            %
+            %   rule = ThresholdRule(condition, value, Name, Value, ...)
+            %   additionally sets optional name-value pairs:
+            %     'Direction' — 'upper' or 'lower' (default 'upper')
+            %     'Label'     — char, display label (default '')
+            %     'Color'     — 1x3 double RGB (default [])
+            %     'LineStyle' — char, line-style token (default '--')
+            %
+            %   Inputs:
+            %     condition — struct whose fields define required state
+            %                 values.  An empty struct() is unconditional.
+            %     value     — numeric, the threshold value
+            %
+            %   Output:
+            %     obj — ThresholdRule object
+            %
+            %   See also ThresholdRule.matchesState, Sensor.addThresholdRule.
+
+            % Validate condition type
             if ~isstruct(condition)
                 error('ThresholdRule:invalidCondition', ...
                     'Condition must be a struct, got %s.', class(condition));
@@ -28,16 +75,18 @@ classdef ThresholdRule
             obj.Condition = condition;
             obj.Value = value;
 
-            % Defaults
+            % Set sensible defaults before parsing optional arguments
             obj.Direction = 'upper';
             obj.Label = '';
             obj.Color = [];
             obj.LineStyle = '--';
 
+            % Parse optional name-value pairs
             for i = 1:2:numel(varargin)
                 switch varargin{i}
                     case 'Direction'
                         d = varargin{i+1};
+                        % Validate against the allowed set
                         if ~ismember(d, ThresholdRule.DIRECTIONS)
                             error('ThresholdRule:invalidDirection', ...
                                 'Direction must be ''upper'' or ''lower'', got ''%s''.', d);
@@ -58,18 +107,39 @@ classdef ThresholdRule
 
         function tf = matchesState(obj, st)
             %MATCHESSTATE Check if a state struct satisfies this rule's condition.
-            %   All fields in Condition must match (implicit AND).
-            %   Empty condition always returns true.
+            %   tf = rule.matchesState(st) returns true if every field in
+            %   the rule's Condition struct exists in st and has a matching
+            %   value (implicit AND logic).  An empty Condition always
+            %   returns true, meaning the rule is unconditional.
+            %
+            %   Comparison uses strcmp for char/string values and == for
+            %   numeric values.  If a required field is missing from st,
+            %   the result is false (fail-closed).
+            %
+            %   Input:
+            %     st — struct representing the current system state, with
+            %          field names corresponding to StateChannel keys
+            %
+            %   Output:
+            %     tf — logical scalar, true if the condition is satisfied
+            %
+            %   See also ThresholdRule, StateChannel.valueAt.
+
             fields = fieldnames(obj.Condition);
             tf = true;
             for f = 1:numel(fields)
                 key = fields{f};
+
+                % If the required state channel key is absent, fail immediately
                 if ~isfield(st, key)
                     tf = false;
                     return;
                 end
+
                 condVal = obj.Condition.(key);
                 stVal = st.(key);
+
+                % Use type-appropriate comparison
                 if ischar(condVal) || isstring(condVal)
                     if ~strcmp(condVal, stVal)
                         tf = false;

@@ -13,6 +13,44 @@ classdef FastPlotFigure < handle
     %     'ParentFigure' — existing figure handle (skip figure creation)
     %     Any additional name-value pairs are passed to figure().
     %
+    %   FastPlotFigure Properties:
+    %     Grid             — [rows, cols] grid dimensions
+    %     Theme            — FastPlotTheme struct for all tiles
+    %     hFigure          — figure handle
+    %     ParentFigure     — external figure handle (skip figure creation)
+    %     ContentOffset    — [left bottom width height] normalized content area
+    %     LiveViewMode     — 'preserve' | 'follow' | 'reset' for live updates
+    %     LiveFile         — path to .mat file for live polling
+    %     LiveUpdateFcn    — @(fig, data) callback on live data change
+    %     LiveIsActive     — whether live polling is running
+    %     LiveInterval     — poll interval in seconds (default 2.0)
+    %     MetadataFile     — path to metadata .mat file
+    %     MetadataVars     — variable names to extract from metadata
+    %     MetadataLineIndex — line index within the tile for metadata
+    %     MetadataTileIndex — which tile to attach metadata to
+    %     ShowProgress     — show console progress bar during renderAll
+    %     Padding          — [left bottom right top] normalized padding
+    %     GapH             — horizontal gap between tiles (normalized)
+    %     GapV             — vertical gap between tiles (normalized)
+    %
+    %   FastPlotFigure Methods:
+    %     FastPlotFigure    — construct a tiled dashboard
+    %     tile              — get or create the FastPlot instance for tile n
+    %     setTileSpan       — set the row/column span for tile n
+    %     setTileTheme      — set per-tile theme overrides
+    %     tileTitle         — set title for tile n
+    %     tileXLabel        — set xlabel for tile n
+    %     tileYLabel        — set ylabel for tile n
+    %     renderAll         — render all tiles that haven't been rendered yet
+    %     render            — alias for renderAll
+    %     reapplyTheme      — re-apply theme to figure and all rendered tiles
+    %     startLive         — start live mode on the dashboard
+    %     stopLive          — stop live polling
+    %     refresh           — manual one-shot reload
+    %     setViewMode       — set view mode on all tiles
+    %     runLive           — blocking poll loop for Octave compatibility
+    %     computeTilePosition — calculate normalized [x y w h] for tile n
+    %
     %   Example — 2x2 dashboard:
     %     fig = FastPlotFigure(2, 2, 'Theme', 'dark');
     %     fig.tile(1).addLine(x1, y1); fig.tile(2).addLine(x2, y2);
@@ -114,6 +152,17 @@ classdef FastPlotFigure < handle
 
         function fp = tile(obj, n)
             %TILE Get or create the FastPlot instance for tile n.
+            %   fp = fig.tile(n) returns the FastPlot for tile n, creating
+            %   it (and its axes) on first access. Tile themes are merged
+            %   from the figure theme and any per-tile overrides.
+            %
+            %   Input:
+            %     n — tile index (1 to rows*cols, row-major order)
+            %
+            %   Output:
+            %     fp — FastPlot instance for the requested tile
+            %
+            %   See also setTileSpan, setTileTheme.
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
                 error('FastPlotFigure:outOfBounds', ...
@@ -139,7 +188,20 @@ classdef FastPlotFigure < handle
 
         function setTileSpan(obj, n, span)
             %SETTILESPAN Set the row/column span for tile n.
-            %   fig.setTileSpan(1, [2 1])  — tile 1 spans 2 rows, 1 col
+            %   fig.setTileSpan(n, span) configures tile n to occupy
+            %   multiple rows and/or columns in the grid layout.
+            %
+            %   Inputs:
+            %     n    — tile index (1 to rows*cols)
+            %     span — [rowSpan, colSpan], e.g. [2 1] for 2 rows, 1 col
+            %
+            %   If the tile's axes already exist, their position is
+            %   immediately recomputed to reflect the new span.
+            %
+            %   Example:
+            %     fig.setTileSpan(1, [2 1]);  % tile 1 spans 2 rows, 1 col
+            %
+            %   See also tile, computeTilePosition.
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
                 error('FastPlotFigure:outOfBounds', ...
@@ -156,6 +218,18 @@ classdef FastPlotFigure < handle
 
         function setTileTheme(obj, n, themeOverrides)
             %SETTILETHEME Set per-tile theme overrides.
+            %   fig.setTileTheme(n, themeOverrides) stores a partial theme
+            %   struct for tile n. When the tile is created or re-themed,
+            %   these overrides are merged on top of the figure-level theme.
+            %
+            %   Inputs:
+            %     n              — tile index (1 to rows*cols)
+            %     themeOverrides — struct with theme fields to override
+            %
+            %   Example:
+            %     fig.setTileTheme(2, struct('Background', [0 0 0]));
+            %
+            %   See also tile, reapplyTheme.
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
                 error('FastPlotFigure:outOfBounds', ...
@@ -166,6 +240,14 @@ classdef FastPlotFigure < handle
 
         function tileTitle(obj, n, str)
             %TILETITLE Set title for tile n.
+            %   fig.tileTitle(n, str) sets the axes title on tile n using
+            %   the figure theme's TitleFontSize and ForegroundColor.
+            %
+            %   Inputs:
+            %     n   — tile index (1 to rows*cols)
+            %     str — title string
+            %
+            %   See also tileXLabel, tileYLabel.
             fp = obj.tile(n);
             if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
                 title(fp.hAxes, str, 'FontSize', obj.Theme.TitleFontSize, ...
@@ -175,6 +257,14 @@ classdef FastPlotFigure < handle
 
         function tileXLabel(obj, n, str)
             %TILEXLABEL Set xlabel for tile n.
+            %   fig.tileXLabel(n, str) sets the X-axis label on tile n
+            %   using the figure theme's ForegroundColor.
+            %
+            %   Inputs:
+            %     n   — tile index (1 to rows*cols)
+            %     str — label string
+            %
+            %   See also tileTitle, tileYLabel.
             fp = obj.tile(n);
             if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
                 xlabel(fp.hAxes, str, 'Color', obj.Theme.ForegroundColor);
@@ -183,6 +273,14 @@ classdef FastPlotFigure < handle
 
         function tileYLabel(obj, n, str)
             %TILEYLABEL Set ylabel for tile n.
+            %   fig.tileYLabel(n, str) sets the Y-axis label on tile n
+            %   using the figure theme's ForegroundColor.
+            %
+            %   Inputs:
+            %     n   — tile index (1 to rows*cols)
+            %     str — label string
+            %
+            %   See also tileTitle, tileXLabel.
             fp = obj.tile(n);
             if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
                 ylabel(fp.hAxes, str, 'Color', obj.Theme.ForegroundColor);
@@ -191,6 +289,18 @@ classdef FastPlotFigure < handle
 
         function renderAll(obj, parentProgressBar)
             %RENDERALL Render all tiles that haven't been rendered yet.
+            %   fig.renderAll() renders all tiles and makes the figure visible.
+            %   fig.renderAll(parentProgressBar) renders as a child of a
+            %   dock or parent progress context (skips figure show/drawnow).
+            %
+            %   Each tile is rendered with DeferDraw=true and a per-tile
+            %   ConsoleProgressBar. Tiles that are already rendered are skipped.
+            %
+            %   Input:
+            %     parentProgressBar — (optional) truthy value indicating nested
+            %                         render context; suppresses figure visibility
+            %
+            %   See also render, tile.
             if nargin < 2; parentProgressBar = []; end
 
             % Collect tiles that need rendering
@@ -244,13 +354,22 @@ classdef FastPlotFigure < handle
 
         function render(obj)
             %RENDER Alias for renderAll.
+            %   fig.render() is a convenience alias for fig.renderAll().
+            %
+            %   See also renderAll.
             obj.renderAll();
         end
 
         function reapplyTheme(obj)
             %REAPPLYTHEME Re-apply theme to figure and all rendered tiles.
-            %   fig.reapplyTheme()
+            %   fig.reapplyTheme() updates the figure background and
+            %   propagates the current Theme to every rendered tile.
+            %   Per-tile theme overrides (from setTileTheme) are merged
+            %   on top of the figure-level theme before propagation.
+            %
             %   Use after changing fig.Theme to update all visuals.
+            %
+            %   See also setTileTheme, FastPlot.reapplyTheme.
             set(obj.hFigure, 'Color', obj.Theme.Background);
             for i = 1:numel(obj.Tiles)
                 if ~isempty(obj.Tiles{i}) && obj.Tiles{i}.IsRendered
@@ -343,6 +462,10 @@ classdef FastPlotFigure < handle
 
         function stopLive(obj)
             %STOPLIVE Stop live polling.
+            %   fig.stopLive() stops and deletes the internal timer, then
+            %   sets LiveIsActive to false. Safe to call when not active.
+            %
+            %   See also startLive, runLive.
             if ~isempty(obj.LiveTimer)
                 try
                     stop(obj.LiveTimer);
@@ -356,6 +479,11 @@ classdef FastPlotFigure < handle
 
         function refresh(obj)
             %REFRESH Manual one-shot reload.
+            %   fig.refresh() loads the LiveFile, calls LiveUpdateFcn,
+            %   and reloads the metadata file if configured. Errors if
+            %   no live source has been configured via startLive().
+            %
+            %   See also startLive, stopLive.
             if isempty(obj.LiveFile) || isempty(obj.LiveUpdateFcn)
                 error('FastPlotFigure:noLiveSource', ...
                     'No live source configured.');
@@ -382,6 +510,13 @@ classdef FastPlotFigure < handle
 
         function setViewMode(obj, mode)
             %SETVIEWMODE Set view mode on all tiles.
+            %   fig.setViewMode(mode) sets LiveViewMode on the figure and
+            %   propagates it to every non-empty tile.
+            %
+            %   Input:
+            %     mode — 'preserve' | 'follow' | 'reset'
+            %
+            %   See also startLive.
             obj.LiveViewMode = mode;
             for i = 1:numel(obj.Tiles)
                 if ~isempty(obj.Tiles{i})
@@ -392,6 +527,14 @@ classdef FastPlotFigure < handle
 
         function runLive(obj)
             %RUNLIVE Blocking poll loop for live mode (Octave compatibility).
+            %   fig.runLive() enters a blocking while-loop that polls
+            %   LiveFile at LiveInterval. On MATLAB, this is a no-op if
+            %   the timer is already running. On Octave (which lacks the
+            %   timer object), this provides equivalent functionality.
+            %   The loop exits when LiveIsActive becomes false or the
+            %   figure is closed. An onCleanup guard calls stopLive().
+            %
+            %   See also startLive, stopLive.
             if ~obj.LiveIsActive
                 return;
             end
@@ -425,6 +568,10 @@ classdef FastPlotFigure < handle
     % Timer callbacks, metadata loading, axes creation, and layout math.
     methods (Access = private)
         function onLiveTimer(obj)
+            %ONLIVETIMER Timer callback: check for data and metadata changes.
+            %   Compares the file's datenum against LiveFileDate. If the file
+            %   has been modified, loads it and calls LiveUpdateFcn. Also
+            %   checks the MetadataFile for changes and reloads if needed.
             if ~exist(obj.LiveFile, 'file'); return; end
             try
                 d = dir(obj.LiveFile);
@@ -451,6 +598,10 @@ classdef FastPlotFigure < handle
         end
 
         function loadMetadataFile(obj)
+            %LOADMETADATAFILE Load metadata from file and attach to target tile/line.
+            %   Uses loadMetaStruct() to extract MetadataVars from
+            %   MetadataFile, then calls setLineMetadata on the tile and
+            %   line specified by MetadataTileIndex and MetadataLineIndex.
             meta = loadMetaStruct(obj.MetadataFile, obj.MetadataVars);
             if ~isempty(meta)
                 tileIdx = obj.MetadataTileIndex;
@@ -462,6 +613,14 @@ classdef FastPlotFigure < handle
         end
 
         function onFigureCloseLive(obj, existingDeleteFcn, src, evt)
+            %ONFIGURECLOSELIVE Figure close handler during live mode.
+            %   Stops live polling, then chains to the previously installed
+            %   DeleteFcn (if any) so that other cleanup still runs.
+            %
+            %   Inputs:
+            %     existingDeleteFcn — previous DeleteFcn (function_handle or [])
+            %     src               — source figure handle
+            %     evt               — event data
             obj.stopLive();
             if ~isempty(existingDeleteFcn) && isa(existingDeleteFcn, 'function_handle')
                 existingDeleteFcn(src, evt);
@@ -469,6 +628,17 @@ classdef FastPlotFigure < handle
         end
 
         function ax = createTileAxes(obj, n)
+            %CREATETILEAXES Create an axes at the computed position for tile n.
+            %   ax = createTileAxes(obj, n) computes the normalized position
+            %   for tile n and creates an axes parented to hFigure. Locks
+            %   the axes to its assigned position to prevent MATLAB's
+            %   automatic layout padding adjustments.
+            %
+            %   Input:
+            %     n — tile index (1 to rows*cols)
+            %
+            %   Output:
+            %     ax — newly created axes handle
             pos = obj.computeTilePosition(n);
             ax = axes('Parent', obj.hFigure, 'Position', pos);
             % Lock axes to its assigned position (prevent MATLAB padding)
@@ -484,9 +654,20 @@ classdef FastPlotFigure < handle
     methods (Access = public, Hidden = true)
         function pos = computeTilePosition(obj, n)
             %COMPUTETILEPOSITION Calculate normalized [x y w h] for tile n.
-            %   Accounts for grid position, padding, gaps, tile spanning,
-            %   and ContentOffset. Uses top-left origin row ordering
-            %   converted to MATLAB's bottom-left coordinate system.
+            %   pos = computeTilePosition(obj, n) computes the normalized
+            %   position vector for tile n, accounting for grid position,
+            %   Padding, GapH, GapV, tile spanning (TileSpans), and
+            %   ContentOffset. Tiles are numbered in row-major order with
+            %   top-left origin, then converted to MATLAB's bottom-left
+            %   coordinate system.
+            %
+            %   Input:
+            %     n — tile index (1 to rows*cols)
+            %
+            %   Output:
+            %     pos — [x, y, w, h] in normalized figure coordinates
+            %
+            %   See also setTileSpan, createTileAxes.
             rows = obj.Grid(1);
             cols = obj.Grid(2);
             span = obj.TileSpans{n};

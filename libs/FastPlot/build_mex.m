@@ -1,19 +1,47 @@
 function build_mex()
-%BUILD_MEX Compile FastPlot MEX files with platform-appropriate SIMD flags.
-%   build_mex()
+%BUILD_MEX Compile all FastPlot MEX files with platform-appropriate SIMD flags.
+%   BUILD_MEX() detects the CPU architecture (x86_64 or ARM64) and the
+%   best available C compiler, then compiles every MEX source file found
+%   in private/mex_src/ into the private/ directory.
 %
-%   Detects CPU architecture and best available compiler, sets flags for
-%   AVX2/SSE2/NEON, and compiles all MEX source files from private/mex_src/
-%   into private/.
+%   Architecture detection normalizes differences between MATLAB and
+%   Octave (e.g., 'maca64' vs 'aarch64') into a canonical label used
+%   to select SIMD instruction targets:
+%     x86_64  — AVX2 + FMA (with SSE2 fallback on failure)
+%     arm64   — ARM NEON (implicit on Apple Silicon / explicit on GCC)
+%     unknown — scalar fallback (no SIMD)
 %
-%   Compiler priority: GCC (better auto-vectorization) > Clang > default.
-%   Safe to re-run — overwrites existing MEX binaries.
+%   Compiler selection:
+%     Octave  — prefers real GCC (searched via find_gcc) for superior
+%               auto-vectorization; falls back to system default
+%     MATLAB  — always uses the configured default compiler (Xcode
+%               Clang on macOS, MSVC on Windows) because MATLAB passes
+%               compiler-specific linker flags that GCC may reject
+%
+%   On x86_64, if the initial AVX2 compilation fails (e.g., on older
+%   hardware), the function automatically retries with SSE2 flags.
+%
+%   After compilation, shared MEX files needed by the SensorThreshold
+%   library are copied into ../SensorThreshold/private/.
+%
+%   MEX source files compiled:
+%     binary_search_mex.c   — binary search on sorted arrays
+%     minmax_core_mex.c     — min/max downsampling kernel
+%     lttb_core_mex.c       — Largest-Triangle-Three-Buckets kernel
+%     violation_cull_mex.c  — threshold violation culling
+%
+%   Example:
+%     build_mex();   % compile everything; prints per-file status
+%
+%   See also binary_search, setup.
 
     rootDir = fileparts(mfilename('fullpath'));
     srcDir  = fullfile(rootDir, 'private', 'mex_src');
     outDir  = fullfile(rootDir, 'private');
 
-    % Detect architecture (normalize Octave vs MATLAB differences)
+    % Detect architecture — normalize varying platform strings into a
+    % canonical label.  Octave returns 'aarch64-...' or 'x86_64-...',
+    % while MATLAB uses 'maca64', 'maci64', 'glnxa64', or 'win64'.
     arch_raw = computer('arch');
     if ~isempty(strfind(arch_raw, 'aarch64')) || ~isempty(strfind(arch_raw, 'arm64')) || strcmp(arch_raw, 'maca64')
         arch = 'arm64';
@@ -47,7 +75,8 @@ function build_mex()
         end
     end
 
-    % Set optimization and SIMD flags (MSVC uses /flags, GCC/Clang use -flags)
+    % Set optimization and SIMD flags — MSVC uses /flags while GCC/Clang
+    % use -flags.  The boolean useMSVC distinguishes the two conventions.
     useMSVC = ispc && ~isOctave;
     switch arch
         case 'x86_64'
@@ -146,7 +175,21 @@ end
 
 
 function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler)
-%COMPILE_MEX Compile a single MEX file, using Octave mkoctfile or MATLAB mex.
+%COMPILE_MEX Compile a single C source file into a MEX binary.
+%   compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler)
+%   dispatches to Octave's mkoctfile or MATLAB's mex depending on the
+%   runtime environment. On Octave, the CC environment variable is
+%   temporarily set to compiler (if non-empty) and restored afterwards.
+%   On MATLAB/Windows, optimization flags are passed via COMPFLAGS; on
+%   MATLAB/Unix they are passed via CFLAGS.
+%
+%   Inputs:
+%     src_file     — char; absolute path to the .c source file
+%     out_name     — char; desired output name (without extension)
+%     outDir       — char; directory for the compiled MEX binary
+%     include_flag — char; compiler include flag (e.g., '-I/path')
+%     opt_flags    — cell array of char; optimization/SIMD flags
+%     compiler     — char; path to compiler executable ('' for default)
     if exist('OCTAVE_VERSION', 'builtin')
         % Octave: use mkoctfile
         args = {'--mex', include_flag};
@@ -178,7 +221,16 @@ end
 
 
 function copy_mex_to(srcDir, destDir, name)
-%COPY_MEX_TO Copy a compiled MEX file to another directory.
+%COPY_MEX_TO Copy a compiled MEX binary to another directory.
+%   copy_mex_to(srcDir, destDir, name) finds all files matching
+%   name.* in srcDir (to catch platform-specific MEX extensions like
+%   .mexa64, .mexmaci64, .mex, etc.) and copies each one to destDir.
+%   Prints a confirmation or warning for every file.
+%
+%   Inputs:
+%     srcDir  — char; source directory containing the compiled MEX file
+%     destDir — char; destination directory to copy into
+%     name    — char; MEX file base name (without extension)
     d = dir(fullfile(srcDir, [name '.*']));
     for i = 1:numel(d)
         src = fullfile(srcDir, d(i).name);
@@ -194,7 +246,18 @@ end
 
 
 function [gcc_path, gcc_name] = find_gcc()
-%FIND_GCC Search for GCC (not Apple Clang disguised as gcc).
+%FIND_GCC Search for a real GCC installation (not Apple Clang).
+%   [gcc_path, gcc_name] = find_gcc() searches Homebrew paths for
+%   versioned GCC binaries (gcc-15 down to gcc-10) in /opt/homebrew/bin
+%   and /usr/local/bin, then checks whether the system 'gcc' is real
+%   GCC (identified by the "Free Software Foundation" string in its
+%   --version output) rather than Apple Clang masquerading as gcc.
+%
+%   Outputs:
+%     gcc_path — char; full path to the GCC executable, or '' if none
+%                found
+%     gcc_name — char; short name of the compiler (e.g., 'gcc-14'),
+%                or '' if none found
     gcc_path = '';
     gcc_name = '';
 

@@ -1,32 +1,82 @@
 function cfg = FastPlotDefaults()
 %FASTPLOTDEFAULTS User-editable default settings for FastPlot.
-%   cfg = FastPlotDefaults()
-%
-%   Returns a struct of global defaults used by FastPlot, FastPlotFigure,
-%   and FastPlotDock. Edit this file to customize behavior project-wide.
+%   cfg = FASTPLOTDEFAULTS() returns a struct of global defaults used by
+%   FastPlot, FastPlotFigure, and FastPlotDock. Edit this file to
+%   customize behavior project-wide.
 %
 %   Values are loaded once per MATLAB session via getDefaults() and cached
 %   in a persistent variable. Call clearDefaultsCache() to force a reload
 %   after editing this file.
 %
-%   Settings:
-%     Theme                    — preset name or struct (default: 'default')
-%     Verbose                  — print diagnostics (default: false)
-%     MinPointsForDownsample   — raw plot threshold (default: 5000)
-%     DownsampleFactor         — points per pixel (default: 2)
-%     PyramidReduction         — compression per level (default: 100)
-%     DefaultDownsampleMethod  — 'minmax' or 'lttb' (default: 'minmax')
-%     XScale                   — 'linear' or 'log' (default: 'linear')
-%     YScale                   — 'linear' or 'log' (default: 'linear')
-%     LiveInterval             — poll interval in seconds (default: 2.0)
-%     DashboardPadding         — figure edge padding (default: 0.06)
-%     DashboardGapH            — horizontal tile gap (default: 0.05)
-%     DashboardGapV            — vertical tile gap (default: 0.07)
-%     TabBarHeight             — dock tab bar height (default: 0.03)
+%   Output:
+%     cfg — struct with the following fields:
+%
+%   Theme Settings:
+%     cfg.Theme                    — preset name ('default', 'dark',
+%                                    'light', 'industrial', 'scientific')
+%                                    or a struct of theme overrides
+%                                    (default: 'default')
+%     cfg.ThemeDir                 — folder containing custom theme .m
+%                                    files, relative to this file
+%                                    (default: 'themes')
+%     cfg.Verbose                  — logical; print diagnostics to the
+%                                    console during plotting operations
+%                                    (default: false)
+%
+%   Performance Tuning:
+%     cfg.MinPointsForDownsample   — integer; series with fewer points
+%                                    than this are plotted raw without
+%                                    downsampling (default: 5000)
+%     cfg.DownsampleFactor         — integer; target points per pixel
+%                                    for downsampled display; higher
+%                                    values produce denser traces
+%                                    (default: 2)
+%     cfg.PyramidReduction         — integer; compression factor per
+%                                    level of the data pyramid; controls
+%                                    the ratio between successive LOD
+%                                    levels (default: 100)
+%
+%   Line Defaults:
+%     cfg.DefaultDownsampleMethod  — char; downsampling algorithm:
+%                                    'minmax' preserves extremes,
+%                                    'lttb' (Largest-Triangle-Three-
+%                                    Buckets) preserves visual shape
+%                                    (default: 'minmax')
+%
+%   Axis Scale:
+%     cfg.XScale                   — char; 'linear' or 'log'
+%                                    (default: 'linear')
+%     cfg.YScale                   — char; 'linear' or 'log'
+%                                    (default: 'linear')
+%
+%   Live Mode:
+%     cfg.LiveInterval             — double; polling interval in seconds
+%                                    for live-updating data sources
+%                                    (default: 2.0)
+%
+%   Dashboard Layout (normalized figure units 0..1):
+%     cfg.DashboardPadding         — 1x4 double [left bottom right top];
+%                                    padding between figure edges and the
+%                                    tile grid (default: [0.06 0.04 0.01 0.02])
+%     cfg.DashboardGapH            — double; horizontal gap between
+%                                    adjacent tiles (default: 0.03)
+%     cfg.DashboardGapV            — double; vertical gap between
+%                                    adjacent tiles (default: 0.06)
+%
+%   Dock Layout:
+%     cfg.TabBarHeight             — double; normalized height of the tab
+%                                    bar in docked figure mode
+%                                    (default: 0.03)
 %
 %   Example — switch to dark theme with LTTB downsampling:
+%     cfg = FastPlotDefaults();
 %     cfg.Theme = 'dark';
 %     cfg.DefaultDownsampleMethod = 'lttb';
+%
+%   Example — widen tile gaps for a spacious dashboard:
+%     cfg = FastPlotDefaults();
+%     cfg.DashboardGapH = 0.06;
+%     cfg.DashboardGapV = 0.10;
 %
 %   See also getDefaults, clearDefaultsCache, FastPlotTheme.
 
