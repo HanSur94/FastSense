@@ -123,7 +123,9 @@ classdef FastPlotToolbar < handle
                 set(obj.hCrosshairBtn, 'State', 'on');
                 try zoom(obj.hFigure, 'off'); catch; end
                 obj.SavedCallbacks.WindowButtonMotionFcn = get(obj.hFigure, 'WindowButtonMotionFcn');
+                obj.SavedCallbacks.WindowButtonDownFcn = get(obj.hFigure, 'WindowButtonDownFcn');
                 set(obj.hFigure, 'WindowButtonMotionFcn', @(s,e) obj.onMouseMove());
+                set(obj.hFigure, 'WindowButtonDownFcn', @(s,e) obj.onMouseClick());
             else
                 obj.cleanupCrosshair();
                 obj.Mode = 'none';
@@ -392,6 +394,12 @@ classdef FastPlotToolbar < handle
         end
 
         function onMouseClick(obj)
+            % Double-click opens loupe regardless of mode
+            if strcmp(get(obj.hFigure, 'SelectionType'), 'open')
+                [fp, ~] = obj.getActiveTarget();
+                if ~isempty(fp); fp.openLoupe(); end
+                return;
+            end
             if ~strcmp(obj.Mode, 'cursor'); return; end
             [fp, ax] = obj.getActiveTarget();
             if isempty(fp); return; end
@@ -436,6 +444,9 @@ classdef FastPlotToolbar < handle
             obj.hCrosshairTxt = [];
             if isfield(obj.SavedCallbacks, 'WindowButtonMotionFcn')
                 set(obj.hFigure, 'WindowButtonMotionFcn', obj.SavedCallbacks.WindowButtonMotionFcn);
+            end
+            if isfield(obj.SavedCallbacks, 'WindowButtonDownFcn')
+                set(obj.hFigure, 'WindowButtonDownFcn', obj.SavedCallbacks.WindowButtonDownFcn);
             end
         end
 
