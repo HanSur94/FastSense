@@ -235,8 +235,11 @@ classdef FastPlotFigure < handle
                 rethrow(err);
             end
 
-            set(obj.hFigure, 'Visible', 'on');
-            drawnow;
+            % Skip figure show + drawnow when nested (dock manages visibility)
+            if isempty(parentProgressBar)
+                set(obj.hFigure, 'Visible', 'on');
+                drawnow;
+            end
         end
 
         function render(obj)

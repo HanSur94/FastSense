@@ -149,31 +149,25 @@ classdef FastPlotDock < handle
 
             nTabs = numel(obj.Tabs);
 
+            % Render all tabs (no toolbars, no drawnow yet)
             for t = 1:nTabs
-                % Print tab header line
                 if obj.ShowProgress
                     fprintf('Tab %d/%d: %s\n', t, nTabs, obj.Tabs(t).Name);
                 end
-
-                % Pass ShowProgress through to figure level
                 obj.Tabs(t).Figure.ShowProgress = obj.ShowProgress;
-
-                % Render the tab
-                tb = obj.Tabs(t).Toolbar;
-                if ~isempty(tb) && ~isempty(tb.hToolbar) && ishandle(tb.hToolbar)
-                    delete(tb.hToolbar);
-                end
-                obj.Tabs(t).Figure.renderAll(true);  % truthy = nested from dock
+                obj.Tabs(t).Figure.renderAll(true);
                 obj.reparentAxes(t);
-                obj.Tabs(t).Toolbar = FastPlotToolbar(obj.Tabs(t).Figure);
                 obj.Tabs(t).IsRendered = true;
             end
 
-            % Hide all tabs, create tab bar, show first tab
+            % Hide all tabs, create tab bar
             for i = 1:nTabs
                 obj.setTabVisible(i, false);
             end
             obj.createTabBar();
+
+            % Create toolbar only for tab 1, then show it
+            obj.Tabs(1).Toolbar = FastPlotToolbar(obj.Tabs(1).Figure);
             obj.selectTab(1);
 
             set(obj.hFigure, 'Visible', 'on');
@@ -197,6 +191,11 @@ classdef FastPlotDock < handle
             % Lazy render on first switch
             if ~obj.Tabs(n).IsRendered
                 obj.renderTab(n);
+            end
+
+            % Lazy toolbar creation (deferred by renderAll)
+            if isempty(obj.Tabs(n).Toolbar)
+                obj.Tabs(n).Toolbar = FastPlotToolbar(obj.Tabs(n).Figure);
             end
 
             % Hide current tab
