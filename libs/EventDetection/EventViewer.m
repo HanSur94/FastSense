@@ -520,7 +520,7 @@ classdef EventViewer < handle
 
             % Open FastPlot for this sensor, zoomed to event
             fp = FastPlot();
-            fp.addLine(sd.t, sd.y, 'Label', sd.name);
+            fp.addLine(sd.t, sd.y, 'DisplayName', sd.name);
 
             % Add threshold line
             fp.addThreshold(ev.ThresholdValue, ...
