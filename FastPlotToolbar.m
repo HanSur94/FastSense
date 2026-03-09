@@ -347,10 +347,7 @@ classdef FastPlotToolbar < handle
         end
 
         function onThemeClick(obj)
-            %ONTHEMECLICK Open a context menu with available themes.
-
-            % Clean up any previously created theme menus
-            delete(findobj(obj.hFigure, 'Type', 'uicontextmenu', 'Tag', 'FastPlotThemeMenu'));
+            %ONTHEMECLICK Open a popup with available themes.
 
             builtins = {'default', 'dark', 'light', 'industrial', 'scientific'};
 
@@ -361,50 +358,62 @@ classdef FastPlotToolbar < handle
             else
                 customNames = {};
             end
+            allNames = [builtins, customNames(:)'];
 
-            % Determine current theme name
+            % Determine current theme name for highlighting
             currentTheme = obj.getCurrentThemeName();
+            currentIdx = find(strcmpi(allNames, currentTheme), 1);
+            if isempty(currentIdx); currentIdx = 1; end
 
-            % Build context menu
-            hMenu = uicontextmenu('Parent', obj.hFigure, 'Tag', 'FastPlotThemeMenu');
-
-            for i = 1:numel(builtins)
-                label = builtins{i};
-                if strcmpi(label, currentTheme)
-                    checked = 'on';
+            % Build display labels (prefix active theme with a checkmark)
+            labels = allNames;
+            for i = 1:numel(labels)
+                if i == currentIdx
+                    labels{i} = [char(10003) ' ' labels{i}];  % ✓ prefix
                 else
-                    checked = 'off';
+                    labels{i} = ['   ' labels{i}];
                 end
-                uimenu(hMenu, 'Label', label, 'Checked', checked, ...
-                    'Callback', @(s,e) obj.applyThemeByName(label));
             end
-
+            % Add separator label before custom themes
             if ~isempty(customNames)
-                for i = 1:numel(customNames)
-                    label = customNames{i};
-                    if strcmpi(label, currentTheme)
-                        checked = 'on';
-                    else
-                        checked = 'off';
-                    end
-                    sep = 'off';
-                    if i == 1; sep = 'on'; end
-                    uimenu(hMenu, 'Label', label, 'Checked', checked, ...
-                        'Separator', sep, ...
-                        'Callback', @(s,e) obj.applyThemeByName(label));
+                sepIdx = numel(builtins) + 1;
+                labels = [labels(1:sepIdx-1), {'───────────'}, labels(sepIdx:end)];
+                allNames = [allNames(1:sepIdx-1), {''}, allNames(sepIdx:end)];
+                % Adjust currentIdx if after separator
+                if currentIdx >= sepIdx
+                    currentIdx = currentIdx + 1;
                 end
             end
 
-            % Position and show the menu near the mouse
-            % Use PointerLocation (screen coords) since CurrentPoint is
-            % not updated during toolbar button callbacks.
+            % Position popup near the toolbar button
             screenPos = get(0, 'PointerLocation');
-            oldUnits = get(obj.hFigure, 'Units');
-            set(obj.hFigure, 'Units', 'pixels');
-            figPos = get(obj.hFigure, 'Position');
-            set(obj.hFigure, 'Units', oldUnits);
-            localPos = screenPos - figPos(1:2);
-            set(hMenu, 'Position', localPos, 'Visible', 'on');
+            itemH = 22;  % pixels per list item
+            listH = numel(labels) * itemH + 4;
+            listW = 140;
+            popupPos = [screenPos(1) - listW/2, screenPos(2) - listH, listW, listH];
+
+            % Create popup figure
+            hPopup = figure('MenuBar', 'none', 'ToolBar', 'none', ...
+                'NumberTitle', 'off', 'Name', '', ...
+                'Position', popupPos, 'Resize', 'off', ...
+                'WindowStyle', 'modal', 'Color', [0.96 0.96 0.96]);
+
+            % Create listbox
+            hList = uicontrol(hPopup, 'Style', 'listbox', ...
+                'String', labels, 'Value', currentIdx, ...
+                'Units', 'normalized', 'Position', [0 0 1 1], ...
+                'FontSize', 11, ...
+                'Callback', @(s,e) onSelect(s));
+
+            function onSelect(src)
+                idx = get(src, 'Value');
+                name = allNames{idx};
+                if isempty(name)
+                    return;  % separator clicked
+                end
+                delete(hPopup);
+                obj.applyThemeByName(name);
+            end
         end
 
         function name = getCurrentThemeName(obj)
