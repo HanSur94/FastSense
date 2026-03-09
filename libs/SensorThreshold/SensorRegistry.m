@@ -132,6 +132,66 @@ classdef SensorRegistry
             end
             fprintf('\n  %d sensor(s) total.\n\n', nSensors);
         end
+
+        function hFig = viewer()
+            %VIEWER Open a GUI figure showing all registered sensors.
+            %   hFig = SensorRegistry.viewer() creates a figure with a
+            %   uitable listing every sensor's Key, Name, ID, Source,
+            %   MatFile, #States, #Rules, and #Points.
+
+            map = SensorRegistry.catalog();
+            keys = sort(map.keys());
+            nSensors = numel(keys);
+
+            % Build table data
+            colNames = {'Key', 'Name', 'ID', 'Source', 'MatFile', '#States', '#Rules', '#Points'};
+            data = cell(nSensors, numel(colNames));
+            for i = 1:nSensors
+                s = map(keys{i});
+                data{i,1} = keys{i};
+                data{i,2} = s.Name;
+                if isempty(s.ID)
+                    data{i,3} = '';
+                else
+                    data{i,3} = s.ID;
+                end
+                data{i,4} = s.Source;
+                data{i,5} = s.MatFile;
+                data{i,6} = numel(s.StateChannels);
+                data{i,7} = numel(s.ThresholdRules);
+                data{i,8} = numel(s.X);
+            end
+
+            % Create figure
+            hFig = figure('Name', 'Sensor Registry', ...
+                'NumberTitle', 'off', ...
+                'Position', [200 200 900 400], ...
+                'Color', [0.15 0.15 0.18], ...
+                'MenuBar', 'none', ...
+                'ToolBar', 'none');
+
+            % Title label
+            uicontrol('Parent', hFig, 'Style', 'text', ...
+                'String', sprintf('Sensor Registry  (%d sensors)', nSensors), ...
+                'Units', 'normalized', 'Position', [0.02 0.92 0.96 0.06], ...
+                'BackgroundColor', [0.15 0.15 0.18], ...
+                'ForegroundColor', [0.9 0.9 0.9], ...
+                'FontSize', 14, 'FontWeight', 'bold', ...
+                'HorizontalAlignment', 'left');
+
+            % Table
+            colWidths = {140, 180, 50, 140, 140, 55, 50, 60};
+            uitable('Parent', hFig, ...
+                'Data', data, ...
+                'ColumnName', colNames, ...
+                'ColumnWidth', colWidths, ...
+                'Units', 'normalized', ...
+                'Position', [0.02 0.02 0.96 0.88], ...
+                'RowName', [], ...
+                'BackgroundColor', [0.22 0.22 0.25; 0.18 0.18 0.21], ...
+                'ForegroundColor', [0.9 0.9 0.9], ...
+                'FontSize', 11);
+        end
     end
 
     methods (Static, Access = private)

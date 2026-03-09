@@ -29,7 +29,12 @@ function test_sensor_registry()
     % testPrintTable — should not error
     SensorRegistry.printTable();
 
-    fprintf('    All 5 sensor_registry tests passed.\n');
+    % testViewer — should open and close without error
+    hFig = SensorRegistry.viewer();
+    assert(ishandle(hFig), 'testViewer: returns figure handle');
+    close(hFig);
+
+    fprintf('    All 6 sensor_registry tests passed.\n');
 end
 
 function add_sensor_path()
