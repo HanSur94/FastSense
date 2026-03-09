@@ -106,7 +106,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
                 int violated;
                 double dev;
 
-                if (yi != yi) continue;  /* NaN check */
+                if (mxIsNaN(yi)) continue;  /* NaN check */
 
                 if (isUpper) violated = (yi > th);
                 else         violated = (yi < th);
@@ -143,7 +143,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
             double dev;
             int violated;
 
-            if (yi != yi) continue;
+            if (mxIsNaN(yi)) continue;
 
             if (isUpper) violated = (yi > th);
             else         violated = (yi < th);
@@ -183,7 +183,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
             double dev;
             int violated;
 
-            if (yi != yi) continue;  /* NaN */
+            if (mxIsNaN(yi)) continue;  /* NaN */
 
             /* Advance cursor to find active threshold */
             cursor = step_lookup(thX, nKnots, xi, cursor);
