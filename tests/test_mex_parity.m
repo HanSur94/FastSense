@@ -9,8 +9,9 @@ function test_mex_parity()
     has_bs  = (exist('binary_search_mex', 'file') == 3);
     has_mm  = (exist('minmax_core_mex', 'file') == 3);
     has_lt  = (exist('lttb_core_mex', 'file') == 3);
+    has_vc  = (exist('violation_cull_mex', 'file') == 3);
 
-    if ~has_bs && ~has_mm && ~has_lt
+    if ~has_bs && ~has_mm && ~has_lt && ~has_vc
         fprintf('    SKIPPED: No MEX files compiled. Run build_mex() first.\n');
         return;
     end
@@ -113,6 +114,24 @@ function test_mex_parity()
         end
 
         fprintf('    lttb_core_mex parity: PASSED\n');
+        n_passed = n_passed + 1;
+    end
+
+    % ---- violation_cull parity ----
+    if has_vc
+        x = linspace(0, 100, 10000);
+        y = sin(x) * 5;
+        % Scalar
+        [xm, ym] = violation_cull(x, y, 0, 3.0, 'upper', 0.1, 0);
+        [xc, yc] = violation_cull_mex(x, y, 0, 3.0, 1, 0.1, 0);
+        assert(numel(xm) == numel(xc), 'violation_cull scalar: count mismatch');
+        assert(max(abs(xm - xc)) < tol, 'violation_cull scalar: X mismatch');
+        % Time-varying
+        [xm, ym] = violation_cull(x, y, [0 50], [3 4], 'upper', 0.1, 0);
+        [xc, yc] = violation_cull_mex(x, y, [0 50], [3 4], 1, 0.1, 0);
+        assert(numel(xm) == numel(xc), 'violation_cull tv: count mismatch');
+        assert(max(abs(xm - xc)) < tol, 'violation_cull tv: X mismatch');
+        fprintf('    violation_cull_mex parity: PASSED\n');
         n_passed = n_passed + 1;
     end
 
