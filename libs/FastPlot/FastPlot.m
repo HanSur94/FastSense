@@ -1480,47 +1480,6 @@ classdef FastPlot < handle
             end
         end
 
-        function addThresholdConnectors(obj, resolvedTh)
-            %ADDTHRESHOLDCONNECTORS Add vertical connectors at threshold transitions.
-            for dir = {'upper', 'lower'}
-                d = dir{1};
-                ruleIdx = [];
-                for r = 1:numel(resolvedTh)
-                    if strcmp(resolvedTh(r).Direction, d)
-                        ruleIdx(end+1) = r; %#ok<AGROW>
-                    end
-                end
-                if numel(ruleIdx) < 2; continue; end
-                nT = numel(resolvedTh(ruleIdx(1)).X);
-                yMat = NaN(numel(ruleIdx), nT);
-                for j = 1:numel(ruleIdx)
-                    yMat(j, :) = resolvedTh(ruleIdx(j)).Y;
-                end
-                activeVal = NaN(1, nT);
-                activeRuleRow = zeros(1, nT);
-                for j = 1:numel(ruleIdx)
-                    mask = isnan(activeVal) & ~isnan(yMat(j, :));
-                    activeVal(mask) = yMat(j, mask);
-                    activeRuleRow(mask) = j;
-                end
-                bothValid = ~isnan(activeVal(1:end-1)) & ~isnan(activeVal(2:end));
-                transIdx = find(bothValid & diff(activeVal) ~= 0) + 1;
-                timeGrid = resolvedTh(ruleIdx(1)).X;
-                for j = 1:numel(transIdx)
-                    k = transIdx(j);
-                    ri = ruleIdx(activeRuleRow(k));
-                    [connColor, connStyle] = obj.resolveThresholdStyle( ...
-                        resolvedTh(ri).Color, resolvedTh(ri).LineStyle);
-                    obj.addLine([timeGrid(k), timeGrid(k)], ...
-                        [activeVal(k-1), activeVal(k)], ...
-                        'Color', connColor, ...
-                        'LineStyle', connStyle, ...
-                        'LineWidth', 1.5, ...
-                        'HandleVisibility', 'off');
-                end
-            end
-        end
-
         function onLiveTimer(obj)
             %ONLIVETIMER Timer callback — check file and refresh if changed.
             if ~exist(obj.LiveFile, 'file')
