@@ -63,6 +63,8 @@ classdef FastPlot < handle
         MetadataVars      = {}        % cell array of variable names to extract
         MetadataLineIndex = 1         % which line index to attach metadata to
         DeferDraw = false             % skip drawnow during batch render
+        XScale = 'linear'             % 'linear' or 'log' — X axis scale
+        YScale = 'linear'             % 'linear' or 'log' — Y axis scale
     end
 
     % ====================== INTERNAL DATA STORAGE ========================
@@ -141,6 +143,8 @@ classdef FastPlot < handle
             defaults.PyramidReduction = cfg.PyramidReduction;
             defaults.DefaultDownsampleMethod = cfg.DefaultDownsampleMethod;
             defaults.LiveInterval = cfg.LiveInterval;
+            defaults.XScale = cfg.XScale;
+            defaults.YScale = cfg.YScale;
             [opts, ~] = parseOpts(defaults, varargin);
 
             obj.ParentAxes = opts.Parent;
@@ -151,6 +155,8 @@ classdef FastPlot < handle
             obj.PyramidReduction = opts.PyramidReduction;
             obj.DefaultDownsampleMethod = opts.DefaultDownsampleMethod;
             obj.LiveInterval = opts.LiveInterval;
+            obj.XScale = opts.XScale;
+            obj.YScale = opts.YScale;
             obj.Theme = resolveTheme(opts.Theme, cfg.Theme);
         end
 

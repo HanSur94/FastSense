@@ -40,6 +40,10 @@ function cfg = FastPlotDefaults()
     % --- Line Defaults ---
     cfg.DefaultDownsampleMethod = 'minmax';  % 'minmax' or 'lttb'
 
+    % --- Axis Scale ---
+    cfg.XScale = 'linear';                   % 'linear' or 'log'
+    cfg.YScale = 'linear';                   % 'linear' or 'log'
+
     % --- Live Mode ---
     cfg.LiveInterval = 2.0;                  % poll interval in seconds
 
