@@ -348,6 +348,10 @@ classdef FastPlotToolbar < handle
 
         function onThemeClick(obj)
             %ONTHEMECLICK Open a context menu with available themes.
+
+            % Clean up any previously created theme menus
+            delete(findobj(obj.hFigure, 'Type', 'uicontextmenu'));
+
             builtins = {'default', 'dark', 'light', 'industrial', 'scientific'};
 
             % Get custom themes
@@ -814,7 +818,8 @@ classdef FastPlotToolbar < handle
             %   Draws simple pixel-art icons on a light gray background.
             %   Available names: 'cursor', 'crosshair', 'grid', 'legend',
             %   'autoscale', 'export', 'refresh', 'live', 'metadata'.
-            icon = ones(16, 16, 3) * 0.94;  % light gray background
+            bg = 0.94;  % light gray background
+            icon = ones(16, 16, 3) * bg;
             fg = [0.2 0.2 0.2];  % dark foreground
 
             switch name
@@ -921,7 +926,7 @@ classdef FastPlotToolbar < handle
                     % Paint palette shape
                     cx = 8; cy = 8;
                     for r = 3:13
-                        for c = 3:14
+                        for c = 3:13
                             dx = (c - cx) / 5.5;
                             dy = (r - cy) / 5;
                             d = dx^2 + dy^2;
@@ -935,7 +940,7 @@ classdef FastPlotToolbar < handle
                         for c = 5:7
                             dx = (c - 6); dy = (r - 11);
                             if dx^2 + dy^2 <= 1.5
-                                icon(r, c, :) = reshape([0.94 0.94 0.94], 1, 1, 3);
+                                icon(r, c, :) = reshape([bg bg bg], 1, 1, 3);
                             end
                         end
                     end
