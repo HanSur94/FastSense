@@ -2,14 +2,15 @@ function example_event_detection_live()
 %EXAMPLE_EVENT_DETECTION_LIVE Live event detection demo with industrial sensors.
 %   Demonstrates the EventDetection library with 3 mock industrial sensors,
 %   threshold-based event detection, console logging, EventViewer UI,
-%   and a MATLAB timer for live data updates.
+%   and a live FastPlot dashboard using startLive for real-time plotting.
 %
 %   Run:  example_event_detection_live()
-%   Stop: Close the Event Viewer figure to stop live mode.
+%   Stop: Close the Event Viewer or Live Plot figure to stop.
 
     setup();
 
-    persistent liveTimer liveViewer liveCfg liveN;
+    persistent dataTimer liveViewer liveCfg liveN fpTemp fpPres fpVib hPlotFig;
+    persistent tempFile presFile vibFile;
 
     fprintf('\n=== Event Detection Live Demo ===\n\n');
 
@@ -20,22 +21,18 @@ function example_event_detection_live()
 
     % Temperature: baseline 70 C, with ramps and spikes
     temp = 70 + 5*sin(t/5) + 2*randn(1, N);
-    % Inject a ramp violation at t=20-30
     rampIdx = t >= 20 & t <= 30;
     temp(rampIdx) = temp(rampIdx) + linspace(0, 25, sum(rampIdx));
-    % Inject a spike at t=40
     spikeIdx = t >= 40 & t <= 42;
     temp(spikeIdx) = temp(spikeIdx) + 30;
 
     % Pressure: baseline 6 bar, with dips
     pressure = 6 + 0.5*sin(t/3) + 0.3*randn(1, N);
-    % Inject a low-pressure event at t=15-18
     lowIdx = t >= 15 & t <= 18;
     pressure(lowIdx) = pressure(lowIdx) - 4;
 
     % Vibration: baseline 2 mm/s, with oscillation bursts
     vibration = 2 + 0.3*randn(1, N);
-    % Inject oscillation burst at t=35-45
     burstIdx = t >= 35 & t <= 45;
     vibration(burstIdx) = vibration(burstIdx) + 4 * abs(sin((t(burstIdx)-35)*3));
 
@@ -80,20 +77,77 @@ function example_event_detection_live()
     liveCfg = cfg;
     liveN = N;
 
-    % --- 6. Start live timer ---
+    % --- 6. Write initial .mat files for live plotting ---
+    liveDir = fullfile(tempdir, 'fastplot_event_live');
+    if ~exist(liveDir, 'dir'); mkdir(liveDir); end
+
+    tempFile = fullfile(liveDir, 'temperature.mat');
+    presFile = fullfile(liveDir, 'pressure.mat');
+    vibFile  = fullfile(liveDir, 'vibration.mat');
+
+    x = t; y = temp;      save(tempFile, 'x', 'y');
+    x = t; y = pressure;  save(presFile, 'x', 'y');
+    x = t; y = vibration; save(vibFile,  'x', 'y');
+
+    % --- 7. Open live FastPlot dashboard ---
+    hPlotFig = figure('Name', 'Live Sensor Dashboard', ...
+        'NumberTitle', 'off', 'Position', [150 50 1200 700]);
+
+    % Temperature plot
+    ax1 = subplot(3,1,1, 'Parent', hPlotFig);
+    fpTemp = FastPlot('Parent', ax1, 'LinkGroup', 'live_demo');
+    fpTemp.addLine(t, temp, 'DisplayName', 'Temperature', 'Color', [0.8 0.2 0.1]);
+    fpTemp.addThreshold(85, 'Direction', 'upper', 'ShowViolations', true, ...
+        'Color', [1 0.8 0], 'LineStyle', '--', 'Label', 'temp warning');
+    fpTemp.addThreshold(95, 'Direction', 'upper', 'ShowViolations', true, ...
+        'Color', [1 0.2 0], 'LineStyle', '-', 'Label', 'temp critical');
+    fpTemp.render();
+    title(ax1, 'Temperature (C)');
+    ylabel(ax1, 'C');
+
+    % Pressure plot
+    ax2 = subplot(3,1,2, 'Parent', hPlotFig);
+    fpPres = FastPlot('Parent', ax2, 'LinkGroup', 'live_demo');
+    fpPres.addLine(t, pressure, 'DisplayName', 'Pressure', 'Color', [0.2 0.5 1]);
+    fpPres.addThreshold(4, 'Direction', 'lower', 'ShowViolations', true, ...
+        'Color', [0.2 0.5 1], 'LineStyle', '--', 'Label', 'pressure low');
+    fpPres.render();
+    title(ax2, 'Pressure (bar)');
+    ylabel(ax2, 'bar');
+
+    % Vibration plot
+    ax3 = subplot(3,1,3, 'Parent', hPlotFig);
+    fpVib = FastPlot('Parent', ax3, 'LinkGroup', 'live_demo');
+    fpVib.addLine(t, vibration, 'DisplayName', 'Vibration', 'Color', [0.8 0.3 0.8]);
+    fpVib.addThreshold(5, 'Direction', 'upper', 'ShowViolations', true, ...
+        'Color', [0.8 0.3 0.8], 'LineStyle', '--', 'Label', 'vibration high');
+    fpVib.render();
+    title(ax3, 'Vibration (mm/s)');
+    ylabel(ax3, 'mm/s');
+    xlabel(ax3, 'Time (s)');
+
+    % --- 8. Start FastPlot live mode (polls .mat files, auto-scrolls) ---
+    fpTemp.startLive(tempFile, @(fp, d) fp.updateData(1, d.x, d.y), ...
+        'Interval', 2, 'ViewMode', 'follow');
+    fpPres.startLive(presFile, @(fp, d) fp.updateData(1, d.x, d.y), ...
+        'Interval', 2, 'ViewMode', 'follow');
+    fpVib.startLive(vibFile,  @(fp, d) fp.updateData(1, d.x, d.y), ...
+        'Interval', 2, 'ViewMode', 'follow');
+
+    % --- 9. Start data generation timer ---
     fprintf('Starting live mode (new data every 2 seconds)...\n');
-    fprintf('Close the Event Viewer figure to stop.\n\n');
+    fprintf('Close the Event Viewer or Live Plot figure to stop.\n\n');
 
-    liveTimer = timer('ExecutionMode', 'fixedRate', ...
+    dataTimer = timer('ExecutionMode', 'fixedRate', ...
         'Period', 2.0, ...
-        'TimerFcn', @(~,~) liveUpdate());
+        'TimerFcn', @(~,~) generateData());
 
-    % Stop when figure is closed
-    set(liveViewer.hFigure, 'DeleteFcn', @(~,~) stopLive());
+    % Stop when EventViewer is closed
+    set(liveViewer.hFigure, 'DeleteFcn', @(~,~) stopAll());
 
-    start(liveTimer);
+    start(dataTimer);
 
-    function liveUpdate()
+    function generateData()
         try
             % Append 50 new data points
             nNew = 50;
@@ -117,7 +171,7 @@ function example_event_detection_live()
                 newPres(vi:span) = newPres(vi:span) - 4;
             end
 
-            % Update sensors
+            % Update sensor objects
             for i = 1:numel(liveCfg.Sensors)
                 s = liveCfg.Sensors{i};
                 switch s.Key
@@ -132,11 +186,16 @@ function example_event_detection_live()
                 liveCfg.SensorData(i).y = s.Y;
             end
 
-            % Re-detect
+            % Write updated data to .mat files — FastPlot startLive picks them up
+            sT = liveCfg.Sensors{1}; x = sT.X; y = sT.Y; save(tempFile, 'x', 'y');
+            sP = liveCfg.Sensors{2}; x = sP.X; y = sP.Y; save(presFile, 'x', 'y');
+            sV = liveCfg.Sensors{3}; x = sV.X; y = sV.Y; save(vibFile,  'x', 'y');
+
+            % Re-detect events
             fprintf('--- Live Update (t=%.1f) ---\n', tNew(end));
             events = liveCfg.runDetection();
 
-            % Update viewer
+            % Update EventViewer
             if isvalid(liveViewer) && ishandle(liveViewer.hFigure)
                 liveViewer.update(events);
             end
@@ -145,11 +204,20 @@ function example_event_detection_live()
         end
     end
 
-    function stopLive()
-        if ~isempty(liveTimer) && isvalid(liveTimer)
-            stop(liveTimer);
-            delete(liveTimer);
-            fprintf('\nLive mode stopped.\n');
+    function stopAll()
+        % Stop data generation timer
+        if ~isempty(dataTimer) && isvalid(dataTimer)
+            stop(dataTimer);
+            delete(dataTimer);
         end
+        % Stop FastPlot live timers
+        try fpTemp.stopLive(); catch; end
+        try fpPres.stopLive(); catch; end
+        try fpVib.stopLive();  catch; end
+        % Clean up temp files
+        try delete(tempFile); catch; end
+        try delete(presFile); catch; end
+        try delete(vibFile);  catch; end
+        fprintf('\nLive mode stopped.\n');
     end
 end

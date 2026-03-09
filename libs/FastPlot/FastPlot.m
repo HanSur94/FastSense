@@ -128,6 +128,7 @@ classdef FastPlot < handle
         ColorIndex    = 0     % tracks auto color cycling position
         LiveTimer      = []        % timer object for live polling
         LiveFileDate   = 0         % last known file modification datenum
+        LiveFileBytes  = 0         % last known file size in bytes
         MetadataFileDate  = 0         % last known metadata file datenum
     end
 
@@ -1497,6 +1498,9 @@ classdef FastPlot < handle
                 obj.applyViewMode(newX);
             end
 
+            % Extend scalar threshold lines to cover new data range
+            obj.extendThresholdLines();
+
             % Re-downsample and update display
             obj.updateLines();
             obj.updateShadings();
@@ -1573,10 +1577,11 @@ classdef FastPlot < handle
                 obj.LiveViewMode = 'preserve';
             end
 
-            % Record current file date
+            % Record current file date and size
             if exist(obj.LiveFile, 'file')
                 d = dir(obj.LiveFile);
                 obj.LiveFileDate = d.datenum;
+                obj.LiveFileBytes = d.bytes;
             end
 
             % Record metadata file date and do initial load
@@ -1687,6 +1692,7 @@ classdef FastPlot < handle
 
             d = dir(obj.LiveFile);
             obj.LiveFileDate = d.datenum;
+            obj.LiveFileBytes = d.bytes;
 
             % Load metadata file if configured
             obj.loadMetadataFile();
@@ -1750,8 +1756,9 @@ classdef FastPlot < handle
                 try
                     if exist(obj.LiveFile, 'file')
                         d = dir(obj.LiveFile);
-                        if d.datenum > obj.LiveFileDate
+                        if d.datenum > obj.LiveFileDate || d.bytes ~= obj.LiveFileBytes
                             obj.LiveFileDate = d.datenum;
+                            obj.LiveFileBytes = d.bytes;
                             data = load(obj.LiveFile);
                             obj.LiveUpdateFcn(obj, data);
                             if obj.Verbose
@@ -2001,8 +2008,9 @@ classdef FastPlot < handle
             end
             try
                 d = dir(obj.LiveFile);
-                if d.datenum > obj.LiveFileDate
+                if d.datenum > obj.LiveFileDate || d.bytes ~= obj.LiveFileBytes
                     obj.LiveFileDate = d.datenum;
+                    obj.LiveFileBytes = d.bytes;
                     data = load(obj.LiveFile);
                     obj.LiveUpdateFcn(obj, data);
                     obj.drawnowLimitRate();
@@ -2493,9 +2501,11 @@ classdef FastPlot < handle
             logYFlag = strcmp(obj.YScale, 'log');
 
             for i = 1:numel(obj.Lines)
-                % Static lines (threshold steps, small overlays): already
-                % rendered with all points — skip on zoom/pan updates.
+                % Static lines (threshold steps, small overlays): set
+                % full data directly (no downsampling needed).
                 if obj.Lines(i).IsStatic
+                    set(obj.Lines(i).hLine, 'XData', obj.Lines(i).X, ...
+                        'YData', obj.Lines(i).Y);
                     continue;
                 end
 
@@ -2647,6 +2657,35 @@ classdef FastPlot < handle
             logXFlag = strcmp(obj.XScale, 'log');
             [px, py] = minmax_downsample(srcX, srcY, numBuckets, false, logXFlag);
             obj.Lines(lineIdx).Pyramid{level} = struct('X', px, 'Y', py);
+        end
+
+        function extendThresholdLines(obj)
+            %EXTENDTHRESHOLDLINES Extend scalar threshold lines to current data range.
+            %   For each scalar threshold (T.Value is set, T.X is empty),
+            %   update the line handle's XData to span the full X range of
+            %   all data lines. Called by updateData to keep threshold lines
+            %   visible as live data extends beyond the initial range.
+            if isempty(obj.Thresholds)
+                return;
+            end
+            % Compute current global X range from all lines
+            xmin = Inf; xmax = -Inf;
+            for i = 1:numel(obj.Lines)
+                xi = obj.Lines(i).X;
+                if ~isempty(xi)
+                    if xi(1) < xmin; xmin = xi(1); end
+                    if xi(end) > xmax; xmax = xi(end); end
+                end
+            end
+            if ~isfinite(xmin) || ~isfinite(xmax)
+                return;
+            end
+            for t = 1:numel(obj.Thresholds)
+                if isempty(obj.Thresholds(t).X) && ~isempty(obj.Thresholds(t).hLine) ...
+                        && ishandle(obj.Thresholds(t).hLine)
+                    set(obj.Thresholds(t).hLine, 'XData', [xmin, xmax]);
+                end
+            end
         end
 
         function updateViolations(obj)

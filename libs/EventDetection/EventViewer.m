@@ -17,7 +17,10 @@ classdef EventViewer < handle
         hTable          % uitable handle
         hSensorFilter   % popup menu for sensor filter
         hLabelFilter    % popup menu for label filter
+        hTooltip        % text object for hover tooltip
         FilteredEvents  % currently displayed events after filtering
+        BarRects        % rectangle handles for hover detection
+        BarEvents       % Event objects corresponding to BarRects
     end
 
     methods
@@ -105,6 +108,21 @@ classdef EventViewer < handle
                 'ColumnWidth', {70 70 65 120 130 45 70 50 70 70 70 70 70}, ...
                 'CellSelectionCallback', @(src, evt) obj.onRowClick(src, evt));
 
+            % --- Hover tooltip (hidden initially) ---
+            obj.hTooltip = text(obj.hTimelineAxes, 0, 0, '', ...
+                'Visible', 'off', ...
+                'BackgroundColor', [0.1 0.1 0.12], ...
+                'Color', [0.95 0.95 0.95], ...
+                'EdgeColor', [0.5 0.5 0.5], ...
+                'FontSize', 9, ...
+                'FontName', 'FixedWidth', ...
+                'Margin', 6, ...
+                'VerticalAlignment', 'bottom', ...
+                'HorizontalAlignment', 'left', ...
+                'Clipping', 'off');
+
+            set(obj.hFigure, 'WindowButtonMotionFcn', @(~,~) obj.onHover());
+
             obj.drawTimeline();
             obj.populateTable();
         end
@@ -112,6 +130,8 @@ classdef EventViewer < handle
         function drawTimeline(obj)
             cla(obj.hTimelineAxes);
             events = obj.FilteredEvents;
+            obj.BarRects = [];
+            obj.BarEvents = [];
 
             if isempty(events)
                 return;
@@ -124,7 +144,10 @@ classdef EventViewer < handle
             defaultColors = [0.2 0.6 1; 1 0.4 0.2; 0.2 0.8 0.4; ...
                              1 0.8 0; 0.6 0.3 0.8; 0 0.8 0.8];
 
-            for i = 1:numel(events)
+            nEvents = numel(events);
+            hRects = gobjects(nEvents, 1);
+
+            for i = 1:nEvents
                 ev = events(i);
                 sIdx = find(strcmp(sensorNames, ev.SensorName));
                 yPos = nSensors - sIdx + 1;
@@ -138,16 +161,36 @@ classdef EventViewer < handle
 
                 barH = 0.6;
                 duration = max(ev.Duration, 0.5); % min width for visibility
-                rectangle(obj.hTimelineAxes, ...
+                hRects(i) = rectangle(obj.hTimelineAxes, ...
                     'Position', [ev.StartTime, yPos - barH/2, duration, barH], ...
                     'FaceColor', c, 'EdgeColor', c * 0.7, ...
                     'LineWidth', 1, 'Curvature', [0.1 0.1]);
             end
 
+            obj.BarRects = hRects;
+            obj.BarEvents = events;
+
             set(obj.hTimelineAxes, 'YTick', 1:nSensors, ...
                 'YTickLabel', flip(sensorNames), ...
                 'YLim', [0.3, nSensors + 0.7]);
             xlabel(obj.hTimelineAxes, 'Time', 'Color', [0.8 0.8 0.8]);
+
+            % Enable grid
+            set(obj.hTimelineAxes, 'XGrid', 'on', 'YGrid', 'on', ...
+                'GridColor', [0.4 0.4 0.4], 'GridAlpha', 0.5);
+
+            % Recreate tooltip (cla destroys it)
+            obj.hTooltip = text(obj.hTimelineAxes, 0, 0, '', ...
+                'Visible', 'off', ...
+                'BackgroundColor', [0.1 0.1 0.12], ...
+                'Color', [0.95 0.95 0.95], ...
+                'EdgeColor', [0.5 0.5 0.5], ...
+                'FontSize', 9, ...
+                'FontName', 'FixedWidth', ...
+                'Margin', 6, ...
+                'VerticalAlignment', 'bottom', ...
+                'HorizontalAlignment', 'left', ...
+                'Clipping', 'off');
         end
 
         function populateTable(obj)
@@ -210,6 +253,53 @@ classdef EventViewer < handle
             obj.FilteredEvents = events;
             obj.drawTimeline();
             obj.populateTable();
+        end
+
+        function onHover(obj)
+            if isempty(obj.BarRects) || isempty(obj.BarEvents)
+                set(obj.hTooltip, 'Visible', 'off');
+                return;
+            end
+
+            cp = get(obj.hTimelineAxes, 'CurrentPoint');
+            mx = cp(1,1);
+            my = cp(1,2);
+
+            % Check if mouse is within axes bounds
+            xl = get(obj.hTimelineAxes, 'XLim');
+            yl = get(obj.hTimelineAxes, 'YLim');
+            if mx < xl(1) || mx > xl(2) || my < yl(1) || my > yl(2)
+                set(obj.hTooltip, 'Visible', 'off');
+                return;
+            end
+
+            % Check each bar rectangle for hit
+            for i = 1:numel(obj.BarRects)
+                if ~ishandle(obj.BarRects(i)); continue; end
+                pos = get(obj.BarRects(i), 'Position');
+                rx = pos(1); ry = pos(2); rw = pos(3); rh = pos(4);
+                if mx >= rx && mx <= rx + rw && my >= ry && my <= ry + rh
+                    ev = obj.BarEvents(i);
+                    tipStr = sprintf([ ...
+                        'Sensor:    %s\n' ...
+                        'Threshold: %s\n' ...
+                        'Direction: %s\n' ...
+                        'Start:     %.2f\n' ...
+                        'End:       %.2f\n' ...
+                        'Duration:  %.2f\n' ...
+                        'Peak:      %.3f\n' ...
+                        'Points:    %d'], ...
+                        ev.SensorName, ev.ThresholdLabel, ev.Direction, ...
+                        ev.StartTime, ev.EndTime, ev.Duration, ...
+                        ev.PeakValue, ev.NumPoints);
+                    set(obj.hTooltip, 'Position', [mx, my + 0.15, 0], ...
+                        'String', tipStr, 'Visible', 'on');
+                    uistack(obj.hTooltip, 'top');
+                    return;
+                end
+            end
+
+            set(obj.hTooltip, 'Visible', 'off');
         end
 
         function onRowClick(obj, ~, evt)
