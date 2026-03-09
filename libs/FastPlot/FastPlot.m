@@ -799,10 +799,21 @@ classdef FastPlot < handle
                 T = obj.Thresholds(t);
 
                 % Threshold line
-                hT = line([xmin, xmax], [T.Value, T.Value], 'Parent', obj.hAxes, ...
-                    'Color', T.Color, ...
-                    'LineStyle', T.LineStyle, ...
-                    'HandleVisibility', 'off');
+                if isempty(T.X)
+                    % Scalar threshold — horizontal line
+                    hT = line([xmin, xmax], [T.Value, T.Value], 'Parent', obj.hAxes, ...
+                        'Color', T.Color, ...
+                        'LineStyle', T.LineStyle, ...
+                        'LineWidth', 1.5, ...
+                        'HandleVisibility', 'off');
+                else
+                    % Time-varying threshold — step-function line
+                    hT = line(T.X, T.Y, 'Parent', obj.hAxes, ...
+                        'Color', T.Color, ...
+                        'LineStyle', T.LineStyle, ...
+                        'LineWidth', 1.5, ...
+                        'HandleVisibility', 'off');
+                end
                 udT.FastPlot = struct( ...
                     'Type', 'threshold', ...
                     'Name', T.Label, ...
@@ -818,10 +829,14 @@ classdef FastPlot < handle
                     vyCell = cell(1, nLines);
                     nViols = 0;
                     for i = 1:nLines
+                        if obj.Lines(i).IsStatic; continue; end
                         xd = get(obj.Lines(i).hLine, 'XData');
                         yd = get(obj.Lines(i).hLine, 'YData');
-                        [vx, vy] = compute_violations( ...
-                            xd, yd, T.Value, T.Direction);
+                        if isempty(T.X)
+                            [vx, vy] = compute_violations(xd, yd, T.Value, T.Direction);
+                        else
+                            [vx, vy] = compute_violations_dynamic(xd, yd, T.X, T.Y, T.Direction);
+                        end
                         if ~isempty(vx)
                             nViols = nViols + 1;
                             vxCell{nViols} = [vx, NaN];
@@ -836,7 +851,12 @@ classdef FastPlot < handle
                         % Pixel-density cull: keep 1 violation per pixel column
                         xl = get(obj.hAxes, 'XLim');
                         pw = diff(xl) / obj.PixelWidth;
-                        [vxAll, vyAll] = downsample_violations(vxAll, vyAll, pw, T.Value, xl(1));
+                        if isempty(T.X)
+                            thVal = T.Value;
+                        else
+                            thVal = median(T.Y(~isnan(T.Y)));
+                        end
+                        [vxAll, vyAll] = downsample_violations(vxAll, vyAll, pw, thVal, xl(1));
                     else
                         vxAll = NaN;
                         vyAll = NaN;
@@ -854,8 +874,13 @@ classdef FastPlot < handle
                     obj.Thresholds(t).hMarkers = hM;
 
                     if obj.Verbose
-                        fprintf('[FastPlot] render: threshold %.4g: %d violation markers\n', ...
-                            T.Value, numel(vxAll));
+                        if isempty(T.X)
+                            fprintf('[FastPlot] render: threshold %.4g: %d violation markers\n', ...
+                                T.Value, numel(vxAll));
+                        else
+                            fprintf('[FastPlot] render: time-varying threshold "%s": %d violation markers\n', ...
+                                T.Label, numel(vxAll));
+                        end
                     end
                 end
             end
