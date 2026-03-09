@@ -25,28 +25,36 @@ function build_mex()
     end
     fprintf('Architecture: %s (%s)\n', arch, arch_raw);
 
-    % Detect best available compiler
-    [gcc_path, gcc_name] = find_gcc();
-    if ~isempty(gcc_path)
-        compiler = gcc_path;
-        fprintf('Compiler: %s (GCC — preferred for auto-vectorization)\n', gcc_name);
+    % Detect compiler: use GCC for Octave (better auto-vectorization),
+    % but always use MATLAB's configured Clang for MATLAB (it passes
+    % Clang-specific linker flags like -weak-lmex that GCC rejects).
+    isOctave = exist('OCTAVE_VERSION', 'builtin');
+    if isOctave
+        [gcc_path, gcc_name] = find_gcc();
+        if ~isempty(gcc_path)
+            compiler = gcc_path;
+            fprintf('Compiler: %s (GCC — preferred for auto-vectorization)\n', gcc_name);
+        else
+            compiler = '';
+            fprintf('Compiler: system default\n');
+        end
     else
         compiler = '';
-        fprintf('Compiler: system default (clang)\n');
+        fprintf('Compiler: MATLAB default (Xcode Clang)\n');
     end
 
     % Set optimization and SIMD flags
     switch arch
         case 'x86_64'
-            % x86_64: try AVX2 first
             opt_flags = {'-O3', '-mavx2', '-mfma', '-ftree-vectorize', '-ffast-math'};
             fprintf('SIMD target: AVX2 + FMA\n');
         case 'arm64'
-            % ARM64 (Apple Silicon / Linux ARM): NEON is default
-            if ~isempty(gcc_path)
+            if isOctave && ~isempty(compiler)
+                % GCC on ARM needs explicit CPU target
                 opt_flags = {'-O3', '-mcpu=apple-m3', '-ftree-vectorize', '-ffast-math'};
             else
-                opt_flags = {'-O3', '-mcpu=apple-m4', '-ffast-math'};
+                % Clang on Apple Silicon: NEON enabled by default
+                opt_flags = {'-O3', '-ffast-math'};
             end
             fprintf('SIMD target: ARM NEON\n');
         otherwise
