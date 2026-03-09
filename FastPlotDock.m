@@ -339,7 +339,7 @@ classdef FastPlotDock < handle
             obj.hUndockButtons(n) = [];
 
             % Create toolbar on the new standalone figure
-            FastPlotToolbar(fig);
+            setappdata(newFig, 'FastPlotToolbar', FastPlotToolbar(fig));
 
             % Show the new figure (suppress MATLAB R2025b reparenting warnings)
             set(newFig, 'Visible', 'on');

@@ -245,7 +245,8 @@ classdef FastPlotToolbar < handle
             end
             setappdata(obj.hFigure, 'FastPlotMetadataEnabled', obj.MetadataEnabled);
 
-            % Reinstall datacursor callback
+            % Clear stale saved callbacks and reinstall datacursor
+            obj.SavedCallbacks = struct();
             obj.installDataCursorCallback();
         end
 
