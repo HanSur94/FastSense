@@ -2,7 +2,7 @@ classdef Sensor < handle
     %SENSOR Represents a sensor with data, state channels, and threshold rules.
     %   s = Sensor('pressure', 'Name', 'Chamber Pressure', 'MatFile', 'data.mat')
     %   s.addStateChannel(stateChannel);
-    %   s.addThresholdRule(@(st) st.machine == 1, 50, 'Direction', 'upper');
+    %   s.addThresholdRule(struct('machine', 1), 50, 'Direction', 'upper');
     %   s.load();
     %   s.resolve();
 
@@ -72,7 +72,8 @@ classdef Sensor < handle
 
         function resolve(obj)
             %RESOLVE Precompute threshold time series, violations, and state bands.
-            %   Must be called after X, Y, and all StateChannels are loaded.
+            %   Segment-based algorithm: evaluates conditions at state-change
+            %   boundaries, then vectorizes violation detection within active segments.
 
             nRules = numel(obj.ThresholdRules);
 
@@ -85,92 +86,147 @@ classdef Sensor < handle
 
             sensorX = obj.X;
             sensorY = obj.Y;
-            n = numel(sensorX);
 
-            % Collect all state-change timestamps into a merged time grid
-            allTimes = sensorX(:)';
-            for i = 1:numel(obj.StateChannels)
-                allTimes = [allTimes, obj.StateChannels{i}.X(:)'];
+            % --- Step 1: Find segment boundaries from state channels ---
+            nChannels = numel(obj.StateChannels);
+
+            if nChannels == 0
+                % No state channels — single segment spanning all data
+                segBounds = [sensorX(1), sensorX(end)];
+            else
+                % Merge all state-change timestamps
+                allChanges = [];
+                for i = 1:nChannels
+                    allChanges = [allChanges, obj.StateChannels{i}.X(:)'];
+                end
+                segBounds = unique(allChanges);
+
+                % Ensure we cover the full sensor data range
+                if segBounds(1) > sensorX(1)
+                    segBounds = [sensorX(1), segBounds];
+                end
+                if segBounds(end) < sensorX(end)
+                    segBounds = [segBounds, sensorX(end)];
+                end
             end
-            timeGrid = unique(allTimes);
 
-            % Align all state channels to the time grid
-            stateValues = struct();
-            for i = 1:numel(obj.StateChannels)
-                sc = obj.StateChannels{i};
-                stateValues.(sc.Key) = alignStateToTime(sc.X, sc.Y, timeGrid);
+            nSegs = numel(segBounds);
+
+            % --- Step 2: Evaluate state at each segment boundary ---
+            segStates = cell(1, nSegs);
+            for s = 1:nSegs
+                st = struct();
+                for i = 1:nChannels
+                    sc = obj.StateChannels{i};
+                    st.(sc.Key) = sc.valueAt(segBounds(s));
+                end
+                segStates{s} = st;
             end
 
-            % Also align states to sensor timestamps for violation detection
-            sensorStates = struct();
-            for i = 1:numel(obj.StateChannels)
-                sc = obj.StateChannels{i};
-                sensorStates.(sc.Key) = alignStateToTime(sc.X, sc.Y, sensorX);
+            % --- Step 3: Group rules by condition for batching ---
+            condKeys = cell(1, nRules);
+            for r = 1:nRules
+                condKeys{r} = conditionKey(obj.ThresholdRules{r}.Condition);
             end
 
-            % Cache field names for state structs (avoid repeated fieldnames() calls)
-            stateFields = fieldnames(stateValues);
-            sensorStateFields = fieldnames(sensorStates);
+            [uniqueKeys, ~, groupIdx] = unique(condKeys);
+            nGroups = numel(uniqueKeys);
 
-            % Evaluate each rule across time grid → build stepped threshold line
+            % --- Step 4: For each condition group, find active segments once ---
             resolvedTh = [];
             resolvedViol = [];
-            for r = 1:nRules
-                rule = obj.ThresholdRules{r};
 
-                % Build threshold time series on the merged time grid
-                thY = NaN(1, numel(timeGrid));
-                for k = 1:numel(timeGrid)
-                    st = obj.buildStateStruct(stateValues, k, stateFields);
-                    if rule.ConditionFn(st)
-                        thY(k) = rule.Value;
+            for g = 1:nGroups
+                ruleIndices = find(groupIdx == g);
+                refRule = obj.ThresholdRules{ruleIndices(1)};
+
+                % Evaluate condition at each segment boundary
+                segActive = false(1, nSegs);
+                for s = 1:nSegs
+                    segActive(s) = refRule.matchesState(segStates{s});
+                end
+
+                % Find [lo, hi] index ranges in sensorX for each active segment
+                activeSegs = find(segActive);
+                nActive = numel(activeSegs);
+
+                if nActive == 0
+                    % No active segments — all rules in this group have no violations
+                    for ri = 1:numel(ruleIndices)
+                        r = ruleIndices(ri);
+                        rule = obj.ThresholdRules{r};
+                        th = buildThresholdEntry(segBounds, NaN(1, nSegs), rule);
+                        viol = struct('X', [], 'Y', [], 'Direction', rule.Direction, 'Label', rule.Label);
+                        [resolvedTh, resolvedViol] = appendResults(resolvedTh, resolvedViol, th, viol);
+                    end
+                    continue;
+                end
+
+                segLo = zeros(1, nActive);
+                segHi = zeros(1, nActive);
+                for a = 1:nActive
+                    si = activeSegs(a);
+                    segStart = segBounds(si);
+                    if si < nSegs
+                        segEnd = segBounds(si + 1);
+                    else
+                        segEnd = sensorX(end);
+                    end
+
+                    segLo(a) = binary_search(sensorX, segStart, 'left');
+                    if si < nSegs
+                        % Exclusive end: last point strictly before next segment
+                        segHi(a) = binary_search(sensorX, segEnd, 'left') - 1;
+                        if segHi(a) < segLo(a)
+                            segHi(a) = segLo(a);
+                        end
+                    else
+                        segHi(a) = numel(sensorX);
                     end
                 end
 
-                % Store resolved threshold
-                th.X = timeGrid;
-                th.Y = thY;
-                th.Direction = rule.Direction;
-                th.Label = rule.Label;
-                th.Color = rule.Color;
-                th.LineStyle = rule.LineStyle;
-                th.Value = rule.Value;
+                % --- Step 5: Vectorized violation detection for each rule in group ---
+                nBatchRules = numel(ruleIndices);
+                thresholdValues = zeros(1, nBatchRules);
+                directions = zeros(1, nBatchRules);
+                for ri = 1:nBatchRules
+                    rule = obj.ThresholdRules{ruleIndices(ri)};
+                    thresholdValues(ri) = rule.Value;
+                    directions(ri) = strcmp(rule.Direction, 'upper');
+                end
 
-                % Compute violations on sensor data
-                % For each sensor point, check if the rule is active and violated
-                isUpper = strcmp(rule.Direction, 'upper');
-                vX = [];
-                vY = [];
-                for k = 1:n
-                    st = obj.buildStateStruct(sensorStates, k, sensorStateFields);
-                    if rule.ConditionFn(st)
-                        if isUpper && sensorY(k) > rule.Value
-                            vX(end+1) = sensorX(k);
-                            vY(end+1) = sensorY(k);
-                        elseif ~isUpper && sensorY(k) < rule.Value
-                            vX(end+1) = sensorX(k);
-                            vY(end+1) = sensorY(k);
+                % Try MEX path, fall back to vectorized MATLAB
+                batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, ...
+                    thresholdValues, directions);
+
+                % Build output for each rule in the group
+                for ri = 1:nBatchRules
+                    r = ruleIndices(ri);
+                    rule = obj.ThresholdRules{r};
+
+                    % Build threshold time series (stepped line at boundaries)
+                    thY = NaN(1, nSegs);
+                    for s = 1:nSegs
+                        if segActive(s)
+                            thY(s) = rule.Value;
                         end
                     end
-                end
+                    th = buildThresholdEntry(segBounds, thY, rule);
 
-                viol.X = vX;
-                viol.Y = vY;
-                viol.Direction = rule.Direction;
-                viol.Label = rule.Label;
+                    % Build violation output
+                    vIdx = batchViolIdx{ri};
+                    viol.X = sensorX(vIdx);
+                    viol.Y = sensorY(vIdx);
+                    viol.Direction = rule.Direction;
+                    viol.Label = rule.Label;
 
-                if isempty(resolvedTh)
-                    resolvedTh = th;
-                    resolvedViol = viol;
-                else
-                    resolvedTh(end+1) = th;
-                    resolvedViol(end+1) = viol;
+                    [resolvedTh, resolvedViol] = appendResults(resolvedTh, resolvedViol, th, viol);
                 end
             end
 
             obj.ResolvedThresholds = resolvedTh;
             obj.ResolvedViolations = resolvedViol;
-            obj.ResolvedStateBands = struct(); % placeholder for state shading
+            obj.ResolvedStateBands = struct();
         end
 
         function active = getThresholdsAt(obj, t)
