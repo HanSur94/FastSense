@@ -4,6 +4,10 @@
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
 
+% Suppress MATLAB Variable Editor warnings during datetime/linspace
+wState = warning('off', 'all');
+restoreWarn = onCleanup(@() warning(wState));
+
 fprintf('Docked Tabs: 5 dashboards in 1 window...\n');
 tic;
 
