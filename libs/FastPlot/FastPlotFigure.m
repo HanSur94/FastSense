@@ -250,6 +250,51 @@ classdef FastPlotFigure < handle
             end
         end
 
+        function hp = tilePanel(obj, n)
+            %TILEPANEL  Get or create a uipanel for tile n.
+            %   hp = fig.tilePanel(n) returns a uipanel handle at the
+            %   computed grid position for tile n. Use this to embed
+            %   composite widgets (e.g. SensorDetailPlot) into a tile.
+            %
+            %   Throws an error if tile n is already occupied by a
+            %   FastPlot (via tile()) or raw axes (via axes()).
+
+            nTiles = obj.Grid(1) * obj.Grid(2);
+            if n < 1 || n > nTiles
+                error('FastPlotFigure:invalidTile', ...
+                    'Tile index %d is out of range [1, %d].', n, nTiles);
+            end
+
+            % Idempotency: return cached panel if already created
+            if ~isempty(obj.TileAxes{n}) && isa(obj.TileAxes{n}, 'matlab.ui.container.Panel')
+                hp = obj.TileAxes{n};
+                return;
+            end
+
+            % Conflict check: occupied by FastPlot?
+            if ~isempty(obj.Tiles{n})
+                error('FastPlotFigure:tileConflict', ...
+                    'Tile %d is a FastPlot tile. Use tile(%d) to access it.', n, n);
+            end
+
+            % Conflict check: occupied by raw axes?
+            if obj.RawAxesTiles(n)
+                error('FastPlotFigure:tileConflict', ...
+                    'Tile %d is a raw axes tile. Use axes(%d) to access it.', n, n);
+            end
+
+            % Create panel at tile position
+            pos = obj.computeTilePosition(n);
+            hp = uipanel('Parent', obj.hFigure, ...
+                'Units', 'normalized', 'Position', pos, ...
+                'BorderType', 'none');
+
+            % Store panel handle (reuses TileAxes cell for storage)
+            obj.TileAxes{n} = hp;
+            % Mark as occupied to prevent future tile()/axes() conflicts
+            obj.RawAxesTiles(n) = true;
+        end
+
         function setTileSpan(obj, n, span)
             %SETTILESPAN Set the row/column span for tile n.
             %   fig.setTileSpan(n, span) configures tile n to occupy
@@ -423,6 +468,8 @@ classdef FastPlotFigure < handle
                 % Determine the axes handle for this tile
                 if obj.RawAxesTiles(i)
                     if isempty(obj.TileAxes{i}); continue; end
+                    % Skip uipanel tiles (from tilePanel) — they manage their own content
+                    if isa(obj.TileAxes{i}, 'matlab.ui.container.Panel'); continue; end
                     ax = obj.TileAxes{i};
                 else
                     if isempty(obj.Tiles{i}) || ~obj.Tiles{i}.IsRendered
@@ -470,8 +517,9 @@ classdef FastPlotFigure < handle
             set(obj.hFigure, 'Color', obj.Theme.Background);
             for i = 1:numel(obj.Tiles)
                 if obj.RawAxesTiles(i)
-                    % Raw axes: apply theme colors directly
-                    if ~isempty(obj.TileAxes{i}) && ishandle(obj.TileAxes{i})
+                    % Raw axes: apply theme colors directly (skip uipanel tiles)
+                    if ~isempty(obj.TileAxes{i}) && ishandle(obj.TileAxes{i}) && ...
+                       ~isa(obj.TileAxes{i}, 'matlab.ui.container.Panel')
                         obj.applyThemeToAxes(obj.TileAxes{i});
                     end
                 elseif ~isempty(obj.Tiles{i}) && obj.Tiles{i}.IsRendered
@@ -756,6 +804,8 @@ classdef FastPlotFigure < handle
             if obj.RawAxesTiles(n)
                 ax = obj.TileAxes{n};
                 if ~isempty(ax) && ~ishandle(ax); ax = []; end
+                % tilePanel tiles store a uipanel, not axes — return empty
+                if ~isempty(ax) && isa(ax, 'matlab.ui.container.Panel'); ax = []; end
             else
                 fp = obj.Tiles{n};
                 if ~isempty(fp) && ~isempty(fp.hAxes) && ishandle(fp.hAxes)

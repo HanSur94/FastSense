@@ -1,0 +1,76 @@
+%% Multi-Sensor Detail Dashboard
+% Demonstrates embedding multiple SensorDetailPlots into a FastPlotFigure
+% grid using tilePanel(), each with independent navigators.
+
+addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+
+%% Create shared state channel
+sc = StateChannel('mode');
+sc.X = [0 200];
+sc.Y = [1 1];
+
+%% Sensor 1: Temperature
+t1 = linspace(0, 200, 80000);
+d1 = 120 + 15*sin(2*pi*t1/40) + 3*randn(1, numel(t1));
+d1(25000:25300) = d1(25000:25300) + 30;  % spike
+
+s1 = Sensor('temp', 'Name', 'Furnace Temperature');
+s1.X = t1; s1.Y = d1;
+s1.addStateChannel(sc);
+s1.addThresholdRule(ThresholdRule(struct('mode', 1), 140, ...
+    'Direction', 'upper', 'Label', 'H Warning', 'Color', [1 0.75 0]));
+s1.addThresholdRule(ThresholdRule(struct('mode', 1), 155, ...
+    'Direction', 'upper', 'Label', 'HH Alarm', 'Color', [1 0 0]));
+s1.resolve();
+
+ev1 = Event(t1(25000), t1(25300), 'temp', 'HH Alarm', 155, 'high');
+
+%% Sensor 2: Pressure
+t2 = linspace(0, 200, 60000);
+d2 = 2.5 + 0.8*sin(2*pi*t2/30) + 0.2*randn(1, numel(t2));
+d2(40000:40150) = d2(40000:40150) - 1.5;  % dip
+
+s2 = Sensor('pressure', 'Name', 'Chamber Pressure');
+s2.X = t2; s2.Y = d2;
+s2.addStateChannel(sc);
+s2.addThresholdRule(ThresholdRule(struct('mode', 1), 1.0, ...
+    'Direction', 'lower', 'Label', 'L Warning', 'Color', [0.3 0.6 1]));
+s2.resolve();
+
+ev2 = Event(t2(40000), t2(40150), 'pressure', 'L Warning', 1.0, 'low');
+
+%% Sensor 3: Vibration (no thresholds, no events — minimal)
+t3 = linspace(0, 200, 50000);
+d3 = 0.5 + 0.3*sin(2*pi*t3/8) + 0.1*randn(1, numel(t3));
+
+s3 = Sensor('vib', 'Name', 'Motor Vibration');
+s3.X = t3; s3.Y = d3;
+
+%% Build 2x2 dashboard: 3 SensorDetailPlots + 1 plain FastPlot
+fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Multi-Sensor Dashboard');
+
+% Tile 1: Temperature with events
+sdp1 = SensorDetailPlot(s1, 'Parent', fig.tilePanel(1), ...
+    'Events', ev1, 'Title', 'Furnace Temperature');
+sdp1.render();
+
+% Tile 2: Pressure with events
+sdp2 = SensorDetailPlot(s2, 'Parent', fig.tilePanel(2), ...
+    'Events', ev2, 'Title', 'Chamber Pressure');
+sdp2.render();
+
+% Tile 3: Vibration — no thresholds, no events
+sdp3 = SensorDetailPlot(s3, 'Parent', fig.tilePanel(3), ...
+    'ShowThresholds', false, 'ShowThresholdBands', false, ...
+    'NavigatorHeight', 0.15, 'Title', 'Motor Vibration');
+sdp3.render();
+
+% Tile 4: Plain FastPlot comparison overlay
+fp = fig.tile(4);
+fp.addLine(t1, (d1 - mean(d1))/std(d1), 'DisplayName', 'Temp (z-score)');
+fp.addLine(t2, (d2 - mean(d2))/std(d2), 'DisplayName', 'Pressure (z-score)');
+fig.tileTitle(4, 'Normalized Overlay');
+fig.renderAll();
+
+fprintf('Multi-sensor dashboard with 3 SensorDetailPlots + 1 FastPlot.\n');
+fprintf('Each navigator operates independently.\n');
