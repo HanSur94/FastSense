@@ -23,7 +23,7 @@ function files = generateEventSnapshot(event, sensorData, varargin)
     padding  = p.Results.Padding;
     ctxHours = p.Results.ContextHours;
 
-    if ~isfolder(outDir); mkdir(outDir); end
+    [~,~] = mkdir(outDir);  % idempotent — no error if exists
 
     stamp = datestr(event.StartTime, 'yyyymmdd_HHMMSS');
     baseName = sprintf('%s_%s_%s', event.SensorName, event.ThresholdLabel, stamp);

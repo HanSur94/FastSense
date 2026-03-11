@@ -118,13 +118,20 @@ classdef NotificationService < handle
         end
     end
 
+    properties (Access = private)
+        smtpConfigured_ = false
+    end
+
     methods (Access = private)
         function sendEmail(obj, recipients, subject, message, attachments)
-            if ~isempty(obj.SmtpServer)
-                setpref('Internet', 'SMTP_Server', obj.SmtpServer);
-            end
-            if ~isempty(obj.FromAddress)
-                setpref('Internet', 'E_mail', obj.FromAddress);
+            if ~obj.smtpConfigured_
+                if ~isempty(obj.SmtpServer)
+                    setpref('Internet', 'SMTP_Server', obj.SmtpServer);
+                end
+                if ~isempty(obj.FromAddress)
+                    setpref('Internet', 'E_mail', obj.FromAddress);
+                end
+                obj.smtpConfigured_ = true;
             end
             if isempty(attachments)
                 sendmail(recipients, subject, message);

@@ -2792,7 +2792,7 @@ classdef FastPlot < handle
             %   UPDATEDATETIMETICKS(obj) calls datetick() with a format
             %   string selected based on the visible X span (in datenum
             %   days):
-            %     > 1 day:   'mmm dd HH:MM'
+            %     > 1 day:   'yyyy mmm dd HH:MM'
             %     1h - 1d:   'HH:MM'
             %     1m - 1h:   'HH:MM'
             %     < 1 min:   'HH:MM:SS'
@@ -2807,7 +2807,7 @@ classdef FastPlot < handle
                 xl = get(obj.hAxes, 'XLim');
                 span = diff(xl);  % in days (datenum units)
                 if span > 1
-                    fmt = 'mmm dd HH:MM';
+                    fmt = 'yyyy mmm dd HH:MM';
                 elseif span > 1/24  % > 1 hour
                     fmt = 'HH:MM';
                 elseif span > 1/1440  % > 1 minute

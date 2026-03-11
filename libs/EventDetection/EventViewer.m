@@ -84,17 +84,7 @@ classdef EventViewer < handle
             if isfield(data, 'sensorData')
                 obj.SensorData = data.sensorData;
             end
-            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) ...
-                    && ~isempty(fieldnames(data.thresholdColors))
-                fields = fieldnames(data.thresholdColors);
-                obj.ThresholdColors = containers.Map();
-                for i = 1:numel(fields)
-                    entry = data.thresholdColors.(fields{i});
-                    obj.ThresholdColors(entry.label) = entry.rgb;
-                end
-            elseif ~isempty(obj.SensorData)
-                obj.ThresholdColors = EventViewer.extractThresholdColors(obj.SensorData);
-            end
+            obj.ThresholdColors = EventViewer.deserializeThresholdColors(data, obj.SensorData);
 
             obj.applyFilters();
 
@@ -127,9 +117,14 @@ classdef EventViewer < handle
 
         function stopAutoRefresh(obj)
             %STOPAUTOREFRESH Stop the auto-refresh timer.
-            if ~isempty(obj.RefreshTimer) && isvalid(obj.RefreshTimer)
-                stop(obj.RefreshTimer);
-                delete(obj.RefreshTimer);
+            if ~isempty(obj.RefreshTimer)
+                try
+                    if isvalid(obj.RefreshTimer)
+                        stop(obj.RefreshTimer);
+                        delete(obj.RefreshTimer);
+                    end
+                catch
+                end
             end
             obj.RefreshTimer = [];
         end
@@ -155,18 +150,7 @@ classdef EventViewer < handle
                 sensorData = data.sensorData;
             end
 
-            thresholdColors = containers.Map();
-            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) ...
-                    && ~isempty(fieldnames(data.thresholdColors))
-                fields = fieldnames(data.thresholdColors);
-                for i = 1:numel(fields)
-                    entry = data.thresholdColors.(fields{i});
-                    thresholdColors(entry.label) = entry.rgb;
-                end
-            elseif ~isempty(sensorData)
-                % Extract threshold colors from sensorData threshold rules
-                thresholdColors = EventViewer.extractThresholdColors(sensorData);
-            end
+            thresholdColors = EventViewer.deserializeThresholdColors(data, sensorData);
 
             viewer = EventViewer(events, sensorData, thresholdColors);
             viewer.SourceFile = filepath;
@@ -323,11 +307,16 @@ classdef EventViewer < handle
             end
 
             nEvents = numel(events);
+
+            % Vectorized datetime conversion
+            startStrs = cellstr(datetime([events.StartTime], 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+            endStrs   = cellstr(datetime([events.EndTime],   'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+
             data = cell(nEvents, 13);
             for i = 1:nEvents
                 ev = events(i);
-                data{i,1}  = char(datetime(ev.StartTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss'));
-                data{i,2}  = char(datetime(ev.EndTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+                data{i,1}  = startStrs{i};
+                data{i,2}  = endStrs{i};
                 data{i,3}  = obj.formatDuration(ev.Duration);
                 data{i,4}  = ev.SensorName;
                 data{i,5}  = ev.ThresholdLabel;
@@ -382,46 +371,11 @@ classdef EventViewer < handle
                 return;
             end
 
-            cp = get(obj.hTimelineAxes, 'CurrentPoint');
-            mx = cp(1,1);
-            my = cp(1,2);
-
-            % Check if mouse is within axes bounds
-            xl = get(obj.hTimelineAxes, 'XLim');
-            yl = get(obj.hTimelineAxes, 'YLim');
-            if mx < xl(1) || mx > xl(2) || my < yl(1) || my > yl(2)
-                set(obj.hTooltip, 'Visible', 'off');
-                return;
-            end
-
-            % Minimum hover width: 5 pixels in data coords
-            axPos = get(obj.hTimelineAxes, 'Position');
-            figPos = get(obj.hFigure, 'Position');
-            axWidthPx = axPos(3) * figPos(3);
-            xRange = xl(2) - xl(1);
-            minHitW = xRange * 5 / max(axWidthPx, 1);
-
-            % Find closest bar under cursor (expand narrow bars)
-            bestDist = inf;
-            bestIdx = 0;
-            for i = 1:numel(obj.BarRects)
-                if ~ishandle(obj.BarRects(i)); continue; end
-                pos = get(obj.BarRects(i), 'Position');
-                rx = pos(1); ry = pos(2); rw = pos(3); rh = pos(4);
-                if my < ry || my > ry + rh; continue; end
-                hitW = max(rw, minHitW);
-                cx = rx + rw / 2;
-                if mx >= cx - hitW/2 && mx <= cx + hitW/2
-                    dist = abs(mx - cx);
-                    if dist < bestDist
-                        bestDist = dist;
-                        bestIdx = i;
-                    end
-                end
-            end
+            bestIdx = obj.findBarUnderCursor();
 
             if bestIdx > 0
                 ev = obj.BarEvents(bestIdx);
+                cp = get(obj.hTimelineAxes, 'CurrentPoint');
                 tipStr = sprintf([ ...
                     'Sensor:    %s\n' ...
                     'Threshold: %s\n' ...
@@ -436,7 +390,7 @@ classdef EventViewer < handle
                     char(datetime(ev.EndTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
                     obj.formatDuration(ev.Duration), ...
                     ev.PeakValue, ev.NumPoints);
-                set(obj.hTooltip, 'Position', [mx, my + 0.15, 0], ...
+                set(obj.hTooltip, 'Position', [cp(1,1), cp(1,2) + 0.15, 0], ...
                     'String', tipStr, 'Visible', 'on');
                 try uistack(obj.hTooltip, 'top'); catch; end %#ok<CTCH>
             else
@@ -527,51 +481,49 @@ classdef EventViewer < handle
                 return;
             end
 
+            bestIdx = obj.findBarUnderCursor();
+
+            if bestIdx > 0
+                obj.selectBar(bestIdx);
+            end
+        end
+
+        function idx = findBarUnderCursor(obj)
+            %FINDBARUNDERCURSOR Find the closest bar to the current mouse position.
+            idx = 0;
+
             cp = get(obj.hTimelineAxes, 'CurrentPoint');
             mx = cp(1,1);
             my = cp(1,2);
 
-            % Check if click is within axes bounds
             xl = get(obj.hTimelineAxes, 'XLim');
             yl = get(obj.hTimelineAxes, 'YLim');
             if mx < xl(1) || mx > xl(2) || my < yl(1) || my > yl(2)
                 return;
             end
 
-            % Minimum clickable width: 5 pixels in data coords
+            % Minimum hit width: 5 pixels in data coords
             axPos = get(obj.hTimelineAxes, 'Position');
             figPos = get(obj.hFigure, 'Position');
             axWidthPx = axPos(3) * figPos(3);
             xRange = xl(2) - xl(1);
-            minClickW = xRange * 5 / max(axWidthPx, 1);
+            minHitW = xRange * 5 / max(axWidthPx, 1);
 
-            % Find closest bar (expand narrow bars for easier clicking)
             bestDist = inf;
-            bestIdx = 0;
             for i = 1:numel(obj.BarRects)
                 if ~ishandle(obj.BarRects(i)); continue; end
                 pos = get(obj.BarRects(i), 'Position');
                 rx = pos(1); ry = pos(2); rw = pos(3); rh = pos(4);
-
-                % Y must be within the bar row
-                if my < ry || my > ry + rh
-                    continue;
-                end
-
-                % Expand hit area for narrow bars
-                hitW = max(rw, minClickW);
-                cx = rx + rw / 2;  % bar center
+                if my < ry || my > ry + rh; continue; end
+                hitW = max(rw, minHitW);
+                cx = rx + rw / 2;
                 if mx >= cx - hitW/2 && mx <= cx + hitW/2
                     dist = abs(mx - cx);
                     if dist < bestDist
                         bestDist = dist;
-                        bestIdx = i;
+                        idx = i;
                     end
                 end
-            end
-
-            if bestIdx > 0
-                obj.selectBar(bestIdx);
             end
         end
 
@@ -632,14 +584,14 @@ classdef EventViewer < handle
             nRows = size(get(obj.hTable, 'Data'), 1);
             if nRows == 0 || row > nRows; return; end
 
-            % Highlight table row
-            bgColors = repmat([1 1 1], nRows, 1);
-            bgColors(row, :) = [0.80 0.88 1.0];  % light blue for light theme
-            set(obj.hTable, 'BackgroundColor', bgColors);
-
-            % Highlight matching Gantt bar
             if row <= numel(obj.BarRects)
+                % selectBar handles both bar and table highlighting
                 obj.selectBar(row);
+            else
+                % No corresponding bar — highlight table row directly
+                bgColors = repmat([1 1 1], nRows, 1);
+                bgColors(row, :) = [0.68 0.84 1.0];
+                set(obj.hTable, 'BackgroundColor', bgColors);
             end
         end
 
@@ -799,6 +751,21 @@ classdef EventViewer < handle
                 str = sprintf('%dm %ds', floor(secs/60), round(mod(secs, 60)));
             else
                 str = sprintf('%dh %dm', floor(secs/3600), round(mod(secs, 3600)/60));
+            end
+        end
+
+        function tc = deserializeThresholdColors(data, sensorData)
+            %DESERIALIZETHRESHOLDCOLORS Parse thresholdColors from loaded file data.
+            tc = containers.Map();
+            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) ...
+                    && ~isempty(fieldnames(data.thresholdColors))
+                fields = fieldnames(data.thresholdColors);
+                for i = 1:numel(fields)
+                    entry = data.thresholdColors.(fields{i});
+                    tc(entry.label) = entry.rgb;
+                end
+            elseif nargin >= 2 && ~isempty(sensorData)
+                tc = EventViewer.extractThresholdColors(sensorData);
             end
         end
 

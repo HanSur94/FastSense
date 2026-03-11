@@ -64,9 +64,10 @@ classdef EventStore < handle
 
     methods (Static)
         function [events, meta, changed] = loadFile(filePath)
-            persistent lastModTime;
+            persistent lastModTime lastData;
             if isempty(lastModTime)
                 lastModTime = containers.Map('KeyType', 'char', 'ValueType', 'double');
+                lastData = containers.Map('KeyType', 'char', 'ValueType', 'any');
             end
 
             events = Event.empty();
@@ -79,13 +80,11 @@ classdef EventStore < handle
             modTime = info.datenum;
 
             if lastModTime.isKey(filePath) && modTime <= lastModTime(filePath)
-                % Unchanged — still load events but mark changed=false
-                data = builtin('load', filePath);
-                if isfield(data, 'events')
-                    events = data.events;
-                end
-                if isfield(data, 'lastUpdated')
-                    meta.lastUpdated = data.lastUpdated;
+                % Unchanged — return cached results without re-reading file
+                if lastData.isKey(filePath)
+                    cached = lastData(filePath);
+                    events = cached.events;
+                    meta = cached.meta;
                 end
                 return;
             end
@@ -103,6 +102,9 @@ classdef EventStore < handle
             if isfield(data, 'pipelineConfig')
                 meta.pipelineConfig = data.pipelineConfig;
             end
+
+            % Cache for future unchanged calls
+            lastData(filePath) = struct('events', events, 'meta', meta);
         end
     end
 
@@ -120,7 +122,7 @@ classdef EventStore < handle
             pattern = fullfile(fdir, [fname '_backup_*.mat']);
             backups = dir(pattern);
             if numel(backups) > obj.MaxBackups
-                [~, idx] = sort({backups.date});
+                [~, idx] = sort([backups.datenum]);
                 toDelete = backups(idx(1:end - obj.MaxBackups));
                 for i = 1:numel(toDelete)
                     delete(fullfile(fdir, toDelete(i).name));

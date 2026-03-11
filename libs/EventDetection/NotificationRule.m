@@ -60,7 +60,15 @@ classdef NotificationRule < handle
             txt = strrep(txt, '{direction}', event.Direction);
             txt = strrep(txt, '{startTime}', datestr(event.StartTime, 'yyyy-mm-dd HH:MM:SS'));
             txt = strrep(txt, '{endTime}', datestr(event.EndTime, 'yyyy-mm-dd HH:MM:SS'));
-            txt = strrep(txt, '{duration}', sprintf('%.1fs', event.Duration * 86400));
+            durSecs = event.Duration * 86400;
+            if durSecs < 60
+                durStr = sprintf('%.1fs', durSecs);
+            elseif durSecs < 3600
+                durStr = sprintf('%dm %ds', floor(durSecs/60), round(mod(durSecs, 60)));
+            else
+                durStr = sprintf('%dh %dm', floor(durSecs/3600), round(mod(durSecs, 3600)/60));
+            end
+            txt = strrep(txt, '{duration}', durStr);
             txt = strrep(txt, '{peak}', sprintf('%.4g', event.PeakValue));
             txt = strrep(txt, '{mean}', sprintf('%.4g', event.MeanValue));
             txt = strrep(txt, '{rms}', sprintf('%.4g', event.RmsValue));

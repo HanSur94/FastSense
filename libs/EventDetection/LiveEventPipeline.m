@@ -30,6 +30,8 @@ classdef LiveEventPipeline < handle
             p.addParameter('MinDuration', 0, @isnumeric);
             p.addParameter('EscalateSeverity', true, @islogical);
             p.addParameter('MaxBackups', 5, @isnumeric);
+            p.addParameter('MaxCallsPerEvent', 1, @isnumeric);
+            p.addParameter('OnEventStart', []);
             p.parse(sensors, dataSourceMap, varargin{:});
 
             obj.Sensors       = sensors;
@@ -37,6 +39,8 @@ classdef LiveEventPipeline < handle
             obj.Interval      = p.Results.Interval;
             obj.MinDuration   = p.Results.MinDuration;
             obj.EscalateSeverity = p.Results.EscalateSeverity;
+            obj.MaxCallsPerEvent = p.Results.MaxCallsPerEvent;
+            obj.OnEventStart     = p.Results.OnEventStart;
 
             if ~isempty(p.Results.EventFile)
                 obj.EventStore = EventStore(p.Results.EventFile, ...
@@ -45,7 +49,9 @@ classdef LiveEventPipeline < handle
 
             obj.detector_ = IncrementalEventDetector( ...
                 'MinDuration', obj.MinDuration, ...
-                'EscalateSeverity', obj.EscalateSeverity);
+                'EscalateSeverity', obj.EscalateSeverity, ...
+                'MaxCallsPerEvent', obj.MaxCallsPerEvent, ...
+                'OnEventStart', obj.OnEventStart);
 
             obj.NotificationService = NotificationService('DryRun', true);
         end
@@ -62,9 +68,14 @@ classdef LiveEventPipeline < handle
         end
 
         function stop(obj)
-            if ~isempty(obj.timer_) && isvalid(obj.timer_)
-                stop(obj.timer_);
-                delete(obj.timer_);
+            if ~isempty(obj.timer_)
+                try
+                    if isvalid(obj.timer_)
+                        stop(obj.timer_);
+                        delete(obj.timer_);
+                    end
+                catch
+                end
             end
             obj.timer_ = [];
             obj.Status = 'stopped';
@@ -78,12 +89,14 @@ classdef LiveEventPipeline < handle
         function runCycle(obj)
             obj.cycleCount_ = obj.cycleCount_ + 1;
             allNewEvents = Event.empty();
+            hasNewData = false;
 
             sensorKeys = obj.Sensors.keys();
             for i = 1:numel(sensorKeys)
                 key = sensorKeys{i};
                 try
-                    newEvents = obj.processSensor(key);
+                    [newEvents, gotData] = obj.processSensor(key);
+                    hasNewData = hasNewData || gotData;
                     if ~isempty(newEvents)
                         allNewEvents = [allNewEvents, newEvents];
                     end
@@ -92,8 +105,8 @@ classdef LiveEventPipeline < handle
                 end
             end
 
-            % Update sensor data in store (for EventViewer click-to-plot)
-            if ~isempty(obj.EventStore)
+            % Update sensor data in store only when new data arrived
+            if ~isempty(obj.EventStore) && hasNewData
                 obj.updateStoreSensorData();
             end
 
@@ -130,8 +143,9 @@ classdef LiveEventPipeline < handle
     end
 
     methods (Access = private)
-        function newEvents = processSensor(obj, key)
+        function [newEvents, gotData] = processSensor(obj, key)
             newEvents = Event.empty();
+            gotData = false;
 
             if ~obj.DataSourceMap.has(key)
                 return;
@@ -143,6 +157,8 @@ classdef LiveEventPipeline < handle
             if ~result.changed
                 return;
             end
+
+            gotData = true;
 
             sensor = obj.Sensors(key);
 
