@@ -90,3 +90,52 @@ function test_set_get_zoom_range(testCase)
     verifyEqual(testCase, xMax, 60, 'AbsTol', 1);
     delete(sdp);
 end
+
+%% Thresholds in main plot
+function test_thresholds_shown_when_enabled(testCase)
+    s = createSensorWithThreshold();
+    sdp = SensorDetailPlot(s, 'ShowThresholds', true);
+    sdp.render();
+    verifyGreaterThanOrEqual(testCase, numel(sdp.MainPlot.Thresholds), 1);
+    delete(sdp);
+end
+
+function test_thresholds_hidden_when_disabled(testCase)
+    s = createSensorWithThreshold();
+    sdp = SensorDetailPlot(s, 'ShowThresholds', false);
+    sdp.render();
+    verifyEqual(testCase, numel(sdp.MainPlot.Thresholds), 0);
+    delete(sdp);
+end
+
+%% Threshold bands in navigator
+function test_navigator_has_threshold_bands(testCase)
+    s = createSensorWithThreshold();
+    sdp = SensorDetailPlot(s, 'ShowThresholdBands', true);
+    sdp.render();
+    verifyGreaterThanOrEqual(testCase, numel(sdp.NavigatorPlot.Bands), 1);
+    delete(sdp);
+end
+
+function test_navigator_no_bands_when_disabled(testCase)
+    s = createSensorWithThreshold();
+    sdp = SensorDetailPlot(s, 'ShowThresholdBands', false);
+    sdp.render();
+    verifyEqual(testCase, numel(sdp.NavigatorPlot.Bands), 0);
+    delete(sdp);
+end
+
+%% Helper: create fresh sensor with threshold (avoids shared handle mutation)
+function s = createSensorWithThreshold()
+    s = Sensor('test_th', 'Name', 'Threshold Test');
+    t = linspace(0, 100, 1000);
+    s.X = t;
+    s.Y = 50 + 10*sin(2*pi*t/20) + randn(1, numel(t));
+    sc = StateChannel('mode');
+    sc.X = [0 100];
+    sc.Y = [1 1];
+    s.addStateChannel(sc);
+    s.addThresholdRule(ThresholdRule(struct('mode', 1), 65, ...
+        'Direction', 'upper', 'Label', 'H Warning'));
+    s.resolve();
+end
