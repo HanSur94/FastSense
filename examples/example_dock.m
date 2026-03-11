@@ -11,7 +11,7 @@ restoreWarn = onCleanup(@() warning(wState));
 fprintf('Docked Tabs: 5 dashboards in 1 window...\n');
 tic;
 
-dock = FastPlotDock('Theme', 'dark', 'Name', 'Control Room', ...
+dock = FastPlotDock('Theme', 'light', 'Name', 'Control Room', ...
     'Position', [50 50 1400 800]);
 
 % Common time base: 1 hour of data starting now
@@ -24,7 +24,7 @@ sec = @(t) seconds(t - t0);
 % =========================================================================
 % Tab 1: Temperature Monitoring (2x2)
 % =========================================================================
-fig1 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig1 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 fp = fig1.tile(1);
 n = 2e6; t = linspace(t0, t1, n); s = sec(t);
@@ -59,7 +59,7 @@ dock.addTab(fig1, 'Temperature');
 % =========================================================================
 % Tab 2: Power Systems (1x2)
 % =========================================================================
-fig2 = FastPlotFigure(1, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig2 = FastPlotFigure(1, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 fp = fig2.tile(1);
 n = 3e6; t = linspace(t0, t1, n); s = sec(t);
@@ -77,7 +77,7 @@ dock.addTab(fig2, 'Power Systems');
 % =========================================================================
 % Tab 3: Hydraulics (2x1)
 % =========================================================================
-fig3 = FastPlotFigure(2, 1, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig3 = FastPlotFigure(2, 1, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 fp = fig3.tile(1);
 n = 1.5e6; t = linspace(t0, t1, n); s = sec(t);
@@ -98,7 +98,7 @@ dock.addTab(fig3, 'Hydraulics');
 % =========================================================================
 % Tab 4: Electrical Grid (1x3)
 % =========================================================================
-fig4 = FastPlotFigure(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig4 = FastPlotFigure(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 fp = fig4.tile(1);
 n = 2e6; t = linspace(t0, t1, n); s = sec(t);
@@ -123,7 +123,7 @@ dock.addTab(fig4, 'Electrical Grid');
 % =========================================================================
 % Tab 5: Environment (2x2) — 24h span
 % =========================================================================
-fig5 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig5 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 te0 = datetime(2026, 3, 8, 0, 0, 0);
 te1 = datetime(2026, 3, 8, 23, 59, 59);

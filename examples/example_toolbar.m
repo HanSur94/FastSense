@@ -12,7 +12,7 @@ y2 = cos(x * 2*pi/15) + 0.3*randn(1,n);
 fprintf('Toolbar example: %d points, 2 lines...\n', n);
 tic;
 
-fp = FastPlot('Theme', 'dark');
+fp = FastPlot('Theme', 'light');
 fp.addLine(x, y1, 'DisplayName', 'Sine');
 fp.addLine(x, y2, 'DisplayName', 'Cosine');
 fp.addThreshold(1.2, 'Direction', 'upper', 'ShowViolations', true);
@@ -41,7 +41,7 @@ fprintf('Dashboard with toolbar ready.\n');
 x = datenum(2024,1,1) + (0:99999)/86400;  % ~1 day at 1-second resolution
 y = sin((1:100000) * 2*pi/3600) + 0.2*randn(1,100000);
 
-fp3 = FastPlot('Theme', 'dark');
+fp3 = FastPlot('Theme', 'light');
 fp3.addLine(x, y, 'DisplayName', 'Sensor', 'XType', 'datenum');
 fp3.render();
 title(fp3.hAxes, 'Datetime Axis — zoom to see format change');

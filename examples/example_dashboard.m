@@ -9,7 +9,7 @@ x = linspace(0, 300, n);
 fprintf('Dashboard example: 4 tiles, %d points each, dark theme...\n', n);
 tic;
 
-fig = FastPlotFigure(2, 2, 'Theme', 'dark', ...
+fig = FastPlotFigure(2, 2, 'Theme', 'light', ...
     'Name', 'FastPlot Dashboard Demo', 'Position', [50 50 1400 800]);
 
 % --- Tile 1: Temperature with alarm bands (spans 2 columns) ---

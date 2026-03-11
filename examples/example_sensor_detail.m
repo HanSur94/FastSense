@@ -59,7 +59,7 @@ events = [ev1, ev2, ev3];
 %% 3. Standalone with events
 fprintf('=== SensorDetailPlot: Standalone with events ===\n');
 sdp = SensorDetailPlot(s, ...
-    'Theme', 'dark', ...
+    'Theme', 'light', ...
     'Events', events, ...
     'Title', 'Chamber Temperature — Detail View');
 sdp.render();
@@ -84,7 +84,7 @@ pause;
 
 %% 5. Embedded in FastPlotFigure
 fprintf('=== SensorDetailPlot: Embedded in FastPlotFigure ===\n');
-fig = FastPlotFigure(1, 2, 'Theme', 'dark', 'Name', 'Sensor Dashboard');
+fig = FastPlotFigure(1, 2, 'Theme', 'light', 'Name', 'Sensor Dashboard');
 sdp3 = SensorDetailPlot(s, 'Parent', fig.tilePanel(1), ...
     'Events', events, 'Title', 'Temperature');
 sdp3.render();

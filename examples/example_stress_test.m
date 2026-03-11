@@ -25,13 +25,13 @@ scZone.X = [0 1200 2400];
 scZone.Y = [0 1 2];
 
 % --- Create dock ---
-dock = FastPlotDock('Theme', 'dark', 'Name', 'Stress Test — 26 Sensors, 104 Thresholds', ...
+dock = FastPlotDock('Theme', 'light', 'Name', 'Stress Test — 26 Sensors, 104 Thresholds', ...
     'Position', [50 50 1800 1000]);
 
 % =========================================================================
 % TAB 1: Vacuum Chamber — 3x2 grid, 6 sensors
 % =========================================================================
-fig1 = FastPlotFigure(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig1 = FastPlotFigure(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % 1.1: Chamber Pressure — 5M pts
 s = make_sensor('pressure', 'Chamber Pressure', 5e6, 40, 18, 800, 4, {scMachine, scVacuum});
@@ -75,7 +75,7 @@ dock.addTab(fig1, 'Vacuum Chamber');
 % =========================================================================
 % TAB 2: Motor Diagnostics — 2x3 grid, 6 sensors
 % =========================================================================
-fig2 = FastPlotFigure(2, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig2 = FastPlotFigure(2, 3, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % 2.1: Motor Current A — 5M pts
 s = make_sensor('motor_A', 'Motor Current A', 5e6, 12, 4, 400, 1.5, {scMachine});
@@ -121,7 +121,7 @@ dock.addTab(fig2, 'Motor Diagnostics');
 % =========================================================================
 % TAB 3: Environmental — 2x2 grid, 4 sensors
 % =========================================================================
-fig3 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig3 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % 3.1: Cleanroom Temp — 5M pts
 s = make_sensor('room_temp', 'Cleanroom Temp', 5e6, 22, 1.5, 1800, 0.3, {scMachine});
@@ -154,7 +154,7 @@ dock.addTab(fig3, 'Environmental');
 % =========================================================================
 % TAB 4: Gas Delivery — 3x2 grid, 6 sensors
 % =========================================================================
-fig4 = FastPlotFigure(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig4 = FastPlotFigure(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 gasNames   = {'Argon', 'Nitrogen', 'Oxygen', 'CF4', 'CHF3', 'Helium'};
 gasNominal = [200    150     80     50    30    500];
@@ -184,7 +184,7 @@ dock.addTab(fig4, 'Gas Delivery');
 % =========================================================================
 % TAB 5: Power & Cooling — 2x2 grid, 4 sensors
 % =========================================================================
-fig5 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig5 = FastPlotFigure(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % 5.1: Chiller Supply — 3M pts
 s = make_sensor('chiller_supply', 'Chiller Supply', 3e6, 18, 2, 1200, 0.5, {scMachine});

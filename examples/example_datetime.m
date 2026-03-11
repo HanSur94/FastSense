@@ -15,7 +15,7 @@ fprintf('Datetime example: %dM points (~579 days, 1-second resolution)...\n', n/
 
 %% Plot 1: With datetime X axis + toolbar
 tic;
-fp1 = FastPlot('Theme', 'dark');
+fp1 = FastPlot('Theme', 'light');
 fp1.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
 fp1.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp1.render();
@@ -25,7 +25,7 @@ fprintf('Datetime + toolbar rendered in %.3f seconds.\n', toc);
 
 %% Plot 2: Plain numeric X axis + toolbar
 tic;
-fp2 = FastPlot('Theme', 'dark');
+fp2 = FastPlot('Theme', 'light');
 fp2.addLine(x, y, 'DisplayName', 'Temperature');
 fp2.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp2.render();
@@ -35,7 +35,7 @@ fprintf('Numeric + toolbar rendered in %.3f seconds.\n', toc);
 
 %% Plot 3: With datetime X axis, no toolbar
 tic;
-fp3 = FastPlot('Theme', 'dark');
+fp3 = FastPlot('Theme', 'light');
 fp3.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
 fp3.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp3.render();
@@ -44,7 +44,7 @@ fprintf('Datetime, no toolbar rendered in %.3f seconds.\n', toc);
 
 %% Plot 4: Plain numeric X axis, no toolbar
 tic;
-fp4 = FastPlot('Theme', 'dark');
+fp4 = FastPlot('Theme', 'light');
 fp4.addLine(x, y, 'DisplayName', 'Temperature');
 fp4.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp4.render();

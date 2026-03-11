@@ -47,7 +47,7 @@ s3 = Sensor('vib', 'Name', 'Motor Vibration');
 s3.X = t3; s3.Y = d3;
 
 %% Build 2x2 dashboard: 3 SensorDetailPlots + 1 plain FastPlot
-fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Multi-Sensor Dashboard');
+fig = FastPlotFigure(2, 2, 'Theme', 'light', 'Name', 'Multi-Sensor Dashboard');
 
 % Tile 1: Temperature with events
 sdp1 = SensorDetailPlot(s1, 'Parent', fig.tilePanel(1), ...

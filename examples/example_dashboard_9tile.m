@@ -6,7 +6,7 @@ addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
 fprintf('3x3 Dashboard: 9 tiles, mixed data sizes, dark theme...\n');
 tic;
 
-fig = FastPlotFigure(3, 3, 'Theme', 'dark', ...
+fig = FastPlotFigure(3, 3, 'Theme', 'light', ...
     'Name', 'Industrial Monitoring Console', 'Position', [30 30 1800 1000]);
 
 % =========================================================================

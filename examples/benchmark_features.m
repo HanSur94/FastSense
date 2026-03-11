@@ -137,7 +137,7 @@ for c = 1:n_cases
 
     % ---- Combined: all features together ----
     tic;
-    fp = FastPlot('Theme', 'dark');
+    fp = FastPlot('Theme', 'light');
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addBand(60, 65, 'FaceColor', [1 0.8 0.3], 'FaceAlpha', 0.2);
     fp.addBand(65, 75, 'FaceColor', [1 0.3 0.3], 'FaceAlpha', 0.2);
@@ -158,7 +158,7 @@ for c = 1:n_cases
 
     % ---- Dashboard: 2x2 with all features ----
     tic;
-    fig = FastPlotFigure(2, 2, 'Theme', 'dark', 'Name', 'Bench');
+    fig = FastPlotFigure(2, 2, 'Theme', 'light', 'Name', 'Bench');
     fp1 = fig.tile(1); fp1.addLine(x, y); fp1.addBand(60, 65, 'FaceColor', [1 0.8 0.3]);
     fp2 = fig.tile(2); fp2.addLine(x, y); fp2.addShaded(x, envelope_hi, envelope_lo);
     fp3 = fig.tile(3); fp3.addLine(x, y_abs); fp3.addFill(x, y_abs, 'FaceColor', [0.2 0.7 0.3]);

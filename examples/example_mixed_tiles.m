@@ -10,7 +10,7 @@ x = linspace(0, 120, n);
 fprintf('Mixed tile dashboard: 2x3 grid, FastPlot + raw axes...\n');
 tic;
 
-fig = FastPlotFigure(2, 3, 'Theme', 'dark', ...
+fig = FastPlotFigure(2, 3, 'Theme', 'light', ...
     'Name', 'Mixed Tile Types Demo', 'Position', [50 50 1500 800]);
 
 % --- Tile 1: FastPlot time series (temperature) ---
