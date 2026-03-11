@@ -102,6 +102,10 @@ classdef SensorDetailPlot < handle
             % Render main plot
             obj.MainPlot.render();
 
+            % Hide main plot x-tick labels — navigator provides the shared x-axis
+            set(obj.hMainAxes, 'XTickLabel', []);
+            xlabel(obj.hMainAxes, '');
+
             % Set title
             if ~isempty(obj.Title)
                 title(obj.hMainAxes, obj.Title);
@@ -119,6 +123,11 @@ classdef SensorDetailPlot < handle
 
             % Render navigator
             obj.NavigatorPlot.render();
+
+            % Strip navigator decoration — it's a minimal overview strip
+            set(obj.hNavAxes, 'YTickLabel', []);
+            ylabel(obj.hNavAxes, '');
+            title(obj.hNavAxes, '');
 
             % Fix navigator axes limits
             xFull = [min(obj.Sensor.X), max(obj.Sensor.X)];
@@ -259,10 +268,12 @@ classdef SensorDetailPlot < handle
                 'BorderType', 'none');
 
             % Create axes in each panel
+            % Main axes: flush bottom (no x-tick labels — navigator shows them)
             obj.hMainAxes = axes('Parent', obj.hMainPanel, ...
-                'Units', 'normalized', 'Position', [0.08 0.12 0.88 0.82]);
+                'Units', 'normalized', 'Position', [0.08 0.02 0.88 0.88]);
+            % Navigator axes: flush top, leave room for x-tick labels at bottom
             obj.hNavAxes = axes('Parent', obj.hNavPanel, ...
-                'Units', 'normalized', 'Position', [0.08 0.15 0.88 0.75]);
+                'Units', 'normalized', 'Position', [0.08 0.22 0.88 0.76]);
         end
 
         function events = resolveEvents(~, eventsInput)
