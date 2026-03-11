@@ -105,21 +105,12 @@ classdef EventConfig < handle
 
     methods (Access = private)
         function saveEvents(obj, events)
-            %SAVEEVENTS Save events, sensor data, and colors to .mat file.
-            %   Creates a timestamped backup of the existing file before overwriting.
+            %SAVEEVENTS Save events, sensor data, and colors to .mat file via EventStore.
+            store = EventStore(obj.EventFile, 'MaxBackups', obj.MaxBackups);
+            store.append(events);
+            store.SensorData = obj.SensorData;
+            store.Timestamp = datetime('now');
 
-            % Backup existing file
-            if exist(obj.EventFile, 'file') && obj.MaxBackups > 0
-                [fDir, fName, fExt] = fileparts(obj.EventFile);
-                backupName = sprintf('%s_%s%s', fName, ...
-                    datestr(now, 'yyyymmdd_HHMMSS'), fExt); %#ok<TNOW1,DATST>
-                backupPath = fullfile(fDir, backupName);
-                copyfile(obj.EventFile, backupPath);
-                obj.pruneBackups(fDir, fName, fExt);
-            end
-
-            eventStore.events = events;
-            eventStore.sensorData = obj.SensorData;
             % Convert containers.Map to struct for serialization
             if obj.ThresholdColors.Count > 0
                 keys = obj.ThresholdColors.keys();
@@ -129,27 +120,10 @@ classdef EventConfig < handle
                     safeKey = matlab.lang.makeValidName(keys{i});
                     colorStruct.(safeKey) = struct('label', keys{i}, 'rgb', vals{i});
                 end
-                eventStore.thresholdColors = colorStruct;
-            else
-                eventStore.thresholdColors = struct();
+                store.ThresholdColors = colorStruct;
             end
-            eventStore.timestamp = datetime('now');
-            save(obj.EventFile, '-struct', 'eventStore');
-        end
 
-        function pruneBackups(obj, folder, baseName, ext)
-            %PRUNEBACKUPS Keep only the newest MaxBackups backup files.
-            pattern = fullfile(folder, [baseName, '_*', ext]);
-            files = dir(pattern);
-            if numel(files) <= obj.MaxBackups
-                return;
-            end
-            [~, order] = sort([files.datenum]);
-            files = files(order);
-            nDelete = numel(files) - obj.MaxBackups;
-            for i = 1:nDelete
-                delete(fullfile(folder, files(i).name));
-            end
+            store.save();
         end
 
         function events = escalateEvents(obj, events)

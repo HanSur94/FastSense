@@ -6,6 +6,8 @@ classdef EventStore < handle
         MaxBackups      = 5
         PipelineConfig  = struct()
         SensorData      = []   % struct array: name, t, y (for EventViewer click-to-plot)
+        ThresholdColors = struct()  % serialized threshold colors struct
+        Timestamp       = []        % datetime: when events were saved
     end
 
     properties (Access = private)
@@ -49,11 +51,20 @@ classdef EventStore < handle
             lastUpdated = now; %#ok<NASGU>
             pipelineConfig = obj.PipelineConfig; %#ok<PROPLC,NASGU>
             sensorData = obj.SensorData; %#ok<PROPLC,NASGU>
-            if isempty(sensorData)
-                builtin('save', tmpFile, 'events', 'lastUpdated', 'pipelineConfig', '-v7.3');
-            else
-                builtin('save', tmpFile, 'events', 'lastUpdated', 'pipelineConfig', 'sensorData', '-v7.3');
+            thresholdColors = obj.ThresholdColors; %#ok<PROPLC,NASGU>
+            timestamp = obj.Timestamp; %#ok<PROPLC,NASGU>
+
+            varList = {'events', 'lastUpdated', 'pipelineConfig'};
+            if ~isempty(sensorData)
+                varList{end+1} = 'sensorData';
             end
+            if isstruct(thresholdColors) && ~isempty(fieldnames(thresholdColors))
+                varList{end+1} = 'thresholdColors';
+            end
+            if ~isempty(timestamp)
+                varList{end+1} = 'timestamp';
+            end
+            builtin('save', tmpFile, varList{:}, '-v7.3');
             movefile(tmpFile, obj.FilePath);
         end
 

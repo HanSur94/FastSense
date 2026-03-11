@@ -7,6 +7,7 @@ function test_incremental_detector()
     test_no_data_no_events();
     test_severity_escalation();
     test_multiple_sensors();
+    test_slice_detection_consistency();
     fprintf('test_incremental_detector: ALL PASSED\n');
 end
 
@@ -110,6 +111,25 @@ function test_multiple_sensors()
     assert(~isempty(ev1) && strcmp(ev1(1).SensorName, 'temp'), 'sensor1');
     assert(~isempty(ev2) && strcmp(ev2(1).SensorName, 'pres'), 'sensor2');
     fprintf('  PASS: test_multiple_sensors\n');
+end
+
+function test_slice_detection_consistency()
+    det = IncrementalEventDetector('MinDuration', 0);
+    sensor = makeSensor('temp', 100, 'upper');
+    % Batch 1: large history with one event
+    t1 = linspace(now-10, now-5, 500);
+    y1 = 80*ones(1,500); y1(100:150) = 120;
+    ev1 = det.process('temp', sensor, t1, y1, [], {});
+    n1 = numel(ev1);
+    % Batch 2: another event in new data
+    t2 = linspace(now-5, now, 500);
+    y2 = 80*ones(1,500); y2(200:250) = 120;
+    ev2 = det.process('temp', sensor, t2, y2, [], {});
+    % Should detect exactly the new event, not re-emit old one
+    assert(n1 >= 1, 'batch1_event');
+    assert(numel(ev2) >= 1, 'batch2_event');
+    assert(ev2(1).StartTime > now - 5.1, 'new_event_in_batch2');
+    fprintf('  PASS: test_slice_detection_consistency\n');
 end
 
 function sensor = makeSensor(key, threshVal, dir)

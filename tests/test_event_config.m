@@ -93,7 +93,30 @@ function test_event_config()
     assert(numel(critLow) >= 1, 'escalate low: critical low event exists');
     assert(critLow(1).PeakValue <= 2, 'escalate low: peak below critical threshold');
 
-    fprintf('    All 8 event_config tests passed.\n');
+    % testSaveViaEventStore
+    tmpFile = fullfile(tempdir, 'test_cfg_store_save.mat');
+    if exist(tmpFile, 'file'); delete(tmpFile); end
+    cfg = EventConfig();
+    cfg.EventFile = tmpFile;
+    cfg.MaxBackups = 0;
+    s = Sensor('temp', 'Name', 'Temperature');
+    s.X = 1:10;
+    s.Y = [5 5 12 14 11 13 5 5 5 5];
+    s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    cfg.setColor('warn', [1 0 0]);
+    cfg.addSensor(s);
+    events = cfg.runDetection();
+    % File should exist and contain events, sensorData, thresholdColors, timestamp
+    assert(exist(tmpFile, 'file') == 2, 'save: file exists');
+    data = load(tmpFile);
+    assert(isfield(data, 'events'), 'save: has events');
+    assert(isfield(data, 'sensorData'), 'save: has sensorData');
+    assert(isfield(data, 'thresholdColors'), 'save: has thresholdColors');
+    assert(isfield(data, 'timestamp'), 'save: has timestamp');
+    assert(numel(data.events) == numel(events), 'save: event count matches');
+    delete(tmpFile);
+
+    fprintf('    All 9 event_config tests passed.\n');
 end
 
 function add_event_path()

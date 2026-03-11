@@ -10,6 +10,9 @@ classdef EventViewer < handle
         SensorData      % struct array: name, t, y (for click-to-plot)
         ThresholdColors % containers.Map: label -> [R G B]
         hFigure         % figure handle
+        BarPositions    % Nx4 matrix: [x, y, w, h] cached from drawTimeline
+        BarRects        % rectangle handles for hover detection
+        BarEvents       % Event objects corresponding to BarRects
     end
 
     properties (Access = private)
@@ -19,8 +22,6 @@ classdef EventViewer < handle
         hLabelFilter    % popup menu for label filter
         hTooltip        % text object for hover tooltip
         FilteredEvents  % currently displayed events after filtering
-        BarRects        % rectangle handles for hover detection
-        BarEvents       % Event objects corresponding to BarRects
         SelectedBarIdx  % index of currently selected bar (0 = none)
         SourceFile      % char: path to .mat file (for refresh)
         RefreshTimer    % timer object for auto-refresh
@@ -236,6 +237,7 @@ classdef EventViewer < handle
             events = obj.FilteredEvents;
             obj.BarRects = [];
             obj.BarEvents = [];
+            obj.BarPositions = [];
 
             if isempty(events)
                 return;
@@ -273,6 +275,12 @@ classdef EventViewer < handle
 
             obj.BarRects = hRects;
             obj.BarEvents = events;
+
+            % Cache bar positions in a plain matrix for fast hit-testing
+            obj.BarPositions = zeros(nEvents, 4);
+            for i = 1:nEvents
+                obj.BarPositions(i, :) = get(hRects(i), 'Position');
+            end
 
             set(obj.hTimelineAxes, 'YTick', 1:nSensors, ...
                 'YTickLabel', flip(sensorNames), ...
@@ -491,6 +499,7 @@ classdef EventViewer < handle
         function idx = findBarUnderCursor(obj)
             %FINDBARUNDERCURSOR Find the closest bar to the current mouse position.
             idx = 0;
+            if isempty(obj.BarPositions); return; end
 
             cp = get(obj.hTimelineAxes, 'CurrentPoint');
             mx = cp(1,1);
@@ -510,10 +519,11 @@ classdef EventViewer < handle
             minHitW = xRange * 5 / max(axWidthPx, 1);
 
             bestDist = inf;
-            for i = 1:numel(obj.BarRects)
-                if ~ishandle(obj.BarRects(i)); continue; end
-                pos = get(obj.BarRects(i), 'Position');
-                rx = pos(1); ry = pos(2); rw = pos(3); rh = pos(4);
+            for i = 1:size(obj.BarPositions, 1)
+                rx = obj.BarPositions(i,1);
+                ry = obj.BarPositions(i,2);
+                rw = obj.BarPositions(i,3);
+                rh = obj.BarPositions(i,4);
                 if my < ry || my > ry + rh; continue; end
                 hitW = max(rw, minHitW);
                 cx = rx + rw / 2;
