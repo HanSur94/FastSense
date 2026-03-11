@@ -221,22 +221,20 @@ classdef NavigatorOverlay < handle
         end
 
         function onMouseDown(obj, src, evt)
-            % Get click position in navigator axes data coordinates
-            cp = get(obj.hAxes, 'CurrentPoint');
-            clickX = cp(1,1);
-            clickY = cp(1,2);
-
-            % Check if click is within navigator axes bounds
-            xLim = get(obj.hAxes, 'XLim');
-            yLim = get(obj.hAxes, 'YLim');
-            if clickX < xLim(1) || clickX > xLim(2) || ...
-               clickY < yLim(1) || clickY > yLim(2)
-                % Click outside navigator — chain to old callback
+            % Pixel-based hit test: verify click is actually on THIS axes
+            % (CurrentPoint projects onto all axes, causing false positives
+            % when multiple NavigatorOverlays share a figure)
+            if ~obj.isClickOnMyAxes()
+                % Not our axes — chain to old callback
                 if ~isempty(obj.OldWindowButtonDownFcn) && isa(obj.OldWindowButtonDownFcn, 'function_handle')
                     obj.OldWindowButtonDownFcn(src, evt);
                 end
                 return;
             end
+
+            % Get click position in navigator axes data coordinates
+            cp = get(obj.hAxes, 'CurrentPoint');
+            clickX = cp(1,1);
 
             xMin = obj.CurrentRange(1);
             xMax = obj.CurrentRange(2);
@@ -296,6 +294,20 @@ classdef NavigatorOverlay < handle
 
         function onMouseUp(obj, ~, ~)
             obj.DragState = 'idle';
+        end
+
+        function hit = isClickOnMyAxes(obj)
+            % Check if the current click is within this axes' pixel bounds.
+            % This is essential when multiple overlays share a figure,
+            % because get(ax, 'CurrentPoint') projects onto ALL axes.
+            if ~ishandle(obj.hFig) || ~ishandle(obj.hAxes)
+                hit = false;
+                return;
+            end
+            figPt = get(obj.hFig, 'CurrentPoint');  % [x, y] in figure pixels
+            axPos = getpixelposition(obj.hAxes, true);  % [l, b, w, h] relative to figure
+            hit = figPt(1) >= axPos(1) && figPt(1) <= axPos(1) + axPos(3) && ...
+                  figPt(2) >= axPos(2) && figPt(2) <= axPos(2) + axPos(4);
         end
 
         function onFigureResize(obj, src, evt)
