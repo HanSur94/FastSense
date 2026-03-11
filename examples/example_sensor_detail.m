@@ -6,9 +6,7 @@
 %   3. Embedding in a FastPlotFigure tile
 
 %% Setup path
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'SensorThreshold'));
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'EventDetection'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
 
 %% 1. Create sensor with realistic data
 t = linspace(0, 300, 100000);  % 5 minutes at ~333 Hz
