@@ -34,7 +34,7 @@ classdef IncrementalEventDetector < handle
 
             st = obj.getState(sensorKey);
 
-            % Append new data
+            % Append new data (kept for EventViewer click-to-plot)
             st.fullX = [st.fullX, newX];
             st.fullY = [st.fullY, newY];
 
@@ -44,10 +44,22 @@ classdef IncrementalEventDetector < handle
                 st.stateY = [st.stateY, newStateY];
             end
 
-            % Build a temporary sensor for detection on the full data
+            % Determine slice start: open event start or new data start
+            if ~isempty(st.openEvent)
+                sliceStart = st.openEvent.StartTime;
+            else
+                sliceStart = newX(1);
+            end
+
+            % Find slice index in accumulated data
+            sliceIdx = binary_search(st.fullX, sliceStart, 'left');
+            sliceX = st.fullX(sliceIdx:end);
+            sliceY = st.fullY(sliceIdx:end);
+
+            % Build a temporary sensor for detection on the slice
             tmpSensor = Sensor(sensorKey);
-            tmpSensor.X = st.fullX;
-            tmpSensor.Y = st.fullY;
+            tmpSensor.X = sliceX;
+            tmpSensor.Y = sliceY;
 
             % Copy threshold rules from the source sensor
             for i = 1:numel(sensor.ThresholdRules)
@@ -57,13 +69,15 @@ classdef IncrementalEventDetector < handle
                     'Color', rule.Color, 'LineStyle', rule.LineStyle);
             end
 
-            % Copy state channels — use accumulated state data
+            % Copy state channels — use accumulated state data (sliced)
             for i = 1:numel(sensor.StateChannels)
                 origSC = sensor.StateChannels{i};
                 if ~isempty(st.stateX)
                     sc = StateChannel(origSC.Key);
-                    sc.X = st.stateX;
-                    sc.Y = st.stateY;
+                    % Slice state data to match time window
+                    stSliceIdx = binary_search(st.stateX, sliceStart, 'left');
+                    sc.X = st.stateX(stSliceIdx:end);
+                    sc.Y = st.stateY(stSliceIdx:end);
                 else
                     sc = origSC;
                 end
@@ -76,16 +90,16 @@ classdef IncrementalEventDetector < handle
             det = EventDetector('MinDuration', obj.MinDuration, ...
                 'MaxCallsPerEvent', obj.MaxCallsPerEvent);
 
-            % Detect on full data using existing infrastructure
+            % Detect on slice using existing infrastructure
             allEvents = detectEventsFromSensor(tmpSensor, det);
 
             % Filter to only events that touch the new data window
-            sliceStart = newX(1);
+            sliceStartTime = newX(1);
             relevantEvents = Event.empty();
             if ~isempty(allEvents)
                 for i = 1:numel(allEvents)
                     ev = allEvents(i);
-                    if ev.EndTime >= sliceStart
+                    if ev.EndTime >= sliceStartTime
                         relevantEvents(end+1) = ev;
                     end
                 end
@@ -122,7 +136,6 @@ classdef IncrementalEventDetector < handle
 
             % Finalize previous open event if it didn't merge
             if ~isempty(st.openEvent) && isempty(completedEvents)
-                % Check if open event ended in this batch
                 if ~isempty(newOpenEvent) && ...
                    strcmp(newOpenEvent.ThresholdLabel, st.openEvent.ThresholdLabel)
                     % Still open, carry forward
