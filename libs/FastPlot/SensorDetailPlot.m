@@ -146,11 +146,32 @@ classdef SensorDetailPlot < handle
             % Wire bidirectional sync
             obj.NavigatorOverlayObj.OnRangeChanged = @(xMin, xMax) obj.onNavigatorRangeChanged(xMin, xMax);
 
+            % Wire sync: main axes → navigator overlay
+            % Use multiple mechanisms for reliable interactive feedback:
+
+            % 1. Ruler LimitsChangedFcn (R2021a+) — fires on zoom, pan, restore view
+            try
+                obj.hMainAxes.XAxis.LimitsChangedFcn = @(~,~) obj.onMainXLimChanged();
+            catch
+            end
+
+            % 2. Zoom/Pan ActionPostCallback — backup for interactive actions
+            hFigForSync = ancestor(obj.hMainAxes, 'figure');
+            if ~isempty(hFigForSync)
+                try
+                    set(zoom(hFigForSync), 'ActionPostCallback', ...
+                        @(~, evd) obj.onFigureZoomPan(evd));
+                    set(pan(hFigForSync), 'ActionPostCallback', ...
+                        @(~, evd) obj.onFigureZoomPan(evd));
+                catch
+                end
+            end
+
+            % 3. XLim PostSet listener — fires on programmatic XLim changes
             try
                 obj.XLimListener = addlistener(obj.hMainAxes, 'XLim', 'PostSet', ...
                     @(s,e) obj.onMainXLimChanged());
             catch
-                % Fallback for older MATLAB
             end
 
             % Set figure visible if standalone
@@ -181,6 +202,14 @@ classdef SensorDetailPlot < handle
         end
 
         function delete(obj)
+            % Clear LimitsChangedFcn
+            if ~isempty(obj.hMainAxes) && ishandle(obj.hMainAxes)
+                try
+                    obj.hMainAxes.XAxis.LimitsChangedFcn = '';
+                catch
+                end
+            end
+
             % Remove XLim listener
             if ~isempty(obj.XLimListener) && isvalid(obj.XLimListener)
                 delete(obj.XLimListener);
@@ -393,6 +422,17 @@ classdef SensorDetailPlot < handle
                 set(obj.hMainAxes, 'XLim', [xMin, xMax]);
             end
             obj.IsPropagating = false;
+        end
+
+        function onFigureZoomPan(obj, evd)
+            % Zoom/Pan ActionPostCallback handler — filter by axes
+            if obj.IsPropagating; return; end
+            try
+                if evd.Axes == obj.hMainAxes
+                    obj.onMainXLimChanged();
+                end
+            catch
+            end
         end
 
         function onMainXLimChanged(obj)
