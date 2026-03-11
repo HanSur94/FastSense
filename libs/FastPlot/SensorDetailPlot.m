@@ -268,16 +268,23 @@ classdef SensorDetailPlot < handle
 
     methods (Access = private)
         function createLayout(obj)
-            mainHeight = 1 - obj.NavigatorHeight;
+            % Resolve theme to struct for background colors
+            if isstruct(obj.Theme)
+                themeStruct = obj.Theme;
+            else
+                themeStruct = FastPlotTheme(obj.Theme);
+            end
 
             if ~isempty(obj.ParentPanel)
-                % Embedded mode: create sub-panels inside parent
+                % Embedded mode: style parent panel background
                 container = obj.ParentPanel;
                 obj.OwnsFigure = false;
+                set(container, 'BackgroundColor', themeStruct.Background);
             else
                 % Standalone mode: create figure
                 obj.hFig = figure('Visible', 'off', 'Name', obj.Title, ...
-                    'NumberTitle', 'off', 'Position', [100 100 900 600]);
+                    'NumberTitle', 'off', 'Position', [100 100 900 600], ...
+                    'Color', themeStruct.Background);
                 container = obj.hFig;
                 obj.OwnsFigure = true;
             end
@@ -299,10 +306,12 @@ classdef SensorDetailPlot < handle
 
             obj.hMainAxes = axes('Parent', container, ...
                 'Units', 'normalized', ...
-                'Position', [left mainBottom width mainHeight]);
+                'Position', [left mainBottom width mainHeight], ...
+                'Color', themeStruct.AxesColor);
             obj.hNavAxes = axes('Parent', container, ...
                 'Units', 'normalized', ...
-                'Position', [left navBottom width navHeight]);
+                'Position', [left navBottom width navHeight], ...
+                'Color', themeStruct.AxesColor);
         end
 
         function events = resolveEvents(~, eventsInput)

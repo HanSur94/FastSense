@@ -283,11 +283,12 @@ classdef FastPlotFigure < handle
                     'Tile %d is a raw axes tile. Use axes(%d) to access it.', n, n);
             end
 
-            % Create panel at tile position
+            % Create panel at tile position with theme background
             pos = obj.computeTilePosition(n);
             hp = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', 'Position', pos, ...
-                'BorderType', 'none');
+                'BorderType', 'none', ...
+                'BackgroundColor', obj.Theme.Background);
 
             % Store panel handle (reuses TileAxes cell for storage)
             obj.TileAxes{n} = hp;
