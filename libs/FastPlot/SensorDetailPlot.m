@@ -135,9 +135,13 @@ classdef SensorDetailPlot < handle
             set(obj.hNavAxes, 'XLim', xFull, 'YLim', [yRange(1)-yPad, yRange(2)+yPad]);
             set(obj.hNavAxes, 'XLimMode', 'manual', 'YLimMode', 'manual');
 
-            % Disable zoom/pan on navigator
+            % Disable all interactive tools on navigator
+            disableDefaultInteractivity(obj.hNavAxes);
+            obj.hNavAxes.Toolbar.Visible = 'off';
             zoom(obj.hNavAxes, 'off');
             pan(obj.hNavAxes, 'off');
+            rotate3d(obj.hNavAxes, 'off');
+            datacursormode(ancestor(obj.hNavAxes, 'figure'), 'off');
 
             % Add event overlays
             if ~isempty(obj.Events)
