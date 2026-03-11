@@ -92,6 +92,8 @@ classdef EventViewer < handle
                     entry = data.thresholdColors.(fields{i});
                     obj.ThresholdColors(entry.label) = entry.rgb;
                 end
+            elseif ~isempty(obj.SensorData)
+                obj.ThresholdColors = EventViewer.extractThresholdColors(obj.SensorData);
             end
 
             obj.applyFilters();
@@ -154,12 +156,16 @@ classdef EventViewer < handle
             end
 
             thresholdColors = containers.Map();
-            if isfield(data, 'thresholdColors') && ~isempty(fieldnames(data.thresholdColors))
+            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) ...
+                    && ~isempty(fieldnames(data.thresholdColors))
                 fields = fieldnames(data.thresholdColors);
                 for i = 1:numel(fields)
                     entry = data.thresholdColors.(fields{i});
                     thresholdColors(entry.label) = entry.rgb;
                 end
+            elseif ~isempty(sensorData)
+                % Extract threshold colors from sensorData threshold rules
+                thresholdColors = EventViewer.extractThresholdColors(sensorData);
             end
 
             viewer = EventViewer(events, sensorData, thresholdColors);
@@ -178,22 +184,22 @@ classdef EventViewer < handle
             obj.hFigure = figure('Name', 'Event Viewer', ...
                 'NumberTitle', 'off', ...
                 'Position', [100 100 1200 700], ...
-                'Color', [0.15 0.15 0.18]);
+                'Color', [0.96 0.96 0.96]);
 
             % --- Top panel: Gantt timeline ---
             obj.hTimelineAxes = axes('Parent', obj.hFigure, ...
                 'Position', [0.05 0.55 0.9 0.40], ...
-                'Color', [0.2 0.2 0.23], ...
-                'XColor', [0.8 0.8 0.8], ...
-                'YColor', [0.8 0.8 0.8]);
-            title(obj.hTimelineAxes, 'Event Timeline', 'Color', [0.9 0.9 0.9]);
+                'Color', [1 1 1], ...
+                'XColor', [0.2 0.2 0.2], ...
+                'YColor', [0.2 0.2 0.2]);
+            title(obj.hTimelineAxes, 'Event Timeline', 'Color', [0.1 0.1 0.1]);
             hold(obj.hTimelineAxes, 'on');
 
             % --- Filter dropdowns ---
             uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
                 'String', 'Sensor:', ...
                 'Units', 'normalized', 'Position', [0.05 0.48 0.05 0.03], ...
-                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8]);
+                'BackgroundColor', [0.96 0.96 0.96], 'ForegroundColor', [0.2 0.2 0.2]);
 
             sensorNames = [{'All'}, obj.getSensorNames()];
             obj.hSensorFilter = uicontrol('Parent', obj.hFigure, 'Style', 'popupmenu', ...
@@ -204,7 +210,7 @@ classdef EventViewer < handle
             uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
                 'String', 'Threshold:', ...
                 'Units', 'normalized', 'Position', [0.28 0.48 0.07 0.03], ...
-                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8]);
+                'BackgroundColor', [0.96 0.96 0.96], 'ForegroundColor', [0.2 0.2 0.2]);
 
             threshLabels = [{'All'}, obj.getThresholdLabels()];
             obj.hLabelFilter = uicontrol('Parent', obj.hFigure, 'Style', 'popupmenu', ...
@@ -218,15 +224,15 @@ classdef EventViewer < handle
             obj.hTable = uitable('Parent', obj.hFigure, ...
                 'Units', 'normalized', 'Position', [0.05 0.03 0.9 0.42], ...
                 'ColumnName', columnNames, ...
-                'ColumnWidth', {70 70 65 120 130 45 70 50 70 70 70 70 70}, ...
+                'ColumnWidth', {140 140 75 120 130 45 70 50 70 70 70 70 70}, ...
                 'CellSelectionCallback', @(src, evt) obj.onRowClick(src, evt));
 
             % --- Hover tooltip (hidden initially) ---
             obj.hTooltip = text(obj.hTimelineAxes, 0, 0, '', ...
                 'Visible', 'off', ...
-                'BackgroundColor', [0.1 0.1 0.12], ...
-                'Color', [0.95 0.95 0.95], ...
-                'EdgeColor', [0.5 0.5 0.5], ...
+                'BackgroundColor', [1 1 1], ...
+                'Color', [0.1 0.1 0.1], ...
+                'EdgeColor', [0.6 0.6 0.6], ...
                 'FontSize', 9, ...
                 'FontName', 'FixedWidth', ...
                 'Margin', 6, ...
@@ -274,7 +280,7 @@ classdef EventViewer < handle
                 end
 
                 barH = 0.9;
-                duration = max(ev.Duration, 0.5); % min width for visibility
+                duration = max(ev.Duration, 1/1440); % min width: 1 minute in datenum
                 hRects(i) = rectangle(obj.hTimelineAxes, ...
                     'Position', [ev.StartTime, yPos - barH/2, duration, barH], ...
                     'FaceColor', c, 'EdgeColor', c * 0.7, ...
@@ -287,18 +293,19 @@ classdef EventViewer < handle
             set(obj.hTimelineAxes, 'YTick', 1:nSensors, ...
                 'YTickLabel', flip(sensorNames), ...
                 'YLim', [0.3, nSensors + 0.7]);
-            xlabel(obj.hTimelineAxes, 'Time', 'Color', [0.8 0.8 0.8]);
+            xlabel(obj.hTimelineAxes, 'Time', 'Color', [0.2 0.2 0.2]);
+            datetick(obj.hTimelineAxes, 'x', 'keeplimits');
 
             % Enable grid
             set(obj.hTimelineAxes, 'XGrid', 'on', 'YGrid', 'on', ...
-                'GridColor', [0.4 0.4 0.4], 'GridAlpha', 0.5);
+                'GridColor', [0.8 0.8 0.8], 'GridAlpha', 0.5);
 
             % Recreate tooltip (cla destroys it)
             obj.hTooltip = text(obj.hTimelineAxes, 0, 0, '', ...
                 'Visible', 'off', ...
-                'BackgroundColor', [0.1 0.1 0.12], ...
-                'Color', [0.95 0.95 0.95], ...
-                'EdgeColor', [0.5 0.5 0.5], ...
+                'BackgroundColor', [1 1 1], ...
+                'Color', [0.1 0.1 0.1], ...
+                'EdgeColor', [0.6 0.6 0.6], ...
                 'FontSize', 9, ...
                 'FontName', 'FixedWidth', ...
                 'Margin', 6, ...
@@ -319,9 +326,9 @@ classdef EventViewer < handle
             data = cell(nEvents, 13);
             for i = 1:nEvents
                 ev = events(i);
-                data{i,1}  = ev.StartTime;
-                data{i,2}  = ev.EndTime;
-                data{i,3}  = ev.Duration;
+                data{i,1}  = char(datetime(ev.StartTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+                data{i,2}  = char(datetime(ev.EndTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+                data{i,3}  = obj.formatDuration(ev.Duration);
                 data{i,4}  = ev.SensorName;
                 data{i,5}  = ev.ThresholdLabel;
                 data{i,6}  = ev.Direction;
@@ -370,8 +377,8 @@ classdef EventViewer < handle
         end
 
         function onHover(obj)
-            if isempty(obj.BarRects) || isempty(obj.BarEvents)
-                set(obj.hTooltip, 'Visible', 'off');
+            if isempty(obj.BarRects) || isempty(obj.BarEvents) ...
+                    || isempty(obj.hTooltip) || ~ishandle(obj.hTooltip)
                 return;
             end
 
@@ -387,33 +394,54 @@ classdef EventViewer < handle
                 return;
             end
 
-            % Check each bar rectangle for hit
+            % Minimum hover width: 5 pixels in data coords
+            axPos = get(obj.hTimelineAxes, 'Position');
+            figPos = get(obj.hFigure, 'Position');
+            axWidthPx = axPos(3) * figPos(3);
+            xRange = xl(2) - xl(1);
+            minHitW = xRange * 5 / max(axWidthPx, 1);
+
+            % Find closest bar under cursor (expand narrow bars)
+            bestDist = inf;
+            bestIdx = 0;
             for i = 1:numel(obj.BarRects)
                 if ~ishandle(obj.BarRects(i)); continue; end
                 pos = get(obj.BarRects(i), 'Position');
                 rx = pos(1); ry = pos(2); rw = pos(3); rh = pos(4);
-                if mx >= rx && mx <= rx + rw && my >= ry && my <= ry + rh
-                    ev = obj.BarEvents(i);
-                    tipStr = sprintf([ ...
-                        'Sensor:    %s\n' ...
-                        'Threshold: %s\n' ...
-                        'Direction: %s\n' ...
-                        'Start:     %.2f\n' ...
-                        'End:       %.2f\n' ...
-                        'Duration:  %.2f\n' ...
-                        'Peak:      %.3f\n' ...
-                        'Points:    %d'], ...
-                        ev.SensorName, ev.ThresholdLabel, ev.Direction, ...
-                        ev.StartTime, ev.EndTime, ev.Duration, ...
-                        ev.PeakValue, ev.NumPoints);
-                    set(obj.hTooltip, 'Position', [mx, my + 0.15, 0], ...
-                        'String', tipStr, 'Visible', 'on');
-                    uistack(obj.hTooltip, 'top');
-                    return;
+                if my < ry || my > ry + rh; continue; end
+                hitW = max(rw, minHitW);
+                cx = rx + rw / 2;
+                if mx >= cx - hitW/2 && mx <= cx + hitW/2
+                    dist = abs(mx - cx);
+                    if dist < bestDist
+                        bestDist = dist;
+                        bestIdx = i;
+                    end
                 end
             end
 
-            set(obj.hTooltip, 'Visible', 'off');
+            if bestIdx > 0
+                ev = obj.BarEvents(bestIdx);
+                tipStr = sprintf([ ...
+                    'Sensor:    %s\n' ...
+                    'Threshold: %s\n' ...
+                    'Direction: %s\n' ...
+                    'Start:     %s\n' ...
+                    'End:       %s\n' ...
+                    'Duration:  %s\n' ...
+                    'Peak:      %.3f\n' ...
+                    'Points:    %d'], ...
+                    ev.SensorName, ev.ThresholdLabel, ev.Direction, ...
+                    char(datetime(ev.StartTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
+                    char(datetime(ev.EndTime, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
+                    obj.formatDuration(ev.Duration), ...
+                    ev.PeakValue, ev.NumPoints);
+                set(obj.hTooltip, 'Position', [mx, my + 0.15, 0], ...
+                    'String', tipStr, 'Visible', 'on');
+                try uistack(obj.hTooltip, 'top'); catch; end %#ok<CTCH>
+            else
+                set(obj.hTooltip, 'Visible', 'off');
+            end
         end
 
         function buildRefreshToolbar(obj)
@@ -431,7 +459,7 @@ classdef EventViewer < handle
             obj.hAutoCheck = uicontrol('Parent', obj.hFigure, 'Style', 'checkbox', ...
                 'String', 'Auto', ...
                 'Units', 'normalized', 'Position', [0.63 0.48 0.05 0.03], ...
-                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8], ...
+                'BackgroundColor', [0.96 0.96 0.96], 'ForegroundColor', [0.2 0.2 0.2], ...
                 'Value', 0, ...
                 'Callback', @(~,~) obj.onAutoCheckChanged());
 
@@ -439,7 +467,7 @@ classdef EventViewer < handle
             uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
                 'String', 'every', ...
                 'Units', 'normalized', 'Position', [0.68 0.48 0.03 0.03], ...
-                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8]);
+                'BackgroundColor', [0.96 0.96 0.96], 'ForegroundColor', [0.2 0.2 0.2]);
 
             % Interval edit
             obj.hIntervalEdit = uicontrol('Parent', obj.hFigure, 'Style', 'edit', ...
@@ -451,13 +479,13 @@ classdef EventViewer < handle
             uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
                 'String', 's', ...
                 'Units', 'normalized', 'Position', [0.75 0.48 0.015 0.03], ...
-                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.8 0.8 0.8]);
+                'BackgroundColor', [0.96 0.96 0.96], 'ForegroundColor', [0.2 0.2 0.2]);
 
             % Status label
             obj.hStatusLabel = uicontrol('Parent', obj.hFigure, 'Style', 'text', ...
                 'String', sprintf('%d events  |  file: %s', numel(obj.Events), obj.SourceFile), ...
                 'Units', 'normalized', 'Position', [0.05 0.44 0.9 0.03], ...
-                'BackgroundColor', [0.15 0.15 0.18], 'ForegroundColor', [0.6 0.6 0.6], ...
+                'BackgroundColor', [0.96 0.96 0.96], 'ForegroundColor', [0.4 0.4 0.4], ...
                 'HorizontalAlignment', 'left', 'FontSize', 8);
 
             % Stop timer and clean up on figure close
@@ -510,15 +538,40 @@ classdef EventViewer < handle
                 return;
             end
 
-            % Find which bar was clicked
+            % Minimum clickable width: 5 pixels in data coords
+            axPos = get(obj.hTimelineAxes, 'Position');
+            figPos = get(obj.hFigure, 'Position');
+            axWidthPx = axPos(3) * figPos(3);
+            xRange = xl(2) - xl(1);
+            minClickW = xRange * 5 / max(axWidthPx, 1);
+
+            % Find closest bar (expand narrow bars for easier clicking)
+            bestDist = inf;
+            bestIdx = 0;
             for i = 1:numel(obj.BarRects)
                 if ~ishandle(obj.BarRects(i)); continue; end
                 pos = get(obj.BarRects(i), 'Position');
                 rx = pos(1); ry = pos(2); rw = pos(3); rh = pos(4);
-                if mx >= rx && mx <= rx + rw && my >= ry && my <= ry + rh
-                    obj.selectBar(i);
-                    return;
+
+                % Y must be within the bar row
+                if my < ry || my > ry + rh
+                    continue;
                 end
+
+                % Expand hit area for narrow bars
+                hitW = max(rw, minClickW);
+                cx = rx + rw / 2;  % bar center
+                if mx >= cx - hitW/2 && mx <= cx + hitW/2
+                    dist = abs(mx - cx);
+                    if dist < bestDist
+                        bestDist = dist;
+                        bestIdx = i;
+                    end
+                end
+            end
+
+            if bestIdx > 0
+                obj.selectBar(bestIdx);
             end
         end
 
@@ -541,18 +594,21 @@ classdef EventViewer < handle
                     'EdgeColor', c * 0.7, 'LineWidth', 1);
             end
 
-            % Highlight selected bar
+            % Highlight selected bar with dark edge (visible on light theme)
             obj.SelectedBarIdx = idx;
             if ishandle(obj.BarRects(idx))
-                set(obj.BarRects(idx), 'EdgeColor', [1 1 1], 'LineWidth', 3);
+                set(obj.BarRects(idx), 'EdgeColor', [0.1 0.1 0.1], 'LineWidth', 3);
             end
 
-            % Highlight corresponding table row via background color
+            % Highlight corresponding table row
             nRows = size(get(obj.hTable, 'Data'), 1);
             if nRows > 0 && idx <= nRows
                 bgColors = repmat([1 1 1], nRows, 1);
-                bgColors(idx, :) = [0.3 0.5 0.8];
+                bgColors(idx, :) = [0.68 0.84 1.0];  % light blue highlight
                 set(obj.hTable, 'BackgroundColor', bgColors);
+
+                % Scroll table to make highlighted row visible
+                obj.scrollTableToRow(idx);
             end
         end
 
@@ -561,45 +617,206 @@ classdef EventViewer < handle
                 return;
             end
             row = evt.Indices(1);
-            ev = obj.FilteredEvents(row);
 
-            % Find matching sensor data
+            % Always highlight the clicked row and corresponding Gantt bar
+            obj.highlightRow(row);
+
+            % Double-click detection via MATLAB's SelectionType
+            if strcmp(get(obj.hFigure, 'SelectionType'), 'open')
+                obj.openEventPlot(row);
+            end
+        end
+
+        function highlightRow(obj, row)
+            %HIGHLIGHTROW Highlight a table row and the corresponding Gantt bar.
+            nRows = size(get(obj.hTable, 'Data'), 1);
+            if nRows == 0 || row > nRows; return; end
+
+            % Highlight table row
+            bgColors = repmat([1 1 1], nRows, 1);
+            bgColors(row, :) = [0.80 0.88 1.0];  % light blue for light theme
+            set(obj.hTable, 'BackgroundColor', bgColors);
+
+            % Highlight matching Gantt bar
+            if row <= numel(obj.BarRects)
+                obj.selectBar(row);
+            end
+        end
+
+        function openEventPlot(obj, row)
+            %OPENEVENTPLOT Open a detail dashboard for the selected event.
             if isempty(obj.SensorData)
                 return;
             end
+            ev = obj.FilteredEvents(row);
 
-            sIdx = [];
-            for i = 1:numel(obj.SensorData)
-                if strcmp(obj.SensorData(i).name, ev.SensorName)
-                    sIdx = i;
-                    break;
-                end
-            end
-
-            if isempty(sIdx)
-                return;
-            end
-
+            % Find matching sensor data
+            sIdx = find(arrayfun(@(s) strcmp(s.name, ev.SensorName), obj.SensorData), 1);
+            if isempty(sIdx); return; end
             sd = obj.SensorData(sIdx);
 
-            % Open FastPlot for this sensor, zoomed to event
-            fp = FastPlot();
-            fp.addLine(sd.t, sd.y, 'DisplayName', sd.name);
+            % Collect all events for this sensor
+            sensorEvents = obj.Events(arrayfun(@(e) strcmp(e.SensorName, ev.SensorName), obj.Events));
 
-            % Add threshold line with violation markers
-            fp.addThreshold(ev.ThresholdValue, ...
-                'Label', ev.ThresholdLabel, ...
-                'Direction', ev.Direction, ...
-                'ShowViolations', true);
+            % Build Sensor object with datetime X for axis formatting
+            sensor = obj.buildSensor(sd);
+            sensor.X = datetime(sd.t, 'ConvertFrom', 'datenum');
 
-            % Zoom to event with 20% padding
-            margin = ev.Duration * 0.2;
-            if margin == 0
-                margin = 5;
+            % Y range for shaded event regions (data + thresholds + padding)
+            yLo = min(sd.y); yHi = max(sd.y);
+            if isfield(sd, 'thresholdRules') && ~isempty(sd.thresholdRules)
+                for i = 1:numel(sd.thresholdRules)
+                    yLo = min(yLo, sd.thresholdRules{i}.Value);
+                    yHi = max(yHi, sd.thresholdRules{i}.Value);
+                end
             end
-            fp.render();
-            FastPlotToolbar(fp);
-            set(fp.hAxes, 'XLim', [ev.StartTime - margin, ev.EndTime + margin]);
+            yPad = max((yHi - yLo) * 0.15, 1);
+            yLo = yLo - yPad; yHi = yHi + yPad;
+
+            % Minimum visible event width (1 minute in datenum)
+            minWidth = 1 / 1440;
+
+            % --- Dashboard: 2 rows, 1 column (light theme) ---
+            dashboard = FastPlotFigure(2, 1, 'Theme', 'light', ...
+                'Name', sprintf('Event: %s — %s', ev.SensorName, ev.ThresholdLabel));
+
+            % Get selected event's threshold color
+            evColor = obj.getThresholdColor(ev.ThresholdLabel);
+
+            % --- Tile 1: event detail (zoomed) ---
+            fp1 = dashboard.tile(1);
+            fp1.addSensor(sensor, 'ShowThresholds', true);
+            evEnd = max(ev.EndTime, ev.StartTime + minWidth);
+            fp1.addShaded([ev.StartTime, evEnd], [yLo, yLo], [yHi, yHi], ...
+                'FaceColor', evColor, 'FaceAlpha', 0.20);
+
+            % --- Tile 2: full timeline with all events ---
+            fp2 = dashboard.tile(2);
+            fp2.addSensor(sensor, 'ShowThresholds', true);
+            for i = 1:numel(sensorEvents)
+                e = sensorEvents(i);
+                eEnd = max(e.EndTime, e.StartTime + minWidth);
+                eColor = obj.getThresholdColor(e.ThresholdLabel);
+                isSelected = (e.StartTime == ev.StartTime) && ...
+                    strcmp(e.ThresholdLabel, ev.ThresholdLabel);
+                if isSelected
+                    a = 0.4;
+                else
+                    a = 0.15;
+                end
+                fp2.addShaded([e.StartTime, eEnd], [yLo, yLo], [yHi, yHi], ...
+                    'FaceColor', eColor, 'FaceAlpha', a);
+            end
+
+            % Titles and labels (buffered — applied automatically during render)
+            durationStr = obj.formatDuration(ev.Duration);
+            dashboard.tileTitle(1, sprintf('Event Detail — %s [%s]  (Peak: %.2f, Duration: %s)', ...
+                ev.SensorName, ev.ThresholdLabel, ev.PeakValue, durationStr));
+            dashboard.tileTitle(2, sprintf('Full Timeline — %s  (%d events)', ...
+                ev.SensorName, numel(sensorEvents)));
+            dashboard.tileXLabel(1, 'Time');
+            dashboard.tileYLabel(1, ev.SensorName);
+            dashboard.tileXLabel(2, 'Time');
+            dashboard.tileYLabel(2, ev.SensorName);
+
+            dashboard.render();
+
+            % Zoom tile 1 to event timespan with context
+            xMargin = max(ev.Duration * 5, 5/1440);  % 5x duration or at least 5 minutes
+            set(fp1.hAxes, 'XLim', [ev.StartTime - xMargin, ev.EndTime + xMargin]);
+
+            % Set YLim on both tiles to include all thresholds
+            set(fp1.hAxes, 'YLim', [yLo, yHi]);
+            set(fp2.hAxes, 'YLim', [yLo, yHi]);
+
+            % Clamp tile 2 X range to full sensor data, max +/- 1 year
+            xDataLo = max(sd.t(1), ev.StartTime - 365);
+            xDataHi = min(sd.t(end), ev.EndTime + 365);
+            set(fp2.hAxes, 'XLim', [xDataLo, xDataHi]);
+
+            % Draw selection rectangle on the full timeline (tile 2)
+            evEnd = max(ev.EndTime, ev.StartTime + minWidth);
+            rectangle(fp2.hAxes, ...
+                'Position', [ev.StartTime, yLo, evEnd - ev.StartTime, yHi - yLo], ...
+                'EdgeColor', evColor, 'LineWidth', 2, 'LineStyle', '-', ...
+                'HandleVisibility', 'off');
+
+            FastPlotToolbar(fp1);
+        end
+
+        function c = getThresholdColor(obj, label)
+            %GETTHRESHOLDCOLOR Look up RGB color for a threshold label.
+            if obj.ThresholdColors.isKey(label)
+                c = obj.ThresholdColors(label);
+            else
+                c = [0.5 0.5 0.5];  % grey fallback
+            end
+        end
+
+        function sensor = buildSensor(~, sd)
+            %BUILDSENSOR Create a resolved Sensor from sensor data struct.
+            sensor = Sensor(sd.name, 'Name', sd.name);
+            sensor.X = sd.t;
+            sensor.Y = sd.y;
+            if isfield(sd, 'thresholdRules') && ~isempty(sd.thresholdRules)
+                for i = 1:numel(sd.thresholdRules)
+                    r = sd.thresholdRules{i};
+                    args = {'Direction', r.Direction, 'Label', r.Label};
+                    if ~isempty(r.Color)
+                        args = [args, {'Color', r.Color}]; %#ok<AGROW>
+                    end
+                    if ~isempty(r.LineStyle)
+                        args = [args, {'LineStyle', r.LineStyle}]; %#ok<AGROW>
+                    end
+                    sensor.addThresholdRule(struct(), r.Value, args{:});
+                end
+            end
+            sensor.resolve();
+        end
+
+        function scrollTableToRow(obj, row)
+            %SCROLLTABLETOROW Scroll uitable so the given row is visible.
+            try
+                jScrollPane = findjobj(obj.hTable);
+                if ~isempty(jScrollPane)
+                    jTable = jScrollPane.getViewport().getView();
+                    jTable.scrollRectToVisible(jTable.getCellRect(row - 1, 0, true));
+                end
+            catch
+                % findjobj or Java call unavailable — highlight still works
+            end
+        end
+    end
+
+    methods (Static, Access = private)
+        function str = formatDuration(dur)
+            %FORMATDURATION Convert datenum duration to readable string.
+            %   dur is in days (datenum units).
+            secs = dur * 86400;
+            if secs < 60
+                str = sprintf('%.1f s', secs);
+            elseif secs < 3600
+                str = sprintf('%dm %ds', floor(secs/60), round(mod(secs, 60)));
+            else
+                str = sprintf('%dh %dm', floor(secs/3600), round(mod(secs, 3600)/60));
+            end
+        end
+
+        function colors = extractThresholdColors(sensorData)
+            %EXTRACTTHRESHOLDCOLORS Build label->RGB map from sensorData threshold rules.
+            colors = containers.Map();
+            for i = 1:numel(sensorData)
+                sd = sensorData(i);
+                if ~isfield(sd, 'thresholdRules') || isempty(sd.thresholdRules)
+                    continue;
+                end
+                for j = 1:numel(sd.thresholdRules)
+                    r = sd.thresholdRules{j};
+                    if ~isempty(r.Color) && ~isempty(r.Label) && ~colors.isKey(r.Label)
+                        colors(r.Label) = r.Color;
+                    end
+                end
+            end
         end
     end
 end

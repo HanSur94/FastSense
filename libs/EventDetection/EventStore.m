@@ -5,6 +5,7 @@ classdef EventStore < handle
         FilePath        = ''
         MaxBackups      = 5
         PipelineConfig  = struct()
+        SensorData      = []   % struct array: name, t, y (for EventViewer click-to-plot)
     end
 
     properties (Access = private)
@@ -47,7 +48,12 @@ classdef EventStore < handle
             events = obj.events_; %#ok<PROPLC>
             lastUpdated = now; %#ok<NASGU>
             pipelineConfig = obj.PipelineConfig; %#ok<PROPLC,NASGU>
-            builtin('save', tmpFile, 'events', 'lastUpdated', 'pipelineConfig', '-v7.3');
+            sensorData = obj.SensorData; %#ok<PROPLC,NASGU>
+            if isempty(sensorData)
+                builtin('save', tmpFile, 'events', 'lastUpdated', 'pipelineConfig', '-v7.3');
+            else
+                builtin('save', tmpFile, 'events', 'lastUpdated', 'pipelineConfig', 'sensorData', '-v7.3');
+            end
             movefile(tmpFile, obj.FilePath);
         end
 

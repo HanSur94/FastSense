@@ -92,6 +92,11 @@ classdef LiveEventPipeline < handle
                 end
             end
 
+            % Update sensor data in store (for EventViewer click-to-plot)
+            if ~isempty(obj.EventStore)
+                obj.updateStoreSensorData();
+            end
+
             % Write to store
             if ~isempty(obj.EventStore) && ~isempty(allNewEvents)
                 obj.EventStore.append(allNewEvents);
@@ -159,6 +164,34 @@ classdef LiveEventPipeline < handle
 
             sd = struct('X', st.fullX, 'Y', st.fullY, ...
                 'thresholdValue', thVal, 'thresholdDirection', thDir);
+        end
+
+        function updateStoreSensorData(obj)
+            % Build sensorData struct array from detector state for EventViewer
+            sensorKeys = obj.Sensors.keys();
+            sd = struct('name', {}, 't', {}, 'y', {}, 'thresholdRules', {});
+            for i = 1:numel(sensorKeys)
+                key = sensorKeys{i};
+                st = obj.detector_.getSensorState(key);
+                if ~isempty(st.fullX)
+                    sd(end+1).name = key; %#ok<AGROW>
+                    sd(end).t = st.fullX;
+                    sd(end).y = st.fullY;
+                    % Store threshold rules for reconstruction in EventViewer
+                    sensor = obj.Sensors(key);
+                    rules = {};
+                    for j = 1:numel(sensor.ThresholdRules)
+                        r = sensor.ThresholdRules{j};
+                        rules{j} = struct('Value', r.Value, ...
+                            'Direction', r.Direction, ...
+                            'Label', r.Label, ...
+                            'Color', r.Color, ...
+                            'LineStyle', r.LineStyle); %#ok<AGROW>
+                    end
+                    sd(end).thresholdRules = rules;
+                end
+            end
+            obj.EventStore.SensorData = sd;
         end
 
         function timerCallback(obj)

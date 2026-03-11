@@ -61,7 +61,9 @@ classdef IncrementalEventDetector < handle
             for i = 1:numel(sensor.StateChannels)
                 origSC = sensor.StateChannels{i};
                 if ~isempty(st.stateX)
-                    sc = StateChannel(origSC.Key, st.stateX, st.stateY);
+                    sc = StateChannel(origSC.Key);
+                    sc.X = st.stateX;
+                    sc.Y = st.stateY;
                 else
                     sc = origSC;
                 end

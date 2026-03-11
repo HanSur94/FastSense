@@ -90,6 +90,9 @@ classdef FastPlotFigure < handle
         TileAxes   = {}         % cell array of axes handles
         TileSpans  = {}         % cell array of [rowSpan, colSpan]
         TileThemes = {}         % cell array of theme override structs
+        TileTitles = {}         % cell array of buffered title strings
+        TileXLabels = {}        % cell array of buffered xlabel strings
+        TileYLabels = {}        % cell array of buffered ylabel strings
         IsRendered = false
         LiveTimer      = []        % timer object
         LiveFileDate   = 0         % last known file datenum
@@ -123,10 +126,13 @@ classdef FastPlotFigure < handle
 
             obj.Grid = [rows, cols];
             nTiles = rows * cols;
-            obj.Tiles     = cell(1, nTiles);
-            obj.TileAxes  = cell(1, nTiles);
-            obj.TileSpans = cell(1, nTiles);
+            obj.Tiles      = cell(1, nTiles);
+            obj.TileAxes   = cell(1, nTiles);
+            obj.TileSpans  = cell(1, nTiles);
             obj.TileThemes = cell(1, nTiles);
+            obj.TileTitles = cell(1, nTiles);
+            obj.TileXLabels = cell(1, nTiles);
+            obj.TileYLabels = cell(1, nTiles);
 
             % Default spans: each tile is 1x1
             for i = 1:nTiles
@@ -242,12 +248,14 @@ classdef FastPlotFigure < handle
             %TILETITLE Set title for tile n.
             %   fig.tileTitle(n, str) sets the axes title on tile n using
             %   the figure theme's TitleFontSize and ForegroundColor.
+            %   Can be called before or after render().
             %
             %   Inputs:
             %     n   — tile index (1 to rows*cols)
             %     str — title string
             %
             %   See also tileXLabel, tileYLabel.
+            obj.TileTitles{n} = str;
             fp = obj.tile(n);
             if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
                 title(fp.hAxes, str, 'FontSize', obj.Theme.TitleFontSize, ...
@@ -259,12 +267,14 @@ classdef FastPlotFigure < handle
             %TILEXLABEL Set xlabel for tile n.
             %   fig.tileXLabel(n, str) sets the X-axis label on tile n
             %   using the figure theme's ForegroundColor.
+            %   Can be called before or after render().
             %
             %   Inputs:
             %     n   — tile index (1 to rows*cols)
             %     str — label string
             %
             %   See also tileTitle, tileYLabel.
+            obj.TileXLabels{n} = str;
             fp = obj.tile(n);
             if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
                 xlabel(fp.hAxes, str, 'Color', obj.Theme.ForegroundColor);
@@ -275,12 +285,14 @@ classdef FastPlotFigure < handle
             %TILEYLABEL Set ylabel for tile n.
             %   fig.tileYLabel(n, str) sets the Y-axis label on tile n
             %   using the figure theme's ForegroundColor.
+            %   Can be called before or after render().
             %
             %   Inputs:
             %     n   — tile index (1 to rows*cols)
             %     str — label string
             %
             %   See also tileTitle, tileXLabel.
+            obj.TileYLabels{n} = str;
             fp = obj.tile(n);
             if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
                 ylabel(fp.hAxes, str, 'Color', obj.Theme.ForegroundColor);
@@ -343,6 +355,24 @@ classdef FastPlotFigure < handle
             catch err
                 if showProg && ~isempty(cpb); cpb.finish(); end
                 rethrow(err);
+            end
+
+            % Apply buffered titles and labels now that axes exist
+            for i = 1:numel(obj.Tiles)
+                if isempty(obj.Tiles{i}) || ~obj.Tiles{i}.IsRendered
+                    continue;
+                end
+                ax = obj.Tiles{i}.hAxes;
+                if ~isempty(obj.TileTitles{i})
+                    title(ax, obj.TileTitles{i}, 'FontSize', obj.Theme.TitleFontSize, ...
+                        'Color', obj.Theme.ForegroundColor);
+                end
+                if ~isempty(obj.TileXLabels{i})
+                    xlabel(ax, obj.TileXLabels{i}, 'Color', obj.Theme.ForegroundColor);
+                end
+                if ~isempty(obj.TileYLabels{i})
+                    ylabel(ax, obj.TileYLabels{i}, 'Color', obj.Theme.ForegroundColor);
+                end
             end
 
             % Skip figure show + drawnow when nested (dock manages visibility)
