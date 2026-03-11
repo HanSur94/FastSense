@@ -32,6 +32,7 @@ function run_all_examples(mode)
         'example_sensor_multi_state', 'Multi-state sensor, combined conditions, getThresholdsAt'
         'example_sensor_registry',  'SensorRegistry API (list, get, getMultiple)'
         'example_sensor_dashboard', 'Multi-sensor 2x2 dashboard with SensorRegistry'
+        'example_mixed_tiles',     'Mixed tile types: FastPlot + bar/scatter/histogram'
     };
 
     fprintf('\n');

@@ -36,6 +36,7 @@ classdef FastPlotFigure < handle
     %   FastPlotFigure Methods:
     %     FastPlotFigure    — construct a tiled dashboard
     %     tile              — get or create the FastPlot instance for tile n
+    %     axes              — get or create a raw MATLAB axes for tile n
     %     setTileSpan       — set the row/column span for tile n
     %     setTileTheme      — set per-tile theme overrides
     %     tileTitle         — set title for tile n
@@ -61,6 +62,14 @@ classdef FastPlotFigure < handle
     %     fig = FastPlotFigure(2, 2);
     %     fig.setTileSpan(1, [1, 2]);  % tile 1 spans full width
     %     fig.tile(1).addLine(x, y);
+    %     fig.renderAll();
+    %
+    %   Example — mixed tile types:
+    %     fig = FastPlotFigure(2, 2, 'Theme', 'dark');
+    %     fig.tile(1).addLine(t, y1);           % FastPlot (optimized)
+    %     ax = fig.axes(2); bar(ax, x, y2);     % raw axes (bar chart)
+    %     ax = fig.axes(3); scatter(ax, x, y3); % raw axes (scatter)
+    %     fig.tile(4).addLine(t, y4);           % FastPlot (optimized)
     %     fig.renderAll();
     %
     %   See also FastPlot, FastPlotDock, FastPlotTheme, FastPlotToolbar.
@@ -93,6 +102,7 @@ classdef FastPlotFigure < handle
         TileTitles = {}         % cell array of buffered title strings
         TileXLabels = {}        % cell array of buffered xlabel strings
         TileYLabels = {}        % cell array of buffered ylabel strings
+        RawAxesTiles = []     % logical array: true = raw axes, false = FastPlot
         IsRendered = false
         LiveTimer      = []        % timer object
         LiveFileDate   = 0         % last known file datenum
@@ -133,6 +143,7 @@ classdef FastPlotFigure < handle
             obj.TileTitles = cell(1, nTiles);
             obj.TileXLabels = cell(1, nTiles);
             obj.TileYLabels = cell(1, nTiles);
+            obj.RawAxesTiles = false(1, nTiles);
 
             % Default spans: each tile is 1x1
             for i = 1:nTiles
@@ -175,6 +186,11 @@ classdef FastPlotFigure < handle
                     'Tile %d is out of range (1-%d).', n, nTiles);
             end
 
+            if obj.RawAxesTiles(n)
+                error('FastPlotFigure:tileConflict', ...
+                    'Tile %d is a raw axes tile. Use axes(%d) to access it.', n, n);
+            end
+
             if isempty(obj.Tiles{n})
                 ax = obj.createTileAxes(n);
                 obj.TileAxes{n} = ax;
@@ -189,6 +205,48 @@ classdef FastPlotFigure < handle
                 obj.Tiles{n} = fp;
             else
                 fp = obj.Tiles{n};
+            end
+        end
+
+        function ax = axes(obj, n)
+            %AXES Get or create a raw MATLAB axes for tile n.
+            %   ax = fig.axes(n) returns a themed MATLAB axes handle at the
+            %   position for tile n. Use for non-FastPlot plot types (bar,
+            %   scatter, histogram, stem, etc.). The axes gets theme colors
+            %   applied but no FastPlot optimization.
+            %
+            %   Mutually exclusive with tile(n) — a tile cannot be both a
+            %   FastPlot and a raw axes.
+            %
+            %   Input:
+            %     n — tile index (1 to rows*cols, row-major order)
+            %
+            %   Output:
+            %     ax — MATLAB axes handle
+            %
+            %   Example:
+            %     ax = fig.axes(2);
+            %     bar(ax, [1 2 3], [10 20 15]);
+            %
+            %   See also tile, setTileSpan.
+            nTiles = obj.Grid(1) * obj.Grid(2);
+            if n < 1 || n > nTiles
+                error('FastPlotFigure:outOfBounds', ...
+                    'Tile %d is out of range (1-%d).', n, nTiles);
+            end
+
+            if ~isempty(obj.Tiles{n})
+                error('FastPlotFigure:tileConflict', ...
+                    'Tile %d is a FastPlot tile. Use tile(%d) to access it.', n, n);
+            end
+
+            if isempty(obj.TileAxes{n})
+                ax = obj.createTileAxes(n);
+                obj.TileAxes{n} = ax;
+                obj.RawAxesTiles(n) = true;
+                obj.applyThemeToAxes(ax);
+            else
+                ax = obj.TileAxes{n};
             end
         end
 
@@ -256,9 +314,9 @@ classdef FastPlotFigure < handle
             %
             %   See also tileXLabel, tileYLabel.
             obj.TileTitles{n} = str;
-            fp = obj.tile(n);
-            if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
-                title(fp.hAxes, str, 'FontSize', obj.Theme.TitleFontSize, ...
+            ax = obj.getTileAxesHandle(n);
+            if ~isempty(ax)
+                title(ax, str, 'FontSize', obj.Theme.TitleFontSize, ...
                     'Color', obj.Theme.ForegroundColor);
             end
         end
@@ -275,9 +333,9 @@ classdef FastPlotFigure < handle
             %
             %   See also tileTitle, tileYLabel.
             obj.TileXLabels{n} = str;
-            fp = obj.tile(n);
-            if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
-                xlabel(fp.hAxes, str, 'Color', obj.Theme.ForegroundColor);
+            ax = obj.getTileAxesHandle(n);
+            if ~isempty(ax)
+                xlabel(ax, str, 'Color', obj.Theme.ForegroundColor);
             end
         end
 
@@ -293,9 +351,9 @@ classdef FastPlotFigure < handle
             %
             %   See also tileTitle, tileXLabel.
             obj.TileYLabels{n} = str;
-            fp = obj.tile(n);
-            if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
-                ylabel(fp.hAxes, str, 'Color', obj.Theme.ForegroundColor);
+            ax = obj.getTileAxesHandle(n);
+            if ~isempty(ax)
+                ylabel(ax, str, 'Color', obj.Theme.ForegroundColor);
             end
         end
 
@@ -315,9 +373,12 @@ classdef FastPlotFigure < handle
             %   See also render, tile.
             if nargin < 2; parentProgressBar = []; end
 
-            % Collect tiles that need rendering
+            % Collect FastPlot tiles that need rendering (skip raw axes tiles)
             tilesToRender = [];
             for i = 1:numel(obj.Tiles)
+                if obj.RawAxesTiles(i)
+                    continue;
+                end
                 if ~isempty(obj.Tiles{i}) && ~obj.Tiles{i}.IsRendered
                     tilesToRender(end+1) = i; %#ok<AGROW>
                 end
@@ -359,10 +420,16 @@ classdef FastPlotFigure < handle
 
             % Apply buffered titles and labels now that axes exist
             for i = 1:numel(obj.Tiles)
-                if isempty(obj.Tiles{i}) || ~obj.Tiles{i}.IsRendered
-                    continue;
+                % Determine the axes handle for this tile
+                if obj.RawAxesTiles(i)
+                    if isempty(obj.TileAxes{i}); continue; end
+                    ax = obj.TileAxes{i};
+                else
+                    if isempty(obj.Tiles{i}) || ~obj.Tiles{i}.IsRendered
+                        continue;
+                    end
+                    ax = obj.Tiles{i}.hAxes;
                 end
-                ax = obj.Tiles{i}.hAxes;
                 if ~isempty(obj.TileTitles{i})
                     title(ax, obj.TileTitles{i}, 'FontSize', obj.Theme.TitleFontSize, ...
                         'Color', obj.Theme.ForegroundColor);
@@ -402,7 +469,12 @@ classdef FastPlotFigure < handle
             %   See also setTileTheme, FastPlot.reapplyTheme.
             set(obj.hFigure, 'Color', obj.Theme.Background);
             for i = 1:numel(obj.Tiles)
-                if ~isempty(obj.Tiles{i}) && obj.Tiles{i}.IsRendered
+                if obj.RawAxesTiles(i)
+                    % Raw axes: apply theme colors directly
+                    if ~isempty(obj.TileAxes{i}) && ishandle(obj.TileAxes{i})
+                        obj.applyThemeToAxes(obj.TileAxes{i});
+                    end
+                elseif ~isempty(obj.Tiles{i}) && obj.Tiles{i}.IsRendered
                     if ~isempty(obj.TileThemes) && i <= numel(obj.TileThemes) && ~isempty(obj.TileThemes{i})
                         obj.Tiles{i}.Theme = mergeTheme(obj.Theme, obj.TileThemes{i});
                     else
@@ -454,9 +526,9 @@ classdef FastPlotFigure < handle
                 obj.LiveViewMode = 'preserve';
             end
 
-            % Set view mode on all tiles
+            % Set view mode on FastPlot tiles only (raw axes tiles are unmanaged)
             for i = 1:numel(obj.Tiles)
-                if ~isempty(obj.Tiles{i})
+                if ~obj.RawAxesTiles(i) && ~isempty(obj.Tiles{i})
                     obj.Tiles{i}.LiveViewMode = obj.LiveViewMode;
                 end
             end
@@ -549,7 +621,7 @@ classdef FastPlotFigure < handle
             %   See also startLive.
             obj.LiveViewMode = mode;
             for i = 1:numel(obj.Tiles)
-                if ~isempty(obj.Tiles{i})
+                if ~obj.RawAxesTiles(i) && ~isempty(obj.Tiles{i})
                     obj.Tiles{i}.LiveViewMode = mode;
                 end
             end
@@ -677,6 +749,43 @@ classdef FastPlotFigure < handle
             catch
                 set(ax, 'ActivePositionProperty', 'position');
             end
+        end
+
+        function ax = getTileAxesHandle(obj, n)
+            %GETTILEAXESHANDLE Get the axes handle for tile n (FastPlot or raw).
+            if obj.RawAxesTiles(n)
+                ax = obj.TileAxes{n};
+                if ~isempty(ax) && ~ishandle(ax); ax = []; end
+            else
+                fp = obj.Tiles{n};
+                if ~isempty(fp) && ~isempty(fp.hAxes) && ishandle(fp.hAxes)
+                    ax = fp.hAxes;
+                else
+                    % Tile exists but not rendered yet — call tile() to create axes
+                    if ~isempty(fp)
+                        ax = [];
+                    else
+                        fp = obj.tile(n);
+                        if ~isempty(fp.hAxes) && ishandle(fp.hAxes)
+                            ax = fp.hAxes;
+                        else
+                            ax = [];
+                        end
+                    end
+                end
+            end
+        end
+
+        function applyThemeToAxes(obj, ax)
+            %APPLYTHEMETOAXES Apply figure theme colors to a raw axes.
+            set(ax, 'Color', obj.Theme.AxesColor, ...
+                    'XColor', obj.Theme.ForegroundColor, ...
+                    'YColor', obj.Theme.ForegroundColor, ...
+                    'GridColor', obj.Theme.GridColor);
+            if ~isempty(obj.Theme.GridAlpha)
+                set(ax, 'GridAlpha', obj.Theme.GridAlpha);
+            end
+            set(ax, 'FontSize', obj.Theme.FontSize);
         end
 
     end

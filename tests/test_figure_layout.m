@@ -112,5 +112,95 @@ function test_figure_layout()
     % No error = pass
     close(fig.hFigure);
 
-    fprintf('    All 12 figure layout tests passed.\n');
+    % testAxesReturnsRawAxes
+    fig = FastPlotFigure(2, 2);
+    ax = fig.axes(1);
+    assert(ishandle(ax), 'testAxesReturnsRawAxes: valid handle');
+    assert(strcmp(get(ax, 'Type'), 'axes'), 'testAxesReturnsRawAxes: is axes');
+    close(fig.hFigure);
+
+    % testAxesLazy
+    fig = FastPlotFigure(2, 1);
+    ax1 = fig.axes(1);
+    ax2 = fig.axes(1);
+    assert(isequal(ax1, ax2), 'testAxesLazy: same handle on repeat call');
+    close(fig.hFigure);
+
+    % testTileThenAxesErrors
+    fig = FastPlotFigure(2, 1);
+    fig.tile(1);
+    threw = false;
+    try
+        fig.axes(1);
+    catch
+        threw = true;
+    end
+    assert(threw, 'testTileThenAxesErrors');
+    close(fig.hFigure);
+
+    % testAxesThenTileErrors
+    fig = FastPlotFigure(2, 1);
+    fig.axes(1);
+    threw = false;
+    try
+        fig.tile(1);
+    catch
+        threw = true;
+    end
+    assert(threw, 'testAxesThenTileErrors');
+    close(fig.hFigure);
+
+    % testMixedRenderAll
+    fig = FastPlotFigure(2, 2);
+    fig.tile(1).addLine(1:50, rand(1,50));
+    ax2 = fig.axes(2); bar(ax2, [1 2 3], [10 20 15]);
+    fig.tile(3).addLine(1:50, rand(1,50));
+    ax4 = fig.axes(4); plot(ax4, 1:10, rand(1,10));
+    fig.renderAll();
+    assert(fig.tile(1).IsRendered, 'testMixedRenderAll: tile 1 rendered');
+    assert(fig.tile(3).IsRendered, 'testMixedRenderAll: tile 3 rendered');
+    % Raw axes tiles should still have valid handles
+    assert(ishandle(ax2), 'testMixedRenderAll: ax2 valid');
+    assert(ishandle(ax4), 'testMixedRenderAll: ax4 valid');
+    close(fig.hFigure);
+
+    % testAxesThemeApplied
+    fig = FastPlotFigure(1, 1, 'Theme', 'dark');
+    ax = fig.axes(1);
+    bgColor = get(ax, 'Color');
+    assert(all(bgColor < [0.3 0.3 0.3]), 'testAxesThemeApplied: dark background');
+    close(fig.hFigure);
+
+    % testLabelsOnRawAxes
+    fig = FastPlotFigure(2, 1);
+    ax = fig.axes(1);
+    bar(ax, [1 2 3], [10 20 15]);
+    fig.tileTitle(1, 'Bar Chart');
+    fig.tileXLabel(1, 'Category');
+    fig.tileYLabel(1, 'Value');
+    % No error = pass; verify title text
+    titleObj = get(ax, 'Title');
+    assert(strcmp(get(titleObj, 'String'), 'Bar Chart'), 'testLabelsOnRawAxes: title');
+    close(fig.hFigure);
+
+    % testAxesOutOfBounds
+    fig = FastPlotFigure(2, 2);
+    threw = false;
+    try
+        fig.axes(5);
+    catch
+        threw = true;
+    end
+    assert(threw, 'testAxesOutOfBounds');
+    close(fig.hFigure);
+
+    % testAxesTileSpanning
+    fig = FastPlotFigure(2, 2);
+    fig.setTileSpan(1, [1 2]);
+    ax = fig.axes(1);
+    pos = get(ax, 'Position');
+    assert(pos(3) > 0.4, 'testAxesTileSpanning: wide enough');
+    close(fig.hFigure);
+
+    fprintf('    All 21 figure layout tests passed.\n');
 end
