@@ -268,32 +268,40 @@ classdef NavigatorOverlay < handle
             end
         end
 
-        function onMouseMove(obj, ~, ~)
-            if strcmp(obj.DragState, 'idle'); return; end
-            if ~ishandle(obj.hAxes); return; end
+        function onMouseMove(obj, src, evt)
+            % Process drag if this overlay is active
+            if ~strcmp(obj.DragState, 'idle') && ishandle(obj.hAxes)
+                cp = get(obj.hAxes, 'CurrentPoint');
+                currentX = cp(1,1);
+                deltaX = currentX - obj.DragStartX;
 
-            cp = get(obj.hAxes, 'CurrentPoint');
-            currentX = cp(1,1);
-            deltaX = currentX - obj.DragStartX;
+                switch obj.DragState
+                    case 'panning'
+                        newMin = obj.DragStartRange(1) + deltaX;
+                        newMax = obj.DragStartRange(2) + deltaX;
+                        obj.setRange(newMin, newMax);
 
-            switch obj.DragState
-                case 'panning'
-                    newMin = obj.DragStartRange(1) + deltaX;
-                    newMax = obj.DragStartRange(2) + deltaX;
-                    obj.setRange(newMin, newMax);
+                    case 'resizeLeft'
+                        newMin = obj.DragStartRange(1) + deltaX;
+                        obj.setRange(newMin, obj.DragStartRange(2));
 
-                case 'resizeLeft'
-                    newMin = obj.DragStartRange(1) + deltaX;
-                    obj.setRange(newMin, obj.DragStartRange(2));
-
-                case 'resizeRight'
-                    newMax = obj.DragStartRange(2) + deltaX;
-                    obj.setRange(obj.DragStartRange(1), newMax);
+                    case 'resizeRight'
+                        newMax = obj.DragStartRange(2) + deltaX;
+                        obj.setRange(obj.DragStartRange(1), newMax);
+                end
+            end
+            % Always chain so other overlays in the figure get the event
+            if ~isempty(obj.OldWindowButtonMotionFcn) && isa(obj.OldWindowButtonMotionFcn, 'function_handle')
+                obj.OldWindowButtonMotionFcn(src, evt);
             end
         end
 
-        function onMouseUp(obj, ~, ~)
+        function onMouseUp(obj, src, evt)
             obj.DragState = 'idle';
+            % Always chain so other overlays in the figure get the event
+            if ~isempty(obj.OldWindowButtonUpFcn) && isa(obj.OldWindowButtonUpFcn, 'function_handle')
+                obj.OldWindowButtonUpFcn(src, evt);
+            end
         end
 
         function hit = isClickOnMyAxes(obj)
@@ -303,6 +311,17 @@ classdef NavigatorOverlay < handle
             if ~ishandle(obj.hFig) || ~ishandle(obj.hAxes)
                 hit = false;
                 return;
+            end
+            % In tabbed docks, hidden tabs overlap visible ones at the
+            % same pixel coordinates.  Walk the parent chain and reject
+            % the click if any ancestor panel is hidden.
+            p = get(obj.hAxes, 'Parent');
+            while ~isempty(p) && p ~= obj.hFig
+                if isprop(p, 'Visible') && strcmp(get(p, 'Visible'), 'off')
+                    hit = false;
+                    return;
+                end
+                p = get(p, 'Parent');
             end
             figPt = get(obj.hFig, 'CurrentPoint');  % [x, y] in figure pixels
             axPos = getpixelposition(obj.hAxes, true);  % [l, b, w, h] relative to figure

@@ -129,9 +129,21 @@ classdef SensorDetailPlot < handle
             set(obj.hMainAxes, 'XTickLabel', []);
             xlabel(obj.hMainAxes, '');
 
-            % Set title
+            % Set title with theme formatting (matches FastPlotFigure.tileTitle)
             if ~isempty(obj.Title)
-                title(obj.hMainAxes, obj.Title);
+                if isstruct(obj.Theme)
+                    themeStruct = obj.Theme;
+                else
+                    themeStruct = FastPlotTheme(obj.Theme);
+                end
+                titleArgs = {obj.Title};
+                if isfield(themeStruct, 'TitleFontSize') && ~isempty(themeStruct.TitleFontSize)
+                    titleArgs = [titleArgs, {'FontSize', themeStruct.TitleFontSize}];
+                end
+                if isfield(themeStruct, 'ForegroundColor') && ~isempty(themeStruct.ForegroundColor)
+                    titleArgs = [titleArgs, {'Color', themeStruct.ForegroundColor}];
+                end
+                title(obj.hMainAxes, titleArgs{:});
             end
 
             % Create navigator FastPlot
@@ -151,6 +163,11 @@ classdef SensorDetailPlot < handle
             set(obj.hNavAxes, 'YTickLabel', []);
             ylabel(obj.hNavAxes, '');
             title(obj.hNavAxes, '');
+
+            % Tighten gap: align main axes bottom with navigator top
+            % After MATLAB auto-computes inner positions, close the gap
+            % left by hidden labels between main and nav.
+            obj.tightenAxesGap();
 
             % Fix navigator axes limits
             xFull = [min(obj.Sensor.X), max(obj.Sensor.X)];
@@ -290,28 +307,20 @@ classdef SensorDetailPlot < handle
                 obj.OwnsFigure = true;
             end
 
-            % Place both axes directly in the container so they share
-            % an exact boundary with zero gap.
-            left = 0.08;
-            width = 0.88;
-            topPad = 0.06;   % room for title above main axes
-            botPad = 0.08;   % room for x-tick labels below navigator
+            % Use OuterPosition so MATLAB auto-computes inner margins
+            % for labels and title, matching regular FastPlot tile appearance.
+            navFrac = obj.NavigatorHeight;
 
-            % Navigator occupies the bottom strip
-            navBottom = botPad;
-            navHeight = obj.NavigatorHeight - botPad;
-
-            % Main axes sit directly on top of navigator (shared edge)
-            mainBottom = obj.NavigatorHeight;
-            mainHeight = 1 - obj.NavigatorHeight - topPad;
-
+            % Main axes: fills top portion
             obj.hMainAxes = axes('Parent', container, ...
                 'Units', 'normalized', ...
-                'Position', [left mainBottom width mainHeight], ...
+                'OuterPosition', [0 navFrac 1 1-navFrac], ...
                 'Color', themeStruct.AxesColor);
+
+            % Navigator axes: fills bottom strip
             obj.hNavAxes = axes('Parent', container, ...
                 'Units', 'normalized', ...
-                'Position', [left navBottom width navHeight], ...
+                'OuterPosition', [0 0 1 navFrac], ...
                 'Color', themeStruct.AxesColor);
         end
 
@@ -498,6 +507,37 @@ classdef SensorDetailPlot < handle
 
         function onFigureClose(obj)
             delete(obj);
+        end
+
+        function tightenAxesGap(obj)
+            % Close the vertical gap between main and navigator axes.
+            % MATLAB's auto-layout leaves space for hidden labels between
+            % the two axes. Read the computed inner positions and nudge
+            % the main axes down / nav axes up so they share an edge.
+            if ~ishandle(obj.hMainAxes) || ~ishandle(obj.hNavAxes)
+                return;
+            end
+            drawnow;  % force MATLAB to compute layout
+            mainPos = get(obj.hMainAxes, 'Position');  % [x y w h]
+            navPos  = get(obj.hNavAxes,  'Position');
+
+            % Current gap between nav top and main bottom
+            navTop = navPos(2) + navPos(4);
+            mainBot = mainPos(2);
+            gap = mainBot - navTop;
+
+            if gap > 0.001
+                % Move main axes down to close the gap
+                mainPos(2) = navTop;
+                mainPos(4) = mainPos(4) + gap;  % expand to fill freed space
+                set(obj.hMainAxes, 'Position', mainPos);
+                % Lock main axes to this adjusted position
+                try
+                    set(obj.hMainAxes, 'PositionConstraint', 'innerposition');
+                catch
+                    set(obj.hMainAxes, 'ActivePositionProperty', 'position');
+                end
+            end
         end
     end
 end
