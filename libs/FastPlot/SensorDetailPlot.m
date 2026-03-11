@@ -13,6 +13,7 @@ classdef SensorDetailPlot < handle
     %     'ShowEventLabels'    - Reserved, no effect (default: false)
     %     'Parent'             - uipanel handle for embedding (default: [])
     %     'Title'              - Plot title (default: sensor.Name)
+    %     'XType'              - 'numeric' or 'datenum' (default: 'numeric')
 
     properties (SetAccess = private)
         Sensor              % Sensor object
@@ -29,6 +30,7 @@ classdef SensorDetailPlot < handle
         ShowEventLabels     % Reserved, no effect
         Theme               % Theme string or struct
         Title               % Plot title
+        XType               % 'numeric' or 'datenum'
         IsRendered          % Whether render() has been called
     end
 
@@ -63,6 +65,7 @@ classdef SensorDetailPlot < handle
             p.addParameter('ShowEventLabels', false);
             p.addParameter('Parent', []);
             p.addParameter('Title', sensor.Name);
+            p.addParameter('XType', 'numeric');
             p.parse(varargin{:});
             opts = p.Results;
 
@@ -73,6 +76,7 @@ classdef SensorDetailPlot < handle
             obj.ShowEventLabels = opts.ShowEventLabels;
             obj.ParentPanel = opts.Parent;
             obj.Title = opts.Title;
+            obj.XType = opts.XType;
 
             % Resolve events
             obj.Events = obj.resolveEvents(opts.Events);
@@ -95,7 +99,28 @@ classdef SensorDetailPlot < handle
 
             % Create main FastPlot
             obj.MainPlot = FastPlot('Parent', obj.hMainAxes, 'Theme', obj.Theme);
-            obj.MainPlot.addSensor(obj.Sensor, 'ShowThresholds', obj.ShowThresholds);
+            displayName = obj.Sensor.Name;
+            if isempty(displayName); displayName = obj.Sensor.Key; end
+            obj.MainPlot.addLine(obj.Sensor.X, obj.Sensor.Y, ...
+                'DisplayName', displayName, 'XType', obj.XType);
+
+            % Add thresholds
+            if obj.ShowThresholds && ~isempty(obj.Sensor.ResolvedThresholds)
+                for i = 1:numel(obj.Sensor.ResolvedThresholds)
+                    th = obj.Sensor.ResolvedThresholds(i);
+                    thLabel = th.Label;
+                    if isempty(thLabel); thLabel = sprintf('Threshold %d', i); end
+                    thArgs = {'Direction', th.Direction, ...
+                        'ShowViolations', true, 'Label', thLabel};
+                    if ~isempty(th.Color)
+                        thArgs = [thArgs, {'Color', th.Color}]; %#ok<AGROW>
+                    end
+                    if ~isempty(th.LineStyle)
+                        thArgs = [thArgs, {'LineStyle', th.LineStyle}]; %#ok<AGROW>
+                    end
+                    obj.MainPlot.addThreshold(th.X, th.Y, thArgs{:});
+                end
+            end
 
             % Render main plot
             obj.MainPlot.render();
@@ -112,7 +137,7 @@ classdef SensorDetailPlot < handle
             % Create navigator FastPlot
             obj.NavigatorPlot = FastPlot('Parent', obj.hNavAxes, 'Theme', obj.Theme);
             obj.NavigatorPlot.addLine(obj.Sensor.X, obj.Sensor.Y, ...
-                'DisplayName', obj.Sensor.Name);
+                'DisplayName', obj.Sensor.Name, 'XType', obj.XType);
 
             % Add threshold bands to navigator
             if obj.ShowThresholdBands
