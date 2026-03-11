@@ -276,15 +276,16 @@ classdef SensorDetailPlot < handle
             end
 
             if ~isempty(obj.ParentPanel)
-                % Embedded mode: style parent panel background
+                % Embedded mode: inherit parent's background (set by tilePanel)
                 container = obj.ParentPanel;
                 obj.OwnsFigure = false;
-                set(container, 'BackgroundColor', themeStruct.Background);
+                bgColor = get(container, 'BackgroundColor');
             else
                 % Standalone mode: create figure
+                bgColor = themeStruct.Background;
                 obj.hFig = figure('Visible', 'off', 'Name', obj.Title, ...
                     'NumberTitle', 'off', 'Position', [100 100 900 600], ...
-                    'Color', themeStruct.Background);
+                    'Color', bgColor);
                 container = obj.hFig;
                 obj.OwnsFigure = true;
             end
