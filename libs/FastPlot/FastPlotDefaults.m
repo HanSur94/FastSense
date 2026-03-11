@@ -67,6 +67,9 @@ function cfg = FastPlotDefaults()
 %     cfg.TabBarHeight             — double; normalized height of the tab
 %                                    bar in docked figure mode
 %                                    (default: 0.03)
+%     cfg.MinTabWidth              — double; minimum normalized width per
+%                                    tab button; when tabs would be smaller,
+%                                    scroll arrows appear (default: 0.10)
 %
 %   Example — switch to dark theme with LTTB downsampling:
 %     cfg = FastPlotDefaults();
@@ -107,4 +110,5 @@ function cfg = FastPlotDefaults()
 
     % --- Dock Layout ---
     cfg.TabBarHeight = 0.03;            % normalized height of tab bar
+    cfg.MinTabWidth  = 0.10;            % minimum normalized width per tab
 end

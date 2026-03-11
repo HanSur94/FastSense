@@ -63,6 +63,13 @@ classdef FastPlotDock < handle
     % ====================== LAYOUT SETTINGS ==============================
     properties (Access = public)
         TabBarHeight = 0.03   % normalized height of tab bar
+        MinTabWidth  = 0.10   % minimum normalized width per tab
+    end
+
+    properties (SetAccess = private)
+        TabScrollOffset = 0   % index offset of the first visible tab (0-based)
+        hScrollLeft  = []     % '<' scroll button handle
+        hScrollRight = []     % '>' scroll button handle
     end
 
     methods (Access = public)
@@ -75,6 +82,7 @@ classdef FastPlotDock < handle
             %   FastPlotFigure instances, then call render().
             cfg = getDefaults();
             obj.TabBarHeight = cfg.TabBarHeight;
+            obj.MinTabWidth  = cfg.MinTabWidth;
 
             conDefaults.Theme = [];
             [conOpts, figOpts] = parseOpts(conDefaults, varargin);
@@ -262,6 +270,9 @@ classdef FastPlotDock < handle
                 obj.styleTabButton(obj.ActiveTab, false);
             end
 
+            % Auto-scroll to make the selected tab visible
+            obj.scrollToTab(n);
+
             % Show new tab
             obj.setTabVisible(n, true);
             obj.styleTabButton(n, true);
@@ -438,27 +449,99 @@ classdef FastPlotDock < handle
             %RECOMPUTELAYOUT Reposition tab, undock, and close buttons on resize.
             %   dock.recomputeLayout() recalculates the normalized positions
             %   of all tab, undock (^), and close (x) buttons based on the
-            %   current number of tabs. Called automatically on
-            %   SizeChangedFcn and after addTabButton/rebuildTabBar.
-            if ~isempty(obj.hTabButtons)
-                nTabs = numel(obj.hTabButtons);
-                tabH = obj.TabBarHeight;
-                smallW = 0.02;  % width for close and undock buttons
+            %   current number of tabs. When the ideal tab width falls below
+            %   MinTabWidth, scroll arrows (< >) appear and only a subset of
+            %   tabs is shown. Called automatically on SizeChangedFcn and
+            %   after addTabButton/rebuildTabBar.
+            if isempty(obj.hTabButtons)
+                return;
+            end
+
+            nTabs  = numel(obj.hTabButtons);
+            tabH   = obj.TabBarHeight;
+            smallW = 0.02;   % width for close and undock buttons
+            scrollW = 0.03;  % width of each scroll arrow button
+
+            idealBtnWidth = 1 / nTabs;
+            needsScroll = idealBtnWidth < obj.MinTabWidth;
+
+            if needsScroll
+                availW = 1 - 2 * scrollW;
+                btnWidth = max(obj.MinTabWidth, availW / nTabs);
+                maxVisible = max(1, floor(availW / btnWidth));
+
+                % Clamp scroll offset
+                obj.TabScrollOffset = max(0, ...
+                    min(obj.TabScrollOffset, nTabs - maxVisible));
+
+                firstVis = obj.TabScrollOffset + 1;
+                lastVis  = min(firstVis + maxVisible - 1, nTabs);
+
+                for i = 1:nTabs
+                    visIdx = i - obj.TabScrollOffset;
+                    if i >= firstVis && i <= lastVis
+                        x0 = scrollW + (visIdx - 1) * btnWidth;
+                        if ishandle(obj.hTabButtons{i})
+                            set(obj.hTabButtons{i}, 'Visible', 'on', ...
+                                'Position', [x0, 1 - tabH, btnWidth - 2*smallW, tabH]);
+                        end
+                        if i <= numel(obj.hUndockButtons) && ishandle(obj.hUndockButtons{i})
+                            set(obj.hUndockButtons{i}, 'Visible', 'on', ...
+                                'Position', [x0 + btnWidth - 2*smallW, 1 - tabH, smallW, tabH]);
+                        end
+                        if i <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{i})
+                            set(obj.hCloseButtons{i}, 'Visible', 'on', ...
+                                'Position', [x0 + btnWidth - smallW, 1 - tabH, smallW, tabH]);
+                        end
+                    else
+                        if ishandle(obj.hTabButtons{i})
+                            set(obj.hTabButtons{i}, 'Visible', 'off');
+                        end
+                        if i <= numel(obj.hUndockButtons) && ishandle(obj.hUndockButtons{i})
+                            set(obj.hUndockButtons{i}, 'Visible', 'off');
+                        end
+                        if i <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{i})
+                            set(obj.hCloseButtons{i}, 'Visible', 'off');
+                        end
+                    end
+                end
+
+                % Create/show scroll arrows
+                obj.ensureScrollButtons();
+                set(obj.hScrollLeft,  'Visible', 'on', ...
+                    'Position', [0, 1 - tabH, scrollW, tabH]);
+                set(obj.hScrollRight, 'Visible', 'on', ...
+                    'Position', [1 - scrollW, 1 - tabH, scrollW, tabH]);
+
+                % Disable arrows at bounds
+                if obj.TabScrollOffset <= 0
+                    set(obj.hScrollLeft, 'Enable', 'off');
+                else
+                    set(obj.hScrollLeft, 'Enable', 'on');
+                end
+                if lastVis >= nTabs
+                    set(obj.hScrollRight, 'Enable', 'off');
+                else
+                    set(obj.hScrollRight, 'Enable', 'on');
+                end
+            else
+                % Normal layout: all tabs fit
                 btnWidth = 1 / nTabs;
                 for i = 1:nTabs
                     if ishandle(obj.hTabButtons{i})
-                        set(obj.hTabButtons{i}, 'Position', ...
-                            [(i-1)*btnWidth, 1 - tabH, btnWidth - 2*smallW, tabH]);
+                        set(obj.hTabButtons{i}, 'Visible', 'on', ...
+                            'Position', [(i-1)*btnWidth, 1 - tabH, btnWidth - 2*smallW, tabH]);
                     end
                     if i <= numel(obj.hUndockButtons) && ishandle(obj.hUndockButtons{i})
-                        set(obj.hUndockButtons{i}, 'Position', ...
-                            [i*btnWidth - 2*smallW, 1 - tabH, smallW, tabH]);
+                        set(obj.hUndockButtons{i}, 'Visible', 'on', ...
+                            'Position', [i*btnWidth - 2*smallW, 1 - tabH, smallW, tabH]);
                     end
                     if i <= numel(obj.hCloseButtons) && ishandle(obj.hCloseButtons{i})
-                        set(obj.hCloseButtons{i}, 'Position', ...
-                            [i*btnWidth - smallW, 1 - tabH, smallW, tabH]);
+                        set(obj.hCloseButtons{i}, 'Visible', 'on', ...
+                            'Position', [i*btnWidth - smallW, 1 - tabH, smallW, tabH]);
                     end
                 end
+                obj.hideScrollButtons();
             end
         end
 
@@ -488,6 +571,16 @@ classdef FastPlotDock < handle
                         'ForegroundColor', obj.Theme.ForegroundColor);
                 end
             end
+            % Style scroll buttons
+            if ~isempty(obj.hScrollLeft) && ishandle(obj.hScrollLeft)
+                set(obj.hScrollLeft, 'BackgroundColor', obj.Theme.Background, ...
+                    'ForegroundColor', obj.Theme.ForegroundColor);
+            end
+            if ~isempty(obj.hScrollRight) && ishandle(obj.hScrollRight)
+                set(obj.hScrollRight, 'BackgroundColor', obj.Theme.Background, ...
+                    'ForegroundColor', obj.Theme.ForegroundColor);
+            end
+
             for i = 1:numel(obj.Tabs)
                 if ~isempty(obj.Tabs(i).Panel) && ishandle(obj.Tabs(i).Panel)
                     set(obj.Tabs(i).Panel, 'BackgroundColor', obj.Theme.Background);
@@ -711,6 +804,83 @@ classdef FastPlotDock < handle
                     'BackgroundColor', obj.Theme.Background, ...
                     'ForegroundColor', obj.Theme.ForegroundColor, ...
                     'FontWeight', 'normal');
+            end
+        end
+
+        function ensureScrollButtons(obj)
+            %ENSURESCROLLBUTTONS Create scroll arrow buttons if they don't exist.
+            if isempty(obj.hScrollLeft) || ~ishandle(obj.hScrollLeft)
+                obj.hScrollLeft = uicontrol(obj.hFigure, ...
+                    'Style', 'pushbutton', ...
+                    'String', '<', ...
+                    'Units', 'normalized', ...
+                    'FontSize', 9, ...
+                    'FontWeight', 'bold', ...
+                    'BackgroundColor', obj.Theme.Background, ...
+                    'ForegroundColor', obj.Theme.ForegroundColor, ...
+                    'Callback', @(s,e) obj.scrollLeft());
+            end
+            if isempty(obj.hScrollRight) || ~ishandle(obj.hScrollRight)
+                obj.hScrollRight = uicontrol(obj.hFigure, ...
+                    'Style', 'pushbutton', ...
+                    'String', '>', ...
+                    'Units', 'normalized', ...
+                    'FontSize', 9, ...
+                    'FontWeight', 'bold', ...
+                    'BackgroundColor', obj.Theme.Background, ...
+                    'ForegroundColor', obj.Theme.ForegroundColor, ...
+                    'Callback', @(s,e) obj.scrollRight());
+            end
+        end
+
+        function hideScrollButtons(obj)
+            %HIDESCROLLBUTTONS Hide scroll arrow buttons.
+            if ~isempty(obj.hScrollLeft) && ishandle(obj.hScrollLeft)
+                set(obj.hScrollLeft, 'Visible', 'off');
+            end
+            if ~isempty(obj.hScrollRight) && ishandle(obj.hScrollRight)
+                set(obj.hScrollRight, 'Visible', 'off');
+            end
+        end
+
+        function scrollLeft(obj)
+            %SCROLLLEFT Scroll tab bar one step to the left.
+            obj.TabScrollOffset = max(0, obj.TabScrollOffset - 1);
+            obj.recomputeLayout();
+        end
+
+        function scrollRight(obj)
+            %SCROLLRIGHT Scroll tab bar one step to the right.
+            obj.TabScrollOffset = obj.TabScrollOffset + 1;
+            obj.recomputeLayout();
+        end
+
+        function scrollToTab(obj, n)
+            %SCROLLTOTAB Adjust scroll offset so tab n is visible.
+            %   Called from selectTab to ensure the newly selected tab is
+            %   in the visible range of the tab bar.
+            nTabs = numel(obj.hTabButtons);
+            if nTabs == 0; return; end
+
+            scrollW = 0.03;
+            idealBtnWidth = 1 / nTabs;
+            if idealBtnWidth >= obj.MinTabWidth
+                return;  % no scrolling needed
+            end
+
+            availW = 1 - 2 * scrollW;
+            btnWidth = max(obj.MinTabWidth, availW / nTabs);
+            maxVisible = max(1, floor(availW / btnWidth));
+
+            firstVis = obj.TabScrollOffset + 1;
+            lastVis  = min(firstVis + maxVisible - 1, nTabs);
+
+            if n < firstVis
+                obj.TabScrollOffset = n - 1;
+                obj.recomputeLayout();
+            elseif n > lastVis
+                obj.TabScrollOffset = n - maxVisible;
+                obj.recomputeLayout();
             end
         end
     end
