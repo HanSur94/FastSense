@@ -71,6 +71,11 @@ function cfg = FastPlotDefaults()
 %                                    tab button; when tabs would be smaller,
 %                                    scroll arrows appear (default: 0.10)
 %
+%   SensorDetailPlot Layout:
+%     cfg.NavigatorHeight          — double; fraction of total height
+%                                    allocated to the navigator strip in
+%                                    SensorDetailPlot (default: 0.20)
+%
 %   Example — switch to dark theme with LTTB downsampling:
 %     cfg = FastPlotDefaults();
 %     cfg.Theme = 'dark';
@@ -111,4 +116,7 @@ function cfg = FastPlotDefaults()
     % --- Dock Layout ---
     cfg.TabBarHeight = 0.03;            % normalized height of tab bar
     cfg.MinTabWidth  = 0.10;            % minimum normalized width per tab
+
+    % --- SensorDetailPlot Layout ---
+    cfg.NavigatorHeight = 0.20;         % fraction of total height for navigator
 end

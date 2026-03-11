@@ -290,6 +290,10 @@ classdef FastPlotFigure < handle
                 'BorderType', 'none', ...
                 'BackgroundColor', obj.Theme.Background);
 
+            % Attach theme so embedded widgets (e.g. SensorDetailPlot) can
+            % auto-inherit the figure's theme without explicit Theme arg.
+            hp.UserData = struct('FastPlotTheme', obj.Theme);
+
             % Store panel handle (reuses TileAxes cell for storage)
             obj.TileAxes{n} = hp;
             % Mark as occupied to prevent future tile()/axes() conflicts

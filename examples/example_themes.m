@@ -9,7 +9,7 @@ y1 = sin(x*2*pi/10) + 0.2*randn(1,n);
 y2 = cos(x*2*pi/8) + 0.3*randn(1,n);
 y3 = 0.5*sin(x*2*pi/5) + 0.15*randn(1,n);
 
-themes = {'default', 'dark', 'light', 'industrial', 'scientific'};
+themes = {'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'};
 
 for i = 1:numel(themes)
     themeName = themes{i};
@@ -23,4 +23,4 @@ for i = 1:numel(themes)
     title(fp.hAxes, sprintf('Theme: %s', themeName));
 end
 
-fprintf('All 5 themes rendered. Compare the styles!\n');
+fprintf('All 6 themes rendered. Compare the styles!\n');

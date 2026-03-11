@@ -3,7 +3,8 @@ function theme = FastPlotTheme(preset, varargin)
 %   theme = FASTPLOTTHEME() returns the 'default' theme preset.
 %
 %   theme = FASTPLOTTHEME(preset) returns the named preset. Valid preset
-%   names are 'default', 'dark', 'light', 'industrial', and 'scientific'.
+%   names are 'default', 'dark', 'light', 'industrial', 'scientific',
+%   and 'ocean'.
 %
 %   theme = FASTPLOTTHEME(preset, Name, Value) returns the named preset
 %   with individual fields overridden by the supplied name-value pairs.
@@ -14,7 +15,8 @@ function theme = FastPlotTheme(preset, varargin)
 %
 %   Inputs:
 %     preset   — char or struct; a preset name ('default', 'dark',
-%                'light', 'industrial', 'scientific') or a partial struct
+%                'light', 'industrial', 'scientific', 'ocean') or a
+%                partial struct
 %                of theme fields to merge onto the default (optional,
 %                default: 'default')
 %     varargin — name-value pairs of theme fields to override after
@@ -33,8 +35,8 @@ function theme = FastPlotTheme(preset, varargin)
 %       TitleFontSize   — double; title font size in points
 %       LineWidth       — double; default line width in points
 %       LineColorOrder  — Nx3 RGB matrix or palette name ('vibrant',
-%                         'muted', 'colorblind'); resolved to Nx3 before
-%                         return
+%                         'muted', 'colorblind', 'ocean'); resolved to
+%                         Nx3 before return
 %       ThresholdColor  — 1x3 RGB; color for threshold lines
 %       ThresholdStyle  — char; threshold line style
 %       ViolationMarker — char; marker symbol for violation points
@@ -80,7 +82,7 @@ function t = getPreset(name)
 %
 %   Input:
 %     name — char; one of 'default', 'dark', 'light', 'industrial',
-%            'scientific' (case-insensitive)
+%            'scientific', 'ocean' (case-insensitive)
 %
 %   Output:
 %     t — struct; fully populated theme (see FastPlotTheme for fields)
@@ -99,7 +101,7 @@ function t = getPreset(name)
                 'FontSize',        10, ...
                 'TitleFontSize',   12, ...
                 'LineWidth',       1.0, ...
-                'LineColorOrder',  'vibrant', ...
+                'LineColorOrder',  'ocean', ...
                 'ThresholdColor',  [0.8 0 0], ...
                 'ThresholdStyle',  '--', ...
                 'ViolationMarker', 'o', ...
@@ -182,9 +184,28 @@ function t = getPreset(name)
                 'ViolationSize',   3, ...
                 'BandAlpha',       0.1 ...
             );
+        case 'ocean'
+            t = struct( ...
+                'Background',      [1 1 1], ...
+                'AxesColor',       [1 1 1], ...
+                'ForegroundColor', [0.15 0.15 0.15], ...
+                'GridColor',       [0.15 0.15 0.15], ...
+                'GridAlpha',       0.15, ...
+                'GridStyle',       '-', ...
+                'FontName',        'Helvetica', ...
+                'FontSize',        10, ...
+                'TitleFontSize',   12, ...
+                'LineWidth',       1.0, ...
+                'LineColorOrder',  'ocean', ...
+                'ThresholdColor',  [0.8 0 0], ...
+                'ThresholdStyle',  '--', ...
+                'ViolationMarker', 'o', ...
+                'ViolationSize',   4, ...
+                'BandAlpha',       0.15 ...
+            );
         otherwise
             error('FastPlotTheme:unknownPreset', ...
-                'Unknown theme preset: ''%s''. Use ''default'', ''dark'', ''light'', ''industrial'', or ''scientific''.', name);
+                'Unknown theme preset: ''%s''. Use ''default'', ''dark'', ''light'', ''industrial'', ''scientific'', or ''ocean''.', name);
     end
 end
 
@@ -194,9 +215,10 @@ function colors = getPalette(name)
 %   for the requested color palette.
 %
 %   Input:
-%     name — char; one of 'vibrant', 'muted', 'colorblind'
+%     name — char; one of 'vibrant', 'muted', 'colorblind', 'ocean'
 %            (case-insensitive). The 'colorblind' palette follows the
-%            Wong (2011) colorblind-safe palette.
+%            Wong (2011) colorblind-safe palette. The 'ocean' palette
+%            is a blue-to-green gradient.
 %
 %   Output:
 %     colors — 8x3 double; each row is an [R G B] triplet in [0,1]
@@ -237,9 +259,21 @@ function colors = getPalette(name)
                 0.84 0.37 0.00; ...  % vermillion
                 0.00 0.00 0.00; ...  % black
             ];
+        case 'ocean'
+            % Blue-to-green gradient palette
+            colors = [ ...
+                0.12 0.24 0.57; ...  % deep blue
+                0.15 0.41 0.69; ...  % royal blue
+                0.10 0.55 0.72; ...  % cerulean
+                0.06 0.63 0.63; ...  % teal
+                0.00 0.68 0.53; ...  % sea green
+                0.10 0.72 0.42; ...  % emerald
+                0.22 0.76 0.32; ...  % green
+                0.16 0.62 0.24; ...  % forest green
+            ];
         otherwise
             error('FastPlotTheme:unknownPalette', ...
-                'Unknown palette: ''%s''. Use ''vibrant'', ''muted'', or ''colorblind''.', name);
+                'Unknown palette: ''%s''. Use ''vibrant'', ''muted'', ''colorblind'', or ''ocean''.', name);
     end
 end
 

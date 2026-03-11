@@ -67,6 +67,13 @@ function test_theme()
     assert(t.LineWidth < 1.0, 'testScientificPreset: thin lines');
     assert(size(t.LineColorOrder, 2) == 3, 'testScientificPreset: LineColorOrder Nx3');
 
+    % testOceanPreset
+    t = FastPlotTheme('ocean');
+    assert(isequal(t.Background, [1 1 1]), 'testOceanPreset: Background should be white');
+    assert(isequal(t.AxesColor, [1 1 1]), 'testOceanPreset: AxesColor should be white');
+    assert(size(t.LineColorOrder, 2) == 3, 'testOceanPreset: LineColorOrder Nx3');
+    assert(size(t.LineColorOrder, 1) == 8, 'testOceanPreset: 8 colors');
+
     % testStructAsPreset
     custom = struct('Background', [0 0 0], 'FontSize', 16);
     t = FastPlotTheme(custom);
@@ -83,5 +90,5 @@ function test_theme()
     t = FastPlotTheme('default', 'LineColorOrder', customColors);
     assert(isequal(t.LineColorOrder, customColors), 'testCustomPaletteMatrix');
 
-    fprintf('    All 11 theme tests passed.\n');
+    fprintf('    All 12 theme tests passed.\n');
 end

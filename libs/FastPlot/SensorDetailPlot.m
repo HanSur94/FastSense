@@ -55,21 +55,33 @@ classdef SensorDetailPlot < handle
             obj.IsPropagating = false;
             obj.OwnsFigure = false;
 
-            % Parse options
-            p = inputParser;
-            p.addParameter('Theme', 'default');
-            p.addParameter('NavigatorHeight', 0.20);
-            p.addParameter('ShowThresholds', true);
-            p.addParameter('ShowThresholdBands', true);
-            p.addParameter('Events', []);
-            p.addParameter('ShowEventLabels', false);
-            p.addParameter('Parent', []);
-            p.addParameter('Title', sensor.Name);
-            p.addParameter('XType', 'numeric');
-            p.parse(varargin{:});
-            opts = p.Results;
+            % Load cached defaults (same pattern as FastPlot / FastPlotFigure)
+            cfg = getDefaults();
 
-            obj.Theme = opts.Theme;
+            % Parse options via standard parseOpts
+            conDefaults.Theme = [];
+            conDefaults.NavigatorHeight = cfg.NavigatorHeight;
+            conDefaults.ShowThresholds = true;
+            conDefaults.ShowThresholdBands = true;
+            conDefaults.Events = [];
+            conDefaults.ShowEventLabels = false;
+            conDefaults.Parent = [];
+            conDefaults.Title = sensor.Name;
+            conDefaults.XType = 'numeric';
+            [opts, ~] = parseOpts(conDefaults, varargin);
+
+            % Inherit theme from parent panel (set by FastPlotFigure.tilePanel)
+            % when no explicit Theme was given.
+            if isempty(opts.Theme) && ~isempty(opts.Parent)
+                try
+                    ud = get(opts.Parent, 'UserData');
+                    if isstruct(ud) && isfield(ud, 'FastPlotTheme')
+                        opts.Theme = ud.FastPlotTheme;
+                    end
+                catch
+                end
+            end
+            obj.Theme = resolveTheme(opts.Theme, cfg.Theme);
             obj.NavigatorHeight = opts.NavigatorHeight;
             obj.ShowThresholds = opts.ShowThresholds;
             obj.ShowThresholdBands = opts.ShowThresholdBands;
@@ -131,19 +143,9 @@ classdef SensorDetailPlot < handle
 
             % Set title with theme formatting (matches FastPlotFigure.tileTitle)
             if ~isempty(obj.Title)
-                if isstruct(obj.Theme)
-                    themeStruct = obj.Theme;
-                else
-                    themeStruct = FastPlotTheme(obj.Theme);
-                end
-                titleArgs = {obj.Title};
-                if isfield(themeStruct, 'TitleFontSize') && ~isempty(themeStruct.TitleFontSize)
-                    titleArgs = [titleArgs, {'FontSize', themeStruct.TitleFontSize}];
-                end
-                if isfield(themeStruct, 'ForegroundColor') && ~isempty(themeStruct.ForegroundColor)
-                    titleArgs = [titleArgs, {'Color', themeStruct.ForegroundColor}];
-                end
-                title(obj.hMainAxes, titleArgs{:});
+                title(obj.hMainAxes, obj.Title, ...
+                    'FontSize', obj.Theme.TitleFontSize, ...
+                    'Color', obj.Theme.ForegroundColor);
             end
 
             % Create navigator FastPlot
@@ -164,11 +166,6 @@ classdef SensorDetailPlot < handle
             ylabel(obj.hNavAxes, '');
             title(obj.hNavAxes, '');
 
-            % Tighten gap: align main axes bottom with navigator top
-            % After MATLAB auto-computes inner positions, close the gap
-            % left by hidden labels between main and nav.
-            obj.tightenAxesGap();
-
             % Fix navigator axes limits
             xFull = [min(obj.Sensor.X), max(obj.Sensor.X)];
             yRange = [min(obj.Sensor.Y), max(obj.Sensor.Y)];
@@ -184,6 +181,15 @@ classdef SensorDetailPlot < handle
             zoom(obj.hNavAxes, 'off');
             pan(obj.hNavAxes, 'off');
             rotate3d(obj.hNavAxes, 'off');
+
+            % Re-apply datetime tick formatting after all nav axes
+            % modifications to guarantee it matches normal FastPlot tiles.
+            % Sync main axes XTick to match, keeping labels suppressed.
+            if strcmp(obj.XType, 'datenum')
+                obj.formatDatetimeTicks(obj.hNavAxes);
+                set(obj.hMainAxes, 'XTick', get(obj.hNavAxes, 'XTick'));
+                set(obj.hMainAxes, 'XTickLabel', []);
+            end
 
             % Add event overlays
             if ~isempty(obj.Events)
@@ -225,6 +231,16 @@ classdef SensorDetailPlot < handle
                 obj.XLimListener = addlistener(obj.hMainAxes, 'XLim', 'PostSet', ...
                     @(s,e) obj.onMainXLimChanged());
             catch
+            end
+
+            % Deferred tick refresh: datetick was called during render()
+            % before the dock layout finalized axes pixel widths, causing
+            % wrong tick density. A one-shot timer re-applies datetick
+            % after the layout settles.
+            if strcmp(obj.XType, 'datenum')
+                start(timer('TimerFcn', @(~,~) obj.refreshDatetimeTicks(), ...
+                    'StartDelay', 0.1, 'ExecutionMode', 'singleShot', ...
+                    'Tag', 'SDP_TickRefresh'));
             end
 
             % Set figure visible if standalone
@@ -285,43 +301,60 @@ classdef SensorDetailPlot < handle
 
     methods (Access = private)
         function createLayout(obj)
-            % Resolve theme to struct for background colors
-            if isstruct(obj.Theme)
-                themeStruct = obj.Theme;
-            else
-                themeStruct = FastPlotTheme(obj.Theme);
-            end
-
             if ~isempty(obj.ParentPanel)
                 % Embedded mode: inherit parent's background (set by tilePanel)
                 container = obj.ParentPanel;
                 obj.OwnsFigure = false;
-                bgColor = get(container, 'BackgroundColor');
             else
                 % Standalone mode: create figure
-                bgColor = themeStruct.Background;
                 obj.hFig = figure('Visible', 'off', 'Name', obj.Title, ...
                     'NumberTitle', 'off', 'Position', [100 100 900 600], ...
-                    'Color', bgColor);
+                    'Color', obj.Theme.Background);
                 container = obj.hFig;
                 obj.OwnsFigure = true;
             end
 
-            % Use OuterPosition so MATLAB auto-computes inner margins
-            % for labels and title, matching regular FastPlot tile appearance.
+            % Use Position + innerposition for both modes so the plot
+            % area width matches normal FastPlot tiles exactly.
+            % In embedded mode add vertical margins inside the panel for
+            % the title (top) and navigator X-tick labels (bottom).
             navFrac = obj.NavigatorHeight;
 
-            % Main axes: fills top portion
+            if ~isempty(obj.ParentPanel)
+                % Vertical margins inside the panel so the title and
+                % navigator X-tick labels are not clipped.
+                topM = 0.06;   % room for title above main axes
+                botM = 0.10;   % room for nav X-tick labels below
+            else
+                topM = 0;
+                botM = 0;
+            end
+
+            innerH = 1 - topM - botM;
+            navH   = navFrac * innerH;
+            mainH  = innerH - navH;
+
+            % Main axes: full width, top portion
             obj.hMainAxes = axes('Parent', container, ...
                 'Units', 'normalized', ...
-                'OuterPosition', [0 navFrac 1 1-navFrac], ...
-                'Color', themeStruct.AxesColor);
+                'Position', [0, botM + navH, 1, mainH], ...
+                'Color', obj.Theme.AxesColor);
+            try
+                set(obj.hMainAxes, 'PositionConstraint', 'innerposition');
+            catch
+                set(obj.hMainAxes, 'ActivePositionProperty', 'position');
+            end
 
-            % Navigator axes: fills bottom strip
+            % Navigator axes: full width, bottom strip
             obj.hNavAxes = axes('Parent', container, ...
                 'Units', 'normalized', ...
-                'OuterPosition', [0 0 1 navFrac], ...
-                'Color', themeStruct.AxesColor);
+                'Position', [0, botM, 1, navH], ...
+                'Color', obj.Theme.AxesColor);
+            try
+                set(obj.hNavAxes, 'PositionConstraint', 'innerposition');
+            catch
+                set(obj.hNavAxes, 'ActivePositionProperty', 'position');
+            end
         end
 
         function events = resolveEvents(~, eventsInput)
@@ -502,6 +535,15 @@ classdef SensorDetailPlot < handle
             if ~isempty(obj.NavigatorOverlayObj) && isvalid(obj.NavigatorOverlayObj)
                 obj.NavigatorOverlayObj.setRange(lim(1), lim(2));
             end
+
+            % Re-apply correct tick density and suppress labels after
+            % FastPlot's onXLimChanged calls datetick (which re-sets
+            % XTick and XTickLabel with wrong density).
+            if strcmp(obj.XType, 'datenum')
+                obj.formatDatetimeTicks(obj.hMainAxes);
+            end
+            set(obj.hMainAxes, 'XTickLabel', []);
+
             obj.IsPropagating = false;
         end
 
@@ -509,35 +551,98 @@ classdef SensorDetailPlot < handle
             delete(obj);
         end
 
-        function tightenAxesGap(obj)
-            % Close the vertical gap between main and navigator axes.
-            % MATLAB's auto-layout leaves space for hidden labels between
-            % the two axes. Read the computed inner positions and nudge
-            % the main axes down / nav axes up so they share an edge.
-            if ~ishandle(obj.hMainAxes) || ~ishandle(obj.hNavAxes)
-                return;
+        function refreshDatetimeTicks(obj)
+            %REFRESHDATETIMETICKS Re-apply datetime ticks after layout settles.
+            %   Called by a one-shot timer to fix tick density once the
+            %   axes have their final pixel widths.
+            try
+                if ~obj.IsRendered; return; end
+                % Force layout computation so axes have correct pixel sizes
+                drawnow;
+                if ishandle(obj.hNavAxes)
+                    obj.formatDatetimeTicks(obj.hNavAxes);
+                end
+                % Sync main axes XTick to navigator and suppress labels
+                if ishandle(obj.hMainAxes) && ishandle(obj.hNavAxes)
+                    set(obj.hMainAxes, 'XTick', get(obj.hNavAxes, 'XTick'));
+                    set(obj.hMainAxes, 'XTickLabel', []);
+                end
+            catch
             end
-            drawnow;  % force MATLAB to compute layout
-            mainPos = get(obj.hMainAxes, 'Position');  % [x y w h]
-            navPos  = get(obj.hNavAxes,  'Position');
+        end
 
-            % Current gap between nav top and main bottom
-            navTop = navPos(2) + navPos(4);
-            mainBot = mainPos(2);
-            gap = mainBot - navTop;
+        function formatDatetimeTicks(~, ax)
+            %FORMATEDATETIMETICKS Apply datetime tick formatting matching FastPlot.
+            %   Computes nice datetime tick positions and labels directly,
+            %   matching the format selection in FastPlot.updateDatetimeTicks.
+            %   Avoids datetick() which produces inconsistent tick density
+            %   for axes embedded in uipanels.
+            if ~ishandle(ax); return; end
+            try
+                xl = get(ax, 'XLim');
+                span = diff(xl);  % in days (datenum units)
 
-            if gap > 0.001
-                % Move main axes down to close the gap
-                mainPos(2) = navTop;
-                mainPos(4) = mainPos(4) + gap;  % expand to fill freed space
-                set(obj.hMainAxes, 'Position', mainPos);
-                % Lock main axes to this adjusted position
+                % Choose interval and format based on span (same thresholds
+                % as FastPlot.updateDatetimeTicks)
+                if span > 365
+                    fmt = 'yyyy mmm dd HH:MM';
+                    % Round to months
+                    step = 30;
+                elseif span > 30
+                    fmt = 'yyyy mmm dd HH:MM';
+                    step = 7;
+                elseif span > 1
+                    fmt = 'yyyy mmm dd HH:MM';
+                    step = max(1, round(span / 8));
+                elseif span > 1/24
+                    fmt = 'HH:MM';
+                    % Pick nice hour-fraction intervals: target 6-12 ticks
+                    nTicks = round(span * 24 * 2);  % 30-min ticks
+                    if nTicks > 12
+                        step = 1/24;      % 1 hour
+                    elseif nTicks > 6
+                        step = 1/48;      % 30 min
+                    else
+                        step = 1/96;      % 15 min
+                    end
+                elseif span > 1/1440
+                    fmt = 'HH:MM';
+                    mins = span * 1440;
+                    if mins > 30
+                        step = 10/1440;   % 10 min
+                    elseif mins > 10
+                        step = 5/1440;    % 5 min
+                    else
+                        step = 1/1440;    % 1 min
+                    end
+                else
+                    fmt = 'HH:MM:SS';
+                    step = max(span / 8, 1/86400);  % target ~8 ticks
+                end
+
+                % Compute tick positions snapped to interval
+                t0 = ceil(xl(1) / step) * step;
+                t1 = xl(2);
+                ticks = t0:step:t1;
+
+                % Ensure we have at least 2 ticks
+                if numel(ticks) < 2
+                    ticks = linspace(xl(1), xl(2), 5);
+                end
+
+                % Format labels
+                labels = datestr(ticks, fmt); %#ok<DATST>
+
+                set(ax, 'XTick', ticks, 'XTickLabel', labels, ...
+                    'XTickMode', 'manual', 'XTickLabelMode', 'manual');
+            catch
+                % Fallback to datetick
                 try
-                    set(obj.hMainAxes, 'PositionConstraint', 'innerposition');
+                    datetick(ax, 'x', 'keeplimits');
                 catch
-                    set(obj.hMainAxes, 'ActivePositionProperty', 'position');
                 end
             end
         end
+
     end
 end
