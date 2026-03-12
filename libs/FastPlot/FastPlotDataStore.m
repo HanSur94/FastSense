@@ -175,19 +175,29 @@ classdef FastPlotDataStore < handle
 
         function data = getColumnRange(obj, name, xMin, xMax)
             %GETCOLUMNRANGE Read a column's data within an X range.
+            %   Converts the X range to a point-offset range using chunk
+            %   metadata (no x_data BLOB fetch), then delegates to slice.
             if ~obj.UseSqlite || ~obj.IsValid
                 data = {};
                 return;
             end
-            res = mksqlite(obj.DbId, ...
-                ['SELECT c.chunk_id, c.pt_offset, ch.x_data, c.col_data ' ...
-                 'FROM columns c ' ...
-                 'JOIN chunks ch ON c.chunk_id = ch.chunk_id ' ...
-                 'WHERE c.col_name = ? AND ch.x_max >= ? AND ch.x_min <= ? ' ...
-                 'ORDER BY c.chunk_id'], ...
-                name, xMin, xMax);
-            if numel(res) == 0; data = {}; return; end
-            data = assembleColumnByRange(res, xMin, xMax);
+            % Find the point-offset range covering [xMin, xMax] with
+            % one neighbour chunk on each side for padding.
+            ids = mksqlite(obj.DbId, ...
+                'SELECT chunk_id FROM chunks WHERE x_max >= ? AND x_min <= ?', ...
+                xMin, xMax);
+            if numel(ids) == 0; data = {}; return; end
+            lo = max(1, ids(1).chunk_id - 1);
+            hi = ids(end).chunk_id + 1;
+            meta = mksqlite(obj.DbId, ...
+                ['SELECT pt_offset, pt_count FROM chunks ' ...
+                 'WHERE chunk_id BETWEEN ? AND ? ORDER BY chunk_id'], ...
+                lo, hi);
+            if numel(meta) == 0; data = {}; return; end
+            startIdx = meta(1).pt_offset;
+            lastRow  = meta(end);
+            endIdx   = lastRow.pt_offset + lastRow.pt_count - 1;
+            data = obj.getColumnSlice(name, startIdx, endIdx);
         end
 
         function data = getColumnSlice(obj, name, startIdx, endIdx)
@@ -287,7 +297,10 @@ classdef FastPlotDataStore < handle
                 ')']);
 
             n = obj.NumPoints;
-            cs = obj.ChunkSize;
+            % Auto-tune chunk size: aim for 500-2000 chunks to balance
+            % granularity (zoom precision) vs overhead (chunk metadata).
+            cs = max(10000, min(500000, ceil(n / 1000)));
+            obj.ChunkSize = cs;
             obj.NumChunks = ceil(n / cs);
 
             mksqlite(obj.DbId, 'BEGIN TRANSACTION');
@@ -302,6 +315,10 @@ classdef FastPlotDataStore < handle
                         'INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?)', ...
                         chunkId, cx(1), cx(end), s, numel(cx), cx, cy);
                 end
+
+                % Build indexes inside the transaction while journal_mode=OFF
+                mksqlite(obj.DbId, 'CREATE INDEX idx_xrange ON chunks (x_min, x_max)');
+                mksqlite(obj.DbId, 'CREATE INDEX idx_ptoffset ON chunks (pt_offset)');
                 mksqlite(obj.DbId, 'COMMIT');
             catch ME
                 try mksqlite(obj.DbId, 'ROLLBACK'); catch; end
@@ -309,7 +326,6 @@ classdef FastPlotDataStore < handle
                 rethrow(ME);
             end
 
-            mksqlite(obj.DbId, 'CREATE INDEX idx_xrange ON chunks (x_min, x_max)');
             mksqlite(obj.DbId, 'ANALYZE');
             mksqlite(obj.DbId, 'PRAGMA journal_mode = DELETE');
             mksqlite(obj.DbId, 'PRAGMA synchronous = NORMAL');
@@ -317,10 +333,18 @@ classdef FastPlotDataStore < handle
         end
 
         function [xOut, yOut] = getRangeSqlite(obj, xMin, xMax)
+            % Fetch overlapping chunks plus one neighbour on each side
+            % so that one-point padding is always available at boundaries.
+            ids = mksqlite(obj.DbId, ...
+                'SELECT chunk_id FROM chunks WHERE x_max >= ? AND x_min <= ?', ...
+                xMin, xMax);
+            if numel(ids) == 0; xOut = []; yOut = []; return; end
+            lo = ids(1).chunk_id - 1;
+            hi = ids(end).chunk_id + 1;
             res = mksqlite(obj.DbId, ...
                 ['SELECT x_data, y_data FROM chunks ' ...
-                 'WHERE x_max >= ? AND x_min <= ? ORDER BY chunk_id'], ...
-                xMin, xMax);
+                 'WHERE chunk_id BETWEEN ? AND ? ORDER BY chunk_id'], ...
+                max(1, lo), hi);
             if numel(res) == 0; xOut = []; yOut = []; return; end
 
             [xAll, yAll] = concatChunks(res);
@@ -438,28 +462,6 @@ function [iStart, iEnd] = padClamp(iStart, iEnd, n)
 %PADCLAMP Add one-point padding and clamp to [1, n].
     iStart = max(1, iStart - 1);
     iEnd   = min(n, iEnd + 1);
-end
-
-function data = assembleColumnByRange(res, xMin, xMax)
-%ASSEMBLECOLUMNBYRANGE Concatenate column chunks and trim by X range.
-    nRes = numel(res);
-    if nRes == 1
-        xAll = res(1).x_data(:)';
-        colAll = res(1).col_data;
-    else
-        xCells = cell(1, nRes);
-        colCells = cell(1, nRes);
-        for k = 1:nRes
-            xCells{k} = res(k).x_data(:)';
-            colCells{k} = res(k).col_data;
-        end
-        xAll = [xCells{:}];
-        colAll = concatColumnData(colCells);
-    end
-    iStart = bsearchLocal(xAll, xMin, 'left');
-    iEnd   = bsearchLocal(xAll, xMax, 'right');
-    [iStart, iEnd] = padClamp(iStart, iEnd, numel(xAll));
-    data = sliceColumnData(colAll, iStart, iEnd);
 end
 
 function data = assembleColumnByOffset(res, startIdx, endIdx)
