@@ -119,6 +119,7 @@ function build_mex()
         'lttb_core_mex.c',              'lttb_core_mex',              {{}}
         'violation_cull_mex.c',         'violation_cull_mex',         {{}}
         'compute_violations_mex.c',     'compute_violations_mex',     {{}}
+        'resolve_disk_mex.c',           'resolve_disk_mex',           {{'-lsqlite3'}}
     };
 
     % mksqlite lives in the library root (not mex_src) and needs -lsqlite3
@@ -205,6 +206,7 @@ function build_mex()
     sensorPrivDir = fullfile(rootDir, '..', 'SensorThreshold', 'private');
     copy_mex_to(outDir, sensorPrivDir, 'violation_cull_mex');
     copy_mex_to(outDir, sensorPrivDir, 'compute_violations_mex');
+    copy_mex_to(outDir, sensorPrivDir, 'resolve_disk_mex');
 end
 
 

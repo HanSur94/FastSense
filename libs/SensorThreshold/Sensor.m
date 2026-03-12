@@ -148,6 +148,10 @@ classdef Sensor < handle
             %   See also Sensor.addThresholdRule, Sensor.resolve.
 
             obj.StateChannels{end+1} = sc;
+            % Invalidate pre-computed resolve cache if data is on disk
+            if obj.isOnDisk()
+                obj.DataStore.clearResolved();
+            end
         end
 
         function addThresholdRule(obj, condition, value, varargin)
@@ -171,6 +175,10 @@ classdef Sensor < handle
 
             rule = ThresholdRule(condition, value, varargin{:});
             obj.ThresholdRules{end+1} = rule;
+            % Invalidate pre-computed resolve cache if data is on disk
+            if obj.isOnDisk()
+                obj.DataStore.clearResolved();
+            end
         end
 
         function toDisk(obj)
@@ -203,6 +211,16 @@ classdef Sensor < handle
                 error('Sensor:noData', 'No X/Y data to move to disk.');
             end
             obj.DataStore = FastPlotDataStore(obj.X, obj.Y);
+
+            % Pre-compute resolve() while X/Y are still in memory (fastest
+            % path).  Results are stored in the SQLite database so that
+            % subsequent resolve() calls are instant.
+            if ~isempty(obj.ThresholdRules)
+                obj.resolve();
+                obj.DataStore.storeResolved( ...
+                    obj.ResolvedThresholds, obj.ResolvedViolations);
+            end
+
             obj.X = [];
             obj.Y = [];
         end
@@ -267,11 +285,22 @@ classdef Sensor < handle
                 return;
             end
 
+            % ----- Check for pre-computed cache (stored during toDisk) -----
+            onDisk = obj.isOnDisk();
+            if onDisk
+                [cachedTh, cachedViol] = obj.DataStore.loadResolved();
+                if ~isempty(cachedTh)
+                    obj.ResolvedThresholds = cachedTh;
+                    obj.ResolvedViolations = cachedViol;
+                    obj.ResolvedStateBands = struct();
+                    return;
+                end
+            end
+
             % ----- Determine data source -----
             % For disk-backed sensors, use DataStore metadata instead of
             % loading the entire dataset into memory.  Peak memory stays
             % proportional to the largest active segment, not total points.
-            onDisk = obj.isOnDisk();
             if onDisk
                 dataXMin = obj.DataStore.XMin;
                 dataXMax = obj.DataStore.XMax;

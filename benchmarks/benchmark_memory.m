@@ -75,41 +75,56 @@ function benchmark_memory()
         fprintf('  %-10s %10.3f   %10.3f\n', formatPoints(n), tTo, tFrom);
     end
 
-    %% 4. resolve() timing: memory vs disk
-    fprintf('\n--- resolve() timing: memory vs disk ---\n');
-    fprintf('  %-10s %12s %12s %10s\n', 'Points', 'Memory (s)', 'Disk (s)', 'Ratio');
-    fprintf('  %s\n', repmat('-', 1, 48));
+    %% 4. resolve() timing: memory vs disk-MEX vs pre-computed
+    fprintf('\n--- resolve() timing: memory vs disk-MEX vs pre-computed ---\n');
+    fprintf('  %-10s %12s %14s %14s\n', ...
+        'Points', 'Memory (s)', 'Disk-MEX (s)', 'Cached (s)');
+    fprintf('  %s\n', repmat('-', 1, 54));
 
     resolveSizes = [1e5, 5e5, 1e6, 2e6, 5e6];
     for i = 1:numel(resolveSizes)
         n = resolveSizes(i);
 
+        % Shared state channel
+        sc = StateChannel('machine');
+        sc.X = [0, 25, 50, 75];
+        sc.Y = [0, 1, 2, 1];
+
         % Memory resolve
         s = Sensor('res');
         s.X = linspace(0, 100, n);
         s.Y = 40 + 20 * sin(2 * pi * s.X / 30);
-        sc = StateChannel('machine');
-        sc.X = [0, 25, 50, 75];
-        sc.Y = [0, 1, 2, 1];
         s.addStateChannel(sc);
         s.addThresholdRule(struct('machine', 1), 55, ...
             'Direction', 'upper', 'Label', 'HH');
         tic; s.resolve(); tMem = toc;
 
-        % Disk resolve (memory-efficient: reads only active segments,
-        % skips chunks whose y_max/y_min cannot violate the threshold)
-        s2 = Sensor('res_d');
+        % Disk resolve — MEX path (clear cache to force recompute)
+        clear compute_violations_disk;
+        s2 = Sensor('res_mex');
         s2.X = linspace(0, 100, n);
         s2.Y = 40 + 20 * sin(2 * pi * s2.X / 30);
         s2.addStateChannel(sc);
         s2.addThresholdRule(struct('machine', 1), 55, ...
             'Direction', 'upper', 'Label', 'HH');
-        s2.toDisk();
-        tic; s2.resolve(); tDisk = toc;
+        s2.toDisk();  % pre-computes + caches
+        s2.DataStore.clearResolved();  % clear cache to force disk scan
+        tic; s2.resolve(); tDiskMex = toc;
         s2.DataStore.cleanup();
 
-        fprintf('  %-10s %10.3f   %10.3f   %7.1fx\n', ...
-            formatPoints(n), tMem, tDisk, tDisk / max(tMem, 1e-6));
+        % Pre-computed resolve — toDisk pre-computes, resolve loads cache
+        s3 = Sensor('res_cached');
+        s3.X = linspace(0, 100, n);
+        s3.Y = 40 + 20 * sin(2 * pi * s3.X / 30);
+        s3.addStateChannel(sc);
+        s3.addThresholdRule(struct('machine', 1), 55, ...
+            'Direction', 'upper', 'Label', 'HH');
+        s3.toDisk();  % pre-computes + caches
+        tic; s3.resolve(); tCached = toc;
+        s3.DataStore.cleanup();
+
+        fprintf('  %-10s %10.3f   %12.3f   %12.4f\n', ...
+            formatPoints(n), tMem, tDiskMex, tCached);
     end
 
     %% 5. resolve() peak memory: old vs new

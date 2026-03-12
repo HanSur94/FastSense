@@ -381,6 +381,88 @@ classdef FastPlotDataStore < handle
     end
 
     methods (Access = public)
+        function storeResolved(obj, resolvedTh, resolvedViol)
+            %STORERESOLVED Cache pre-computed resolve() results in SQLite.
+            %   ds.storeResolved(resolvedTh, resolvedViol) stores the
+            %   threshold and violation struct arrays produced by
+            %   Sensor.resolve() into the database for instant retrieval.
+            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            mksqlite(obj.DbId, 'BEGIN TRANSACTION');
+            try
+                for i = 1:numel(resolvedTh)
+                    th = resolvedTh(i);
+                    colorBlob = th.Color;
+                    if isempty(colorBlob); colorBlob = zeros(1,0); end
+                    mksqlite(obj.DbId, ...
+                        'INSERT INTO resolved_thresholds VALUES (?,?,?,?,?,?,?,?)', ...
+                        i, th.X, th.Y, th.Direction, th.Label, ...
+                        colorBlob, th.LineStyle, th.Value);
+                end
+                for i = 1:numel(resolvedViol)
+                    v = resolvedViol(i);
+                    mksqlite(obj.DbId, ...
+                        'INSERT INTO resolved_violations VALUES (?,?,?,?,?)', ...
+                        i, v.X, v.Y, v.Direction, v.Label);
+                end
+                mksqlite(obj.DbId, 'COMMIT');
+            catch ME
+                try mksqlite(obj.DbId, 'ROLLBACK'); catch; end
+                rethrow(ME);
+            end
+        end
+
+        function [resolvedTh, resolvedViol] = loadResolved(obj)
+            %LOADRESOLVED Load pre-computed resolve() results from SQLite.
+            %   Returns empty arrays if no cached results exist.
+            resolvedTh = [];
+            resolvedViol = [];
+            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            rows = mksqlite(obj.DbId, ...
+                'SELECT * FROM resolved_thresholds ORDER BY idx');
+            if isempty(rows) || numel(rows) == 0; return; end
+            for i = 1:numel(rows)
+                r = rows(i);
+                th.X = r.x_data(:)';
+                th.Y = r.y_data(:)';
+                th.Direction = r.direction;
+                th.Label = r.label;
+                c = r.color;
+                if isempty(c) || numel(c) == 0
+                    th.Color = [];
+                else
+                    th.Color = c(:)';
+                end
+                th.LineStyle = r.line_style;
+                th.Value = r.value;
+                if isempty(resolvedTh)
+                    resolvedTh = th;
+                else
+                    resolvedTh(end+1) = th;
+                end
+            end
+            vrows = mksqlite(obj.DbId, ...
+                'SELECT * FROM resolved_violations ORDER BY idx');
+            for i = 1:numel(vrows)
+                r = vrows(i);
+                v.X = r.x_data(:)';
+                v.Y = r.y_data(:)';
+                v.Direction = r.direction;
+                v.Label = r.label;
+                if isempty(resolvedViol)
+                    resolvedViol = v;
+                else
+                    resolvedViol(end+1) = v;
+                end
+            end
+        end
+
+        function clearResolved(obj)
+            %CLEARRESOLVED Invalidate pre-computed resolve() cache.
+            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            mksqlite(obj.DbId, 'DELETE FROM resolved_thresholds');
+            mksqlite(obj.DbId, 'DELETE FROM resolved_violations');
+        end
+
         function cleanup(obj)
             %CLEANUP Close the database and delete temp files.
             if obj.UseSqlite && obj.DbId >= 0
@@ -428,6 +510,27 @@ classdef FastPlotDataStore < handle
                 '  y_data BLOB NOT NULL' ...
                 ')']);
 
+            % Pre-computed resolve() cache tables
+            mksqlite(obj.DbId, [...
+                'CREATE TABLE resolved_thresholds (' ...
+                '  idx INTEGER PRIMARY KEY,' ...
+                '  x_data BLOB NOT NULL,' ...
+                '  y_data BLOB NOT NULL,' ...
+                '  direction TEXT NOT NULL,' ...
+                '  label TEXT NOT NULL,' ...
+                '  color BLOB,' ...
+                '  line_style TEXT NOT NULL,' ...
+                '  value REAL NOT NULL' ...
+                ')']);
+            mksqlite(obj.DbId, [...
+                'CREATE TABLE resolved_violations (' ...
+                '  idx INTEGER PRIMARY KEY,' ...
+                '  x_data BLOB NOT NULL,' ...
+                '  y_data BLOB NOT NULL,' ...
+                '  direction TEXT NOT NULL,' ...
+                '  label TEXT NOT NULL' ...
+                ')']);
+
             n = obj.NumPoints;
             % Auto-tune chunk size: aim for 500-2000 chunks to balance
             % granularity (zoom precision) vs overhead (chunk metadata).
@@ -462,6 +565,11 @@ classdef FastPlotDataStore < handle
             mksqlite(obj.DbId, 'ANALYZE');
             mksqlite(obj.DbId, 'PRAGMA journal_mode = DELETE');
             mksqlite(obj.DbId, 'PRAGMA synchronous = NORMAL');
+            % Release exclusive lock so resolve_disk_mex can open a
+            % concurrent read-only connection to this database file.
+            mksqlite(obj.DbId, 'PRAGMA locking_mode = NORMAL');
+            % A read must occur to actually release the EXCLUSIVE lock.
+            mksqlite(obj.DbId, 'SELECT 1 FROM chunks LIMIT 1');
             obj.IsValid = true;
         end
 

@@ -4,6 +4,9 @@ function [batchViolX, batchViolY] = compute_violations_disk(ds, segLo, segHi, th
 %   metadata, skipping entire chunks that cannot contain violations.  Peak
 %   memory is proportional to the hot chunks rather than the full dataset.
 %
+%   When resolve_disk_mex is available, all violation detection is done in a
+%   single MEX call (direct SQLite + SIMD), eliminating MATLAB<->MEX overhead.
+%
 %   Inputs:
 %     ds              — FastPlotDataStore, disk-backed data source
 %     segLo           — 1xS integer, start indices of active segments
@@ -17,6 +20,21 @@ function [batchViolX, batchViolY] = compute_violations_disk(ds, segLo, segHi, th
 %
 %   See also compute_violations_batch, Sensor.resolve, FastPlotDataStore.
 
+    persistent hasMex
+    if isempty(hasMex)
+        hasMex = (exist('resolve_disk_mex', 'file') == 3);
+    end
+
+    if hasMex
+        % Fast path: single MEX call with direct SQLite access + SIMD
+        dirDoubles = double(directions);
+        [batchViolX, batchViolY] = resolve_disk_mex( ...
+            ds.DbPath, double(segLo), double(segHi), ...
+            thresholdValues, dirDoubles);
+        return;
+    end
+
+    % Fallback: MATLAB loop via DataStore.findViolations()
     nThresholds = numel(thresholdValues);
     nSegs = numel(segLo);
 
