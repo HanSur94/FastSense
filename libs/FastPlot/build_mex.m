@@ -122,10 +122,9 @@ function build_mex()
     };
 
     % mksqlite lives in the library root (not mex_src) and needs -lsqlite3
-    hasSqlite3 = check_sqlite3(isOctave);
+    hasSqlite3 = check_sqlite3();
     if hasSqlite3
         mksqlite_src = fullfile(rootDir, 'mksqlite.c');
-        mksqlite_extra = {{'-lsqlite3'}};
     end;
 
     fprintf('\n');
@@ -321,26 +320,15 @@ function [gcc_path, gcc_name] = find_gcc()
 end
 
 
-function found = check_sqlite3(isOctave)
+function found = check_sqlite3()
 %CHECK_SQLITE3 Check whether libsqlite3 development files are available.
-%   found = check_sqlite3(isOctave) returns true if a small test program
-%   can be compiled and linked against -lsqlite3.
     found = false;
-    tmpdir = tempdir();
-    test_c = fullfile(tmpdir, 'sqlite3_check.c');
+    test_c = fullfile(tempdir(), 'sqlite3_check.c');
     fid = fopen(test_c, 'w');
     if fid == -1; return; end
     fprintf(fid, '#include <sqlite3.h>\nint main(){sqlite3_libversion();return 0;}\n');
     fclose(fid);
-
-    if isOctave
-        [status, ~] = system(sprintf('cc -o /dev/null %s -lsqlite3 2>/dev/null', test_c));
-    else
-        % On MATLAB, just check if the header/lib exist via system compiler
-        [status, ~] = system(sprintf('cc -o /dev/null %s -lsqlite3 2>/dev/null', test_c));
-    end
-    if status == 0
-        found = true;
-    end
+    [status, ~] = system(sprintf('cc -o /dev/null %s -lsqlite3 2>/dev/null', test_c));
+    found = (status == 0);
     delete(test_c);
 end

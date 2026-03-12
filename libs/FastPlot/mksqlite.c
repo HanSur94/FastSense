@@ -28,6 +28,7 @@
 /* Typed BLOB header magic */
 #define TYPED_BLOB_MAGIC  0x4D4B5351  /* "MKSQ" */
 #define TYPED_BLOB_VER    3           /* v3: added char, logical, cell support */
+#define LEN_PREFIX_SIZE   4           /* uint32 length prefix for nested blobs */
 
 /* Extended type tags (stored in class_id field) */
 #define TAG_NUMERIC    0   /* class_id holds mxClassID directly */
@@ -96,89 +97,60 @@ static size_t class_element_size(mxClassID cid) {
  *  SERIALIZATION
  * ================================================================ */
 
-/* Serialize a numeric array to typed BLOB */
+static TypedBlobHeader init_blob_header(uint32_t class_id, size_t rows, size_t cols) {
+    TypedBlobHeader hdr;
+    hdr.magic    = TYPED_BLOB_MAGIC;
+    hdr.version  = TYPED_BLOB_VER;
+    hdr.class_id = class_id;
+    hdr.ndims    = 2;
+    hdr.rows     = (uint32_t)rows;
+    hdr.cols     = (uint32_t)cols;
+    return hdr;
+}
+
 static void *serialize_numeric(const mxArray *arr, size_t *out_size) {
     mxClassID cid = mxGetClassID(arr);
     size_t elem_sz = class_element_size(cid);
-    size_t rows = mxGetM(arr);
-    size_t cols = mxGetN(arr);
+    size_t rows = mxGetM(arr), cols = mxGetN(arr);
     size_t data_bytes = rows * cols * elem_sz;
     size_t total = TYPED_BLOB_HEADER_SIZE + data_bytes;
-    unsigned char *buf;
-    TypedBlobHeader hdr;
-
-    buf = (unsigned char *)mxMalloc(total);
-    hdr.magic    = TYPED_BLOB_MAGIC;
-    hdr.version  = TYPED_BLOB_VER;
-    hdr.class_id = (uint32_t)cid;
-    hdr.ndims    = 2;
-    hdr.rows     = (uint32_t)rows;
-    hdr.cols     = (uint32_t)cols;
+    unsigned char *buf = (unsigned char *)mxMalloc(total);
+    TypedBlobHeader hdr = init_blob_header((uint32_t)cid, rows, cols);
 
     memcpy(buf, &hdr, TYPED_BLOB_HEADER_SIZE);
     memcpy(buf + TYPED_BLOB_HEADER_SIZE, mxGetData(arr), data_bytes);
-
     *out_size = total;
     return buf;
 }
 
-/* Serialize a char array */
 static void *serialize_char(const mxArray *arr, size_t *out_size) {
-    size_t rows = mxGetM(arr);
-    size_t cols = mxGetN(arr);
+    size_t rows = mxGetM(arr), cols = mxGetN(arr);
     size_t numel = rows * cols;
     size_t total = TYPED_BLOB_HEADER_SIZE + numel;
-    unsigned char *buf;
-    TypedBlobHeader hdr;
-    mxChar *data;
+    unsigned char *buf = (unsigned char *)mxMalloc(total);
+    TypedBlobHeader hdr = init_blob_header(TAG_CHAR, rows, cols);
+    mxChar *data = mxGetChars(arr);
     size_t i;
 
-    buf = (unsigned char *)mxMalloc(total);
-    hdr.magic    = TYPED_BLOB_MAGIC;
-    hdr.version  = TYPED_BLOB_VER;
-    hdr.class_id = TAG_CHAR;
-    hdr.ndims    = 2;
-    hdr.rows     = (uint32_t)rows;
-    hdr.cols     = (uint32_t)cols;
-
     memcpy(buf, &hdr, TYPED_BLOB_HEADER_SIZE);
-
-    /* Copy char data (mxChar may be uint16 in MATLAB, char in Octave) */
-    data = mxGetChars(arr);
-    for (i = 0; i < numel; i++) {
+    for (i = 0; i < numel; i++)
         buf[TYPED_BLOB_HEADER_SIZE + i] = (unsigned char)data[i];
-    }
-
     *out_size = total;
     return buf;
 }
 
-/* Serialize a logical array */
 static void *serialize_logical(const mxArray *arr, size_t *out_size) {
-    size_t rows = mxGetM(arr);
-    size_t cols = mxGetN(arr);
+    size_t rows = mxGetM(arr), cols = mxGetN(arr);
     size_t numel = rows * cols;
     size_t total = TYPED_BLOB_HEADER_SIZE + numel;
-    unsigned char *buf;
-    TypedBlobHeader hdr;
-    mxLogical *data;
+    unsigned char *buf = (unsigned char *)mxMalloc(total);
+    TypedBlobHeader hdr = init_blob_header(TAG_LOGICAL, rows, cols);
+    mxLogical *data = mxGetLogicals(arr);
     size_t i;
 
-    buf = (unsigned char *)mxMalloc(total);
-    hdr.magic    = TYPED_BLOB_MAGIC;
-    hdr.version  = TYPED_BLOB_VER;
-    hdr.class_id = TAG_LOGICAL;
-    hdr.ndims    = 2;
-    hdr.rows     = (uint32_t)rows;
-    hdr.cols     = (uint32_t)cols;
-
     memcpy(buf, &hdr, TYPED_BLOB_HEADER_SIZE);
-
-    data = mxGetLogicals(arr);
-    for (i = 0; i < numel; i++) {
+    for (i = 0; i < numel; i++)
         buf[TYPED_BLOB_HEADER_SIZE + i] = (unsigned char)(data[i] ? 1 : 0);
-    }
-
     *out_size = total;
     return buf;
 }
@@ -186,13 +158,10 @@ static void *serialize_logical(const mxArray *arr, size_t *out_size) {
 /* Serialize a cell array — each element is recursively serialized with
  * a 4-byte length prefix:  [len_0][blob_0][len_1][blob_1]... */
 static void *serialize_cell(const mxArray *arr, size_t *out_size) {
-    size_t rows = mxGetM(arr);
-    size_t cols = mxGetN(arr);
+    size_t rows = mxGetM(arr), cols = mxGetN(arr);
     size_t numel = rows * cols;
-    TypedBlobHeader hdr;
     size_t i;
 
-    /* First pass: serialize each element to get total size */
     void **elem_blobs = (void **)mxMalloc(numel * sizeof(void *));
     size_t *elem_sizes = (size_t *)mxMalloc(numel * sizeof(size_t));
     size_t payload_size = 0;
@@ -200,31 +169,24 @@ static void *serialize_cell(const mxArray *arr, size_t *out_size) {
     for (i = 0; i < numel; i++) {
         mxArray *cell_elem = mxGetCell(arr, i);
         if (cell_elem == NULL) {
-            /* Empty cell — serialize as zero-length */
             elem_blobs[i] = NULL;
             elem_sizes[i] = 0;
         } else {
             elem_blobs[i] = serialize_value(cell_elem, &elem_sizes[i]);
         }
-        payload_size += 4 + elem_sizes[i];  /* uint32 length + data */
+        payload_size += LEN_PREFIX_SIZE + elem_sizes[i];
     }
 
     size_t total = TYPED_BLOB_HEADER_SIZE + payload_size;
     unsigned char *buf = (unsigned char *)mxMalloc(total);
-
-    hdr.magic    = TYPED_BLOB_MAGIC;
-    hdr.version  = TYPED_BLOB_VER;
-    hdr.class_id = TAG_CELL;
-    hdr.ndims    = 2;
-    hdr.rows     = (uint32_t)rows;
-    hdr.cols     = (uint32_t)cols;
+    TypedBlobHeader hdr = init_blob_header(TAG_CELL, rows, cols);
     memcpy(buf, &hdr, TYPED_BLOB_HEADER_SIZE);
 
     size_t offset = TYPED_BLOB_HEADER_SIZE;
     for (i = 0; i < numel; i++) {
         uint32_t len = (uint32_t)elem_sizes[i];
-        memcpy(buf + offset, &len, 4);
-        offset += 4;
+        memcpy(buf + offset, &len, LEN_PREFIX_SIZE);
+        offset += LEN_PREFIX_SIZE;
         if (len > 0) {
             memcpy(buf + offset, elem_blobs[i], len);
             mxFree(elem_blobs[i]);
@@ -247,20 +209,17 @@ static void *serialize_cell(const mxArray *arr, size_t *out_size) {
  * 'categories' (cell array of char). We store structs generically. */
 static void *serialize_struct(const mxArray *arr, size_t *out_size) {
     int nfields = mxGetNumberOfFields(arr);
-    TypedBlobHeader hdr;
     int f;
 
-    /* Only serialize scalar structs */
     if (mxGetNumberOfElements(arr) != 1) {
         mexErrMsgIdAndTxt("mksqlite:unsupportedStruct",
                           "Only scalar structs can be serialized as typed BLOBs.");
     }
 
-    /* First pass: gather field names and serialize values */
     const char **field_names = (const char **)mxMalloc(nfields * sizeof(char *));
     void **field_blobs = (void **)mxMalloc(nfields * sizeof(void *));
     size_t *field_sizes = (size_t *)mxMalloc(nfields * sizeof(size_t));
-    size_t payload_size = 4;  /* nFields */
+    size_t payload_size = LEN_PREFIX_SIZE;  /* nFields */
 
     for (f = 0; f < nfields; f++) {
         field_names[f] = mxGetFieldNameByNumber(arr, f);
@@ -271,32 +230,26 @@ static void *serialize_struct(const mxArray *arr, size_t *out_size) {
         } else {
             field_blobs[f] = serialize_value(val, &field_sizes[f]);
         }
-        payload_size += 4 + strlen(field_names[f]);  /* nameLen + name */
-        payload_size += 4 + field_sizes[f];           /* valueLen + blob */
+        payload_size += LEN_PREFIX_SIZE + strlen(field_names[f]);
+        payload_size += LEN_PREFIX_SIZE + field_sizes[f];
     }
 
     size_t total = TYPED_BLOB_HEADER_SIZE + payload_size;
     unsigned char *buf = (unsigned char *)mxMalloc(total);
-
-    hdr.magic    = TYPED_BLOB_MAGIC;
-    hdr.version  = TYPED_BLOB_VER;
-    hdr.class_id = TAG_CATEGORICAL;
-    hdr.ndims    = 2;
-    hdr.rows     = 1;
-    hdr.cols     = 1;
+    TypedBlobHeader hdr = init_blob_header(TAG_CATEGORICAL, 1, 1);
     memcpy(buf, &hdr, TYPED_BLOB_HEADER_SIZE);
 
     size_t offset = TYPED_BLOB_HEADER_SIZE;
     uint32_t nf = (uint32_t)nfields;
-    memcpy(buf + offset, &nf, 4); offset += 4;
+    memcpy(buf + offset, &nf, LEN_PREFIX_SIZE); offset += LEN_PREFIX_SIZE;
 
     for (f = 0; f < nfields; f++) {
         uint32_t nlen = (uint32_t)strlen(field_names[f]);
-        memcpy(buf + offset, &nlen, 4); offset += 4;
+        memcpy(buf + offset, &nlen, LEN_PREFIX_SIZE); offset += LEN_PREFIX_SIZE;
         memcpy(buf + offset, field_names[f], nlen); offset += nlen;
 
         uint32_t vlen = (uint32_t)field_sizes[f];
-        memcpy(buf + offset, &vlen, 4); offset += 4;
+        memcpy(buf + offset, &vlen, LEN_PREFIX_SIZE); offset += LEN_PREFIX_SIZE;
         if (vlen > 0) {
             memcpy(buf + offset, field_blobs[f], vlen);
             mxFree(field_blobs[f]);
@@ -336,7 +289,7 @@ static void *serialize_value(const mxArray *arr, size_t *out_size) {
     }
     mexErrMsgIdAndTxt("mksqlite:unsupportedClass",
                       "Cannot serialize this MATLAB type as a typed BLOB.");
-    return NULL;  /* unreachable */
+    return NULL;  /* unreachable — satisfies compiler */
 }
 
 /* ================================================================
@@ -425,9 +378,9 @@ static mxArray *deserialize_value(const unsigned char *data, size_t nbytes,
 
         for (i = 0; i < numel; i++) {
             uint32_t elem_len;
-            if (offset + 4 > nbytes) break;
-            memcpy(&elem_len, data + offset, 4);
-            offset += 4;
+            if (offset + LEN_PREFIX_SIZE > nbytes) break;
+            memcpy(&elem_len, data + offset, LEN_PREFIX_SIZE);
+            offset += LEN_PREFIX_SIZE;
             if (elem_len == 0) {
                 mxSetCell(arr, i, mxCreateDoubleMatrix(0, 0, mxREAL));
             } else {
@@ -451,8 +404,8 @@ static mxArray *deserialize_value(const unsigned char *data, size_t nbytes,
         uint32_t nfields_raw, f;
         offset = TYPED_BLOB_HEADER_SIZE;
 
-        if (offset + 4 > nbytes) { *consumed = 0; return NULL; }
-        memcpy(&nfields_raw, data + offset, 4); offset += 4;
+        if (offset + LEN_PREFIX_SIZE > nbytes) { *consumed = 0; return NULL; }
+        memcpy(&nfields_raw, data + offset, LEN_PREFIX_SIZE); offset += LEN_PREFIX_SIZE;
 
         /* Gather field names and values */
         const char **fnames = (const char **)mxMalloc(nfields_raw * sizeof(char *));
@@ -463,8 +416,8 @@ static mxArray *deserialize_value(const unsigned char *data, size_t nbytes,
             uint32_t nlen, vlen;
             size_t val_consumed;
 
-            if (offset + 4 > nbytes) break;
-            memcpy(&nlen, data + offset, 4); offset += 4;
+            if (offset + LEN_PREFIX_SIZE > nbytes) break;
+            memcpy(&nlen, data + offset, LEN_PREFIX_SIZE); offset += LEN_PREFIX_SIZE;
 
             fname_bufs[f] = (char *)mxMalloc(nlen + 1);
             memcpy(fname_bufs[f], data + offset, nlen);
@@ -472,8 +425,8 @@ static mxArray *deserialize_value(const unsigned char *data, size_t nbytes,
             fnames[f] = fname_bufs[f];
             offset += nlen;
 
-            if (offset + 4 > nbytes) break;
-            memcpy(&vlen, data + offset, 4); offset += 4;
+            if (offset + LEN_PREFIX_SIZE > nbytes) break;
+            memcpy(&vlen, data + offset, LEN_PREFIX_SIZE); offset += LEN_PREFIX_SIZE;
 
             if (vlen > 0) {
                 val_consumed = 0;
@@ -515,53 +468,42 @@ static mxArray *deserialize_blob(const void *data, int nbytes) {
  *  PARAMETER BINDING
  * ================================================================ */
 
+/* Serialize an mxArray, bind as BLOB, and free the buffer. */
+static void bind_typed_blob(sqlite3_stmt *stmt, int idx,
+                             void *(*serializer)(const mxArray *, size_t *),
+                             const mxArray *param) {
+    size_t blob_sz;
+    void *blob = serializer(param, &blob_sz);
+    sqlite3_bind_blob(stmt, idx, blob, (int)blob_sz, SQLITE_TRANSIENT);
+    mxFree(blob);
+}
+
 static void bind_param(sqlite3_stmt *stmt, int idx, const mxArray *param,
                        int typed_blobs) {
     if (mxIsChar(param)) {
-        if (typed_blobs && (mxGetM(param) > 1)) {
-            /* Multi-row char array — serialize as typed BLOB */
-            size_t blob_sz;
-            void *blob = serialize_char(param, &blob_sz);
-            sqlite3_bind_blob(stmt, idx, blob, (int)blob_sz, SQLITE_TRANSIENT);
-            mxFree(blob);
+        if (typed_blobs && mxGetM(param) > 1) {
+            bind_typed_blob(stmt, idx, serialize_char, param);
         } else {
-            /* Single-row char: bind as text */
             char *str = mxArrayToString(param);
             sqlite3_bind_text(stmt, idx, str, -1, SQLITE_TRANSIENT);
             mxFree(str);
         }
     } else if (mxIsEmpty(param)) {
         sqlite3_bind_null(stmt, idx);
-    } else if (mxIsLogical(param) && typed_blobs) {
-        size_t blob_sz;
-        void *blob = serialize_logical(param, &blob_sz);
-        sqlite3_bind_blob(stmt, idx, blob, (int)blob_sz, SQLITE_TRANSIENT);
-        mxFree(blob);
     } else if (mxIsLogical(param)) {
-        /* Without typed BLOBs, bind as integer */
-        sqlite3_bind_int(stmt, idx, mxIsLogicalScalarTrue(param) ? 1 : 0);
+        if (typed_blobs)
+            bind_typed_blob(stmt, idx, serialize_logical, param);
+        else
+            sqlite3_bind_int(stmt, idx, mxIsLogicalScalarTrue(param) ? 1 : 0);
     } else if (mxIsCell(param) && typed_blobs) {
-        size_t blob_sz;
-        void *blob = serialize_cell(param, &blob_sz);
-        sqlite3_bind_blob(stmt, idx, blob, (int)blob_sz, SQLITE_TRANSIENT);
-        mxFree(blob);
+        bind_typed_blob(stmt, idx, serialize_cell, param);
     } else if (mxIsStruct(param) && typed_blobs) {
-        size_t blob_sz;
-        void *blob = serialize_struct(param, &blob_sz);
-        sqlite3_bind_blob(stmt, idx, blob, (int)blob_sz, SQLITE_TRANSIENT);
-        mxFree(blob);
-    } else if (mxIsNumeric(param) && mxGetNumberOfElements(param) == 1 &&
-               !typed_blobs) {
-        sqlite3_bind_double(stmt, idx, mxGetScalar(param));
+        bind_typed_blob(stmt, idx, serialize_struct, param);
     } else if (mxIsNumeric(param)) {
-        if (typed_blobs && mxGetNumberOfElements(param) > 1) {
-            size_t blob_sz;
-            void *blob = serialize_numeric(param, &blob_sz);
-            sqlite3_bind_blob(stmt, idx, blob, (int)blob_sz, SQLITE_TRANSIENT);
-            mxFree(blob);
-        } else {
+        if (typed_blobs && mxGetNumberOfElements(param) > 1)
+            bind_typed_blob(stmt, idx, serialize_numeric, param);
+        else
             sqlite3_bind_double(stmt, idx, mxGetScalar(param));
-        }
     } else {
         mexErrMsgIdAndTxt("mksqlite:unsupportedParam",
                           "Unsupported parameter type at position %d.", idx);

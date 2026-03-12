@@ -443,17 +443,14 @@ classdef FastPlot < handle
             lineStruct.NumPoints = nPts;
 
             % Decide storage: disk-backed for large datasets to avoid OOM
-            dataBytes = nPts * 8 * 2;  % X + Y, double precision
-            useDisk = strcmp(obj.StorageMode, 'disk') || ...
-                      (strcmp(obj.StorageMode, 'auto') && dataBytes > obj.MemoryLimit);
-
+            useDisk = obj.shouldUseDisk(nPts);
             if useDisk
                 lineStruct.DataStore = FastPlotDataStore(x, y);
                 lineStruct.X = [];
                 lineStruct.Y = [];
                 if obj.Verbose
                     fprintf('[FastPlot] addLine: %d pts (%.1f MB) -> disk-backed storage\n', ...
-                        nPts, dataBytes / 1e6);
+                        nPts, nPts * 16 / 1e6);
                 end
             else
                 lineStruct.DataStore = [];
@@ -1524,15 +1521,12 @@ classdef FastPlot < handle
 
             % Replace raw data (decide storage mode)
             nPtsNew = numel(newX);
-            dataBytes = nPtsNew * 8 * 2;
-            useDisk = strcmp(obj.StorageMode, 'disk') || ...
-                      (strcmp(obj.StorageMode, 'auto') && dataBytes > obj.MemoryLimit);
-
-            if useDisk
+            if obj.shouldUseDisk(nPtsNew)
                 obj.Lines(lineIdx).DataStore = FastPlotDataStore(newX, newY);
                 obj.Lines(lineIdx).X = [];
                 obj.Lines(lineIdx).Y = [];
             else
+                obj.Lines(lineIdx).DataStore = [];
                 obj.Lines(lineIdx).X = newX;
                 obj.Lines(lineIdx).Y = newY;
             end
@@ -2557,6 +2551,13 @@ classdef FastPlot < handle
         function onDisk = lineOnDisk(obj, i)
             %LINEONDISK True if line i uses disk-backed storage.
             onDisk = ~isempty(obj.Lines(i).DataStore);
+        end
+
+        function useDisk = shouldUseDisk(obj, nPts)
+            %SHOULDUSEDISK Decide if data should use disk-backed storage.
+            dataBytes = nPts * 8 * 2;
+            useDisk = strcmp(obj.StorageMode, 'disk') || ...
+                      (strcmp(obj.StorageMode, 'auto') && dataBytes > obj.MemoryLimit);
         end
 
         function [xMin, xMax] = lineXRange(obj, i)
