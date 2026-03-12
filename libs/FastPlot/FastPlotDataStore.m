@@ -11,14 +11,29 @@ classdef FastPlotDataStore < handle
     %   overlapping the visible range are loaded, then trimmed to the exact
     %   view window.
     %
+    %   Additional data columns (cell, char, string, categorical, logical,
+    %   or any numeric type) can be attached via addColumn / getColumn.
+    %   These are stored as typed BLOBs in a separate 'columns' table and
+    %   queried by the same chunk-based range mechanism.
+    %
     %   Requires mksqlite (https://github.com/AnyBody-Research-Group/mksqlite).
-    %   If mksqlite is not available, falls back to binary file storage.
+    %   If mksqlite is not available, falls back to binary file storage
+    %   (extra columns require mksqlite).
     %
     %   Usage:
     %     ds = FastPlotDataStore(x, y);
     %     [xVis, yVis] = ds.getRange(xMin, xMax);
     %     [xSlice, ySlice] = ds.readSlice(1000, 2000);
     %     n = ds.NumPoints;
+    %
+    %   Extra columns:
+    %     ds.addColumn('labels', {'A','B','C',...});  % cell of strings
+    %     ds.addColumn('flags', logical([1 0 1 ...])); % logical
+    %     ds.addColumn('category', struct('codes',uint32([...]), ...
+    %                   'categories',{{'low','mid','high'}})); % categorical
+    %     vals = ds.getColumnRange('labels', xMin, xMax);
+    %     vals = ds.getColumnSlice('labels', 1, 100);
+    %     names = ds.listColumns();
     %
     %   Cleanup:
     %     Temp files are deleted automatically when the object is destroyed.
@@ -41,6 +56,7 @@ classdef FastPlotDataStore < handle
         NumChunks    = 0       % total number of stored chunks
         IsValid      = false   % true after successful write
         UseSqlite    = false   % true if mksqlite is available
+        ColumnNames  = {}      % cell array of extra column names
     end
 
     methods (Access = public)
@@ -143,6 +159,170 @@ classdef FastPlotDataStore < handle
                 count = endIdx - startIdx + 1;
                 [xOut, yOut] = obj.readSliceBinary(startIdx, endIdx, count);
             end
+        end
+
+        function addColumn(obj, name, data)
+            %ADDCOLUMN Store an extra data column alongside X/Y.
+            %   ds.ADDCOLUMN(name, data) stores an additional column of
+            %   arbitrary type (cell, char, string, logical, numeric,
+            %   categorical struct) chunked in the same way as X/Y data.
+            %
+            %   The data length must match ds.NumPoints. Data is stored as
+            %   typed BLOBs in a 'columns' table, enabling range queries.
+            %
+            %   Inputs:
+            %     name — char; column name (must be unique)
+            %     data — array or cell with NumPoints elements
+            %
+            %   Requires mksqlite (SQLite backend).
+
+            if ~obj.UseSqlite
+                error('FastPlotDataStore:noSqlite', ...
+                    'addColumn requires mksqlite (SQLite backend).');
+            end
+            if ~obj.IsValid
+                error('FastPlotDataStore:notValid', ...
+                    'DataStore is not initialized.');
+            end
+
+            % Validate length
+            if iscell(data)
+                nData = numel(data);
+            elseif isstruct(data) && isfield(data, 'codes')
+                nData = numel(data.codes);
+            else
+                nData = numel(data);
+            end
+            if nData ~= obj.NumPoints
+                error('FastPlotDataStore:sizeMismatch', ...
+                    'Column data length (%d) must match NumPoints (%d).', ...
+                    nData, obj.NumPoints);
+            end
+
+            % Create columns table if it doesn't exist yet
+            if isempty(obj.ColumnNames)
+                mksqlite(obj.DbId, [...
+                    'CREATE TABLE IF NOT EXISTS columns (' ...
+                    '  chunk_id INTEGER NOT NULL,' ...
+                    '  col_name TEXT NOT NULL,' ...
+                    '  pt_offset INTEGER NOT NULL,' ...
+                    '  pt_count INTEGER NOT NULL,' ...
+                    '  col_data BLOB NOT NULL,' ...
+                    '  PRIMARY KEY (col_name, chunk_id)' ...
+                    ')']);
+            end
+
+            % Check for duplicate
+            if any(strcmp(name, obj.ColumnNames))
+                error('FastPlotDataStore:duplicateColumn', ...
+                    'Column ''%s'' already exists.', name);
+            end
+
+            % Chunk and insert
+            n = obj.NumPoints;
+            cs = obj.ChunkSize;
+            mksqlite(obj.DbId, 'BEGIN TRANSACTION');
+            try
+                chunkId = 0;
+                for s = 1:cs:n
+                    chunkId = chunkId + 1;
+                    e = min(s + cs - 1, n);
+                    if iscell(data)
+                        chunk = data(s:e);
+                    elseif isstruct(data) && isfield(data, 'codes')
+                        chunk = struct();
+                        chunk.codes = data.codes(s:e);
+                        chunk.categories = data.categories;
+                    else
+                        chunk = data(s:e);
+                    end
+                    mksqlite(obj.DbId, ...
+                        'INSERT INTO columns VALUES (?, ?, ?, ?, ?)', ...
+                        chunkId, name, s, e - s + 1, chunk);
+                end
+                mksqlite(obj.DbId, 'COMMIT');
+            catch ME
+                try mksqlite(obj.DbId, 'ROLLBACK'); catch; end
+                rethrow(ME);
+            end
+
+            obj.ColumnNames{end+1} = name;
+        end
+
+        function data = getColumnRange(obj, name, xMin, xMax)
+            %GETCOLUMNRANGE Read a column's data within an X range.
+            %   data = ds.GETCOLUMNRANGE(name, xMin, xMax) returns the
+            %   column data for points within the visible X range.
+            %   Uses the same chunk overlap query as getRange.
+            %
+            %   Inputs:
+            %     name — char; column name
+            %     xMin — left boundary of visible range
+            %     xMax — right boundary of visible range
+            %
+            %   Output:
+            %     data — column data for the matching range
+
+            if ~obj.UseSqlite || ~obj.IsValid
+                data = {};
+                return;
+            end
+
+            % Get chunk IDs that overlap the X range
+            res = mksqlite(obj.DbId, ...
+                ['SELECT c.chunk_id, c.pt_offset, ch.x_data, c.col_data ' ...
+                 'FROM columns c ' ...
+                 'JOIN chunks ch ON c.chunk_id = ch.chunk_id ' ...
+                 'WHERE c.col_name = ? AND ch.x_max >= ? AND ch.x_min <= ? ' ...
+                 'ORDER BY c.chunk_id'], ...
+                name, xMin, xMax);
+
+            if numel(res) == 0
+                data = {};
+                return;
+            end
+
+            data = obj.assembleColumnRange(res, xMin, xMax);
+        end
+
+        function data = getColumnSlice(obj, name, startIdx, endIdx)
+            %GETCOLUMNSLICE Read a column slice by point index range.
+            %   data = ds.GETCOLUMNSLICE(name, startIdx, endIdx) returns
+            %   column data for points from startIdx to endIdx (1-based).
+            %
+            %   Inputs:
+            %     name     — char; column name
+            %     startIdx — first point index (1-based)
+            %     endIdx   — last point index (1-based)
+            %
+            %   Output:
+            %     data — column data for the slice
+
+            if ~obj.UseSqlite || ~obj.IsValid
+                data = {};
+                return;
+            end
+
+            startIdx = max(1, startIdx);
+            endIdx   = min(obj.NumPoints, endIdx);
+
+            res = mksqlite(obj.DbId, ...
+                ['SELECT pt_offset, pt_count, col_data FROM columns ' ...
+                 'WHERE col_name = ? AND (pt_offset + pt_count - 1) >= ? ' ...
+                 'AND pt_offset <= ? ORDER BY chunk_id'], ...
+                name, startIdx, endIdx);
+
+            if numel(res) == 0
+                data = {};
+                return;
+            end
+
+            data = obj.assembleColumnSlice(res, startIdx, endIdx);
+        end
+
+        function names = listColumns(obj)
+            %LISTCOLUMNS Return names of all stored extra columns.
+            names = obj.ColumnNames;
         end
 
         function cleanup(obj)
@@ -318,6 +498,65 @@ classdef FastPlotDataStore < handle
         end
     end
 
+    % =================== COLUMN HELPERS ==================================
+    methods (Access = private)
+        function data = assembleColumnRange(obj, res, xMin, xMax)
+            %ASSEMBLECOLUMNRANGE Concatenate column chunks for a range query.
+            nRes = numel(res);
+
+            % Get the X data to find exact trim indices
+            if nRes == 1
+                xAll = res(1).x_data(:)';
+                colAll = res(1).col_data;
+            else
+                xCells = cell(1, nRes);
+                colCells = cell(1, nRes);
+                for k = 1:nRes
+                    xCells{k} = res(k).x_data(:)';
+                    colCells{k} = res(k).col_data;
+                end
+                xAll = [xCells{:}];
+                colAll = concatColumnData(colCells);
+            end
+
+            % Trim to range with padding
+            iStart = bsearchLocal(xAll, xMin, 'left');
+            iEnd   = bsearchLocal(xAll, xMax, 'right');
+            iStart = max(1, iStart - 1);
+            iEnd   = min(numel(xAll), iEnd + 1);
+
+            data = sliceColumnData(colAll, iStart, iEnd);
+        end
+
+        function data = assembleColumnSlice(~, res, startIdx, endIdx)
+            %ASSEMBLECOLUMNSLICE Concatenate column chunks for a slice query.
+            nRes = numel(res);
+
+            if nRes == 1
+                colAll = res(1).col_data;
+                localStart = startIdx - res(1).pt_offset + 1;
+                localEnd   = endIdx - res(1).pt_offset + 1;
+                nTotal = columnLength(colAll);
+                localStart = max(1, localStart);
+                localEnd   = min(nTotal, localEnd);
+                data = sliceColumnData(colAll, localStart, localEnd);
+            else
+                colCells = cell(1, nRes);
+                for k = 1:nRes
+                    colCells{k} = res(k).col_data;
+                end
+                colAll = concatColumnData(colCells);
+                globalOffset = res(1).pt_offset;
+                localStart = startIdx - globalOffset + 1;
+                localEnd   = endIdx - globalOffset + 1;
+                nTotal = columnLength(colAll);
+                localStart = max(1, localStart);
+                localEnd   = min(nTotal, localEnd);
+                data = sliceColumnData(colAll, localStart, localEnd);
+            end
+        end
+    end
+
     % =================== BINARY FILE FALLBACK ===========================
     methods (Access = private)
         function initBinaryFallback(obj, x, y)
@@ -390,6 +629,72 @@ classdef FastPlotDataStore < handle
 end
 
 % ========================= LOCAL HELPERS ================================
+
+function n = columnLength(data)
+%COLUMNLENGTH Return the number of elements in a column data chunk.
+    if iscell(data)
+        n = numel(data);
+    elseif isstruct(data) && isfield(data, 'codes')
+        n = numel(data.codes);
+    else
+        n = numel(data);
+    end
+end
+
+function out = sliceColumnData(data, iStart, iEnd)
+%SLICECOLUMNDATA Extract a sub-range from column data.
+    if iscell(data)
+        out = data(iStart:iEnd);
+    elseif isstruct(data) && isfield(data, 'codes')
+        out = struct();
+        out.codes = data.codes(iStart:iEnd);
+        out.categories = data.categories;
+    elseif ischar(data)
+        % char vector: slice directly
+        out = data(iStart:iEnd);
+    else
+        out = data(iStart:iEnd);
+    end
+end
+
+function out = concatColumnData(cells)
+%CONCATCOLUMNDATA Concatenate multiple column chunks.
+    if isempty(cells)
+        out = {};
+        return;
+    end
+    first = cells{1};
+    if iscell(first)
+        out = {};
+        for k = 1:numel(cells)
+            out = [out, cells{k}(:)'];  %#ok<AGROW>
+        end
+    elseif isstruct(first) && isfield(first, 'codes')
+        codes = [];
+        for k = 1:numel(cells)
+            codes = [codes, cells{k}.codes(:)'];  %#ok<AGROW>
+        end
+        out = struct();
+        out.codes = codes;
+        out.categories = first.categories;
+    elseif ischar(first)
+        out = '';
+        for k = 1:numel(cells)
+            out = [out, cells{k}(:)'];  %#ok<AGROW>
+        end
+    elseif islogical(first)
+        out = logical([]);
+        for k = 1:numel(cells)
+            out = [out, cells{k}(:)'];  %#ok<AGROW>
+        end
+    else
+        out = [];
+        for k = 1:numel(cells)
+            out = [out, cells{k}(:)'];  %#ok<AGROW>
+        end
+    end
+end
+
 function idx = bsearchLocal(x, val, mode)
 %BSEARCHLOCAL Binary search on a sorted vector.
 %   idx = BSEARCHLOCAL(x, val, 'left')  — first index where x(idx) >= val
