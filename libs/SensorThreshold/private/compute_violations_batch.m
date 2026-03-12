@@ -1,21 +1,20 @@
-function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, thresholdValues, directions)
+function [batchViolX, batchViolY] = compute_violations_batch(sensorX, sensorY, segLo, segHi, thresholdValues, directions)
 %COMPUTE_VIOLATIONS_BATCH Vectorized batch violation detection across segments.
-%   batchViolIdx = COMPUTE_VIOLATIONS_BATCH(sensorY, segLo, segHi,
-%       thresholdValues, directions) identifies the indices of sensorY
-%   that violate each threshold within the specified active segment
-%   ranges.  This is the inner computational kernel of Sensor.resolve().
+%   [batchViolX, batchViolY] = COMPUTE_VIOLATIONS_BATCH(sensorX, sensorY,
+%       segLo, segHi, thresholdValues, directions) identifies the X/Y
+%   coordinates of sensorY that violate each threshold within the specified
+%   active segment ranges.  This is the inner computational kernel of
+%   Sensor.resolve().
 %
 %   Two code paths are available:
 %     1. MEX path: delegates to compute_violations_mex (SIMD-accelerated C)
-%        for maximum throughput on large datasets.
-%     2. Pure-MATLAB fallback (current default): iterates over segments
-%        once and checks all thresholds per chunk (single-pass over data).
-%
-%   The MATLAB fallback pre-allocates a buffer sized to the total number
-%   of points across all active segments (upper bound), then fills it
-%   with a running count to avoid repeated dynamic array growth.
+%        which returns X/Y directly, avoiding costly MATLAB random-access
+%        indexing into large arrays.
+%     2. Pure-MATLAB fallback: iterates over segments once and checks all
+%        thresholds per chunk (single-pass over data).
 %
 %   Inputs:
+%     sensorX         — 1xN double, the full sensor X data vector
 %     sensorY         — 1xN double, the full sensor Y data vector
 %     segLo           — 1xS integer, start indices of active segments
 %                        (1-based, inclusive)
@@ -26,10 +25,11 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
 %                        y > threshold), false = lower (violation when
 %                        y < threshold)
 %
-%   Output:
-%     batchViolIdx — 1xT cell array; batchViolIdx{t} is a 1xK integer
-%                    vector of 1-based indices into sensorY where the
-%                    t-th threshold is violated
+%   Outputs:
+%     batchViolX — 1xT cell array; batchViolX{t} is a 1xK double vector
+%                  of violation X coordinates for threshold t
+%     batchViolY — 1xT cell array; batchViolY{t} is a 1xK double vector
+%                  of violation Y coordinates for threshold t
 %
 %   See also Sensor.resolve, binary_search.
 
@@ -39,9 +39,10 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
         useMex = (exist('compute_violations_mex', 'file') == 3);
     end
 
-    % --- MEX fast path ---
+    % --- MEX fast path: returns X/Y directly ---
     if useMex
-        batchViolIdx = compute_violations_mex(sensorY, double(segLo), double(segHi), ...
+        [batchViolX, batchViolY] = compute_violations_mex( ...
+            sensorX, sensorY, double(segLo), double(segHi), ...
             double(thresholdValues), double(directions));
         return;
     end
@@ -52,13 +53,15 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
     % each chunk is extracted from sensorY only once.
     nThresholds = numel(thresholdValues);
     nSegs = numel(segLo);
-    batchViolIdx = cell(1, nThresholds);
+    batchViolX = cell(1, nThresholds);
+    batchViolY = cell(1, nThresholds);
 
     % Upper-bound buffer size: total data points across all active segments
     totalPoints = sum(segHi - segLo + 1);
 
-    % Pre-allocate output buffers for all thresholds at once
-    buffers = zeros(nThresholds, totalPoints);
+    % Pre-allocate X and Y output buffers for all thresholds at once
+    bufsX = zeros(nThresholds, totalPoints);
+    bufsY = zeros(nThresholds, totalPoints);
     counts = zeros(1, nThresholds);
 
     % Separate upper and lower thresholds for vectorized comparison
@@ -71,19 +74,20 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
         lo = segLo(s);
         hi = segHi(s);
 
-        % Extract the segment chunk once for all thresholds
-        chunk = sensorY(lo:hi);
-        chunkLen = hi - lo + 1;
-        globalIdx = lo:hi;
+        % Extract X and Y chunks once for all thresholds
+        chunkX = sensorX(lo:hi);
+        chunkY = sensorY(lo:hi);
 
         % Process all upper thresholds against this chunk
         for ui = 1:numel(upperIdx)
             t = upperIdx(ui);
-            mask = chunk > thresholdValues(t);
-            hits = globalIdx(mask);
-            nHits = numel(hits);
+            mask = chunkY > thresholdValues(t);
+            hitsX = chunkX(mask);
+            hitsY = chunkY(mask);
+            nHits = numel(hitsX);
             if nHits > 0
-                buffers(t, counts(t)+1:counts(t)+nHits) = hits;
+                bufsX(t, counts(t)+1:counts(t)+nHits) = hitsX;
+                bufsY(t, counts(t)+1:counts(t)+nHits) = hitsY;
                 counts(t) = counts(t) + nHits;
             end
         end
@@ -91,11 +95,13 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
         % Process all lower thresholds against this chunk
         for li = 1:numel(lowerIdx)
             t = lowerIdx(li);
-            mask = chunk < thresholdValues(t);
-            hits = globalIdx(mask);
-            nHits = numel(hits);
+            mask = chunkY < thresholdValues(t);
+            hitsX = chunkX(mask);
+            hitsY = chunkY(mask);
+            nHits = numel(hitsX);
             if nHits > 0
-                buffers(t, counts(t)+1:counts(t)+nHits) = hits;
+                bufsX(t, counts(t)+1:counts(t)+nHits) = hitsX;
+                bufsY(t, counts(t)+1:counts(t)+nHits) = hitsY;
                 counts(t) = counts(t) + nHits;
             end
         end
@@ -103,6 +109,7 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
 
     % Trim the buffers to the actual number of violations found
     for t = 1:nThresholds
-        batchViolIdx{t} = buffers(t, 1:counts(t));
+        batchViolX{t} = bufsX(t, 1:counts(t));
+        batchViolY{t} = bufsY(t, 1:counts(t));
     end
 end

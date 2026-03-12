@@ -61,50 +61,63 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
 
     for g = 1:nGroups
         members = find(groupIdx == g);
-
-        % --- Overlay Y arrays from all members ---
-        % Start with the first member as the base; fill its NaN positions
-        % with non-NaN values contributed by subsequent members.
+        nMembers = numel(members);
         base = resolvedTh(members(1));
-        mergedY = base.Y;
 
-        for m = 2:numel(members)
-            otherY = resolvedTh(members(m)).Y;
-            % Only fill positions that are still NaN in the accumulator
-            fill = isnan(mergedY) & ~isnan(otherY);
-            mergedY(fill) = otherY(fill);
-        end
+        if nMembers == 1
+            % --- Fast path: single member, no merge needed ---
+            % Violations are already sorted (produced by left-to-right
+            % segment scan).  Skip allocation, copy, and sort entirely.
+            [stepX, stepY] = toStepFunction(segBounds, base.Y, dataEnd);
+            base.X = stepX;
+            base.Y = stepY;
 
-        % --- Convert composite Y to step-function format ---
-        [stepX, stepY] = toStepFunction(segBounds, mergedY, dataEnd);
-        base.X = stepX;
-        base.Y = stepY;
-
-        % --- Merge violation arrays from all members ---
-        % Pre-compute total length to avoid repeated concatenation
-        totalViolLen = 0;
-        for m = 1:numel(members)
-            totalViolLen = totalViolLen + numel(resolvedViol(members(m)).X);
-        end
-        allViolX = zeros(1, totalViolLen);
-        allViolY = zeros(1, totalViolLen);
-        pos = 0;
-        for m = 1:numel(members)
-            v = resolvedViol(members(m));
-            nv = numel(v.X);
-            if nv > 0
-                allViolX(pos+1:pos+nv) = v.X;
-                allViolY(pos+1:pos+nv) = v.Y;
-                pos = pos + nv;
+            v = resolvedViol(members(1));
+            mergedViol_entry = struct('X', v.X, 'Y', v.Y, ...
+                'Direction', base.Direction, 'Label', base.Label);
+        else
+            % --- Multi-member merge ---
+            % Overlay Y arrays from all members
+            mergedY = base.Y;
+            for m = 2:nMembers
+                otherY = resolvedTh(members(m)).Y;
+                fill = isnan(mergedY) & ~isnan(otherY);
+                mergedY(fill) = otherY(fill);
             end
+
+            [stepX, stepY] = toStepFunction(segBounds, mergedY, dataEnd);
+            base.X = stepX;
+            base.Y = stepY;
+
+            % Concatenate violation arrays from all members.
+            % Each member's violations are already sorted (segment scan
+            % order) and come from non-overlapping time segments, so the
+            % concatenation is already in chronological order — skip sort.
+            totalViolLen = 0;
+            for m = 1:nMembers
+                totalViolLen = totalViolLen + numel(resolvedViol(members(m)).X);
+            end
+
+            if totalViolLen == 0
+                allViolX = [];
+                allViolY = [];
+            else
+                allViolX = zeros(1, totalViolLen);
+                allViolY = zeros(1, totalViolLen);
+                pos = 0;
+                for m = 1:nMembers
+                    v = resolvedViol(members(m));
+                    nv = numel(v.X);
+                    if nv > 0
+                        allViolX(pos+1:pos+nv) = v.X;
+                        allViolY(pos+1:pos+nv) = v.Y;
+                        pos = pos + nv;
+                    end
+                end
+            end
+            mergedViol_entry = struct('X', allViolX, 'Y', allViolY, ...
+                'Direction', base.Direction, 'Label', base.Label);
         end
-        % Sort merged violations chronologically
-        if totalViolLen > 1
-            [allViolX, sortIdx] = sort(allViolX);
-            allViolY = allViolY(sortIdx);
-        end
-        mergedViol_entry = struct('X', allViolX, 'Y', allViolY, ...
-            'Direction', base.Direction, 'Label', base.Label);
 
         [mergedTh, mergedViol] = appendResults(mergedTh, mergedViol, ...
             base, mergedViol_entry);

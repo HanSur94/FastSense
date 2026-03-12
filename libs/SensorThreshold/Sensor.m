@@ -354,8 +354,11 @@ classdef Sensor < handle
                     directions(ri) = rule.IsUpper;
                 end
 
-                % Delegate to MEX (if available) or vectorized MATLAB
-                batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, ...
+                % Delegate to MEX (if available) or vectorized MATLAB.
+                % Returns X/Y directly, avoiding costly random-access
+                % indexing into large sensorX/sensorY arrays.
+                [batchViolX, batchViolY] = compute_violations_batch( ...
+                    sensorX, sensorY, segLo, segHi, ...
                     thresholdValues, directions);
 
                 % Build output structs for each rule in the group
@@ -369,10 +372,9 @@ classdef Sensor < handle
                     thY(segActive) = rule.Value;
                     th = buildThresholdEntry(segBounds, thY, rule);
 
-                    % Violation output: extract X/Y at the violating indices
-                    vIdx = batchViolIdx{ri};
-                    viol.X = sensorX(vIdx);
-                    viol.Y = sensorY(vIdx);
+                    % Violation output: X/Y returned directly from batch
+                    viol.X = batchViolX{ri};
+                    viol.Y = batchViolY{ri};
                     viol.Direction = rule.Direction;
                     viol.Label = rule.Label;
 
