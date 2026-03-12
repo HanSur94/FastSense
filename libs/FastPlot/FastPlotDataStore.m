@@ -514,6 +514,27 @@ classdef FastPlotDataStore < handle
 
         function initSqlite(obj, x, y)
             obj.DbPath = [tempname, '.fpdb'];
+
+            n = obj.NumPoints;
+            % Auto-tune chunk size: aim for 500-2000 chunks to balance
+            % granularity (zoom precision) vs overhead (chunk metadata).
+            cs = max(10000, min(500000, ceil(n / 1000)));
+            obj.ChunkSize = cs;
+            obj.NumChunks = ceil(n / cs);
+
+            % MEX fast path: single C call replaces ~20K mksqlite round-trips
+            if exist('build_store_mex', 'file') == 3
+                try
+                    build_store_mex(obj.DbPath, x, y, cs);
+                    obj.IsValid = true;
+                    return;
+                catch
+                    % Fall through to MATLAB path
+                    if exist(obj.DbPath, 'file'); delete(obj.DbPath); end
+                end
+            end
+
+            % MATLAB fallback path (used when MEX not compiled)
             obj.DbId = mksqlite('open', obj.DbPath);
             obj.DbOpen = true;
             mksqlite(obj.DbId, 'typedBLOBs', 2);
@@ -559,13 +580,6 @@ classdef FastPlotDataStore < handle
                 '  direction TEXT NOT NULL,' ...
                 '  label TEXT NOT NULL' ...
                 ')']);
-
-            n = obj.NumPoints;
-            % Auto-tune chunk size: aim for 500-2000 chunks to balance
-            % granularity (zoom precision) vs overhead (chunk metadata).
-            cs = max(10000, min(500000, ceil(n / 1000)));
-            obj.ChunkSize = cs;
-            obj.NumChunks = ceil(n / cs);
 
             mksqlite(obj.DbId, 'BEGIN TRANSACTION');
             try

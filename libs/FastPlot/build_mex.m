@@ -30,6 +30,7 @@ function build_mex()
 %     lttb_core_mex.c              — Largest-Triangle-Three-Buckets kernel
 %     violation_cull_mex.c         — threshold violation culling
 %     compute_violations_mex.c     — batch violation detection for resolve()
+%     build_store_mex.c            — bulk SQLite writer for DataStore init
 %
 %   Example:
 %     build_mex();   % compile everything; prints per-file status
@@ -120,6 +121,7 @@ function build_mex()
         'violation_cull_mex.c',         'violation_cull_mex',         {{}}
         'compute_violations_mex.c',     'compute_violations_mex',     {{}}
         'resolve_disk_mex.c',           'resolve_disk_mex',           {{'-lsqlite3'}}
+        'build_store_mex.c',            'build_store_mex',            {{'-lsqlite3'}}
     };
 
     % mksqlite lives in the library root (not mex_src) and needs -lsqlite3

@@ -128,6 +128,99 @@ classdef TestMexParity < matlab.unittest.TestCase
             testCase.verifyEqual(numel(xm), numel(xc), 'violation_cull tv: count mismatch');
             testCase.verifyLessThan(max(abs(xm - xc)), tol, 'violation_cull tv: X mismatch');
         end
+
+        function testBuildStoreParitySmall(testCase)
+            testCase.assumeTrue(exist('build_store_mex', 'file') == 3, 'MEX not compiled');
+            testCase.assumeTrue(exist('mksqlite', 'file') == 3, 'mksqlite not compiled');
+
+            tol = 1e-12;
+            n = 50000;
+            cs = 10000;
+            x = linspace(0, 100, n);
+            y = sin(x * 2 * pi / 10) + 0.3 * randn(1, n);
+
+            % Build via MEX
+            dbMex = [tempname, '.fpdb'];
+            testCase.addTeardown(@() delete(dbMex));
+            build_store_mex(dbMex, x, y, cs);
+
+            % Read back and verify via mksqlite
+            dbId = mksqlite('open', dbMex);
+            mksqlite(dbId, 'typedBLOBs', 2);
+            testCase.addTeardown(@() mksqlite(dbId, 'close'));
+
+            rows = mksqlite(dbId, 'SELECT * FROM chunks ORDER BY chunk_id');
+            testCase.verifyEqual(numel(rows), ceil(n / cs), 'chunk count mismatch');
+
+            % Verify each chunk's data and metadata
+            for k = 1:numel(rows)
+                r = rows(k);
+                s = (k - 1) * cs + 1;
+                e = min(k * cs, n);
+                expectedX = x(s:e);
+                expectedY = y(s:e);
+
+                chunkX = r.x_data(:)';
+                chunkY = r.y_data(:)';
+
+                testCase.verifyEqual(numel(chunkX), numel(expectedX), ...
+                    sprintf('chunk %d: X length mismatch', k));
+                testCase.verifyLessThan(max(abs(chunkX - expectedX)), tol, ...
+                    sprintf('chunk %d: X data mismatch', k));
+                testCase.verifyLessThan(max(abs(chunkY - expectedY)), tol, ...
+                    sprintf('chunk %d: Y data mismatch', k));
+
+                % Verify metadata
+                testCase.verifyEqual(r.x_min, expectedX(1), ...
+                    sprintf('chunk %d: x_min mismatch', k));
+                testCase.verifyEqual(r.x_max, expectedX(end), ...
+                    sprintf('chunk %d: x_max mismatch', k));
+                testCase.verifyLessThan(abs(r.y_min - min(expectedY)), tol, ...
+                    sprintf('chunk %d: y_min mismatch', k));
+                testCase.verifyLessThan(abs(r.y_max - max(expectedY)), tol, ...
+                    sprintf('chunk %d: y_max mismatch', k));
+                testCase.verifyEqual(r.pt_offset, s, ...
+                    sprintf('chunk %d: pt_offset mismatch', k));
+                testCase.verifyEqual(r.pt_count, e - s + 1, ...
+                    sprintf('chunk %d: pt_count mismatch', k));
+            end
+        end
+
+        function testBuildStoreParityLarge(testCase)
+            testCase.assumeTrue(exist('build_store_mex', 'file') == 3, 'MEX not compiled');
+            testCase.assumeTrue(exist('mksqlite', 'file') == 3, 'mksqlite not compiled');
+
+            tol = 1e-12;
+            n = 1000000;
+            cs = 100000;
+            x = linspace(0, 1000, n);
+            y = sin(x) + 0.1 * randn(1, n);
+
+            % Build via MEX
+            dbMex = [tempname, '.fpdb'];
+            testCase.addTeardown(@() delete(dbMex));
+            build_store_mex(dbMex, x, y, cs);
+
+            % Verify via DataStore getRange (end-to-end)
+            dbId = mksqlite('open', dbMex);
+            mksqlite(dbId, 'typedBLOBs', 2);
+            mksqlite(dbId, 'PRAGMA mmap_size = 268435456');
+            testCase.addTeardown(@() mksqlite(dbId, 'close'));
+
+            % Read all chunks and concatenate
+            rows = mksqlite(dbId, ...
+                'SELECT x_data, y_data FROM chunks ORDER BY chunk_id');
+            allX = [];
+            allY = [];
+            for k = 1:numel(rows)
+                allX = [allX, rows(k).x_data(:)'];
+                allY = [allY, rows(k).y_data(:)'];
+            end
+
+            testCase.verifyEqual(numel(allX), n, 'total point count mismatch');
+            testCase.verifyLessThan(max(abs(allX - x)), tol, 'X data mismatch');
+            testCase.verifyLessThan(max(abs(allY - y)), tol, 'Y data mismatch');
+        end
     end
 
     methods (Static, Access = private)
