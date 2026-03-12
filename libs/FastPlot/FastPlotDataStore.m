@@ -48,6 +48,7 @@ classdef FastPlotDataStore < handle
         IsValid      = false
         UseSqlite    = false
         ColumnNames  = {}
+        DbOpen       = false   % Track whether connection is currently open
     end
 
     methods (Access = public)
@@ -84,6 +85,7 @@ classdef FastPlotDataStore < handle
                 xOut = []; yOut = [];
                 return;
             end
+            obj.ensureOpen();
             if obj.UseSqlite
                 [xOut, yOut] = obj.getRangeSqlite(xMin, xMax);
             else
@@ -97,6 +99,7 @@ classdef FastPlotDataStore < handle
                 xOut = []; yOut = [];
                 return;
             end
+            obj.ensureOpen();
             startIdx = max(1, startIdx);
             endIdx   = min(obj.NumPoints, endIdx);
             if endIdx < startIdx
@@ -118,6 +121,7 @@ classdef FastPlotDataStore < handle
                 error('FastPlotDataStore:noSqlite', ...
                     'addColumn requires mksqlite (SQLite backend).');
             end
+            obj.ensureOpen();
             if ~obj.IsValid
                 error('FastPlotDataStore:notValid', ...
                     'DataStore is not initialized.');
@@ -188,6 +192,7 @@ classdef FastPlotDataStore < handle
                 data = {};
                 return;
             end
+            obj.ensureOpen();
             % Find the point-offset range covering [xMin, xMax] with
             % one neighbour chunk on each side for padding.
             ids = mksqlite(obj.DbId, ...
@@ -213,6 +218,7 @@ classdef FastPlotDataStore < handle
                 data = {};
                 return;
             end
+            obj.ensureOpen();
             startIdx = max(1, startIdx);
             endIdx   = min(obj.NumPoints, endIdx);
             res = mksqlite(obj.DbId, ...
@@ -245,6 +251,7 @@ classdef FastPlotDataStore < handle
                 idx = 1;
                 return;
             end
+            obj.ensureOpen();
 
             if ~obj.UseSqlite
                 % Binary file fallback: binary search on file
@@ -299,6 +306,7 @@ classdef FastPlotDataStore < handle
                 violX = []; violY = [];
                 return;
             end
+            obj.ensureOpen();
 
             if ~obj.UseSqlite
                 % Binary fallback: read and filter
@@ -386,7 +394,8 @@ classdef FastPlotDataStore < handle
             %   ds.storeResolved(resolvedTh, resolvedViol) stores the
             %   threshold and violation struct arrays produced by
             %   Sensor.resolve() into the database for instant retrieval.
-            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
             mksqlite(obj.DbId, 'BEGIN TRANSACTION');
             try
                 for i = 1:numel(resolvedTh)
@@ -407,6 +416,7 @@ classdef FastPlotDataStore < handle
                 try mksqlite(obj.DbId, 'ROLLBACK'); catch; end
                 rethrow(ME);
             end
+            obj.closeDb();
         end
 
         function [resolvedTh, resolvedViol] = loadResolved(obj)
@@ -414,7 +424,8 @@ classdef FastPlotDataStore < handle
             %   Returns empty arrays if no cached results exist.
             resolvedTh = [];
             resolvedViol = [];
-            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
             rows = mksqlite(obj.DbId, ...
                 'SELECT * FROM resolved_thresholds ORDER BY idx');
             if isempty(rows) || numel(rows) == 0; return; end
@@ -460,17 +471,15 @@ classdef FastPlotDataStore < handle
 
         function clearResolved(obj)
             %CLEARRESOLVED Invalidate pre-computed resolve() cache.
-            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
             mksqlite(obj.DbId, 'DELETE FROM resolved_thresholds');
             mksqlite(obj.DbId, 'DELETE FROM resolved_violations');
         end
 
         function cleanup(obj)
             %CLEANUP Close the database and delete temp files.
-            if obj.UseSqlite && obj.DbId >= 0
-                try mksqlite(obj.DbId, 'close'); catch; end
-                obj.DbId = -1;
-            end
+            obj.closeDb();
             if ~isempty(obj.DbPath) && exist(obj.DbPath, 'file')
                 delete(obj.DbPath);
             end
@@ -486,9 +495,27 @@ classdef FastPlotDataStore < handle
     end
 
     methods (Access = private)
+        function ensureOpen(obj)
+            %ENSUREOPEN Reopen the SQLite connection if it was closed.
+            if obj.DbOpen || ~obj.UseSqlite || isempty(obj.DbPath); return; end
+            obj.DbId = mksqlite('open', obj.DbPath);
+            mksqlite(obj.DbId, 'typedBLOBs', 2);
+            mksqlite(obj.DbId, 'PRAGMA mmap_size = 268435456');
+            obj.DbOpen = true;
+        end
+
+        function closeDb(obj)
+            %CLOSEDB Close the SQLite connection to free the slot.
+            if ~obj.DbOpen || obj.DbId < 0; return; end
+            try mksqlite(obj.DbId, 'close'); catch; end
+            obj.DbId = -1;
+            obj.DbOpen = false;
+        end
+
         function initSqlite(obj, x, y)
             obj.DbPath = [tempname, '.fpdb'];
             obj.DbId = mksqlite('open', obj.DbPath);
+            obj.DbOpen = true;
             mksqlite(obj.DbId, 'typedBLOBs', 2);
 
             mksqlite(obj.DbId, 'PRAGMA journal_mode = OFF');
@@ -573,6 +600,8 @@ classdef FastPlotDataStore < handle
             % A read must occur to actually release the EXCLUSIVE lock.
             mksqlite(obj.DbId, 'SELECT 1 FROM chunks LIMIT 1');
             obj.IsValid = true;
+            % Close connection to free the mksqlite slot — reopened on demand
+            obj.closeDb();
         end
 
         function [xOut, yOut] = getRangeSqlite(obj, xMin, xMax)
