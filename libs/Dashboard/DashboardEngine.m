@@ -59,6 +59,10 @@ classdef DashboardEngine < handle
         end
 
         function render(obj)
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                return;
+            end
+
             themeStruct = DashboardTheme(obj.Theme);
 
             obj.hFigure = figure('Name', obj.Name, ...
@@ -136,13 +140,23 @@ classdef DashboardEngine < handle
         function obj = load(filepath)
             config = DashboardSerializer.load(filepath);
             obj = DashboardEngine(config.name);
-            obj.Theme = config.theme;
-            obj.LiveInterval = config.liveInterval;
+            if isfield(config, 'theme')
+                obj.Theme = config.theme;
+            end
+            if isfield(config, 'liveInterval')
+                obj.LiveInterval = config.liveInterval;
+            end
             obj.FilePath = filepath;
 
             widgets = DashboardSerializer.configToWidgets(config);
             for i = 1:numel(widgets)
-                obj.Widgets{end+1} = widgets{i};
+                w = widgets{i};
+                existingPositions = cell(1, numel(obj.Widgets));
+                for j = 1:numel(obj.Widgets)
+                    existingPositions{j} = obj.Widgets{j}.Position;
+                end
+                w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
+                obj.Widgets{end+1} = w;
             end
         end
     end

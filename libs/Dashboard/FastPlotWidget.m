@@ -78,10 +78,10 @@ classdef FastPlotWidget < DashboardWidget
             fp.render();
         end
 
-        function refresh(obj)
-            if ~isempty(obj.FastPlotObj)
-                obj.FastPlotObj.refresh();
-            end
+        function refresh(~)
+            % No-op for dashboard widgets. FastPlot.refresh() requires
+            % LiveFile which dashboard widgets don't use. Sensor/DataStore
+            % bindings provide data at render time only.
         end
 
         function configure(obj)
