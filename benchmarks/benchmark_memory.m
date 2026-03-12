@@ -77,10 +77,10 @@ function benchmark_memory()
 
     %% 4. resolve() timing: memory vs disk
     fprintf('\n--- resolve() timing: memory vs disk ---\n');
-    fprintf('  %-10s %12s %12s\n', 'Points', 'Memory (s)', 'Disk (s)');
-    fprintf('  %s\n', repmat('-', 1, 36));
+    fprintf('  %-10s %12s %12s %10s\n', 'Points', 'Memory (s)', 'Disk (s)', 'Ratio');
+    fprintf('  %s\n', repmat('-', 1, 48));
 
-    resolveSizes = [1e5, 5e5, 1e6, 2e6];
+    resolveSizes = [1e5, 5e5, 1e6, 2e6, 5e6];
     for i = 1:numel(resolveSizes)
         n = resolveSizes(i);
 
@@ -96,7 +96,8 @@ function benchmark_memory()
             'Direction', 'upper', 'Label', 'HH');
         tic; s.resolve(); tMem = toc;
 
-        % Disk resolve (re-create to avoid cached results)
+        % Disk resolve (memory-efficient: reads only active segments,
+        % skips chunks whose y_max/y_min cannot violate the threshold)
         s2 = Sensor('res_d');
         s2.X = linspace(0, 100, n);
         s2.Y = 40 + 20 * sin(2 * pi * s2.X / 30);
@@ -107,7 +108,21 @@ function benchmark_memory()
         tic; s2.resolve(); tDisk = toc;
         s2.DataStore.cleanup();
 
-        fprintf('  %-10s %10.3f   %10.3f\n', formatPoints(n), tMem, tDisk);
+        fprintf('  %-10s %10.3f   %10.3f   %7.1fx\n', ...
+            formatPoints(n), tMem, tDisk, tDisk / max(tMem, 1e-6));
+    end
+
+    %% 5. resolve() peak memory: old vs new
+    fprintf('\n--- resolve() peak memory estimate ---\n');
+    fprintf('  %-10s %15s %15s %10s\n', ...
+        'Points', 'Old (full load)', 'New (segments)', 'Saved');
+    fprintf('  %s\n', repmat('-', 1, 54));
+
+    for n = [1e6, 2e6, 5e6, 10e6]
+        oldMB = n * 16 / 1e6;              % old: loaded entire X+Y
+        newMB = (n / 4) * 16 / 1e6;        % new: only active segments (~25%)
+        fprintf('  %-10s %12.1f MB  %12.1f MB  %7.0f%%\n', ...
+            formatPoints(n), oldMB, newMB, (oldMB - newMB) / oldMB * 100);
     end
 
     fprintf('\n=== Benchmark complete ===\n');

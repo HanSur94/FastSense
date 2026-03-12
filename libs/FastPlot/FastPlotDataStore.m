@@ -228,6 +228,129 @@ classdef FastPlotDataStore < handle
             %LISTCOLUMNS Return names of all stored extra columns.
             names = obj.ColumnNames;
         end
+
+        function idx = findIndex(obj, xVal, side)
+            %FINDINDEX Binary search for a global point index by X value.
+            %   idx = ds.findIndex(xVal, 'left') returns the first index
+            %   where X(idx) >= xVal.  idx = ds.findIndex(xVal, 'right')
+            %   returns the last index where X(idx) <= xVal.
+            %
+            %   Uses chunk metadata (x_min, x_max) to read only one chunk's
+            %   X data from disk, giving O(log C + log K) performance where
+            %   C is the number of chunks and K is the chunk size.
+            %
+            %   See also readSlice, getRange.
+
+            if ~obj.IsValid || obj.NumPoints == 0
+                idx = 1;
+                return;
+            end
+
+            if ~obj.UseSqlite
+                % Binary file fallback: binary search on file
+                fid = fopen(obj.BinPath, 'rb');
+                idx = bsearchBinaryFile(fid, obj.NumPoints, xVal, side);
+                fclose(fid);
+                return;
+            end
+
+            if strcmp(side, 'left')
+                % First index where X >= xVal: find the first chunk
+                % whose x_max reaches xVal.
+                res = mksqlite(obj.DbId, ...
+                    ['SELECT pt_offset, x_data FROM chunks ' ...
+                     'WHERE x_max >= ? ORDER BY chunk_id LIMIT 1'], ...
+                    xVal);
+                if isempty(res)
+                    idx = obj.NumPoints;
+                    return;
+                end
+                chunkX = res(1).x_data(:)';
+                localIdx = bsearchLocal(chunkX, xVal, 'left');
+                idx = res(1).pt_offset + localIdx - 1;
+            else
+                % Last index where X <= xVal: find the last chunk
+                % whose x_min is still <= xVal.
+                res = mksqlite(obj.DbId, ...
+                    ['SELECT pt_offset, x_data FROM chunks ' ...
+                     'WHERE x_min <= ? ORDER BY chunk_id DESC LIMIT 1'], ...
+                    xVal);
+                if isempty(res)
+                    idx = 1;
+                    return;
+                end
+                chunkX = res(1).x_data(:)';
+                localIdx = bsearchLocal(chunkX, xVal, 'right');
+                idx = res(1).pt_offset + localIdx - 1;
+            end
+        end
+
+        function [violX, violY] = findViolations(obj, startIdx, endIdx, threshold, isUpper)
+            %FINDVIOLATIONS Find violation points using chunk-level Y filtering.
+            %   [vx, vy] = ds.findViolations(lo, hi, thresh, true) finds all
+            %   points in [lo, hi] where Y > thresh (upper violation).
+            %   [vx, vy] = ds.findViolations(lo, hi, thresh, false) finds
+            %   points where Y < thresh (lower violation).
+            %
+            %   Uses chunk y_min/y_max metadata to skip entire chunks that
+            %   cannot contain violations, avoiding BLOB reads for safe chunks.
+
+            if ~obj.IsValid
+                violX = []; violY = [];
+                return;
+            end
+
+            if ~obj.UseSqlite
+                % Binary fallback: read and filter
+                [x, y] = obj.readSlice(startIdx, endIdx);
+                if isUpper; mask = y > threshold;
+                else;       mask = y < threshold; end
+                violX = x(mask); violY = y(mask);
+                return;
+            end
+
+            % Single query: only fetch chunks whose y-range could violate
+            if isUpper
+                res = mksqlite(obj.DbId, ...
+                    ['SELECT pt_offset, pt_count, x_data, y_data FROM chunks ' ...
+                     'WHERE (pt_offset+pt_count-1) >= ? AND pt_offset <= ? ' ...
+                     'AND y_max > ? ORDER BY chunk_id'], ...
+                    startIdx, endIdx, threshold);
+            else
+                res = mksqlite(obj.DbId, ...
+                    ['SELECT pt_offset, pt_count, x_data, y_data FROM chunks ' ...
+                     'WHERE (pt_offset+pt_count-1) >= ? AND pt_offset <= ? ' ...
+                     'AND y_min < ? ORDER BY chunk_id'], ...
+                    startIdx, endIdx, threshold);
+            end
+
+            if isempty(res)
+                violX = []; violY = [];
+                return;
+            end
+
+            nRes = numel(res);
+            vxParts = cell(1, nRes);
+            vyParts = cell(1, nRes);
+            for k = 1:nRes
+                cx = res(k).x_data(:)';
+                cy = res(k).y_data(:)';
+
+                % Trim to [startIdx, endIdx]
+                localStart = max(1, startIdx - res(k).pt_offset + 1);
+                localEnd   = min(numel(cx), endIdx - res(k).pt_offset + 1);
+                if localEnd < localStart; continue; end
+                cx = cx(localStart:localEnd);
+                cy = cy(localStart:localEnd);
+
+                if isUpper; mask = cy > threshold;
+                else;       mask = cy < threshold; end
+                vxParts{k} = cx(mask);
+                vyParts{k} = cy(mask);
+            end
+            violX = [vxParts{:}];
+            violY = [vyParts{:}];
+        end
     end
 
     methods (Static)
@@ -297,6 +420,8 @@ classdef FastPlotDataStore < handle
                 '  chunk_id INTEGER PRIMARY KEY,' ...
                 '  x_min REAL NOT NULL,' ...
                 '  x_max REAL NOT NULL,' ...
+                '  y_min REAL NOT NULL,' ...
+                '  y_max REAL NOT NULL,' ...
                 '  pt_offset INTEGER NOT NULL,' ...
                 '  pt_count INTEGER NOT NULL,' ...
                 '  x_data BLOB NOT NULL,' ...
@@ -319,8 +444,9 @@ classdef FastPlotDataStore < handle
                     cx = x(s:e);
                     cy = y(s:e);
                     mksqlite(obj.DbId, ...
-                        'INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?)', ...
-                        chunkId, cx(1), cx(end), s, numel(cx), cx, cy);
+                        'INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', ...
+                        chunkId, cx(1), cx(end), min(cy), max(cy), ...
+                        s, numel(cx), cx, cy);
                 end
 
                 % Build indexes inside the transaction while journal_mode=OFF

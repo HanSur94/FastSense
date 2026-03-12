@@ -267,41 +267,42 @@ classdef Sensor < handle
                 return;
             end
 
-            % Cache sensor data locally to avoid repeated property access.
-            % If data is on disk, read it into local variables for resolve.
-            if obj.isOnDisk()
-                [sensorX, sensorY] = obj.DataStore.readSlice(1, obj.DataStore.NumPoints);
+            % ----- Determine data source -----
+            % For disk-backed sensors, use DataStore metadata instead of
+            % loading the entire dataset into memory.  Peak memory stays
+            % proportional to the largest active segment, not total points.
+            onDisk = obj.isOnDisk();
+            if onDisk
+                dataXMin = obj.DataStore.XMin;
+                dataXMax = obj.DataStore.XMax;
+                dataN    = obj.DataStore.NumPoints;
             else
                 sensorX = obj.X;
                 sensorY = obj.Y;
+                dataXMin = sensorX(1);
+                dataXMax = sensorX(end);
+                dataN    = numel(sensorX);
             end
 
             % -------------------------------------------------------
             % Step 1: Find segment boundaries from state channels
             % -------------------------------------------------------
-            % Each state channel contributes its transition timestamps.
-            % The union of all transitions defines the segment grid on
-            % which conditions are evaluated.
             nChannels = numel(obj.StateChannels);
 
             if nChannels == 0
-                % No state channels -- treat the entire time span as one
-                % segment (unconditional rules only).
-                segBounds = [sensorX(1), sensorX(end)];
+                segBounds = [dataXMin, dataXMax];
             else
-                % Merge all state-change timestamps from every channel
                 allChanges = [];
                 for i = 1:nChannels
                     allChanges = [allChanges, obj.StateChannels{i}.X(:)'];
                 end
                 segBounds = unique(allChanges);
 
-                % Extend boundaries to cover the full sensor data range
-                if segBounds(1) > sensorX(1)
-                    segBounds = [sensorX(1), segBounds];
+                if segBounds(1) > dataXMin
+                    segBounds = [dataXMin, segBounds];
                 end
-                if segBounds(end) < sensorX(end)
-                    segBounds = [segBounds, sensorX(end)];
+                if segBounds(end) < dataXMax
+                    segBounds = [segBounds, dataXMax];
                 end
             end
 
@@ -310,8 +311,6 @@ classdef Sensor < handle
             % -------------------------------------------------------
             % Step 2: Evaluate the composite state at each boundary
             % -------------------------------------------------------
-            % Build a state struct for every segment boundary by querying
-            % each StateChannel via zero-order hold.
             segStates = cell(1, nSegs);
             for s = 1:nSegs
                 st = struct();
@@ -325,9 +324,6 @@ classdef Sensor < handle
             % -------------------------------------------------------
             % Step 3: Group rules by condition for batching
             % -------------------------------------------------------
-            % Rules with identical conditions share the same active
-            % segments, so grouping avoids redundant matchesState calls.
-            % Use pre-cached condition keys from ThresholdRule for speed.
             condKeys = cell(1, nRules);
             for r = 1:nRules
                 condKeys{r} = obj.ThresholdRules{r}.CachedConditionKey;
@@ -343,26 +339,18 @@ classdef Sensor < handle
             resolvedViol = [];
 
             for g = 1:nGroups
-                % Indices of rules that belong to this condition group
                 ruleIndices = find(groupIdx == g);
-
-                % Use the first rule as the representative for condition
-                % matching (all rules in the group share the same condition)
                 refRule = obj.ThresholdRules{ruleIndices(1)};
 
-                % Evaluate the condition at each segment boundary
                 segActive = false(1, nSegs);
                 for s = 1:nSegs
                     segActive(s) = refRule.matchesState(segStates{s});
                 end
 
-                % Identify which segments are active (condition satisfied)
                 activeSegs = find(segActive);
                 nActive = numel(activeSegs);
 
                 if nActive == 0
-                    % No active segments: emit NaN threshold lines and
-                    % empty violation arrays for every rule in the group
                     for ri = 1:numel(ruleIndices)
                         r = ruleIndices(ri);
                         rule = obj.ThresholdRules{r};
@@ -373,7 +361,7 @@ classdef Sensor < handle
                     continue;
                 end
 
-                % Map each active segment to [lo, hi] index range in sensorX
+                % Map each active segment to [lo, hi] index range
                 segLo = zeros(1, nActive);
                 segHi = zeros(1, nActive);
                 for a = 1:nActive
@@ -382,59 +370,61 @@ classdef Sensor < handle
                     if si < nSegs
                         segEnd = segBounds(si + 1);
                     else
-                        segEnd = sensorX(end);
+                        segEnd = dataXMax;
                     end
 
-                    % Left binary search: first index >= segStart
-                    segLo(a) = binary_search(sensorX, segStart, 'left');
+                    if onDisk
+                        segLo(a) = obj.DataStore.findIndex(segStart, 'left');
+                    else
+                        segLo(a) = binary_search(sensorX, segStart, 'left');
+                    end
+
                     if si < nSegs
-                        % Exclusive end: last data point strictly before the
-                        % next segment boundary
-                        segHi(a) = binary_search(sensorX, segEnd, 'left') - 1;
-                        % Guard against empty segments (hi < lo)
+                        if onDisk
+                            segHi(a) = obj.DataStore.findIndex(segEnd, 'left') - 1;
+                        else
+                            segHi(a) = binary_search(sensorX, segEnd, 'left') - 1;
+                        end
                         if segHi(a) < segLo(a)
                             segHi(a) = segLo(a);
                         end
                     else
-                        % Last segment extends to the end of the data
-                        segHi(a) = numel(sensorX);
+                        segHi(a) = dataN;
                     end
                 end
 
                 % ---------------------------------------------------
                 % Step 5: Batch violation detection for this group
                 % ---------------------------------------------------
-                % Collect threshold values and direction flags for every
-                % rule in the group so violations can be found in one pass.
                 nBatchRules = numel(ruleIndices);
                 thresholdValues = zeros(1, nBatchRules);
                 directions = false(1, nBatchRules);
                 for ri = 1:nBatchRules
                     rule = obj.ThresholdRules{ruleIndices(ri)};
                     thresholdValues(ri) = rule.Value;
-                    % Use pre-cached IsUpper flag
                     directions(ri) = rule.IsUpper;
                 end
 
-                % Delegate to MEX (if available) or vectorized MATLAB.
-                % Returns X/Y directly, avoiding costly random-access
-                % indexing into large sensorX/sensorY arrays.
-                [batchViolX, batchViolY] = compute_violations_batch( ...
-                    sensorX, sensorY, segLo, segHi, ...
-                    thresholdValues, directions);
+                if onDisk
+                    % Memory-efficient: read each segment from disk
+                    [batchViolX, batchViolY] = compute_violations_disk( ...
+                        obj.DataStore, segLo, segHi, ...
+                        thresholdValues, directions);
+                else
+                    [batchViolX, batchViolY] = compute_violations_batch( ...
+                        sensorX, sensorY, segLo, segHi, ...
+                        thresholdValues, directions);
+                end
 
                 % Build output structs for each rule in the group
                 for ri = 1:nBatchRules
                     r = ruleIndices(ri);
                     rule = obj.ThresholdRules{r};
 
-                    % Threshold time series: value at active boundaries, NaN elsewhere
-                    % Use logical indexing instead of per-element loop
                     thY = NaN(1, nSegs);
                     thY(segActive) = rule.Value;
                     th = buildThresholdEntry(segBounds, thY, rule);
 
-                    % Violation output: X/Y returned directly from batch
                     viol.X = batchViolX{ri};
                     viol.Y = batchViolY{ri};
                     viol.Direction = rule.Direction;
@@ -447,12 +437,8 @@ classdef Sensor < handle
             % -------------------------------------------------------
             % Step 6: Merge thresholds with same Label+Direction
             % -------------------------------------------------------
-            % Rules covering different state combinations (e.g., machine=0
-            % vs machine=1) but carrying the same label produce separate
-            % entries above.  Merge them into single continuous
-            % step-function threshold lines for cleaner rendering.
             [resolvedTh, resolvedViol] = mergeResolvedByLabel( ...
-                resolvedTh, resolvedViol, segBounds, sensorX(end));
+                resolvedTh, resolvedViol, segBounds, dataXMax);
 
             % Store final results on the object
             obj.ResolvedThresholds = resolvedTh;
