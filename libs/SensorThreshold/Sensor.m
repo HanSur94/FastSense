@@ -265,9 +265,10 @@ classdef Sensor < handle
             % -------------------------------------------------------
             % Rules with identical conditions share the same active
             % segments, so grouping avoids redundant matchesState calls.
+            % Use pre-cached condition keys from ThresholdRule for speed.
             condKeys = cell(1, nRules);
             for r = 1:nRules
-                condKeys{r} = conditionKey(obj.ThresholdRules{r}.Condition);
+                condKeys{r} = obj.ThresholdRules{r}.CachedConditionKey;
             end
 
             [uniqueKeys, ~, groupIdx] = unique(condKeys);
@@ -345,12 +346,12 @@ classdef Sensor < handle
                 % rule in the group so violations can be found in one pass.
                 nBatchRules = numel(ruleIndices);
                 thresholdValues = zeros(1, nBatchRules);
-                directions = zeros(1, nBatchRules);
+                directions = false(1, nBatchRules);
                 for ri = 1:nBatchRules
                     rule = obj.ThresholdRules{ruleIndices(ri)};
                     thresholdValues(ri) = rule.Value;
-                    % Encode direction as logical: true = upper, false = lower
-                    directions(ri) = strcmp(rule.Direction, 'upper');
+                    % Use pre-cached IsUpper flag
+                    directions(ri) = rule.IsUpper;
                 end
 
                 % Delegate to MEX (if available) or vectorized MATLAB
@@ -363,12 +364,9 @@ classdef Sensor < handle
                     rule = obj.ThresholdRules{r};
 
                     % Threshold time series: value at active boundaries, NaN elsewhere
+                    % Use logical indexing instead of per-element loop
                     thY = NaN(1, nSegs);
-                    for s = 1:nSegs
-                        if segActive(s)
-                            thY(s) = rule.Value;
-                        end
-                    end
+                    thY(segActive) = rule.Value;
                     th = buildThresholdEntry(segBounds, thY, rule);
 
                     % Violation output: extract X/Y at the violating indices

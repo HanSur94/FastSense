@@ -44,6 +44,12 @@ classdef ThresholdRule
         LineStyle   % char: MATLAB line-style specifier (e.g., '--', ':')
     end
 
+    properties (SetAccess = private)
+        CachedConditionKey  % char: pre-computed conditionKey for batching
+        ConditionFields     % cell: sorted field names of Condition (cached)
+        IsUpper             % logical: true if Direction is 'upper' (cached)
+    end
+
     methods
         function obj = ThresholdRule(condition, value, varargin)
             %THRESHOLDRULE Construct a ThresholdRule object.
@@ -103,6 +109,11 @@ classdef ThresholdRule
                             'Unknown option ''%s''.', varargin{i});
                 end
             end
+
+            % Pre-compute cached properties for fast resolve()
+            obj.CachedConditionKey = conditionKey(condition);
+            obj.ConditionFields = sort(fieldnames(condition));
+            obj.IsUpper = strcmp(obj.Direction, 'upper');
         end
 
         function tf = matchesState(obj, st)
@@ -112,20 +123,17 @@ classdef ThresholdRule
             %   value (implicit AND logic).  An empty Condition always
             %   returns true, meaning the rule is unconditional.
             %
-            %   Comparison uses strcmp for char/string values and == for
-            %   numeric values.  If a required field is missing from st,
-            %   the result is false (fail-closed).
+            %   Uses pre-cached ConditionFields for faster iteration.
             %
             %   Input:
-            %     st — struct representing the current system state, with
-            %          field names corresponding to StateChannel keys
+            %     st — struct representing the current system state
             %
             %   Output:
             %     tf — logical scalar, true if the condition is satisfied
             %
             %   See also ThresholdRule, StateChannel.valueAt.
 
-            fields = fieldnames(obj.Condition);
+            fields = obj.ConditionFields;
             tf = true;
             for f = 1:numel(fields)
                 key = fields{f};

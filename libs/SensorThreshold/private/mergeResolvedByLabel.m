@@ -81,15 +81,25 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
         base.Y = stepY;
 
         % --- Merge violation arrays from all members ---
-        allViolX = [];
-        allViolY = [];
+        % Pre-compute total length to avoid repeated concatenation
+        totalViolLen = 0;
+        for m = 1:numel(members)
+            totalViolLen = totalViolLen + numel(resolvedViol(members(m)).X);
+        end
+        allViolX = zeros(1, totalViolLen);
+        allViolY = zeros(1, totalViolLen);
+        pos = 0;
         for m = 1:numel(members)
             v = resolvedViol(members(m));
-            allViolX = [allViolX, v.X];
-            allViolY = [allViolY, v.Y];
+            nv = numel(v.X);
+            if nv > 0
+                allViolX(pos+1:pos+nv) = v.X;
+                allViolY(pos+1:pos+nv) = v.Y;
+                pos = pos + nv;
+            end
         end
         % Sort merged violations chronologically
-        if numel(allViolX) > 1
+        if totalViolLen > 1
             [allViolX, sortIdx] = sort(allViolX);
             allViolY = allViolY(sortIdx);
         end

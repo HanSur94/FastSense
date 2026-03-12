@@ -9,7 +9,7 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
 %     1. MEX path (not yet wired up): delegates to compute_violations_mex
 %        for maximum throughput on large datasets.
 %     2. Pure-MATLAB fallback (current default): iterates over segments
-%        and applies vectorized comparison within each chunk.
+%        once and checks all thresholds per chunk (single-pass over data).
 %
 %   The MATLAB fallback pre-allocates a buffer sized to the total number
 %   of points across all active segments (upper bound), then fills it
@@ -46,7 +46,10 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
         return;
     end
 
-    % --- Pure-MATLAB vectorized fallback ---
+    % --- Pure-MATLAB single-pass fallback ---
+    % Instead of iterating (nThresholds * nSegs), iterate over segments
+    % once and check all thresholds per chunk.  This is faster because
+    % each chunk is extracted from sensorY only once.
     nThresholds = numel(thresholdValues);
     nSegs = numel(segLo);
     batchViolIdx = cell(1, nThresholds);
@@ -54,38 +57,52 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
     % Upper-bound buffer size: total data points across all active segments
     totalPoints = sum(segHi - segLo + 1);
 
-    for t = 1:nThresholds
-        thVal = thresholdValues(t);
-        isUpper = directions(t);
+    % Pre-allocate output buffers for all thresholds at once
+    buffers = zeros(nThresholds, totalPoints);
+    counts = zeros(1, nThresholds);
 
-        % Pre-allocate output buffer to the maximum possible size
-        idx = zeros(1, totalPoints);
-        count = 0;
+    % Separate upper and lower thresholds for vectorized comparison
+    upperMask = logical(directions);
+    lowerMask = ~upperMask;
+    upperIdx = find(upperMask);
+    lowerIdx = find(lowerMask);
 
-        for s = 1:nSegs
-            lo = segLo(s);
-            hi = segHi(s);
+    for s = 1:nSegs
+        lo = segLo(s);
+        hi = segHi(s);
 
-            % Extract the segment chunk for vectorized comparison
-            chunk = sensorY(lo:hi);
+        % Extract the segment chunk once for all thresholds
+        chunk = sensorY(lo:hi);
+        chunkLen = hi - lo + 1;
+        globalIdx = lo:hi;
 
-            % Apply direction-dependent threshold comparison
-            if isUpper
-                mask = chunk > thVal;   % upper violation: value exceeds limit
-            else
-                mask = chunk < thVal;   % lower violation: value falls below limit
-            end
-
-            % Convert local mask indices back to global sensorY indices
-            hits = find(mask) + lo - 1;
+        % Process all upper thresholds against this chunk
+        for ui = 1:numel(upperIdx)
+            t = upperIdx(ui);
+            mask = chunk > thresholdValues(t);
+            hits = globalIdx(mask);
             nHits = numel(hits);
-
-            % Append hits to the running buffer
-            idx(count+1:count+nHits) = hits;
-            count = count + nHits;
+            if nHits > 0
+                buffers(t, counts(t)+1:counts(t)+nHits) = hits;
+                counts(t) = counts(t) + nHits;
+            end
         end
 
-        % Trim the buffer to the actual number of violations found
-        batchViolIdx{t} = idx(1:count);
+        % Process all lower thresholds against this chunk
+        for li = 1:numel(lowerIdx)
+            t = lowerIdx(li);
+            mask = chunk < thresholdValues(t);
+            hits = globalIdx(mask);
+            nHits = numel(hits);
+            if nHits > 0
+                buffers(t, counts(t)+1:counts(t)+nHits) = hits;
+                counts(t) = counts(t) + nHits;
+            end
+        end
+    end
+
+    % Trim the buffers to the actual number of violations found
+    for t = 1:nThresholds
+        batchViolIdx{t} = buffers(t, 1:counts(t));
     end
 end
