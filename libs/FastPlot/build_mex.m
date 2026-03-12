@@ -25,10 +25,11 @@ function build_mex()
 %   library are copied into ../SensorThreshold/private/.
 %
 %   MEX source files compiled:
-%     binary_search_mex.c   — binary search on sorted arrays
-%     minmax_core_mex.c     — min/max downsampling kernel
-%     lttb_core_mex.c       — Largest-Triangle-Three-Buckets kernel
-%     violation_cull_mex.c  — threshold violation culling
+%     binary_search_mex.c          — binary search on sorted arrays
+%     minmax_core_mex.c            — min/max downsampling kernel
+%     lttb_core_mex.c              — Largest-Triangle-Three-Buckets kernel
+%     violation_cull_mex.c         — threshold violation culling
+%     compute_violations_mex.c     — batch violation detection for resolve()
 %
 %   Example:
 %     build_mex();   % compile everything; prints per-file status
@@ -116,6 +117,7 @@ function build_mex()
         'minmax_core_mex.c',            'minmax_core_mex'
         'lttb_core_mex.c',              'lttb_core_mex'
         'violation_cull_mex.c',         'violation_cull_mex'
+        'compute_violations_mex.c',     'compute_violations_mex'
     };
 
     fprintf('\n');
@@ -171,6 +173,7 @@ function build_mex()
     % Copy shared MEX files to SensorThreshold/private so they're accessible there
     sensorPrivDir = fullfile(rootDir, '..', 'SensorThreshold', 'private');
     copy_mex_to(outDir, sensorPrivDir, 'violation_cull_mex');
+    copy_mex_to(outDir, sensorPrivDir, 'compute_violations_mex');
 end
 
 

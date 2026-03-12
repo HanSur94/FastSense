@@ -6,7 +6,7 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
 %   ranges.  This is the inner computational kernel of Sensor.resolve().
 %
 %   Two code paths are available:
-%     1. MEX path (not yet wired up): delegates to compute_violations_mex
+%     1. MEX path: delegates to compute_violations_mex (SIMD-accelerated C)
 %        for maximum throughput on large datasets.
 %     2. Pure-MATLAB fallback (current default): iterates over segments
 %        once and checks all thresholds per chunk (single-pass over data).
@@ -36,7 +36,7 @@ function batchViolIdx = compute_violations_batch(sensorY, segLo, segHi, threshol
     % --- MEX availability flag (cached across calls) ---
     persistent useMex;
     if isempty(useMex)
-        useMex = false;  % TODO: wire up violation_cull_mex for batch path
+        useMex = (exist('compute_violations_mex', 'file') == 3);
     end
 
     % --- MEX fast path ---
