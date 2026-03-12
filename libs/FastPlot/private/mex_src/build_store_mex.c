@@ -91,6 +91,24 @@ static void compute_yminmax(const double *data, size_t count,
         *out_max = dmax;
     }
 #endif
+
+    /* NaN handling: SIMD min/max propagate NaN (unlike MATLAB's min/max
+     * which skip NaN).  If result is NaN, rescan with NaN-skipping scalar
+     * loop.  For all-NaN chunks, use Inf/-Inf sentinels so SQLite doesn't
+     * convert NaN to NULL (which would violate NOT NULL constraints). */
+    if (*out_min != *out_min || *out_max != *out_max) {  /* NaN check */
+        /* Use 1.0/0.0 instead of INFINITY macro to avoid -ffast-math warning */
+        volatile double zero = 0.0;
+        double dmin = 1.0 / zero, dmax = -1.0 / zero;
+        for (i = 0; i < count; i++) {
+            if (data[i] == data[i]) {  /* !isnan */
+                if (data[i] < dmin) dmin = data[i];
+                if (data[i] > dmax) dmax = data[i];
+            }
+        }
+        *out_min = dmin;  /* stays INFINITY if all NaN */
+        *out_max = dmax;  /* stays -INFINITY if all NaN */
+    }
 }
 
 void mexFunction(int nlhs, mxArray *plhs[],

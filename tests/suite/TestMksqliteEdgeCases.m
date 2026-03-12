@@ -228,8 +228,10 @@ classdef TestMksqliteEdgeCases < matlab.unittest.TestCase
             end
             res = mksqlite(testCase.db, 'SELECT val FROM multi WHERE id > 2 ORDER BY id');
             testCase.verifyEqual(numel(res), 3, 'multiRow: 3 results');
-            testCase.verifyEqual(res(1).val, int32(30), 'multiRow: first');
-            testCase.verifyEqual(res(3).val, int32(50), 'multiRow: last');
+            % mksqlite binds scalar numerics as SQLite REAL, so int32
+            % round-trips as double.  Compare values, not class.
+            testCase.verifyEqual(res(1).val, 30, 'multiRow: first');
+            testCase.verifyEqual(res(3).val, 50, 'multiRow: last');
         end
 
         function testZeroRowQuery(testCase)
@@ -250,7 +252,8 @@ classdef TestMksqliteEdgeCases < matlab.unittest.TestCase
             db2 = mksqlite('open', testCase.dbPath);
             mksqlite(db2, 'typedBLOBs', 2);
             res = mksqlite(db2, 'SELECT val FROM multi3 WHERE id=1');
-            testCase.verifyEqual(res.val, int32(10), 'reopen: data persists');
+            % Scalar int32 round-trips as double (see testScalarInt32).
+            testCase.verifyEqual(res.val, 10, 'reopen: data persists');
             mksqlite(db2, 'close');
             % Re-open for teardown
             testCase.db = mksqlite('open', testCase.dbPath);

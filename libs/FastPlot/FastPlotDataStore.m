@@ -589,9 +589,15 @@ classdef FastPlotDataStore < handle
                     e = min(s + cs - 1, n);
                     cx = x(s:e);
                     cy = y(s:e);
+                    yMinVal = min(cy);
+                    yMaxVal = max(cy);
+                    % SQLite converts NaN to NULL, violating NOT NULL.
+                    % Use Inf/-Inf for all-NaN chunks (no violations possible).
+                    if isnan(yMinVal); yMinVal = Inf; end
+                    if isnan(yMaxVal); yMaxVal = -Inf; end
                     mksqlite(obj.DbId, ...
                         'INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', ...
-                        chunkId, cx(1), cx(end), min(cy), max(cy), ...
+                        chunkId, cx(1), cx(end), yMinVal, yMaxVal, ...
                         s, numel(cx), cx, cy);
                 end
 
