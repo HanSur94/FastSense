@@ -1,5 +1,10 @@
 # FastPlot
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
+[![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org)
+[![Tests](https://img.shields.io/badge/tests-30%2F30%20passing-brightgreen.svg)](#running-tests)
+
 Ultra-fast time series plotting for MATLAB and GNU Octave. Plot 100M+ data points with fluid zoom and pan.
 
 FastPlot dynamically downsamples your data to screen resolution on every zoom/pan interaction. Instead of pushing millions of points to the GPU, it renders only ~4000 points — preserving visual fidelity while keeping the UI responsive.
@@ -903,15 +908,21 @@ run_all_examples
 ## Architecture
 
 ```
-setup.m                               Path setup (adds both libraries)
+setup.m                               Path setup + MEX compilation
 libs/
 ├── FastPlot/
 │   ├── FastPlot.m                    Main class (addLine, addThreshold, addBand, addShaded, addFill, addMarker, addSensor, render)
 │   ├── FastPlotFigure.m              Tiled dashboard layout manager (tile, setTileSpan, renderAll)
 │   ├── FastPlotDock.m                Tabbed container for multiple dashboards (addTab, selectTab, render)
 │   ├── FastPlotToolbar.m             Interactive toolbar (cursor, crosshair, grid, legend, autoscale, export, refresh, live)
-│   ├── FastPlotTheme.m               Theme presets and palette system (5 presets, 3 palettes)
-│   ├── build_mex.m                   MEX compilation script
+│   ├── FastPlotTheme.m               Theme presets and palette system (6 presets, 4 palettes)
+│   ├── FastPlotDefaults.m            Default configuration values
+│   ├── FastPlotDataStore.m           SQLite-backed chunked storage for 100M+ point datasets
+│   ├── SensorDetailPlot.m            Specialized sensor detail view with state bands
+│   ├── NavigatorOverlay.m            Minimap zoom navigator overlay
+│   ├── ConsoleProgressBar.m          Hierarchical console progress display
+│   ├── build_mex.m                   MEX compilation script (auto-detects SIMD)
+│   ├── mksqlite.c                    SQLite3 MEX interface with typed BLOB support
 │   └── private/
 │       ├── binary_search.m           O(log n) find visible range (MEX dispatch)
 │       ├── minmax_downsample.m       NaN-aware MinMax downsampling (MEX dispatch)
@@ -919,10 +930,13 @@ libs/
 │       ├── compute_violations.m      Threshold violation detection (MEX dispatch)
 │       └── mex_src/
 │           ├── simd_utils.h          SIMD abstraction (AVX2/SSE2/NEON/scalar)
-│           ├── binary_search_mex.c
-│           ├── minmax_core_mex.c
-│           ├── lttb_core_mex.c
-│           └── compute_violations_mex.c
+│           ├── binary_search_mex.c   Binary search kernel
+│           ├── minmax_core_mex.c     MinMax downsampling kernel
+│           ├── lttb_core_mex.c       LTTB downsampling kernel
+│           ├── compute_violations_mex.c  Violation detection kernel
+│           ├── violation_cull_mex.c  Fused detection + pixel culling
+│           ├── resolve_disk_mex.c    SQLite disk-based sensor resolution
+│           └── build_store_mex.c     Bulk SQLite writer for DataStore init
 ├── SensorThreshold/
 │   ├── Sensor.m                      Sensor data + state channels + threshold rules
 │   ├── SensorRegistry.m              Catalog of predefined sensors
@@ -947,8 +961,16 @@ libs/
 │   ├── printEventSummary.m           Console event table
 │   └── private/
 │       └── groupViolations.m         Violation grouping helper
-├── tests/                            30 test suites
-└── examples/                         29 demos + benchmarks
+└── Dashboard/
+    ├── DashboardEngine.m             Top-level dashboard orchestrator
+    ├── DashboardLayout.m             Grid positioning and overlap resolution
+    ├── DashboardWidget.m             Base widget class
+    ├── FastPlotWidget.m              FastPlot-based widget
+    ├── DashboardToolbar.m            Dashboard-level controls
+    ├── DashboardSerializer.m         JSON persistence
+    └── DashboardTheme.m              Dashboard container styling
+tests/                                30+ test suites
+examples/                             30+ demos + benchmarks
 ```
 
 **Zoom/pan pipeline:**
@@ -1072,4 +1094,18 @@ FastPlot's advantage grows with more tiles — downsampled rendering cost stays 
 
 ## License
 
-MIT
+[MIT](LICENSE) — free for commercial and academic use.
+
+## Citation
+
+If you use FastPlot in your research, please cite it:
+
+```bibtex
+@software{suhr2026fastplot,
+  author  = {Suhr, Hannes},
+  title   = {FastPlot: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave},
+  url     = {https://github.com/HanSur94/FastPlot},
+  license = {MIT},
+  year    = {2026}
+}
+```

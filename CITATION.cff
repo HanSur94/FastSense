@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use FastPlot in your research, please cite it as below."
+title: "FastPlot: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave"
+type: software
+authors:
+  - family-names: Suhr
+    given-names: Hannes
+repository-code: "https://github.com/HanSur94/FastPlot"
+license: MIT
+keywords:
+  - MATLAB
+  - GNU Octave
+  - time series
+  - plotting
+  - data visualization
+  - large datasets
+  - SIMD
+  - downsampling
+  - signal processing
+  - sensor monitoring

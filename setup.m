@@ -13,6 +13,7 @@ function setup()
 %     <project_root>/libs/FastPlot
 %     <project_root>/libs/SensorThreshold
 %     <project_root>/libs/EventDetection
+%     <project_root>/libs/Dashboard
 %
 %   MEX compilation includes:
 %     - SIMD-optimized downsampling kernels (AVX2/NEON)
@@ -38,7 +39,8 @@ function setup()
     addpath(fullfile(root, 'libs', 'FastPlot'));
     addpath(fullfile(root, 'libs', 'SensorThreshold'));
     addpath(fullfile(root, 'libs', 'EventDetection'));
-    fprintf('FastPlot + SensorThreshold + EventDetection libraries added to path.\n');
+    addpath(fullfile(root, 'libs', 'Dashboard'));
+    fprintf('FastPlot + SensorThreshold + EventDetection + Dashboard libraries added to path.\n');
 
     % Compile all MEX files (SIMD kernels + mksqlite)
     fprintf('\n--- Compiling MEX files ---\n');
