@@ -227,7 +227,88 @@ function test_mksqlite_types()
     ds.cleanup();
 
     % =====================================================================
-    %  Part 3: Verify existing DataStore tests still pass
+    %  Part 3: Categorical and string convenience methods
+    % =====================================================================
+    fprintf('\n  --- Categorical & string convenience ---\n');
+
+    n2 = 1000;
+    x2 = linspace(0, 100, n2);
+    y2 = sin(x2);
+    ds2 = FastPlotDataStore(x2, y2);
+
+    % 23. toCategorical round-trip via struct
+    catData2.codes = uint32(mod(0:n2-1, 3) + 1);
+    catData2.categories = {'low', 'medium', 'high'};
+    ds2.addColumn('cat_struct', catData2);
+    slice = ds2.getColumnSlice('cat_struct', 1, 6);
+    labels_back = FastPlotDataStore.toCategorical(slice);
+    if exist('categorical', 'class')
+        assert(isa(labels_back, 'categorical'), ...
+            'toCategorical: should return categorical in MATLAB');
+    else
+        assert(iscell(labels_back), ...
+            'toCategorical: should return cell in Octave');
+    end
+    expected_labels = {'low','medium','high','low','medium','high'};
+    if iscell(labels_back)
+        for li = 1:6
+            assert(strcmp(labels_back{li}, expected_labels{li}), ...
+                sprintf('toCategorical: label %d mismatch', li));
+        end
+    end
+    fprintf('    toCategorical: PASS\n');
+
+    % 24. toCategorical with bad input should error
+    threw = false;
+    try
+        FastPlotDataStore.toCategorical('not_a_struct');
+    catch
+        threw = true;
+    end
+    assert(threw, 'toCategorical bad input: should throw');
+    fprintf('    toCategorical bad input rejection: PASS\n');
+
+    % 25. Auto-convert MATLAB categorical in addColumn
+    if exist('categorical', 'class')
+        c_native = categorical({'a','b','c','a','b'}, {'a','b','c'});
+        c_native = repmat(c_native, 1, n2/5);
+        ds2.addColumn('cat_native', c_native);
+        sliceN = ds2.getColumnSlice('cat_native', 1, 5);
+        assert(isstruct(sliceN) && isfield(sliceN, 'codes'), ...
+            'auto-convert categorical: should be stored as struct');
+        labelsN = FastPlotDataStore.toCategorical(sliceN);
+        assert(isa(labelsN, 'categorical'), ...
+            'auto-convert categorical: toCategorical should return categorical');
+        fprintf('    addColumn auto-convert categorical: PASS\n');
+
+        % 26. fromCategorical
+        c_test = categorical({'x','y','z','x'}, {'x','y','z'});
+        s_test = FastPlotDataStore.fromCategorical(c_test);
+        assert(isequal(s_test.codes, uint32([1 2 3 1])), ...
+            'fromCategorical: codes mismatch');
+        assert(isequal(s_test.categories, {'x','y','z'}), ...
+            'fromCategorical: categories mismatch');
+        fprintf('    fromCategorical: PASS\n');
+    else
+        fprintf('    addColumn auto-convert categorical: SKIPPED (Octave)\n');
+        fprintf('    fromCategorical: SKIPPED (Octave)\n');
+    end
+
+    % 27. Auto-convert MATLAB string array in addColumn
+    if exist('string', 'class')
+        strData = string(labels(1:n2));
+        ds2.addColumn('str_col', strData);
+        sliceS = ds2.getColumnSlice('str_col', 1, 3);
+        assert(iscell(sliceS), 'auto-convert string: should be stored as cell');
+        fprintf('    addColumn auto-convert string: PASS\n');
+    else
+        fprintf('    addColumn auto-convert string: SKIPPED (Octave)\n');
+    end
+
+    ds2.cleanup();
+
+    % =====================================================================
+    %  Part 4: Verify existing DataStore tests still pass
     % =====================================================================
     fprintf('\n  --- Regression check ---\n');
     run('test_datastore.m');

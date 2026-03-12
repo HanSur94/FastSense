@@ -167,6 +167,13 @@ classdef FastPlotDataStore < handle
             %   arbitrary type (cell, char, string, logical, numeric,
             %   categorical struct) chunked in the same way as X/Y data.
             %
+            %   MATLAB categorical arrays are automatically converted to a
+            %   struct with 'codes' (uint32) and 'categories' (cell of char).
+            %   Use ds.toCategorical(slice) to convert back after retrieval.
+            %
+            %   MATLAB string arrays are automatically converted to cell
+            %   arrays of char vectors.
+            %
             %   The data length must match ds.NumPoints. Data is stored as
             %   typed BLOBs in a 'columns' table, enabling range queries.
             %
@@ -183,6 +190,21 @@ classdef FastPlotDataStore < handle
             if ~obj.IsValid
                 error('FastPlotDataStore:notValid', ...
                     'DataStore is not initialized.');
+            end
+
+            % Auto-convert MATLAB categorical to struct
+            if isa(data, 'categorical')
+                catNames = categories(data);
+                [~, codes] = ismember(cellstr(data), catNames);
+                s = struct();
+                s.codes = uint32(codes(:)');
+                s.categories = catNames(:)';
+                data = s;
+            end
+
+            % Auto-convert MATLAB string arrays to cell of char
+            if isa(data, 'string')
+                data = cellstr(data);
             end
 
             % Validate length
@@ -324,7 +346,67 @@ classdef FastPlotDataStore < handle
             %LISTCOLUMNS Return names of all stored extra columns.
             names = obj.ColumnNames;
         end
+    end
 
+    methods (Static)
+        function c = toCategorical(s)
+            %TOCATEGORICAL Convert a codes+categories struct back to categorical.
+            %   c = FastPlotDataStore.TOCATEGORICAL(s) converts a struct
+            %   returned by getColumnSlice/getColumnRange back to a MATLAB
+            %   categorical array.
+            %
+            %   Input:
+            %     s — struct with fields 'codes' (uint32) and 'categories'
+            %         (cell of char)
+            %
+            %   Output:
+            %     c — categorical array (MATLAB only; errors in Octave)
+            %
+            %   Example:
+            %     slice = ds.getColumnSlice('severity', 1, 100);
+            %     c = FastPlotDataStore.toCategorical(slice);
+
+            if ~isstruct(s) || ~isfield(s, 'codes') || ~isfield(s, 'categories')
+                error('FastPlotDataStore:badInput', ...
+                    'Input must be a struct with ''codes'' and ''categories'' fields.');
+            end
+
+            if exist('categorical', 'class')
+                % MATLAB: reconstruct native categorical
+                catNames = s.categories(:)';
+                labels = catNames(s.codes);
+                c = categorical(labels, catNames);
+            else
+                % Octave: return cell of category names (no native categorical)
+                catNames = s.categories(:)';
+                c = catNames(s.codes);
+            end
+        end
+
+        function c = fromCategorical(data)
+            %FROMCATEGORICAL Convert a MATLAB categorical to codes+categories struct.
+            %   c = FastPlotDataStore.FROMCATEGORICAL(data) converts a MATLAB
+            %   categorical array to a struct suitable for addColumn.
+            %
+            %   Input:
+            %     data — categorical array
+            %
+            %   Output:
+            %     c — struct with 'codes' (uint32) and 'categories' (cell)
+
+            if ~isa(data, 'categorical')
+                error('FastPlotDataStore:badInput', ...
+                    'Input must be a categorical array.');
+            end
+            catNames = categories(data);
+            [~, codes] = ismember(cellstr(data), catNames);
+            c = struct();
+            c.codes = uint32(codes(:)');
+            c.categories = catNames(:)';
+        end
+    end
+
+    methods (Access = public)
         function cleanup(obj)
             %CLEANUP Close the database and delete temp files.
             if obj.UseSqlite && obj.DbId >= 0
