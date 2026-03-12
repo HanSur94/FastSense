@@ -272,6 +272,8 @@ classdef FastPlotDataStore < handle
             mksqlite(obj.DbId, 'PRAGMA cache_size = -50000');
             mksqlite(obj.DbId, 'PRAGMA temp_store = MEMORY');
             mksqlite(obj.DbId, 'PRAGMA locking_mode = EXCLUSIVE');
+            mksqlite(obj.DbId, 'PRAGMA page_size = 65536');
+            mksqlite(obj.DbId, 'PRAGMA mmap_size = 268435456');
 
             mksqlite(obj.DbId, [...
                 'CREATE TABLE chunks (' ...
@@ -308,6 +310,7 @@ classdef FastPlotDataStore < handle
             end
 
             mksqlite(obj.DbId, 'CREATE INDEX idx_xrange ON chunks (x_min, x_max)');
+            mksqlite(obj.DbId, 'ANALYZE');
             mksqlite(obj.DbId, 'PRAGMA journal_mode = DELETE');
             mksqlite(obj.DbId, 'PRAGMA synchronous = NORMAL');
             obj.IsValid = true;
@@ -369,18 +372,19 @@ classdef FastPlotDataStore < handle
                 xOut = []; yOut = [];
                 return;
             end
+            n = obj.NumPoints;
             fid = fopen(obj.BinPath, 'rb');
-            allX = fread(fid, [1, obj.NumPoints], 'double');
 
-            idxStart = bsearchLocal(allX, xMin, 'left');
-            idxEnd   = bsearchLocal(allX, xMax, 'right');
-            [idxStart, idxEnd] = padClamp(idxStart, idxEnd, obj.NumPoints);
-
-            xOut = allX(idxStart:idxEnd);
-            clear allX;
+            % Binary search on disk: read only sampled X values to find
+            % approximate bounds, then refine on a small neighbourhood.
+            idxStart = bsearchBinaryFile(fid, n, xMin, 'left');
+            idxEnd   = bsearchBinaryFile(fid, n, xMax, 'right');
+            [idxStart, idxEnd] = padClamp(idxStart, idxEnd, n);
 
             count = idxEnd - idxStart + 1;
-            fseek(fid, obj.NumPoints * 8 + (idxStart - 1) * 8, 'bof');
+            fseek(fid, (idxStart - 1) * 8, 'bof');
+            xOut = fread(fid, [1, count], 'double');
+            fseek(fid, n * 8 + (idxStart - 1) * 8, 'bof');
             yOut = fread(fid, [1, count], 'double');
             fclose(fid);
         end
@@ -496,28 +500,52 @@ end
 
 function out = concatColumnData(cells)
     if isempty(cells); out = {}; return; end
+    nCells = numel(cells);
     first = cells{1};
     if isCategoricalStruct(first)
-        codes = [];
-        for k = 1:numel(cells)
-            codes = [codes, cells{k}.codes(:)'];  %#ok<AGROW>
+        codeParts = cell(1, nCells);
+        for k = 1:nCells
+            codeParts{k} = cells{k}.codes(:)';
         end
-        out = struct('codes', codes, 'categories', {first.categories});
-    elseif islogical(first)
-        out = logical([]);
-        for k = 1:numel(cells)
-            out = [out, cells{k}(:)'];  %#ok<AGROW>
-        end
+        out = struct('codes', [codeParts{:}], 'categories', {first.categories});
     elseif iscell(first)
-        out = {};
-        for k = 1:numel(cells)
-            out = [out, cells{k}(:)'];  %#ok<AGROW>
+        parts = cell(1, nCells);
+        for k = 1:nCells
+            parts{k} = cells{k}(:)';
         end
+        out = [parts{:}];
     else
-        out = [];
-        for k = 1:numel(cells)
-            out = [out, cells{k}(:)'];  %#ok<AGROW>
+        parts = cell(1, nCells);
+        for k = 1:nCells
+            parts{k} = cells{k}(:)';
         end
+        out = [parts{:}];
+    end
+end
+
+function idx = bsearchBinaryFile(fid, n, val, mode)
+%BSEARCHBINARYFILE Binary search on a double array stored in a binary file.
+%   Reads O(log n) individual values from disk instead of loading the
+%   entire X array. fid must be an open file handle positioned at the
+%   start of the X data (offset 0).
+    if strcmp(mode, 'left')
+        lo = 1; hi = n + 1;
+        while lo < hi
+            mid = floor((lo + hi) / 2);
+            fseek(fid, (mid - 1) * 8, 'bof');
+            v = fread(fid, 1, 'double');
+            if v < val; lo = mid + 1; else; hi = mid; end
+        end
+        idx = min(lo, n);
+    else
+        lo = 0; hi = n;
+        while lo < hi
+            mid = ceil((lo + hi) / 2);
+            fseek(fid, (mid - 1) * 8, 'bof');
+            v = fread(fid, 1, 'double');
+            if v > val; hi = mid - 1; else; lo = mid; end
+        end
+        idx = max(hi, 1);
     end
 end
 
