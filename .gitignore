@@ -5,3 +5,5 @@
 *.mex
 .DS_Store
 .worktrees/
+*.egg-info/
+__pycache__/
