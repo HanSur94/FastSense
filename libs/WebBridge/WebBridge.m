@@ -129,15 +129,17 @@ classdef WebBridge < handle
             writeline(obj.TcpServer, strtrim(resp));
         end
         function sendInit(obj)
-            signals = obj.buildSignalList();
+            [signals, ~] = obj.buildSignalList();
             dashConfig = obj.buildDashboardConfig();
             actionNames = fieldnames(obj.Actions);
             if isempty(actionNames); actionNames = {}; end
             msg = WebBridgeProtocol.encodeInit(signals, dashConfig, actionNames);
             writeline(obj.TcpServer, strtrim(msg));
         end
-        function signals = buildSignalList(obj)
+        function [signals, widgetSignalMap] = buildSignalList(obj)
+            %BUILDSIGNALLIST Build signal list and a map from widget index to signal ID.
             signals = struct('id', {}, 'dbPath', {}, 'title', {});
+            widgetSignalMap = containers.Map('KeyType', 'int32', 'ValueType', 'char');
             if isempty(obj.Dashboard) || isempty(obj.Dashboard.Widgets); return; end
             idx = 0;
             for i = 1:numel(obj.Dashboard.Widgets)
@@ -156,6 +158,7 @@ classdef WebBridge < handle
                     dbPath = w.Sensor.DataStore.DbPath;
                 end
                 signals(end+1) = struct('id', sid, 'dbPath', dbPath, 'title', w.Title);
+                widgetSignalMap(int32(i)) = sid;
             end
         end
         function config = buildDashboardConfig(obj)
@@ -164,13 +167,10 @@ classdef WebBridge < handle
                 return;
             end
             config = DashboardSerializer.widgetsToConfig(obj.Dashboard.Name, obj.Dashboard.Theme, obj.Dashboard.LiveInterval, obj.Dashboard.Widgets);
-            signals = obj.buildSignalList();
-            sigIdx = 0;
+            [~, widgetSignalMap] = obj.buildSignalList();
             for i = 1:numel(config.widgets)
-                w = config.widgets{i};
-                if strcmp(w.type, 'fastplot') && sigIdx < numel(signals)
-                    sigIdx = sigIdx + 1;
-                    config.widgets{i}.signalId = signals(sigIdx).id;
+                if widgetSignalMap.isKey(int32(i))
+                    config.widgets{i}.signalId = widgetSignalMap(int32(i));
                 end
             end
         end

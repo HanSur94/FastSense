@@ -19,9 +19,9 @@ var Dashboard = (function () {
         var grid = getGrid();
         grid.innerHTML = "";
 
-        if (config.title) {
+        if (config.name || config.title) {
             var titleEl = document.getElementById("dashboard-title");
-            if (titleEl) titleEl.textContent = config.title;
+            if (titleEl) titleEl.textContent = config.name || config.title;
         }
 
         var widgets = config.widgets || [];
