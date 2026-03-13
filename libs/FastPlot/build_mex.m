@@ -4,6 +4,11 @@ function build_mex()
 %   best available C compiler, then compiles every MEX source file found
 %   in private/mex_src/ into the private/ directory.
 %
+%   SQLite3 is bundled as the amalgamation (sqlite3.c + sqlite3.h) in
+%   private/mex_src/ and compiled directly into MEX files that need it.
+%   No system libsqlite3 installation is required — works out of the box
+%   on Linux, macOS, and Windows.
+%
 %   Architecture detection normalizes differences between MATLAB and
 %   Octave (e.g., 'maca64' vs 'aarch64') into a canonical label used
 %   to select SIMD instruction targets:
@@ -31,6 +36,7 @@ function build_mex()
 %     violation_cull_mex.c         — threshold violation culling
 %     compute_violations_mex.c     — batch violation detection for resolve()
 %     build_store_mex.c            — bulk SQLite writer for DataStore init
+%     mksqlite.c                   — SQLite3 MEX interface (bundled sqlite3.c)
 %
 %   Example:
 %     build_mex();   % compile everything; prints per-file status
@@ -112,23 +118,28 @@ function build_mex()
     % Common flags
     include_flag = ['-I' srcDir];
 
-    % Files to compile: {source_name, output_name, extra_flags}
-    %   extra_flags is a cell of additional linker/compiler flags (e.g. -lsqlite3).
+    % Bundled SQLite3 amalgamation — compiled directly into MEX files that
+    % need it, so no system libsqlite3 installation is required.
+    sqlite3_src = fullfile(srcDir, 'sqlite3.c');
+    sqlite3_flags = {'-DSQLITE_THREADSAFE=0', '-DSQLITE_OMIT_LOAD_EXTENSION'};
+    if useMSVC
+        sqlite3_flags = {'/DSQLITE_THREADSAFE=0', '/DSQLITE_OMIT_LOAD_EXTENSION'};
+    end
+
+    % Files to compile: {source_name, output_name, extra_sources, extra_flags}
+    %   extra_sources is a cell of additional .c files to compile together.
+    %   extra_flags is a cell of additional compiler flags.
     mex_files = {
-        'binary_search_mex.c',          'binary_search_mex',          {{}}
-        'minmax_core_mex.c',            'minmax_core_mex',            {{}}
-        'lttb_core_mex.c',              'lttb_core_mex',              {{}}
-        'violation_cull_mex.c',         'violation_cull_mex',         {{}}
-        'compute_violations_mex.c',     'compute_violations_mex',     {{}}
-        'resolve_disk_mex.c',           'resolve_disk_mex',           {{'-lsqlite3'}}
-        'build_store_mex.c',            'build_store_mex',            {{'-lsqlite3'}}
+        'binary_search_mex.c',          'binary_search_mex',          {{}},              {{}}
+        'minmax_core_mex.c',            'minmax_core_mex',            {{}},              {{}}
+        'lttb_core_mex.c',              'lttb_core_mex',              {{}},              {{}}
+        'violation_cull_mex.c',         'violation_cull_mex',         {{}},              {{}}
+        'compute_violations_mex.c',     'compute_violations_mex',     {{}},              {{}}
+        'resolve_disk_mex.c',           'resolve_disk_mex',           {{sqlite3_src}},   {sqlite3_flags}
+        'build_store_mex.c',            'build_store_mex',            {{sqlite3_src}},   {sqlite3_flags}
     };
 
-    % mksqlite lives in the library root (not mex_src) and needs -lsqlite3
-    hasSqlite3 = check_sqlite3();
-    if hasSqlite3
-        mksqlite_src = fullfile(rootDir, 'mksqlite.c');
-    end;
+    mksqlite_src = fullfile(rootDir, 'mksqlite.c');
 
     fprintf('\n');
 
@@ -138,13 +149,14 @@ function build_mex()
     for i = 1:size(mex_files, 1)
         src_file = fullfile(srcDir, mex_files{i, 1});
         out_name = mex_files{i, 2};
-        extra = mex_files{i, 3};
-        extra = extra{1};  % unwrap nested cell
+        extra_srcs  = mex_files{i, 3};  extra_srcs  = extra_srcs{1};
+        extra_flags = mex_files{i, 4};  extra_flags = extra_flags{1};
 
         fprintf('Compiling %s ... ', mex_files{i, 1});
 
         try
-            compile_mex(src_file, out_name, outDir, include_flag, [opt_flags, extra], compiler);
+            compile_mex(src_file, out_name, outDir, include_flag, ...
+                        [opt_flags, extra_flags], compiler, extra_srcs);
             fprintf('OK\n');
             n_success = n_success + 1;
         catch e
@@ -161,7 +173,8 @@ function build_mex()
                     else
                         sse_flags = {'-O3', '-msse2', '-ftree-vectorize', '-ffast-math'};
                     end
-                    compile_mex(src_file, out_name, outDir, include_flag, [sse_flags, extra], compiler);
+                    compile_mex(src_file, out_name, outDir, include_flag, ...
+                                [sse_flags, extra_flags], compiler, extra_srcs);
                     fprintf('OK (SSE2)\n');
                     n_success = n_success + 1;
                 catch e2
@@ -175,29 +188,21 @@ function build_mex()
         end
     end
 
-    % Compile mksqlite (SQLite-backed DataStore support)
-    if hasSqlite3
-        fprintf('Compiling mksqlite.c ... ');
-        try
-            compile_mex(mksqlite_src, 'mksqlite', rootDir, include_flag, [opt_flags, {'-lsqlite3'}], compiler);
-            fprintf('OK\n');
-            n_success = n_success + 1;
-        catch e
-            fprintf('FAILED\n');
-            fprintf('  Error: %s\n', e.message);
-            fprintf('  (DataStore will use binary file fallback)\n');
-            n_fail = n_fail + 1;
-        end
-    else
-        fprintf('Skipping mksqlite.c — libsqlite3 not found.\n');
-        fprintf('  Install sqlite3 dev libraries for SQLite-backed DataStore:\n');
-        fprintf('    Ubuntu/Debian: sudo apt install libsqlite3-dev\n');
-        fprintf('    macOS:         brew install sqlite3\n');
-        fprintf('    Windows:       download from https://sqlite.org/download.html\n');
+    % Compile mksqlite with bundled SQLite3 amalgamation
+    fprintf('Compiling mksqlite.c ... ');
+    try
+        compile_mex(mksqlite_src, 'mksqlite', rootDir, include_flag, ...
+                    [opt_flags, sqlite3_flags], compiler, {sqlite3_src});
+        fprintf('OK\n');
+        n_success = n_success + 1;
+    catch e
+        fprintf('FAILED\n');
+        fprintf('  Error: %s\n', e.message);
         fprintf('  (DataStore will use binary file fallback)\n');
+        n_fail = n_fail + 1;
     end
 
-    total = size(mex_files, 1) + hasSqlite3;
+    total = size(mex_files, 1) + 1;
     fprintf('\n%d/%d MEX files compiled successfully.\n', n_success, total);
 
     if n_fail > 0
@@ -212,9 +217,9 @@ function build_mex()
 end
 
 
-function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler)
-%COMPILE_MEX Compile a single C source file into a MEX binary.
-%   compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler)
+function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler, extra_srcs)
+%COMPILE_MEX Compile C source file(s) into a MEX binary.
+%   compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler, extra_srcs)
 %   dispatches to Octave's mkoctfile or MATLAB's mex depending on the
 %   runtime environment. On Octave, the CC environment variable is
 %   temporarily set to compiler (if non-empty) and restored afterwards.
@@ -222,17 +227,24 @@ function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compil
 %   MATLAB/Unix they are passed via CFLAGS.
 %
 %   Inputs:
-%     src_file     — char; absolute path to the .c source file
+%     src_file     — char; absolute path to the main .c source file
 %     out_name     — char; desired output name (without extension)
 %     outDir       — char; directory for the compiled MEX binary
 %     include_flag — char; compiler include flag (e.g., '-I/path')
 %     opt_flags    — cell array of char; optimization/SIMD flags
 %     compiler     — char; path to compiler executable ('' for default)
+%     extra_srcs   — cell array of char; additional .c files to compile
+%                    together (e.g., bundled sqlite3.c). Default: {}
+    if nargin < 7; extra_srcs = {}; end
+
+    % Collect all source files
+    all_srcs = [{src_file}, extra_srcs(:)'];
+
     if exist('OCTAVE_VERSION', 'builtin')
         % Octave: use mkoctfile
         args = {'--mex', include_flag};
         args = [args, opt_flags];
-        args = [args, {'-o', fullfile(outDir, out_name), src_file}];
+        args = [args, {'-o', fullfile(outDir, out_name)}, all_srcs];
         if ~isempty(compiler)
             setenv('CC', compiler);
         end
@@ -254,8 +266,8 @@ function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compil
             % macOS/Linux GCC/Clang: use CFLAGS
             cflags = ['CFLAGS="$CFLAGS ' strjoin(comp_flags, ' ') '"'];
         end
-        mex_args = {cflags, include_flag, '-outdir', outDir, '-output', out_name, src_file};
-        % Append linker flags (e.g. -lsqlite3) as direct mex arguments
+        mex_args = [{cflags, include_flag, '-outdir', outDir, '-output', out_name}, all_srcs];
+        % Append linker flags as direct mex arguments
         if ~isempty(link_flags)
             mex_args = [mex_args, link_flags];
         end
@@ -333,15 +345,3 @@ function [gcc_path, gcc_name] = find_gcc()
 end
 
 
-function found = check_sqlite3()
-%CHECK_SQLITE3 Check whether libsqlite3 development files are available.
-    found = false;
-    test_c = fullfile(tempdir(), 'sqlite3_check.c');
-    fid = fopen(test_c, 'w');
-    if fid == -1; return; end
-    fprintf(fid, '#include <sqlite3.h>\nint main(){sqlite3_libversion();return 0;}\n');
-    fclose(fid);
-    [status, ~] = system(sprintf('cc -o /dev/null %s -lsqlite3 2>/dev/null', test_c));
-    found = (status == 0);
-    delete(test_c);
-end

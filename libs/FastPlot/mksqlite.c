@@ -12,13 +12,13 @@
  * preservation. Supports numeric arrays, char, logical, cell arrays, and
  * struct-based categorical representation.
  *
- * Compile:
- *   mkoctfile --mex -o mksqlite.mex -lsqlite3 mksqlite.c    (Octave)
- *   mex -lsqlite3 mksqlite.c                                 (MATLAB)
+ * Compile (uses bundled sqlite3.c amalgamation from private/mex_src/):
+ *   mkoctfile --mex -Iprivate/mex_src -o mksqlite.mex mksqlite.c private/mex_src/sqlite3.c  (Octave)
+ *   mex -Iprivate/mex_src mksqlite.c private/mex_src/sqlite3.c                               (MATLAB)
  */
 
 #include "mex.h"
-#include <sqlite3.h>
+#include "sqlite3.h"
 #include <string.h>
 #include <stdlib.h>
 
