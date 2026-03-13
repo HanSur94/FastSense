@@ -1,4 +1,4 @@
-classdef (Abstract) DashboardWidget < handle
+classdef DashboardWidget < handle
 %DASHBOARDWIDGET Abstract base class for all dashboard widgets.
 %
 %   Subclasses must implement:
@@ -53,10 +53,22 @@ classdef (Abstract) DashboardWidget < handle
         end
     end
 
-    methods (Abstract)
-        render(obj, parentPanel)
-        refresh(obj)
-        configure(obj)
-        t = getType(obj)
+    methods
+        function render(obj, parentPanel)
+            error('%s:notImplemented', class(obj), ...
+                'Subclass must implement render()');
+        end
+        function refresh(obj)
+            error('%s:notImplemented', class(obj), ...
+                'Subclass must implement refresh()');
+        end
+        function configure(obj)
+            error('%s:notImplemented', class(obj), ...
+                'Subclass must implement configure()');
+        end
+        function t = getType(obj)
+            error('%s:notImplemented', class(obj), ...
+                'Subclass must implement getType()');
+        end
     end
 end

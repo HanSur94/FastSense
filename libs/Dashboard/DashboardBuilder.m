@@ -45,6 +45,12 @@ classdef DashboardBuilder < handle
         % Layout constants (normalized figure coords)
         PaletteWidth    = 0.12
         PropsWidth      = 0.18
+
+    end
+
+    properties (Access = public)
+        % Test support: when non-empty, overrides figure CurrentPoint
+        MockCurrentPoint = []
     end
 
     methods (Access = public)
@@ -107,7 +113,7 @@ classdef DashboardBuilder < handle
 
             % Restore full content area and re-render
             theme = DashboardTheme(obj.Engine.Theme);
-            obj.Engine.Layout.ContentArea = obj.Engine.Toolbar.getContentArea();
+            obj.Engine.setContentArea(obj.Engine.Toolbar.getContentArea());
             obj.relayoutWidgets(theme);
         end
     end
@@ -227,6 +233,17 @@ classdef DashboardBuilder < handle
     end
 
     methods (Access = private)
+        function cp = getMousePosition(obj)
+        %GETMOUSEPOSITION Return current mouse position.
+        %   Uses MockCurrentPoint when set (for testing), otherwise
+        %   reads from the figure's CurrentPoint property.
+            if ~isempty(obj.MockCurrentPoint)
+                cp = obj.MockCurrentPoint;
+            else
+                cp = get(obj.Engine.hFigure, 'CurrentPoint');
+            end
+        end
+
         function createPalette(obj, hFig, theme)
             toolbarH = obj.Engine.Toolbar.Height;
             obj.hPalette = uipanel('Parent', hFig, ...
@@ -398,7 +415,7 @@ classdef DashboardBuilder < handle
             else
                 contentArea = [0, 0, 1, 1 - toolbarH];
             end
-            obj.Engine.Layout.ContentArea = contentArea;
+            obj.Engine.setContentArea(contentArea);
 
             % Re-create all widget panels
             obj.Engine.Layout.createPanels(obj.Engine.hFigure, widgets, theme);
@@ -494,8 +511,7 @@ classdef DashboardBuilder < handle
             obj.DragOrigGrid = w.Position;
             obj.DragOrigNorm = get(w.hPanel, 'Position');
 
-            hFig = obj.Engine.hFigure;
-            obj.DragStart = get(hFig, 'CurrentPoint');
+            obj.DragStart = obj.getMousePosition();
             obj.selectWidget(widgetIdx);
         end
 
@@ -506,8 +522,7 @@ classdef DashboardBuilder < handle
             obj.DragOrigGrid = w.Position;
             obj.DragOrigNorm = get(w.hPanel, 'Position');
 
-            hFig = obj.Engine.hFigure;
-            obj.DragStart = get(hFig, 'CurrentPoint');
+            obj.DragStart = obj.getMousePosition();
             obj.selectWidget(widgetIdx);
         end
 
@@ -516,8 +531,7 @@ classdef DashboardBuilder < handle
                 return;
             end
 
-            hFig = obj.Engine.hFigure;
-            cp = get(hFig, 'CurrentPoint');
+            cp = obj.getMousePosition();
             dx = cp(1) - obj.DragStart(1);
             dy = cp(2) - obj.DragStart(2);
 
@@ -558,8 +572,7 @@ classdef DashboardBuilder < handle
                 return;
             end
 
-            hFig = obj.Engine.hFigure;
-            cp = get(hFig, 'CurrentPoint');
+            cp = obj.getMousePosition();
             dx = cp(1) - obj.DragStart(1);
             dy = cp(2) - obj.DragStart(2);
 
@@ -603,7 +616,7 @@ classdef DashboardBuilder < handle
                 end
             end
             newGrid = obj.Engine.Layout.resolveOverlap(newGrid, existingPositions);
-            obj.Engine.Widgets{obj.DragIdx}.Position = newGrid;
+            obj.Engine.setWidgetPosition(obj.DragIdx, newGrid);
 
             % Snap to grid by re-laying out
             theme = DashboardTheme(obj.Engine.Theme);
