@@ -57,9 +57,9 @@ var Chart = (function () {
         var signalId = plot._fpSignalId;
         if (!signalId) return;
 
-        fetchData(signalId, min, max).then(function (data) {
+        fetchData(signalId, min, max).then(function (result) {
             if (instances[signalId]) {
-                instances[signalId].plot.setData(data);
+                instances[signalId].plot.setData(result.data);
             }
         });
     }
@@ -73,18 +73,10 @@ var Chart = (function () {
         url += "?" + params.join("&");
 
         return fetchJSON(url).then(function (resp) {
-            // Expect { timestamps: [...], series: { label: [...], ... } }
-            var timestamps = resp.timestamps || [];
-            var data = [timestamps];
-            var labels = [];
-            if (resp.series) {
-                var keys = Object.keys(resp.series);
-                for (var i = 0; i < keys.length; i++) {
-                    labels.push(keys[i]);
-                    data.push(resp.series[keys[i]]);
-                }
-            }
-            return { data: data, labels: labels };
+            // Server returns { x: [...], y: [...] }
+            var x = resp.x || [];
+            var y = resp.y || [];
+            return { data: [x, y], labels: [signalId] };
         });
     }
 

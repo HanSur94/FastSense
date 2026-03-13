@@ -94,6 +94,11 @@ class AppState:
             asyncio.create_task(self.broadcast_ws(msg))
         elif msg_type == "config_changed":
             self.dashboard = msg.get("dashboard", self.dashboard)
+            if "actions" in msg:
+                self.actions = msg["actions"]
+            asyncio.create_task(self.broadcast_ws(msg))
+        elif msg_type == "actions_changed":
+            self.actions = msg.get("actions", self.actions)
             asyncio.create_task(self.broadcast_ws(msg))
         elif msg_type == "action_result":
             req_id = msg.get("id", "")
@@ -127,8 +132,8 @@ def create_app(state: AppState) -> FastAPI:
     @app.get("/api/signals/{signal_id}/data")
     def get_signal_data(
         signal_id: str,
-        xMin: float,
-        xMax: float,
+        xMin: float = -1e30,
+        xMax: float = 1e30,
         maxPoints: int = 4000,
     ) -> dict[str, list[float]]:
         reader = state.get_reader(signal_id)
