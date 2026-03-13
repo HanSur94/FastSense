@@ -23,6 +23,7 @@ classdef WebBridge < handle
             end
         end
         function serve(obj)
+            if obj.IsServing; return; end
             obj.enableWALOnDataStores();
             obj.startTcp();
             obj.launchBridge();
@@ -49,7 +50,7 @@ classdef WebBridge < handle
         function registerAction(obj, name, callback)
             obj.Actions.(name) = callback;
             if obj.IsServing && obj.ClientConnected
-                obj.sendConfigChanged();
+                obj.sendActionsChanged();
             end
         end
         function tf = hasAction(obj, name)
@@ -184,6 +185,12 @@ classdef WebBridge < handle
         function sendConfigChanged(obj)
             config = obj.buildDashboardConfig();
             msg = WebBridgeProtocol.encodeConfigChanged(config);
+            obj.sendToClient(msg);
+        end
+        function sendActionsChanged(obj)
+            actionNames = fieldnames(obj.Actions);
+            if isempty(actionNames); actionNames = {}; end
+            msg = WebBridgeProtocol.encodeActionsChanged(actionNames);
             obj.sendToClient(msg);
         end
         function startConfigPoll(obj)

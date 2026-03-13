@@ -49,7 +49,7 @@
                 return r.json();
             })
             .then(function (data) {
-                var names = data.actions || data || [];
+                var names = data || [];
                 Actions.render(names);
             })
             .catch(function (err) {
@@ -88,6 +88,9 @@
                     loadDashboard();
                     loadActions();
                     break;
+                case "actions_changed":
+                    Actions.render(msg.actions || []);
+                    break;
                 case "shutdown":
                     setStatus("Disconnected");
                     showToast("Server shutting down", "error");
@@ -108,10 +111,13 @@
     }
 
     function handleDataChanged(msg) {
-        if (msg.signalId) {
-            Chart.refresh(msg.signalId);
+        var signals = msg.signals;
+        if (signals && signals.length > 0) {
+            for (var i = 0; i < signals.length; i++) {
+                Chart.refresh(signals[i]);
+            }
         } else {
-            // Refresh all charts if no specific signal specified
+            // Refresh all charts if no specific signals listed
             var ids = Chart.getSignalIds();
             for (var i = 0; i < ids.length; i++) {
                 Chart.refresh(ids[i]);

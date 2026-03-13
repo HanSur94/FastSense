@@ -13,6 +13,10 @@ classdef WebBridgeProtocol
             s = struct('type', 'config_changed', 'dashboard', dashboard);
             msg = [jsonencode(s), newline];
         end
+        function msg = encodeActionsChanged(actionNames)
+            s = struct('type', 'actions_changed', 'actions', {actionNames});
+            msg = [jsonencode(s), newline];
+        end
         function msg = encodeActionResult(requestId, name, ok, errorMsg)
             s = struct('type', 'action_result', 'id', requestId, 'name', name, 'ok', ok);
             if ~ok && ~isempty(errorMsg)
