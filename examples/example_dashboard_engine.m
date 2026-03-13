@@ -2,11 +2,14 @@
 % Demonstrates: DashboardEngine with FastPlotWidgets, Sensor binding,
 % JSON save/load, and live mode.
 
-setup();
+close all force;
+clear functions;
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
 %% 1. Create dashboard with inline data
 d = DashboardEngine('Process Monitoring — Line 4');
-d.Theme = 'dark';
+d.Theme = 'light';
 d.LiveInterval = 5;
 
 % Generate sample data

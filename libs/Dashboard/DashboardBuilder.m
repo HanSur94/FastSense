@@ -29,6 +29,9 @@ classdef DashboardBuilder < handle
         DragOrigGrid    = [0 0 0 0]
         DragOrigNorm    = [0 0 0 0]
 
+        % Grid overlay axes (edit mode)
+        hGridOverlay    = []
+
         % Selected widget
         SelectedIdx     = 0
 
@@ -41,6 +44,16 @@ classdef DashboardBuilder < handle
         hPropApply      = []
         hPropDelete     = []
         hPropLabel      = []
+
+        % Data source controls
+        hSourceType     = []
+        hSourceKey      = []
+        hSourceBrowse   = []
+        hSourceLabel    = []
+
+        % Saved figure callbacks (restored on exit edit)
+        OldMotionFcn    = ''
+        OldButtonUpFcn  = ''
 
         % Layout constants (normalized figure coords)
         PaletteWidth    = 0.12
@@ -63,7 +76,9 @@ classdef DashboardBuilder < handle
             hFig = eng.hFigure;
             theme = DashboardTheme(eng.Theme);
 
-            % Install mouse callbacks
+            % Save existing callbacks (e.g. NavigatorOverlay) and install ours
+            obj.OldMotionFcn = get(hFig, 'WindowButtonMotionFcn');
+            obj.OldButtonUpFcn = get(hFig, 'WindowButtonUpFcn');
             set(hFig, 'WindowButtonMotionFcn', @(~,~) obj.onMouseMove());
             set(hFig, 'WindowButtonUpFcn', @(~,~) obj.onMouseUp());
 
@@ -85,10 +100,13 @@ classdef DashboardBuilder < handle
             obj.DragMode = '';
 
             hFig = obj.Engine.hFigure;
-            set(hFig, 'WindowButtonMotionFcn', '');
-            set(hFig, 'WindowButtonUpFcn', '');
+            set(hFig, 'WindowButtonMotionFcn', obj.OldMotionFcn);
+            set(hFig, 'WindowButtonUpFcn', obj.OldButtonUpFcn);
+            obj.OldMotionFcn = '';
+            obj.OldButtonUpFcn = '';
 
             obj.clearOverlays();
+            obj.clearGrid();
 
             % Delete sidebars
             safeDelete(obj.hPalette);
@@ -176,6 +194,9 @@ classdef DashboardBuilder < handle
                 hgt = max(1, hgt);
                 w.Position = [col, row, wid, hgt];
             end
+
+            % Apply data source
+            obj.applyDataSource();
 
             theme = DashboardTheme(obj.Engine.Theme);
             obj.relayoutWidgets(theme);
@@ -350,6 +371,39 @@ classdef DashboardBuilder < handle
                 'String', '', 'Visible', 'off');
             y = y - fh - gap*4;
 
+            % --- Data Source section ---
+            y = y - lh - gap*2;
+            obj.hSourceLabel = uicontrol('Parent', obj.hPropsPanel, ...
+                'Style', 'text', 'Units', 'normalized', ...
+                'Position', [0.05 y 0.9 lh], ...
+                'String', 'Data Source:', 'ForegroundColor', fg, ...
+                'BackgroundColor', bg, 'HorizontalAlignment', 'left', ...
+                'FontWeight', 'bold', ...
+                'Visible', 'off', 'Tag', 'propLabel');
+            y = y - fh - gap;
+
+            % Source type dropdown
+            obj.hSourceType = uicontrol('Parent', obj.hPropsPanel, ...
+                'Style', 'popupmenu', 'Units', 'normalized', ...
+                'Position', [0.05 y 0.9 fh], ...
+                'String', {'None', 'Sensor', 'MAT File', 'Static Value'}, ...
+                'Value', 1, 'Visible', 'off');
+            y = y - fh - gap;
+
+            % Source key / path / value field
+            obj.hSourceKey = uicontrol('Parent', obj.hPropsPanel, ...
+                'Style', 'edit', 'Units', 'normalized', ...
+                'Position', [0.05 y 0.65 fh], ...
+                'String', '', 'Visible', 'off');
+
+            % Browse button (for MAT files)
+            obj.hSourceBrowse = uicontrol('Parent', obj.hPropsPanel, ...
+                'Style', 'pushbutton', 'Units', 'normalized', ...
+                'Position', [0.72 y 0.23 fh], ...
+                'String', 'Browse', 'Visible', 'off', ...
+                'Callback', @(~,~) obj.onSourceBrowse());
+            y = y - fh - gap*4;
+
             % Apply / Delete buttons
             obj.hPropApply = uicontrol('Parent', obj.hPropsPanel, ...
                 'Style', 'pushbutton', 'Units', 'normalized', ...
@@ -375,23 +429,29 @@ classdef DashboardBuilder < handle
 
             % Compute content area (narrowed when edit mode active)
             toolbarH = obj.Engine.Toolbar.Height;
+            timePanelH = obj.Engine.TimePanelHeight;
             if obj.IsActive
-                contentArea = [obj.PaletteWidth, 0, ...
+                contentArea = [obj.PaletteWidth, timePanelH, ...
                     1 - obj.PaletteWidth - obj.PropsWidth, ...
-                    1 - toolbarH];
+                    1 - toolbarH - timePanelH];
             else
-                contentArea = [0, 0, 1, 1 - toolbarH];
+                contentArea = [0, timePanelH, 1, 1 - toolbarH - timePanelH];
             end
             obj.Engine.Layout.ContentArea = contentArea;
 
-            % Re-create all widget panels
+            % Re-create viewport, canvas, and widget panels
             obj.Engine.Layout.createPanels(obj.Engine.hFigure, widgets, theme);
+
+            % Draw grid overlay in edit mode (on new canvas, after panels)
+            if obj.IsActive
+                obj.drawGrid(theme);
+            end
         end
 
         function createOverlays(obj, theme)
             obj.clearOverlays();
             widgets = obj.Engine.Widgets;
-            hFig = obj.Engine.hFigure;
+            hCanvas = obj.Engine.Layout.hCanvas;
 
             for i = 1:numel(widgets)
                 w = widgets{i};
@@ -405,7 +465,7 @@ classdef DashboardBuilder < handle
 
                 % Drag handle bar at top of widget panel
                 handleH = 0.022;
-                ov.hDragBar = uipanel('Parent', hFig, ...
+                ov.hDragBar = uipanel('Parent', hCanvas, ...
                     'Units', 'normalized', ...
                     'Position', [panelPos(1), ...
                                  panelPos(2) + panelPos(4) - handleH, ...
@@ -440,7 +500,7 @@ classdef DashboardBuilder < handle
                 % Resize handle at bottom-right corner
                 rsW = 0.012;
                 rsH = 0.012;
-                ov.hResize = uicontrol('Parent', hFig, ...
+                ov.hResize = uicontrol('Parent', hCanvas, ...
                     'Style', 'text', ...
                     'Units', 'normalized', ...
                     'Position', [panelPos(1) + panelPos(3) - rsW, ...
@@ -465,6 +525,9 @@ classdef DashboardBuilder < handle
             obj.Overlays = {};
         end
 
+    end
+
+    methods (Access = public)
         %% Drag and resize callbacks
 
         function onDragStart(obj, widgetIdx)
@@ -498,10 +561,15 @@ classdef DashboardBuilder < handle
 
             hFig = obj.Engine.hFigure;
             cp = get(hFig, 'CurrentPoint');
-            dx = cp(1) - obj.DragStart(1);
-            dy = cp(2) - obj.DragStart(2);
+            dx_fig = cp(1) - obj.DragStart(1);
+            dy_fig = cp(2) - obj.DragStart(2);
 
-            origNorm = obj.DragOrigNorm;
+            % Convert figure deltas to canvas deltas
+            layout = obj.Engine.Layout;
+            [dx, dy] = layout.figureToCanvasDelta(dx_fig, dy_fig);
+            [stepW, stepH] = layout.canvasStepSizes();
+
+            origGrid = obj.DragOrigGrid;
             w = obj.Engine.Widgets{obj.DragIdx};
             ov = obj.Overlays{obj.DragIdx};
             handleH = 0.022;
@@ -509,28 +577,36 @@ classdef DashboardBuilder < handle
 
             switch obj.DragMode
                 case 'drag'
-                    newX = origNorm(1) + dx;
-                    newY = origNorm(2) + dy;
-                    set(w.hPanel, 'Position', ...
-                        [newX, newY, origNorm(3), origNorm(4)]);
-                    set(ov.hDragBar, 'Position', ...
-                        [newX, newY + origNorm(4) - handleH, ...
-                         origNorm(3), handleH]);
-                    set(ov.hResize, 'Position', ...
-                        [newX + origNorm(3) - rsW, newY, rsW, rsH]);
+                    deltaCol = round(dx / stepW);
+                    deltaRow = round(-dy / stepH);
+                    newCol = max(1, min(origGrid(1) + deltaCol, ...
+                        13 - origGrid(3)));
+                    newRow = max(1, origGrid(2) + deltaRow);
+                    newGrid = [newCol, newRow, origGrid(3), origGrid(4)];
 
                 case 'resize'
-                    newW = max(origNorm(3) + dx, 0.04);
-                    newH = max(origNorm(4) - dy, 0.04);
-                    newY = origNorm(2) + dy;
-                    set(w.hPanel, 'Position', ...
-                        [origNorm(1), newY, newW, newH]);
-                    set(ov.hDragBar, 'Position', ...
-                        [origNorm(1), newY + newH - handleH, ...
-                         newW, handleH]);
-                    set(ov.hResize, 'Position', ...
-                        [origNorm(1) + newW - rsW, newY, rsW, rsH]);
+                    deltaW = round(dx / stepW);
+                    deltaH = round(-dy / stepH);
+                    newW = max(1, min(origGrid(3) + deltaW, ...
+                        13 - origGrid(1)));
+                    newH = max(1, origGrid(4) + deltaH);
+                    newGrid = [origGrid(1), origGrid(2), newW, newH];
             end
+
+            % Snap to exact grid position via computePosition
+            savedRows = layout.TotalRows;
+            maxNeeded = newGrid(2) + newGrid(4) - 1;
+            if maxNeeded > layout.TotalRows
+                layout.TotalRows = maxNeeded;
+            end
+            pos = layout.computePosition(newGrid);
+            layout.TotalRows = savedRows;
+
+            set(w.hPanel, 'Position', pos);
+            set(ov.hDragBar, 'Position', ...
+                [pos(1), pos(2) + pos(4) - handleH, pos(3), handleH]);
+            set(ov.hResize, 'Position', ...
+                [pos(1) + pos(3) - rsW, pos(2), rsW, rsH]);
         end
 
         function onMouseUp(obj)
@@ -540,20 +616,13 @@ classdef DashboardBuilder < handle
 
             hFig = obj.Engine.hFigure;
             cp = get(hFig, 'CurrentPoint');
-            dx = cp(1) - obj.DragStart(1);
-            dy = cp(2) - obj.DragStart(2);
+            dx_fig = cp(1) - obj.DragStart(1);
+            dy_fig = cp(2) - obj.DragStart(2);
 
-            % Compute grid cell size from current layout
+            % Convert figure deltas to canvas deltas
             layout = obj.Engine.Layout;
-            ca = layout.ContentArea;
-            totalW = ca(3) - layout.Padding(1) - layout.Padding(3);
-            totalH = ca(4) - layout.Padding(2) - layout.Padding(4);
-            cols = layout.Columns;
-            rows = max(layout.TotalRows, 1);
-            cellW = (totalW - (cols - 1) * layout.GapH) / cols;
-            cellH = (totalH - (rows - 1) * layout.GapV) / rows;
-            stepW = cellW + layout.GapH;
-            stepH = cellH + layout.GapV;
+            [dx, dy] = layout.figureToCanvasDelta(dx_fig, dy_fig);
+            [stepW, stepH] = layout.canvasStepSizes();
 
             origGrid = obj.DragOrigGrid;
 
@@ -590,7 +659,9 @@ classdef DashboardBuilder < handle
                 obj.updatePropertiesDisplay();
             end
         end
+    end
 
+    methods (Access = private)
         function updatePropertiesDisplay(obj)
             idx = obj.SelectedIdx;
             if idx == 0 || idx > numel(obj.Engine.Widgets)
@@ -607,7 +678,89 @@ classdef DashboardBuilder < handle
             set(obj.hPropRow, 'String', num2str(w.Position(2)));
             set(obj.hPropWidth, 'String', num2str(w.Position(3)));
             set(obj.hPropHeight, 'String', num2str(w.Position(4)));
+
+            % Populate data source controls
+            obj.populateSourceControls(w);
+
             obj.showProps('on');
+        end
+
+        function drawGrid(obj, theme)
+            obj.clearGrid();
+
+            layout = obj.Engine.Layout;
+            hCanvas = layout.hCanvas;
+            if isempty(hCanvas) || ~ishandle(hCanvas)
+                return;
+            end
+
+            [stepW, stepH, cellW, cellH] = layout.canvasStepSizes();
+
+            padL = layout.Padding(1);
+            padB = layout.Padding(2);
+            cols = layout.Columns;
+            rows = max(layout.TotalRows, 1);
+
+            cr = layout.canvasRatio();
+            if cr <= 1
+                yBase = padB;
+            else
+                yBase = padB / cr;
+            end
+
+            xLeft  = padL;
+            yBot   = yBase;
+            xRight = xLeft + (cols - 1) * stepW + cellW;
+            yTop   = yBot  + (rows - 1) * stepH + cellH;
+
+            % Transparent axes on canvas for grid lines
+            hAx = axes('Parent', hCanvas, ...
+                'Units', 'normalized', ...
+                'Position', [0 0 1 1], ...
+                'XLim', [0 1], 'YLim', [0 1], ...
+                'Color', 'none', ...
+                'Visible', 'off', ...
+                'HitTest', 'off');
+            try set(hAx, 'PickableParts', 'none'); catch, end
+            hold(hAx, 'on');
+
+            gc = theme.GridLineColor;
+
+            % Vertical lines (column boundaries)
+            for c = 1:(cols + 1)
+                if c <= cols
+                    x = xLeft + (c - 1) * stepW;
+                else
+                    x = xRight;
+                end
+                hL = line(hAx, [x x], [yBot yTop], 'Color', gc, ...
+                    'LineStyle', ':', 'LineWidth', 0.5, ...
+                    'HitTest', 'off');
+                try set(hL, 'PickableParts', 'none'); catch, end
+            end
+
+            % Horizontal lines (row boundaries)
+            for r = 1:(rows + 1)
+                if r <= rows
+                    y = yBot + (r - 1) * stepH;
+                else
+                    y = yTop;
+                end
+                hL = line(hAx, [xLeft xRight], [y y], 'Color', gc, ...
+                    'LineStyle', ':', 'LineWidth', 0.5, ...
+                    'HitTest', 'off');
+                try set(hL, 'PickableParts', 'none'); catch, end
+            end
+
+            hold(hAx, 'off');
+            obj.hGridOverlay = hAx;
+        end
+
+        function clearGrid(obj)
+            if ~isempty(obj.hGridOverlay) && ishandle(obj.hGridOverlay)
+                delete(obj.hGridOverlay);
+            end
+            obj.hGridOverlay = [];
         end
 
         function showProps(obj, vis)
@@ -618,10 +771,100 @@ classdef DashboardBuilder < handle
             set(obj.hPropHeight, 'Visible', vis);
             set(obj.hPropApply, 'Visible', vis);
             set(obj.hPropDelete, 'Visible', vis);
+            set(obj.hSourceType, 'Visible', vis);
+            set(obj.hSourceKey, 'Visible', vis);
+            set(obj.hSourceBrowse, 'Visible', vis);
 
             % Show/hide property labels
             labels = findobj(obj.hPropsPanel, 'Tag', 'propLabel');
             set(labels, 'Visible', vis);
+        end
+
+        function populateSourceControls(obj, w)
+            switch w.Type
+                case 'fastplot'
+                    if ~isempty(w.SensorObj)
+                        set(obj.hSourceType, 'Value', 2);  % Sensor
+                        set(obj.hSourceKey, 'String', w.SensorObj.Key);
+                    elseif ~isempty(w.File)
+                        set(obj.hSourceType, 'Value', 3);  % MAT File
+                        set(obj.hSourceKey, 'String', w.File);
+                    else
+                        set(obj.hSourceType, 'Value', 1);  % None
+                        set(obj.hSourceKey, 'String', '');
+                    end
+                case {'kpi', 'gauge'}
+                    if ~isempty(w.StaticValue)
+                        set(obj.hSourceType, 'Value', 4);  % Static
+                        set(obj.hSourceKey, 'String', num2str(w.StaticValue));
+                    else
+                        set(obj.hSourceType, 'Value', 1);
+                        set(obj.hSourceKey, 'String', '');
+                    end
+                otherwise
+                    set(obj.hSourceType, 'Value', 1);
+                    set(obj.hSourceKey, 'String', '');
+            end
+        end
+
+        function applyDataSource(obj)
+            if obj.SelectedIdx == 0, return; end
+            w = obj.Engine.Widgets{obj.SelectedIdx};
+            srcType = get(obj.hSourceType, 'Value');
+            srcKey = strtrim(get(obj.hSourceKey, 'String'));
+
+            switch srcType
+                case 2  % Sensor
+                    if ~isempty(srcKey)
+                        try
+                            sensor = SensorRegistry.get(srcKey);
+                            if isprop(w, 'SensorObj')
+                                w.SensorObj = sensor;
+                            end
+                        catch ME
+                            warning('DashboardBuilder:sensorNotFound', ...
+                                'Sensor "%s" not found: %s', srcKey, ME.message);
+                        end
+                    end
+                case 3  % MAT File
+                    if ~isempty(srcKey) && isprop(w, 'File')
+                        w.File = srcKey;
+                        % Auto-detect variable names if not set
+                        if isempty(w.XVar) || isempty(w.YVar)
+                            try
+                                info = whos('-file', srcKey);
+                                names = {info.name};
+                                if numel(names) >= 2
+                                    w.XVar = names{1};
+                                    w.YVar = names{2};
+                                end
+                            catch
+                            end
+                        end
+                    end
+                case 4  % Static Value
+                    val = str2double(srcKey);
+                    if ~isnan(val) && isprop(w, 'StaticValue')
+                        w.StaticValue = val;
+                    end
+            end
+
+            % Re-render to apply data binding
+            theme = DashboardTheme(obj.Engine.Theme);
+            obj.relayoutWidgets(theme);
+            obj.clearOverlays();
+            obj.createOverlays(theme);
+
+            % Update global time range
+            obj.Engine.updateGlobalTimeRange();
+        end
+
+        function onSourceBrowse(obj)
+            [file, path] = uigetfile('*.mat', 'Select MAT file');
+            if file ~= 0
+                set(obj.hSourceKey, 'String', fullfile(path, file));
+                set(obj.hSourceType, 'Value', 3);  % MAT File
+            end
         end
 
     end

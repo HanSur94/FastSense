@@ -7,7 +7,12 @@
 %
 % Click "Edit" in the toolbar to enter GUI builder mode (Phase 4).
 
-setup();
+close all force;
+clear functions;  % flush MATLAB function cache
+
+% Use this project's setup (not worktree copies)
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
 %% Generate sample process data
 t = linspace(0, 86400, 10000);  % 24 hours in seconds
@@ -16,8 +21,15 @@ pressure = 50 + 20*sin(2*pi*t/7200) + randn(1,10000)*1.0;
 
 %% Create dashboard
 d = DashboardEngine('Process Monitoring — All Widgets');
-d.Theme = 'dark';
+d.Theme = 'light';
 d.LiveInterval = 5;
+
+% Diagnostic: verify theme is applied
+themeCheck = DashboardTheme('light');
+fprintf('DEBUG theme: %s | DashboardBG=[%.2f %.2f %.2f]\n', ...
+    d.Theme, themeCheck.DashboardBackground);
+fprintf('DEBUG DashboardTheme.m: %s\n', which('DashboardTheme'));
+fprintf('DEBUG DashboardEngine.m: %s\n', which('DashboardEngine'));
 
 % --- Row 1: Header + KPIs + Status indicators ---
 d.addWidget('text', 'Title', 'Overview', ...

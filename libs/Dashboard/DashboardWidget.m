@@ -13,6 +13,7 @@ classdef (Abstract) DashboardWidget < handle
         Title    = ''           % Widget title displayed in header
         Position = [1 1 3 2]    % [col, row, width, height] in grid units
         ThemeOverride = struct() % Per-widget theme overrides (merged on top of dashboard theme)
+        UseGlobalTime = true    % false when user manually zooms this widget
     end
 
     properties (SetAccess = protected)
@@ -50,6 +51,17 @@ classdef (Abstract) DashboardWidget < handle
             if ~isempty(obj.hPanel) && isvalid(obj.hPanel)
                 delete(obj.hPanel);
             end
+        end
+    end
+
+    methods
+        function setTimeRange(~, ~, ~)
+            % Override in subclasses to respond to global time changes.
+        end
+
+        function [tMin, tMax] = getTimeRange(~)
+            % Override in subclasses to report data time range.
+            tMin = inf; tMax = -inf;
         end
     end
 

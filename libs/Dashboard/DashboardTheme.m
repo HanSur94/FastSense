@@ -7,9 +7,10 @@ function theme = DashboardTheme(preset, varargin)
 %
 %   Returns a struct containing all FastPlotTheme fields plus dashboard-specific
 %   fields: DashboardBackground, WidgetBackground, WidgetBorderColor,
-%   WidgetBorderWidth, DragHandleColor, DropZoneColor, ToolbarBackground,
-%   ToolbarFontColor, HeaderFontSize, WidgetTitleFontSize, StatusOkColor,
-%   StatusWarnColor, StatusAlarmColor, GaugeArcWidth, KpiFontSize.
+%   WidgetBorderWidth, DragHandleColor, DropZoneColor, GridLineColor,
+%   ToolbarBackground, ToolbarFontColor, HeaderFontSize,
+%   WidgetTitleFontSize, StatusOkColor, StatusWarnColor, StatusAlarmColor,
+%   GaugeArcWidth, KpiFontSize.
 
     if nargin == 0
         preset = 'default';
@@ -43,6 +44,7 @@ function d = getDashboardDefaults(preset)
             d.ToolbarFontColor    = [0.66 0.73 0.78];
             d.DragHandleColor     = [0.31 0.80 0.64];
             d.DropZoneColor       = [0.16 0.23 0.37];
+            d.GridLineColor       = [0.20 0.28 0.42];
         case 'light'
             d.DashboardBackground = [0.96 0.96 0.97];
             d.WidgetBackground    = [1.00 1.00 1.00];
@@ -51,6 +53,7 @@ function d = getDashboardDefaults(preset)
             d.ToolbarFontColor    = [0.20 0.20 0.25];
             d.DragHandleColor     = [0.20 0.60 0.86];
             d.DropZoneColor       = [0.85 0.85 0.87];
+            d.GridLineColor       = [0.82 0.82 0.85];
         case 'industrial'
             d.DashboardBackground = [0.15 0.15 0.16];
             d.WidgetBackground    = [0.20 0.20 0.21];
@@ -59,6 +62,7 @@ function d = getDashboardDefaults(preset)
             d.ToolbarFontColor    = [0.78 0.78 0.78];
             d.DragHandleColor     = [0.90 0.60 0.10];
             d.DropZoneColor       = [0.30 0.30 0.31];
+            d.GridLineColor       = [0.32 0.32 0.34];
         case 'scientific'
             d.DashboardBackground = [0.98 0.98 0.96];
             d.WidgetBackground    = [1.00 1.00 1.00];
@@ -67,6 +71,7 @@ function d = getDashboardDefaults(preset)
             d.ToolbarFontColor    = [0.15 0.15 0.20];
             d.DragHandleColor     = [0.00 0.45 0.74];
             d.DropZoneColor       = [0.80 0.80 0.78];
+            d.GridLineColor       = [0.82 0.82 0.80];
         case 'ocean'
             d.DashboardBackground = [0.05 0.12 0.18];
             d.WidgetBackground    = [0.07 0.16 0.24];
@@ -75,6 +80,7 @@ function d = getDashboardDefaults(preset)
             d.ToolbarFontColor    = [0.60 0.78 0.85];
             d.DragHandleColor     = [0.00 0.75 0.85];
             d.DropZoneColor       = [0.12 0.25 0.35];
+            d.GridLineColor       = [0.15 0.28 0.40];
         otherwise % 'default'
             d.DashboardBackground = [0.94 0.94 0.94];
             d.WidgetBackground    = [1.00 1.00 1.00];
@@ -83,6 +89,7 @@ function d = getDashboardDefaults(preset)
             d.ToolbarFontColor    = [0.20 0.20 0.20];
             d.DragHandleColor     = [0.20 0.60 0.40];
             d.DropZoneColor       = [0.80 0.80 0.80];
+            d.GridLineColor       = [0.82 0.82 0.82];
     end
 
     % Shared defaults across all presets

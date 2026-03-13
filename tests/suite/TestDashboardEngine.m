@@ -10,7 +10,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testConstruction(testCase)
             d = DashboardEngine('Test Dashboard');
             testCase.verifyEqual(d.Name, 'Test Dashboard');
-            testCase.verifyEqual(d.Theme, 'default');
+            testCase.verifyEqual(d.Theme, 'light');
             testCase.verifyEqual(d.LiveInterval, 5);
         end
 

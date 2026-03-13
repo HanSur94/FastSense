@@ -22,6 +22,7 @@ classdef FastPlotWidget < DashboardWidget
 
     properties (SetAccess = private)
         FastPlotObj = []
+        IsSettingTime = false  % guard to distinguish programmatic vs user xlim change
     end
 
     methods
@@ -76,6 +77,12 @@ classdef FastPlotWidget < DashboardWidget
             end
 
             fp.render();
+
+            % Listen for manual zoom/pan to disable global time for this widget
+            try
+                addlistener(ax, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
+            catch
+            end
         end
 
         function refresh(~)
@@ -84,8 +91,47 @@ classdef FastPlotWidget < DashboardWidget
             % bindings provide data at render time only.
         end
 
-        function configure(obj)
-            % Placeholder for edit mode properties panel (Phase 4)
+        function configure(obj) %#ok<MANU>
+            % Placeholder for edit mode properties panel
+        end
+
+        function setTimeRange(obj, tStart, tEnd)
+            if ~obj.UseGlobalTime
+                return;  % widget has its own zoom, skip global time
+            end
+            if ~isempty(obj.FastPlotObj)
+                try
+                    ax = obj.FastPlotObj.hAxes;
+                    if ~isempty(ax) && ishandle(ax)
+                        obj.IsSettingTime = true;
+                        xlim(ax, [tStart tEnd]);
+                        obj.IsSettingTime = false;
+                    end
+                catch
+                    obj.IsSettingTime = false;
+                end
+            end
+        end
+
+        function onXLimChanged(obj)
+            % If xlim changed by user zoom/pan (not by setTimeRange),
+            % detach this widget from global time.
+            if ~obj.IsSettingTime
+                obj.UseGlobalTime = false;
+            end
+        end
+
+        function [tMin, tMax] = getTimeRange(obj)
+            tMin = inf; tMax = -inf;
+            if ~isempty(obj.SensorObj)
+                if ~isempty(obj.SensorObj.X)
+                    tMin = min(obj.SensorObj.X);
+                    tMax = max(obj.SensorObj.X);
+                end
+            elseif ~isempty(obj.XData)
+                tMin = min(obj.XData);
+                tMax = max(obj.XData);
+            end
         end
 
         function t = getType(~)
