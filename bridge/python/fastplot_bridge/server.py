@@ -158,7 +158,7 @@ def create_app(state: AppState) -> FastAPI:
 
     @app.get("/api/signals/{signal_id}/columns/{col_name}")
     def get_column(
-        signal_id: str, col_name: str, xMin: float, xMax: float
+        signal_id: str, col_name: str, xMin: float = -1e30, xMax: float = 1e30
     ) -> list:
         reader = state.get_reader(signal_id)
         if reader is None:
