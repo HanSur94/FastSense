@@ -83,12 +83,16 @@ classdef DashboardEngine < handle
                 'NumberTitle', 'off', ...
                 'Color', themeStruct.DashboardBackground, ...
                 'Units', 'normalized', ...
+                'Visible', 'off', ...
                 'OuterPosition', [0.05 0.05 0.9 0.9], ...
                 'CloseRequestFcn', @(~,~) obj.onClose());
 
             obj.Toolbar = DashboardToolbar(obj, obj.hFigure, themeStruct);
             obj.Layout.ContentArea = obj.Toolbar.getContentArea();
             obj.Layout.createPanels(obj.hFigure, obj.Widgets, themeStruct);
+
+            % Show the figure after all widgets are created
+            set(obj.hFigure, 'Visible', 'on');
         end
 
         function startLive(obj)
@@ -133,6 +137,11 @@ classdef DashboardEngine < handle
                 end
                 obj.Widgets(idx) = [];
             end
+        end
+
+        function setWidgetTitle(obj, idx, title)
+        %SETWIDGETTITLE Set the title of a widget by index.
+            obj.Widgets{idx}.Title = title;
         end
 
         function setWidgetPosition(obj, idx, pos)
