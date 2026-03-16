@@ -93,6 +93,13 @@ function results = run_octave_tests(test_dir)
             failures{end+1} = sprintf('%s: %s', name, e.message);
         end
         total = total + 1;
+        % Write results incrementally so they survive Octave crashes
+        resultsFile = getenv('FASTPLOT_RESULTS_FILE');
+        if ~isempty(resultsFile)
+            fid = fopen(resultsFile, 'w');
+            fprintf(fid, '%d %d\n', passed, failed);
+            fclose(fid);
+        end
     end
 
     fprintf('\n=== Results: %d/%d passed, %d failed ===\n', passed, total, failed);

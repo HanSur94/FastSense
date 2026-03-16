@@ -65,6 +65,7 @@ jobs:
     container: gnuoctave/octave:8.4.0
     env:
       FASTPLOT_SKIP_BUILD: "1"
+      FASTPLOT_RESULTS_FILE: /tmp/test-results.txt
     steps:
       - uses: actions/checkout@v4
 
