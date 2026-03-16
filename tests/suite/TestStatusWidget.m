@@ -64,5 +64,33 @@ classdef TestStatusWidget < matlab.unittest.TestCase
             w.refresh();
             testCase.verifyEqual(w.CurrentStatus, 'alarm');
         end
+
+        function testSensorBindingNoViolation(testCase)
+            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.X = [1 2 3]; s.Y = [70 71 72];
+            s.ThresholdRules = {};
+            w = StatusWidget('SensorObj', s);
+            testCase.verifyEqual(w.Title, 'Temperature');
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+            w.render(hp);
+            testCase.verifyEqual(w.CurrentStatus, 'ok');
+        end
+
+        function testSensorBindingWithViolation(testCase)
+            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.X = [1 2 3]; s.Y = [70 71 85];
+            rule = ThresholdRule(struct(), 80, 'Direction', 'upper', ...
+                'Label', 'Hi Alarm', 'Color', [0.9 0.2 0.2]);
+            s.ThresholdRules = {rule};
+            w = StatusWidget('SensorObj', s);
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+            w.render(hp);
+            testCase.verifyNotEqual(w.CurrentStatus, 'ok');
+            testCase.verifyEqual(w.CurrentColor, [0.9 0.2 0.2]);
+        end
     end
 end
