@@ -15,12 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Octave
-        run: sudo apt-get update && sudo apt-get install -y octave octave-dev
+      - name: Install Octave and Xvfb
+        run: sudo apt-get update && sudo apt-get install -y octave octave-dev xvfb
 
       - name: Run tests
         run: |
-          octave --eval "cd('tests'); r = run_all_tests(); if r.failed > 0; exit(1); end"
+          xvfb-run octave --eval "cd('tests'); r = run_all_tests(); if r.failed > 0; exit(1); end"
 
   release:
     name: Create Release

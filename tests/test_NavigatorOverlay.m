@@ -1,4 +1,9 @@
 function tests = test_NavigatorOverlay
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (MATLAB-only test)\n');
+        tests = [];
+        return;
+    end
     tests = functiontests(localfunctions);
 end
 
