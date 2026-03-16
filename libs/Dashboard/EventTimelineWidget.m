@@ -15,6 +15,8 @@ classdef EventTimelineWidget < DashboardWidget
         EventStoreObj = []  % EventStore handle — primary data source
         Events    = []      % struct array of events (legacy)
         EventFcn  = []      % function_handle returning events (legacy)
+        FilterSensors = {}   % Cell array of Sensor names to filter
+        ColorSource = 'event' % 'event' or 'theme'
     end
 
     properties (SetAccess = private)
@@ -25,10 +27,14 @@ classdef EventTimelineWidget < DashboardWidget
 
     methods
         function obj = EventTimelineWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 24 2];
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 24 2];
             end
         end
 
@@ -139,7 +145,7 @@ classdef EventTimelineWidget < DashboardWidget
                 y = lane - barHeight/2;
 
                 % Color
-                if isfield(ev, 'color') && ~isempty(ev.color)
+                if strcmp(obj.ColorSource, 'event') && isfield(ev, 'color') && ~isempty(ev.color)
                     c = ev.color;
                 else
                     c = defaultColors(mod(i-1, size(defaultColors,1)) + 1, :);
@@ -165,6 +171,8 @@ classdef EventTimelineWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
+            s.filterSensors = obj.FilterSensors;
+            s.colorSource = obj.ColorSource;
             if ~isempty(obj.EventStoreObj)
                 s.source = struct('type', 'eventstore', ...
                     'path', obj.EventStoreObj.FilePath);
@@ -183,6 +191,15 @@ classdef EventTimelineWidget < DashboardWidget
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
+            if isfield(s, 'description')
+                obj.Description = s.description;
+            end
+            if isfield(s, 'filterSensors')
+                obj.FilterSensors = s.filterSensors;
+            end
+            if isfield(s, 'colorSource')
+                obj.ColorSource = s.colorSource;
+            end
             if isfield(s, 'source')
                 if strcmp(s.source.type, 'eventstore') && isfield(s.source, 'path')
                     obj.EventStoreObj = EventStore(s.source.path);
@@ -206,6 +223,19 @@ classdef EventTimelineWidget < DashboardWidget
                 evts = obj.EventFcn();
             elseif ~isempty(obj.Events)
                 evts = obj.Events;
+            end
+            % Filter by sensor name if FilterSensors is set
+            if ~isempty(obj.FilterSensors) && ~isempty(evts)
+                mask = false(1, numel(evts));
+                for i = 1:numel(evts)
+                    for j = 1:numel(obj.FilterSensors)
+                        if contains(evts(i).label, obj.FilterSensors{j})
+                            mask(i) = true;
+                            break;
+                        end
+                    end
+                end
+                evts = evts(mask);
             end
         end
 

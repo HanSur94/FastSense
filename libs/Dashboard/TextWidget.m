@@ -16,10 +16,14 @@ classdef TextWidget < DashboardWidget
 
     methods
         function obj = TextWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 6 1];
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 6 1];
             end
         end
 
@@ -121,6 +125,9 @@ classdef TextWidget < DashboardWidget
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
+            if isfield(s, 'description')
+                obj.Description = s.description;
+            end
             if isfield(s, 'content')
                 obj.Content = s.content;
             end
