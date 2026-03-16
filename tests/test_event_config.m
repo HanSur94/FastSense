@@ -1,4 +1,8 @@
 function test_event_config()
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (known Octave classdef limitation)\n');
+        return;
+    end
 %TEST_EVENT_CONFIG Tests for EventConfig configuration class.
 
     add_event_path();

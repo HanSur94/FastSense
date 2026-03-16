@@ -1,4 +1,8 @@
 function test_data_source()
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (known Octave classdef limitation)\n');
+        return;
+    end
     add_event_path();
     test_cannot_instantiate();
     test_subclass_must_implement_fetchNew();

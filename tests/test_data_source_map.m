@@ -1,4 +1,8 @@
 function test_data_source_map()
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (known Octave classdef limitation)\n');
+        return;
+    end
     add_event_path();
     test_add_and_get();
     test_keys();
