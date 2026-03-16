@@ -1,6 +1,12 @@
 %% Dashboard Engine Example — Sensor-Driven
 % Demonstrates: DashboardEngine with FastPlotWidgets bound to Sensors,
 % dynamic thresholds via StateChannels, JSON save/load.
+%
+% DashboardEngine uses a 24-column grid.  Widget positions are specified as
+%   Position = [col, row, width, height]
+% where col and row are 1-based, row 1 = top.  For example,
+%   [1 1 24 8] = full-width, 8 rows tall, starting at the top.
+%   [13 1 12 4] = right half, 4 rows tall.
 
 close all force;
 clear functions;
@@ -59,17 +65,13 @@ d.addWidget('fastplot', 'Title', 'Temperature (full view)', ...
 
 d.render();
 
-%% 3. Save to JSON
-d.save(fullfile(tempdir, 'example_dashboard.json'));
-fprintf('Dashboard saved to: %s\n', fullfile(tempdir, 'example_dashboard.json'));
-fprintf('Temperature violations: %d\n', countViol(sTemp));
-fprintf('Pressure violations: %d\n', countViol(sPress));
+%% 3. Save to JSON and reload
+jsonPath = fullfile(tempdir, 'example_dashboard.json');
+d.save(jsonPath);
+fprintf('Dashboard saved to: %s\n', jsonPath);
+fprintf('Temperature violations: %d\n', sTemp.countViolations());
+fprintf('Pressure violations: %d\n', sPress.countViolations());
 
-function n = countViol(s)
-    n = 0;
-    if ~isempty(s.ResolvedViolations)
-        for k = 1:numel(s.ResolvedViolations)
-            n = n + numel(s.ResolvedViolations(k).X);
-        end
-    end
-end
+%% 4. Load from JSON (demonstrates roundtrip)
+% d2 = DashboardEngine.load(jsonPath);
+% d2.render();  % opens a second figure from the saved config

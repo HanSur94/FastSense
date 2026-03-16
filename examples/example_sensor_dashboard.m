@@ -6,7 +6,10 @@
 %   - Tile titles, labels, and per-tile theming
 %   - renderAll() for batch rendering
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+close all force;
+clear functions;
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
 % --- Shared state channel (machine state for all sensors) ---
 scMachine = StateChannel('machine');

@@ -2,7 +2,10 @@
 % Demonstrates embedding multiple SensorDetailPlots into a FastPlotFigure
 % grid using tilePanel(), each with independent navigators.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+close all force;
+clear functions;
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
 %% Create shared state channel
 sc = StateChannel('mode');

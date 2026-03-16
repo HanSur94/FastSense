@@ -1,7 +1,22 @@
 %% FastPlot Dashboard — Tiled layout with themes and visual enhancements
-% Demonstrates FastPlotFigure, theming, bands, shading, and markers
+% Demonstrates FastPlotFigure, theming, bands, shading, and markers.
+%
+% Choosing your dashboard approach:
+%   FastPlotFigure — Lightweight tiled grid of FastPlot instances.
+%       Best for: pure time-series dashboards with linked zoom, tile
+%       spanning, and SensorDetailPlot embedding.  No widget types beyond
+%       plots.  See also: example_dashboard_9tile, example_sensor_dashboard.
+%
+%   DashboardEngine — Full widget-based dashboard with toolbar, edit mode,
+%       JSON save/load, and 8 widget types (fastplot, number, status,
+%       gauge, text, table, rawaxes, timeline).  Uses a 24-column grid
+%       with Position = [col row width height].
+%       See also: example_dashboard_engine, example_dashboard_all_widgets.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+close all force;
+clear functions;
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
 n = 1e6;
 x = linspace(0, 300, n);

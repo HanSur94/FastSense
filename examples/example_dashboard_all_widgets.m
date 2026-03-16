@@ -119,8 +119,6 @@ sFlow.addThresholdRule(struct('machine', 1), 90, ...
     'Color', [0.2 0.6 1], 'LineStyle', '--');
 sFlow.resolve();
 
-%% ========== (Number/Status/Gauge use ValueFcn/StatusFcn — always read last value) ==========
-
 %% ========== Build alarm log from resolved violations ==========
 alarmLog = {};
 sensors = {sTemp, sPress, sFlow};
@@ -176,6 +174,9 @@ for k = 1:nModes
 end
 
 %% ========== Create Dashboard ==========
+% DashboardEngine uses a 24-column grid.  Widget positions are specified as
+%   Position = [col, row, width, height]
+% where col and row are 1-based, row 1 = top.
 d = DashboardEngine('Process Monitoring — Line 4');
 d.Theme = 'light';
 d.LiveInterval = 5;
@@ -187,25 +188,29 @@ d.addWidget('text', 'Title', 'Overview', ...
     'FontSize', 16, ...
     'Alignment', 'left');
 
+% Sensor-bound number widgets: auto-derive value from Sensor.Y(end),
+% Units from Sensor.Units, and trend arrow from recent data.
 d.addWidget('number', 'Title', 'Temperature', ...
     'Position', [5 1 5 2], ...
+    'Sensor', sTemp, ...
     'Units', [char(176) 'F'], ...
-    'Format', '%.1f', ...
-    'ValueFcn', @() sTemp.Y(end));
+    'Format', '%.1f');
 
 d.addWidget('number', 'Title', 'Pressure', ...
     'Position', [10 1 5 2], ...
+    'Sensor', sPress, ...
     'Units', 'psi', ...
-    'Format', '%.0f', ...
-    'ValueFcn', @() sPress.Y(end));
+    'Format', '%.0f');
 
+% Sensor-bound status widgets: auto-derive ok/warning/alarm from
+% threshold rules — no custom StatusFcn callback needed.
 d.addWidget('status', 'Title', 'Temp', ...
     'Position', [15 1 5 2], ...
-    'StatusFcn', @() sensorStatus(sTemp));
+    'Sensor', sTemp);
 
 d.addWidget('status', 'Title', 'Press', ...
     'Position', [20 1 5 2], ...
-    'StatusFcn', @() sensorStatus(sPress));
+    'Sensor', sPress);
 
 % --- Row 3-10: Sensor-driven FastPlot widgets with thresholds ---
 d.addWidget('fastplot', ...
@@ -221,11 +226,12 @@ d.addWidget('fastplot', ...
     'Position', [1 11 12 8], ...
     'SensorObj', sFlow);
 
+% Sensor-bound gauge: auto-derives value, units, and range from sensor.
 d.addWidget('gauge', 'Title', 'Flow', ...
     'Position', [13 11 6 6], ...
+    'Sensor', sFlow, ...
     'Range', [0 160], ...
-    'Units', 'L/min', ...
-    'ValueFcn', @() sFlow.Y(end));
+    'Units', 'L/min');
 
 d.addWidget('rawaxes', 'Title', 'Temp Distribution', ...
     'Position', [19 11 6 6], ...
@@ -233,7 +239,7 @@ d.addWidget('rawaxes', 'Title', 'Temp Distribution', ...
         'FaceColor', [0.31 0.80 0.64], 'EdgeColor', 'none'));
 
 d.addWidget('table', 'Title', 'Alarm Log', ...
-    'Position', [13 17 12 4], ...
+    'Position', [13 17 12 2], ...
     'ColumnNames', {'Time', 'Tag', 'Value', 'Threshold'}, ...
     'Data', alarmLog);
 
@@ -247,40 +253,6 @@ d.render();
 
 fprintf('Dashboard rendered with %d widgets.\n', numel(d.Widgets));
 fprintf('Sensors: T-401 (%d violations), P-201 (%d violations), F-301 (%d violations)\n', ...
-    countViolations(sTemp), countViolations(sPress), countViolations(sFlow));
+    sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations());
 fprintf('Click "Edit" to enter GUI builder mode.\n');
 fprintf('Click "Save" to export as JSON, "Export" to generate .m script.\n');
-
-%% ========== Helper ==========
-function n = countViolations(s)
-    n = 0;
-    if ~isempty(s.ResolvedViolations)
-        for k = 1:numel(s.ResolvedViolations)
-            n = n + numel(s.ResolvedViolations(k).X);
-        end
-    end
-end
-
-function st = sensorStatus(s)
-%SENSORSTATUS Derive 'ok'/'warning'/'alarm' from sensor's last value vs thresholds.
-    val = s.Y(end);
-    tLast = s.X(end);
-    activeRules = s.getThresholdsAt(tLast);
-    st = 'ok';
-    for r = 1:numel(activeRules)
-        rule = activeRules(r);
-        violated = false;
-        if strcmp(rule.Direction, 'upper') && val > rule.Value
-            violated = true;
-        elseif strcmp(rule.Direction, 'lower') && val < rule.Value
-            violated = true;
-        end
-        if violated
-            if ~isempty(strfind(rule.Label, 'Alarm')) %#ok<STREMP>
-                st = 'alarm'; return;
-            else
-                st = 'warning';
-            end
-        end
-    end
-end

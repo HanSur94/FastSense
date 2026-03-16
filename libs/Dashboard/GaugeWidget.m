@@ -35,7 +35,7 @@ classdef GaugeWidget < DashboardWidget
             end
             obj = obj@DashboardWidget(varargin{:});
             if isequal(obj.Position, [1 1 6 2])
-                obj.Position = [1 1 6 2];
+                obj.Position = [1 1 6 4];
             end
             % Derive from Sensor
             if ~isempty(obj.SensorObj)

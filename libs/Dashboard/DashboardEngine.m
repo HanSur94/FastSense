@@ -6,7 +6,7 @@ classdef DashboardEngine < handle
 %     d.Theme = 'light';
 %     d.LiveInterval = 5;
 %     d.addWidget('fastplot', 'Title', 'Temp', 'Position', [1 1 6 3], ...
-%                 'Sensor', SensorRegistry.get('T-401'));
+%                 'Sensor', SensorRegistry.get('temperature'));
 %     d.render();
 %
 %   Loading from JSON:

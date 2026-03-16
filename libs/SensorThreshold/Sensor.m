@@ -37,6 +37,8 @@ classdef Sensor < handle
     %     addThresholdRule — Add a conditional threshold rule
     %     resolve          — Precompute thresholds, violations, state bands
     %     getThresholdsAt  — Evaluate active rules at a single time point
+    %     countViolations  — Count total violation points across all rules
+    %     currentStatus    — Derive 'ok'/'warning'/'alarm' from latest value
     %
     %   Example:
     %     s = Sensor('pressure', 'Name', 'Chamber Pressure', 'ID', 101);
@@ -522,6 +524,71 @@ classdef Sensor < handle
                         active = entry;
                     else
                         active(end+1) = entry;
+                    end
+                end
+            end
+        end
+
+        function n = countViolations(obj)
+            %COUNTVIOLATIONS Count total violation points across all rules.
+            %   n = s.countViolations() returns the total number of
+            %   violation data points summed over all ResolvedViolations.
+            %   Call resolve() first.
+            %
+            %   Output:
+            %     n — scalar integer, total violation points
+            %
+            %   See also Sensor.resolve.
+
+            n = 0;
+            if isempty(obj.ResolvedViolations)
+                return;
+            end
+            for k = 1:numel(obj.ResolvedViolations)
+                n = n + numel(obj.ResolvedViolations(k).X);
+            end
+        end
+
+        function st = currentStatus(obj)
+            %CURRENTSTATUS Derive 'ok'/'warning'/'alarm' from latest value.
+            %   st = s.currentStatus() evaluates the sensor's latest Y
+            %   value against all threshold rules active at the latest X
+            %   time. Returns 'ok' if no thresholds are violated,
+            %   'warning' if a warning-level rule is violated, or 'alarm'
+            %   if an alarm-level rule is violated.
+            %
+            %   Severity is determined by the threshold rule's Color and
+            %   Label: rules containing 'Alarm' in the Label are treated
+            %   as alarm severity; all other violated rules are warnings.
+            %
+            %   Output:
+            %     st — char: 'ok', 'warning', or 'alarm'
+            %
+            %   See also Sensor.getThresholdsAt, Sensor.resolve.
+
+            st = 'ok';
+            if isempty(obj.Y) || isempty(obj.ThresholdRules)
+                return;
+            end
+
+            val = obj.Y(end);
+            tLast = obj.X(end);
+            activeRules = obj.getThresholdsAt(tLast);
+
+            for r = 1:numel(activeRules)
+                rule = activeRules(r);
+                violated = false;
+                if strcmp(rule.Direction, 'upper') && val > rule.Value
+                    violated = true;
+                elseif strcmp(rule.Direction, 'lower') && val < rule.Value
+                    violated = true;
+                end
+                if violated
+                    if contains(rule.Label, 'Alarm')
+                        st = 'alarm';
+                        return;
+                    else
+                        st = 'warning';
                     end
                 end
             end

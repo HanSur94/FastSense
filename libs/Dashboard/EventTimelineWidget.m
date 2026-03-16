@@ -215,14 +215,20 @@ classdef EventTimelineWidget < DashboardWidget
     methods (Access = private)
         function evts = resolveEvents(obj)
         %RESOLVEEVENTS Get events from the best available source.
-        %   Priority: EventStoreObj > EventFcn > Events (static)
+        %   Priority: EventStoreObj > EventFcn > Events (static/Event objects)
             evts = [];
             if ~isempty(obj.EventStoreObj)
                 evts = obj.eventStoreToStructs();
             elseif ~isempty(obj.EventFcn)
                 evts = obj.EventFcn();
             elseif ~isempty(obj.Events)
-                evts = obj.Events;
+                % Accept both Event objects and plain structs
+                if isa(obj.Events, 'Event') || ...
+                        (isstruct(obj.Events) && isfield(obj.Events, 'StartTime'))
+                    evts = obj.eventObjectsToStructs(obj.Events);
+                else
+                    evts = obj.Events;
+                end
             end
             % Filter by sensor name if FilterSensors is set
             if ~isempty(obj.FilterSensors) && ~isempty(evts)
@@ -257,13 +263,56 @@ classdef EventTimelineWidget < DashboardWidget
                     lbl = [ev.SensorName ' — ' ev.ThresholdLabel];
                 end
                 % Color based on direction/severity hint in label
-                if ~isempty(strfind(lower(ev.ThresholdLabel), 'alarm')) %#ok<STREMP>
+                if contains(lower(ev.ThresholdLabel), 'alarm')
                     clr = alarmColor;
                 else
                     clr = warnColor;
                 end
                 evts(end+1) = struct('startTime', ev.StartTime, ...
                     'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
+            end
+        end
+
+        function evts = eventObjectsToStructs(obj, eventObjs)
+        %EVENTOBJECTSTOSTRUCTS Convert Event objects to rendering structs.
+        %   Accepts an array of Event objects (or structs with StartTime/
+        %   EndTime fields) and converts them to the struct format used
+        %   for rendering: startTime, endTime, label, color.
+            evts = struct('startTime', {}, 'endTime', {}, 'label', {}, 'color', {});
+            if isempty(eventObjs), return; end
+
+            theme = obj.getTheme();
+            alarmColor = theme.StatusAlarmColor;
+            warnColor  = theme.StatusWarnColor;
+
+            for i = 1:numel(eventObjs)
+                ev = eventObjs(i);
+                if isa(ev, 'Event')
+                    lbl = ev.SensorName;
+                    if ~isempty(ev.ThresholdLabel)
+                        lbl = [ev.SensorName ' — ' ev.ThresholdLabel];
+                    end
+                    if contains(lower(ev.ThresholdLabel), 'alarm')
+                        clr = alarmColor;
+                    else
+                        clr = warnColor;
+                    end
+                    evts(end+1) = struct('startTime', ev.StartTime, ...
+                        'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
+                else
+                    % Struct with StartTime/EndTime (PascalCase)
+                    lbl = '';
+                    if isfield(ev, 'SensorName'), lbl = ev.SensorName; end
+                    if isfield(ev, 'ThresholdLabel') && ~isempty(ev.ThresholdLabel)
+                        lbl = [lbl ' — ' ev.ThresholdLabel];
+                    end
+                    clr = warnColor;
+                    if isfield(ev, 'ThresholdLabel') && contains(lower(ev.ThresholdLabel), 'alarm')
+                        clr = alarmColor;
+                    end
+                    evts(end+1) = struct('startTime', ev.StartTime, ...
+                        'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
+                end
             end
         end
 

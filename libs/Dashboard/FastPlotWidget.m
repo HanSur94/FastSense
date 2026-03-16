@@ -99,8 +99,16 @@ classdef FastPlotWidget < DashboardWidget
 
         function refresh(obj)
             % Re-render sensor-bound widgets so updated data + violations show.
+            % Preserves current zoom state (xlim) across the rebuild.
             if isempty(obj.SensorObj), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+
+            % Save zoom state before teardown
+            savedXLim = [];
+            if ~isempty(obj.FastPlotObj) && ~isempty(obj.FastPlotObj.hAxes) ...
+                    && ishandle(obj.FastPlotObj.hAxes)
+                savedXLim = get(obj.FastPlotObj.hAxes, 'XLim');
+            end
 
             % Delete old axes and FastPlot, then rebuild
             if ~isempty(obj.FastPlotObj)
@@ -130,6 +138,13 @@ classdef FastPlotWidget < DashboardWidget
             end
 
             fp.render();
+
+            % Restore zoom state
+            if ~isempty(savedXLim)
+                obj.IsSettingTime = true;
+                xlim(ax, savedXLim);
+                obj.IsSettingTime = false;
+            end
 
             try
                 addlistener(ax, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());

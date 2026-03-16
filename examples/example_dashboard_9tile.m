@@ -1,7 +1,10 @@
 %% FastPlot 3x3 Dashboard — Industrial Monitoring Console
 % 9 tiles with different signals, data sizes, and features.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+close all force;
+clear functions;
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
 fprintf('3x3 Dashboard: 9 tiles, mixed data sizes, dark theme...\n');
 tic;

@@ -4,10 +4,10 @@
 %
 %   Widget types shown:
 %     text       — static header
-%     number     — big number driven by ValueFcn
-%     status     — colored indicator driven by StatusFcn
+%     number     — sensor-bound big number with trend arrow
+%     status     — sensor-bound colored indicator (auto ok/warning/alarm)
 %     fastplot   — sensor-bound plots with thresholds + violation markers
-%     gauge      — arc gauge driven by ValueFcn
+%     gauge      — sensor-bound arc gauge
 %     rawaxes    — live histogram via PlotFcn
 %     table      — alarm log driven by DataFcn
 %     timeline   — violation events from EventStore
@@ -94,31 +94,34 @@ function example_dashboard_live_run()
     d.LiveInterval = 1;
 
     % --- Row 1-2: Header + KPIs + Status ---
+    % DashboardEngine uses a 24-column grid: Position = [col row width height].
     d.addWidget('text', 'Title', 'Live Monitor', ...
         'Position', [1 1 4 2], ...
         'Content', 'Simulated Process', ...
         'FontSize', 14, ...
         'Alignment', 'left');
 
+    % Sensor-bound: auto-derives value + trend from Sensor.Y
     d.addWidget('number', 'Title', 'Temperature',...
         'Position', [5 1 5 2], ...
+        'Sensor', sTemp, ...
         'Units', [char(176) 'F'], ...
-        'Format', '%.1f', ...
-        'ValueFcn', @() sTemp.Y(end));
+        'Format', '%.1f');
 
     d.addWidget('number', 'Title', 'Pressure',...
         'Position', [10 1 5 2], ...
+        'Sensor', sPress, ...
         'Units', 'psi', ...
-        'Format', '%.0f', ...
-        'ValueFcn', @() sPress.Y(end));
+        'Format', '%.0f');
 
+    % Sensor-bound: auto-derives ok/warning/alarm from threshold rules
     d.addWidget('status', 'Title', 'Temp', ...
         'Position', [15 1 5 2], ...
-        'StatusFcn', @tempStatus);
+        'Sensor', sTemp);
 
     d.addWidget('status', 'Title', 'Press', ...
         'Position', [20 1 5 2], ...
-        'StatusFcn', @presStatus);
+        'Sensor', sPress);
 
     % --- Row 3-10: Sensor-bound FastPlot widgets (thresholds + violations) ---
     d.addWidget('fastplot', ...
@@ -134,19 +137,20 @@ function example_dashboard_live_run()
         'Position', [1 11 12 8], ...
         'SensorObj', sFlow);
 
+    % Sensor-bound gauge: auto-derives value from Sensor.Y(end)
     d.addWidget('gauge', 'Title', 'Flow', ...
         'Position', [13 11 6 6], ...
+        'Sensor', sFlow, ...
         'Range', [0 170], ...
-        'Units', 'L/min', ...
-        'ValueFcn', @() sFlow.Y(end));
+        'Units', 'L/min');
 
     d.addWidget('rawaxes', 'Title', 'Temp Distribution', ...
         'Position', [19 11 6 6], ...
         'PlotFcn', @plotHist);
 
-    % --- Row 17-20: Table + Timeline (EventStore) ---
+    % --- Row 17-18: Table, Row 19-21: Timeline (EventStore) ---
     d.addWidget('table', 'Title', 'Alarm Log', ...
-        'Position', [13 17 12 4], ...
+        'Position', [13 17 12 2], ...
         'ColumnNames', {'Time', 'Tag', 'Value', 'Severity'}, ...
         'DataFcn', @getAlarms);
 
@@ -209,6 +213,8 @@ function example_dashboard_live_run()
         checkAndLog(elapsed, sPress, newP, 68, 64);
         if newF > 140
             logEvent(elapsed, sFlow, newF, 'Hi Alarm', 140, 'upper');
+        elseif newF < 90
+            logEvent(elapsed, sFlow, newF, 'Lo Warn', 90, 'lower');
         end
     end
 
@@ -239,22 +245,6 @@ function example_dashboard_live_run()
 
     %% ==================== Nested: value callbacks ====================
     function a = getAlarms(), a = S.alarms; end
-
-    function st = tempStatus()
-        v = sTemp.Y(end);
-        if v > 82,     st = 'alarm';
-        elseif v > 78, st = 'warning';
-        else,          st = 'ok';
-        end
-    end
-
-    function st = presStatus()
-        v = sPress.Y(end);
-        if v > 68,     st = 'alarm';
-        elseif v > 64, st = 'warning';
-        else,          st = 'ok';
-        end
-    end
 
     %% ==================== Nested: plot callbacks ====================
     function plotHist(ax)
