@@ -44,7 +44,7 @@ function idx = binary_search(x, val, direction)
 
     % Fast path: MEX implementation
     if useMex
-        idx = binary_search_mex(x, val, direction);
+        idx = binary_search_mex(x, val, char(direction));
         return;
     end
 

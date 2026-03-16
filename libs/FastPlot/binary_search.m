@@ -48,7 +48,7 @@ function idx = binary_search(x, val, direction)
 
     % Delegate to MEX for speed when available
     if useMex
-        idx = binary_search_mex(x, val, direction);
+        idx = binary_search_mex(x, val, char(direction));
         return;
     end
 
