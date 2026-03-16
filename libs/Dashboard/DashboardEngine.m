@@ -161,6 +161,19 @@ classdef DashboardEngine < handle
             end
         end
 
+        function setWidgetPosition(obj, idx, pos)
+        %SETWIDGETPOSITION Set the grid position of a widget by index.
+            obj.Widgets{idx}.Position = pos;
+        end
+
+        function setContentArea(obj, contentArea)
+        %SETCONTENTAREA Update the Layout content area.
+        %   Provided so that DashboardBuilder can modify the layout
+        %   without direct write-access to the Layout property (required
+        %   for Octave compatibility).
+            obj.Layout.ContentArea = contentArea;
+        end
+
         function rerenderWidgets(obj)
         %RERENDERWIDGETS Delete all widget panels and recreate them.
             theme = DashboardTheme(obj.Theme);

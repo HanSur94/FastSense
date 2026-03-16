@@ -143,7 +143,7 @@ classdef TableWidget < DashboardWidget
                 s.source = struct('type', 'callback', ...
                     'function', func2str(obj.DataFcn));
             elseif ~isempty(obj.Data)
-                s.source = struct('type', 'static');
+                s.source = struct('type', 'static', 'data', {obj.Data});
             end
         end
     end

@@ -71,6 +71,11 @@ classdef DashboardBuilder < handle
         PropsWidth      = 0.14
     end
 
+    properties (Access = public)
+        % Test support: when non-empty, overrides figure CurrentPoint
+        MockCurrentPoint = []
+    end
+
     methods (Access = public)
         function obj = DashboardBuilder(engine)
             obj.Engine = engine;
@@ -78,10 +83,15 @@ classdef DashboardBuilder < handle
 
         function enterEditMode(obj)
             if obj.IsActive, return; end
-            obj.IsActive = true;
-            obj.SelectedIdx = 0;
 
             eng = obj.Engine;
+            if isempty(eng.hFigure) || ~ishandle(eng.hFigure)
+                error('DashboardBuilder:noFigure', ...
+                    'Dashboard must be rendered before entering edit mode.');
+            end
+
+            obj.IsActive = true;
+            obj.SelectedIdx = 0;
             eng.stopLive();
 
             hFig = eng.hFigure;
@@ -126,9 +136,17 @@ classdef DashboardBuilder < handle
             safeDelete(obj.hPropsPanel);
             obj.hPropsPanel = [];
 
+            hFig = obj.Engine.hFigure;
+            if isempty(hFig) || ~ishandle(hFig)
+                return;
+            end
+
+            set(hFig, 'WindowButtonMotionFcn', '');
+            set(hFig, 'WindowButtonUpFcn', '');
+
             % Restore full content area and re-render
             theme = DashboardTheme(obj.Engine.Theme);
-            obj.Engine.Layout.ContentArea = obj.Engine.Toolbar.getContentArea();
+            obj.Engine.setContentArea(obj.Engine.Toolbar.getContentArea());
             obj.relayoutWidgets(theme);
         end
     end
@@ -156,7 +174,8 @@ classdef DashboardBuilder < handle
         function addWidget(obj, type)
             eng = obj.Engine;
             pos = obj.findNextSlot(type);
-            eng.addWidget(type, 'Title', type, 'Position', pos);
+            defaultTitle = obj.defaultTitleForType(type);
+            eng.addWidget(type, 'Title', defaultTitle, 'Position', pos);
 
             theme = DashboardTheme(eng.Theme);
             obj.relayoutWidgets(theme);
@@ -171,7 +190,6 @@ classdef DashboardBuilder < handle
 
             if obj.SelectedIdx == idx
                 obj.SelectedIdx = 0;
-                obj.updatePropertiesDisplay();
             elseif obj.SelectedIdx > idx
                 obj.SelectedIdx = obj.SelectedIdx - 1;
             end
@@ -180,6 +198,12 @@ classdef DashboardBuilder < handle
             obj.relayoutWidgets(theme);
             obj.clearOverlays();
             obj.createOverlays(theme);
+
+            if obj.SelectedIdx > 0
+                obj.selectWidget(obj.SelectedIdx);
+            else
+                obj.updatePropertiesDisplay();
+            end
         end
 
         function deleteSelected(obj)
@@ -220,6 +244,7 @@ classdef DashboardBuilder < handle
             obj.relayoutWidgets(theme);
             obj.clearOverlays();
             obj.createOverlays(theme);
+            obj.selectWidget(obj.SelectedIdx);
         end
 
         function pos = findNextSlot(obj, type)
@@ -250,6 +275,17 @@ classdef DashboardBuilder < handle
     end
 
     methods (Access = private)
+        function cp = getMousePosition(obj)
+        %GETMOUSEPOSITION Return current mouse position.
+        %   Uses MockCurrentPoint when set (for testing), otherwise
+        %   reads from the figure's CurrentPoint property.
+            if ~isempty(obj.MockCurrentPoint)
+                cp = obj.MockCurrentPoint;
+            else
+                cp = get(obj.Engine.hFigure, 'CurrentPoint');
+            end
+        end
+
         function createPalette(obj, hFig, theme)
             toolbarH = obj.Engine.Toolbar.Height;
             obj.hPalette = uipanel('Parent', hFig, ...
@@ -486,7 +522,7 @@ classdef DashboardBuilder < handle
             else
                 contentArea = [0, timePanelH, 1, 1 - toolbarH - timePanelH];
             end
-            obj.Engine.Layout.ContentArea = contentArea;
+            obj.Engine.setContentArea(contentArea);
 
             % Re-create viewport, canvas, and widget panels
             obj.Engine.Layout.createPanels(obj.Engine.hFigure, widgets, theme);
@@ -502,9 +538,13 @@ classdef DashboardBuilder < handle
             widgets = obj.Engine.Widgets;
             hCanvas = obj.Engine.Layout.hCanvas;
 
+            % Pre-allocate so overlay indices match widget indices
+            obj.Overlays = cell(1, numel(widgets));
+
             for i = 1:numel(widgets)
                 w = widgets{i};
                 if isempty(w.hPanel) || ~ishandle(w.hPanel)
+                    obj.Overlays{i} = struct('hDragBar', [], 'hResize', []);
                     continue;
                 end
 
@@ -561,7 +601,7 @@ classdef DashboardBuilder < handle
                     'Enable', 'inactive', ...
                     'ButtonDownFcn', @(~,~) obj.onResizeStart(idx));
 
-                obj.Overlays{end+1} = ov;
+                obj.Overlays{i} = ov;
             end
         end
 
@@ -977,6 +1017,20 @@ classdef DashboardBuilder < handle
             if file ~= 0
                 set(obj.hSourceKey, 'String', fullfile(path, file));
                 set(obj.hSourceType, 'Value', 3);  % MAT File
+            end
+        end
+
+        function t = defaultTitleForType(~, type)
+            switch type
+                case 'fastplot', t = 'New Plot';
+                case 'number',   t = 'New Number';
+                case 'status',   t = 'New Status';
+                case 'text',     t = 'New Text';
+                case 'gauge',    t = 'New Gauge';
+                case 'table',    t = 'New Table';
+                case 'rawaxes',  t = 'New Axes';
+                case 'timeline', t = 'New Timeline';
+                otherwise,       t = 'New Widget';
             end
         end
 

@@ -69,6 +69,7 @@ classdef DashboardSerializer
             widgets = cell(1, numel(config.widgets));
             for i = 1:numel(config.widgets)
                 ws = config.widgets{i};
+                w = [];
                 switch ws.type
                     case 'fastplot'
                         widgets{i} = FastPlotWidget.fromStruct(ws);
@@ -77,17 +78,17 @@ classdef DashboardSerializer
                     case 'kpi'
                         widgets{i} = NumberWidget.fromStruct(ws);
                     case 'status'
-                        widgets{i} = StatusWidget.fromStruct(ws);
+                        w = StatusWidget.fromStruct(ws);
                     case 'text'
-                        widgets{i} = TextWidget.fromStruct(ws);
+                        w = TextWidget.fromStruct(ws);
                     case 'gauge'
-                        widgets{i} = GaugeWidget.fromStruct(ws);
+                        w = GaugeWidget.fromStruct(ws);
                     case 'table'
-                        widgets{i} = TableWidget.fromStruct(ws);
+                        w = TableWidget.fromStruct(ws);
                     case 'rawaxes'
-                        widgets{i} = RawAxesWidget.fromStruct(ws);
+                        w = RawAxesWidget.fromStruct(ws);
                     case 'timeline'
-                        widgets{i} = EventTimelineWidget.fromStruct(ws);
+                        w = EventTimelineWidget.fromStruct(ws);
                     otherwise
                         warning('DashboardSerializer:unknownType', ...
                             'Unknown widget type: %s — skipping', ws.type);
@@ -101,6 +102,9 @@ classdef DashboardSerializer
                         warning('DashboardSerializer:sensorNotFound', ...
                             'Could not resolve sensor: %s', ws.source.name);
                     end
+                end
+                if ~isempty(w)
+                    widgets{i} = w;
                 end
             end
         end

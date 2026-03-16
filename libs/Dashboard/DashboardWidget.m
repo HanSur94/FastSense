@@ -1,4 +1,4 @@
-classdef (Abstract) DashboardWidget < handle
+classdef DashboardWidget < handle
 %DASHBOARDWIDGET Abstract base class for all dashboard widgets.
 %
 %   Subclasses must implement:

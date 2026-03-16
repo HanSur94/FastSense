@@ -21,7 +21,7 @@
 
 #include "mex.h"
 #include "simd_utils.h"
-#include <sqlite3.h>
+#include "sqlite3.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>

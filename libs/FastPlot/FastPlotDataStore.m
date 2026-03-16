@@ -359,6 +359,22 @@ classdef FastPlotDataStore < handle
             violX = [vxParts{:}];
             violY = [vyParts{:}];
         end
+
+        function enableWAL(obj)
+            %ENABLEWAL Switch database to WAL journal mode for concurrent reads.
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
+            mksqlite(obj.DbId, 'PRAGMA journal_mode = WAL');
+            mksqlite(obj.DbId, 'PRAGMA locking_mode = NORMAL');
+        end
+
+        function disableWAL(obj)
+            %DISABLEWAL Revert database to DELETE journal mode.
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
+            mksqlite(obj.DbId, 'PRAGMA journal_mode = DELETE');
+            mksqlite(obj.DbId, 'PRAGMA locking_mode = EXCLUSIVE');
+        end
     end
 
     methods (Static)
