@@ -18,10 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Octave
-        run: |
-          sudo add-apt-repository -y ppa:ubuntugis/ppa || true
-          sudo apt-get update
-          sudo apt-get install -y octave octave-dev
+        run: sudo apt-get update && sudo apt-get install -y octave octave-dev
 
       - name: Run tests
         run: |
