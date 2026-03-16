@@ -67,6 +67,11 @@ classdef DashboardEngine < handle
                     w = RawAxesWidget(varargin{:});
                 case 'timeline'
                     w = EventTimelineWidget(varargin{:});
+                    if isempty(w.EventStoreObj) && isempty(w.EventFcn) && isempty(w.Events)
+                        warning('DashboardEngine:timelineNoStore', ...
+                            'Timeline widget "%s" has no data source. Bind via EventStoreObj.', ...
+                            w.Title);
+                    end
                 otherwise
                     error('DashboardEngine:unknownType', ...
                         'Unknown widget type: %s', type);

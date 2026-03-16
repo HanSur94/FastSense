@@ -1,15 +1,20 @@
 classdef EventTimelineWidget < DashboardWidget
 %EVENTTIMELINEWIDGET Displays events as colored bars on a timeline.
 %
-%   w = EventTimelineWidget('Title', 'Events', 'Events', eventArray);
-%   w = EventTimelineWidget('Title', 'Events', 'EventFcn', @() getEvents());
+%   Preferred: bind to an EventStore from the event detection system:
+%     w = EventTimelineWidget('Title', 'Events', 'EventStoreObj', store);
+%
+%   Legacy (still supported for backwards compatibility):
+%     w = EventTimelineWidget('Title', 'Events', 'EventFcn', @() getEvents());
+%     w = EventTimelineWidget('Title', 'Events', 'Events', eventArray);
 %
 %   Events must be a struct array with fields:
 %     startTime, endTime, label, color (optional)
 
     properties (Access = public)
-        Events    = []      % struct array of events
-        EventFcn  = []      % function_handle returning events
+        EventStoreObj = []  % EventStore handle — primary data source
+        Events    = []      % struct array of events (legacy)
+        EventFcn  = []      % function_handle returning events (legacy)
     end
 
     properties (SetAccess = private)
@@ -73,12 +78,7 @@ classdef EventTimelineWidget < DashboardWidget
 
         function [tMin, tMax] = getTimeRange(obj)
             tMin = inf; tMax = -inf;
-            evts = [];
-            if ~isempty(obj.EventFcn)
-                try evts = obj.EventFcn(); catch, end
-            elseif ~isempty(obj.Events)
-                evts = obj.Events;
-            end
+            evts = obj.resolveEvents();
             if ~isempty(evts)
                 for i = 1:numel(evts)
                     if evts(i).startTime < tMin, tMin = evts(i).startTime; end
@@ -88,12 +88,7 @@ classdef EventTimelineWidget < DashboardWidget
         end
 
         function refresh(obj)
-            events = [];
-            if ~isempty(obj.EventFcn)
-                events = obj.EventFcn();
-            elseif ~isempty(obj.Events)
-                events = obj.Events;
-            end
+            events = obj.resolveEvents();
 
             if isempty(events) || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
                 return;
@@ -170,7 +165,10 @@ classdef EventTimelineWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
-            if ~isempty(obj.EventFcn)
+            if ~isempty(obj.EventStoreObj)
+                s.source = struct('type', 'eventstore', ...
+                    'path', obj.EventStoreObj.FilePath);
+            elseif ~isempty(obj.EventFcn)
                 s.source = struct('type', 'callback', ...
                     'function', func2str(obj.EventFcn));
             elseif ~isempty(obj.Events)
@@ -186,7 +184,9 @@ classdef EventTimelineWidget < DashboardWidget
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
             if isfield(s, 'source')
-                if strcmp(s.source.type, 'callback')
+                if strcmp(s.source.type, 'eventstore') && isfield(s.source, 'path')
+                    obj.EventStoreObj = EventStore(s.source.path);
+                elseif strcmp(s.source.type, 'callback')
                     obj.EventFcn = str2func(s.source.function);
                 elseif strcmp(s.source.type, 'static') && isfield(s.source, 'events')
                     obj.Events = s.source.events;
@@ -196,6 +196,47 @@ classdef EventTimelineWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function evts = resolveEvents(obj)
+        %RESOLVEEVENTS Get events from the best available source.
+        %   Priority: EventStoreObj > EventFcn > Events (static)
+            evts = [];
+            if ~isempty(obj.EventStoreObj)
+                evts = obj.eventStoreToStructs();
+            elseif ~isempty(obj.EventFcn)
+                evts = obj.EventFcn();
+            elseif ~isempty(obj.Events)
+                evts = obj.Events;
+            end
+        end
+
+        function evts = eventStoreToStructs(obj)
+        %EVENTSTORETOSTRUCTS Convert Event objects from EventStore to
+        %   the struct format used for rendering (startTime, endTime, label, color).
+            evts = struct('startTime', {}, 'endTime', {}, 'label', {}, 'color', {});
+            raw = obj.EventStoreObj.getEvents();
+            if isempty(raw), return; end
+
+            theme = obj.getTheme();
+            alarmColor = theme.StatusAlarmColor;
+            warnColor  = theme.StatusWarnColor;
+
+            for i = 1:numel(raw)
+                ev = raw(i);
+                lbl = ev.SensorName;
+                if ~isempty(ev.ThresholdLabel)
+                    lbl = [ev.SensorName ' — ' ev.ThresholdLabel];
+                end
+                % Color based on direction/severity hint in label
+                if ~isempty(strfind(lower(ev.ThresholdLabel), 'alarm')) %#ok<STREMP>
+                    clr = alarmColor;
+                else
+                    clr = warnColor;
+                end
+                evts(end+1) = struct('startTime', ev.StartTime, ...
+                    'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
+            end
+        end
+
         function onXLimChanged(obj)
             if ~obj.IsSettingTime
                 obj.UseGlobalTime = false;

@@ -105,10 +105,44 @@ classdef FastPlotWidget < DashboardWidget
             end
         end
 
-        function refresh(~)
-            % No-op for dashboard widgets. FastPlot.refresh() requires
-            % LiveFile which dashboard widgets don't use. Sensor/DataStore
-            % bindings provide data at render time only.
+        function refresh(obj)
+            % Re-render sensor-bound widgets so updated data + violations show.
+            if isempty(obj.SensorObj), return; end
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+
+            % Delete old axes and FastPlot, then rebuild
+            if ~isempty(obj.FastPlotObj)
+                try delete(obj.FastPlotObj); catch, end
+                obj.FastPlotObj = [];
+            end
+            % Delete any leftover axes in the panel
+            ch = findobj(obj.hPanel, 'Type', 'axes');
+            delete(ch);
+
+            ax = axes('Parent', obj.hPanel, ...
+                'Units', 'normalized', ...
+                'Position', [0.08 0.12 0.88 0.78]);
+
+            fp = FastPlot('Parent', ax);
+            obj.FastPlotObj = fp;
+            fp.addSensor(obj.SensorObj);
+
+            if ~isempty(obj.Title)
+                title(ax, obj.Title, 'Color', get(ax, 'XColor'));
+            end
+            if ~isempty(obj.XLabel)
+                xlabel(ax, obj.XLabel, 'Color', get(ax, 'XColor'));
+            end
+            if ~isempty(obj.YLabel)
+                ylabel(ax, obj.YLabel, 'Color', get(ax, 'XColor'));
+            end
+
+            fp.render();
+
+            try
+                addlistener(ax, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
+            catch
+            end
         end
 
         function configure(obj) %#ok<MANU>
