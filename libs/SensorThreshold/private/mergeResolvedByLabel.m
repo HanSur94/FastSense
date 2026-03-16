@@ -124,7 +124,6 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
     end
 end
 
-
 function [stepX, stepY] = toStepFunction(segBounds, values, dataEnd)
 %TOSTEPFUNCTION Convert segment boundary values to step-function arrays.
 %   [stepX, stepY] = TOSTEPFUNCTION(segBounds, values, dataEnd) transforms

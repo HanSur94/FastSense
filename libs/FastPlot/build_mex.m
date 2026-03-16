@@ -216,7 +216,6 @@ function build_mex()
     copy_mex_to(outDir, sensorPrivDir, 'resolve_disk_mex');
 end
 
-
 function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler, extra_srcs)
 %COMPILE_MEX Compile C source file(s) into a MEX binary.
 %   compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler, extra_srcs)
@@ -278,7 +277,6 @@ function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compil
     end
 end
 
-
 function copy_mex_to(srcDir, destDir, name)
 %COPY_MEX_TO Copy a compiled MEX binary to another directory.
 %   copy_mex_to(srcDir, destDir, name) finds all files matching
@@ -302,7 +300,6 @@ function copy_mex_to(srcDir, destDir, name)
         end
     end
 end
-
 
 function [gcc_path, gcc_name] = find_gcc()
 %FIND_GCC Search for a real GCC installation (not Apple Clang).
@@ -343,5 +340,3 @@ function [gcc_path, gcc_name] = find_gcc()
         gcc_name = 'gcc';
     end
 end
-
-

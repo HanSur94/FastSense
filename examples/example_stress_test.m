@@ -260,7 +260,6 @@ fprintf('  %.1fM total data points\n', totalPts/1e6);
 fprintf('  Total time: %.2f seconds\n', totalTime);
 fprintf('  Toolbar: cursor, crosshair, grid, legend, autoscale, export\n');
 
-
 % =========================================================================
 % Helper functions
 % =========================================================================

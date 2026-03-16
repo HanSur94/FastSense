@@ -126,7 +126,6 @@ function [xOut, yOut] = lttb_downsample(x, y, numOut, logX, logY)
     yOut = yOut(1:pos);
 end
 
-
 function [xOut, yOut] = lttb_core(x, y, numOut, logX, logY)
 %LTTB_CORE Core LTTB algorithm on a contiguous (no NaN) segment.
 %   [xOut, yOut] = LTTB_CORE(x, y, numOut, logX, logY) performs the

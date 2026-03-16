@@ -73,7 +73,6 @@ function test_violation_cull_mex()
     fprintf('    All 7 violation_cull_mex parity tests passed.\n');
 end
 
-
 function [xOut, yOut] = matlab_violation_cull(x, y, thX, thY, direction, pw, xmin)
 %MATLAB_VIOLATION_CULL Reference implementation matching MEX behavior.
     if isempty(x) || pw <= 0

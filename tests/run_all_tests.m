@@ -20,7 +20,6 @@ function results = run_all_tests()
     end
 end
 
-
 function results = run_matlab_suite(test_dir)
 %RUN_MATLAB_SUITE Run class-based test suite using matlab.unittest.
     import matlab.unittest.TestSuite
@@ -70,7 +69,6 @@ function results = run_matlab_suite(test_dir)
         end
     end
 end
-
 
 function results = run_octave_tests(test_dir)
 %RUN_OCTAVE_TESTS Run function-based tests for Octave compatibility.

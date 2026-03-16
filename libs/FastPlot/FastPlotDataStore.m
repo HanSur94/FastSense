@@ -808,7 +808,6 @@ classdef FastPlotDataStore < handle
     end
 end
 
-
 function tf = isCategoricalStruct(data)
 %ISCATEGORICALSTRUCT True if data is a struct with codes+categories fields.
     tf = isstruct(data) && isfield(data, 'codes') && isfield(data, 'categories');

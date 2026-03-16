@@ -158,7 +158,6 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN, logX)
     yOut = yOut(1:pos);
 end
 
-
 function [xOut, yOut] = minmax_core(segX, segY, nb)
 %MINMAX_CORE Vectorized min/max downsampling of a contiguous segment.
 %   [xOut, yOut] = MINMAX_CORE(segX, segY, nb) performs min/max envelope
@@ -245,7 +244,6 @@ function [xOut, yOut] = minmax_core(segX, segY, nb)
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
 end
-
 
 function [xOut, yOut] = minmax_core_logx(segX, segY, nb)
 %MINMAX_CORE_LOGX Min/max downsampling with logarithmically-spaced buckets.

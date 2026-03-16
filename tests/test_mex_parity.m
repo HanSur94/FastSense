@@ -138,7 +138,6 @@ function test_mex_parity()
     fprintf('    All %d MEX parity tests passed.\n', n_passed);
 end
 
-
 % ---- Pure MATLAB reference implementations (copied from private/) ----
 
 function idx = binary_search_matlab(x, val, direction)
