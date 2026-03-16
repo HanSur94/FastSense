@@ -25,10 +25,20 @@ classdef NumberWidget < DashboardWidget
 
     methods
         function obj = NumberWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 6 1]; % default KPI size
+            % Map 'Sensor' shorthand to 'SensorObj'
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            % Set default position for NumberWidget if base default wasn't overridden
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 6 1];
+            end
+            % Derive Units from Sensor if not explicitly set
+            if isempty(obj.Units) && ~isempty(obj.SensorObj) && ~isempty(obj.SensorObj.Units)
+                obj.Units = obj.SensorObj.Units;
             end
         end
 
@@ -102,45 +112,40 @@ classdef NumberWidget < DashboardWidget
         end
 
         function refresh(obj)
-            if ~isempty(obj.ValueFcn)
+            if ~isempty(obj.SensorObj)
+                obj.CurrentValue = obj.SensorObj.Y(end);
+                if isempty(obj.Units) && ~isempty(obj.SensorObj.Units)
+                    obj.Units = obj.SensorObj.Units;
+                end
+                obj.CurrentTrend = obj.computeTrend();
+            elseif ~isempty(obj.ValueFcn)
                 result = obj.ValueFcn();
+                if isstruct(result)
+                    obj.CurrentValue = result.value;
+                    if isfield(result, 'unit'), obj.Units = result.unit; end
+                    if isfield(result, 'trend'), obj.CurrentTrend = result.trend; end
+                else
+                    obj.CurrentValue = result;
+                end
             elseif ~isempty(obj.StaticValue)
-                result = obj.StaticValue;
+                obj.CurrentValue = obj.StaticValue;
             else
                 return;
-            end
-
-            if isstruct(result)
-                obj.CurrentValue = result.value;
-                if isfield(result, 'unit')
-                    obj.Units = result.unit;
-                end
-                if isfield(result, 'trend')
-                    obj.CurrentTrend = result.trend;
-                end
-            else
-                obj.CurrentValue = result;
             end
 
             % Update display
             if ~isempty(obj.hValueText) && ishandle(obj.hValueText)
                 set(obj.hValueText, 'String', sprintf(obj.Format, obj.CurrentValue));
             end
-
             if ~isempty(obj.hUnitText) && ishandle(obj.hUnitText)
                 set(obj.hUnitText, 'String', obj.Units);
             end
-
             if ~isempty(obj.hTrendText) && ishandle(obj.hTrendText)
                 switch obj.CurrentTrend
-                    case 'up'
-                        set(obj.hTrendText, 'String', char(9650));  % up triangle
-                    case 'down'
-                        set(obj.hTrendText, 'String', char(9660));  % down triangle
-                    case 'flat'
-                        set(obj.hTrendText, 'String', char(9654));  % right triangle
-                    otherwise
-                        set(obj.hTrendText, 'String', '');
+                    case 'up',    set(obj.hTrendText, 'String', char(9650));
+                    case 'down',  set(obj.hTrendText, 'String', char(9660));
+                    case 'flat',  set(obj.hTrendText, 'String', char(9654));
+                    otherwise,    set(obj.hTrendText, 'String', '');
                 end
             end
         end
@@ -157,11 +162,35 @@ classdef NumberWidget < DashboardWidget
             s = toStruct@DashboardWidget(obj);
             s.units = obj.Units;
             s.format = obj.Format;
-            if ~isempty(obj.ValueFcn)
-                s.source = struct('type', 'callback', ...
-                    'function', func2str(obj.ValueFcn));
-            elseif ~isempty(obj.StaticValue)
-                s.source = struct('type', 'static', 'value', obj.StaticValue);
+            if isempty(obj.SensorObj)
+                if ~isempty(obj.ValueFcn)
+                    s.source = struct('type', 'callback', 'function', func2str(obj.ValueFcn));
+                elseif ~isempty(obj.StaticValue)
+                    s.source = struct('type', 'static', 'value', obj.StaticValue);
+                end
+            end
+        end
+    end
+
+    methods (Access = private)
+        function trend = computeTrend(obj)
+            trend = '';
+            if isempty(obj.SensorObj) || numel(obj.SensorObj.Y) < 3
+                return;
+            end
+            n = numel(obj.SensorObj.Y);
+            nTrend = max(3, round(n * 0.1));
+            yRecent = obj.SensorObj.Y(end-nTrend+1:end);
+            slope = (yRecent(end) - yRecent(1)) / nTrend;
+            yRange = max(obj.SensorObj.Y) - min(obj.SensorObj.Y);
+            if yRange == 0, return; end
+            threshold = yRange * 0.01;
+            if slope > threshold
+                trend = 'up';
+            elseif slope < -threshold
+                trend = 'down';
+            else
+                trend = 'flat';
             end
         end
     end
@@ -170,16 +199,17 @@ classdef NumberWidget < DashboardWidget
         function obj = fromStruct(s)
             obj = NumberWidget();
             obj.Title = s.title;
+            if isfield(s, 'description'), obj.Description = s.description; end
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
-            if isfield(s, 'units')
-                obj.Units = s.units;
-            end
-            if isfield(s, 'format')
-                obj.Format = s.format;
-            end
+            if isfield(s, 'units'), obj.Units = s.units; end
+            if isfield(s, 'format'), obj.Format = s.format; end
             if isfield(s, 'source')
                 switch s.source.type
+                    case 'sensor'
+                        if exist('SensorRegistry', 'class')
+                            obj.SensorObj = SensorRegistry.get(s.source.name);
+                        end
                     case 'callback'
                         obj.ValueFcn = str2func(s.source.function);
                     case 'static'

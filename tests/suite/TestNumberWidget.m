@@ -85,5 +85,31 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             w.render(hp);
             testCase.verifyEqual(w.CurrentValue, 72.5);
         end
+
+        function testSensorBinding(testCase)
+            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.X = [1 2 3 4 5];
+            s.Y = [70 71 72 73 74];
+            w = NumberWidget('Sensor', s);
+            testCase.verifyEqual(w.Title, 'Temperature');
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+            w.render(hp);
+            testCase.verifyEqual(w.CurrentValue, 74);
+            testCase.verifyEqual(w.Units, 'degC');
+        end
+
+        function testSensorTrend(testCase)
+            s = Sensor('T-401', 'Name', 'Temperature');
+            s.X = [1 2 3 4 5];
+            s.Y = [70 71 72 73 74]; % rising
+            w = NumberWidget('SensorObj', s);
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+            w.render(hp);
+            testCase.verifyEqual(w.CurrentTrend, 'up');
+        end
     end
 end
