@@ -52,5 +52,10 @@ classdef TestSensor < matlab.unittest.TestCase
             s.addThresholdRule(struct('m', 1), 10, 'Direction', 'lower');
             testCase.verifyEqual(numel(s.ThresholdRules), 3, 'testMultipleRules: count');
         end
+
+        function testUnitsProperty(testCase)
+            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            testCase.verifyEqual(s.Units, 'degC');
+        end
     end
 end
