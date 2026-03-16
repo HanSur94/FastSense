@@ -10,7 +10,6 @@ classdef FastPlotWidget < DashboardWidget
 %   When bound to a Sensor, ThresholdRules apply automatically.
 
     properties (Access = public)
-        SensorObj    = []
         DataStoreObj = []
         XData        = []
         YData        = []
@@ -29,28 +28,21 @@ classdef FastPlotWidget < DashboardWidget
 
     methods
         function obj = FastPlotWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 12 3]; % default size for FastPlot
-
-            % Parse name-value pairs
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
             end
-
-            % Default title and labels from Sensor
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 12 3];
+            end
             if ~isempty(obj.SensorObj)
-                if isempty(obj.Title)
-                    if ~isempty(obj.SensorObj.Name)
-                        obj.Title = obj.SensorObj.Name;
-                    else
-                        obj.Title = obj.SensorObj.Key;
-                    end
-                end
-                if isempty(obj.XLabel)
-                    obj.XLabel = 'Time';
-                end
+                if isempty(obj.XLabel), obj.XLabel = 'Time'; end
                 if isempty(obj.YLabel)
-                    if ~isempty(obj.SensorObj.Name)
+                    if ~isempty(obj.SensorObj.Units)
+                        obj.YLabel = obj.SensorObj.Units;
+                    elseif ~isempty(obj.SensorObj.Name)
                         obj.YLabel = obj.SensorObj.Name;
                     else
                         obj.YLabel = obj.SensorObj.Key;
@@ -215,6 +207,10 @@ classdef FastPlotWidget < DashboardWidget
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
+
+            if isfield(s, 'description')
+                obj.Description = s.description;
+            end
 
             if isfield(s, 'source')
                 switch s.source.type
