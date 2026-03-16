@@ -240,7 +240,7 @@ classdef DashboardLayout < handle
                     'Position', [ca(1) + vpW, ca(2), ...
                                  obj.ScrollbarWidth, ca(4)], ...
                     'Min', 0, 'Max', 1, 'Value', scrollVal, ...
-                    'SliderStep', [1/obj.TotalRows, 3/obj.TotalRows], ...
+                    'SliderStep', [0.06, 0.2], ...
                     'Callback', @(src,~) obj.onScroll(get(src, 'Value')));
                 try
                     set(hFigure, 'WindowScrollWheelFcn', ...
@@ -283,12 +283,8 @@ classdef DashboardLayout < handle
                 return;
             end
             val = get(obj.hScrollbar, 'Value');
-            step = 1 / max(obj.TotalRows, 1);
-            if evt.VerticalScrollCount > 0
-                val = max(0, val - step);
-            else
-                val = min(1, val + step);
-            end
+            step = 0.06 * evt.VerticalScrollCount;
+            val = max(0, min(1, val - step));
             set(obj.hScrollbar, 'Value', val);
             obj.onScroll(val);
         end
