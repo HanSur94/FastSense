@@ -11,19 +11,62 @@ permissions:
   pull-requests: write
 
 jobs:
-  benchmark:
-    name: Performance Benchmark
+  build-mex:
+    name: Build MEX
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache MEX binaries
+        id: cache-mex
+        uses: actions/cache@v4
+        with:
+          path: |
+            libs/FastPlot/private/*.mex
+            libs/SensorThreshold/private/*.mex
+          key: mex-linux-${{ hashFiles('libs/FastPlot/private/mex_src/**', 'libs/FastPlot/build_mex.m') }}
+
+      - name: Install Octave
+        if: steps.cache-mex.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y octave octave-dev
+
+      - name: Compile MEX files
+        if: steps.cache-mex.outputs.cache-hit != 'true'
+        run: octave --eval "setup();"
+
+      - name: Upload MEX artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mex-linux-bench
+          path: |
+            libs/FastPlot/private/*.mex
+            libs/SensorThreshold/private/*.mex
+          retention-days: 1
+
+  benchmark:
+    name: Performance Benchmark
+    needs: build-mex
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download MEX binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: mex-linux-bench
+
       - name: Install Octave and Xvfb
-        run: sudo apt-get update && sudo apt-get install -y octave octave-dev xvfb
+        run: sudo apt-get update && sudo apt-get install -y octave xvfb
 
       - name: Run benchmark
         run: |
           xvfb-run octave --eval "
-            addpath(pwd); setup();
+            addpath(pwd);
+            addpath(fullfile(pwd, 'libs', 'FastPlot'));
+            addpath(fullfile(pwd, 'libs', 'SensorThreshold'));
+            addpath(fullfile(pwd, 'libs', 'EventDetection'));
+            addpath(fullfile(pwd, 'libs', 'Dashboard'));
+            addpath(fullfile(pwd, 'libs', 'WebBridge'));
             addpath(fullfile(pwd, 'libs', 'FastPlot', 'private'));
 
             % Quick benchmark: 1M points, 10 zooms
@@ -41,7 +84,7 @@ jobs:
             % Measure binary search
             tic;
             for i = 1:1000
-              binary_search(x, 20, 80);
+              binary_search(x, 20, 'left');
             end
             t_bs = toc / 1000;
 
