@@ -3,9 +3,12 @@ classdef RawAxesWidget < DashboardWidget
 %
 %   w = RawAxesWidget('Title', 'Histogram', ...
 %       'PlotFcn', @(ax) histogram(ax, randn(1,1000)));
+%
+%   When bound to a Sensor, the PlotFcn receives (ax, sensor) or
+%   (ax, sensor, timeRange) depending on its nargin.
 
     properties (Access = public)
-        PlotFcn    = []    % @(ax) or @(ax, tRange) — tRange = [tMin tMax] from time controls
+        PlotFcn    = []    % @(ax) or @(ax, sensor[, tRange]) or @(ax, tRange)
         DataRangeFcn = []  % @() returning [tMin tMax] for global time range detection
     end
 
@@ -17,10 +20,14 @@ classdef RawAxesWidget < DashboardWidget
 
     methods
         function obj = RawAxesWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 8 2];
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 8 2];
             end
         end
 
@@ -78,7 +85,10 @@ classdef RawAxesWidget < DashboardWidget
 
         function [tMin, tMax] = getTimeRange(obj)
             tMin = inf; tMax = -inf;
-            if ~isempty(obj.DataRangeFcn)
+            if ~isempty(obj.SensorObj) && ~isempty(obj.SensorObj.X)
+                tMin = min(obj.SensorObj.X);
+                tMax = max(obj.SensorObj.X);
+            elseif ~isempty(obj.DataRangeFcn)
                 r = obj.DataRangeFcn();
                 tMin = r(1); tMax = r(2);
             end
@@ -93,7 +103,9 @@ classdef RawAxesWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
-            if ~isempty(obj.PlotFcn)
+            if ~isempty(obj.SensorObj)
+                s.source = struct('type', 'sensor', 'name', obj.SensorObj.Key);
+            elseif ~isempty(obj.PlotFcn)
                 s.source = struct('type', 'callback', ...
                     'function', func2str(obj.PlotFcn));
             end
@@ -106,8 +118,18 @@ classdef RawAxesWidget < DashboardWidget
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
-            if isfield(s, 'source') && strcmp(s.source.type, 'callback')
-                obj.PlotFcn = str2func(s.source.function);
+            if isfield(s, 'description')
+                obj.Description = s.description;
+            end
+            if isfield(s, 'source')
+                switch s.source.type
+                    case 'sensor'
+                        if exist('SensorRegistry', 'class')
+                            obj.SensorObj = SensorRegistry.get(s.source.name);
+                        end
+                    case 'callback'
+                        obj.PlotFcn = str2func(s.source.function);
+                end
             end
         end
     end
@@ -115,10 +137,21 @@ classdef RawAxesWidget < DashboardWidget
     methods (Access = private)
         function callPlotFcn(obj)
             if isempty(obj.PlotFcn), return; end
-            if ~isempty(obj.TimeRange) && nargin(obj.PlotFcn) >= 2
-                obj.PlotFcn(obj.hAxes, obj.TimeRange);
+            nArgs = nargin(obj.PlotFcn);
+            if ~isempty(obj.SensorObj)
+                if ~isempty(obj.TimeRange) && nArgs >= 3
+                    obj.PlotFcn(obj.hAxes, obj.SensorObj, obj.TimeRange);
+                elseif nArgs >= 2
+                    obj.PlotFcn(obj.hAxes, obj.SensorObj);
+                else
+                    obj.PlotFcn(obj.hAxes);
+                end
             else
-                obj.PlotFcn(obj.hAxes);
+                if ~isempty(obj.TimeRange) && nArgs >= 2
+                    obj.PlotFcn(obj.hAxes, obj.TimeRange);
+                else
+                    obj.PlotFcn(obj.hAxes);
+                end
             end
         end
 
