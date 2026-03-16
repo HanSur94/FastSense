@@ -29,6 +29,7 @@ jobs:
     name: Build MEX (Linux)
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    container: gnuoctave/octave:8.4.0
     steps:
       - uses: actions/checkout@v4
 
@@ -40,10 +41,6 @@ jobs:
             libs/FastPlot/private/*.mex
             libs/SensorThreshold/private/*.mex
           key: mex-linux-${{ hashFiles('libs/FastPlot/private/mex_src/**', 'libs/FastPlot/build_mex.m') }}
-
-      - name: Install Octave
-        if: steps.cache-mex.outputs.cache-hit != 'true'
-        run: sudo apt-get update && sudo apt-get install -y octave octave-dev
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
@@ -63,6 +60,7 @@ jobs:
     needs: build-mex
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    container: gnuoctave/octave:8.4.0
     steps:
       - uses: actions/checkout@v4
 
@@ -70,9 +68,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mex-linux
-
-      - name: Install Octave and Xvfb
-        run: sudo apt-get update && sudo apt-get install -y octave xvfb
 
       - name: Run tests
         run: |
