@@ -1,47 +1,75 @@
-%% Dashboard Engine Example — Phase 1 Core API
-% Demonstrates: DashboardEngine with FastPlotWidgets, Sensor binding,
-% JSON save/load, and live mode.
+%% Dashboard Engine Example — Sensor-Driven
+% Demonstrates: DashboardEngine with FastPlotWidgets bound to Sensors,
+% dynamic thresholds via StateChannels, JSON save/load.
 
-setup();
+close all force;
+clear functions;
+projectRoot = fileparts(fileparts(mfilename('fullpath')));
+run(fullfile(projectRoot, 'setup.m'));
 
-%% 1. Create dashboard with inline data
+%% 1. Generate data and create Sensors with thresholds
+rng(7);
+N = 10000;
+t = linspace(0, 86400, N);  % 24 hours in seconds
+
+% Machine mode state channel: idle(0) -> running(1) -> idle(0) -> running(1)
+scMode = StateChannel('machine');
+scMode.X = [0, 7200, 43200, 57600];
+scMode.Y = [0, 1,    0,     1    ];
+
+% Temperature sensor with mode-dependent thresholds
+sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp.X = t;
+sTemp.Y = 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8;
+sTemp.addStateChannel(scMode);
+sTemp.addThresholdRule(struct('machine', 1), 78, ...
+    'Direction', 'upper', 'Label', 'Hi Warn');
+sTemp.addThresholdRule(struct('machine', 1), 85, ...
+    'Direction', 'upper', 'Label', 'Hi Alarm');
+sTemp.addThresholdRule(struct('machine', 0), 73, ...
+    'Direction', 'upper', 'Label', 'Idle Hi');
+sTemp.resolve();
+
+% Pressure sensor with unconditional thresholds
+sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress.X = t;
+sPress.Y = 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5;
+sPress.addThresholdRule(struct(), 65, ...
+    'Direction', 'upper', 'Label', 'Hi Warn');
+sPress.addThresholdRule(struct(), 70, ...
+    'Direction', 'upper', 'Label', 'Hi Alarm');
+sPress.resolve();
+
+%% 2. Create dashboard with sensor-bound widgets
 d = DashboardEngine('Process Monitoring — Line 4');
-d.Theme = 'dark';
+d.Theme = 'light';
 d.LiveInterval = 5;
 
-% Generate sample data
-t = linspace(0, 86400, 10000); % 24 hours in seconds
-temp = 70 + 5*sin(2*pi*t/3600) + randn(1,10000)*0.5;
-pressure = 50 + 20*sin(2*pi*t/7200) + randn(1,10000)*1.0;
+d.addWidget('fastplot', ...
+    'Position', [1 1 16 8], ...
+    'SensorObj', sTemp);
 
-% Add FastPlot widgets
-d.addWidget('fastplot', 'Title', 'Temperature', ...
-    'Position', [1 1 8 3], ...
-    'XData', t, 'YData', temp);
+d.addWidget('fastplot', ...
+    'Position', [17 1 8 8], ...
+    'SensorObj', sPress);
 
-d.addWidget('fastplot', 'Title', 'Pressure', ...
-    'Position', [9 1 4 3], ...
-    'XData', t, 'YData', pressure);
-
-d.addWidget('fastplot', 'Title', 'Temp vs Pressure Overlay', ...
-    'Position', [1 4 12 3], ...
-    'XData', t, 'YData', temp);
+d.addWidget('fastplot', 'Title', 'Temperature (full view)', ...
+    'Position', [1 9 24 8], ...
+    'SensorObj', sTemp);
 
 d.render();
 
-%% 2. Save to JSON
+%% 3. Save to JSON
 d.save(fullfile(tempdir, 'example_dashboard.json'));
 fprintf('Dashboard saved to: %s\n', fullfile(tempdir, 'example_dashboard.json'));
+fprintf('Temperature violations: %d\n', countViol(sTemp));
+fprintf('Pressure violations: %d\n', countViol(sPress));
 
-%% 3. Demonstrate Sensor binding (if SensorRegistry available)
-% s = Sensor('T-401', 'Name', 'Temperature Sensor');
-% s.X = t;
-% s.Y = temp;
-% s.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
-% s.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'Hi Alarm');
-% s.resolve();
-%
-% d2 = DashboardEngine('Sensor Dashboard');
-% d2.Theme = 'industrial';
-% d2.addWidget('fastplot', 'Sensor', s, 'Position', [1 1 12 4]);
-% d2.render();
+function n = countViol(s)
+    n = 0;
+    if ~isempty(s.ResolvedViolations)
+        for k = 1:numel(s.ResolvedViolations)
+            n = n + numel(s.ResolvedViolations(k).X);
+        end
+    end
+end

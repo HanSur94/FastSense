@@ -1,29 +1,36 @@
 classdef StatusWidget < DashboardWidget
-%STATUSWIDGET Colored circle indicator with label.
+%STATUSWIDGET Colored dot indicator with sensor value.
 %
-%   w = StatusWidget('Title', 'Pump 1', 'StatusFcn', @() getPumpStatus());
+%   Sensor-first:
+%     w = StatusWidget('Sensor', sensorObj);
 %
-%   StatusFcn returns 'ok', 'warning', or 'alarm'.
+%   Legacy (still supported):
+%     w = StatusWidget('Title', 'Pump 1', 'StatusFcn', @() 'ok');
 
     properties (Access = public)
-        StatusFcn    = []       % function_handle returning 'ok'/'warning'/'alarm'
-        StaticStatus = ''       % fixed status (no callback)
+        StatusFcn    = []       % function_handle returning 'ok'/'warning'/'alarm' (legacy)
+        StaticStatus = ''       % fixed status string (legacy)
     end
 
     properties (SetAccess = private)
         CurrentStatus = ''
+        CurrentColor  = [0.5 0.5 0.5]
         hAxes        = []
         hCircle      = []
         hLabelText   = []
-        hStatusText  = []
     end
 
     methods
         function obj = StatusWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 2 1]; % default compact size
+            % Map 'Sensor' shorthand to 'SensorObj'
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 4 1]; % default compact size
             end
         end
 
@@ -35,42 +42,39 @@ classdef StatusWidget < DashboardWidget
             fgColor = theme.ForegroundColor;
             fontName = theme.FontName;
 
-            % Create axes for the circle
+            % Adaptive font size
+            oldUnits = get(parentPanel, 'Units');
+            set(parentPanel, 'Units', 'pixels');
+            pxPos = get(parentPanel, 'Position');
+            set(parentPanel, 'Units', oldUnits);
+            pH = pxPos(4);
+            fontSz = max(7, min(14, round(pH * 0.28)));
+
+            % Layout: [dot] [Name: value Units]
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
-                'Position', [0.1 0.3 0.35 0.6], ...
+                'Position', [0.02 0.1 0.12 0.8], ...
                 'Visible', 'off', ...
-                'XLim', [-1.2 1.2], 'YLim', [-1.2 1.2], ...
-                'DataAspectRatio', [1 1 1]);
+                'XLim', [-1.3 1.3], 'YLim', [-1.3 1.3], ...
+                'DataAspectRatio', [1 1 1], ...
+                'HitTest', 'off');
+            try set(obj.hAxes, 'PickableParts', 'none'); catch, end
+            try disableDefaultInteractivity(obj.hAxes); catch, end
             hold(obj.hAxes, 'on');
 
-            % Draw circle
             theta = linspace(0, 2*pi, 60);
             obj.hCircle = fill(obj.hAxes, cos(theta), sin(theta), ...
-                [0.5 0.5 0.5], 'EdgeColor', 'none');
+                [0.5 0.5 0.5], 'EdgeColor', 'none', 'HitTest', 'off');
 
-            % Title/label text
             obj.hLabelText = uicontrol('Parent', parentPanel, ...
                 'Style', 'text', ...
-                'String', obj.Title, ...
+                'String', '', ...
                 'Units', 'normalized', ...
-                'Position', [0.45 0.5 0.5 0.35], ...
+                'Position', [0.16 0.02 0.82 0.96], ...
                 'FontName', fontName, ...
-                'FontSize', theme.WidgetTitleFontSize, ...
+                'FontSize', fontSz, ...
                 'FontWeight', 'bold', ...
                 'ForegroundColor', fgColor, ...
-                'BackgroundColor', bgColor, ...
-                'HorizontalAlignment', 'left');
-
-            % Status text below label
-            obj.hStatusText = uicontrol('Parent', parentPanel, ...
-                'Style', 'text', ...
-                'String', '--', ...
-                'Units', 'normalized', ...
-                'Position', [0.45 0.15 0.5 0.3], ...
-                'FontName', fontName, ...
-                'FontSize', theme.WidgetTitleFontSize - 1, ...
-                'ForegroundColor', fgColor * 0.6 + bgColor * 0.4, ...
                 'BackgroundColor', bgColor, ...
                 'HorizontalAlignment', 'left');
 
@@ -78,35 +82,39 @@ classdef StatusWidget < DashboardWidget
         end
 
         function refresh(obj)
-            if ~isempty(obj.StatusFcn)
+            theme = obj.getTheme();
+
+            if ~isempty(obj.SensorObj)
+                if isempty(obj.SensorObj.Y), return; end
+                [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromSensor(theme);
+            elseif ~isempty(obj.StatusFcn)
                 obj.CurrentStatus = obj.StatusFcn();
+                obj.CurrentColor = obj.statusToColor(obj.CurrentStatus, theme);
             elseif ~isempty(obj.StaticStatus)
                 obj.CurrentStatus = obj.StaticStatus;
+                obj.CurrentColor = obj.statusToColor(obj.CurrentStatus, theme);
             else
                 return;
             end
 
-            theme = obj.getTheme();
-            switch obj.CurrentStatus
-                case 'ok'
-                    color = theme.StatusOkColor;
-                    label = 'OK';
-                case 'warning'
-                    color = theme.StatusWarnColor;
-                    label = 'WARNING';
-                case 'alarm'
-                    color = theme.StatusAlarmColor;
-                    label = 'ALARM';
-                otherwise
-                    color = [0.5 0.5 0.5];
-                    label = upper(obj.CurrentStatus);
+            % Update dot color
+            if ~isempty(obj.hCircle) && ishandle(obj.hCircle)
+                set(obj.hCircle, 'FaceColor', obj.CurrentColor);
             end
 
-            if ~isempty(obj.hCircle) && ishandle(obj.hCircle)
-                set(obj.hCircle, 'FaceColor', color);
-            end
-            if ~isempty(obj.hStatusText) && ishandle(obj.hStatusText)
-                set(obj.hStatusText, 'String', label, 'ForegroundColor', color);
+            % Update label
+            if ~isempty(obj.hLabelText) && ishandle(obj.hLabelText)
+                if ~isempty(obj.SensorObj)
+                    val = obj.SensorObj.Y(end);
+                    units = '';
+                    if ~isempty(obj.SensorObj.Units)
+                        units = [' ' obj.SensorObj.Units];
+                    end
+                    lbl = sprintf('%s: %.1f%s', obj.Title, val, units);
+                else
+                    lbl = sprintf('%s: %s', obj.Title, upper(obj.CurrentStatus));
+                end
+                set(obj.hLabelText, 'String', lbl);
             end
         end
 
@@ -119,11 +127,13 @@ classdef StatusWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
-            if ~isempty(obj.StatusFcn)
-                s.source = struct('type', 'callback', ...
-                    'function', func2str(obj.StatusFcn));
-            elseif ~isempty(obj.StaticStatus)
-                s.source = struct('type', 'static', 'value', obj.StaticStatus);
+            if isempty(obj.SensorObj)
+                if ~isempty(obj.StatusFcn)
+                    s.source = struct('type', 'callback', ...
+                        'function', func2str(obj.StatusFcn));
+                elseif ~isempty(obj.StaticStatus)
+                    s.source = struct('type', 'static', 'value', obj.StaticStatus);
+                end
             end
         end
     end
@@ -132,10 +142,15 @@ classdef StatusWidget < DashboardWidget
         function obj = fromStruct(s)
             obj = StatusWidget();
             obj.Title = s.title;
+            if isfield(s, 'description'), obj.Description = s.description; end
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
             if isfield(s, 'source')
                 switch s.source.type
+                    case 'sensor'
+                        if exist('SensorRegistry', 'class')
+                            obj.SensorObj = SensorRegistry.get(s.source.name);
+                        end
                     case 'callback'
                         obj.StatusFcn = str2func(s.source.function);
                     case 'static'
@@ -146,13 +161,51 @@ classdef StatusWidget < DashboardWidget
     end
 
     methods (Access = private)
-        function theme = getTheme(obj)
-            theme = DashboardTheme();
-            if ~isempty(obj.ThemeOverride) && ~isempty(fieldnames(obj.ThemeOverride))
-                fns = fieldnames(obj.ThemeOverride);
-                for i = 1:numel(fns)
-                    theme.(fns{i}) = obj.ThemeOverride.(fns{i});
+        function [status, color] = deriveStatusFromSensor(obj, theme)
+            status = 'ok';
+            color = theme.StatusOkColor;
+
+            if isempty(obj.SensorObj.Y), return; end
+
+            if isempty(obj.SensorObj.ThresholdRules)
+                return;
+            end
+
+            latestY = obj.SensorObj.Y(end);
+            worstDist = -inf;
+
+            for i = 1:numel(obj.SensorObj.ThresholdRules)
+                rule = obj.SensorObj.ThresholdRules{i};
+                isViolated = false;
+                if rule.IsUpper && latestY > rule.Value
+                    isViolated = true;
+                elseif ~rule.IsUpper && latestY < rule.Value
+                    isViolated = true;
                 end
+
+                if isViolated
+                    dist = abs(latestY - rule.Value);
+                    if dist > worstDist
+                        worstDist = dist;
+                        status = 'violation';
+                        if ~isempty(rule.Color)
+                            color = rule.Color;
+                        elseif rule.IsUpper
+                            color = theme.StatusAlarmColor;
+                        else
+                            color = theme.StatusWarnColor;
+                        end
+                    end
+                end
+            end
+        end
+
+        function color = statusToColor(~, status, theme)
+            switch status
+                case 'ok',      color = theme.StatusOkColor;
+                case 'warning', color = theme.StatusWarnColor;
+                case 'alarm',   color = theme.StatusAlarmColor;
+                otherwise,      color = [0.5 0.5 0.5];
             end
         end
     end

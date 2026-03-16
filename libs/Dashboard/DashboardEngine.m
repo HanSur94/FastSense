@@ -3,7 +3,7 @@ classdef DashboardEngine < handle
 %
 %   Usage:
 %     d = DashboardEngine('My Dashboard');
-%     d.Theme = 'dark';
+%     d.Theme = 'light';
 %     d.LiveInterval = 5;
 %     d.addWidget('fastplot', 'Title', 'Temp', 'Position', [1 1 6 3], ...
 %                 'Sensor', SensorRegistry.get('T-401'));
@@ -15,18 +15,27 @@ classdef DashboardEngine < handle
 
     properties (Access = public)
         Name         = ''
-        Theme        = 'default'
+        Theme        = 'light'
         LiveInterval = 5
     end
 
     properties (SetAccess = private)
-        Widgets    = {}
-        hFigure    = []
-        Layout     = []
-        Toolbar    = []
-        LiveTimer  = []
-        IsLive     = false
-        FilePath   = ''
+        Widgets        = {}
+        hFigure        = []
+        Layout         = []
+        Toolbar        = []
+        LiveTimer      = []
+        IsLive         = false
+        LastUpdateTime = []
+        FilePath       = ''
+        % Time control
+        TimePanelHeight = 0.06
+        DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
+        hTimePanel      = []
+        hTimeSliderL    = []       % Left (start) slider
+        hTimeSliderR    = []       % Right (end) slider
+        hTimeStart      = []
+        hTimeEnd        = []
     end
 
     methods (Access = public)
@@ -44,8 +53,12 @@ classdef DashboardEngine < handle
             switch type
                 case 'fastplot'
                     w = FastPlotWidget(varargin{:});
+                case 'number'
+                    w = NumberWidget(varargin{:});
                 case 'kpi'
-                    w = KpiWidget(varargin{:});
+                    warning('DashboardEngine:deprecated', ...
+                        '''kpi'' type is deprecated, use ''number'' instead.');
+                    w = NumberWidget(varargin{:});
                 case 'status'
                     w = StatusWidget(varargin{:});
                 case 'text'
@@ -58,6 +71,11 @@ classdef DashboardEngine < handle
                     w = RawAxesWidget(varargin{:});
                 case 'timeline'
                     w = EventTimelineWidget(varargin{:});
+                    if isempty(w.EventStoreObj) && isempty(w.EventFcn) && isempty(w.Events)
+                        warning('DashboardEngine:timelineNoStore', ...
+                            'Timeline widget "%s" has no data source. Bind via EventStoreObj.', ...
+                            w.Title);
+                    end
                 otherwise
                     error('DashboardEngine:unknownType', ...
                         'Unknown widget type: %s', type);
@@ -87,8 +105,18 @@ classdef DashboardEngine < handle
                 'CloseRequestFcn', @(~,~) obj.onClose());
 
             obj.Toolbar = DashboardToolbar(obj, obj.hFigure, themeStruct);
-            obj.Layout.ContentArea = obj.Toolbar.getContentArea();
+
+            % Create time control panel at bottom
+            obj.createTimePanel(themeStruct);
+
+            % Content area between toolbar and time panel
+            toolbarH = obj.Toolbar.Height;
+            obj.Layout.ContentArea = [0, obj.TimePanelHeight, ...
+                1, 1 - toolbarH - obj.TimePanelHeight];
             obj.Layout.createPanels(obj.hFigure, obj.Widgets, themeStruct);
+
+            % Auto-detect time range from data
+            obj.updateGlobalTimeRange();
         end
 
         function startLive(obj)
@@ -128,10 +156,8 @@ classdef DashboardEngine < handle
         %REMOVEWIDGET Remove widget at given index.
             if idx >= 1 && idx <= numel(obj.Widgets)
                 w = obj.Widgets{idx};
-                if ~isempty(w.hPanel) && ishandle(w.hPanel)
-                    delete(w.hPanel);
-                end
                 obj.Widgets(idx) = [];
+                delete(w);
             end
         end
 
@@ -160,20 +186,215 @@ classdef DashboardEngine < handle
             obj.Layout.createPanels(obj.hFigure, obj.Widgets, theme);
         end
 
+        function updateGlobalTimeRange(obj)
+        %UPDATEGLOBALTIMERANGE Scan all widgets for data time bounds.
+            tMin = inf; tMax = -inf;
+            for i = 1:numel(obj.Widgets)
+                [wMin, wMax] = obj.Widgets{i}.getTimeRange();
+                if wMin < tMin, tMin = wMin; end
+                if wMax > tMax, tMax = wMax; end
+            end
+            if isinf(tMin) || isinf(tMax)
+                tMin = 0; tMax = 1;
+            end
+            obj.DataTimeRange = [tMin, tMax];
+
+            % Reset sliders to full range
+            if ~isempty(obj.hTimeSliderL) && ishandle(obj.hTimeSliderL)
+                set(obj.hTimeSliderL, 'Value', 0);
+                set(obj.hTimeSliderR, 'Value', 1);
+            end
+
+            obj.updateTimeLabels(tMin, tMax);
+        end
+
+        function updateLiveTimeRange(obj)
+        %UPDATELIVETIMERANGE Update DataTimeRange without resetting sliders.
+        %   Called during live mode to expand the time range as data grows.
+            tMin = inf; tMax = -inf;
+            for i = 1:numel(obj.Widgets)
+                [wMin, wMax] = obj.Widgets{i}.getTimeRange();
+                if wMin < tMin, tMin = wMin; end
+                if wMax > tMax, tMax = wMax; end
+            end
+            if isinf(tMin) || isinf(tMax)
+                return;  % no widgets report time data
+            end
+            obj.DataTimeRange = [tMin, tMax];
+        end
+
+        function broadcastTimeRange(obj, tStart, tEnd)
+        %BROADCASTTIMERANGE Push time range to widgets using global time.
+            for i = 1:numel(obj.Widgets)
+                try
+                    obj.Widgets{i}.setTimeRange(tStart, tEnd);
+                catch ME
+                    warning('DashboardEngine:timeRangeError', ...
+                        'Widget "%s" setTimeRange failed: %s', ...
+                        obj.Widgets{i}.Title, ME.message);
+                end
+            end
+        end
+
+        function resetGlobalTime(obj)
+        %RESETGLOBALTIME Re-attach all widgets to global time and apply.
+            for i = 1:numel(obj.Widgets)
+                obj.Widgets{i}.UseGlobalTime = true;
+            end
+            obj.onTimeSlidersChanged();
+        end
+
         function delete(obj)
             obj.stopLive();
         end
     end
 
     methods (Access = private)
+        function createTimePanel(obj, theme)
+            tH = obj.TimePanelHeight;
+
+            % Simple uipanel + dual sliders. NavigatorOverlay doesn't
+            % work reliably in dashboard context (axes interaction
+            % handlers, z-order, uipanel isolation). Sliders just work.
+            obj.hTimePanel = uipanel('Parent', obj.hFigure, ...
+                'Units', 'normalized', ...
+                'Position', [0, 0, 1, tH], ...
+                'BorderType', 'line', ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'ForegroundColor', theme.WidgetBorderColor);
+
+            % Start time label
+            obj.hTimeStart = uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.005 0.55 0.12 0.4], ...
+                'String', '', ...
+                'FontSize', 9, ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'HorizontalAlignment', 'left');
+
+            % End time label
+            obj.hTimeEnd = uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.88 0.55 0.115 0.4], ...
+                'String', '', ...
+                'FontSize', 9, ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'HorizontalAlignment', 'right');
+
+            % "From" / "To" labels
+            uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.005 0.05 0.04 0.45], ...
+                'String', 'From:', ...
+                'FontSize', 8, ...
+                'ForegroundColor', theme.ToolbarFontColor * 0.7 + ...
+                    theme.ToolbarBackground * 0.3, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'HorizontalAlignment', 'left');
+
+            uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.50 0.05 0.03 0.45], ...
+                'String', 'To:', ...
+                'FontSize', 8, ...
+                'ForegroundColor', theme.ToolbarFontColor * 0.7 + ...
+                    theme.ToolbarBackground * 0.3, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'HorizontalAlignment', 'left');
+
+            % Left slider (range start): 0 = data start, 1 = data end
+            obj.hTimeSliderL = uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'slider', ...
+                'Units', 'normalized', ...
+                'Position', [0.045 0.1 0.45 0.42], ...
+                'Min', 0, 'Max', 1, 'Value', 0, ...
+                'SliderStep', [0.01 0.1], ...
+                'Callback', @(src,~) obj.onTimeSlidersChanged());
+
+            % Right slider (range end): 0 = data start, 1 = data end
+            obj.hTimeSliderR = uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'slider', ...
+                'Units', 'normalized', ...
+                'Position', [0.535 0.1 0.45 0.42], ...
+                'Min', 0, 'Max', 1, 'Value', 1, ...
+                'SliderStep', [0.01 0.1], ...
+                'Callback', @(src,~) obj.onTimeSlidersChanged());
+        end
+
+        function onTimeSlidersChanged(obj)
+            valL = get(obj.hTimeSliderL, 'Value');
+            valR = get(obj.hTimeSliderR, 'Value');
+
+            % Enforce left < right
+            if valL >= valR
+                valR = min(1, valL + 0.01);
+                if valL >= valR
+                    valL = valR - 0.01;
+                    set(obj.hTimeSliderL, 'Value', valL);
+                end
+                set(obj.hTimeSliderR, 'Value', valR);
+            end
+
+            tr = obj.DataTimeRange;
+            span = tr(2) - tr(1);
+            tStart = tr(1) + valL * span;
+            tEnd   = tr(1) + valR * span;
+
+            obj.broadcastTimeRange(tStart, tEnd);
+            obj.updateTimeLabels(tStart, tEnd);
+        end
+
+        function updateTimeLabels(obj, tStart, tEnd)
+            if isempty(obj.hTimeStart), return; end
+            set(obj.hTimeStart, 'String', obj.formatTimeVal(tStart));
+            set(obj.hTimeEnd, 'String', obj.formatTimeVal(tEnd));
+        end
+
+        function str = formatTimeVal(~, t)
+            % Detect datenum (modern dates are > 700000)
+            if t > 700000
+                if t > 730000
+                    str = datestr(t, 'yyyy-mm-dd HH:MM');
+                else
+                    str = datestr(t, 'HH:MM:SS');
+                end
+            else
+                % Raw numeric (seconds, samples, etc.)
+                if abs(t) >= 86400
+                    str = sprintf('%.1f d', t / 86400);
+                elseif abs(t) >= 3600
+                    str = sprintf('%.1f h', t / 3600);
+                elseif abs(t) >= 60
+                    str = sprintf('%.1f m', t / 60);
+                else
+                    str = sprintf('%.1f s', t);
+                end
+            end
+        end
+
         function onClose(obj)
             obj.stopLive();
-            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
-                delete(obj.hFigure);
+            hf = obj.hFigure;
+            obj.hFigure = [];
+            if ~isempty(hf) && ishandle(hf)
+                delete(hf);
             end
         end
 
         function onLiveTick(obj)
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+
+            % Update global time range from live data
+            obj.updateLiveTimeRange();
+
             for i = 1:numel(obj.Widgets)
                 try
                     obj.Widgets{i}.refresh();
@@ -183,11 +404,27 @@ classdef DashboardEngine < handle
                         obj.Widgets{i}.Title, ME.message);
                 end
             end
+            obj.LastUpdateTime = now;
+            if ~isempty(obj.Toolbar)
+                obj.Toolbar.setLastUpdateTime(obj.LastUpdateTime);
+            end
+
+            % Re-apply current slider positions to the updated time range
+            if ~isempty(obj.hTimeSliderL) && ishandle(obj.hTimeSliderL)
+                obj.onTimeSlidersChanged();
+            end
         end
     end
 
     methods (Static)
-        function obj = load(filepath)
+        function obj = load(filepath, varargin)
+            resolver = [];
+            for k = 1:2:numel(varargin)
+                if strcmp(varargin{k}, 'SensorResolver')
+                    resolver = varargin{k+1};
+                end
+            end
+
             config = DashboardSerializer.load(filepath);
             obj = DashboardEngine(config.name);
             if isfield(config, 'theme')
@@ -198,7 +435,7 @@ classdef DashboardEngine < handle
             end
             obj.FilePath = filepath;
 
-            widgets = DashboardSerializer.configToWidgets(config);
+            widgets = DashboardSerializer.configToWidgets(config, resolver);
             for i = 1:numel(widgets)
                 w = widgets{i};
                 existingPositions = cell(1, numel(obj.Widgets));

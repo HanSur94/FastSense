@@ -1,28 +1,40 @@
 classdef EventTimelineWidget < DashboardWidget
 %EVENTTIMELINEWIDGET Displays events as colored bars on a timeline.
 %
-%   w = EventTimelineWidget('Title', 'Events', 'Events', eventArray);
-%   w = EventTimelineWidget('Title', 'Events', 'EventFcn', @() getEvents());
+%   Preferred: bind to an EventStore from the event detection system:
+%     w = EventTimelineWidget('Title', 'Events', 'EventStoreObj', store);
+%
+%   Legacy (still supported for backwards compatibility):
+%     w = EventTimelineWidget('Title', 'Events', 'EventFcn', @() getEvents());
+%     w = EventTimelineWidget('Title', 'Events', 'Events', eventArray);
 %
 %   Events must be a struct array with fields:
 %     startTime, endTime, label, color (optional)
 
     properties (Access = public)
-        Events    = []      % struct array of events
-        EventFcn  = []      % function_handle returning events
+        EventStoreObj = []  % EventStore handle — primary data source
+        Events    = []      % struct array of events (legacy)
+        EventFcn  = []      % function_handle returning events (legacy)
+        FilterSensors = {}   % Cell array of Sensor names to filter
+        ColorSource = 'event' % 'event' or 'theme'
     end
 
     properties (SetAccess = private)
         hAxes     = []
         hBars     = {}
+        IsSettingTime = false  % guard for programmatic vs user xlim change
     end
 
     methods
         function obj = EventTimelineWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 12 2];
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 24 2];
             end
         end
 
@@ -51,15 +63,38 @@ classdef EventTimelineWidget < DashboardWidget
             end
 
             obj.refresh();
+
+            % Listen for manual zoom/pan to detach from global time
+            try
+                addlistener(obj.hAxes, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
+            catch
+            end
+        end
+
+        function setTimeRange(obj, tStart, tEnd)
+            if ~obj.UseGlobalTime
+                return;
+            end
+            if ~isempty(obj.hAxes) && ishandle(obj.hAxes)
+                obj.IsSettingTime = true;
+                xlim(obj.hAxes, [tStart tEnd]);
+                obj.IsSettingTime = false;
+            end
+        end
+
+        function [tMin, tMax] = getTimeRange(obj)
+            tMin = inf; tMax = -inf;
+            evts = obj.resolveEvents();
+            if ~isempty(evts)
+                for i = 1:numel(evts)
+                    if evts(i).startTime < tMin, tMin = evts(i).startTime; end
+                    if evts(i).endTime > tMax, tMax = evts(i).endTime; end
+                end
+            end
         end
 
         function refresh(obj)
-            events = [];
-            if ~isempty(obj.EventFcn)
-                events = obj.EventFcn();
-            elseif ~isempty(obj.Events)
-                events = obj.Events;
-            end
+            events = obj.resolveEvents();
 
             if isempty(events) || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
                 return;
@@ -110,7 +145,7 @@ classdef EventTimelineWidget < DashboardWidget
                 y = lane - barHeight/2;
 
                 % Color
-                if isfield(ev, 'color') && ~isempty(ev.color)
+                if strcmp(obj.ColorSource, 'event') && isfield(ev, 'color') && ~isempty(ev.color)
                     c = ev.color;
                 else
                     c = defaultColors(mod(i-1, size(defaultColors,1)) + 1, :);
@@ -136,7 +171,12 @@ classdef EventTimelineWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
-            if ~isempty(obj.EventFcn)
+            s.filterSensors = obj.FilterSensors;
+            s.colorSource = obj.ColorSource;
+            if ~isempty(obj.EventStoreObj)
+                s.source = struct('type', 'eventstore', ...
+                    'path', obj.EventStoreObj.FilePath);
+            elseif ~isempty(obj.EventFcn)
                 s.source = struct('type', 'callback', ...
                     'function', func2str(obj.EventFcn));
             elseif ~isempty(obj.Events)
@@ -151,8 +191,19 @@ classdef EventTimelineWidget < DashboardWidget
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
+            if isfield(s, 'description')
+                obj.Description = s.description;
+            end
+            if isfield(s, 'filterSensors')
+                obj.FilterSensors = s.filterSensors;
+            end
+            if isfield(s, 'colorSource')
+                obj.ColorSource = s.colorSource;
+            end
             if isfield(s, 'source')
-                if strcmp(s.source.type, 'callback')
+                if strcmp(s.source.type, 'eventstore') && isfield(s.source, 'path')
+                    obj.EventStoreObj = EventStore(s.source.path);
+                elseif strcmp(s.source.type, 'callback')
                     obj.EventFcn = str2func(s.source.function);
                 elseif strcmp(s.source.type, 'static') && isfield(s.source, 'events')
                     obj.Events = s.source.events;
@@ -162,14 +213,65 @@ classdef EventTimelineWidget < DashboardWidget
     end
 
     methods (Access = private)
-        function theme = getTheme(obj)
-            theme = DashboardTheme();
-            if ~isempty(fieldnames(obj.ThemeOverride))
-                fns = fieldnames(obj.ThemeOverride);
-                for i = 1:numel(fns)
-                    theme.(fns{i}) = obj.ThemeOverride.(fns{i});
+        function evts = resolveEvents(obj)
+        %RESOLVEEVENTS Get events from the best available source.
+        %   Priority: EventStoreObj > EventFcn > Events (static)
+            evts = [];
+            if ~isempty(obj.EventStoreObj)
+                evts = obj.eventStoreToStructs();
+            elseif ~isempty(obj.EventFcn)
+                evts = obj.EventFcn();
+            elseif ~isempty(obj.Events)
+                evts = obj.Events;
+            end
+            % Filter by sensor name if FilterSensors is set
+            if ~isempty(obj.FilterSensors) && ~isempty(evts)
+                mask = false(1, numel(evts));
+                for i = 1:numel(evts)
+                    for j = 1:numel(obj.FilterSensors)
+                        if contains(evts(i).label, obj.FilterSensors{j})
+                            mask(i) = true;
+                            break;
+                        end
+                    end
                 end
+                evts = evts(mask);
             end
         end
+
+        function evts = eventStoreToStructs(obj)
+        %EVENTSTORETOSTRUCTS Convert Event objects from EventStore to
+        %   the struct format used for rendering (startTime, endTime, label, color).
+            evts = struct('startTime', {}, 'endTime', {}, 'label', {}, 'color', {});
+            raw = obj.EventStoreObj.getEvents();
+            if isempty(raw), return; end
+
+            theme = obj.getTheme();
+            alarmColor = theme.StatusAlarmColor;
+            warnColor  = theme.StatusWarnColor;
+
+            for i = 1:numel(raw)
+                ev = raw(i);
+                lbl = ev.SensorName;
+                if ~isempty(ev.ThresholdLabel)
+                    lbl = [ev.SensorName ' — ' ev.ThresholdLabel];
+                end
+                % Color based on direction/severity hint in label
+                if ~isempty(strfind(lower(ev.ThresholdLabel), 'alarm')) %#ok<STREMP>
+                    clr = alarmColor;
+                else
+                    clr = warnColor;
+                end
+                evts(end+1) = struct('startTime', ev.StartTime, ...
+                    'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
+            end
+        end
+
+        function onXLimChanged(obj)
+            if ~obj.IsSettingTime
+                obj.UseGlobalTime = false;
+            end
+        end
+
     end
 end

@@ -131,6 +131,90 @@ classdef TestDashboardBuilder < matlab.unittest.TestCase
             testCase.verifyEqual(get(toolbar.hEditBtn, 'String'), 'Edit');
         end
 
+        function testGridOverlayInEditMode(testCase)
+            d = DashboardEngine('Test');
+            d.addWidget('kpi', 'Title', 'M', 'Position', [1 1 3 1]);
+            d.render();
+            set(d.hFigure, 'Visible', 'off');
+            testCase.addTeardown(@() close(d.hFigure));
+
+            b = DashboardBuilder(d);
+            b.enterEditMode();
+            testCase.verifyNotEmpty(b.hGridOverlay);
+            testCase.verifyTrue(ishandle(b.hGridOverlay));
+
+            % Grid axes should contain line children
+            lines = findobj(b.hGridOverlay, 'Type', 'line');
+            testCase.verifyGreaterThan(numel(lines), 0);
+
+            b.exitEditMode();
+            testCase.verifyEmpty(b.hGridOverlay);
+        end
+
+        function testDragSnapsToGrid(testCase)
+            d = DashboardEngine('Test');
+            d.addWidget('kpi', 'Title', 'A', 'Position', [1 1 3 1]);
+            d.render();
+            set(d.hFigure, 'Visible', 'off');
+            testCase.addTeardown(@() close(d.hFigure));
+
+            b = DashboardBuilder(d);
+            b.enterEditMode();
+
+            layout = d.Layout;
+            ca = layout.ContentArea;
+            cr = layout.canvasRatio();
+            vpW = ca(3);
+            if cr > 1, vpW = vpW - layout.ScrollbarWidth; end
+            [stepW_c] = layout.canvasStepSizes();
+            stepW_fig = stepW_c * vpW;
+
+            % Drag widget 1 column to the right
+            b.onDragStart(1);
+            set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
+            b.onMouseMove();
+
+            actual = get(d.Widgets{1}.hPanel, 'Position');
+            expected = layout.computePosition([2 1 3 1]);
+            testCase.verifyEqual(actual, expected, 'AbsTol', 1e-10, ...
+                'Drag must snap to exact grid position');
+
+            set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
+            b.onMouseUp();
+        end
+
+        function testResizeSnapsToGrid(testCase)
+            d = DashboardEngine('Test');
+            d.addWidget('kpi', 'Title', 'A', 'Position', [1 1 3 1]);
+            d.render();
+            set(d.hFigure, 'Visible', 'off');
+            testCase.addTeardown(@() close(d.hFigure));
+
+            b = DashboardBuilder(d);
+            b.enterEditMode();
+
+            layout = d.Layout;
+            ca = layout.ContentArea;
+            cr = layout.canvasRatio();
+            vpW = ca(3);
+            if cr > 1, vpW = vpW - layout.ScrollbarWidth; end
+            [stepW_c] = layout.canvasStepSizes();
+            stepW_fig = stepW_c * vpW;
+
+            % Resize widget 1 column wider
+            b.onResizeStart(1);
+            set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
+            b.onMouseMove();
+
+            actual = get(d.Widgets{1}.hPanel, 'Position');
+            expected = layout.computePosition([1 1 4 1]);
+            testCase.verifyEqual(actual, expected, 'AbsTol', 1e-10, ...
+                'Resize must snap to exact grid position');
+
+            set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
+            b.onMouseUp();
+        end
+
         function testFindNextSlotPlacesBelowExisting(testCase)
             d = DashboardEngine('Test');
             d.addWidget('kpi', 'Title', 'A', 'Position', [1 1 3 2]);

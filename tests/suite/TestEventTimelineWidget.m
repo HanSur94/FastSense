@@ -18,7 +18,7 @@ classdef TestEventTimelineWidget < matlab.unittest.TestCase
 
         function testDefaultPosition(testCase)
             w = EventTimelineWidget('Title', 'Test');
-            testCase.verifyEqual(w.Position, [1 1 12 2]);
+            testCase.verifyEqual(w.Position, [1 1 24 2]);
         end
 
         function testGetType(testCase)

@@ -53,24 +53,30 @@ classdef DashboardSerializer
             config.name = name;
             config.theme = theme;
             config.liveInterval = liveInterval;
-            config.grid = struct('columns', 12);
+            config.grid = struct('columns', 24);
             config.widgets = cell(1, numel(widgets));
             for i = 1:numel(widgets)
                 config.widgets{i} = widgets{i}.toStruct();
             end
         end
 
-        function widgets = configToWidgets(config)
+        function widgets = configToWidgets(config, resolver)
             %CONFIGTOWIDGETS Create widget objects from config struct.
-            widgets = {};
+            %   configToWidgets(config) — no sensor resolution
+            %   configToWidgets(config, resolver) — resolver is a function
+            %     handle @(name) that returns a Sensor object by name.
+            if nargin < 2, resolver = []; end
+            widgets = cell(1, numel(config.widgets));
             for i = 1:numel(config.widgets)
                 ws = config.widgets{i};
                 w = [];
                 switch ws.type
                     case 'fastplot'
-                        w = FastPlotWidget.fromStruct(ws);
+                        widgets{i} = FastPlotWidget.fromStruct(ws);
+                    case 'number'
+                        widgets{i} = NumberWidget.fromStruct(ws);
                     case 'kpi'
-                        w = KpiWidget.fromStruct(ws);
+                        widgets{i} = NumberWidget.fromStruct(ws);
                     case 'status'
                         w = StatusWidget.fromStruct(ws);
                     case 'text'
@@ -87,8 +93,18 @@ classdef DashboardSerializer
                         warning('DashboardSerializer:unknownType', ...
                             'Unknown widget type: %s — skipping', ws.type);
                 end
+                % Resolve sensor binding using resolver
+                if ~isempty(resolver) && ~isempty(widgets{i}) && ...
+                        isfield(ws, 'source') && strcmp(ws.source.type, 'sensor')
+                    try
+                        widgets{i}.SensorObj = resolver(ws.source.name);
+                    catch
+                        warning('DashboardSerializer:sensorNotFound', ...
+                            'Could not resolve sensor: %s', ws.source.name);
+                    end
+                end
                 if ~isempty(w)
-                    widgets{end+1} = w;
+                    widgets{i} = w;
                 end
             end
         end
@@ -134,6 +150,19 @@ classdef DashboardSerializer
                         else
                             lines{end+1} = sprintf('d.addWidget(''fastplot'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
                         end
+                    case 'number'
+                        line = sprintf('d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
+                        if isfield(ws, 'units') && ~isempty(ws.units)
+                            line = [line, sprintf(', ...\n    ''Units'', ''%s''', ws.units)];
+                        end
+                        if isfield(ws, 'source') && isfield(ws.source, 'type')
+                            if strcmp(ws.source.type, 'callback')
+                                line = [line, sprintf(', ...\n    ''ValueFcn'', @%s', ws.source.function)];
+                            elseif strcmp(ws.source.type, 'static')
+                                line = [line, sprintf(', ...\n    ''StaticValue'', %g', ws.source.value)];
+                            end
+                        end
+                        lines{end+1} = [line, ');'];
                     case 'kpi'
                         line = sprintf('d.addWidget(''kpi'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
                         if isfield(ws, 'units') && ~isempty(ws.units)

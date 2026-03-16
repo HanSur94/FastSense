@@ -14,7 +14,7 @@ classdef TestTableWidget < matlab.unittest.TestCase
 
         function testDefaultPosition(testCase)
             w = TableWidget('Title', 'Test');
-            testCase.verifyEqual(w.Position, [1 1 4 2]);
+            testCase.verifyEqual(w.Position, [1 1 8 2]);
         end
 
         function testGetType(testCase)
@@ -25,14 +25,14 @@ classdef TestTableWidget < matlab.unittest.TestCase
         function testToStructFromStruct(testCase)
             w = TableWidget('Title', 'Readings', ...
                 'ColumnNames', {'Sensor','Value'}, ...
-                'Position', [1 1 6 3]);
+                'Position', [1 1 12 3]);
             s = w.toStruct();
             testCase.verifyEqual(s.type, 'table');
             testCase.verifyEqual(s.title, 'Readings');
 
             w2 = TableWidget.fromStruct(s);
             testCase.verifyEqual(w2.Title, 'Readings');
-            testCase.verifyEqual(w2.Position, [1 1 6 3]);
+            testCase.verifyEqual(w2.Position, [1 1 12 3]);
         end
 
         function testRender(testCase)

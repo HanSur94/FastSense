@@ -15,7 +15,7 @@ classdef TestTextWidget < matlab.unittest.TestCase
 
         function testDefaultPosition(testCase)
             w = TextWidget('Title', 'Test');
-            testCase.verifyEqual(w.Position, [1 1 3 1]);
+            testCase.verifyEqual(w.Position, [1 1 6 1]);
         end
 
         function testGetType(testCase)
@@ -25,7 +25,7 @@ classdef TestTextWidget < matlab.unittest.TestCase
 
         function testToStructFromStruct(testCase)
             w = TextWidget('Title', 'Header', 'Content', 'Body text', ...
-                'Position', [1 1 6 1], 'FontSize', 16);
+                'Position', [1 1 12 1], 'FontSize', 16);
             s = w.toStruct();
             testCase.verifyEqual(s.type, 'text');
             testCase.verifyEqual(s.content, 'Body text');

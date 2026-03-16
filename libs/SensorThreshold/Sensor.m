@@ -60,6 +60,7 @@ classdef Sensor < handle
         KeyName       % char: field name in .mat file (defaults to Key)
         X             % 1xN double: datenum time stamps
         Y             % 1xN (or MxN) double: sensor values
+        Units         % char: measurement unit (e.g., 'degC', 'bar', 'rpm')
         DataStore     % FastPlotDataStore: disk-backed storage (set by toDisk)
         StateChannels % cell array of StateChannel objects
         ThresholdRules % cell array of ThresholdRule objects
@@ -100,6 +101,7 @@ classdef Sensor < handle
             obj.MatFile = '';
             obj.X = [];
             obj.Y = [];
+            obj.Units = '';
             obj.DataStore = [];
             obj.StateChannels = {};
             obj.ThresholdRules = {};
@@ -115,6 +117,7 @@ classdef Sensor < handle
                     case 'Source',   obj.Source = varargin{i+1};
                     case 'MatFile',  obj.MatFile = varargin{i+1};
                     case 'KeyName',  obj.KeyName = varargin{i+1};
+                    case 'Units',    obj.Units = varargin{i+1};
                     otherwise
                         error('Sensor:unknownOption', ...
                             'Unknown option ''%s''.', varargin{i});

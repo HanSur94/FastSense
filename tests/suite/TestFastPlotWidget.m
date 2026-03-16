@@ -14,8 +14,8 @@ classdef TestFastPlotWidget < matlab.unittest.TestCase
 
         function testDefaultPosition(testCase)
             w = FastPlotWidget();
-            testCase.verifyEqual(w.Position, [1 1 6 3], ...
-                'Default FastPlotWidget size should be 6x3');
+            testCase.verifyEqual(w.Position, [1 1 12 3], ...
+                'Default FastPlotWidget size should be 12x3');
         end
 
         function testSensorBinding(testCase)
@@ -76,14 +76,14 @@ classdef TestFastPlotWidget < matlab.unittest.TestCase
         end
 
         function testToStructRoundTrip(testCase)
-            w = FastPlotWidget('Title', 'My Plot', 'Position', [3 2 8 3]);
+            w = FastPlotWidget('Title', 'My Plot', 'Position', [5 2 16 3]);
             w.XData = 1:10;
             w.YData = rand(1,10);
 
             s = w.toStruct();
             testCase.verifyEqual(s.type, 'fastplot');
             testCase.verifyEqual(s.title, 'My Plot');
-            testCase.verifyEqual(s.position.col, 3);
+            testCase.verifyEqual(s.position.col, 5);
         end
 
         function testToStructWithSensor(testCase)
@@ -101,12 +101,12 @@ classdef TestFastPlotWidget < matlab.unittest.TestCase
             s = struct();
             s.type = 'fastplot';
             s.title = 'Restored Plot';
-            s.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 3);
+            s.position = struct('col', 1, 'row', 1, 'width', 12, 'height', 3);
             s.source = struct('type', 'data', 'x', 1:10, 'y', rand(1,10));
 
             w = FastPlotWidget.fromStruct(s);
             testCase.verifyEqual(w.Title, 'Restored Plot');
-            testCase.verifyEqual(w.Position, [1 1 6 3]);
+            testCase.verifyEqual(w.Position, [1 1 12 3]);
             testCase.verifyLength(w.XData, 10);
         end
     end

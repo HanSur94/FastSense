@@ -24,11 +24,11 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             config.name = 'Test Dashboard';
             config.theme = 'dark';
             config.liveInterval = 5;
-            config.grid = struct('columns', 12);
+            config.grid = struct('columns', 24);
             config.widgets = {};
             config.widgets{1} = struct('type', 'fastplot', ...
                 'title', 'Temperature', ...
-                'position', struct('col', 1, 'row', 1, 'width', 6, 'height', 3), ...
+                'position', struct('col', 1, 'row', 1, 'width', 12, 'height', 3), ...
                 'source', struct('type', 'data', 'x', 1:10, 'y', rand(1,10)));
 
             filepath = fullfile(testCase.TempDir, 'test_dashboard.json');
@@ -45,10 +45,10 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
         end
 
         function testWidgetsToConfig(testCase)
-            w1 = FastPlotWidget('Title', 'Plot 1', 'Position', [1 1 6 3]);
+            w1 = FastPlotWidget('Title', 'Plot 1', 'Position', [1 1 12 3]);
             w1.XData = 1:10;
             w1.YData = rand(1,10);
-            w2 = FastPlotWidget('Title', 'Plot 2', 'Position', [7 1 6 3]);
+            w2 = FastPlotWidget('Title', 'Plot 2', 'Position', [13 1 12 3]);
             w2.XData = 1:10;
             w2.YData = rand(1,10);
 
@@ -64,12 +64,12 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             config.name = 'Test';
             config.theme = 'default';
             config.liveInterval = 1;
-            config.grid = struct('columns', 12);
+            config.grid = struct('columns', 24);
 
             ws = struct();
             ws.type = 'fastplot';
             ws.title = 'Temp';
-            ws.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 3);
+            ws.position = struct('col', 1, 'row', 1, 'width', 12, 'height', 3);
             ws.source = struct('type', 'data', 'x', 1:5, 'y', [1 2 3 4 5]);
             config.widgets = {ws};
 
@@ -84,12 +84,12 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             config.name = 'Export Test';
             config.theme = 'dark';
             config.liveInterval = 5;
-            config.grid = struct('columns', 12);
+            config.grid = struct('columns', 24);
 
             ws = struct();
             ws.type = 'fastplot';
             ws.title = 'Temperature';
-            ws.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 3);
+            ws.position = struct('col', 1, 'row', 1, 'width', 12, 'height', 3);
             ws.source = struct('type', 'data', 'x', 1:10, 'y', rand(1,10));
             config.widgets = {ws};
 

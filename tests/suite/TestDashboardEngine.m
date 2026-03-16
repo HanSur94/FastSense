@@ -10,7 +10,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testConstruction(testCase)
             d = DashboardEngine('Test Dashboard');
             testCase.verifyEqual(d.Name, 'Test Dashboard');
-            testCase.verifyEqual(d.Theme, 'default');
+            testCase.verifyEqual(d.Theme, 'light');
             testCase.verifyEqual(d.LiveInterval, 5);
         end
 
@@ -23,7 +23,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testAddWidget(testCase)
             d = DashboardEngine('Test');
             d.addWidget('fastplot', 'Title', 'Plot 1', ...
-                'Position', [1 1 6 3], ...
+                'Position', [1 1 12 3], ...
                 'XData', 1:10, 'YData', rand(1,10));
             testCase.verifyEqual(numel(d.Widgets), 1);
             testCase.verifyTrue(isa(d.Widgets{1}, 'FastPlotWidget'));
@@ -32,25 +32,25 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testAddMultipleWidgets(testCase)
             d = DashboardEngine('Test');
             d.addWidget('fastplot', 'Title', 'Plot 1', ...
-                'Position', [1 1 6 3], 'XData', 1:10, 'YData', rand(1,10));
+                'Position', [1 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
             d.addWidget('fastplot', 'Title', 'Plot 2', ...
-                'Position', [7 1 6 3], 'XData', 1:10, 'YData', rand(1,10));
+                'Position', [13 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
             testCase.verifyEqual(numel(d.Widgets), 2);
         end
 
         function testOverlapResolution(testCase)
             d = DashboardEngine('Test');
             d.addWidget('fastplot', 'Title', 'Plot 1', ...
-                'Position', [1 1 6 3], 'XData', 1:10, 'YData', rand(1,10));
+                'Position', [1 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
             d.addWidget('fastplot', 'Title', 'Plot 2', ...
-                'Position', [3 1 6 3], 'XData', 1:10, 'YData', rand(1,10));
+                'Position', [5 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
             testCase.verifyEqual(d.Widgets{2}.Position(2), 4);
         end
 
         function testRender(testCase)
             d = DashboardEngine('Render Test');
             d.addWidget('fastplot', 'Title', 'Plot 1', ...
-                'Position', [1 1 12 3], 'XData', 1:100, 'YData', rand(1,100));
+                'Position', [1 1 24 3], 'XData', 1:100, 'YData', rand(1,100));
             d.render();
             testCase.addTeardown(@() close(d.hFigure));
 
@@ -63,7 +63,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             d.Theme = 'dark';
             d.LiveInterval = 3;
             d.addWidget('fastplot', 'Title', 'Temp', ...
-                'Position', [1 1 6 3], 'XData', 1:10, 'YData', [1:10]);
+                'Position', [1 1 12 3], 'XData', 1:10, 'YData', [1:10]);
 
             filepath = fullfile(tempdir, 'test_save_dashboard.json');
             testCase.addTeardown(@() delete(filepath));
@@ -80,7 +80,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testExportScript(testCase)
             d = DashboardEngine('Export Test');
             d.addWidget('fastplot', 'Title', 'Pressure', ...
-                'Position', [1 1 6 3], 'XData', 1:5, 'YData', [5 4 3 2 1]);
+                'Position', [1 1 12 3], 'XData', 1:5, 'YData', [5 4 3 2 1]);
 
             filepath = fullfile(tempdir, 'test_export_dashboard.m');
             testCase.addTeardown(@() delete(filepath));
@@ -95,7 +95,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             d = DashboardEngine('Live Test');
             d.LiveInterval = 1;
             d.addWidget('fastplot', 'Title', 'Plot', ...
-                'Position', [1 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
+                'Position', [1 1 24 3], 'XData', 1:10, 'YData', rand(1,10));
             d.render();
             testCase.addTeardown(@() close(d.hFigure));
 
@@ -115,7 +115,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             s.resolve();
 
             d = DashboardEngine('Sensor Test');
-            d.addWidget('fastplot', 'SensorObj', s, 'Position', [1 1 8 3]);
+            d.addWidget('fastplot', 'SensorObj', s, 'Position', [1 1 16 3]);
             testCase.verifyEqual(d.Widgets{1}.Title, 'Temperature');
             testCase.verifyEqual(d.Widgets{1}.SensorObj, s);
         end
@@ -124,7 +124,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             d = DashboardEngine('Timer Cleanup');
             d.LiveInterval = 1;
             d.addWidget('fastplot', 'Title', 'P', ...
-                'Position', [1 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
+                'Position', [1 1 24 3], 'XData', 1:10, 'YData', rand(1,10));
             d.render();
             d.startLive();
 

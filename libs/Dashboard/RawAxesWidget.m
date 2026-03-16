@@ -3,21 +3,31 @@ classdef RawAxesWidget < DashboardWidget
 %
 %   w = RawAxesWidget('Title', 'Histogram', ...
 %       'PlotFcn', @(ax) histogram(ax, randn(1,1000)));
+%
+%   When bound to a Sensor, the PlotFcn receives (ax, sensor) or
+%   (ax, sensor, timeRange) depending on its nargin.
 
     properties (Access = public)
-        PlotFcn = []    % function_handle receiving axes handle: @(ax) plot(ax, ...)
+        PlotFcn    = []    % @(ax) or @(ax, sensor[, tRange]) or @(ax, tRange)
+        DataRangeFcn = []  % @() returning [tMin tMax] for global time range detection
     end
 
     properties (SetAccess = private)
-        hAxes = []
+        hAxes      = []
+        TimeRange  = []    % [tMin tMax] set by global time controls
+        IsSettingTime = false
     end
 
     methods
         function obj = RawAxesWidget(varargin)
-            obj = obj@DashboardWidget();
-            obj.Position = [1 1 4 2];
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                if strcmp(varargin{k}, 'Sensor')
+                    varargin{k} = 'SensorObj';
+                end
+            end
+            obj = obj@DashboardWidget(varargin{:});
+            if isequal(obj.Position, [1 1 6 2])
+                obj.Position = [1 1 8 2];
             end
         end
 
@@ -36,6 +46,7 @@ classdef RawAxesWidget < DashboardWidget
                 'XColor', fgColor, ...
                 'YColor', fgColor, ...
                 'Color', theme.AxesColor);
+            try disableDefaultInteractivity(obj.hAxes); catch, end
 
             if ~isempty(obj.Title)
                 title(obj.hAxes, obj.Title, ...
@@ -43,19 +54,43 @@ classdef RawAxesWidget < DashboardWidget
                     'FontSize', theme.WidgetTitleFontSize);
             end
 
-            if ~isempty(obj.PlotFcn)
-                obj.PlotFcn(obj.hAxes);
-            end
+            obj.callPlotFcn();
         end
 
         function refresh(obj)
             if ~isempty(obj.PlotFcn) && ~isempty(obj.hAxes) && ishandle(obj.hAxes)
                 cla(obj.hAxes);
-                obj.PlotFcn(obj.hAxes);
+                obj.callPlotFcn();
                 if ~isempty(obj.Title)
                     theme = obj.getTheme();
                     title(obj.hAxes, obj.Title, 'Color', theme.ForegroundColor);
                 end
+            end
+        end
+
+        function setTimeRange(obj, tStart, tEnd)
+            if ~obj.UseGlobalTime, return; end
+            obj.TimeRange = [tStart tEnd];
+            if ~isempty(obj.hAxes) && ishandle(obj.hAxes)
+                obj.IsSettingTime = true;
+                cla(obj.hAxes);
+                obj.callPlotFcn();
+                if ~isempty(obj.Title)
+                    theme = obj.getTheme();
+                    title(obj.hAxes, obj.Title, 'Color', theme.ForegroundColor);
+                end
+                obj.IsSettingTime = false;
+            end
+        end
+
+        function [tMin, tMax] = getTimeRange(obj)
+            tMin = inf; tMax = -inf;
+            if ~isempty(obj.SensorObj) && ~isempty(obj.SensorObj.X)
+                tMin = min(obj.SensorObj.X);
+                tMax = max(obj.SensorObj.X);
+            elseif ~isempty(obj.DataRangeFcn)
+                r = obj.DataRangeFcn();
+                tMin = r(1); tMax = r(2);
             end
         end
 
@@ -68,7 +103,9 @@ classdef RawAxesWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
-            if ~isempty(obj.PlotFcn)
+            if ~isempty(obj.SensorObj)
+                s.source = struct('type', 'sensor', 'name', obj.SensorObj.Key);
+            elseif ~isempty(obj.PlotFcn)
                 s.source = struct('type', 'callback', ...
                     'function', func2str(obj.PlotFcn));
             end
@@ -81,21 +118,42 @@ classdef RawAxesWidget < DashboardWidget
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
-            if isfield(s, 'source') && strcmp(s.source.type, 'callback')
-                obj.PlotFcn = str2func(s.source.function);
+            if isfield(s, 'description')
+                obj.Description = s.description;
+            end
+            if isfield(s, 'source')
+                switch s.source.type
+                    case 'sensor'
+                        if exist('SensorRegistry', 'class')
+                            obj.SensorObj = SensorRegistry.get(s.source.name);
+                        end
+                    case 'callback'
+                        obj.PlotFcn = str2func(s.source.function);
+                end
             end
         end
     end
 
     methods (Access = private)
-        function theme = getTheme(obj)
-            theme = DashboardTheme();
-            if ~isempty(fieldnames(obj.ThemeOverride))
-                fns = fieldnames(obj.ThemeOverride);
-                for i = 1:numel(fns)
-                    theme.(fns{i}) = obj.ThemeOverride.(fns{i});
+        function callPlotFcn(obj)
+            if isempty(obj.PlotFcn), return; end
+            nArgs = nargin(obj.PlotFcn);
+            if ~isempty(obj.SensorObj)
+                if ~isempty(obj.TimeRange) && nArgs >= 3
+                    obj.PlotFcn(obj.hAxes, obj.SensorObj, obj.TimeRange);
+                elseif nArgs >= 2
+                    obj.PlotFcn(obj.hAxes, obj.SensorObj);
+                else
+                    obj.PlotFcn(obj.hAxes);
+                end
+            else
+                if ~isempty(obj.TimeRange) && nArgs >= 2
+                    obj.PlotFcn(obj.hAxes, obj.TimeRange);
+                else
+                    obj.PlotFcn(obj.hAxes);
                 end
             end
         end
+
     end
 end

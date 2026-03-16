@@ -15,7 +15,7 @@ classdef TestRawAxesWidget < matlab.unittest.TestCase
 
         function testDefaultPosition(testCase)
             w = RawAxesWidget('Title', 'Test');
-            testCase.verifyEqual(w.Position, [1 1 4 2]);
+            testCase.verifyEqual(w.Position, [1 1 8 2]);
         end
 
         function testGetType(testCase)
@@ -24,7 +24,7 @@ classdef TestRawAxesWidget < matlab.unittest.TestCase
         end
 
         function testToStructFromStruct(testCase)
-            w = RawAxesWidget('Title', 'Chart', 'Position', [1 1 6 3]);
+            w = RawAxesWidget('Title', 'Chart', 'Position', [1 1 12 3]);
             s = w.toStruct();
             testCase.verifyEqual(s.type, 'rawaxes');
 
