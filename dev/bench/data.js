@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773699533990,
+  "lastUpdate": 1773760373323,
   "repoUrl": "https://github.com/HanSur94/FastPlot",
   "entries": {
     "FastPlot Performance": [
@@ -194,6 +194,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Zoom Cycle (1M pts)",
             "value": 25.82,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "HanSur94",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "name": "HanSur94",
+            "username": "HanSur94"
+          },
+          "id": "75d7c06d581d20c0704f3806783f39f6a6a11d4b",
+          "message": "feat: add LLM-powered wiki documentation generation via Claude API",
+          "timestamp": "2026-03-16T22:16:35Z",
+          "url": "https://github.com/HanSur94/FastPlot/pull/22/commits/75d7c06d581d20c0704f3806783f39f6a6a11d4b"
+        },
+        "date": 1773760372373,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample (1M pts)",
+            "value": 2.12,
+            "unit": "ms"
+          },
+          {
+            "name": "Binary Search",
+            "value": 99.95,
+            "unit": "us"
+          },
+          {
+            "name": "Zoom Cycle (1M pts)",
+            "value": 26.53,
             "unit": "ms"
           }
         ]
