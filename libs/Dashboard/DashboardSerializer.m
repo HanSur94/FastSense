@@ -115,6 +115,18 @@ classdef DashboardSerializer
                     w = EventTimelineWidget.fromStruct(ws);
                 case 'group'
                     w = GroupWidget.fromStruct(ws);
+                case 'heatmap'
+                    w = HeatmapWidget.fromStruct(ws);
+                case 'barchart'
+                    w = BarChartWidget.fromStruct(ws);
+                case 'histogram'
+                    w = HistogramWidget.fromStruct(ws);
+                case 'scatter'
+                    w = ScatterWidget.fromStruct(ws);
+                case 'image'
+                    w = ImageWidget.fromStruct(ws);
+                case 'multistatus'
+                    w = MultiStatusWidget.fromStruct(ws);
                 otherwise
                     warning('DashboardSerializer:unknownType', ...
                         'Unknown widget type: %s — skipping', ws.type);
@@ -231,6 +243,22 @@ classdef DashboardSerializer
                             line = [line, sprintf(', ...\n    ''Mode'', ''%s''', ws.mode)];
                         end
                         lines{end+1} = [line, ');'];
+                    case 'heatmap'
+                        lines{end+1} = sprintf('d.addWidget(''heatmap'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                    case 'barchart'
+                        lines{end+1} = sprintf('d.addWidget(''barchart'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                    case 'histogram'
+                        lines{end+1} = sprintf('d.addWidget(''histogram'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                    case 'scatter'
+                        lines{end+1} = sprintf('d.addWidget(''scatter'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                    case 'image'
+                        line = sprintf('d.addWidget(''image'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
+                        if isfield(ws, 'file') && ~isempty(ws.file)
+                            line = [line, sprintf(', ...\n    ''File'', ''%s''', ws.file)];
+                        end
+                        lines{end+1} = [line, ');'];
+                    case 'multistatus'
+                        lines{end+1} = sprintf('d.addWidget(''multistatus'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
                     otherwise
                         lines{end+1} = sprintf('d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
                 end

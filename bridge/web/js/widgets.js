@@ -18,6 +18,12 @@ var Widgets = (function () {
             case "timeline": return renderTimeline(config, bodyEl);
             case "rawaxes":  return renderRawAxes(config, bodyEl);
             case "group":    return renderGroup(config, bodyEl);
+            case "heatmap":  return renderHeatmap(config, bodyEl);
+            case "barchart": return renderBarChart(config, bodyEl);
+            case "histogram":return renderHistogram(config, bodyEl);
+            case "scatter":  return renderScatter(config, bodyEl);
+            case "image":    return renderImage(config, bodyEl);
+            case "multistatus": return renderMultiStatus(config, bodyEl);
             default:
                 bodyEl.textContent = "Unknown widget type: " + type;
         }
@@ -322,6 +328,91 @@ var Widgets = (function () {
             });
             container.appendChild(content);
         }
+
+    /* --- Heatmap ------------------------------------------- */
+    function renderHeatmap(cfg, el) {
+        el.innerHTML = '<div class="placeholder-widget">' +
+            '<div class="icon">&#x1F7E5;</div>' +
+            '<div class="label">Heatmap: ' + (cfg.title || '') + '</div>' +
+            '</div>';
+    }
+
+    /* --- Bar Chart ----------------------------------------- */
+    function renderBarChart(cfg, el) {
+        el.innerHTML = '<div class="placeholder-widget">' +
+            '<div class="icon">&#x1F4CA;</div>' +
+            '<div class="label">Bar Chart: ' + (cfg.title || '') + '</div>' +
+            '</div>';
+    }
+
+    /* --- Histogram ----------------------------------------- */
+    function renderHistogram(cfg, el) {
+        el.innerHTML = '<div class="placeholder-widget">' +
+            '<div class="icon">&#x1F4C8;</div>' +
+            '<div class="label">Histogram: ' + (cfg.title || '') + '</div>' +
+            '</div>';
+    }
+
+    /* --- Scatter ------------------------------------------- */
+    function renderScatter(cfg, el) {
+        el.innerHTML = '<div class="placeholder-widget">' +
+            '<div class="icon">&#x2022;</div>' +
+            '<div class="label">Scatter: ' + (cfg.title || '') + '</div>' +
+            '</div>';
+    }
+
+    /* --- Image --------------------------------------------- */
+    function renderImage(cfg, el) {
+        if (cfg.file) {
+            var img = document.createElement("img");
+            img.src = cfg.file;
+            img.alt = cfg.title || "Image";
+            img.style.maxWidth = "100%";
+            img.style.maxHeight = "100%";
+            img.style.objectFit = "contain";
+            el.appendChild(img);
+        } else {
+            el.innerHTML = '<div class="placeholder-widget">' +
+                '<div class="icon">&#x1F5BC;</div>' +
+                '<div class="label">Image: ' + (cfg.title || '') + '</div>' +
+                '</div>';
+        }
+    }
+
+    /* --- Multi-Status -------------------------------------- */
+    function renderMultiStatus(cfg, el) {
+        var items = cfg.items || [];
+        if (items.length === 0) {
+            el.innerHTML = '<div class="placeholder-widget">' +
+                '<div class="label">Multi-Status: ' + (cfg.title || '') + '</div>' +
+                '</div>';
+            return;
+        }
+        var grid = document.createElement("div");
+        grid.style.display = "grid";
+        grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(80px, 1fr))";
+        grid.style.gap = "6px";
+        grid.style.padding = "8px";
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            var cell = document.createElement("div");
+            cell.style.display = "flex";
+            cell.style.alignItems = "center";
+            cell.style.gap = "4px";
+            var dot = document.createElement("span");
+            dot.style.width = "10px";
+            dot.style.height = "10px";
+            dot.style.borderRadius = "50%";
+            dot.style.display = "inline-block";
+            dot.style.backgroundColor = item.color || "#888";
+            cell.appendChild(dot);
+            var lbl = document.createElement("span");
+            lbl.style.fontSize = "0.8em";
+            lbl.textContent = item.label || "";
+            cell.appendChild(lbl);
+            grid.appendChild(cell);
+        }
+        el.appendChild(grid);
     }
 
     /* --- helpers ------------------------------------------- */
