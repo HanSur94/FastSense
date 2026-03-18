@@ -159,6 +159,7 @@ classdef MarkdownRenderer
 
     methods (Static, Access = private)
         function text = inlineFormat(text)
+            text = MarkdownRenderer.escapeHtml(text);
             % Links: [text](url)
             text = regexprep(text, '\[([^\]]+)\]\(([^)]+)\)', '<a href="$2">$1</a>');
             % Bold: **text**
