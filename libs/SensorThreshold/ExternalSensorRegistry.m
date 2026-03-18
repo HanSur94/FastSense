@@ -40,6 +40,9 @@ classdef ExternalSensorRegistry < handle
         function register(obj, key, sensor)
             %REGISTER Add a Sensor to the catalog.
             %   reg.register('key', sensorObj)
+            assert(ischar(key) && ~isempty(key), ...
+                'ExternalSensorRegistry:invalidKey', ...
+                'Key must be a non-empty char.');
             assert(isa(sensor, 'Sensor'), ...
                 'ExternalSensorRegistry:invalidType', ...
                 'Value must be a Sensor object.');
@@ -125,6 +128,9 @@ classdef ExternalSensorRegistry < handle
             %   })
             %
             %   Each row of mappings: {sensorKey, 'XVar', xField, 'YVar', yField}
+            p = inputParser();
+            p.addParameter('XVar', 'X', @ischar);
+            p.addParameter('YVar', 'Y', @ischar);
             for i = 1:size(mappings, 1)
                 key = mappings{i, 1};
                 if ~obj.catalog_.isKey(key)
@@ -134,9 +140,6 @@ classdef ExternalSensorRegistry < handle
 
                 % Parse name-value pairs from remaining columns
                 nvPairs = mappings(i, 2:end);
-                p = inputParser();
-                p.addParameter('XVar', 'X', @ischar);
-                p.addParameter('YVar', 'Y', @ischar);
                 p.parse(nvPairs{:});
 
                 % Set Sensor properties

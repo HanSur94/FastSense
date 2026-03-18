@@ -175,7 +175,10 @@ classdef TestExternalSensorRegistry < matlab.unittest.TestCase
             reg.wireMatFile(matPath, {'s1', 'XVar', 'time', 'YVar', 'val'});
 
             % Wire again — should warn but not error
+            lastwarn('');
             reg.wireMatFile(matPath, {'s1', 'XVar', 'time', 'YVar', 'val'});
+            [~, warnId] = lastwarn();
+            testCase.verifyEqual(warnId, 'ExternalSensorRegistry:overwrite', 'overwrite_warned');
 
             % Should still work
             dsMap = reg.getDataSourceMap();
