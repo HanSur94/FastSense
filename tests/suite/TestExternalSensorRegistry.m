@@ -89,5 +89,27 @@ classdef TestExternalSensorRegistry < matlab.unittest.TestCase
             reg = ExternalSensorRegistry('TestLab');
             reg.unregister('nonexistent');  % should not error
         end
+
+        function testListNoError(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            reg.register('temp', Sensor('temp', 'Name', 'Temperature'));
+            reg.list();  % should not error
+        end
+
+        function testListEmpty(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            reg.list();  % should not error on empty registry
+        end
+
+        function testPrintTableNoError(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            reg.register('temp', Sensor('temp', 'Name', 'Temperature', 'ID', 1));
+            reg.printTable();  % should not error
+        end
+
+        function testPrintTableEmpty(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            reg.printTable();  % should not error on empty registry
+        end
     end
 end
