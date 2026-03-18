@@ -92,6 +92,18 @@ classdef DashboardEngine < handle
                     end
                 case 'group'
                     w = GroupWidget(varargin{:});
+                case 'heatmap'
+                    w = HeatmapWidget(varargin{:});
+                case 'barchart'
+                    w = BarChartWidget(varargin{:});
+                case 'histogram'
+                    w = HistogramWidget(varargin{:});
+                case 'scatter'
+                    w = ScatterWidget(varargin{:});
+                case 'image'
+                    w = ImageWidget(varargin{:});
+                case 'multistatus'
+                    w = MultiStatusWidget(varargin{:});
                 otherwise
                     error('DashboardEngine:unknownType', ...
                         'Unknown widget type: %s', type);
@@ -566,6 +578,12 @@ classdef DashboardEngine < handle
                 'timeline',    'Event timeline display (EventTimelineWidget)'
                 'rawaxes',     'Raw MATLAB axes for custom plotting (RawAxesWidget)'
                 'group',       'Widget container with panel/collapsible/tabbed modes (GroupWidget)'
+                'heatmap',     'Heatmap color grid (HeatmapWidget)'
+                'barchart',    'Bar chart for categories (BarChartWidget)'
+                'histogram',   'Value distribution histogram (HistogramWidget)'
+                'scatter',     'X vs Y scatter plot (ScatterWidget)'
+                'image',       'Static image display (ImageWidget)'
+                'multistatus', 'Multi-sensor status grid (MultiStatusWidget)'
             };
         end
 
