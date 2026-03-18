@@ -3,6 +3,7 @@ classdef MarkdownRenderer
 %
 %   html = MarkdownRenderer.render(mdText)
 %   html = MarkdownRenderer.render(mdText, themeName)
+%   html = MarkdownRenderer.render(mdText, themeName, basePath)
 %
 %   Converts a subset of Markdown to a self-contained HTML document.
 %   Supported: headings (#-###), **bold**, *italic*, `inline code`,
@@ -14,9 +15,12 @@ classdef MarkdownRenderer
 %   color scheme. Unrecognized themes default to 'light'.
 
     methods (Static)
-        function html = render(mdText, themeName)
+        function html = render(mdText, themeName, basePath)
             if nargin < 2 || isempty(themeName)
                 themeName = 'light';
+            end
+            if nargin < 3
+                basePath = '';
             end
 
             % regexp split preserves empty tokens (Octave-compatible)
@@ -195,8 +199,15 @@ classdef MarkdownRenderer
             bodyHtml = strjoin(bodyParts, char(10));
 
             css = MarkdownRenderer.getCSS(themeName);
+            baseTag = '';
+            if ~isempty(basePath)
+                % file:// URL so relative paths resolve against the .md dir
+                baseUrl = ['file://' strrep(basePath, '\', '/') '/'];
+                baseTag = ['<base href="' baseUrl '">' char(10)];
+            end
             html = ['<!DOCTYPE html>' char(10) ...
                 '<html><head><meta charset="utf-8">' char(10) ...
+                baseTag ...
                 '<style>' char(10) css char(10) '</style>' char(10) ...
                 '</head><body>' char(10) ...
                 bodyHtml char(10) ...

@@ -210,8 +210,9 @@ classdef DashboardEngine < handle
                 return;
             end
 
-            % Convert to HTML
-            html = MarkdownRenderer.render(mdText, obj.Theme);
+            % Convert to HTML with base path for relative image/link resolution
+            mdDir = fileparts(mdPath);
+            html = MarkdownRenderer.render(mdText, obj.Theme, mdDir);
 
             % Write temp file (reuse path)
             if isempty(obj.InfoTempFile)

@@ -31,6 +31,10 @@ engineers to quickly assess process health.
   valve PV-201.
 - Contact the process engineer (ext. 4412) for sustained alarms.
 
+## Process Diagram
+
+![Process diagram for Line 4](example_dashboard_info_diagram.png)
+
 ## Data Sources
 
 All sensor data is sampled at 10 Hz and stored in the historian.

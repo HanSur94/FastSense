@@ -34,7 +34,39 @@ sPress.addThresholdRule(struct(), 65, 'Direction', 'upper', 'Label', 'Hi Warn');
 sPress.addThresholdRule(struct(), 70, 'Direction', 'upper', 'Label', 'Hi Alarm');
 sPress.resolve();
 
-%% 2. Create dashboard with InfoFile
+%% 2. Generate a process diagram image for the info page
+% The Markdown file references this image via ![...](example_dashboard_info_diagram.png)
+examplesDir = fileparts(mfilename('fullpath'));
+diagramPath = fullfile(examplesDir, 'example_dashboard_info_diagram.png');
+if ~exist(diagramPath, 'file')
+    hFig = figure('Visible', 'off', 'Position', [100 100 600 250], 'Color', 'w');
+    ax = axes(hFig, 'Visible', 'off');
+    hold(ax, 'on');
+    % Draw simple block diagram: Feed -> Reactor -> Outlet
+    rectangle(ax, 'Position', [0.5 0.3 1.2 0.4], 'Curvature', 0.1, ...
+        'FaceColor', [0.85 0.92 1], 'EdgeColor', [0.3 0.5 0.8], 'LineWidth', 1.5);
+    text(ax, 1.1, 0.5, {'Feed Header'; 'P-201'}, 'HorizontalAlignment', 'center', 'FontSize', 10);
+
+    rectangle(ax, 'Position', [2.5 0.15 1.5 0.7], 'Curvature', 0.1, ...
+        'FaceColor', [1 0.92 0.85], 'EdgeColor', [0.8 0.5 0.3], 'LineWidth', 1.5);
+    text(ax, 3.25, 0.5, 'Reactor', 'HorizontalAlignment', 'center', 'FontSize', 12, 'FontWeight', 'bold');
+
+    rectangle(ax, 'Position', [4.8 0.3 1.2 0.4], 'Curvature', 0.1, ...
+        'FaceColor', [0.85 1 0.88], 'EdgeColor', [0.3 0.7 0.4], 'LineWidth', 1.5);
+    text(ax, 5.4, 0.5, {'Outlet'; 'T-401'}, 'HorizontalAlignment', 'center', 'FontSize', 10);
+
+    % Arrows
+    annotation(hFig, 'arrow', [0.30 0.40], [0.5 0.5], 'LineWidth', 1.5);
+    annotation(hFig, 'arrow', [0.66 0.76], [0.5 0.5], 'LineWidth', 1.5);
+
+    xlim(ax, [0 6.5]);
+    ylim(ax, [0 1]);
+    print(hFig, diagramPath, '-dpng', '-r150');
+    close(hFig);
+    fprintf('Generated process diagram: %s\n', diagramPath);
+end
+
+%% 3. Create dashboard with InfoFile
 % The InfoFile points to a Markdown file in the same directory as this
 % script.  The Info button will appear in the toolbar.
 infoPath = fullfile(fileparts(mfilename('fullpath')), 'example_dashboard_info.md');
@@ -68,7 +100,7 @@ d.addWidget('text', 'Title', 'Notes', ...
 d.render();
 fprintf('Dashboard rendered. Click the "Info" button next to the title.\n');
 
-%% 3. Save and reload — InfoFile is preserved
+%% 4. Save and reload — InfoFile is preserved
 jsonPath = fullfile(tempdir, 'example_dashboard_info.json');
 d.save(jsonPath);
 fprintf('Dashboard saved to: %s\n', jsonPath);
