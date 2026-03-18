@@ -100,6 +100,18 @@ classdef TestMarkdownRenderer < matlab.unittest.TestCase
             testCase.verifyTrue(~strcmp(htmlLight, htmlDark));
         end
 
+        function testTable(testCase)
+            md = sprintf('| Name | Value |\n|------|-------|\n| Temp | 80 C |\n| Press | 50 bar |');
+            html = MarkdownRenderer.render(md);
+            testCase.verifyTrue(contains(html, '<table>'));
+            testCase.verifyTrue(contains(html, '<th>Name</th>'));
+            testCase.verifyTrue(contains(html, '<th>Value</th>'));
+            testCase.verifyTrue(contains(html, '<td>Temp</td>'));
+            testCase.verifyTrue(contains(html, '<td>80 C</td>'));
+            testCase.verifyTrue(contains(html, '<td>Press</td>'));
+            testCase.verifyTrue(contains(html, '</table>'));
+        end
+
         function testFullHtmlDocument(testCase)
             html = MarkdownRenderer.render('# Hello');
             testCase.verifyTrue(strncmp(html, '<!DOCTYPE html>', 15));
