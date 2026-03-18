@@ -67,8 +67,10 @@ obj = IncrementalEventDetector(varargin)
 
 ## `Event` --- Represents a single detected threshold violation event.
 
+> Inherits from: `handle`
+
 e = Event(startTime, endTime, sensorName, thresholdLabel, thresholdValue, direction)
-  e = e.setStats(peakValue, numPoints, minVal, maxVal, meanVal, rmsVal, stdVal)
+  e.setStats(peakValue, numPoints, minVal, maxVal, meanVal, rmsVal, stdVal)
 
 ### Constructor
 
@@ -80,7 +82,7 @@ obj = Event(startTime, endTime, sensorName, thresholdLabel, thresholdValue, dire
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| DIRECTIONS | `{'high', 'low'}` |  |
+| DIRECTIONS | `{'upper', 'lower'}` |  |
 
 ### Methods
 
@@ -303,7 +305,7 @@ obj = NotificationService(varargin)
 | SmtpPort | `25` |  |
 | SmtpUser | `''` |  |
 | SmtpPassword | `''` |  |
-| FromAddress | `'fastplot@noreply.com'` |  |
+| FromAddress | `'fastsense@noreply.com'` |  |
 | NotificationCount | `0` |  |
 
 ### Methods
@@ -364,6 +366,10 @@ Subclasses must implement fetchNew() which returns a struct:
     .stateX  — 1xK datenum state timestamps (empty if none)
     .stateY  — 1xK state values (empty if none)
     .changed — logical, true if new data since last call
+
+### Methods
+
+#### `result = fetchNew(obj)`
 
 ### Static Methods
 

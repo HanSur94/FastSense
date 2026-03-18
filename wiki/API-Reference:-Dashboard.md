@@ -36,11 +36,18 @@ obj = DashboardEngine(name, varargin)
 
 #### `removeWidget(obj, idx)`
 
-REMOVEWIDGET Remove widget at given index.
+REMOVEWIDGET Remove widget at given index and re-layout.
 
 #### `setWidgetPosition(obj, idx, pos)`
 
 SETWIDGETPOSITION Set the grid position of a widget by index.
+  Clamps width to grid columns and resolves overlaps with other
+  widgets.
+
+#### `w = getWidgetByTitle(obj, title)`
+
+GETWIDGETBYTITLE Find a widget by its Title property.
+  Returns the widget object, or empty if not found.
 
 #### `setContentArea(obj, contentArea)`
 
@@ -71,6 +78,10 @@ BROADCASTTIMERANGE Push time range to widgets using global time.
 RESETGLOBALTIME Re-attach all widgets to global time and apply.
 
 ### Static Methods
+
+#### `DashboardEngine.types = widgetTypes()`
+
+WIDGETTYPES List supported widget type strings.
 
 #### `DashboardEngine.obj = load(filepath, varargin)`
 
@@ -135,8 +146,7 @@ obj = DashboardBuilder(engine)
 Subclasses must implement:
     render(parentPanel) — create graphics objects inside the panel
     refresh()           — update data/display (called by live timer)
-    configure()         — open properties UI for edit mode
-    getType()           — return widget type string (e.g. 'fastplot')
+    getType()           — return widget type string (e.g. 'fastsense')
 
   Subclasses must also provide a static fromStruct(s) method.
 
@@ -155,7 +165,8 @@ obj = DashboardWidget(varargin)
 | ThemeOverride | `struct()` | Per-widget theme overrides (merged on top of dashboard theme) |
 | UseGlobalTime | `true` | false when user manually zooms this widget |
 | Description | `''` | Optional tooltip text shown via info icon hover |
-| SensorObj | `[]` | Sensor object for data binding (primary source) |
+| Sensor | `[]` | Sensor object for data binding (primary source) |
+| ParentTheme | `[]` | Theme inherited from DashboardEngine |
 
 ### Methods
 
@@ -214,10 +225,6 @@ obj = FastSenseWidget(varargin)
 Re-render sensor-bound widgets so updated data + violations show.
 Preserves current zoom state (xlim) across the rebuild.
 
-#### `configure(obj)`
-
-Placeholder for edit mode properties panel
-
 #### `setTimeRange(obj, tStart, tEnd)`
 
 #### `onXLimChanged(obj)`
@@ -251,8 +258,6 @@ w = GaugeWidget('Title', 'Pressure', 'ValueFcn', @() getPressure(), ...
 obj = GaugeWidget(varargin)
 ```
 
-Rename 'Sensor' shorthand to 'SensorObj' for base class
-
 ### Properties
 
 | Property | Default | Description |
@@ -268,8 +273,6 @@ Rename 'Sensor' shorthand to 'SensorObj' for base class
 #### `render(obj, parentPanel)`
 
 #### `refresh(obj)`
-
-#### `configure(~)`
 
 #### `t = getType(~)`
 
@@ -297,8 +300,6 @@ w = NumberWidget('Title', 'Temp', 'ValueFcn', @() readTemp(), 'Units', 'degC');
 obj = NumberWidget(varargin)
 ```
 
-Map 'Sensor' shorthand to 'SensorObj'
-
 ### Properties
 
 | Property | Default | Description |
@@ -313,10 +314,6 @@ Map 'Sensor' shorthand to 'SensorObj'
 #### `render(obj, parentPanel)`
 
 #### `refresh(obj)`
-
-#### `configure(obj)`
-
-Placeholder for Phase 4 edit mode
 
 #### `t = getType(~)`
 
@@ -344,8 +341,6 @@ Sensor-first:
 obj = StatusWidget(varargin)
 ```
 
-Map 'Sensor' shorthand to 'SensorObj'
-
 ### Properties
 
 | Property | Default | Description |
@@ -358,8 +353,6 @@ Map 'Sensor' shorthand to 'SensorObj'
 #### `render(obj, parentPanel)`
 
 #### `refresh(obj)`
-
-#### `configure(~)`
 
 #### `t = getType(~)`
 
@@ -398,8 +391,6 @@ obj = TextWidget(varargin)
 #### `refresh(~)`
 
 Static widget — nothing to refresh
-
-#### `configure(~)`
 
 #### `t = getType(~)`
 
@@ -444,8 +435,6 @@ obj = TableWidget(varargin)
 
 #### `refresh(obj)`
 
-#### `configure(~)`
-
 #### `t = getType(~)`
 
 #### `s = toStruct(obj)`
@@ -488,8 +477,6 @@ obj = RawAxesWidget(varargin)
 #### `setTimeRange(obj, tStart, tEnd)`
 
 #### `[tMin, tMax] = getTimeRange(obj)`
-
-#### `configure(~)`
 
 #### `t = getType(~)`
 
@@ -540,8 +527,6 @@ obj = EventTimelineWidget(varargin)
 #### `[tMin, tMax] = getTimeRange(obj)`
 
 #### `refresh(obj)`
-
-#### `configure(~)`
 
 #### `t = getType(~)`
 
@@ -608,7 +593,6 @@ obj = DashboardLayout(varargin)
 | Padding | `[0.02 0.02 0.02 0.02]` |  |
 | GapH | `0.008` |  |
 | GapV | `0.015` |  |
-| Widgets | `{}` |  |
 | RowHeight | `0.22` |  |
 | ScrollbarWidth | `0.015` |  |
 

@@ -48,11 +48,10 @@ SENSOR Construct a Sensor object.
 
 #### `load(obj)`
 
-LOAD Load sensor data from the external data source.
+LOAD Load sensor data from a .mat file.
   s.load() populates s.X and s.Y by loading the file
-  specified in s.MatFile.  This is a placeholder that must
-  be overridden or extended to integrate with your project's
-  data loading library.  Alternatively, set X and Y directly.
+  specified in s.MatFile using the field name s.KeyName.
+  Requires MatFile and KeyName to be set.
 
 #### `addStateChannel(obj, sc)`
 
@@ -259,6 +258,15 @@ LIST Print all available sensor keys and names.
   SensorRegistry.list() prints a formatted table of every
   registered sensor key and its human-readable name to the
   command window.  Keys are sorted alphabetically.
+
+#### `SensorRegistry.register(key, sensor)`
+
+REGISTER Add a sensor to the catalog at runtime.
+  SensorRegistry.register('myKey', sensorObj)
+
+#### `SensorRegistry.unregister(key)`
+
+UNREGISTER Remove a sensor from the catalog.
 
 #### `SensorRegistry.printTable()`
 
