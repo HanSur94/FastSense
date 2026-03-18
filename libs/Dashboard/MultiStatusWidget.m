@@ -58,24 +58,8 @@ classdef MultiStatusWidget < DashboardWidget
                 cx = (col + 0.5) / cols;
                 cy = 1 - (row + 0.5) / rows;
 
-                % Determine color from sensor thresholds
                 sensor = obj.Sensors{i};
-                color = okColor;
-                if ~isempty(sensor) && ~isempty(sensor.Y)
-                    val = sensor.Y(end);
-                    if ~isempty(sensor.ThresholdRules)
-                        for k = 1:numel(sensor.ThresholdRules)
-                            rule = sensor.ThresholdRules{k};
-                            if ~isempty(rule.Color)
-                                if rule.IsUpper && val >= rule.Value
-                                    color = rule.Color;
-                                elseif ~rule.IsUpper && val <= rule.Value
-                                    color = rule.Color;
-                                end
-                            end
-                        end
-                    end
-                end
+                color = obj.deriveColor(sensor, okColor);
 
                 % Draw indicator
                 r = 0.3 / max(cols, rows);
@@ -125,6 +109,28 @@ classdef MultiStatusWidget < DashboardWidget
                 keys{i} = obj.Sensors{i}.Key;
             end
             s.sensors = keys;
+        end
+    end
+
+    methods (Access = private)
+        function color = deriveColor(~, sensor, defaultColor)
+            color = defaultColor;
+            if isempty(sensor) || isempty(sensor.Y)
+                return;
+            end
+            val = sensor.Y(end);
+            if isempty(sensor.ThresholdRules)
+                return;
+            end
+            for k = 1:numel(sensor.ThresholdRules)
+                rule = sensor.ThresholdRules{k};
+                if isempty(rule.Color), continue; end
+                if rule.IsUpper && val >= rule.Value
+                    color = rule.Color;
+                elseif ~rule.IsUpper && val <= rule.Value
+                    color = rule.Color;
+                end
+            end
         end
     end
 
