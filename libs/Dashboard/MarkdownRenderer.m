@@ -198,14 +198,9 @@ classdef MarkdownRenderer
 
             bodyHtml = strjoin(bodyParts, char(10));
 
-            % Resolve relative image paths to absolute file:// URLs
+            % Embed local images as base64 data URIs
             if ~isempty(basePath)
-                absPrefix = ['file://' strrep(basePath, '\', '/') '/'];
-                % Match <img src="X" where X does not start with
-                % http://, https://, file://, or /
-                bodyHtml = regexprep(bodyHtml, ...
-                    '<img src="(?!https?://|file://|/)', ...
-                    ['<img src="' absPrefix]);
+                bodyHtml = MarkdownRenderer.embedImages(bodyHtml, basePath);
             end
 
             css = MarkdownRenderer.getCSS(themeName);
@@ -231,6 +226,56 @@ classdef MarkdownRenderer
             text = regexprep(text, '\*([^*]+)\*', '<em>$1</em>');
             % Inline code: `text`
             text = regexprep(text, '`([^`]+)`', '<code>$1</code>');
+        end
+
+        function html = embedImages(html, basePath)
+            % Find all <img src="..."> and embed local files as base64
+            [toks, starts, ends] = regexp(html, '<img src="([^"]+)"', ...
+                'tokens', 'start', 'end');
+            if isempty(toks)
+                return;
+            end
+            % Process in reverse order so indices stay valid
+            for k = numel(toks):-1:1
+                src = toks{k}{1};
+                % Skip URLs (http/https/data)
+                if strncmp(src, 'http://', 7) || strncmp(src, 'https://', 8) || ...
+                        strncmp(src, 'data:', 5)
+                    continue;
+                end
+                % Resolve relative path
+                if src(1) == '/' || (numel(src) > 1 && src(2) == ':')
+                    imgPath = src;
+                else
+                    imgPath = fullfile(basePath, src);
+                end
+                if ~exist(imgPath, 'file')
+                    continue;
+                end
+                % Detect MIME type from extension
+                [~, ~, ext] = fileparts(imgPath);
+                ext = lower(ext);
+                switch ext
+                    case '.png',  mime = 'image/png';
+                    case {'.jpg', '.jpeg'}, mime = 'image/jpeg';
+                    case '.gif',  mime = 'image/gif';
+                    case '.svg',  mime = 'image/svg+xml';
+                    otherwise,    mime = 'application/octet-stream';
+                end
+                % Read and encode
+                fid = fopen(imgPath, 'rb');
+                if fid == -1, continue; end
+                raw = fread(fid, '*uint8')';
+                fclose(fid);
+                if exist('OCTAVE_VERSION', 'builtin')
+                    b64 = base64_encode(raw);
+                else
+                    b64 = char(java.util.Base64.getEncoder().encodeToString(raw));
+                end
+                dataUri = ['data:' mime ';base64,' b64];
+                % Replace src in the tag
+                html = [html(1:starts(k)-1) '<img src="' dataUri '"' html(ends(k)+1:end)];
+            end
         end
 
         function cells = parseTableRow(line)
