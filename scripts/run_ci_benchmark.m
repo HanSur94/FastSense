@@ -38,9 +38,9 @@ function run_ci_benchmark()
         elseif n <= 10e6
             N_DS = 10; N_RUNS = 5; N_INIT = 3;
         elseif n <= 100e6
-            N_DS = 5; N_RUNS = 3; N_INIT = 2;
+            N_DS = 5; N_RUNS = 3; N_INIT = 3;
         else
-            N_DS = 2; N_RUNS = 3; N_INIT = 2;
+            N_DS = 3; N_RUNS = 3; N_INIT = 3;
         end
 
         fprintf('  Generating %s data points...\n', lbl);
