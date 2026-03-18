@@ -59,55 +59,7 @@ jobs:
 
       - name: Run benchmark
         run: |
-          xvfb-run octave --eval "
-            addpath(pwd); setup();
-            addpath(fullfile(pwd, 'libs', 'FastSense', 'private'));
-
-            n = 1e6;
-            x = linspace(0, 100, n);
-            y = sin(x * 2*pi / 10) + 0.5 * randn(1, n);
-
-            tic;
-            for i = 1:100
-              minmax_downsample(x, y, 2000);
-            end
-            t_ds = toc / 100;
-
-            tic;
-            for i = 1:1000
-              binary_search(x, 20, 'left');
-            end
-            t_bs = toc / 1000;
-
-            % Measure full render cycle
-            fp = FastSense();
-            fp.addLine(x, y, 'DisplayName', 'bench');
-            fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true);
-            fp.render();
-
-            tic;
-            for i = 1:20
-              center = 10 + 80 * rand();
-              width = 1 + 20 * rand();
-              set(fp.hAxes, 'XLim', [center-width/2, center+width/2]);
-              drawnow;
-            end
-            t_zoom = toc / 20;
-            close all force;
-
-            fid = fopen('benchmark-results.json', 'w');
-            fprintf(fid, '[\n');
-            fprintf(fid, '  {\"name\": \"Downsample (1M pts)\", \"unit\": \"ms\", \"value\": %.2f},\n', t_ds * 1000);
-            fprintf(fid, '  {\"name\": \"Binary Search\", \"unit\": \"us\", \"value\": %.2f},\n', t_bs * 1e6);
-            fprintf(fid, '  {\"name\": \"Zoom Cycle (1M pts)\", \"unit\": \"ms\", \"value\": %.2f}\n', t_zoom * 1000);
-            fprintf(fid, ']\n');
-            fclose(fid);
-
-            fprintf('\n=== Benchmark Results (1M points) ===\n');
-            fprintf('Downsample:    %.2f ms\n', t_ds * 1000);
-            fprintf('Binary search: %.2f us\n', t_bs * 1e6);
-            fprintf('Zoom cycle:    %.2f ms\n', t_zoom * 1000);
-          "
+          xvfb-run octave --eval "addpath(pwd); setup(); addpath('scripts'); run_ci_benchmark();"
 
       - name: Fix git ownership
         run: git config --global --add safe.directory /__w/FastSense/FastSense
@@ -115,7 +67,7 @@ jobs:
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: FastSense Performance
+          name: FastPlot Performance
           tool: customSmallerIsBetter
           output-file-path: benchmark-results.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
