@@ -12,9 +12,9 @@
 
 1. Clone or download the repository
 2. In MATLAB/Octave, navigate to the FastPlot directory
-3. Run setup:
+3. Run install:
 ```matlab
-setup;
+install;
 ```
 
 This adds the library paths:
@@ -48,13 +48,13 @@ If MEX files are not compiled, pure-MATLAB fallbacks are used automatically with
 ## Verify Installation
 
 ```matlab
-setup;
+install;
 addpath('tests');
 run_all_tests();
 ```
 
 Or run a quick example:
 ```matlab
-setup;
+install;
 example_basic;
 ```

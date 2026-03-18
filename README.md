@@ -16,7 +16,7 @@ Sensor monitoring and dashboarding platform for MATLAB and GNU Octave. Plot 100M
 ## Quick Start
 
 ```matlab
-setup;  % adds libraries to path + compiles MEX
+install;  % adds libraries to path + compiles MEX
 
 x = linspace(0, 100, 1e7);
 y = sin(x) + 0.1 * randn(size(x));
@@ -156,7 +156,7 @@ cd FastSense
 Then in MATLAB or Octave:
 
 ```matlab
-setup;  % adds paths + compiles MEX accelerators (requires C compiler)
+install;  % adds paths + compiles MEX accelerators (requires C compiler)
 ```
 
 No toolbox dependencies. MEX compilation is optional — pure MATLAB fallbacks are used automatically if no C compiler is available.

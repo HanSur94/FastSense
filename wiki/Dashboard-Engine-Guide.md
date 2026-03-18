@@ -28,7 +28,7 @@ FastSense provides two dashboard systems:
 ## Quick Start
 
 ```matlab
-setup;
+install;
 
 % Create some data
 x = linspace(0, 100, 10000);
@@ -321,7 +321,7 @@ The editor snaps to the 24-column grid. You can change the widget's title, posit
 This example creates a process monitoring dashboard with sensor-bound widgets:
 
 ```matlab
-setup;
+install;
 
 %% Generate data
 rng(42);

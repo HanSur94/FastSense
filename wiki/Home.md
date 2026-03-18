@@ -42,7 +42,7 @@ FastPlot consists of five integrated libraries:
 ## Quick Start
 
 ```matlab
-setup;
+install;
 
 % Basic plot with 10M points
 fp = FastSense('Theme', 'dark');

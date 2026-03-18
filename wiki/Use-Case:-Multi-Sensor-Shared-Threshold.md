@@ -11,7 +11,7 @@ Plot multiple sensors on a single tile with one shared threshold, see violation 
 ## Quick Example
 
 ```matlab
-setup;
+install;
 
 %% Create sensors with identical threshold rules
 sensors = cell(1, 4);

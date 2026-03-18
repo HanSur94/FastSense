@@ -9,7 +9,7 @@ FastSense supports live data visualization by polling a .mat file for updates an
 ## Basic Live Plot
 
 ```matlab
-setup;
+install;
 
 % Create initial plot
 fp = FastSense('Theme', 'dark');

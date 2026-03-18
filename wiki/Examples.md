@@ -5,7 +5,7 @@ FastPlot includes 40+ runnable examples in the `examples/` directory. Each demon
 ## Running Examples
 
 ```matlab
-setup;
+install;
 cd examples
 
 example_basic;          % Run a specific example

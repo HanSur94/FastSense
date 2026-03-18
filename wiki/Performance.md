@@ -59,7 +59,7 @@ MEX kernels use SIMD instructions (AVX2/NEON) to process 4 doubles per CPU cycle
 FastSense includes several benchmark scripts to measure performance on your system:
 
 ```matlab
-setup;
+install;
 cd examples
 
 % Compare FastSense vs plot() across different data sizes

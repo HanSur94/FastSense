@@ -102,7 +102,7 @@ The `build_mex()` function:
 Test that MEX functions produce identical results to MATLAB fallbacks:
 
 ```matlab
-setup;
+install;
 addpath('tests');
 test_mex_parity;      % Verify MEX matches MATLAB output
 test_mex_edge_cases;  % Test edge cases (empty arrays, NaN, etc.)
