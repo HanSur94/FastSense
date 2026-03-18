@@ -2,7 +2,7 @@ function test_violation_cull_mex()
 %TEST_VIOLATION_CULL_MEX Parity tests: MEX vs MATLAB fallback.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     hasMex = (exist('violation_cull_mex', 'file') == 3);
     if ~hasMex

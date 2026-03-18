@@ -4,20 +4,20 @@
 
 **Goal:** Optimize violation marker rendering with faster marker style, pixel-density downsampling, and dirty-flag caching to skip redundant recomputation.
 
-**Architecture:** Three independent optimizations applied to `FastPlot.m` and its private functions: (1) swap `'o'` → `'.'` marker, (2) cull violations to 1-per-pixel-column via new `downsample_violations.m`, (3) cache `[xlim ylim]` to skip `updateViolations()` when view unchanged.
+**Architecture:** Three independent optimizations applied to `FastSense.m` and its private functions: (1) swap `'o'` → `'.'` marker, (2) cull violations to 1-per-pixel-column via new `downsample_violations.m`, (3) cache `[xlim ylim]` to skip `updateViolations()` when view unchanged.
 
-**Tech Stack:** MATLAB/Octave, existing FastPlot private function pattern.
+**Tech Stack:** MATLAB/Octave, existing FastSense private function pattern.
 
 ---
 
 ### Task 1: Change marker style from `'o'` to `'.'`
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:813` (render method)
+- Modify: `libs/FastSense/FastSense.m:813` (render method)
 
 **Step 1: Change marker in render()**
 
-In `libs/FastPlot/FastPlot.m:811-813`, change the `line()` call marker from `'o'` to `'.'`:
+In `libs/FastSense/FastSense.m:811-813`, change the `line()` call marker from `'o'` to `'.'`:
 
 ```matlab
 hM = line(vxAll, vyAll, 'Parent', obj.hAxes, ...
@@ -30,7 +30,7 @@ Note: `MarkerSize` bumped from 4 to 6 because `'.'` renders smaller than `'o'` a
 
 **Step 2: Run existing tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup; test_compute_violations"` (or Octave equivalent)
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup; test_compute_violations"` (or Octave equivalent)
 Expected: All 5 tests pass (marker style is a rendering detail, not tested by compute_violations).
 
 **Step 3: Commit**
@@ -44,10 +44,10 @@ feat: use '.' marker for violation rendering (faster than 'o')
 ### Task 2: Pixel-density downsampling of violation markers
 
 **Files:**
-- Create: `libs/FastPlot/private/downsample_violations.m`
+- Create: `libs/FastSense/private/downsample_violations.m`
 - Create: `tests/test_downsample_violations.m`
-- Modify: `libs/FastPlot/FastPlot.m:785-810` (render — apply downsampling after compute_violations)
-- Modify: `libs/FastPlot/FastPlot.m:1953-2000` (updateViolations — apply downsampling after compute_violations)
+- Modify: `libs/FastSense/FastSense.m:785-810` (render — apply downsampling after compute_violations)
+- Modify: `libs/FastSense/FastSense.m:1953-2000` (updateViolations — apply downsampling after compute_violations)
 
 **Step 1: Write the test**
 
@@ -58,7 +58,7 @@ function test_downsample_violations()
 %TEST_DOWNSAMPLE_VIOLATIONS Tests for violation marker pixel-density culling.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testBasicDownsample: 10 violations in 3 pixel columns -> 3 points
     xV = [1.0, 1.1, 1.2, 2.0, 2.1, 2.2, 3.0, 3.1, 3.2, 3.3];
@@ -119,12 +119,12 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup; test_downsample_violations"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup; test_downsample_violations"`
 Expected: FAIL — `downsample_violations` not found.
 
 **Step 3: Implement `downsample_violations.m`**
 
-Create `libs/FastPlot/private/downsample_violations.m`:
+Create `libs/FastSense/private/downsample_violations.m`:
 
 ```matlab
 function [xOut, yOut] = downsample_violations(xViol, yViol, pixelWidth, thresholdValue)
@@ -137,7 +137,7 @@ function [xOut, yOut] = downsample_violations(xViol, yViol, pixelWidth, threshol
 %     pixelWidth     — X-axis span per pixel (diff(xlim) / axesWidthPixels)
 %     thresholdValue — threshold value (used to pick max-deviation point)
 %
-%   See also compute_violations, FastPlot.updateViolations.
+%   See also compute_violations, FastSense.updateViolations.
 
     if isempty(xViol)
         xOut = xViol;
@@ -180,12 +180,12 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup; test_downsample_violations"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup; test_downsample_violations"`
 Expected: All 6 tests pass.
 
 **Step 5: Integrate into `render()` and `updateViolations()`**
 
-In `libs/FastPlot/FastPlot.m`, the `render()` method at lines 785-810 — after computing violations for each line, downsample before rendering. The key change is adding a downsample call after the violation collection loop, before the `line()` call.
+In `libs/FastSense/FastSense.m`, the `render()` method at lines 785-810 — after computing violations for each line, downsample before rendering. The key change is adding a downsample call after the violation collection loop, before the `line()` call.
 
 In the render section (after line 806, before line 811), add:
 
@@ -209,7 +209,7 @@ And update the corresponding `set()` call to use `vxAll, vyAll` directly (no mor
 
 **Step 6: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup; test_compute_violations; test_downsample_violations"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup; test_compute_violations; test_downsample_violations"`
 Expected: All tests pass.
 
 **Step 7: Commit**
@@ -223,13 +223,13 @@ feat: downsample violation markers to pixel density
 ### Task 3: Dirty-flag caching to skip redundant `updateViolations()`
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:113-124` (add `CachedViolationLim` property)
-- Modify: `libs/FastPlot/FastPlot.m:1953-2000` (check cache at top of `updateViolations()`)
-- Modify: `libs/FastPlot/FastPlot.m:892` (invalidate on render)
+- Modify: `libs/FastSense/FastSense.m:113-124` (add `CachedViolationLim` property)
+- Modify: `libs/FastSense/FastSense.m:1953-2000` (check cache at top of `updateViolations()`)
+- Modify: `libs/FastSense/FastSense.m:892` (invalidate on render)
 
 **Step 1: Add cached property**
 
-In `libs/FastPlot/FastPlot.m`, properties block at line 117, add after `CachedXLim`:
+In `libs/FastSense/FastSense.m`, properties block at line 117, add after `CachedXLim`:
 
 ```matlab
 CachedViolationLim = []    % [xmin xmax ymin ymax pw] for violation skip
@@ -268,7 +268,7 @@ before the `obj.updateViolations()` call. This ensures data updates always trigg
 
 **Step 4: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup; test_compute_violations; test_downsample_violations"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup; test_compute_violations; test_downsample_violations"`
 Expected: All tests pass.
 
 **Step 5: Commit**

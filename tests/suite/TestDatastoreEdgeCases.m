@@ -1,5 +1,5 @@
 classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
-%TestDatastoreEdgeCases Edge-case and stress tests for FastPlotDataStore.
+%TestDatastoreEdgeCases Edge-case and stress tests for FastSenseDataStore.
 %   Covers: boundary conditions, special values (Inf, NaN), single-point
 %   datasets, repeated X values, multi-chunk queries, and binary fallback.
 
@@ -7,13 +7,13 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testSinglePointDataset(testCase)
-            ds = FastPlotDataStore(5, 10);
+            ds = FastSenseDataStore(5, 10);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.NumPoints, 1, 'singlePoint: NumPoints');
             testCase.verifyEqual(ds.XMin, 5, 'singlePoint: XMin');
@@ -26,7 +26,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         end
 
         function testTwoPointDataset(testCase)
-            ds = FastPlotDataStore([1, 100], [10, 20]);
+            ds = FastSenseDataStore([1, 100], [10, 20]);
             testCase.addTeardown(@() ds.cleanup());
             [xr, yr] = ds.getRange(1, 100);
             testCase.verifyEqual(numel(xr), 2, 'twoPoint: getRange count');
@@ -37,7 +37,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
             x = 1:100;
             y = rand(1, 100);
             y(25) = Inf; y(75) = -Inf;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [~, yr] = ds.readSlice(1, 100);
             testCase.verifyTrue(isinf(yr(25)) && yr(25) > 0, 'infValues: +Inf preserved');
@@ -47,7 +47,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testAllNaNYData(testCase)
             x = 1:50;
             y = nan(1, 50);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.HasNaN, true, 'allNaN: HasNaN');
             [~, yr] = ds.readSlice(1, 50);
@@ -57,7 +57,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testConstantX(testCase)
             x = ones(1, 100) * 42;
             y = rand(1, 100);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyTrue(ds.XMin == 42 && ds.XMax == 42, 'constantX: XMin==XMax');
             [xr, yr] = ds.getRange(41, 43);
@@ -67,14 +67,14 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testRepeatedXValues(testCase)
             x = sort(repmat(1:50, 1, 3));  % [1 1 1 2 2 2 ... 50 50 50]
             y = rand(1, 150);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, ~] = ds.getRange(10, 20);
             testCase.verifyTrue(all(xr >= 9 & xr <= 21), 'duplicateX: range respected');
         end
 
         function testInvertedRange(testCase)
-            ds = FastPlotDataStore(1:1000, rand(1, 1000));
+            ds = FastSenseDataStore(1:1000, rand(1, 1000));
             testCase.addTeardown(@() ds.cleanup());
             [xr, ~] = ds.getRange(500, 100);
             testCase.verifyEmpty(xr, 'invertedRange: should return empty');
@@ -83,7 +83,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testExactBoundaryQueries(testCase)
             x = linspace(0, 100, 10000);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, ~] = ds.getRange(0, 0);  % exact start
             testCase.verifyTrue(numel(xr) >= 1, 'exactBoundary: at start');
@@ -92,7 +92,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         end
 
         function testSinglePointSlice(testCase)
-            ds = FastPlotDataStore(1:1000, (1:1000)*3);
+            ds = FastSenseDataStore(1:1000, (1:1000)*3);
             testCase.addTeardown(@() ds.cleanup());
             [xs, ys] = ds.readSlice(500, 500);
             testCase.verifyEqual(numel(xs), 1, 'singleSlice: count');
@@ -103,7 +103,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
             n = 5000;
             x = 1:n;
             y = x * 2;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xs, ys] = ds.readSlice(n-2, n);
             testCase.verifyEqual(numel(xs), 3, 'endSlice: count');
@@ -112,7 +112,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         end
 
         function testStartSlice(testCase)
-            ds = FastPlotDataStore(1:5000, (1:5000)*2);
+            ds = FastSenseDataStore(1:5000, (1:5000)*2);
             testCase.addTeardown(@() ds.cleanup());
             [xs, ys] = ds.readSlice(1, 3);
             testCase.verifyEqual(numel(xs), 3, 'startSlice: count');
@@ -122,7 +122,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testRepeatedQueriesConsistent(testCase)
             x = linspace(0, 100, 50000);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr1, ~] = ds.getRange(10, 20);
             [xr2, ~] = ds.getRange(50, 60);
@@ -134,7 +134,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testStressQueries(testCase)
             x = linspace(0, 1000, 100000);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             tic;
             for i = 1:100
@@ -146,14 +146,14 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         end
 
         function testIdempotentCleanup(testCase)
-            ds = FastPlotDataStore(1:100, rand(1, 100));
+            ds = FastSenseDataStore(1:100, rand(1, 100));
             ds.cleanup();
             ds.cleanup();  % should not throw
             testCase.verifyTrue(true, 'idempotent cleanup: no error on double cleanup');
         end
 
         function testPostCleanupState(testCase)
-            ds = FastPlotDataStore(1:100, rand(1, 100));
+            ds = FastSenseDataStore(1:100, rand(1, 100));
             if ~isempty(ds.DbPath); fpath = ds.DbPath; else; fpath = ds.BinPath; end
             ds.cleanup();
             testCase.verifyTrue(~exist(fpath, 'file'), 'afterCleanup: file should be gone');
@@ -162,7 +162,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testVeryLargeYValues(testCase)
             x = 1:100;
             y = ones(1, 100) * 1e300;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [~, yr] = ds.readSlice(1, 100);
             testCase.verifyTrue(all(yr == 1e300), 'largeValues: preserved');
@@ -171,7 +171,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testVerySmallYValues(testCase)
             x = 1:100;
             y = ones(1, 100) * 1e-300;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [~, yr] = ds.readSlice(1, 100);
             testCase.verifyTrue(all(abs(yr - 1e-300) < 1e-312), 'smallValues: preserved');
@@ -180,7 +180,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
         function testNegativeXValues(testCase)
             x = linspace(-100, -1, 500);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyTrue(ds.XMin == -100 && ds.XMax == -1, 'negativeX: range');
             [xr, ~] = ds.getRange(-60, -40);
@@ -192,7 +192,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
             n = 200000;
             x = linspace(0, 1000, n);
             y = x .* 3;  % simple linear for verification
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             % Query range that spans chunk boundaries
             [xr, yr] = ds.getRange(400, 600);
@@ -205,7 +205,7 @@ classdef TestDatastoreEdgeCases < matlab.unittest.TestCase
             n = 100000;
             x = linspace(0, 1000, n);
             y = randn(1, n);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, ~] = ds.getRange(200, 800);
             testCase.verifyTrue(all(diff(xr) >= 0), 'monotonicity: X must be non-decreasing');

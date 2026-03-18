@@ -3,13 +3,13 @@ classdef TestRender < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testCreatesNewFigure(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100), 'DisplayName', 'Test');
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -21,14 +21,14 @@ classdef TestRender < matlab.unittest.TestCase
             fig = figure('Visible', 'off');
             testCase.addTeardown(@close, fig);
             ax = axes('Parent', fig);
-            fp = FastPlot('Parent', ax);
+            fp = FastSense('Parent', ax);
             fp.addLine(1:100, rand(1,100));
             fp.render();
             testCase.verifyEqual(fp.hAxes, ax, 'testUsesExistingAxes');
         end
 
         function testCreatesLineObjects(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100), 'DisplayName', 'L1');
             fp.addLine(1:100, rand(1,100), 'DisplayName', 'L2');
             fp.render();
@@ -39,30 +39,30 @@ classdef TestRender < matlab.unittest.TestCase
         end
 
         function testUserDataTagging(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100), 'DisplayName', 'Sensor1');
             fp.addThreshold(0.5, 'Label', 'UpperLim');
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
             ud = get(fp.Lines(1).hLine, 'UserData');
-            testCase.verifyEqual(ud.FastPlot.Type, 'data_line', 'testUserDataTagging: Type');
-            testCase.verifyEqual(ud.FastPlot.Name, 'Sensor1', 'testUserDataTagging: Name');
-            testCase.verifyEqual(ud.FastPlot.LineIndex, 1, 'testUserDataTagging: LineIndex');
+            testCase.verifyEqual(ud.FastSense.Type, 'data_line', 'testUserDataTagging: Type');
+            testCase.verifyEqual(ud.FastSense.Name, 'Sensor1', 'testUserDataTagging: Name');
+            testCase.verifyEqual(ud.FastSense.LineIndex, 1, 'testUserDataTagging: LineIndex');
         end
 
         function testThresholdLineCreated(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100));
             fp.addThreshold(0.5, 'Direction', 'upper', 'Label', 'UL');
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
             testCase.verifyTrue(isgraphics(fp.Thresholds(1).hLine, 'line'), 'testThresholdLineCreated');
             ud = get(fp.Thresholds(1).hLine, 'UserData');
-            testCase.verifyEqual(ud.FastPlot.Type, 'threshold', 'testThresholdLineCreated: Type');
+            testCase.verifyEqual(ud.FastSense.Type, 'threshold', 'testThresholdLineCreated: Type');
         end
 
         function testViolationMarkersCreated(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             y = [0.1 0.2 0.8 0.9 0.3 0.1];
             fp.addLine(1:6, y);
             fp.addThreshold(0.5, 'Direction', 'upper', 'ShowViolations', true);
@@ -76,7 +76,7 @@ classdef TestRender < matlab.unittest.TestCase
         end
 
         function testDoubleRenderError(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -90,7 +90,7 @@ classdef TestRender < matlab.unittest.TestCase
         end
 
         function testStaticAxisLimits(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);

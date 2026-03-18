@@ -1,4 +1,4 @@
-%% FastPlotDock — Disk-Backed Dashboard with Dynamic Thresholds
+%% FastSenseDock — Disk-Backed Dashboard with Dynamic Thresholds
 %
 % Five dashboards in a tabbed dock window, all using disk-backed storage.
 % Each sensor has state-dependent (dynamic) thresholds that change with
@@ -22,7 +22,7 @@ fprintf('=== Disk-Backed Dock Dashboard ===\n');
 fprintf('Generating ~100M data points across 5 tabs (all disk-backed)...\n\n');
 tic;
 
-dock = FastPlotDock('Theme', 'dark', 'Name', 'Plant Control Room — Disk Mode', ...
+dock = FastSenseDock('Theme', 'dark', 'Name', 'Plant Control Room — Disk Mode', ...
     'Position', [50 50 1500 900]);
 
 % ---------- Shared time base: 8h shift ----------
@@ -35,7 +35,7 @@ tdn1 = datenum(t1);
 % Tab 1: Turbine Monitoring (2x2) — ~28M points
 % =========================================================================
 fprintf('Tab 1: Turbine Monitoring...\n');
-fig1 = FastPlotGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig1 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Turbine operates in 3 modes over the shift
 scTurbine = StateChannel('turbine');
@@ -162,7 +162,7 @@ dock.addTab(fig1, 'Turbine');
 % Tab 2: Chemical Process (2x2) — ~22M points
 % =========================================================================
 fprintf('Tab 2: Chemical Process...\n');
-fig2 = FastPlotGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig2 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Reactor modes: batch phases
 scReactor = StateChannel('phase');
@@ -286,7 +286,7 @@ dock.addTab(fig2, 'Chemical');
 % Tab 3: Compressor Station (1x3) — ~18M points
 % =========================================================================
 fprintf('Tab 3: Compressor Station...\n');
-fig3 = FastPlotGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig3 = FastSenseGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Compressor modes
 scComp = StateChannel('stage');
@@ -386,7 +386,7 @@ dock.addTab(fig3, 'Compressor');
 % Tab 4: Power Generation (2x2) — ~24M points
 % =========================================================================
 fprintf('Tab 4: Power Generation...\n');
-fig4 = FastPlotGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig4 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Generator modes
 scGen = StateChannel('gen');
@@ -499,7 +499,7 @@ dock.addTab(fig4, 'Power Gen');
 % Tab 5: Environmental (1x3) — ~11M points
 % =========================================================================
 fprintf('Tab 5: Environmental...\n');
-fig5 = FastPlotGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+fig5 = FastSenseGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % HVAC modes
 scHvac = StateChannel('hvac');

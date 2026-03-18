@@ -2,7 +2,7 @@ function test_downsample_violations()
 %TEST_DOWNSAMPLE_VIOLATIONS Tests for violation marker pixel-density culling.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testBasicDownsample: 10 violations in 3 pixel columns -> 3 points
     xV = [1.0, 1.1, 1.2, 2.0, 2.1, 2.2, 3.0, 3.1, 3.2, 3.3];

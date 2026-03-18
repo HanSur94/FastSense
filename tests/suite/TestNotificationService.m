@@ -4,7 +4,7 @@ classdef TestNotificationService < matlab.unittest.TestCase
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'EventDetection'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'SensorThreshold'));
-            addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'FastPlot'));
+            addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'FastSense'));
             setup();
         end
     end

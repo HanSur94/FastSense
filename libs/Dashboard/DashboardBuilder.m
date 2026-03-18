@@ -52,7 +52,7 @@ classdef DashboardBuilder < handle
         hPropDelete     = []
         hPropLabel      = []
 
-        % Axis label controls (fastplot only)
+        % Axis label controls (fastsense only)
         hPropXLabel     = []
         hPropYLabel     = []
 
@@ -249,7 +249,7 @@ classdef DashboardBuilder < handle
 
         function pos = findNextSlot(obj, type)
             switch type
-                case 'fastplot', defW = 12; defH = 3;
+                case 'fastsense', defW = 12; defH = 3;
                 case 'number',   defW = 6; defH = 1;
                 case 'status',   defW = 4; defH = 1;
                 case 'text',     defW = 6; defH = 1;
@@ -307,7 +307,7 @@ classdef DashboardBuilder < handle
                 'BackgroundColor', theme.ToolbarBackground, ...
                 'HorizontalAlignment', 'center');
 
-            types  = {'fastplot','number','status','text', ...
+            types  = {'fastsense','number','status','text', ...
                       'gauge','table','rawaxes','timeline'};
             labels = {'Plot','Number','Status','Text', ...
                       'Gauge','Table','Axes','Events'};
@@ -433,7 +433,7 @@ classdef DashboardBuilder < handle
                 'String', '', 'Visible', 'off');
             y = y - fh - gap*2;
 
-            % --- Axis Labels (shown for fastplot) ---
+            % --- Axis Labels (shown for fastsense) ---
             uicontrol('Parent', obj.hPropsPanel, 'Style', 'text', ...
                 'Units', 'normalized', 'Position', [0.04 y 0.44 lh], ...
                 'String', 'X:', 'FontSize', fs, ...
@@ -785,7 +785,7 @@ classdef DashboardBuilder < handle
             set(obj.hPropWidth, 'String', num2str(w.Position(3)));
             set(obj.hPropHeight, 'String', num2str(w.Position(4)));
 
-            % Populate axis label fields (fastplot only)
+            % Populate axis label fields (fastsense only)
             if isprop(w, 'XLabel')
                 set(obj.hPropXLabel, 'String', w.XLabel, 'Enable', 'on');
                 set(obj.hPropYLabel, 'String', w.YLabel, 'Enable', 'on');
@@ -935,7 +935,7 @@ classdef DashboardBuilder < handle
 
         function populateSourceControls(obj, w)
             switch w.Type
-                case 'fastplot'
+                case 'fastsense'
                     if ~isempty(w.Sensor)
                         set(obj.hSourceType, 'Value', 2);  % Sensor
                         set(obj.hSourceKey, 'String', w.Sensor.Key);
@@ -1022,7 +1022,7 @@ classdef DashboardBuilder < handle
 
         function t = defaultTitleForType(~, type)
             switch type
-                case 'fastplot', t = 'New Plot';
+                case 'fastsense', t = 'New Plot';
                 case 'number',   t = 'New Number';
                 case 'status',   t = 'New Status';
                 case 'text',     t = 'New Text';

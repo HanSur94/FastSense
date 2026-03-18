@@ -1,4 +1,4 @@
-%% FastPlot Theme Comparison — All 5 built-in themes side by side
+%% FastSense Theme Comparison — All 5 built-in themes side by side
 % Opens one figure per theme to compare visual styles
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -14,7 +14,7 @@ themes = {'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'};
 
 for i = 1:numel(themes)
     themeName = themes{i};
-    fp = FastPlot('Theme', themeName);
+    fp = FastSense('Theme', themeName);
     fp.addLine(x, y1, 'DisplayName', 'Signal A');
     fp.addLine(x, y2, 'DisplayName', 'Signal B');
     fp.addLine(x, y3, 'DisplayName', 'Signal C');

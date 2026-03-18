@@ -139,7 +139,7 @@ fprintf('DataSourceMap: %d sources configured\n', numel(dsMap.keys()));
 %  3. EVENT STORE — atomic write with backup rotation
 %  ========================================================================
 
-storeFile = fullfile(tempdir, 'fastplot_live_events.mat');
+storeFile = fullfile(tempdir, 'fastsense_live_events.mat');
 fprintf('Event store: %s\n', storeFile);
 
 %% ========================================================================
@@ -157,7 +157,7 @@ pipeline = LiveEventPipeline(sensors, dsMap, ...
 %  5. NOTIFICATIONS — rule-based with priority matching and snapshots
 %  ========================================================================
 
-snapshotDir = fullfile(tempdir, 'fastplot_snapshots');
+snapshotDir = fullfile(tempdir, 'fastsense_snapshots');
 fprintf('Snapshot directory: %s\n', snapshotDir);
 
 notif = NotificationService('DryRun', true, 'SnapshotDir', snapshotDir);
@@ -165,7 +165,7 @@ notif = NotificationService('DryRun', true, 'SnapshotDir', snapshotDir);
 % Default rule: catches all events not matched by specific rules (score=1)
 notif.setDefaultRule(NotificationRule( ...
     'Recipients', {{'ops-team@company.com'}}, ...
-    'Subject', '[FastPlot] {sensor}: {threshold} violation', ...
+    'Subject', '[FastSense] {sensor}: {threshold} violation', ...
     'Message', ['Sensor {sensor} violated {threshold} ({direction}) ' ...
                'from {startTime} to {endTime}.\n' ...
                'Peak: {peak}, Mean: {mean}, Std: {std}, Duration: {duration}'], ...

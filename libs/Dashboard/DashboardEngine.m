@@ -5,7 +5,7 @@ classdef DashboardEngine < handle
 %     d = DashboardEngine('My Dashboard');
 %     d.Theme = 'light';
 %     d.LiveInterval = 5;
-%     d.addWidget('fastplot', 'Title', 'Temp', 'Position', [1 1 6 3], ...
+%     d.addWidget('fastsense', 'Title', 'Temp', 'Position', [1 1 6 3], ...
 %                 'Sensor', SensorRegistry.get('temperature'));
 %     d.render();
 %
@@ -16,8 +16,8 @@ classdef DashboardEngine < handle
 %     d = DashboardEngine.load('path/to/dashboard.json');
 %     d.render();
 %
-%   For a lightweight tiled grid of FastPlot charts without widgets,
-%   see FastPlotGrid.
+%   For a lightweight tiled grid of FastSense charts without widgets,
+%   see FastSenseGrid.
 
     properties (Access = public)
         Name         = ''
@@ -63,8 +63,8 @@ classdef DashboardEngine < handle
 
         function addWidget(obj, type, varargin)
             switch type
-                case 'fastplot'
-                    w = FastPlotWidget(varargin{:});
+                case 'fastsense'
+                    w = FastSenseWidget(varargin{:});
                 case 'number'
                     w = NumberWidget(varargin{:});
                 case 'kpi'
@@ -432,7 +432,7 @@ classdef DashboardEngine < handle
         function types = widgetTypes()
             %WIDGETTYPES List supported widget type strings.
             types = {
-                'fastplot',    'Time-series plot (FastPlotWidget)'
+                'fastsense',    'Time-series plot (FastSenseWidget)'
                 'number',      'Single numeric value with trend (NumberWidget)'
                 'status',      'Status indicator with dot and label (StatusWidget)'
                 'gauge',       'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)'

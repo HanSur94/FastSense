@@ -3,7 +3,7 @@ classdef TestMinmaxDownsample < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 

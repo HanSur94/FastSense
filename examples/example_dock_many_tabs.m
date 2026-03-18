@@ -1,4 +1,4 @@
-%% FastPlotDock — Many Tabs (Scroll Arrows) Example
+%% FastSenseDock — Many Tabs (Scroll Arrows) Example
 % 20 tabs in a single dock window to exercise the scrollable tab bar.
 % Each tab gets a simple 1x1 figure with a sine wave variant.
 
@@ -11,7 +11,7 @@ restoreWarn = onCleanup(@() warning(wState));
 fprintf('Docked Tabs: 20 tabs — testing scrollable tab bar...\n');
 tic;
 
-dock = FastPlotDock('Theme', 'dark', 'Name', 'Many Tabs Demo', ...
+dock = FastSenseDock('Theme', 'dark', 'Name', 'Many Tabs Demo', ...
     'Position', [50 50 1400 800]);
 
 % Common time base
@@ -31,7 +31,7 @@ t = linspace(t0, t1, n);
 s = sec(t);
 
 for k = 1:20
-    fig = FastPlotGrid(1, 1, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
+    fig = FastSenseGrid(1, 1, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
     fp = fig.tile(1);
 
     % Vary the signal per tab

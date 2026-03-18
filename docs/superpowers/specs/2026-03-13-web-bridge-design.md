@@ -5,7 +5,7 @@
 
 ## Overview
 
-A bidirectional communication layer that makes FastPlot data, metadata, and dashboard state accessible to web frontends in real-time while MATLAB is running. MATLAB runs a minimal TCP server; a separate bridge process (Python or Node.js) serves a REST API, WebSocket, and web UI.
+A bidirectional communication layer that makes FastSense data, metadata, and dashboard state accessible to web frontends in real-time while MATLAB is running. MATLAB runs a minimal TCP server; a separate bridge process (Python or Node.js) serves a REST API, WebSocket, and web UI.
 
 ## Goals
 
@@ -138,10 +138,10 @@ A standalone process (Python or Node) connecting to MATLAB's TCP server.
 ```bash
 # Launched automatically by MATLAB's .serve() via system()
 # Or manually:
-fastplot-bridge --matlab-port 5555
+fastsense-bridge --matlab-port 5555
 
 # Node
-npx fastplot-bridge --matlab-port 5555
+npx fastsense-bridge --matlab-port 5555
 ```
 
 ### Components
@@ -210,7 +210,7 @@ For the data endpoint, X/Y chunks are always `mxDOUBLE` (class_id=6). Extra colu
 
 ### Server-Side Downsampling
 
-The data endpoint accepts an optional `maxPoints` query parameter (default: 4000). When the requested range contains more points than `maxPoints`, the bridge applies minmax downsampling (keep min/max per bucket) server-side before returning JSON. This matches FastPlot's existing downsampling strategy and keeps browser payloads manageable.
+The data endpoint accepts an optional `maxPoints` query parameter (default: 4000). When the requested range contains more points than `maxPoints`, the bridge applies minmax downsampling (keep min/max per bucket) server-side before returning JSON. This matches FastSense's existing downsampling strategy and keeps browser payloads manageable.
 
 ### Signal Identity
 
@@ -225,7 +225,7 @@ Vanilla HTML/JS/CSS served by the bridge.
 1. **Chart Viewer** — uPlot library for fast rendering of large datasets. Zoom/pan triggers data re-fetch via REST API with `maxPoints` parameter. Threshold lines and violation markers overlaid.
 
 2. **Dashboard Layout** — Reads config from `/api/dashboard`, renders a CSS grid of widgets:
-   - FastPlotWidget → Chart Viewer (uPlot)
+   - FastSenseWidget → Chart Viewer (uPlot)
    - KpiWidget → Big number display
    - StatusWidget → Color-coded badge
    - TableWidget → HTML table
@@ -259,7 +259,7 @@ libs/
 
 bridge/
   python/
-    fastplot_bridge/
+    fastsense_bridge/
       __init__.py
       server.py              — FastAPI app (REST + WebSocket)
       tcp_client.py          — MATLAB TCP connection
@@ -303,7 +303,7 @@ bridge/
 7. Bridge sends `{"type":"bridge_ready","httpPort":8080}` to MATLAB via TCP
 8. MATLAB prints: `Dashboard served at http://localhost:<port>`
 
-**Blocking behavior:** `.serve()` blocks until `bridge_ready` is received or a 10-second timeout fires. If the timeout fires, WebBridge throws: `'Bridge did not start within 10s. Check that fastplot-bridge is installed.'` Actions can be registered before or after `.serve()` — the action list is sent as part of `init` and refreshed via `config_changed` when new actions are added.
+**Blocking behavior:** `.serve()` blocks until `bridge_ready` is received or a 10-second timeout fires. If the timeout fires, WebBridge throws: `'Bridge did not start within 10s. Check that fastsense-bridge is installed.'` Actions can be registered before or after `.serve()` — the action list is sent as part of `init` and refreshed via `config_changed` when new actions are added.
 
 **Config change detection:** A MATLAB timer polls every 1 second, comparing a hash of the serialized dashboard config. Configurable via `WebBridge('ConfigPollInterval', N)`.
 
@@ -345,7 +345,7 @@ MATLAB is single-threaded. Action callbacks execute on the MATLAB event queue (l
 
 ## SQLite Configuration for Concurrent Access
 
-Each `FastPlotDataStore` gains two methods: `enableWAL()` and `disableWAL()`. These run on the DataStore's own mksqlite connection (ensuring no connection ownership conflicts):
+Each `FastSenseDataStore` gains two methods: `enableWAL()` and `disableWAL()`. These run on the DataStore's own mksqlite connection (ensuring no connection ownership conflicts):
 
 **`enableWAL()`** — called by WebBridge on `.serve()`:
 ```sql

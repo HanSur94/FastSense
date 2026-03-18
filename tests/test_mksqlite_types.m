@@ -124,7 +124,7 @@ function test_mksqlite_types()
     n = 50000;
     x = linspace(0, 100, n);
     y = sin(x);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
 
     % 10. addColumn with cell of strings
     labels = cell(1, n);
@@ -234,14 +234,14 @@ function test_mksqlite_types()
     n2 = 1000;
     x2 = linspace(0, 100, n2);
     y2 = sin(x2);
-    ds2 = FastPlotDataStore(x2, y2);
+    ds2 = FastSenseDataStore(x2, y2);
 
     % 23. toCategorical round-trip via struct
     catData2.codes = uint32(mod(0:n2-1, 3) + 1);
     catData2.categories = {'low', 'medium', 'high'};
     ds2.addColumn('cat_struct', catData2);
     slice = ds2.getColumnSlice('cat_struct', 1, 6);
-    labels_back = FastPlotDataStore.toCategorical(slice);
+    labels_back = FastSenseDataStore.toCategorical(slice);
     if exist('categorical', 'class')
         assert(isa(labels_back, 'categorical'), ...
             'toCategorical: should return categorical in MATLAB');
@@ -261,7 +261,7 @@ function test_mksqlite_types()
     % 24. toCategorical with bad input should error
     threw = false;
     try
-        FastPlotDataStore.toCategorical('not_a_struct');
+        FastSenseDataStore.toCategorical('not_a_struct');
     catch
         threw = true;
     end
@@ -276,14 +276,14 @@ function test_mksqlite_types()
         sliceN = ds2.getColumnSlice('cat_native', 1, 5);
         assert(isstruct(sliceN) && isfield(sliceN, 'codes'), ...
             'auto-convert categorical: should be stored as struct');
-        labelsN = FastPlotDataStore.toCategorical(sliceN);
+        labelsN = FastSenseDataStore.toCategorical(sliceN);
         assert(isa(labelsN, 'categorical'), ...
             'auto-convert categorical: toCategorical should return categorical');
         fprintf('    addColumn auto-convert categorical: PASS\n');
 
         % 26. fromCategorical
         c_test = categorical({'x','y','z','x'}, {'x','y','z'});
-        s_test = FastPlotDataStore.fromCategorical(c_test);
+        s_test = FastSenseDataStore.fromCategorical(c_test);
         assert(isequal(s_test.codes, uint32([1 2 3 1])), ...
             'fromCategorical: codes mismatch');
         assert(isequal(s_test.categories, {'x','y','z'}), ...

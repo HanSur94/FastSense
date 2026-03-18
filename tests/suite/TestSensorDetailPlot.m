@@ -50,12 +50,12 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             delete(sdp);
         end
 
-        %% Render creates two FastPlot instances
+        %% Render creates two FastSense instances
         function testRenderCreatesMainAndNavigator(testCase)
             sdp = SensorDetailPlot(testCase.TestData.sensor);
             sdp.render();
-            testCase.verifyClass(sdp.MainPlot, ?FastPlot);
-            testCase.verifyClass(sdp.NavigatorPlot, ?FastPlot);
+            testCase.verifyClass(sdp.MainPlot, ?FastSense);
+            testCase.verifyClass(sdp.NavigatorPlot, ?FastSense);
             delete(sdp);
         end
 
@@ -285,30 +285,30 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             delete(sdp);
         end
 
-        %% FastPlotGrid tilePanel integration
+        %% FastSenseGrid tilePanel integration
         function testTilePanelReturnsUipanel(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             hp = fig.tilePanel(1);
             testCase.verifyTrue(isa(hp, 'matlab.ui.container.Panel'));
             delete(fig);
         end
 
         function testTilePanelConflictWithTile(testCase)
-            fig = FastPlotGrid(2, 1);
-            fig.tile(1);  % Occupy tile 1 as FastPlot
-            testCase.verifyError(@() fig.tilePanel(1), 'FastPlotGrid:tileConflict');
+            fig = FastSenseGrid(2, 1);
+            fig.tile(1);  % Occupy tile 1 as FastSense
+            testCase.verifyError(@() fig.tilePanel(1), 'FastSenseGrid:tileConflict');
             delete(fig);
         end
 
-        %% Embedded in FastPlotGrid
+        %% Embedded in FastSenseGrid
         function testEmbeddedInFigureTile(testCase)
             s = testCase.TestData.sensor;
-            fig = FastPlotGrid(1, 1);
+            fig = FastSenseGrid(1, 1);
             hp = fig.tilePanel(1);
             sdp = SensorDetailPlot(s, 'Parent', hp);
             sdp.render();
             testCase.verifyTrue(sdp.IsRendered);
-            testCase.verifyClass(sdp.MainPlot, ?FastPlot);
+            testCase.verifyClass(sdp.MainPlot, ?FastSense);
             delete(sdp);
             delete(fig);
         end

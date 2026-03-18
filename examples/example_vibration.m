@@ -1,4 +1,4 @@
-%% FastPlot Vibration Analysis — High-frequency data with envelope thresholds
+%% FastSense Vibration Analysis — High-frequency data with envelope thresholds
 % Simulates accelerometer data from a rotating machine
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -27,7 +27,7 @@ end
 fprintf('Vibration: %d points at %d kHz...\n', n, fs/1000);
 tic;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Accelerometer', 'Color', [0.1 0.3 0.6]);
 
 % ISO 10816 style velocity thresholds (simplified for displacement)

@@ -2,7 +2,7 @@ function test_compute_violations()
 %TEST_COMPUTE_VIOLATIONS Tests for compute_violations private function.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testUpperViolation
     x = 1:10;

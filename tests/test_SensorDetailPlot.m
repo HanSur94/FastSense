@@ -8,7 +8,7 @@ function tests = test_SensorDetailPlot
 end
 
 function setup(testCase)
-    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastPlot'));
+    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastSense'));
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'SensorThreshold'));
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'EventDetection'));
 
@@ -52,12 +52,12 @@ function test_constructor_custom_options(testCase)
     delete(sdp);
 end
 
-%% Render creates two FastPlot instances
+%% Render creates two FastSense instances
 function test_render_creates_main_and_navigator(testCase)
     sdp = SensorDetailPlot(testCase.TestData.sensor);
     sdp.render();
-    verifyClass(testCase, sdp.MainPlot, ?FastPlot);
-    verifyClass(testCase, sdp.NavigatorPlot, ?FastPlot);
+    verifyClass(testCase, sdp.MainPlot, ?FastSense);
+    verifyClass(testCase, sdp.NavigatorPlot, ?FastSense);
     delete(sdp);
 end
 
@@ -302,30 +302,30 @@ function test_event_patch_userdata_fields(testCase)
     delete(sdp);
 end
 
-%% FastPlotGrid tilePanel integration
+%% FastSenseGrid tilePanel integration
 function test_tilePanel_returns_uipanel(testCase)
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     hp = fig.tilePanel(1);
     verifyTrue(testCase, isa(hp, 'matlab.ui.container.Panel'));
     delete(fig);
 end
 
 function test_tilePanel_conflict_with_tile(testCase)
-    fig = FastPlotGrid(2, 1);
-    fig.tile(1);  % Occupy tile 1 as FastPlot
-    verifyError(testCase, @() fig.tilePanel(1), 'FastPlotGrid:tileConflict');
+    fig = FastSenseGrid(2, 1);
+    fig.tile(1);  % Occupy tile 1 as FastSense
+    verifyError(testCase, @() fig.tilePanel(1), 'FastSenseGrid:tileConflict');
     delete(fig);
 end
 
-%% Embedded in FastPlotGrid
+%% Embedded in FastSenseGrid
 function test_embedded_in_figure_tile(testCase)
     s = testCase.TestData.sensor;
-    fig = FastPlotGrid(1, 1);
+    fig = FastSenseGrid(1, 1);
     hp = fig.tilePanel(1);
     sdp = SensorDetailPlot(s, 'Parent', hp);
     sdp.render();
     verifyTrue(testCase, sdp.IsRendered);
-    verifyClass(testCase, sdp.MainPlot, ?FastPlot);
+    verifyClass(testCase, sdp.MainPlot, ?FastSense);
     delete(sdp);
     delete(fig);
 end

@@ -8,22 +8,22 @@
 
 **Tech Stack:** C11, MATLAB MEX API (`mex.h`), AVX2/SSE2 intrinsics (`immintrin.h`), ARM NEON intrinsics (`arm_neon.h`), MATLAB R2020b+.
 
-**Design doc:** `FastPlot/docs/plans/2026-03-06-mex-acceleration-design.md`
+**Design doc:** `FastSense/docs/plans/2026-03-06-mex-acceleration-design.md`
 
 ---
 
 ## Task 1: SIMD Abstraction Header
 
 **Files:**
-- Create: `FastPlot/private/mex_src/simd_utils.h`
+- Create: `FastSense/private/mex_src/simd_utils.h`
 
 **Step 1: Create directory and write simd_utils.h**
 
 ```bash
-mkdir -p FastPlot/private/mex_src
+mkdir -p FastSense/private/mex_src
 ```
 
-Create `FastPlot/private/mex_src/simd_utils.h`:
+Create `FastSense/private/mex_src/simd_utils.h`:
 
 ```c
 #ifndef SIMD_UTILS_H
@@ -33,7 +33,7 @@ Create `FastPlot/private/mex_src/simd_utils.h`:
 #include <stddef.h>
 
 /*
- * simd_utils.h — Compile-time SIMD abstraction for FastPlot MEX files.
+ * simd_utils.h — Compile-time SIMD abstraction for FastSense MEX files.
  *
  * Provides unified operations on packed doubles:
  *   - AVX2:  4 doubles per vector  (__m256d)
@@ -177,7 +177,7 @@ static inline double simd_hmin(simd_double v) { return v; }
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add private/mex_src/simd_utils.h
 git commit -m "Add SIMD abstraction header for MEX acceleration
 
@@ -190,11 +190,11 @@ Provides unified macros for packed-double min/max/mul/sub/abs."
 ## Task 2: binary_search_mex
 
 **Files:**
-- Create: `FastPlot/private/mex_src/binary_search_mex.c`
+- Create: `FastSense/private/mex_src/binary_search_mex.c`
 
 **Step 1: Write binary_search_mex.c**
 
-Create `FastPlot/private/mex_src/binary_search_mex.c`:
+Create `FastSense/private/mex_src/binary_search_mex.c`:
 
 ```c
 /*
@@ -223,19 +223,19 @@ void mexFunction(int nlhs, mxArray *plhs[],
 {
     /* Validate inputs */
     if (nrhs != 3) {
-        mexErrMsgIdAndTxt("FastPlot:binary_search_mex:nrhs",
+        mexErrMsgIdAndTxt("FastSense:binary_search_mex:nrhs",
                           "Three inputs required: x, val, direction.");
     }
     if (!mxIsDouble(prhs[0]) || mxIsComplex(prhs[0])) {
-        mexErrMsgIdAndTxt("FastPlot:binary_search_mex:notDouble",
+        mexErrMsgIdAndTxt("FastSense:binary_search_mex:notDouble",
                           "x must be a real double array.");
     }
     if (!mxIsDouble(prhs[1]) || mxGetNumberOfElements(prhs[1]) != 1) {
-        mexErrMsgIdAndTxt("FastPlot:binary_search_mex:notScalar",
+        mexErrMsgIdAndTxt("FastSense:binary_search_mex:notScalar",
                           "val must be a scalar double.");
     }
     if (!mxIsChar(prhs[2])) {
-        mexErrMsgIdAndTxt("FastPlot:binary_search_mex:notChar",
+        mexErrMsgIdAndTxt("FastSense:binary_search_mex:notChar",
                           "direction must be a char array.");
     }
 
@@ -288,7 +288,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add private/mex_src/binary_search_mex.c
 git commit -m "Add binary_search MEX implementation
 
@@ -301,11 +301,11 @@ loop overhead for O(log n) search on sorted double arrays."
 ## Task 3: minmax_core_mex
 
 **Files:**
-- Create: `FastPlot/private/mex_src/minmax_core_mex.c`
+- Create: `FastSense/private/mex_src/minmax_core_mex.c`
 
 **Step 1: Write minmax_core_mex.c**
 
-Create `FastPlot/private/mex_src/minmax_core_mex.c`:
+Create `FastSense/private/mex_src/minmax_core_mex.c`:
 
 ```c
 /*
@@ -335,11 +335,11 @@ void mexFunction(int nlhs, mxArray *plhs[],
 {
     /* Validate inputs */
     if (nrhs != 3) {
-        mexErrMsgIdAndTxt("FastPlot:minmax_core_mex:nrhs",
+        mexErrMsgIdAndTxt("FastSense:minmax_core_mex:nrhs",
                           "Three inputs required: x, y, numBuckets.");
     }
     if (!mxIsDouble(prhs[0]) || !mxIsDouble(prhs[1])) {
-        mexErrMsgIdAndTxt("FastPlot:minmax_core_mex:notDouble",
+        mexErrMsgIdAndTxt("FastSense:minmax_core_mex:notDouble",
                           "x and y must be real double arrays.");
     }
 
@@ -433,7 +433,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add private/mex_src/minmax_core_mex.c
 git commit -m "Add minmax_core MEX implementation with SIMD
 
@@ -446,11 +446,11 @@ index-tracking pass. Handles remainder by extending last bucket."
 ## Task 4: lttb_core_mex
 
 **Files:**
-- Create: `FastPlot/private/mex_src/lttb_core_mex.c`
+- Create: `FastSense/private/mex_src/lttb_core_mex.c`
 
 **Step 1: Write lttb_core_mex.c**
 
-Create `FastPlot/private/mex_src/lttb_core_mex.c`:
+Create `FastSense/private/mex_src/lttb_core_mex.c`:
 
 ```c
 /*
@@ -479,11 +479,11 @@ void mexFunction(int nlhs, mxArray *plhs[],
 {
     /* Validate inputs */
     if (nrhs != 3) {
-        mexErrMsgIdAndTxt("FastPlot:lttb_core_mex:nrhs",
+        mexErrMsgIdAndTxt("FastSense:lttb_core_mex:nrhs",
                           "Three inputs required: x, y, numOut.");
     }
     if (!mxIsDouble(prhs[0]) || !mxIsDouble(prhs[1])) {
-        mexErrMsgIdAndTxt("FastPlot:lttb_core_mex:notDouble",
+        mexErrMsgIdAndTxt("FastSense:lttb_core_mex:notDouble",
                           "x and y must be real double arrays.");
     }
 
@@ -611,7 +611,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add private/mex_src/lttb_core_mex.c
 git commit -m "Add lttb_core MEX implementation with SIMD
 
@@ -624,15 +624,15 @@ Sequential outer loop preserved (each bucket depends on previous)."
 ## Task 5: Build Script
 
 **Files:**
-- Create: `FastPlot/build_mex.m`
+- Create: `FastSense/build_mex.m`
 
 **Step 1: Write build_mex.m**
 
-Create `FastPlot/build_mex.m`:
+Create `FastSense/build_mex.m`:
 
 ```matlab
 function build_mex()
-%BUILD_MEX Compile FastPlot MEX files with platform-appropriate SIMD flags.
+%BUILD_MEX Compile FastSense MEX files with platform-appropriate SIMD flags.
 %   build_mex()
 %
 %   Detects CPU architecture, sets compiler flags for AVX2/SSE2/NEON,
@@ -734,7 +734,7 @@ end
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add build_mex.m
 git commit -m "Add build_mex.m script for MEX compilation
 
@@ -747,9 +747,9 @@ Compiles all 3 MEX files into private/. Safe to re-run."
 ## Task 6: Wire MEX Fallback into MATLAB Wrappers
 
 **Files:**
-- Modify: `FastPlot/private/binary_search.m` (lines 1-39)
-- Modify: `FastPlot/private/minmax_downsample.m` (lines 21, 73)
-- Modify: `FastPlot/private/lttb_downsample.m` (lines 59)
+- Modify: `FastSense/private/binary_search.m` (lines 1-39)
+- Modify: `FastSense/private/minmax_downsample.m` (lines 21, 73)
+- Modify: `FastSense/private/lttb_downsample.m` (lines 59)
 
 **Step 1: Modify binary_search.m — add MEX dispatch**
 
@@ -874,7 +874,7 @@ with:
 **Step 4: Run existing tests to verify fallback path still works**
 
 ```bash
-cd FastPlot && matlab -batch "addpath('tests'); addpath('private'); run_all_tests()"
+cd FastSense && matlab -batch "addpath('tests'); addpath('private'); run_all_tests()"
 ```
 
 Expected: All existing tests pass (MEX not compiled yet, so fallback path runs).
@@ -882,7 +882,7 @@ Expected: All existing tests pass (MEX not compiled yet, so fallback path runs).
 **Step 5: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add private/binary_search.m private/minmax_downsample.m private/lttb_downsample.m
 git commit -m "Wire MEX fallback dispatch into MATLAB wrappers
 
@@ -895,11 +895,11 @@ availability. Falls back to existing pure-MATLAB code if not compiled."
 ## Task 7: MEX Parity Tests
 
 **Files:**
-- Create: `FastPlot/tests/test_mex_parity.m`
+- Create: `FastSense/tests/test_mex_parity.m`
 
 **Step 1: Write test_mex_parity.m**
 
-Create `FastPlot/tests/test_mex_parity.m`:
+Create `FastSense/tests/test_mex_parity.m`:
 
 ```matlab
 function test_mex_parity()
@@ -1117,7 +1117,7 @@ end
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add tests/test_mex_parity.m
 git commit -m "Add MEX parity tests
 
@@ -1131,11 +1131,11 @@ Skips gracefully if MEX not compiled."
 ## Task 8: MEX Edge Case Tests
 
 **Files:**
-- Create: `FastPlot/tests/test_mex_edge_cases.m`
+- Create: `FastSense/tests/test_mex_edge_cases.m`
 
 **Step 1: Write test_mex_edge_cases.m**
 
-Create `FastPlot/tests/test_mex_edge_cases.m`:
+Create `FastSense/tests/test_mex_edge_cases.m`:
 
 ```matlab
 function test_mex_edge_cases()
@@ -1263,7 +1263,7 @@ end
 **Step 2: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add tests/test_mex_edge_cases.m
 git commit -m "Add MEX edge case tests
 
@@ -1278,7 +1278,7 @@ negative values, and remainder handling for all 3 MEX functions."
 **Step 1: Compile MEX files**
 
 ```matlab
-cd FastPlot
+cd FastSense
 build_mex()
 ```
 
@@ -1287,7 +1287,7 @@ Expected: `3/3 MEX files compiled successfully.`
 **Step 2: Run full test suite**
 
 ```matlab
-cd FastPlot
+cd FastSense
 addpath('tests'); addpath('private');
 run_all_tests()
 ```
@@ -1304,18 +1304,18 @@ Add a "Building MEX (optional)" section after "Requirements" in `README.md`:
 For maximum performance, compile the C MEX accelerators:
 
 ```matlab
-cd FastPlot
+cd FastSense
 build_mex()
 ```
 
 Requires a C compiler (Xcode on macOS, GCC on Linux, MSVC on Windows). Uses AVX2/NEON SIMD intrinsics when available.
 
-If MEX files are not compiled, FastPlot automatically uses the pure-MATLAB implementations — no functionality is lost.
+If MEX files are not compiled, FastSense automatically uses the pure-MATLAB implementations — no functionality is lost.
 ```
 
 **Step 4: Add `*.mex*` to .gitignore**
 
-Create or update `FastPlot/.gitignore`:
+Create or update `FastSense/.gitignore`:
 
 ```
 *.mexmaci64
@@ -1328,7 +1328,7 @@ Create or update `FastPlot/.gitignore`:
 **Step 5: Commit**
 
 ```bash
-cd FastPlot
+cd FastSense
 git add README.md .gitignore
 git commit -m "Update README with MEX build instructions, add .gitignore
 
@@ -1343,16 +1343,16 @@ binaries and .DS_Store files."
 **Step 1: Run existing benchmark to compare**
 
 ```matlab
-cd FastPlot/examples
+cd FastSense/examples
 benchmark()
 ```
 
-Expected: With MEX compiled, FastPlot zoom/downsample times should be noticeably faster, especially for LTTB at large data sizes.
+Expected: With MEX compiled, FastSense zoom/downsample times should be noticeably faster, especially for LTTB at large data sizes.
 
 **Step 2: Verify benchmark_zoom still works**
 
 ```matlab
-cd FastPlot/examples
+cd FastSense/examples
 benchmark_zoom()
 ```
 

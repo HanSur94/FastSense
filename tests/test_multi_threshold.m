@@ -2,10 +2,10 @@ function test_multi_threshold()
 %TEST_MULTI_THRESHOLD Tests for per-threshold rendering with independent colors/markers.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testEachThresholdGetsOwnLine
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, randn(1,100));
     fp.addThreshold(2.0, 'Direction', 'upper', 'Color', 'r', 'LineStyle', '--');
     fp.addThreshold(1.0, 'Direction', 'upper', 'Color', [1 0.6 0], 'LineStyle', ':');
@@ -32,7 +32,7 @@ function test_multi_threshold()
     close(fp.hFigure);
 
     % testEachThresholdGetsOwnViolationMarkers
-    fp = FastPlot();
+    fp = FastSense();
     y = [0 0 0 1.5 1.5 0 0 0 2.5 2.5 0 0];
     fp.addLine(1:12, y);
     fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
@@ -59,7 +59,7 @@ function test_multi_threshold()
     close(fp.hFigure);
 
     % testThresholdWithoutViolationsGetsNoMarkers
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, zeros(1,10));
     fp.addThreshold(5.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
     fp.render();
@@ -73,7 +73,7 @@ function test_multi_threshold()
     close(fp.hFigure);
 
     % testShowViolationsFalseGetsNoMarkerHandle
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, 5*ones(1,10));
     fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', false, 'Color', 'r');
     fp.render();
@@ -84,7 +84,7 @@ function test_multi_threshold()
 
     % testViolationsUpdateOnZoomPerThreshold (MATLAB only — needs PostSet listeners)
     if ~exist('OCTAVE_VERSION', 'builtin')
-        fp = FastPlot();
+        fp = FastSense();
         y = [zeros(1,100), 1.5*ones(1,100), zeros(1,100), 2.5*ones(1,100), zeros(1,100)];
         x = 1:500;
         fp.addLine(x, y);
@@ -109,15 +109,15 @@ function test_multi_threshold()
     end
 
     % testUserDataTagging
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, randn(1,100));
     fp.addThreshold(1.0, 'Direction', 'upper', 'Label', 'AlarmHi', 'Color', 'r');
     fp.render();
 
     ud = get(fp.Thresholds(1).hLine, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'threshold'), 'UserData Type');
-    assert(strcmp(ud.FastPlot.Name, 'AlarmHi'), 'UserData Name');
-    assert(ud.FastPlot.ThresholdValue == 1.0, 'UserData ThresholdValue');
+    assert(strcmp(ud.FastSense.Type, 'threshold'), 'UserData Type');
+    assert(strcmp(ud.FastSense.Name, 'AlarmHi'), 'UserData Name');
+    assert(ud.FastSense.ThresholdValue == 1.0, 'UserData ThresholdValue');
 
     close(fp.hFigure);
 

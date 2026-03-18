@@ -45,7 +45,7 @@ Single-pass over data array:
 
 ## MATLAB Wrapper
 
-`compute_violations.m` and `compute_violations_dynamic.m` gain MEX fast-paths. The render/updateViolations loops in `FastPlot.m` are updated to call a fused path that skips `downsample_violations` when MEX is available.
+`compute_violations.m` and `compute_violations_dynamic.m` gain MEX fast-paths. The render/updateViolations loops in `FastSense.m` are updated to call a fused path that skips `downsample_violations` when MEX is available.
 
 ## Files Changed
 
@@ -55,7 +55,7 @@ Single-pass over data array:
 - **Modify:** `compute_violations.m` — add MEX fast-path
 - **Modify:** `compute_violations_dynamic.m` — add MEX fast-path
 - **Modify:** `downsample_violations.m` — no change (still used as MATLAB fallback)
-- **Modify:** `FastPlot.m` render + updateViolations — fused call path
+- **Modify:** `FastSense.m` render + updateViolations — fused call path
 - **Create:** `tests/test_violation_cull_mex.m` — parity tests against MATLAB fallback
 
 ## Compatibility

@@ -28,7 +28,7 @@ All widgets inherit from `DashboardWidget`. The following properties are added o
 |---|---|---|---|
 | `Title` | char | `Sensor.Name` or `''` | Display title. Defaults to Sensor name when bound. |
 | `Description` | char | `''` | Optional tooltip text, shown via info icon hover on the widget header. |
-| `SensorObj` | Sensor | `[]` | Primary data binding. Moved from FastPlotWidget to base class. |
+| `SensorObj` | Sensor | `[]` | Primary data binding. Moved from FastSenseWidget to base class. |
 | `Position` | 1x4 double | widget-specific | `[col, row, width, height]` in grid units (unchanged). |
 | `ThemeOverride` | struct | `struct()` | Per-widget theme overrides (unchanged). |
 | `UseGlobalTime` | logical | `true` | Follow global time slider (unchanged). |
@@ -45,7 +45,7 @@ When `Description` is non-empty, the widget header renders a small `(i)` icon ne
 
 ## Widget Specifications
 
-### 1. FastPlotWidget
+### 1. FastSenseWidget
 
 **Binding:** Single Sensor (primary), DataStore, File, or inline XData/YData (fallbacks).
 
@@ -54,7 +54,7 @@ When `Description` is non-empty, the widget header renders a small `(i)` icon ne
 - ThresholdRules auto-resolve — violation markers and bands render automatically
 - XLabel defaults to `'Time'`, YLabel defaults to `Sensor.Units`
 
-**Unchanged behavior:** Creates a `FastPlot` instance inside its panel. Full zoom/pan/downsample support. `setTimeRange()` updates xlim when `UseGlobalTime` is true. User zoom sets `UseGlobalTime = false`.
+**Unchanged behavior:** Creates a `FastSense` instance inside its panel. Full zoom/pan/downsample support. `setTimeRange()` updates xlim when `UseGlobalTime` is true. User zoom sets `UseGlobalTime = false`.
 
 **Default size:** 12 cols x 3 rows.
 
@@ -223,7 +223,7 @@ The `DashboardEngine.addWidget()` method signature remains the same but all widg
 
 ```matlab
 % Sensor-first (recommended for all sensor-bound widgets)
-d.addWidget('fastplot',  'Sensor', sTemp, 'Position', [1 1 12 3]);
+d.addWidget('fastsense',  'Sensor', sTemp, 'Position', [1 1 12 3]);
 d.addWidget('number',    'Sensor', sTemp, 'Position', [13 1 6 1]);
 d.addWidget('gauge',     'Sensor', sPressure, 'Style', 'donut', 'Position', [13 2 6 2]);
 d.addWidget('status',    'Sensor', sTemp, 'Position', [19 1 6 1]);
@@ -238,7 +238,7 @@ d.addWidget('text', 'Title', 'Section A', 'Content', 'Overview', 'Position', [1 
 ```
 
 **Type string mapping:**
-- `'fastplot'` → FastPlotWidget
+- `'fastsense'` → FastSenseWidget
 - `'number'` → NumberWidget (was `'kpi'`)
 - `'gauge'` → GaugeWidget
 - `'status'` → StatusWidget
@@ -306,7 +306,7 @@ The existing live timer architecture is unchanged. On each tick:
    - GaugeWidget: re-evaluates `Sensor.Y(end)`, updates needle/fill
    - StatusWidget: re-checks current violations, updates dot color
    - TableWidget: re-queries last N data points or events
-   - FastPlotWidget: re-renders with latest Sensor data
+   - FastSenseWidget: re-renders with latest Sensor data
    - RawAxesWidget: clears and re-calls PlotFcn with updated Sensor
    - EventTimelineWidget: re-queries EventStore
    - TextWidget: no-op (static)
@@ -322,7 +322,7 @@ The existing live timer architecture is unchanged. On each tick:
 - `KpiWidget.m` → `NumberWidget.m`
 
 ### Moved Properties
-- `SensorObj` moves from `FastPlotWidget` to `DashboardWidget` base class
+- `SensorObj` moves from `FastSenseWidget` to `DashboardWidget` base class
 
 ### API Changes
 - `DashboardEngine.load(filepath)` gains an optional name-value parameter: `'SensorResolver'`, a function handle `@(key) -> Sensor`. Existing single-argument calls continue to work (default resolver attempts `SensorRegistry.get(key)` if available, otherwise leaves widget unbound).

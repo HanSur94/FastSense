@@ -1,4 +1,4 @@
-# FastPlot Enhancement: Visual Customization + Dashboard Layouts
+# FastSense Enhancement: Visual Customization + Dashboard Layouts
 
 **Date:** 2026-03-06
 **Status:** Approved
@@ -7,9 +7,9 @@
 
 ## 1. Problem Statement
 
-FastPlot today is a single-axes class. Building multi-panel dashboards requires manual `subplot()` calls, manual `Parent`/`LinkGroup` wiring, and no theming support. Visual customization is limited to pass-through MATLAB line properties. There are no shaded regions, band fills, or custom markers.
+FastSense today is a single-axes class. Building multi-panel dashboards requires manual `subplot()` calls, manual `Parent`/`LinkGroup` wiring, and no theming support. Visual customization is limited to pass-through MATLAB line properties. There are no shaded regions, band fills, or custom markers.
 
-**Goal:** Add a figure-level layout manager (`FastPlotFigure`) for tiled dashboards with spanning, a comprehensive theming system with inheritance, and new visual elements (shaded fills, bands, markers) — all while keeping full backward compatibility.
+**Goal:** Add a figure-level layout manager (`FastSenseFigure`) for tiled dashboards with spanning, a comprehensive theming system with inheritance, and new visual elements (shaded fills, bands, markers) — all while keeping full backward compatibility.
 
 ---
 
@@ -18,7 +18,7 @@ FastPlot today is a single-axes class. Building multi-panel dashboards requires 
 ### Functional
 - Tiled grid layout with configurable rows/columns
 - Tiles can span multiple rows and/or columns
-- Every tile is a FastPlot axes (no non-plot tiles for now)
+- Every tile is a FastSense axes (no non-plot tiles for now)
 - Theme system with presets and custom definitions
 - Theme inheritance: element override > tile theme > figure theme > default preset
 - Auto line color cycling from theme palette
@@ -27,7 +27,7 @@ FastPlot today is a single-axes class. Building multi-panel dashboards requires 
 - Area fills from line to baseline
 - Custom event markers with configurable shape/size/color
 - Link groups remain explicit (not auto-linked in dashboards)
-- Standalone FastPlot gains theme support without requiring FastPlotFigure
+- Standalone FastSense gains theme support without requiring FastSenseFigure
 
 ### Non-Functional
 - Full backward compatibility — all existing scripts unchanged
@@ -41,13 +41,13 @@ FastPlot today is a single-axes class. Building multi-panel dashboards requires 
 ### 3.1 Class Structure
 
 ```
-FastPlotFigure (handle class)        -- figure + layout + theme
+FastSenseFigure (handle class)        -- figure + layout + theme
   hFigure                            -- figure handle
-  Theme                              -- FastPlotTheme struct
+  Theme                              -- FastSenseTheme struct
   Grid [rows, cols]                  -- layout grid dimensions
-  Tiles{}                            -- cell array of FastPlot instances
+  Tiles{}                            -- cell array of FastSense instances
   TileSpans{}                        -- per-tile [rowSpan, colSpan]
-  tile(n) -> FastPlot                -- get/create FastPlot for tile n
+  tile(n) -> FastSense                -- get/create FastSense for tile n
   setTileSpan(n, [r,c])             -- make tile span multiple rows/cols
   tileTitle(n, str)                  -- set title for tile n
   tileXLabel(n, str)                 -- set xlabel for tile n
@@ -56,7 +56,7 @@ FastPlotFigure (handle class)        -- figure + layout + theme
   renderAll()                        -- render all unrendered tiles
   render()                           -- alias for renderAll()
 
-FastPlot (handle class)              -- per-axes (extended)
+FastSense (handle class)              -- per-axes (extended)
   existing API unchanged
   addShaded(x, y1, y2, ...)          -- fill between two curves
   addBand(yLow, yHigh, ...)         -- horizontal band fill
@@ -65,7 +65,7 @@ FastPlot (handle class)              -- per-axes (extended)
   Theme (inherited or overridden)    -- per-tile theme
   auto line color cycling            -- from theme LineColorOrder
 
-FastPlotTheme (function, not class)  -- returns theme struct
+FastSenseTheme (function, not class)  -- returns theme struct
   Background, AxesColor, GridColor, GridAlpha
   GridStyle, FontName, FontSize, TitleFontSize
   ForegroundColor                    -- text, tick labels, axis lines
@@ -80,10 +80,10 @@ FastPlotTheme (function, not class)  -- returns theme struct
 
 | File | Purpose |
 |------|---------|
-| `FastPlotFigure.m` | Figure-level layout manager with tiled grid, spanning, theming |
-| `FastPlotTheme.m` | Function returning theme preset structs and merge logic |
+| `FastSenseFigure.m` | Figure-level layout manager with tiled grid, spanning, theming |
+| `FastSenseTheme.m` | Function returning theme preset structs and merge logic |
 
-### 3.3 Extended: `FastPlot.m`
+### 3.3 Extended: `FastSense.m`
 
 | Addition | Description |
 |----------|-------------|
@@ -96,20 +96,20 @@ FastPlotTheme (function, not class)  -- returns theme struct
 
 ---
 
-## 4. FastPlotFigure API
+## 4. FastSenseFigure API
 
 ```matlab
 %% Construction
-fig = FastPlotFigure(rows, cols);
-fig = FastPlotFigure(rows, cols, 'Theme', 'dark');
-fig = FastPlotFigure(rows, cols, 'Theme', myCustomTheme);
-fig = FastPlotFigure(rows, cols, 'Position', [100 100 1400 800], 'Name', 'Dashboard');
+fig = FastSenseFigure(rows, cols);
+fig = FastSenseFigure(rows, cols, 'Theme', 'dark');
+fig = FastSenseFigure(rows, cols, 'Theme', myCustomTheme);
+fig = FastSenseFigure(rows, cols, 'Position', [100 100 1400 800], 'Name', 'Dashboard');
 
 %% Tile spanning
 fig.setTileSpan(1, [1 2]);   % tile 1 spans 1 row, 2 columns
 fig.setTileSpan(3, [2 1]);   % tile 3 spans 2 rows, 1 column
 
-%% Getting tiles (returns FastPlot instance, creates axes on first call)
+%% Getting tiles (returns FastSense instance, creates axes on first call)
 fp = fig.tile(1);
 fp.addLine(x, y, 'DisplayName', 'Sensor1');
 fp.render();
@@ -132,7 +132,7 @@ Tiles are numbered left-to-right, top-to-bottom (same as MATLAB's `subplot`). Wh
 
 ### Key Behaviors
 
-- `tile(n)` is lazy -- axes and FastPlot are created on first access
+- `tile(n)` is lazy -- axes and FastSense are created on first access
 - `renderAll()` calls `render()` on all tiles that haven't been rendered yet
 - Figure is kept invisible until `renderAll()` or the first `tile.render()` call
 - Standard figure properties (`Name`, `Position`, `Color`) forwarded to underlying figure handle
@@ -170,7 +170,7 @@ fp.addMarker(x_events, y_events, ...
 - `addBand` creates a rectangle patch -- no downsampling (constant bounds)
 - `addFill` is sugar for `addShaded(x, y, baseline)`
 - `addMarker` creates a line object with `'none'` LineStyle and configurable marker props
-- All new elements get `UserData.FastPlot` tagging (`'shaded'`, `'band'`, `'fill'`, `'marker'`)
+- All new elements get `UserData.FastSense` tagging (`'shaded'`, `'band'`, `'fill'`, `'marker'`)
 
 ### Rendering Order (back to front)
 
@@ -227,7 +227,7 @@ myTheme = struct( ...
 | `'colorblind'` | Deuteranopia-safe 8-color palette |
 | Custom | Nx3 matrix of RGB values |
 
-Auto-cycling: when `addLine` is called without a `Color` argument, the next color from `LineColorOrder` is assigned automatically. Each FastPlot instance tracks its position in the cycle.
+Auto-cycling: when `addLine` is called without a `Color` argument, the next color from `LineColorOrder` is assigned automatically. Each FastSense instance tracks its position in the cycle.
 
 ### 6.4 Theme Inheritance
 
@@ -235,27 +235,27 @@ Auto-cycling: when `addLine` is called without a `Color` argument, the next colo
 Element override > Tile theme > Figure theme > 'default' preset
 ```
 
-- `FastPlotTheme('dark')` returns the full dark preset struct
-- `FastPlotTheme('dark', 'LineColorOrder', 'colorblind')` returns dark with one field overridden
+- `FastSenseTheme('dark')` returns the full dark preset struct
+- `FastSenseTheme('dark', 'LineColorOrder', 'colorblind')` returns dark with one field overridden
 - Merging: simple `fieldnames` loop, override wins
 - Unset fields in custom themes inherit from `'default'`
 
 ---
 
-## 7. Standalone FastPlot Enhancements
+## 7. Standalone FastSense Enhancements
 
 ```matlab
-%% Standalone with theme (no FastPlotFigure required)
-fp = FastPlot('Theme', 'dark');
+%% Standalone with theme (no FastSenseFigure required)
+fp = FastSense('Theme', 'dark');
 fp.addLine(x, y);
 fp.render();
 
 %% Full constructor signature
-fp = FastPlot();
-fp = FastPlot('Parent', ax);
-fp = FastPlot('LinkGroup', 'sensors');
-fp = FastPlot('Theme', 'dark');
-fp = FastPlot('Parent', ax, 'LinkGroup', 'g1', 'Theme', myTheme);
+fp = FastSense();
+fp = FastSense('Parent', ax);
+fp = FastSense('LinkGroup', 'sensors');
+fp = FastSense('Theme', 'dark');
+fp = FastSense('Parent', ax, 'LinkGroup', 'g1', 'Theme', myTheme);
 ```
 
 No theme = `'default'` preset. All new methods are optional additions.

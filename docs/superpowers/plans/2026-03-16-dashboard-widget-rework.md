@@ -4,7 +4,7 @@
 
 **Goal:** Rework all dashboard widgets to use Sensor-first data binding, rename KpiWidget→NumberWidget, add 4 gauge styles, rework StatusWidget layout, and add Description tooltip to all widgets.
 
-**Architecture:** Move `SensorObj` from FastPlotWidget to the `DashboardWidget` base class. Each widget derives its display (value, units, range, colors) from the bound Sensor and its ThresholdRules. Add `Description` property with info icon hover to base class. GaugeWidget gains 4 rendering styles. StatusWidget uses ThresholdRule.Color for dot color.
+**Architecture:** Move `SensorObj` from FastSenseWidget to the `DashboardWidget` base class. Each widget derives its display (value, units, range, colors) from the bound Sensor and its ThresholdRules. Add `Description` property with info icon hover to base class. GaugeWidget gains 4 rendering styles. StatusWidget uses ThresholdRule.Color for dot color.
 
 **Tech Stack:** MATLAB R2020b, figure-based UI (uipanel, uicontrol, axes), no uifigure.
 
@@ -33,7 +33,7 @@ end
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestSensor', 'ProcedureName', 'testUnitsProperty')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestSensor', 'ProcedureName', 'testUnitsProperty')"`
 Expected: FAIL — 'Units' is not a property
 
 - [ ] **Step 3: Add Units property to Sensor.m**
@@ -48,7 +48,7 @@ And in the constructor, add support for the name-value pair (the existing loop `
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestSensor', 'ProcedureName', 'testUnitsProperty')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestSensor', 'ProcedureName', 'testUnitsProperty')"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -104,7 +104,7 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestDashboardWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestDashboardWidget')"`
 Expected: FAIL — Description and SensorObj not recognized
 
 - [ ] **Step 3: Implement base class changes**
@@ -174,7 +174,7 @@ Add a `getTheme` utility method (currently duplicated in every widget — centra
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestDashboardWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestDashboardWidget')"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -203,7 +203,7 @@ Each file has a private method block at the end with only `getTheme` in it. Dele
 
 - [ ] **Step 2: Run all existing widget tests to verify nothing breaks**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestKpiWidget'); runtests('tests/suite/TestGaugeWidget'); runtests('tests/suite/TestStatusWidget'); runtests('tests/suite/TestFastPlotWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestKpiWidget'); runtests('tests/suite/TestGaugeWidget'); runtests('tests/suite/TestStatusWidget'); runtests('tests/suite/TestFastSenseWidget')"`
 Expected: All PASS
 
 - [ ] **Step 3: Commit**
@@ -273,7 +273,7 @@ In `libs/Dashboard/DashboardSerializer.m`, at the switch block (lines 68-88), re
 
 - [ ] **Step 5: Run TestNumberWidget**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget')"`
 Expected: All PASS
 
 - [ ] **Step 6: Commit**
@@ -325,7 +325,7 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget', 'ProcedureName', 'testSensorBinding')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget', 'ProcedureName', 'testSensorBinding')"`
 Expected: FAIL
 
 - [ ] **Step 3: Implement Sensor binding in NumberWidget**
@@ -471,7 +471,7 @@ Update `fromStruct()` to handle sensor source:
 
 - [ ] **Step 4: Run all NumberWidget tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget')"`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -530,7 +530,7 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestStatusWidget', 'ProcedureName', 'testSensorBindingNoViolation')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestStatusWidget', 'ProcedureName', 'testSensorBindingNoViolation')"`
 Expected: FAIL
 
 - [ ] **Step 3: Implement Sensor-bound StatusWidget**
@@ -757,7 +757,7 @@ end
 
 - [ ] **Step 4: Run all StatusWidget tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestStatusWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestStatusWidget')"`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -803,7 +803,7 @@ end
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget', 'ProcedureName', 'testSensorBinding')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget', 'ProcedureName', 'testSensorBinding')"`
 Expected: FAIL
 
 - [ ] **Step 3: Implement Sensor binding**
@@ -928,7 +928,7 @@ Extract the arc rendering into `updateDisplay()` (refactored from existing refre
 
 - [ ] **Step 4: Run all GaugeWidget tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget')"`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -994,7 +994,7 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget', 'ProcedureName', 'testDonutStyle')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget', 'ProcedureName', 'testDonutStyle')"`
 Expected: FAIL — Style property not recognized or donut rendering not implemented
 
 - [ ] **Step 3: Implement the render dispatcher and three new styles**
@@ -1265,7 +1265,7 @@ Update `toStruct()` and `fromStruct()` to serialize `style`:
 
 - [ ] **Step 4: Run all GaugeWidget tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestGaugeWidget')"`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -1279,18 +1279,18 @@ git commit -m "feat: add donut, bar, thermometer styles to GaugeWidget"
 
 ## Chunk 5: Remaining Widget Updates
 
-### Task 9: Update FastPlotWidget to use base class SensorObj
+### Task 9: Update FastSenseWidget to use base class SensorObj
 
 **Files:**
-- Modify: `libs/Dashboard/FastPlotWidget.m`
-- Test: `tests/suite/TestFastPlotWidget.m`
+- Modify: `libs/Dashboard/FastSenseWidget.m`
+- Test: `tests/suite/TestFastSenseWidget.m`
 
-- [ ] **Step 1: Remove SensorObj property from FastPlotWidget**
+- [ ] **Step 1: Remove SensorObj property from FastSenseWidget**
 
-`SensorObj` is now on the base class. Remove it from `libs/Dashboard/FastPlotWidget.m` line 13. Add 'Sensor' shorthand mapping in the constructor. Update constructor to delegate to base class:
+`SensorObj` is now on the base class. Remove it from `libs/Dashboard/FastSenseWidget.m` line 13. Add 'Sensor' shorthand mapping in the constructor. Update constructor to delegate to base class:
 
 ```matlab
-        function obj = FastPlotWidget(varargin)
+        function obj = FastSenseWidget(varargin)
             for k = 1:2:numel(varargin)
                 if strcmp(varargin{k}, 'Sensor')
                     varargin{k} = 'SensorObj';
@@ -1318,16 +1318,16 @@ git commit -m "feat: add donut, bar, thermometer styles to GaugeWidget"
 
 Remove the `SensorObj = []` from the public properties block (line 13). The rest of the class already references `obj.SensorObj` which will now resolve to the base class property.
 
-- [ ] **Step 2: Run existing FastPlotWidget tests**
+- [ ] **Step 2: Run existing FastSenseWidget tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestFastPlotWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestFastSenseWidget')"`
 Expected: All PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add libs/Dashboard/FastPlotWidget.m
-git commit -m "refactor: FastPlotWidget uses base class SensorObj"
+git add libs/Dashboard/FastSenseWidget.m
+git commit -m "refactor: FastSenseWidget uses base class SensorObj"
 ```
 
 ---
@@ -1426,7 +1426,7 @@ Add `'Sensor'` shorthand in constructor. Update `refresh()`:
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestTableWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestTableWidget')"`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
@@ -1491,7 +1491,7 @@ Add `'Sensor'` shorthand mapping in constructor.
 
 - [ ] **Step 2: Run existing tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite')"`
 Expected: All PASS
 
 - [ ] **Step 3: Commit**
@@ -1560,7 +1560,7 @@ This replaces the existing color selection block. When `ColorSource == 'theme'`,
 
 - [ ] **Step 3: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite')"`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
@@ -1626,8 +1626,8 @@ Update `configToWidgets` signature to accept an optional resolver function handl
             for i = 1:numel(config.widgets)
                 ws = config.widgets{i};
                 switch ws.type
-                    case 'fastplot'
-                        widgets{i} = FastPlotWidget.fromStruct(ws);
+                    case 'fastsense'
+                        widgets{i} = FastSenseWidget.fromStruct(ws);
                     case {'number', 'kpi'}
                         widgets{i} = NumberWidget.fromStruct(ws);
                     case 'status'
@@ -1662,7 +1662,7 @@ Update `configToWidgets` signature to accept an optional resolver function handl
 
 - [ ] **Step 3: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite')"`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
@@ -1682,7 +1682,7 @@ git commit -m "feat: add SensorResolver to DashboardEngine.load()"
 
 - [ ] **Step 1: Verify NumberWidget works as replacement**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestNumberWidget')"`
 Expected: All PASS
 
 - [ ] **Step 2: Delete old files**
@@ -1707,7 +1707,7 @@ Run grep to find all usages, then update each file.
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite')"`
 Expected: All PASS
 
 - [ ] **Step 3: Commit**
@@ -1730,7 +1730,7 @@ The palette sidebar creates buttons for each widget type. Update the 'kpi' butto
 
 - [ ] **Step 2: Run builder tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); runtests('tests/suite/TestDashboardBuilder')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); runtests('tests/suite/TestDashboardBuilder')"`
 Expected: All PASS
 
 - [ ] **Step 3: Commit**
@@ -1746,7 +1746,7 @@ git commit -m "chore: update DashboardBuilder palette for NumberWidget"
 
 - [ ] **Step 1: Run the full test suite**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "setup(); results = runtests('tests/suite'); disp(table(results))"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "setup(); results = runtests('tests/suite'); disp(table(results))"`
 Expected: All PASS, no warnings about deprecated 'kpi' in test code
 
 - [ ] **Step 2: Verify all changes are committed**

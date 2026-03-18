@@ -28,7 +28,7 @@ s.addThresholdRule(struct(), 0.5, ...
 % --- Resolve and plot ---
 s.resolve();
 
-fp = FastPlot();
+fp = FastSense();
 fp.addSensor(s, 'ShowThresholds', true);
 fp.render();
 title('Motor Vibration — Static Upper & Lower Thresholds');

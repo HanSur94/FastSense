@@ -1,10 +1,10 @@
 function test_theme()
-%TEST_THEME Tests for FastPlotTheme function.
+%TEST_THEME Tests for FastSenseTheme function.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
 
     % testDefaultPreset
-    t = FastPlotTheme('default');
+    t = FastSenseTheme('default');
     assert(isstruct(t), 'testDefaultPreset: must return struct');
     assert(isequal(t.Background, [1 1 1]), 'testDefaultPreset: Background');
     assert(isfield(t, 'AxesColor'), 'testDefaultPreset: AxesColor field');
@@ -25,12 +25,12 @@ function test_theme()
     assert(size(t.LineColorOrder, 2) == 3, 'testDefaultPreset: LineColorOrder must be Nx3');
 
     % testNoArgsReturnsDefault
-    t0 = FastPlotTheme();
-    t1 = FastPlotTheme('default');
+    t0 = FastSenseTheme();
+    t1 = FastSenseTheme('default');
     assert(isequal(t0, t1), 'testNoArgsReturnsDefault');
 
     % testMergeOverrides
-    t = FastPlotTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
+    t = FastSenseTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
     assert(t.FontSize == 14, 'testMergeOverrides: FontSize');
     assert(t.LineWidth == 2.0, 'testMergeOverrides: LineWidth');
     assert(isequal(t.Background, [1 1 1]), 'testMergeOverrides: Background unchanged');
@@ -38,37 +38,37 @@ function test_theme()
     % testInvalidPresetErrors
     threw = false;
     try
-        FastPlotTheme('nonexistent');
+        FastSenseTheme('nonexistent');
     catch
         threw = true;
     end
     assert(threw, 'testInvalidPresetErrors');
 
     % testDarkPreset
-    t = FastPlotTheme('dark');
+    t = FastSenseTheme('dark');
     assert(all(t.Background < [0.2 0.2 0.2]), 'testDarkPreset: Background should be dark');
     assert(all(t.ForegroundColor > [0.7 0.7 0.7]), 'testDarkPreset: ForegroundColor should be light');
     assert(size(t.LineColorOrder, 2) == 3, 'testDarkPreset: LineColorOrder Nx3');
 
     % testLightPreset
-    t = FastPlotTheme('light');
+    t = FastSenseTheme('light');
     assert(all(t.Background > [0.9 0.9 0.9]), 'testLightPreset: Background');
     assert(size(t.LineColorOrder, 2) == 3, 'testLightPreset: LineColorOrder Nx3');
 
     % testIndustrialPreset
-    t = FastPlotTheme('industrial');
+    t = FastSenseTheme('industrial');
     assert(t.LineWidth >= 1.0, 'testIndustrialPreset: LineWidth');
     assert(size(t.LineColorOrder, 2) == 3, 'testIndustrialPreset: LineColorOrder Nx3');
 
     % testScientificPreset
-    t = FastPlotTheme('scientific');
+    t = FastSenseTheme('scientific');
     assert(strcmp(t.FontName, 'Times New Roman'), 'testScientificPreset: FontName');
     assert(t.GridAlpha == 0, 'testScientificPreset: no grid');
     assert(t.LineWidth < 1.0, 'testScientificPreset: thin lines');
     assert(size(t.LineColorOrder, 2) == 3, 'testScientificPreset: LineColorOrder Nx3');
 
     % testOceanPreset
-    t = FastPlotTheme('ocean');
+    t = FastSenseTheme('ocean');
     assert(isequal(t.Background, [1 1 1]), 'testOceanPreset: Background should be white');
     assert(isequal(t.AxesColor, [1 1 1]), 'testOceanPreset: AxesColor should be white');
     assert(size(t.LineColorOrder, 2) == 3, 'testOceanPreset: LineColorOrder Nx3');
@@ -76,18 +76,18 @@ function test_theme()
 
     % testStructAsPreset
     custom = struct('Background', [0 0 0], 'FontSize', 16);
-    t = FastPlotTheme(custom);
+    t = FastSenseTheme(custom);
     assert(isequal(t.Background, [0 0 0]), 'testStructAsPreset: Background');
     assert(t.FontSize == 16, 'testStructAsPreset: FontSize');
     assert(isfield(t, 'GridColor'), 'testStructAsPreset: inherits defaults');
 
     % testPaletteResolution
-    t = FastPlotTheme('default');
+    t = FastSenseTheme('default');
     assert(size(t.LineColorOrder, 1) >= 6, 'testPaletteResolution: at least 6 colors');
 
     % testCustomPaletteMatrix
     customColors = [1 0 0; 0 1 0; 0 0 1];
-    t = FastPlotTheme('default', 'LineColorOrder', customColors);
+    t = FastSenseTheme('default', 'LineColorOrder', customColors);
     assert(isequal(t.LineColorOrder, customColors), 'testCustomPaletteMatrix');
 
     fprintf('    All 12 theme tests passed.\n');

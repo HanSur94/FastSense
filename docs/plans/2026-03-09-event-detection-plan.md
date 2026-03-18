@@ -79,7 +79,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event"`
 Expected: FAIL — `Event` class not found.
 
 **Step 3: Write minimal implementation**
@@ -155,7 +155,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event"`
 Expected: PASS
 
 **Step 5: Commit**
@@ -242,7 +242,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_group_violations"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_group_violations"`
 Expected: FAIL — `groupViolations` not found.
 
 **Step 3: Write minimal implementation**
@@ -285,7 +285,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_group_violations"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_group_violations"`
 Expected: PASS
 
 **Step 5: Commit**
@@ -406,7 +406,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_detector"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_detector"`
 Expected: FAIL — `EventDetector` class not found.
 
 **Step 3: Write minimal implementation**
@@ -509,7 +509,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_detector"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_detector"`
 Expected: PASS
 
 **Step 5: Commit**
@@ -587,7 +587,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_detect_events_from_sensor"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_detect_events_from_sensor"`
 Expected: FAIL — `detectEventsFromSensor` not found.
 
 **Step 3: Write minimal implementation**
@@ -672,7 +672,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_detect_events_from_sensor"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_detect_events_from_sensor"`
 Expected: PASS
 
 **Step 5: Commit**
@@ -753,7 +753,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_integration"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_integration"`
 Expected: Fails if setup.m hasn't been updated yet (EventDetection not on path).
 
 **Step 3: Update setup.m**
@@ -762,25 +762,25 @@ In `setup.m`, add the EventDetection library path:
 
 ```matlab
 function setup()
-%SETUP Add FastPlot, SensorThreshold, and EventDetection libraries to the MATLAB path.
+%SETUP Add FastSense, SensorThreshold, and EventDetection libraries to the MATLAB path.
 %   Run this once per session to make all library classes available.
 
     root = fileparts(mfilename('fullpath'));
-    addpath(fullfile(root, 'libs', 'FastPlot'));
+    addpath(fullfile(root, 'libs', 'FastSense'));
     addpath(fullfile(root, 'libs', 'SensorThreshold'));
     addpath(fullfile(root, 'libs', 'EventDetection'));
-    fprintf('FastPlot + SensorThreshold + EventDetection libraries added to path.\n');
+    fprintf('FastSense + SensorThreshold + EventDetection libraries added to path.\n');
 end
 ```
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_integration"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_integration"`
 Expected: PASS
 
 **Step 5: Run full test suite**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); run_all_tests"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); run_all_tests"`
 Expected: All tests pass, including the 4 new test files.
 
 **Step 6: Commit**
@@ -850,7 +850,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_console"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_console"`
 Expected: FAIL — `printEventSummary` not found.
 
 **Step 3: Write printEventSummary implementation**
@@ -916,7 +916,7 @@ end
 
 **Step 5: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_console"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_console"`
 Expected: PASS
 
 **Step 6: Commit**
@@ -1005,7 +1005,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_config"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_config"`
 Expected: FAIL — `EventConfig` class not found.
 
 **Step 3: Write minimal implementation**
@@ -1106,7 +1106,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_config"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_config"`
 Expected: PASS
 
 **Step 5: Commit**
@@ -1206,7 +1206,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_viewer"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_viewer"`
 Expected: FAIL — `EventViewer` class not found.
 
 **Step 3: Write implementation**
@@ -1454,8 +1454,8 @@ classdef EventViewer < handle
 
             sd = obj.SensorData(sIdx);
 
-            % Open FastPlot for this sensor, zoomed to event
-            fp = FastPlot();
+            % Open FastSense for this sensor, zoomed to event
+            fp = FastSense();
             fp.addLine(sd.t, sd.y, 'Label', sd.name);
 
             % Add threshold line
@@ -1477,7 +1477,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); test_event_viewer"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); test_event_viewer"`
 Expected: PASS
 
 **Step 5: Commit**
@@ -1665,7 +1665,7 @@ end
 
 **Step 2: Verify example runs**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('examples'); example_event_detection_live"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('examples'); example_event_detection_live"`
 Expected: Console output shows initial detection + live logging. EventViewer figure opens with Gantt timeline and table. Timer appends data every 2 seconds.
 
 **Step 3: Commit**
@@ -1681,7 +1681,7 @@ git commit -m "feat: add live event detection demo with industrial mock data"
 
 **Step 1: Run full test suite**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); run_all_tests"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); run_all_tests"`
 Expected: All tests pass, including the 6 new test files:
 - `test_event.m`
 - `test_group_violations.m`

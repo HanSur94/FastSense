@@ -3,7 +3,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
@@ -12,7 +12,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
             x = 1:100;
             y1 = ones(1,100) * 2;
             y2 = ones(1,100) * -2;
-            fp = FastPlot();
+            fp = FastSense();
             fp.addShaded(x, y1, y2, 'FaceColor', [0 0 1], 'FaceAlpha', 0.2);
             testCase.verifyEqual(numel(fp.Shadings), 1, 'testAddShaded: count');
             testCase.verifyEqual(fp.Shadings(1).X, x, 'testAddShaded: X');
@@ -21,7 +21,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
         end
 
         function testShadedRendered(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100));
             fp.addShaded(1:100, ones(1,100), zeros(1,100), 'FaceColor', [1 0 0]);
             fp.render();
@@ -29,11 +29,11 @@ classdef TestAddShaded < matlab.unittest.TestCase
             testCase.verifyNotEmpty(fp.Shadings(1).hPatch, 'testShadedRendered: hPatch');
             testCase.verifyTrue(ishandle(fp.Shadings(1).hPatch), 'testShadedRendered: valid');
             ud = get(fp.Shadings(1).hPatch, 'UserData');
-            testCase.verifyEqual(ud.FastPlot.Type, 'shaded', 'testShadedRendered: type');
+            testCase.verifyEqual(ud.FastSense.Type, 'shaded', 'testShadedRendered: type');
         end
 
         function testShadedValidation(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             threw = false;
             try
                 fp.addShaded(1:10, 1:10, 1:5);  % mismatched lengths
@@ -44,7 +44,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
         end
 
         function testShadedMonotonicX(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             threw = false;
             try
                 fp.addShaded([3 1 2], [1 1 1], [0 0 0]);
@@ -55,7 +55,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
         end
 
         function testShadedRejectsAfterRender(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -69,7 +69,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
         end
 
         function testShadedColumnVectors(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addShaded((1:10)', (1:10)', zeros(10,1));
             testCase.verifyTrue(isrow(fp.Shadings(1).X), 'testShadedColumnVectors: X row');
             testCase.verifyTrue(isrow(fp.Shadings(1).Y1), 'testShadedColumnVectors: Y1 row');
@@ -77,7 +77,7 @@ classdef TestAddShaded < matlab.unittest.TestCase
         end
 
         function testAddFill(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             x = 1:50;
             y = rand(1,50);
             fp.addFill(x, y, 'FaceColor', [0 0.5 1], 'FaceAlpha', 0.2);
@@ -86,20 +86,20 @@ classdef TestAddShaded < matlab.unittest.TestCase
         end
 
         function testAddFillCustomBaseline(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addFill(1:10, rand(1,10), 'Baseline', -1);
             testCase.verifyTrue(all(fp.Shadings(1).Y2 == -1), 'testAddFillCustomBaseline');
         end
 
         function testAddFillRendered(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100));
             fp.addFill(1:100, rand(1,100), 'FaceColor', [0 1 0]);
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
             testCase.verifyTrue(ishandle(fp.Shadings(1).hPatch), 'testAddFillRendered: valid patch');
             ud = get(fp.Shadings(1).hPatch, 'UserData');
-            testCase.verifyEqual(ud.FastPlot.Type, 'shaded', 'testAddFillRendered: type is shaded');
+            testCase.verifyEqual(ud.FastSense.Type, 'shaded', 'testAddFillRendered: type is shaded');
         end
     end
 end

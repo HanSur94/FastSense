@@ -3,19 +3,19 @@ classdef TestDatetime < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testXTypeDefaultIsNumeric(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, rand(1,100));
             testCase.verifyEqual(fp.XType, 'numeric', 'testXTypeDefault: should be numeric');
         end
 
         function testXTypeDatenum(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             x = datenum(2024,1,1) + (0:99)/24;
             fp.addLine(x, rand(1,100), 'XType', 'datenum');
             testCase.verifyEqual(fp.XType, 'datenum', 'testXTypeDatenum: should be datenum');
@@ -23,7 +23,7 @@ classdef TestDatetime < matlab.unittest.TestCase
 
         function testDatetimeAutoConvert(testCase)
             if exist('datetime', 'class')
-                fp = FastPlot();
+                fp = FastSense();
                 dt = datetime(2024,1,1) + hours(0:99);
                 fp.addLine(dt, rand(1,100));
                 testCase.verifyEqual(fp.XType, 'datenum', 'testDatetimeAutoConvert: should be datenum');
@@ -32,7 +32,7 @@ classdef TestDatetime < matlab.unittest.TestCase
         end
 
         function testTickLabelsAreDateStrings(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             x = datenum(2024,1,1) + (0:99)/24;  % ~4 days of hourly data
             fp.addLine(x, rand(1,100), 'XType', 'datenum');
             fp.render();
@@ -50,7 +50,7 @@ classdef TestDatetime < matlab.unittest.TestCase
         end
 
         function testTickFormatChangesOnZoom(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             x = datenum(2024,1,1) + (0:9999)/86400;  % ~0.1s resolution
             fp.addLine(x, rand(1,10000), 'XType', 'datenum');
             fp.render();
@@ -73,9 +73,9 @@ classdef TestDatetime < matlab.unittest.TestCase
         function testToolbarFormatX(testCase)
             % Verify the static helper returns date string for datenum XType
             xVal = datenum(2024, 3, 15, 10, 30, 45);
-            result = FastPlotToolbar.formatX(xVal, 'datenum');
+            result = FastSenseToolbar.formatX(xVal, 'datenum');
             testCase.verifyTrue(any(result == ':'), 'testToolbarFormatX: should contain colon');
-            resultNum = FastPlotToolbar.formatX(42.5, 'numeric');
+            resultNum = FastSenseToolbar.formatX(42.5, 'numeric');
             testCase.verifyTrue(~any(resultNum == ':'), 'testToolbarFormatXNum: should not contain colon');
         end
     end

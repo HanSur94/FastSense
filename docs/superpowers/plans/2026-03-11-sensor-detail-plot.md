@@ -4,7 +4,7 @@
 
 **Goal:** Build a two-panel sensor overview+detail plot with interactive navigator, threshold bands, and optional event overlay.
 
-**Architecture:** Two new classes (`SensorDetailPlot`, `NavigatorOverlay`) in `libs/FastPlot/`, one new method (`tilePanel`) on `FastPlotFigure`. `SensorDetailPlot` coordinates two `FastPlot` instances; `NavigatorOverlay` handles the zoom rectangle, dimming, and drag interaction on the navigator axes.
+**Architecture:** Two new classes (`SensorDetailPlot`, `NavigatorOverlay`) in `libs/FastSense/`, one new method (`tilePanel`) on `FastSenseFigure`. `SensorDetailPlot` coordinates two `FastSense` instances; `NavigatorOverlay` handles the zoom rectangle, dimming, and drag interaction on the navigator axes.
 
 **Tech Stack:** MATLAB (handle classes, uipanel layout, axes listeners, WindowButton callbacks)
 
@@ -16,9 +16,9 @@
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `libs/FastPlot/NavigatorOverlay.m` | Create | Zoom rectangle, dimming patches, drag interaction |
-| `libs/FastPlot/SensorDetailPlot.m` | Create | Coordinator: two-panel layout, sensor rendering, event overlay, sync |
-| `libs/FastPlot/FastPlotFigure.m` | Modify | Add `tilePanel(n)` method |
+| `libs/FastSense/NavigatorOverlay.m` | Create | Zoom rectangle, dimming patches, drag interaction |
+| `libs/FastSense/SensorDetailPlot.m` | Create | Coordinator: two-panel layout, sensor rendering, event overlay, sync |
+| `libs/FastSense/FastSenseFigure.m` | Modify | Add `tilePanel(n)` method |
 | `tests/test_NavigatorOverlay.m` | Create | Unit tests for NavigatorOverlay |
 | `tests/test_SensorDetailPlot.m` | Create | Unit tests for SensorDetailPlot |
 | `examples/example_sensor_detail.m` | Create | Demo script showing standalone + events usage |
@@ -30,7 +30,7 @@
 ### Task 1: NavigatorOverlay — Class Skeleton + Visual Elements
 
 **Files:**
-- Create: `libs/FastPlot/NavigatorOverlay.m`
+- Create: `libs/FastSense/NavigatorOverlay.m`
 - Create: `tests/test_NavigatorOverlay.m`
 
 - [ ] **Step 1: Write failing tests for NavigatorOverlay construction and visual elements**
@@ -43,7 +43,7 @@ function tests = test_NavigatorOverlay
 end
 
 function setup(testCase)
-    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastPlot'));
+    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastSense'));
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'SensorThreshold'));
     testCase.TestData.hFig = figure('Visible', 'off');
     testCase.TestData.hAxes = axes('Parent', testCase.TestData.hFig);
@@ -161,12 +161,12 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_NavigatorOverlay'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_NavigatorOverlay'); disp(results)"`
 Expected: FAIL — NavigatorOverlay class not found
 
 - [ ] **Step 3: Implement NavigatorOverlay class — visual elements + setRange**
 
-Create `libs/FastPlot/NavigatorOverlay.m`:
+Create `libs/FastSense/NavigatorOverlay.m`:
 
 ```matlab
 classdef NavigatorOverlay < handle
@@ -488,13 +488,13 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_NavigatorOverlay'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_NavigatorOverlay'); disp(results)"`
 Expected: All 6 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/FastPlot/NavigatorOverlay.m tests/test_NavigatorOverlay.m
+git add libs/FastSense/NavigatorOverlay.m tests/test_NavigatorOverlay.m
 git commit -m "feat: add NavigatorOverlay with visual elements and drag interaction"
 ```
 
@@ -543,7 +543,7 @@ end
 
 - [ ] **Step 2: Run tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_NavigatorOverlay'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_NavigatorOverlay'); disp(results)"`
 Expected: All 10 tests PASS
 
 - [ ] **Step 3: Commit**
@@ -560,7 +560,7 @@ git commit -m "test: add NavigatorOverlay boundary clamping tests"
 ### Task 3: SensorDetailPlot — Constructor + Layout
 
 **Files:**
-- Create: `libs/FastPlot/SensorDetailPlot.m`
+- Create: `libs/FastSense/SensorDetailPlot.m`
 - Create: `tests/test_SensorDetailPlot.m`
 
 - [ ] **Step 1: Write failing tests for constructor and layout**
@@ -573,7 +573,7 @@ function tests = test_SensorDetailPlot
 end
 
 function setup(testCase)
-    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastPlot'));
+    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastSense'));
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'SensorThreshold'));
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'EventDetection'));
 
@@ -617,12 +617,12 @@ function test_constructor_custom_options(testCase)
     delete(sdp);
 end
 
-%% Render creates two FastPlot instances
+%% Render creates two FastSense instances
 function test_render_creates_main_and_navigator(testCase)
     sdp = SensorDetailPlot(testCase.TestData.sensor);
     sdp.render();
-    verifyClass(testCase, sdp.MainPlot, ?FastPlot);
-    verifyClass(testCase, sdp.NavigatorPlot, ?FastPlot);
+    verifyClass(testCase, sdp.MainPlot, ?FastSense);
+    verifyClass(testCase, sdp.NavigatorPlot, ?FastSense);
     delete(sdp);
 end
 
@@ -664,12 +664,12 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
 Expected: FAIL — SensorDetailPlot class not found
 
 - [ ] **Step 3: Implement SensorDetailPlot — constructor + render + layout**
 
-Create `libs/FastPlot/SensorDetailPlot.m`:
+Create `libs/FastSense/SensorDetailPlot.m`:
 
 ```matlab
 classdef SensorDetailPlot < handle
@@ -679,7 +679,7 @@ classdef SensorDetailPlot < handle
     %   sdp = SensorDetailPlot(sensor, Name, Value, ...)
     %
     %   Name-Value Options:
-    %     'Theme'              - FastPlot theme (default: 'default')
+    %     'Theme'              - FastSense theme (default: 'default')
     %     'NavigatorHeight'    - Fraction 0-1 for navigator (default: 0.20)
     %     'ShowThresholds'     - Show thresholds in main plot (default: true)
     %     'ShowThresholdBands' - Show threshold bands in navigator (default: true)
@@ -690,8 +690,8 @@ classdef SensorDetailPlot < handle
 
     properties (SetAccess = private)
         Sensor              % Sensor object
-        MainPlot            % FastPlot instance for upper panel
-        NavigatorPlot       % FastPlot instance for lower panel
+        MainPlot            % FastSense instance for upper panel
+        NavigatorPlot       % FastSense instance for lower panel
         NavigatorOverlayObj % NavigatorOverlay instance
     end
 
@@ -763,8 +763,8 @@ classdef SensorDetailPlot < handle
             % Create layout
             obj.createLayout();
 
-            % Create main FastPlot
-            obj.MainPlot = FastPlot('Parent', obj.hMainAxes, 'Theme', obj.Theme);
+            % Create main FastSense
+            obj.MainPlot = FastSense('Parent', obj.hMainAxes, 'Theme', obj.Theme);
             obj.MainPlot.addSensor(obj.Sensor, 'ShowThresholds', obj.ShowThresholds);
 
             % Render main plot
@@ -775,8 +775,8 @@ classdef SensorDetailPlot < handle
                 title(obj.hMainAxes, obj.Title);
             end
 
-            % Create navigator FastPlot
-            obj.NavigatorPlot = FastPlot('Parent', obj.hNavAxes, 'Theme', obj.Theme);
+            % Create navigator FastSense
+            obj.NavigatorPlot = FastSense('Parent', obj.hNavAxes, 'Theme', obj.Theme);
             obj.NavigatorPlot.addLine(obj.Sensor.X, obj.Sensor.Y, ...
                 'DisplayName', obj.Sensor.Name);
 
@@ -1084,13 +1084,13 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
 Expected: All 8 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/FastPlot/SensorDetailPlot.m tests/test_SensorDetailPlot.m
+git add libs/FastSense/SensorDetailPlot.m tests/test_SensorDetailPlot.m
 git commit -m "feat: add SensorDetailPlot with two-panel layout and navigator sync"
 ```
 
@@ -1158,7 +1158,7 @@ end
 
 - [ ] **Step 2: Run tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
 Expected: All 12 tests PASS
 
 - [ ] **Step 3: Commit**
@@ -1170,7 +1170,7 @@ git commit -m "test: add threshold display tests for SensorDetailPlot"
 
 ---
 
-## Chunk 3: Events, FastPlotFigure Integration, and Example
+## Chunk 3: Events, FastSenseFigure Integration, and Example
 
 ### Task 5: SensorDetailPlot — Event Overlay Tests
 
@@ -1343,7 +1343,7 @@ end
 
 - [ ] **Step 2: Run tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
 Expected: All 19 tests PASS
 
 - [ ] **Step 3: Commit**
@@ -1355,10 +1355,10 @@ git commit -m "test: add event overlay tests for SensorDetailPlot"
 
 ---
 
-### Task 6: FastPlotFigure — tilePanel Method
+### Task 6: FastSenseFigure — tilePanel Method
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlotFigure.m:211-251` (add after `axes(n)` method)
+- Modify: `libs/FastSense/FastSenseFigure.m:211-251` (add after `axes(n)` method)
 - Modify: `tests/test_SensorDetailPlot.m` (add integration test)
 
 - [ ] **Step 1: Write failing test for tilePanel**
@@ -1366,30 +1366,30 @@ git commit -m "test: add event overlay tests for SensorDetailPlot"
 Append to `tests/test_SensorDetailPlot.m`:
 
 ```matlab
-%% FastPlotFigure tilePanel integration
+%% FastSenseFigure tilePanel integration
 function test_tilePanel_returns_uipanel(testCase)
-    fig = FastPlotFigure(2, 1);
+    fig = FastSenseFigure(2, 1);
     hp = fig.tilePanel(1);
     verifyTrue(testCase, isa(hp, 'matlab.ui.container.Panel'));
     delete(fig);
 end
 
 function test_tilePanel_conflict_with_tile(testCase)
-    fig = FastPlotFigure(2, 1);
-    fig.tile(1);  % Occupy tile 1 as FastPlot
-    verifyError(testCase, @() fig.tilePanel(1), 'FastPlotFigure:tileConflict');
+    fig = FastSenseFigure(2, 1);
+    fig.tile(1);  % Occupy tile 1 as FastSense
+    verifyError(testCase, @() fig.tilePanel(1), 'FastSenseFigure:tileConflict');
     delete(fig);
 end
 
-%% Embedded in FastPlotFigure
+%% Embedded in FastSenseFigure
 function test_embedded_in_figure_tile(testCase)
     s = testCase.TestData.sensor;
-    fig = FastPlotFigure(1, 1);
+    fig = FastSenseFigure(1, 1);
     hp = fig.tilePanel(1);
     sdp = SensorDetailPlot(s, 'Parent', hp);
     sdp.render();
     verifyTrue(testCase, sdp.IsRendered);
-    verifyClass(testCase, sdp.MainPlot, ?FastPlot);
+    verifyClass(testCase, sdp.MainPlot, ?FastSense);
     delete(sdp);
     delete(fig);
 end
@@ -1397,16 +1397,16 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot', 'ProcedureName', 'test_tilePanel*'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot', 'ProcedureName', 'test_tilePanel*'); disp(results)"`
 Expected: FAIL — tilePanel method not found
 
-- [ ] **Step 3: Read FastPlotFigure.m to find insertion point**
+- [ ] **Step 3: Read FastSenseFigure.m to find insertion point**
 
-Read: `libs/FastPlot/FastPlotFigure.m:211-260` to see the `axes(n)` method and find where to add `tilePanel(n)`.
+Read: `libs/FastSense/FastSenseFigure.m:211-260` to see the `axes(n)` method and find where to add `tilePanel(n)`.
 
-- [ ] **Step 4: Add tilePanel method to FastPlotFigure**
+- [ ] **Step 4: Add tilePanel method to FastSenseFigure**
 
-Add after the `axes(n)` method (around line 251) in `libs/FastPlot/FastPlotFigure.m`. The method follows the same pattern as `axes(n)`:
+Add after the `axes(n)` method (around line 251) in `libs/FastSense/FastSenseFigure.m`. The method follows the same pattern as `axes(n)`:
 
 ```matlab
         function hp = tilePanel(obj, n)
@@ -1416,11 +1416,11 @@ Add after the `axes(n)` method (around line 251) in `libs/FastPlot/FastPlotFigur
             %   composite widgets (e.g. SensorDetailPlot) into a tile.
             %
             %   Throws an error if tile n is already occupied by a
-            %   FastPlot (via tile()) or raw axes (via axes()).
+            %   FastSense (via tile()) or raw axes (via axes()).
 
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
-                error('FastPlotFigure:invalidTile', ...
+                error('FastSenseFigure:invalidTile', ...
                     'Tile index %d is out of range [1, %d].', n, nTiles);
             end
 
@@ -1430,15 +1430,15 @@ Add after the `axes(n)` method (around line 251) in `libs/FastPlot/FastPlotFigur
                 return;
             end
 
-            % Conflict check: occupied by FastPlot?
+            % Conflict check: occupied by FastSense?
             if ~isempty(obj.Tiles{n})
-                error('FastPlotFigure:tileConflict', ...
-                    'Tile %d is a FastPlot tile. Use tile(%d) to access it.', n, n);
+                error('FastSenseFigure:tileConflict', ...
+                    'Tile %d is a FastSense tile. Use tile(%d) to access it.', n, n);
             end
 
             % Conflict check: occupied by raw axes?
             if obj.RawAxesTiles(n)
-                error('FastPlotFigure:tileConflict', ...
+                error('FastSenseFigure:tileConflict', ...
                     'Tile %d is a raw axes tile. Use axes(%d) to access it.', n, n);
             end
 
@@ -1457,12 +1457,12 @@ Add after the `axes(n)` method (around line 251) in `libs/FastPlot/FastPlotFigur
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
 Expected: All 22 tests PASS
 
 - [ ] **Step 6: Also make `IsRendered` accessible for test**
 
-In `libs/FastPlot/SensorDetailPlot.m`, change `IsRendered` access from `(Access = private)` to `(SetAccess = private, GetAccess = ?matlab.unittest.TestCase)` or simply move it to the `(SetAccess = private, GetAccess = public)` block since it's a useful read-only property:
+In `libs/FastSense/SensorDetailPlot.m`, change `IsRendered` access from `(Access = private)` to `(SetAccess = private, GetAccess = ?matlab.unittest.TestCase)` or simply move it to the `(SetAccess = private, GetAccess = public)` block since it's a useful read-only property:
 
 Move `IsRendered` from the private properties block to the public-readable block:
 
@@ -1481,14 +1481,14 @@ Move `IsRendered` from the private properties block to the public-readable block
 
 - [ ] **Step 7: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('test_SensorDetailPlot'); disp(results)"`
 Expected: All 22 tests PASS
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add libs/FastPlot/FastPlotFigure.m libs/FastPlot/SensorDetailPlot.m tests/test_SensorDetailPlot.m
-git commit -m "feat: add tilePanel method to FastPlotFigure for composite widget embedding"
+git add libs/FastSense/FastSenseFigure.m libs/FastSense/SensorDetailPlot.m tests/test_SensorDetailPlot.m
+git commit -m "feat: add tilePanel method to FastSenseFigure for composite widget embedding"
 ```
 
 ---
@@ -1508,10 +1508,10 @@ Create `examples/example_sensor_detail.m`:
 % Demonstrates:
 %   1. Standalone sensor detail plot with thresholds
 %   2. Adding events from EventStore
-%   3. Embedding in a FastPlotFigure tile
+%   3. Embedding in a FastSenseFigure tile
 
 %% Setup path
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastSense'));
 addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'SensorThreshold'));
 addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'EventDetection'));
 
@@ -1589,20 +1589,20 @@ sdp2.render();
 fprintf('  Press any key to continue...\n');
 pause;
 
-%% 5. Embedded in FastPlotFigure
-fprintf('=== SensorDetailPlot: Embedded in FastPlotFigure ===\n');
-fig = FastPlotFigure(1, 2, 'Theme', 'dark', 'Name', 'Sensor Dashboard');
+%% 5. Embedded in FastSenseFigure
+fprintf('=== SensorDetailPlot: Embedded in FastSenseFigure ===\n');
+fig = FastSenseFigure(1, 2, 'Theme', 'dark', 'Name', 'Sensor Dashboard');
 sdp3 = SensorDetailPlot(s, 'Parent', fig.tilePanel(1), ...
     'Events', events, 'Title', 'Temperature');
 sdp3.render();
 
-% Second tile: plain FastPlot for comparison
+% Second tile: plain FastSense for comparison
 fp = fig.tile(2);
 fp.addLine(t, data, 'DisplayName', 'Raw Data');
 fig.tileTitle(2, 'Raw Data');
 fig.renderAll();
 
-fprintf('  Two tiles: SensorDetailPlot + plain FastPlot\n');
+fprintf('  Two tiles: SensorDetailPlot + plain FastSense\n');
 fprintf('  Press any key to exit...\n');
 pause;
 
@@ -1611,7 +1611,7 @@ fprintf('Done.\n');
 
 - [ ] **Step 2: Run example to verify it works**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run('examples/example_sensor_detail.m')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run('examples/example_sensor_detail.m')"`
 Expected: Two figure windows open showing the sensor detail plots. No errors.
 
 - [ ] **Step 3: Commit**
@@ -1627,12 +1627,12 @@ git commit -m "feat: add example_sensor_detail demo script"
 
 - [ ] **Step 1: Run all tests to ensure nothing is broken**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "addpath('tests'); results = runtests('tests'); disp(table(results))"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "addpath('tests'); results = runtests('tests'); disp(table(results))"`
 Expected: All tests PASS (existing tests + new tests)
 
 - [ ] **Step 2: Fix any failures**
 
-If any existing tests fail, investigate and fix. The new classes should not affect existing behavior since they are additive (new files) with only one modification to `FastPlotFigure.m` (adding a new method, no changes to existing methods).
+If any existing tests fail, investigate and fix. The new classes should not affect existing behavior since they are additive (new files) with only one modification to `FastSenseFigure.m` (adding a new method, no changes to existing methods).
 
 - [ ] **Step 3: Final commit if fixes were needed**
 

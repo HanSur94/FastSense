@@ -1,5 +1,5 @@
 %% Multi-Sensor Detail Dashboard
-% Demonstrates embedding multiple SensorDetailPlots into a FastPlotGrid
+% Demonstrates embedding multiple SensorDetailPlots into a FastSenseGrid
 % grid using tilePanel(), each with independent navigators.
 
 close all force;
@@ -52,8 +52,8 @@ s3 = Sensor('vib', 'Name', 'Motor Vibration');
 s3.Units = 'mm/s';
 s3.X = t3; s3.Y = d3;
 
-%% Build 2x2 dashboard: 3 SensorDetailPlots + 1 plain FastPlot
-fig = FastPlotGrid(2, 2, 'Theme', 'light', 'Name', 'Multi-Sensor Dashboard');
+%% Build 2x2 dashboard: 3 SensorDetailPlots + 1 plain FastSense
+fig = FastSenseGrid(2, 2, 'Theme', 'light', 'Name', 'Multi-Sensor Dashboard');
 
 % Tile 1: Temperature with events
 sdp1 = SensorDetailPlot(s1, 'Parent', fig.tilePanel(1), ...
@@ -71,12 +71,12 @@ sdp3 = SensorDetailPlot(s3, 'Parent', fig.tilePanel(3), ...
     'NavigatorHeight', 0.15, 'Title', 'Motor Vibration');
 sdp3.render();
 
-% Tile 4: Plain FastPlot comparison overlay
+% Tile 4: Plain FastSense comparison overlay
 fp = fig.tile(4);
 fp.addLine(t1, (d1 - mean(d1))/std(d1), 'DisplayName', 'Temp (z-score)');
 fp.addLine(t2, (d2 - mean(d2))/std(d2), 'DisplayName', 'Pressure (z-score)');
 fig.setTileTitle(4, 'Normalized Overlay');
 fig.renderAll();
 
-fprintf('Multi-sensor dashboard with 3 SensorDetailPlots + 1 FastPlot.\n');
+fprintf('Multi-sensor dashboard with 3 SensorDetailPlots + 1 FastSense.\n');
 fprintf('Each navigator operates independently.\n');

@@ -1,17 +1,17 @@
-%% FastPlot Feature Benchmark — Theme, Band, Shaded, Fill, Marker, Dashboard
-% Measures overhead of each new feature vs baseline FastPlot rendering.
+%% FastSense Feature Benchmark — Theme, Band, Shaded, Fill, Marker, Dashboard
+% Measures overhead of each new feature vs baseline FastSense rendering.
 %
 % Tests:
-%   1. FastPlotTheme creation overhead
+%   1. FastSenseTheme creation overhead
 %   2. addBand rendering cost (constant-y fill — trivial geometry)
 %   3. addShaded rendering + zoom cost (data-driven fill — downsampled)
 %   4. addFill rendering + zoom cost (area under curve)
 %   5. addMarker rendering cost
-%   6. FastPlotGrid tiled dashboard overhead
+%   6. FastSenseGrid tiled dashboard overhead
 %   7. Combined: all features together vs baseline
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastSense', 'private'));
 
 sizes  = [1e4, 1e5, 1e6, 5e6, 10e6];
 labels = {'10K', '100K', '1M', '5M', '10M'};
@@ -21,7 +21,7 @@ n_cases = numel(sizes);
 
 % Timing arrays
 t_theme_create = NaN(1, 5);   % theme creation (5 presets)
-t_baseline     = NaN(1, n_cases);  % FastPlot + addLine + render
+t_baseline     = NaN(1, n_cases);  % FastSense + addLine + render
 t_band         = NaN(1, n_cases);  % + 4 bands
 t_shaded       = NaN(1, n_cases);  % + shaded region
 t_fill         = NaN(1, n_cases);  % + fill region
@@ -34,7 +34,7 @@ t_shaded_zoom   = NaN(1, n_cases);
 t_combined_zoom = NaN(1, n_cases);
 
 fprintf('================================================================\n');
-fprintf('  FastPlot Feature Benchmark\n');
+fprintf('  FastSense Feature Benchmark\n');
 fprintf('  Render + %d zoom ops per size\n', n_zooms);
 fprintf('================================================================\n\n');
 
@@ -44,7 +44,7 @@ presets = {'default', 'dark', 'light', 'industrial', 'scientific'};
 for i = 1:5
     tic;
     for rep = 1:10000
-        t = FastPlotTheme(presets{i});
+        t = FastSenseTheme(presets{i});
     end
     t_theme_create(i) = toc / 10000;
 end
@@ -72,7 +72,7 @@ for c = 1:n_cases
 
     % ---- Baseline: addLine only ----
     tic;
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.render();
     t_baseline(c) = toc;
@@ -88,7 +88,7 @@ for c = 1:n_cases
 
     % ---- addBand: 4 bands (trivial geometry) ----
     tic;
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addBand(60, 65, 'FaceColor', [1 0.8 0.3], 'FaceAlpha', 0.2, 'Label', 'Warning');
     fp.addBand(65, 75, 'FaceColor', [1 0.3 0.3], 'FaceAlpha', 0.2, 'Label', 'Alarm');
@@ -100,7 +100,7 @@ for c = 1:n_cases
 
     % ---- addShaded: confidence envelope ----
     tic;
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addShaded(x, envelope_hi, envelope_lo, 'FaceColor', [0.2 0.5 0.9], 'FaceAlpha', 0.15);
     fp.render();
@@ -118,7 +118,7 @@ for c = 1:n_cases
     % ---- addFill: area under curve ----
     y_abs = abs(y);
     tic;
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(x, y_abs, 'DisplayName', 'Signal');
     fp.addFill(x, y_abs, 'FaceColor', [0.2 0.7 0.3], 'FaceAlpha', 0.3);
     fp.render();
@@ -127,7 +127,7 @@ for c = 1:n_cases
 
     % ---- addMarker: 50 event markers ----
     tic;
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addMarker(event_x, event_y, 'Marker', 'v', 'MarkerSize', 10, ...
         'Color', [0.9 0.2 0.2], 'Label', 'Anomaly');
@@ -137,7 +137,7 @@ for c = 1:n_cases
 
     % ---- Combined: all features together ----
     tic;
-    fp = FastPlot('Theme', 'light');
+    fp = FastSense('Theme', 'light');
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addBand(60, 65, 'FaceColor', [1 0.8 0.3], 'FaceAlpha', 0.2);
     fp.addBand(65, 75, 'FaceColor', [1 0.3 0.3], 'FaceAlpha', 0.2);
@@ -158,7 +158,7 @@ for c = 1:n_cases
 
     % ---- Dashboard: 2x2 with all features ----
     tic;
-    fig = FastPlotGrid(2, 2, 'Theme', 'light', 'Name', 'Bench');
+    fig = FastSenseGrid(2, 2, 'Theme', 'light', 'Name', 'Bench');
     fp1 = fig.tile(1); fp1.addLine(x, y); fp1.addBand(60, 65, 'FaceColor', [1 0.8 0.3]);
     fp2 = fig.tile(2); fp2.addLine(x, y); fp2.addShaded(x, envelope_hi, envelope_lo);
     fp3 = fig.tile(3); fp3.addLine(x, y_abs); fp3.addFill(x, y_abs, 'FaceColor', [0.2 0.7 0.3]);

@@ -1,12 +1,12 @@
 %% SensorDetailPlot Dock — Multi-Tab Dashboard
 %
-% Demonstrates a FastPlotDock with 4 tabs, each containing multiple plots.
-% Tabs mix SensorDetailPlots (with navigators) and plain FastPlot tiles.
+% Demonstrates a FastSenseDock with 4 tabs, each containing multiple plots.
+% Tabs mix SensorDetailPlots (with navigators) and plain FastSense tiles.
 %
 %   Tab 1: Process Overview   — 4 SensorDetailPlots (2x2 grid)
-%   Tab 2: Correlation         — 2 SensorDetailPlots + 2 plain FastPlots
+%   Tab 2: Correlation         — 2 SensorDetailPlots + 2 plain FastSenses
 %   Tab 3: Event Analysis      — 1 large SensorDetailPlot + event details
-%   Tab 4: Trends              — 6 plain FastPlots showing z-score overlays
+%   Tab 4: Trends              — 6 plain FastSenses showing z-score overlays
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
 run(fullfile(projectRoot, 'setup.m'));
@@ -78,11 +78,11 @@ s4.X = tNum; s4.Y = d4;
 allEvents = [ev1a, ev1b, ev2, ev3];
 
 %% ===== Create Dock =====
-dock = FastPlotDock('Theme', 'light', 'Name', 'Sensor Detail Dashboard', ...
+dock = FastSenseDock('Theme', 'light', 'Name', 'Sensor Detail Dashboard', ...
     'Position', [50 50 1400 800]);
 
 %% ===== Tab 1: Process Overview (2x2 SensorDetailPlots) =====
-fig1 = FastPlotGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
+fig1 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 sensors = {s1, s2, s3, s4};
 titles  = {'Furnace Temperature', 'Chamber Pressure', ...
@@ -100,7 +100,7 @@ end
 dock.addTab(fig1, 'Process Overview');
 
 %% ===== Tab 2: Correlation (2 SensorDetailPlots + 2 plain) =====
-fig2 = FastPlotGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
+fig2 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % Top row: SensorDetailPlots for temperature and pressure
 sdpCorr1 = SensorDetailPlot(s1, 'Parent', fig2.tilePanel(1), ...
@@ -111,7 +111,7 @@ sdpCorr2 = SensorDetailPlot(s2, 'Parent', fig2.tilePanel(2), ...
     'Events', ev2, 'XType', 'datenum', 'Title', 'Pressure');
 sdpCorr2.render();
 
-% Bottom row: plain FastPlots
+% Bottom row: plain FastSenses
 % Tile 3: Temperature + Pressure overlay (z-score normalized)
 fp3 = fig2.tile(3);
 fp3.addLine(tNum, (d1-mean(d1))/std(d1), 'DisplayName', 'Temp (z)', 'XType', 'datenum');
@@ -128,7 +128,7 @@ fig2.setTileTitle(4, 'Rolling Correlation');
 dock.addTab(fig2, 'Correlation');
 
 %% ===== Tab 3: Event Analysis (1 large + event table) =====
-fig3 = FastPlotGrid(1, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
+fig3 = FastSenseGrid(1, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % Left: large SensorDetailPlot of temperature
 sdpEvent = SensorDetailPlot(s1, 'Parent', fig3.tilePanel(1), ...
@@ -149,8 +149,8 @@ sdpVib.setZoomRange(tNum(78000), tNum(82000));
 
 dock.addTab(fig3, 'Event Analysis');
 
-%% ===== Tab 4: Trends (3x2 plain FastPlots) =====
-fig4 = FastPlotGrid(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
+%% ===== Tab 4: Trends (3x2 plain FastSenses) =====
+fig4 = FastSenseGrid(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % Column 1: Raw signals
 rawSensors = {s1, s2, s3};

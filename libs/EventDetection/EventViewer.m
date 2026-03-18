@@ -639,7 +639,7 @@ classdef EventViewer < handle
             minWidth = 1 / 1440;
 
             % --- Dashboard: 2 rows, 1 column (light theme) ---
-            dashboard = FastPlotGrid(2, 1, 'Theme', 'light', ...
+            dashboard = FastSenseGrid(2, 1, 'Theme', 'light', ...
                 'Name', sprintf('Event: %s — %s', ev.SensorName, ev.ThresholdLabel));
 
             % Get selected event's threshold color
@@ -703,7 +703,7 @@ classdef EventViewer < handle
                 'EdgeColor', evColor, 'LineWidth', 2, 'LineStyle', '-', ...
                 'HandleVisibility', 'off');
 
-            FastPlotToolbar(fp1);
+            FastSenseToolbar(fp1);
         end
 
         function c = getThresholdColor(obj, label)

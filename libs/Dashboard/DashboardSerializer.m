@@ -71,8 +71,8 @@ classdef DashboardSerializer
                 ws = config.widgets{i};
                 w = [];
                 switch ws.type
-                    case 'fastplot'
-                        widgets{i} = FastPlotWidget.fromStruct(ws);
+                    case 'fastsense'
+                        widgets{i} = FastSenseWidget.fromStruct(ws);
                     case 'number'
                         widgets{i} = NumberWidget.fromStruct(ws);
                     case 'kpi'
@@ -127,28 +127,28 @@ classdef DashboardSerializer
                     ws.position.width, ws.position.height);
 
                 switch ws.type
-                    case 'fastplot'
+                    case 'fastsense'
                         if isfield(ws, 'source')
                             switch ws.source.type
                                 case 'sensor'
-                                    lines{end+1} = sprintf('d.addWidget(''fastplot'', ''Title'', ''%s'', ...', ws.title);
+                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('    ''Position'', %s, ...', pos);
                                     lines{end+1} = sprintf('    ''Sensor'', SensorRegistry.get(''%s''));', ws.source.name);
                                 case 'file'
-                                    lines{end+1} = sprintf('d.addWidget(''fastplot'', ''Title'', ''%s'', ...', ws.title);
+                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('    ''Position'', %s, ...', pos);
                                     lines{end+1} = sprintf('    ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
                                         ws.source.path, ws.source.xVar, ws.source.yVar);
                                 case 'data'
-                                    lines{end+1} = sprintf('d.addWidget(''fastplot'', ''Title'', ''%s'', ...', ws.title);
+                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('    ''Position'', %s, ...', pos);
                                     lines{end+1} = sprintf('    ''XData'', %s, ''YData'', %s);', ...
                                         mat2str(ws.source.x), mat2str(ws.source.y));
                                 otherwise
-                                    lines{end+1} = sprintf('d.addWidget(''fastplot'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
                             end
                         else
-                            lines{end+1} = sprintf('d.addWidget(''fastplot'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                            lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
                         end
                     case 'number'
                         line = sprintf('d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);

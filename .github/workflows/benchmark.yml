@@ -23,10 +23,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            libs/FastPlot/private/*.mex
+            libs/FastSense/private/*.mex
             libs/SensorThreshold/private/*.mex
-            libs/FastPlot/mksqlite.mex
-          key: mex-linux-${{ hashFiles('libs/FastPlot/private/mex_src/**', 'libs/FastPlot/build_mex.m') }}
+            libs/FastSense/mksqlite.mex
+          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
@@ -37,9 +37,9 @@ jobs:
         with:
           name: mex-linux-bench
           path: |
-            libs/FastPlot/private/*.mex
+            libs/FastSense/private/*.mex
             libs/SensorThreshold/private/*.mex
-            libs/FastPlot/mksqlite.mex
+            libs/FastSense/mksqlite.mex
           retention-days: 1
 
   benchmark:
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
     env:
-      FASTPLOT_SKIP_BUILD: "1"
+      FASTSENSE_SKIP_BUILD: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -61,7 +61,7 @@ jobs:
         run: |
           xvfb-run octave --eval "
             addpath(pwd); setup();
-            addpath(fullfile(pwd, 'libs', 'FastPlot', 'private'));
+            addpath(fullfile(pwd, 'libs', 'FastSense', 'private'));
 
             n = 1e6;
             x = linspace(0, 100, n);
@@ -79,7 +79,8 @@ jobs:
             end
             t_bs = toc / 1000;
 
-            fp = FastPlot();
+            % Measure full render cycle
+            fp = FastSense();
             fp.addLine(x, y, 'DisplayName', 'bench');
             fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true);
             fp.render();
@@ -109,12 +110,12 @@ jobs:
           "
 
       - name: Fix git ownership
-        run: git config --global --add safe.directory /__w/FastPlot/FastPlot
+        run: git config --global --add safe.directory /__w/FastSense/FastSense
 
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: FastPlot Performance
+          name: FastSense Performance
           tool: customSmallerIsBetter
           output-file-path: benchmark-results.json
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -27,7 +27,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/HanSur94/FastPlot.wiki.git" wiki
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/HanSur94/FastSense.wiki.git" wiki
 
       - name: Generate API docs
         run: python3 scripts/generate_api_docs.py

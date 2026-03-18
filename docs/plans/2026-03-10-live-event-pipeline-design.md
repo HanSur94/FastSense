@@ -137,7 +137,7 @@ Two plots generated per notification:
 - Same threshold line + violation markers
 - Shows signal trend leading into the violation
 
-Both generated headless (`'Visible', 'off'`) via FastPlot, saved as PNG, attached to email. Old snapshots auto-cleaned after configurable retention (default: 7 days).
+Both generated headless (`'Visible', 'off'`) via FastSense, saved as PNG, attached to email. Old snapshots auto-cleaned after configurable retention (default: 7 days).
 
 ### 9. LiveEventPipeline (Orchestrator)
 
@@ -166,7 +166,7 @@ Both generated headless (`'Visible', 'off'`) via FastPlot, saved as PNG, attache
 - `Event`, `EventDetector`, `EventConfig`
 - `EventViewer` (clients use `fromFile()` + `startAutoRefresh()`)
 - `Sensor`, `ThresholdRule`, `StateChannel`, `SensorRegistry`
-- `FastPlot`
+- `FastSense`
 
 ## Configuration
 

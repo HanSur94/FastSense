@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from fastplot_bridge.blob_decoder import MKSQ_MAGIC
-from fastplot_bridge.server import AppState, create_app
+from fastsense_bridge.blob_decoder import MKSQ_MAGIC
+from fastsense_bridge.server import AppState, create_app
 
 
 def _make_double_blob(values: list[float]) -> bytes:

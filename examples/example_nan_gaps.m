@@ -1,5 +1,5 @@
-%% FastPlot NaN Gaps — Sensor dropout simulation
-% Demonstrates how FastPlot handles missing data (NaN gaps)
+%% FastSense NaN Gaps — Sensor dropout simulation
+% Demonstrates how FastSense handles missing data (NaN gaps)
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
 run(fullfile(projectRoot, 'setup.m'));
@@ -19,7 +19,7 @@ end
 fprintf('NaN Gaps: %d points with %d dropout regions...\n', n, numel(gap_starts));
 tic;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Sensor (with dropouts)', 'Color', [0 0.5 0.3]);
 fp.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true, ...
     'Color', [0.9 0 0], 'LineStyle', '--', 'Label', 'Upper Limit');

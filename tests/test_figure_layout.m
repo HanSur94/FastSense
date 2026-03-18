@@ -1,24 +1,24 @@
 function test_figure_layout()
-%TEST_FIGURE_LAYOUT Tests for FastPlotGrid layout manager.
+%TEST_FIGURE_LAYOUT Tests for FastSenseGrid layout manager.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testConstruction
-    fig = FastPlotGrid(2, 3);
+    fig = FastSenseGrid(2, 3);
     assert(isequal(fig.Grid, [2 3]), 'testConstruction: Grid');
     assert(~isempty(fig.hFigure), 'testConstruction: hFigure');
     assert(ishandle(fig.hFigure), 'testConstruction: hFigure valid');
     close(fig.hFigure);
 
-    % testTileReturnsFastPlot
-    fig = FastPlotGrid(2, 1);
+    % testTileReturnsFastSense
+    fig = FastSenseGrid(2, 1);
     fp = fig.tile(1);
-    assert(isa(fp, 'FastPlot'), 'testTileReturnsFastPlot');
+    assert(isa(fp, 'FastSense'), 'testTileReturnsFastSense');
     close(fig.hFigure);
 
     % testTileLazy
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     fp1a = fig.tile(1);
     fp1b = fig.tile(1);
     % In Octave, handle == isn't always defined; check axes handle identity
@@ -27,7 +27,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testTileCreatesAxes
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     fp = fig.tile(1);
     fp.addLine(1:100, rand(1,100));
     fp.render();
@@ -36,7 +36,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testMultipleTiles
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     for i = 1:4
         fp = fig.tile(i);
         fp.addLine(1:50, rand(1,50));
@@ -49,7 +49,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testRenderAllSkipsRendered
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     fp1 = fig.tile(1);
     fp1.addLine(1:10, rand(1,10));
     fp1.render();
@@ -60,7 +60,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testOutOfBoundsTileErrors
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     threw = false;
     try
         fig.tile(5);  % only 4 tiles in 2x2
@@ -71,7 +71,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testTileSpanning
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     fig.setTileSpan(1, [1 2]);  % tile 1 spans both columns
     fp1 = fig.tile(1);
     fp1.addLine(1:50, rand(1,50));
@@ -82,13 +82,13 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testFigureThemePassedToTiles
-    fig = FastPlotGrid(2, 1, 'Theme', 'dark');
+    fig = FastSenseGrid(2, 1, 'Theme', 'dark');
     fp = fig.tile(1);
     assert(all(fp.Theme.Background < [0.2 0.2 0.2]), 'testFigureThemePassedToTiles');
     close(fig.hFigure);
 
     % testTileThemeOverride
-    fig = FastPlotGrid(2, 1, 'Theme', 'dark');
+    fig = FastSenseGrid(2, 1, 'Theme', 'dark');
     fig.setTileTheme(1, struct('AxesColor', [0.3 0 0]));
     fp = fig.tile(1);
     assert(isequal(fp.Theme.AxesColor, [0.3 0 0]), 'testTileThemeOverride: AxesColor');
@@ -96,13 +96,13 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testFigureProperties
-    fig = FastPlotGrid(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
+    fig = FastSenseGrid(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
     name = get(fig.hFigure, 'Name');
     assert(strcmp(name, 'MyDash'), 'testFigureProperties: Name');
     close(fig.hFigure);
 
     % testTileLabels
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     fp = fig.tile(1);
     fp.addLine(1:50, rand(1,50));
     fp.render();
@@ -113,21 +113,21 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testAxesReturnsRawAxes
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     ax = fig.axes(1);
     assert(ishandle(ax), 'testAxesReturnsRawAxes: valid handle');
     assert(strcmp(get(ax, 'Type'), 'axes'), 'testAxesReturnsRawAxes: is axes');
     close(fig.hFigure);
 
     % testAxesLazy
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     ax1 = fig.axes(1);
     ax2 = fig.axes(1);
     assert(isequal(ax1, ax2), 'testAxesLazy: same handle on repeat call');
     close(fig.hFigure);
 
     % testTileThenAxesErrors
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     fig.tile(1);
     threw = false;
     try
@@ -139,7 +139,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testAxesThenTileErrors
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     fig.axes(1);
     threw = false;
     try
@@ -151,7 +151,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testMixedRenderAll
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     fig.tile(1).addLine(1:50, rand(1,50));
     ax2 = fig.axes(2); bar(ax2, [1 2 3], [10 20 15]);
     fig.tile(3).addLine(1:50, rand(1,50));
@@ -165,14 +165,14 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testAxesThemeApplied
-    fig = FastPlotGrid(1, 1, 'Theme', 'dark');
+    fig = FastSenseGrid(1, 1, 'Theme', 'dark');
     ax = fig.axes(1);
     bgColor = get(ax, 'Color');
     assert(all(bgColor < [0.3 0.3 0.3]), 'testAxesThemeApplied: dark background');
     close(fig.hFigure);
 
     % testLabelsOnRawAxes
-    fig = FastPlotGrid(2, 1);
+    fig = FastSenseGrid(2, 1);
     ax = fig.axes(1);
     bar(ax, [1 2 3], [10 20 15]);
     fig.setTileTitle(1, 'Bar Chart');
@@ -184,7 +184,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testAxesOutOfBounds
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     threw = false;
     try
         fig.axes(5);
@@ -195,7 +195,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testAxesTileSpanning
-    fig = FastPlotGrid(2, 2);
+    fig = FastSenseGrid(2, 2);
     fig.setTileSpan(1, [1 2]);
     ax = fig.axes(1);
     pos = get(ax, 'Position');

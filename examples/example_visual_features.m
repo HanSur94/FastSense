@@ -1,4 +1,4 @@
-%% FastPlot Visual Features — Bands, Shading, Fill, and Markers
+%% FastSense Visual Features — Bands, Shading, Fill, and Markers
 % Demonstrates all new visual enhancement methods in a 2x2 dashboard
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -10,7 +10,7 @@ x = linspace(0, 100, n);
 fprintf('Visual features example: 4 tiles, %d points...\n', n);
 tic;
 
-fig = FastPlotGrid(2, 2, 'Theme', 'default', ...
+fig = FastSenseGrid(2, 2, 'Theme', 'default', ...
     'Name', 'Visual Features Demo', 'Position', [50 50 1200 800]);
 
 % --- Tile 1: addBand — Alarm bands with thresholds ---

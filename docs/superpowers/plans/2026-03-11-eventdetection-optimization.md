@@ -63,7 +63,7 @@ Add `test_slice_detection_consistency();` to the function list at the top of `te
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); test_incremental_detector
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); test_incremental_detector
 ```
 Expected: ALL PASSED (this test should pass with current code too — it's a regression test)
 
@@ -214,7 +214,7 @@ end
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); test_incremental_detector
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); test_incremental_detector
 ```
 Expected: ALL PASSED (8 tests including the new one)
 
@@ -222,7 +222,7 @@ Expected: ALL PASSED (8 tests including the new one)
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); run_all_tests
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); run_all_tests
 ```
 Expected: 52/52 passed, 0 failed
 
@@ -275,7 +275,7 @@ Add `test_bar_positions_cached();` to the test function list in `test_event_view
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); test_event_viewer
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); test_event_viewer
 ```
 Expected: FAIL — `BarPositions` property does not exist
 
@@ -361,7 +361,7 @@ end
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); test_event_viewer
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); test_event_viewer
 ```
 Expected: ALL PASSED (7 tests including the new one)
 
@@ -369,7 +369,7 @@ Expected: ALL PASSED (7 tests including the new one)
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); run_all_tests
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); run_all_tests
 ```
 Expected: All passed, 0 failed
 
@@ -426,7 +426,7 @@ delete(tmpFile);
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); test_event_config
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); test_event_config
 ```
 Expected: ALL PASSED (this should pass with the current EventConfig.saveEvents too — it's a regression test)
 
@@ -518,7 +518,7 @@ Remove the `pruneBackups` method (lines 140-153) from `EventConfig.m`. EventStor
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); test_event_config
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); test_event_config
 ```
 Expected: ALL PASSED (9 tests including the new one)
 
@@ -526,7 +526,7 @@ Expected: ALL PASSED (9 tests including the new one)
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); run_all_tests
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); run_all_tests
 ```
 Expected: All passed, 0 failed
 
@@ -551,7 +551,7 @@ Single backup implementation to maintain."
 
 Run in MATLAB:
 ```
-cd('/Users/hannessuhr/FastPlot'); setup(); cd('tests'); run_all_tests
+cd('/Users/hannessuhr/FastSense'); setup(); cd('tests'); run_all_tests
 ```
 Expected: All passed, 0 failed
 

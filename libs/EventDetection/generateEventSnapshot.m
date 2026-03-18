@@ -1,5 +1,5 @@
 function files = generateEventSnapshot(event, sensorData, varargin)
-    % generateEventSnapshot  Create two FastPlot PNG snapshots for an event.
+    % generateEventSnapshot  Create two FastSense PNG snapshots for an event.
     %
     %   files = generateEventSnapshot(event, sensorData, ...)
     %

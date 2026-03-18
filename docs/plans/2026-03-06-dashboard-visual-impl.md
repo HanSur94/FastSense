@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add FastPlotFigure (tiled dashboard layouts), FastPlotTheme (5 presets + custom themes), and new visual elements (addShaded, addBand, addFill, addMarker) to FastPlot while maintaining full backward compatibility.
+**Goal:** Add FastSenseFigure (tiled dashboard layouts), FastSenseTheme (5 presets + custom themes), and new visual elements (addShaded, addBand, addFill, addMarker) to FastSense while maintaining full backward compatibility.
 
-**Architecture:** Three layers — `FastPlotTheme.m` (function returning theme structs), extended `FastPlot.m` (theme support + 4 new visual methods), and `FastPlotFigure.m` (figure layout manager). Theme inheritance flows: element override > tile theme > figure theme > 'default' preset. All visual enhancements use `patch()` or `line()` objects with UserData tagging and downsampling on zoom.
+**Architecture:** Three layers — `FastSenseTheme.m` (function returning theme structs), extended `FastSense.m` (theme support + 4 new visual methods), and `FastSenseFigure.m` (figure layout manager). Theme inheritance flows: element override > tile theme > figure theme > 'default' preset. All visual enhancements use `patch()` or `line()` objects with UserData tagging and downsampling on zoom.
 
 **Tech Stack:** Pure MATLAB/Octave — no toolboxes, no MEX. Uses `figure()`, `axes()`, `patch()`, `line()`, `set()`/`get()`.
 
@@ -12,10 +12,10 @@
 
 ---
 
-### Task 1: FastPlotTheme — Default Preset & Merge Logic
+### Task 1: FastSenseTheme — Default Preset & Merge Logic
 
 **Files:**
-- Create: `FastPlotTheme.m`
+- Create: `FastSenseTheme.m`
 - Create: `tests/test_theme.m`
 
 **Step 1: Write the failing test**
@@ -24,12 +24,12 @@ Create `tests/test_theme.m`:
 
 ```matlab
 function test_theme()
-%TEST_THEME Tests for FastPlotTheme function.
+%TEST_THEME Tests for FastSenseTheme function.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
 
     % testDefaultPreset
-    t = FastPlotTheme('default');
+    t = FastSenseTheme('default');
     assert(isstruct(t), 'testDefaultPreset: must return struct');
     assert(isequal(t.Background, [1 1 1]), 'testDefaultPreset: Background');
     assert(isfield(t, 'AxesColor'), 'testDefaultPreset: AxesColor field');
@@ -50,12 +50,12 @@ function test_theme()
     assert(size(t.LineColorOrder, 2) == 3, 'testDefaultPreset: LineColorOrder must be Nx3');
 
     % testNoArgsReturnsDefault
-    t0 = FastPlotTheme();
-    t1 = FastPlotTheme('default');
+    t0 = FastSenseTheme();
+    t1 = FastSenseTheme('default');
     assert(isequal(t0, t1), 'testNoArgsReturnsDefault');
 
     % testMergeOverrides
-    t = FastPlotTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
+    t = FastSenseTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
     assert(t.FontSize == 14, 'testMergeOverrides: FontSize');
     assert(t.LineWidth == 2.0, 'testMergeOverrides: LineWidth');
     assert(isequal(t.Background, [1 1 1]), 'testMergeOverrides: Background unchanged');
@@ -63,7 +63,7 @@ function test_theme()
     % testInvalidPresetErrors
     threw = false;
     try
-        FastPlotTheme('nonexistent');
+        FastSenseTheme('nonexistent');
     catch
         threw = true;
     end
@@ -76,18 +76,18 @@ end
 **Step 2: Run test to verify it fails**
 
 Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_theme;"`
-Expected: FAIL — `FastPlotTheme` not found
+Expected: FAIL — `FastSenseTheme` not found
 
 **Step 3: Write minimal implementation**
 
-Create `FastPlotTheme.m`:
+Create `FastSenseTheme.m`:
 
 ```matlab
-function theme = FastPlotTheme(preset, varargin)
-%FASTPLOTTHEME Return a theme struct for FastPlot styling.
-%   theme = FastPlotTheme()              — returns 'default' preset
-%   theme = FastPlotTheme('dark')        — returns named preset
-%   theme = FastPlotTheme('dark', 'FontSize', 14) — preset with overrides
+function theme = FastSenseTheme(preset, varargin)
+%FASTSENSETHEME Return a theme struct for FastSense styling.
+%   theme = FastSenseTheme()              — returns 'default' preset
+%   theme = FastSenseTheme('dark')        — returns named preset
+%   theme = FastSenseTheme('dark', 'FontSize', 14) — preset with overrides
 
     if nargin == 0
         preset = 'default';
@@ -209,7 +209,7 @@ function t = getPreset(name)
                 'BandAlpha',       0.1 ...
             );
         otherwise
-            error('FastPlotTheme:unknownPreset', ...
+            error('FastSenseTheme:unknownPreset', ...
                 'Unknown theme preset: ''%s''. Use ''default'', ''dark'', ''light'', ''industrial'', or ''scientific''.', name);
     end
 end
@@ -251,7 +251,7 @@ function colors = getPalette(name)
                 0.00 0.00 0.00; ...  % black
             ];
         otherwise
-            error('FastPlotTheme:unknownPalette', ...
+            error('FastSenseTheme:unknownPalette', ...
                 'Unknown palette: ''%s''. Use ''vibrant'', ''muted'', or ''colorblind''.', name);
     end
 end
@@ -273,13 +273,13 @@ Expected: PASS — All 4 theme tests passed.
 **Step 5: Commit**
 
 ```bash
-git add FastPlotTheme.m tests/test_theme.m
-git commit -m "Add FastPlotTheme with 5 presets, 3 palettes, and merge logic"
+git add FastSenseTheme.m tests/test_theme.m
+git commit -m "Add FastSenseTheme with 5 presets, 3 palettes, and merge logic"
 ```
 
 ---
 
-### Task 2: FastPlotTheme — All Presets & Palettes
+### Task 2: FastSenseTheme — All Presets & Palettes
 
 **Files:**
 - Modify: `tests/test_theme.m`
@@ -290,23 +290,23 @@ Append to `tests/test_theme.m` (before the final fprintf):
 
 ```matlab
     % testDarkPreset
-    t = FastPlotTheme('dark');
+    t = FastSenseTheme('dark');
     assert(all(t.Background < [0.2 0.2 0.2]), 'testDarkPreset: Background should be dark');
     assert(all(t.ForegroundColor > [0.7 0.7 0.7]), 'testDarkPreset: ForegroundColor should be light');
     assert(size(t.LineColorOrder, 2) == 3, 'testDarkPreset: LineColorOrder Nx3');
 
     % testLightPreset
-    t = FastPlotTheme('light');
+    t = FastSenseTheme('light');
     assert(all(t.Background > [0.9 0.9 0.9]), 'testLightPreset: Background');
     assert(size(t.LineColorOrder, 2) == 3, 'testLightPreset: LineColorOrder Nx3');
 
     % testIndustrialPreset
-    t = FastPlotTheme('industrial');
+    t = FastSenseTheme('industrial');
     assert(t.LineWidth >= 1.0, 'testIndustrialPreset: LineWidth');
     assert(size(t.LineColorOrder, 2) == 3, 'testIndustrialPreset: LineColorOrder Nx3');
 
     % testScientificPreset
-    t = FastPlotTheme('scientific');
+    t = FastSenseTheme('scientific');
     assert(strcmp(t.FontName, 'Times New Roman'), 'testScientificPreset: FontName');
     assert(t.GridAlpha == 0, 'testScientificPreset: no grid');
     assert(t.LineWidth < 1.0, 'testScientificPreset: thin lines');
@@ -314,18 +314,18 @@ Append to `tests/test_theme.m` (before the final fprintf):
 
     % testStructAsPreset
     custom = struct('Background', [0 0 0], 'FontSize', 16);
-    t = FastPlotTheme(custom);
+    t = FastSenseTheme(custom);
     assert(isequal(t.Background, [0 0 0]), 'testStructAsPreset: Background');
     assert(t.FontSize == 16, 'testStructAsPreset: FontSize');
     assert(isfield(t, 'GridColor'), 'testStructAsPreset: inherits defaults');
 
     % testPaletteResolution
-    t = FastPlotTheme('default');
+    t = FastSenseTheme('default');
     assert(size(t.LineColorOrder, 1) >= 6, 'testPaletteResolution: at least 6 colors');
 
     % testCustomPaletteMatrix
     customColors = [1 0 0; 0 1 0; 0 0 1];
-    t = FastPlotTheme('default', 'LineColorOrder', customColors);
+    t = FastSenseTheme('default', 'LineColorOrder', customColors);
     assert(isequal(t.LineColorOrder, customColors), 'testCustomPaletteMatrix');
 ```
 
@@ -349,42 +349,42 @@ git commit -m "Add comprehensive theme preset and palette tests"
 
 ---
 
-### Task 3: FastPlot Theme Integration — Constructor & applyTheme
+### Task 3: FastSense Theme Integration — Constructor & applyTheme
 
 **Files:**
-- Modify: `FastPlot.m:12-54` (properties + constructor)
-- Modify: `FastPlot.m:161-328` (render method)
-- Create: `tests/test_fastplot_theme.m`
+- Modify: `FastSense.m:12-54` (properties + constructor)
+- Modify: `FastSense.m:161-328` (render method)
+- Create: `tests/test_fastsense_theme.m`
 
 **Step 1: Write the failing test**
 
-Create `tests/test_fastplot_theme.m`:
+Create `tests/test_fastsense_theme.m`:
 
 ```matlab
-function test_fastplot_theme()
-%TEST_FASTPLOT_THEME Tests for FastPlot theme integration.
+function test_fastsense_theme()
+%TEST_FASTSENSE_THEME Tests for FastSense theme integration.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
 
     % testThemeConstructorString
-    fp = FastPlot('Theme', 'dark');
+    fp = FastSense('Theme', 'dark');
     assert(isstruct(fp.Theme), 'testThemeConstructorString: Theme must be struct');
     assert(all(fp.Theme.Background < [0.2 0.2 0.2]), 'testThemeConstructorString: dark bg');
 
     % testThemeConstructorStruct
     custom = struct('Background', [0.5 0.5 0.5]);
-    fp = FastPlot('Theme', custom);
+    fp = FastSense('Theme', custom);
     assert(isequal(fp.Theme.Background, [0.5 0.5 0.5]), 'testThemeConstructorStruct');
     assert(isfield(fp.Theme, 'FontSize'), 'testThemeConstructorStruct: inherits defaults');
 
     % testDefaultThemeWhenNoneSpecified
-    fp = FastPlot();
+    fp = FastSense();
     assert(isstruct(fp.Theme), 'testDefaultTheme: must have theme');
     assert(isequal(fp.Theme.Background, [1 1 1]), 'testDefaultTheme: default bg');
 
     % testThemeAppliedOnRender
-    fp = FastPlot('Theme', 'dark');
+    fp = FastSense('Theme', 'dark');
     fp.addLine(1:100, rand(1,100));
     fp.render();
     bgColor = get(fp.hFigure, 'Color');
@@ -394,7 +394,7 @@ function test_fastplot_theme()
     close(fp.hFigure);
 
     % testThemeFontApplied
-    fp = FastPlot('Theme', 'scientific');
+    fp = FastSense('Theme', 'scientific');
     fp.addLine(1:100, rand(1,100));
     fp.render();
     assert(strcmp(get(fp.hAxes, 'FontName'), 'Times New Roman'), 'testThemeFontApplied');
@@ -403,7 +403,7 @@ function test_fastplot_theme()
     % testThemeWithParentAxes
     fig = figure('Visible', 'off');
     ax = axes('Parent', fig);
-    fp = FastPlot('Parent', ax, 'Theme', 'dark');
+    fp = FastSense('Parent', ax, 'Theme', 'dark');
     fp.addLine(1:100, rand(1,100));
     fp.render();
     axColor = get(ax, 'Color');
@@ -411,7 +411,7 @@ function test_fastplot_theme()
     close(fig);
 
     % testBackwardCompatNoTheme
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.render();
     assert(isgraphics(fp.hAxes), 'testBackwardCompatNoTheme');
@@ -423,16 +423,16 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastplot_theme;"`
+Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastsense_theme;"`
 Expected: FAIL — `fp.Theme` property does not exist
 
 **Step 3: Write implementation**
 
-Modify `FastPlot.m`:
+Modify `FastSense.m`:
 
 Add to public properties (after line 14):
 ```matlab
-        Theme      = []        % theme struct (from FastPlotTheme)
+        Theme      = []        % theme struct (from FastSenseTheme)
 ```
 
 Add to private properties (after line 35):
@@ -442,7 +442,7 @@ Add to private properties (after line 35):
 
 Modify constructor (lines 45-54) to handle 'theme':
 ```matlab
-        function obj = FastPlot(varargin)
+        function obj = FastSense(varargin)
             for k = 1:2:numel(varargin)
                 switch lower(varargin{k})
                     case 'parent'
@@ -452,7 +452,7 @@ Modify constructor (lines 45-54) to handle 'theme':
                     case 'theme'
                         val = varargin{k+1};
                         if ischar(val) || isstruct(val)
-                            obj.Theme = FastPlotTheme(val);
+                            obj.Theme = FastSenseTheme(val);
                         else
                             obj.Theme = val;
                         end
@@ -460,12 +460,12 @@ Modify constructor (lines 45-54) to handle 'theme':
             end
             % Default theme if none set
             if isempty(obj.Theme)
-                obj.Theme = FastPlotTheme('default');
+                obj.Theme = FastSenseTheme('default');
             end
         end
 ```
 
-Add private method `applyTheme` to FastPlot.m (in the `methods (Access = private)` block):
+Add private method `applyTheme` to FastSense.m (in the `methods (Access = private)` block):
 ```matlab
         function applyTheme(obj)
             t = obj.Theme;
@@ -501,7 +501,7 @@ In `render()`, call `obj.applyTheme()` right after creating/assigning axes (afte
 
 **Step 4: Run test to verify it passes**
 
-Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastplot_theme;"`
+Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastsense_theme;"`
 Expected: PASS — All 7 theme integration tests passed.
 
 **Step 5: Run existing tests to verify backward compatibility**
@@ -512,8 +512,8 @@ Expected: All existing tests pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_fastplot_theme.m
-git commit -m "Add theme support to FastPlot constructor and render"
+git add FastSense.m tests/test_fastsense_theme.m
+git commit -m "Add theme support to FastSense constructor and render"
 ```
 
 ---
@@ -521,16 +521,16 @@ git commit -m "Add theme support to FastPlot constructor and render"
 ### Task 4: Auto Line Color Cycling
 
 **Files:**
-- Modify: `FastPlot.m` (addLine method, lines 56-116)
-- Modify: `tests/test_fastplot_theme.m`
+- Modify: `FastSense.m` (addLine method, lines 56-116)
+- Modify: `tests/test_fastsense_theme.m`
 
 **Step 1: Write the failing test**
 
-Append to `tests/test_fastplot_theme.m` (before final fprintf):
+Append to `tests/test_fastsense_theme.m` (before final fprintf):
 
 ```matlab
     % testAutoColorCycling
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10));
     fp.addLine(1:10, rand(1,10));
     fp.addLine(1:10, rand(1,10));
@@ -541,7 +541,7 @@ Append to `tests/test_fastplot_theme.m` (before final fprintf):
     assert(~isequal(c2, c3), 'testAutoColorCycling: colors 2 and 3 differ');
 
     % testExplicitColorSkipsCycle
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10), 'Color', [1 0 0]);
     fp.addLine(1:10, rand(1,10));
     assert(isequal(fp.Lines(1).Options.Color, [1 0 0]), 'testExplicitColorSkipsCycle: explicit');
@@ -557,7 +557,7 @@ Expected: FAIL — auto-assigned colors not present in Options
 
 **Step 3: Write implementation**
 
-Modify `addLine` in `FastPlot.m`. After the name-value parsing loop (around line 100), before building the line struct, add:
+Modify `addLine` in `FastSense.m`. After the name-value parsing loop (around line 100), before building the line struct, add:
 
 ```matlab
             % Auto-assign color from theme palette if not explicitly set
@@ -571,7 +571,7 @@ Modify `addLine` in `FastPlot.m`. After the name-value parsing loop (around line
 
 **Step 4: Run test to verify it passes**
 
-Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastplot_theme;"`
+Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastsense_theme;"`
 Expected: PASS
 
 **Step 5: Run all tests**
@@ -582,7 +582,7 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_fastplot_theme.m
+git add FastSense.m tests/test_fastsense_theme.m
 git commit -m "Add auto line color cycling from theme palette"
 ```
 
@@ -591,7 +591,7 @@ git commit -m "Add auto line color cycling from theme palette"
 ### Task 5: addBand — Horizontal Band Fill
 
 **Files:**
-- Modify: `FastPlot.m` (new property struct, addBand method, render updates)
+- Modify: `FastSense.m` (new property struct, addBand method, render updates)
 - Create: `tests/test_add_band.m`
 
 **Step 1: Write the failing test**
@@ -600,13 +600,13 @@ Create `tests/test_add_band.m`:
 
 ```matlab
 function test_add_band()
-%TEST_ADD_BAND Tests for FastPlot.addBand method.
+%TEST_ADD_BAND Tests for FastSense.addBand method.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
 
     % testAddBand
-    fp = FastPlot();
+    fp = FastSense();
     fp.addBand(-1, 1, 'FaceColor', [1 0.9 0.9], 'FaceAlpha', 0.3, 'Label', 'Safe');
     assert(numel(fp.Bands) == 1, 'testAddBand: count');
     assert(fp.Bands(1).YLow == -1, 'testAddBand: YLow');
@@ -614,24 +614,24 @@ function test_add_band()
     assert(strcmp(fp.Bands(1).Label, 'Safe'), 'testAddBand: Label');
 
     % testAddMultipleBands
-    fp = FastPlot();
+    fp = FastSense();
     fp.addBand(-2, -1);
     fp.addBand(1, 2);
     assert(numel(fp.Bands) == 2, 'testAddMultipleBands');
 
     % testBandRendered
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.addBand(0.2, 0.8, 'FaceColor', [0 1 0], 'FaceAlpha', 0.2);
     fp.render();
     assert(~isempty(fp.Bands(1).hPatch), 'testBandRendered: hPatch created');
     assert(ishandle(fp.Bands(1).hPatch), 'testBandRendered: hPatch valid');
     ud = get(fp.Bands(1).hPatch, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'band'), 'testBandRendered: UserData type');
+    assert(strcmp(ud.FastSense.Type, 'band'), 'testBandRendered: UserData type');
     close(fp.hFigure);
 
     % testBandRejectsAfterRender
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.render();
     threw = false;
@@ -644,7 +644,7 @@ function test_add_band()
     close(fp.hFigure);
 
     % testBandDefaults
-    fp = FastPlot();
+    fp = FastSense();
     fp.addBand(0, 1);
     assert(fp.Bands(1).FaceAlpha > 0, 'testBandDefaults: FaceAlpha');
     assert(numel(fp.Bands(1).FaceColor) == 3, 'testBandDefaults: FaceColor');
@@ -659,7 +659,7 @@ Expected: FAIL — `addBand` method does not exist
 
 **Step 3: Write implementation**
 
-Add new property struct in `FastPlot.m` properties (SetAccess = private), after the Thresholds line (around line 24):
+Add new property struct in `FastSense.m` properties (SetAccess = private), after the Thresholds line (around line 24):
 
 ```matlab
         Bands      = struct('YLow', {}, 'YHigh', {}, 'FaceColor', {}, ...
@@ -676,7 +676,7 @@ Add `addBand` method in the public methods block (after `addThreshold`):
             %   fp.addBand(yLow, yHigh, 'FaceColor', [1 0.9 0.9], 'FaceAlpha', 0.3)
 
             if obj.IsRendered
-                error('FastPlot:alreadyRendered', ...
+                error('FastSense:alreadyRendered', ...
                     'Cannot add bands after render() has been called.');
             end
 
@@ -733,7 +733,7 @@ Actually, bands need the X range which is computed later. Better approach: rende
                     'FaceAlpha', B.FaceAlpha, ...
                     'EdgeColor', B.EdgeColor, ...
                     'HandleVisibility', 'off');
-                udB.FastPlot = struct( ...
+                udB.FastSense = struct( ...
                     'Type', 'band', ...
                     'Name', B.Label, ...
                     'LineIndex', [], ...
@@ -758,7 +758,7 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_add_band.m
+git add FastSense.m tests/test_add_band.m
 git commit -m "Add addBand for horizontal band fills"
 ```
 
@@ -767,7 +767,7 @@ git commit -m "Add addBand for horizontal band fills"
 ### Task 6: addMarker — Custom Event Markers
 
 **Files:**
-- Modify: `FastPlot.m` (new Markers property, addMarker method, render)
+- Modify: `FastSense.m` (new Markers property, addMarker method, render)
 - Create: `tests/test_add_marker.m`
 
 **Step 1: Write the failing test**
@@ -776,37 +776,37 @@ Create `tests/test_add_marker.m`:
 
 ```matlab
 function test_add_marker()
-%TEST_ADD_MARKER Tests for FastPlot.addMarker method.
+%TEST_ADD_MARKER Tests for FastSense.addMarker method.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
 
     % testAddMarker
-    fp = FastPlot();
+    fp = FastSense();
     fp.addMarker([10 20 30], [1 2 3], 'Marker', 'v', 'Color', [1 0 0], 'Label', 'Faults');
     assert(numel(fp.Markers) == 1, 'testAddMarker: count');
     assert(isequal(fp.Markers(1).X, [10 20 30]), 'testAddMarker: X');
     assert(strcmp(fp.Markers(1).Label, 'Faults'), 'testAddMarker: Label');
 
     % testMarkerRendered
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.addMarker([10 50], [0.5 0.8], 'Marker', 'd', 'MarkerSize', 10);
     fp.render();
     assert(~isempty(fp.Markers(1).hLine), 'testMarkerRendered: hLine');
     assert(ishandle(fp.Markers(1).hLine), 'testMarkerRendered: valid handle');
     ud = get(fp.Markers(1).hLine, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'marker'), 'testMarkerRendered: UserData type');
+    assert(strcmp(ud.FastSense.Type, 'marker'), 'testMarkerRendered: UserData type');
     close(fp.hFigure);
 
     % testMarkerDefaults
-    fp = FastPlot();
+    fp = FastSense();
     fp.addMarker([5], [1]);
     assert(~isempty(fp.Markers(1).Marker), 'testMarkerDefaults: Marker shape');
     assert(fp.Markers(1).MarkerSize > 0, 'testMarkerDefaults: MarkerSize');
 
     % testMarkerRejectsAfterRender
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10));
     fp.render();
     threw = false;
@@ -845,7 +845,7 @@ Add `addMarker` method (after `addBand`):
             %   fp.addMarker(x, y, 'Marker', 'v', 'MarkerSize', 8, 'Color', [1 0 0])
 
             if obj.IsRendered
-                error('FastPlot:alreadyRendered', ...
+                error('FastSense:alreadyRendered', ...
                     'Cannot add markers after render() has been called.');
             end
 
@@ -893,7 +893,7 @@ In `render()`, add marker rendering after threshold/violation markers section (r
                     'MarkerSize', M.MarkerSize, ...
                     'Color', M.Color, ...
                     'HandleVisibility', 'off');
-                udM.FastPlot = struct( ...
+                udM.FastSense = struct( ...
                     'Type', 'marker', ...
                     'Name', M.Label, ...
                     'LineIndex', [], ...
@@ -916,7 +916,7 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_add_marker.m
+git add FastSense.m tests/test_add_marker.m
 git commit -m "Add addMarker for custom event markers"
 ```
 
@@ -925,7 +925,7 @@ git commit -m "Add addMarker for custom event markers"
 ### Task 7: addShaded — Fill Between Two Curves
 
 **Files:**
-- Modify: `FastPlot.m` (new Shaded property, addShaded method, render + zoom updates)
+- Modify: `FastSense.m` (new Shaded property, addShaded method, render + zoom updates)
 - Create: `tests/test_add_shaded.m`
 
 **Step 1: Write the failing test**
@@ -934,7 +934,7 @@ Create `tests/test_add_shaded.m`:
 
 ```matlab
 function test_add_shaded()
-%TEST_ADD_SHADED Tests for FastPlot.addShaded method.
+%TEST_ADD_SHADED Tests for FastSense.addShaded method.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
@@ -943,7 +943,7 @@ function test_add_shaded()
     x = 1:100;
     y1 = ones(1,100) * 2;
     y2 = ones(1,100) * -2;
-    fp = FastPlot();
+    fp = FastSense();
     fp.addShaded(x, y1, y2, 'FaceColor', [0 0 1], 'FaceAlpha', 0.2);
     assert(numel(fp.Shadings) == 1, 'testAddShaded: count');
     assert(isequal(fp.Shadings(1).X, x), 'testAddShaded: X');
@@ -951,18 +951,18 @@ function test_add_shaded()
     assert(isequal(fp.Shadings(1).Y2, y2), 'testAddShaded: Y2');
 
     % testShadedRendered
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.addShaded(1:100, ones(1,100), zeros(1,100), 'FaceColor', [1 0 0]);
     fp.render();
     assert(~isempty(fp.Shadings(1).hPatch), 'testShadedRendered: hPatch');
     assert(ishandle(fp.Shadings(1).hPatch), 'testShadedRendered: valid');
     ud = get(fp.Shadings(1).hPatch, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'shaded'), 'testShadedRendered: type');
+    assert(strcmp(ud.FastSense.Type, 'shaded'), 'testShadedRendered: type');
     close(fp.hFigure);
 
     % testShadedValidation
-    fp = FastPlot();
+    fp = FastSense();
     threw = false;
     try
         fp.addShaded(1:10, 1:10, 1:5);  % mismatched lengths
@@ -972,7 +972,7 @@ function test_add_shaded()
     assert(threw, 'testShadedValidation: length mismatch');
 
     % testShadedMonotonicX
-    fp = FastPlot();
+    fp = FastSense();
     threw = false;
     try
         fp.addShaded([3 1 2], [1 1 1], [0 0 0]);
@@ -982,7 +982,7 @@ function test_add_shaded()
     assert(threw, 'testShadedMonotonicX');
 
     % testShadedRejectsAfterRender
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10));
     fp.render();
     threw = false;
@@ -995,7 +995,7 @@ function test_add_shaded()
     close(fp.hFigure);
 
     % testShadedColumnVectors
-    fp = FastPlot();
+    fp = FastSense();
     fp.addShaded((1:10)', (1:10)', zeros(10,1));
     assert(isrow(fp.Shadings(1).X), 'testShadedColumnVectors: X row');
     assert(isrow(fp.Shadings(1).Y1), 'testShadedColumnVectors: Y1 row');
@@ -1029,7 +1029,7 @@ Add `addShaded` method (after `addMarker`):
             %   fp.addShaded(x, y1, y2, 'FaceColor', [0 0 1], 'FaceAlpha', 0.2)
 
             if obj.IsRendered
-                error('FastPlot:alreadyRendered', ...
+                error('FastSense:alreadyRendered', ...
                     'Cannot add shaded regions after render() has been called.');
             end
 
@@ -1038,14 +1038,14 @@ Add `addShaded` method (after `addMarker`):
             if ~isrow(y2); y2 = y2(:)'; end
 
             if numel(x) ~= numel(y1) || numel(x) ~= numel(y2)
-                error('FastPlot:sizeMismatch', ...
+                error('FastSense:sizeMismatch', ...
                     'X, Y1, and Y2 must have the same number of elements.');
             end
 
             if numel(x) > 1
                 dx = diff(x);
                 if any(dx(~isnan(dx)) < 0)
-                    error('FastPlot:nonMonotonicX', ...
+                    error('FastSense:nonMonotonicX', ...
                         'X must be monotonically increasing.');
                 end
             end
@@ -1094,7 +1094,7 @@ In `render()`, add shading rendering after bands and before data lines:
                     'FaceAlpha', S.FaceAlpha, ...
                     'EdgeColor', S.EdgeColor, ...
                     'HandleVisibility', 'off');
-                udS.FastPlot = struct( ...
+                udS.FastSense = struct( ...
                     'Type', 'shaded', ...
                     'Name', S.DisplayName, ...
                     'LineIndex', [], ...
@@ -1158,7 +1158,7 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_add_shaded.m
+git add FastSense.m tests/test_add_shaded.m
 git commit -m "Add addShaded for fill between two curves with zoom downsampling"
 ```
 
@@ -1167,7 +1167,7 @@ git commit -m "Add addShaded for fill between two curves with zoom downsampling"
 ### Task 8: addFill — Area Fill to Baseline
 
 **Files:**
-- Modify: `FastPlot.m` (addFill method)
+- Modify: `FastSense.m` (addFill method)
 - Modify: `tests/test_add_shaded.m`
 
 **Step 1: Write the failing test**
@@ -1176,7 +1176,7 @@ Append to `tests/test_add_shaded.m` (before final fprintf):
 
 ```matlab
     % testAddFill
-    fp = FastPlot();
+    fp = FastSense();
     x = 1:50;
     y = rand(1,50);
     fp.addFill(x, y, 'FaceColor', [0 0.5 1], 'FaceAlpha', 0.2);
@@ -1184,18 +1184,18 @@ Append to `tests/test_add_shaded.m` (before final fprintf):
     assert(all(fp.Shadings(1).Y2 == 0), 'testAddFill: baseline is 0');
 
     % testAddFillCustomBaseline
-    fp = FastPlot();
+    fp = FastSense();
     fp.addFill(1:10, rand(1,10), 'Baseline', -1);
     assert(all(fp.Shadings(1).Y2 == -1), 'testAddFillCustomBaseline');
 
     % testAddFillRendered
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.addFill(1:100, rand(1,100), 'FaceColor', [0 1 0]);
     fp.render();
     assert(ishandle(fp.Shadings(1).hPatch), 'testAddFillRendered: valid patch');
     ud = get(fp.Shadings(1).hPatch, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'shaded'), 'testAddFillRendered: type is shaded');
+    assert(strcmp(ud.FastSense.Type, 'shaded'), 'testAddFillRendered: type is shaded');
     close(fp.hFigure);
 ```
 
@@ -1248,7 +1248,7 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_add_shaded.m
+git add FastSense.m tests/test_add_shaded.m
 git commit -m "Add addFill as sugar for addShaded with baseline"
 ```
 
@@ -1257,22 +1257,22 @@ git commit -m "Add addFill as sugar for addShaded with baseline"
 ### Task 9: Theme Defaults for Thresholds & Violations
 
 **Files:**
-- Modify: `FastPlot.m` (addThreshold method, render)
-- Modify: `tests/test_fastplot_theme.m`
+- Modify: `FastSense.m` (addThreshold method, render)
+- Modify: `tests/test_fastsense_theme.m`
 
 **Step 1: Write the failing test**
 
-Append to `tests/test_fastplot_theme.m`:
+Append to `tests/test_fastsense_theme.m`:
 
 ```matlab
     % testThresholdUsesThemeDefaults
-    fp = FastPlot('Theme', struct('ThresholdColor', [0 1 0], 'ThresholdStyle', ':'));
+    fp = FastSense('Theme', struct('ThresholdColor', [0 1 0], 'ThresholdStyle', ':'));
     fp.addThreshold(5.0);
     assert(isequal(fp.Thresholds(1).Color, [0 1 0]), 'testThresholdThemeDefaults: Color');
     assert(strcmp(fp.Thresholds(1).LineStyle, ':'), 'testThresholdThemeDefaults: Style');
 
     % testThresholdExplicitOverridesTheme
-    fp = FastPlot('Theme', struct('ThresholdColor', [0 1 0]));
+    fp = FastSense('Theme', struct('ThresholdColor', [0 1 0]));
     fp.addThreshold(5.0, 'Color', [1 0 0]);
     assert(isequal(fp.Thresholds(1).Color, [1 0 0]), 'testThresholdOverride: Color');
 ```
@@ -1285,7 +1285,7 @@ Expected: FAIL — threshold defaults are hardcoded, not from theme
 
 **Step 3: Write implementation**
 
-Modify `addThreshold` in `FastPlot.m`. Change the defaults section (around line 132-133) to use theme:
+Modify `addThreshold` in `FastSense.m`. Change the defaults section (around line 132-133) to use theme:
 
 ```matlab
             t.Color          = obj.Theme.ThresholdColor;
@@ -1296,7 +1296,7 @@ These theme values are set in the constructor, so they're always available befor
 
 **Step 4: Run test to verify it passes**
 
-Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastplot_theme;"`
+Run: `octave --no-gui --eval "addpath('.'); addpath('tests'); addpath('private'); test_fastsense_theme;"`
 Expected: PASS
 
 **Step 5: Run all tests**
@@ -1306,16 +1306,16 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlot.m tests/test_fastplot_theme.m
+git add FastSense.m tests/test_fastsense_theme.m
 git commit -m "Use theme defaults for threshold color and style"
 ```
 
 ---
 
-### Task 10: FastPlotFigure — Basic Grid Layout
+### Task 10: FastSenseFigure — Basic Grid Layout
 
 **Files:**
-- Create: `FastPlotFigure.m`
+- Create: `FastSenseFigure.m`
 - Create: `tests/test_figure_layout.m`
 
 **Step 1: Write the failing test**
@@ -1324,33 +1324,33 @@ Create `tests/test_figure_layout.m`:
 
 ```matlab
 function test_figure_layout()
-%TEST_FIGURE_LAYOUT Tests for FastPlotFigure layout manager.
+%TEST_FIGURE_LAYOUT Tests for FastSenseFigure layout manager.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'private'));
 
     % testConstruction
-    fig = FastPlotFigure(2, 3);
+    fig = FastSenseFigure(2, 3);
     assert(isequal(fig.Grid, [2 3]), 'testConstruction: Grid');
     assert(~isempty(fig.hFigure), 'testConstruction: hFigure');
     assert(ishandle(fig.hFigure), 'testConstruction: hFigure valid');
     close(fig.hFigure);
 
-    % testTileReturnsFastPlot
-    fig = FastPlotFigure(2, 1);
+    % testTileReturnsFastSense
+    fig = FastSenseFigure(2, 1);
     fp = fig.tile(1);
-    assert(isa(fp, 'FastPlot'), 'testTileReturnsFastPlot');
+    assert(isa(fp, 'FastSense'), 'testTileReturnsFastSense');
     close(fig.hFigure);
 
     % testTileLazy
-    fig = FastPlotFigure(2, 1);
+    fig = FastSenseFigure(2, 1);
     fp1a = fig.tile(1);
     fp1b = fig.tile(1);
     assert(fp1a == fp1b, 'testTileLazy: same object on repeat call');
     close(fig.hFigure);
 
     % testTileCreatesAxes
-    fig = FastPlotFigure(2, 1);
+    fig = FastSenseFigure(2, 1);
     fp = fig.tile(1);
     fp.addLine(1:100, rand(1,100));
     fp.render();
@@ -1359,7 +1359,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testMultipleTiles
-    fig = FastPlotFigure(2, 2);
+    fig = FastSenseFigure(2, 2);
     for i = 1:4
         fp = fig.tile(i);
         fp.addLine(1:50, rand(1,50));
@@ -1372,7 +1372,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testRenderAllSkipsRendered
-    fig = FastPlotFigure(2, 1);
+    fig = FastSenseFigure(2, 1);
     fp1 = fig.tile(1);
     fp1.addLine(1:10, rand(1,10));
     fp1.render();
@@ -1383,7 +1383,7 @@ function test_figure_layout()
     close(fig.hFigure);
 
     % testOutOfBoundsTileErrors
-    fig = FastPlotFigure(2, 2);
+    fig = FastSenseFigure(2, 2);
     threw = false;
     try
         fig.tile(5);  % only 4 tiles in 2x2
@@ -1399,26 +1399,26 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Expected: FAIL — `FastPlotFigure` does not exist
+Expected: FAIL — `FastSenseFigure` does not exist
 
 **Step 3: Write implementation**
 
-Create `FastPlotFigure.m`:
+Create `FastSenseFigure.m`:
 
 ```matlab
-classdef FastPlotFigure < handle
-    %FASTPLOTFIGURE Tiled layout manager for FastPlot dashboards.
-    %   fig = FastPlotFigure(rows, cols)
-    %   fig = FastPlotFigure(rows, cols, 'Theme', 'dark')
+classdef FastSenseFigure < handle
+    %FASTSENSEFIGURE Tiled layout manager for FastSense dashboards.
+    %   fig = FastSenseFigure(rows, cols)
+    %   fig = FastSenseFigure(rows, cols, 'Theme', 'dark')
 
     properties (Access = public)
         Grid       = [1 1]      % [rows, cols]
-        Theme      = []         % FastPlotTheme struct
+        Theme      = []         % FastSenseTheme struct
         hFigure    = []         % figure handle
     end
 
     properties (SetAccess = private)
-        Tiles      = {}         % cell array of FastPlot instances
+        Tiles      = {}         % cell array of FastSense instances
         TileAxes   = {}         % cell array of axes handles
         TileSpans  = {}         % cell array of [rowSpan, colSpan]
         TileThemes = {}         % cell array of theme override structs
@@ -1432,7 +1432,7 @@ classdef FastPlotFigure < handle
     end
 
     methods (Access = public)
-        function obj = FastPlotFigure(rows, cols, varargin)
+        function obj = FastSenseFigure(rows, cols, varargin)
             obj.Grid = [rows, cols];
             nTiles = rows * cols;
             obj.Tiles     = cell(1, nTiles);
@@ -1452,7 +1452,7 @@ classdef FastPlotFigure < handle
                     case 'theme'
                         val = varargin{k+1};
                         if ischar(val) || isstruct(val)
-                            obj.Theme = FastPlotTheme(val);
+                            obj.Theme = FastSenseTheme(val);
                         else
                             obj.Theme = val;
                         end
@@ -1463,7 +1463,7 @@ classdef FastPlotFigure < handle
             end
 
             if isempty(obj.Theme)
-                obj.Theme = FastPlotTheme('default');
+                obj.Theme = FastSenseTheme('default');
             end
 
             obj.hFigure = figure('Visible', 'off', ...
@@ -1471,10 +1471,10 @@ classdef FastPlotFigure < handle
         end
 
         function fp = tile(obj, n)
-            %TILE Get or create the FastPlot instance for tile n.
+            %TILE Get or create the FastSense instance for tile n.
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
-                error('FastPlotFigure:outOfBounds', ...
+                error('FastSenseFigure:outOfBounds', ...
                     'Tile %d is out of range (1-%d).', n, nTiles);
             end
 
@@ -1491,7 +1491,7 @@ classdef FastPlotFigure < handle
                     end
                 end
 
-                fp = FastPlot('Parent', ax, 'Theme', tileTheme);
+                fp = FastSense('Parent', ax, 'Theme', tileTheme);
                 obj.Tiles{n} = fp;
             else
                 fp = obj.Tiles{n};
@@ -1503,7 +1503,7 @@ classdef FastPlotFigure < handle
             %   fig.setTileSpan(1, [2 1])  — tile 1 spans 2 rows, 1 col
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
-                error('FastPlotFigure:outOfBounds', ...
+                error('FastSenseFigure:outOfBounds', ...
                     'Tile %d is out of range (1-%d).', n, nTiles);
             end
             obj.TileSpans{n} = span;
@@ -1519,7 +1519,7 @@ classdef FastPlotFigure < handle
             %SETTILETHEME Set per-tile theme overrides.
             nTiles = obj.Grid(1) * obj.Grid(2);
             if n < 1 || n > nTiles
-                error('FastPlotFigure:outOfBounds', ...
+                error('FastSenseFigure:outOfBounds', ...
                     'Tile %d is out of range (1-%d).', n, nTiles);
             end
             obj.TileThemes{n} = themeOverrides;
@@ -1622,13 +1622,13 @@ Expected: All pass.
 **Step 6: Commit**
 
 ```bash
-git add FastPlotFigure.m tests/test_figure_layout.m
-git commit -m "Add FastPlotFigure with tiled grid layout and lazy tile creation"
+git add FastSenseFigure.m tests/test_figure_layout.m
+git commit -m "Add FastSenseFigure with tiled grid layout and lazy tile creation"
 ```
 
 ---
 
-### Task 11: FastPlotFigure — Tile Spanning & Theme Inheritance
+### Task 11: FastSenseFigure — Tile Spanning & Theme Inheritance
 
 **Files:**
 - Modify: `tests/test_figure_layout.m`
@@ -1639,7 +1639,7 @@ Append to `tests/test_figure_layout.m` (before final fprintf):
 
 ```matlab
     % testTileSpanning
-    fig = FastPlotFigure(2, 2);
+    fig = FastSenseFigure(2, 2);
     fig.setTileSpan(1, [1 2]);  % tile 1 spans both columns
     fp1 = fig.tile(1);
     fp1.addLine(1:50, rand(1,50));
@@ -1650,13 +1650,13 @@ Append to `tests/test_figure_layout.m` (before final fprintf):
     close(fig.hFigure);
 
     % testFigureThemePassedToTiles
-    fig = FastPlotFigure(2, 1, 'Theme', 'dark');
+    fig = FastSenseFigure(2, 1, 'Theme', 'dark');
     fp = fig.tile(1);
     assert(all(fp.Theme.Background < [0.2 0.2 0.2]), 'testFigureThemePassedToTiles');
     close(fig.hFigure);
 
     % testTileThemeOverride
-    fig = FastPlotFigure(2, 1, 'Theme', 'dark');
+    fig = FastSenseFigure(2, 1, 'Theme', 'dark');
     fig.setTileTheme(1, struct('AxesColor', [0.3 0 0]));
     fp = fig.tile(1);
     assert(isequal(fp.Theme.AxesColor, [0.3 0 0]), 'testTileThemeOverride: AxesColor');
@@ -1664,13 +1664,13 @@ Append to `tests/test_figure_layout.m` (before final fprintf):
     close(fig.hFigure);
 
     % testFigureProperties
-    fig = FastPlotFigure(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
+    fig = FastSenseFigure(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
     name = get(fig.hFigure, 'Name');
     assert(strcmp(name, 'MyDash'), 'testFigureProperties: Name');
     close(fig.hFigure);
 
     % testTileLabels
-    fig = FastPlotFigure(2, 1);
+    fig = FastSenseFigure(2, 1);
     fp = fig.tile(1);
     fp.addLine(1:50, rand(1,50));
     fp.render();
@@ -1733,8 +1733,8 @@ git commit -m "Fix integration issues from full test suite"
 Create `examples/example_dashboard.m`:
 
 ```matlab
-%% FastPlot Dashboard — Tiled layout with themes and visual enhancements
-% Demonstrates FastPlotFigure, theming, bands, shading, and markers
+%% FastSense Dashboard — Tiled layout with themes and visual enhancements
+% Demonstrates FastSenseFigure, theming, bands, shading, and markers
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
 
@@ -1744,8 +1744,8 @@ x = linspace(0, 300, n);
 fprintf('Dashboard example: 4 tiles, %d points each, dark theme...\n', n);
 tic;
 
-fig = FastPlotFigure(2, 2, 'Theme', 'dark', ...
-    'Name', 'FastPlot Dashboard Demo', 'Position', [50 50 1400 800]);
+fig = FastSenseFigure(2, 2, 'Theme', 'dark', ...
+    'Name', 'FastSense Dashboard Demo', 'Position', [50 50 1400 800]);
 
 % --- Tile 1: Temperature with alarm bands (spans 2 columns) ---
 fig.setTileSpan(1, [1 2]);
@@ -1813,7 +1813,7 @@ git commit -m "Add dashboard example with tiled layout, bands, shading, and mark
 Create `examples/example_themes.m`:
 
 ```matlab
-%% FastPlot Theme Comparison — All 5 built-in themes side by side
+%% FastSense Theme Comparison — All 5 built-in themes side by side
 % Opens one figure per theme to compare visual styles
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
@@ -1828,7 +1828,7 @@ themes = {'default', 'dark', 'light', 'industrial', 'scientific'};
 
 for i = 1:numel(themes)
     themeName = themes{i};
-    fp = FastPlot('Theme', themeName);
+    fp = FastSense('Theme', themeName);
     fp.addLine(x, y1, 'DisplayName', 'Signal A');
     fp.addLine(x, y2, 'DisplayName', 'Signal B');
     fp.addLine(x, y3, 'DisplayName', 'Signal C');
@@ -1863,7 +1863,7 @@ git commit -m "Add theme comparison example showing all 5 presets"
 **Step 1: Update README**
 
 Add sections for:
-- FastPlotFigure (tiled layouts with spanning)
+- FastSenseFigure (tiled layouts with spanning)
 - Theming system (5 presets, custom themes, color palettes)
 - New visual methods (addShaded, addBand, addFill, addMarker)
 - Updated example table with new examples
@@ -1872,9 +1872,9 @@ Add sections for:
 Key additions to the API Reference section:
 
 ```markdown
-### `FastPlotFigure(rows, cols, ...)` -- Dashboard Layout
+### `FastSenseFigure(rows, cols, ...)` -- Dashboard Layout
 
-### `FastPlotTheme(preset, ...)` -- Theme Presets
+### `FastSenseTheme(preset, ...)` -- Theme Presets
 
 ### `addShaded(x, y1, y2, ...)` -- Fill Between Curves
 

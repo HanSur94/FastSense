@@ -3,7 +3,7 @@ classdef TestViolationsMexParity < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'FastPlot', 'private'));
+            addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'FastSense', 'private'));
         end
     end
 

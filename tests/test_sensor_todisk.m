@@ -59,7 +59,7 @@ function test_sensor_todisk()
     fprintf('    resolve with disk data: PASS\n');
 
     %% 4. addSensor with disk-backed sensor
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s2, 'ShowThresholds', true);
     fp.render();
     assert(numel(fp.Lines) >= 1, 'should have at least 1 line');
@@ -72,7 +72,7 @@ function test_sensor_todisk()
     s3.X = linspace(0, 100, 10000);
     s3.Y = rand(1, 10000);
     s3.toDisk();
-    fp2 = FastPlot();
+    fp2 = FastSense();
     fp2.addSensor(s3);
     fp2.render();
     assert(numel(fp2.Lines) == 1, 'should have 1 line');

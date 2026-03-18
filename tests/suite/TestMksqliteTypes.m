@@ -13,7 +13,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
@@ -135,7 +135,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -151,7 +151,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -169,7 +169,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -188,7 +188,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             charData = char(mod(0:n-1, 26) + 65);  % A-Z repeating
@@ -201,7 +201,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -219,7 +219,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             flags = logical(mod(1:n, 2));
@@ -236,7 +236,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -260,7 +260,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             charData = char(mod(0:n-1, 26) + 65);
@@ -276,7 +276,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -292,7 +292,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             flags = logical(mod(1:n, 2));
@@ -306,7 +306,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -330,7 +330,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             labels = cell(1, n);
@@ -350,7 +350,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
 
             threw = false;
@@ -368,14 +368,14 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n2 = 1000;
             x2 = linspace(0, 100, n2);
             y2 = sin(x2);
-            ds2 = FastPlotDataStore(x2, y2);
+            ds2 = FastSenseDataStore(x2, y2);
             testCase.addTeardown(@() ds2.cleanup());
 
             catData2.codes = uint32(mod(0:n2-1, 3) + 1);
             catData2.categories = {'low', 'medium', 'high'};
             ds2.addColumn('cat_struct', catData2);
             slice = ds2.getColumnSlice('cat_struct', 1, 6);
-            labels_back = FastPlotDataStore.toCategorical(slice);
+            labels_back = FastSenseDataStore.toCategorical(slice);
             if exist('categorical', 'class')
                 testCase.verifyTrue(isa(labels_back, 'categorical'), ...
                     'toCategorical: should return categorical in MATLAB');
@@ -395,7 +395,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
         function testToCategoricalBadInput(testCase)
             threw = false;
             try
-                FastPlotDataStore.toCategorical('not_a_struct');
+                FastSenseDataStore.toCategorical('not_a_struct');
             catch
                 threw = true;
             end
@@ -409,7 +409,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n2 = 1000;
             x2 = linspace(0, 100, n2);
             y2 = sin(x2);
-            ds2 = FastPlotDataStore(x2, y2);
+            ds2 = FastSenseDataStore(x2, y2);
             testCase.addTeardown(@() ds2.cleanup());
 
             c_native = categorical({'a','b','c','a','b'}, {'a','b','c'});
@@ -418,7 +418,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             sliceN = ds2.getColumnSlice('cat_native', 1, 5);
             testCase.verifyTrue(isstruct(sliceN) && isfield(sliceN, 'codes'), ...
                 'auto-convert categorical: should be stored as struct');
-            labelsN = FastPlotDataStore.toCategorical(sliceN);
+            labelsN = FastSenseDataStore.toCategorical(sliceN);
             testCase.verifyTrue(isa(labelsN, 'categorical'), ...
                 'auto-convert categorical: toCategorical should return categorical');
         end
@@ -428,7 +428,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
                 return;
             end
             c_test = categorical({'x','y','z','x'}, {'x','y','z'});
-            s_test = FastPlotDataStore.fromCategorical(c_test);
+            s_test = FastSenseDataStore.fromCategorical(c_test);
             testCase.verifyEqual(s_test.codes, uint32([1 2 3 1]), ...
                 'fromCategorical: codes mismatch');
             testCase.verifyEqual(s_test.categories, {'x','y','z'}, ...
@@ -442,7 +442,7 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
             n2 = 1000;
             x2 = linspace(0, 100, n2);
             y2 = sin(x2);
-            ds2 = FastPlotDataStore(x2, y2);
+            ds2 = FastSenseDataStore(x2, y2);
             testCase.addTeardown(@() ds2.cleanup());
 
             labels = cell(1, n2);

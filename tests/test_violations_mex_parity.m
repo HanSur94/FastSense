@@ -100,5 +100,5 @@ function add_sensor_path()
     repo_root = fileparts(test_dir);
     addpath(repo_root);setup();
     % Add private dirs so MEX is directly accessible for parity testing
-    addpath(fullfile(repo_root, 'libs', 'FastPlot', 'private'));
+    addpath(fullfile(repo_root, 'libs', 'FastSense', 'private'));
 end

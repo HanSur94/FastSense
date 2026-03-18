@@ -1,5 +1,5 @@
 function test_add_sensor()
-%TEST_ADD_SENSOR Tests for FastPlot.addSensor() integration.
+%TEST_ADD_SENSOR Tests for FastSense.addSensor() integration.
 
     add_sensor_path();
 
@@ -9,7 +9,7 @@ function test_add_sensor()
     s.Y = rand(1, 100) * 10;
     s.resolve();
 
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s);
     assert(numel(fp.Lines) == 1, 'testBasic: one line added');
     assert(strcmp(fp.Lines(1).Options.DisplayName, 'Chamber Pressure'), 'testBasic: display name');
@@ -25,7 +25,7 @@ function test_add_sensor()
     s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
     s.resolve();
 
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s, 'ShowThresholds', true);
     assert(numel(fp.Lines) == 1, 'testWithThresholds: only data line');
     assert(numel(fp.Thresholds) >= 1, 'testWithThresholds: threshold(s) added');
@@ -39,7 +39,7 @@ function test_add_sensor()
     s.addThresholdRule(struct(), 5, 'Direction', 'upper');
     s.resolve();
 
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s, 'ShowThresholds', false);
     assert(numel(fp.Lines) == 1, 'testNoThresholds: only data line');
     assert(numel(fp.Thresholds) == 0, 'testNoThresholds: no thresholds');
@@ -50,7 +50,7 @@ function test_add_sensor()
     s.Y = rand(1, 10);
     s.resolve();
 
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s);
     assert(strcmp(fp.Lines(1).Options.DisplayName, 'flow_rate'), 'testFallbackName: uses Key');
 

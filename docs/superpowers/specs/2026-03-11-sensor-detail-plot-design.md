@@ -6,21 +6,21 @@ A two-panel composite plot for sensor data. The upper panel shows a zoomable det
 
 ## Architecture
 
-Two new classes in `libs/FastPlot/`:
+Two new classes in `libs/FastSense/`:
 
-- **`SensorDetailPlot.m`** — Coordinator. Creates two `FastPlot` instances (main + navigator), wires bidirectional zoom synchronization, manages event rendering.
+- **`SensorDetailPlot.m`** — Coordinator. Creates two `FastSense` instances (main + navigator), wires bidirectional zoom synchronization, manages event rendering.
 - **`NavigatorOverlay.m`** — Handles the zoom rectangle, dimming patches, and drag interaction on the navigator axes.
 
 ## Layout
 
 ```
 ┌──────────────────────────────────────┐
-│  Main Plot (80%)            FastPlot │
+│  Main Plot (80%)            FastSense │
 │  - Sensor data line                  │
 │  - Threshold lines + violations      │
 │  - Event shading (optional)          │
 ├──────────────────────────────────────┤
-│  Navigator (20%)            FastPlot │
+│  Navigator (20%)            FastSense │
 │  - Full data range line              │
 │  - Threshold bands (subtle fills)    │
 │  - Event vertical lines (optional)   │
@@ -46,7 +46,7 @@ sdp = SensorDetailPlot(sensor, Name, Value, ...)
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `Theme` | string or struct | `'default'` | FastPlot theme preset or custom struct |
+| `Theme` | string or struct | `'default'` | FastSense theme preset or custom struct |
 | `NavigatorHeight` | double (0–1) | `0.20` | Fraction of total height for navigator |
 | `ShowThresholds` | logical | `true` | Show threshold lines + violations in main plot |
 | `ShowThresholdBands` | logical | `true` | Show threshold bands in navigator |
@@ -64,13 +64,13 @@ sdp.setZoomRange(xMin, xMax)          % Programmatically set visible range
 sdp.delete()                          % Clean up listeners, callbacks, handles
 ```
 
-Calling `render()` twice throws an error (same guard as `FastPlot`).
+Calling `render()` twice throws an error (same guard as `FastSense`).
 
 ### Properties (read-only)
 
 ```matlab
-sdp.MainPlot        % FastPlot instance for the upper panel
-sdp.NavigatorPlot   % FastPlot instance for the lower panel
+sdp.MainPlot        % FastSense instance for the upper panel
+sdp.NavigatorPlot   % FastSense instance for the lower panel
 ```
 
 `MainPlot` is exposed so users can add extra elements (markers, bands, etc.) to the detail view.
@@ -102,8 +102,8 @@ sdp.render();
 sdp = SensorDetailPlot(s, 'Events', store, 'Theme', 'dark');
 sdp.render();
 
-% Inside FastPlotFigure (uses new tilePanel method)
-fig = FastPlotFigure(2, 1, 'Theme', 'dark');
+% Inside FastSenseFigure (uses new tilePanel method)
+fig = FastSenseFigure(2, 1, 'Theme', 'dark');
 sdp = SensorDetailPlot(s, 'Parent', fig.tilePanel(1), 'Events', store);
 sdp.render();
 fig.renderAll();
@@ -114,7 +114,7 @@ fig.renderAll();
 ### Sensor Data + Thresholds
 
 - When `SensorDetailPlot.ShowThresholds = true`, calls `MainPlot.addSensor(sensor, 'ShowThresholds', true)` which renders the data line, threshold lines, and violation markers. When `false`, calls `addSensor(sensor, 'ShowThresholds', false)` (data line only, no thresholds).
-- Inherits all existing FastPlot behavior: downsampling on zoom, pyramid caching, NaN gap handling.
+- Inherits all existing FastSense behavior: downsampling on zoom, pyramid caching, NaN gap handling.
 
 ### Event Shading
 
@@ -128,14 +128,14 @@ When `Events` is provided:
    - `Direction = 'low'` — cool colors (blue, alpha 0.12)
    - Two-tier escalation: if `ThresholdLabel` contains `'HH'` or `'LL'` (case-insensitive), use stronger color (red / dark blue, alpha 0.15). This matches the `escalateTo()` convention where escalated events get a new `ThresholdLabel`.
    - Fallback — theme accent color, alpha 0.10
-5. All Event statistics are attached to the patch `UserData` struct: `ThresholdLabel`, `Direction`, `Duration`, `PeakValue`, `MeanValue`, `MinValue`, `MaxValue`, `RmsValue`, `StdValue`, `NumPoints`. This makes all event data available to `FastPlotToolbar` cursor/crosshair.
+5. All Event statistics are attached to the patch `UserData` struct: `ThresholdLabel`, `Direction`, `Duration`, `PeakValue`, `MeanValue`, `MinValue`, `MaxValue`, `RmsValue`, `StdValue`, `NumPoints`. This makes all event data available to `FastSenseToolbar` cursor/crosshair.
 6. No permanent text labels on the plot.
 
 ## Lower Plot (Navigator)
 
 ### Full Data Range
 
-- Renders the sensor data line using `FastPlot.addLine()` across the full time range.
+- Renders the sensor data line using `FastSense.addLine()` across the full time range.
 - Navigator axes XLim is fixed to `[min(sensor.X), max(sensor.X)]` and does not change.
 - Navigator axes YLim is computed from `[min(sensor.Y), max(sensor.Y)]` with 5% padding, set after all elements are drawn, then fixed. This prevents threshold bands and dim patches from affecting the Y scale.
 - MATLAB's built-in zoom and pan tools are disabled on the navigator axes (`zoom(hNavAxes, 'off')`, `pan(hNavAxes, 'off')`) to preserve the full-range invariant.
@@ -201,7 +201,7 @@ overlay.setRange(xMin, xMax);                   % Programmatic update
 
 ```
 User zooms/pans in main plot
-  → FastPlot XLim PostSet listener fires
+  → FastSense XLim PostSet listener fires
     → SensorDetailPlot receives new XLim
       → Calls NavigatorOverlay.setRange(xMin, xMax)
         → Overlay updates rectangle + dim patches
@@ -210,48 +210,48 @@ User drags in navigator
   → NavigatorOverlay fires OnRangeChanged(xMin, xMax)
     → SensorDetailPlot receives callback
       → Sets MainPlot axes XLim
-        → FastPlot zoom listener fires, re-downsamples visible data
+        → FastSense zoom listener fires, re-downsamples visible data
 ```
 
 A guard flag (`IsPropagating`) prevents infinite callback loops (main→navigator→main→...).
 
-**Design note:** This intentionally does not use FastPlot's `LinkGroup` mechanism. `LinkGroup` propagates XLim changes between peer FastPlot instances that all re-downsample on zoom. The navigator must not re-downsample or change its XLim — it always shows the full range. The bespoke guard flag approach is simpler and avoids `resetplotview` / `XLimMode='auto'` side effects that `LinkGroup` handles for peer plots but that would break navigator invariants.
+**Design note:** This intentionally does not use FastSense's `LinkGroup` mechanism. `LinkGroup` propagates XLim changes between peer FastSense instances that all re-downsample on zoom. The navigator must not re-downsample or change its XLim — it always shows the full range. The bespoke guard flag approach is simpler and avoids `resetplotview` / `XLimMode='auto'` side effects that `LinkGroup` handles for peer plots but that would break navigator invariants.
 
 ## Cleanup
 
-Both classes implement `delete()` methods following the `onCleanup`/`DeleteFcn` pattern used in `FastPlotFigure`:
+Both classes implement `delete()` methods following the `onCleanup`/`DeleteFcn` pattern used in `FastSenseFigure`:
 
 - **`SensorDetailPlot.delete()`** — Removes the XLim PostSet listener on the main axes. Calls `NavigatorOverlay.delete()`. If the figure was self-created (no `Parent`), sets `CloseRequestFcn` to trigger cleanup on figure close.
 - **`NavigatorOverlay.delete()`** — Removes `WindowButtonDownFcn`, `WindowButtonMotionFcn`, `WindowButtonUpFcn` callbacks. Removes `SizeChangedFcn` listener. Deletes graphics handles (`hRegion`, `hDimLeft`, `hDimRight`, `hEdgeLeft`, `hEdgeRight`).
 
 This prevents dead listeners and stale figure callbacks when plots are closed and re-opened in the same MATLAB session.
 
-## Integration with FastPlotFigure
+## Integration with FastSenseFigure
 
 When `Parent` is provided:
 
-- `SensorDetailPlot` accepts a `uipanel` handle as `Parent`. This handle is NOT passed through to `FastPlot`'s `'Parent'` option.
-- Instead, `SensorDetailPlot` creates two sub-panels inside it, then creates axes within each sub-panel, and passes those axes to the internal `FastPlot` instances via `FastPlot('Parent', hAxes)`.
+- `SensorDetailPlot` accepts a `uipanel` handle as `Parent`. This handle is NOT passed through to `FastSense`'s `'Parent'` option.
+- Instead, `SensorDetailPlot` creates two sub-panels inside it, then creates axes within each sub-panel, and passes those axes to the internal `FastSense` instances via `FastSense('Parent', hAxes)`.
 - Does not create its own figure window.
 
-**New method required on `FastPlotFigure`:** `tilePanel(n)` — returns a `uipanel` handle at the computed position for tile `n`. This is distinct from the existing `tile(n)` (returns a `FastPlot`) and `axes(n)` (returns a raw axes). The `tilePanel(n)` method creates an empty `uipanel` at the tile's grid position, allowing composite widgets like `SensorDetailPlot` to manage their own internal layout within a dashboard tile. Calling `tilePanel(n)` on a tile already occupied by `tile(n)` or `axes(n)` throws a `tileConflict` error, same as the existing `tile(n)` vs `axes(n)` mutual exclusion guard.
+**New method required on `FastSenseFigure`:** `tilePanel(n)` — returns a `uipanel` handle at the computed position for tile `n`. This is distinct from the existing `tile(n)` (returns a `FastSense`) and `axes(n)` (returns a raw axes). The `tilePanel(n)` method creates an empty `uipanel` at the tile's grid position, allowing composite widgets like `SensorDetailPlot` to manage their own internal layout within a dashboard tile. Calling `tilePanel(n)` on a tile already occupied by `tile(n)` or `axes(n)` throws a `tileConflict` error, same as the existing `tile(n)` vs `axes(n)` mutual exclusion guard.
 
-**Axes creation in Parent path:** `SensorDetailPlot` is responsible for creating the axes within each sub-panel via `axes('Parent', subPanel)`, then passing those axes handles to the internal `FastPlot` instances via `FastPlot('Parent', hAxes)`.
+**Axes creation in Parent path:** `SensorDetailPlot` is responsible for creating the axes within each sub-panel via `axes('Parent', subPanel)`, then passing those axes handles to the internal `FastSense` instances via `FastSense('Parent', hAxes)`.
 
 ## File Locations
 
 | File | Location |
 |------|----------|
-| `SensorDetailPlot.m` | `libs/FastPlot/SensorDetailPlot.m` |
-| `NavigatorOverlay.m` | `libs/FastPlot/NavigatorOverlay.m` |
+| `SensorDetailPlot.m` | `libs/FastSense/SensorDetailPlot.m` |
+| `NavigatorOverlay.m` | `libs/FastSense/NavigatorOverlay.m` |
 | `example_sensor_detail.m` | `examples/example_sensor_detail.m` |
 | `test_SensorDetailPlot.m` | `tests/test_SensorDetailPlot.m` |
 | `test_NavigatorOverlay.m` | `tests/test_NavigatorOverlay.m` |
 
 ## Dependencies
 
-- `FastPlot` — rendering engine for both panels
+- `FastSense` — rendering engine for both panels
 - `Sensor`, `ThresholdRule`, `StateChannel` — sensor data model
 - `EventStore`, `Event` — event data (optional)
-- `FastPlotFigure` — for dashboard embedding (optional)
-- `FastPlotTheme` — theme system
+- `FastSenseFigure` — for dashboard embedding (optional)
+- `FastSenseTheme` — theme system

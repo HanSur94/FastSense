@@ -1,4 +1,4 @@
-%% FastPlot LTTB vs MinMax — Compare downsampling methods side by side
+%% FastSense LTTB vs MinMax — Compare downsampling methods side by side
 % Shows visual difference between MinMax (preserves extremes) and LTTB (preserves shape)
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -15,7 +15,7 @@ tic;
 
 % Top: MinMax (default)
 ax1 = subplot(2,1,1, 'Parent', fig);
-fp1 = FastPlot('Parent', ax1, 'LinkGroup', 'compare');
+fp1 = FastSense('Parent', ax1, 'LinkGroup', 'compare');
 fp1.addLine(x, y, 'DisplayName', 'MinMax', 'Color', [0 0.45 0.74], ...
     'DownsampleMethod', 'minmax');
 fp1.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true, ...
@@ -25,7 +25,7 @@ title(ax1, 'MinMax Downsampling (preserves peaks/valleys)');
 
 % Bottom: LTTB
 ax2 = subplot(2,1,2, 'Parent', fig);
-fp2 = FastPlot('Parent', ax2, 'LinkGroup', 'compare');
+fp2 = FastSense('Parent', ax2, 'LinkGroup', 'compare');
 fp2.addLine(x, y, 'DisplayName', 'LTTB', 'Color', [0.85 0.33 0.1], ...
     'DownsampleMethod', 'lttb');
 fp2.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true, ...

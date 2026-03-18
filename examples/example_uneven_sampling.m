@@ -1,5 +1,5 @@
-%% FastPlot Unevenly Sampled Data — Event-driven acquisition
-% Demonstrates that FastPlot handles non-uniform X spacing correctly
+%% FastSense Unevenly Sampled Data — Event-driven acquisition
+% Demonstrates that FastSense handles non-uniform X spacing correctly
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
 run(fullfile(projectRoot, 'setup.m'));
@@ -38,7 +38,7 @@ end
 fprintf('Uneven sampling: %d points, rate varies 10 Hz to 10 kHz...\n', numel(x));
 tic;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Event-Driven Sensor', 'Color', [0.2 0.5 0.7]);
 fp.addThreshold(4.0, 'Direction', 'upper', 'ShowViolations', true, ...
     'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'High');

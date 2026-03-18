@@ -60,7 +60,7 @@ Add GitHub Actions CI/CD pipelines (test + release), replace the 43KB reference-
 
 1. **Gate:** Run Octave tests (same as test pipeline Octave job)
 2. **Package:** Create archive containing:
-   - `libs/` (all 5 libraries: FastPlot, SensorThreshold, EventDetection, Dashboard, WebBridge)
+   - `libs/` (all 5 libraries: FastSense, SensorThreshold, EventDetection, Dashboard, WebBridge)
    - MEX C source files included, compiled `.mex*` binaries **excluded** (users compile via `setup.m`)
    - Must explicitly filter `*.mexmaca64`, `*.mexmaci64`, `*.mexa64`, `*.mexw64`, `*.mex` since some are tracked in git despite `.gitignore`
    - `setup.m`
@@ -72,18 +72,18 @@ Add GitHub Actions CI/CD pipelines (test + release), replace the 43KB reference-
 4. **Release:** Create GitHub Release via `softprops/action-gh-release@v2`
    - Title: tag name (e.g., `v1.5.0`)
    - Body: auto-generated changelog
-   - Assets: `FastPlot-v1.5.0.zip` and `FastPlot-v1.5.0.tar.gz` (version includes `v` prefix)
+   - Assets: `FastSense-v1.5.0.zip` and `FastSense-v1.5.0.tar.gz` (version includes `v` prefix)
 
 ### Archive Structure
 
 ```
-FastPlot-v1.5.0/
+FastSense-v1.5.0/
 ├── setup.m
 ├── LICENSE
 ├── README.md
 ├── CITATION.cff
 ├── libs/
-│   ├── FastPlot/
+│   ├── FastSense/
 │   ├── SensorThreshold/
 │   ├── EventDetection/
 │   ├── Dashboard/
@@ -103,7 +103,7 @@ Replace the current 43KB README with a concise (~150-200 lines) overview.
 
 ### Structure
 
-1. **Title + tagline** — "FastPlot — Ultra-fast time series plotting for MATLAB & Octave"
+1. **Title + tagline** — "FastSense — Ultra-fast time series plotting for MATLAB & Octave"
 2. **Badges** — CI status (pointing to `tests.yml` on `main`), license (MIT), MATLAB R2020b+, Octave 7+
 3. **One-paragraph description** — what it does, key performance claim
 4. **Screenshot** — existing `docs/images/` hero image
@@ -151,7 +151,7 @@ Update all 17 wiki pages to reflect the current project state.
 | Home.md | Add Dashboard Engine v2, WebBridge, NumberWidget, new widget types |
 | Installation.md | Verify requirements still accurate |
 | Getting-Started.md | Ensure examples use current API |
-| API-Reference: FastPlot.md | Verify method signatures match current code |
+| API-Reference: FastSense.md | Verify method signatures match current code |
 | API-Reference: Dashboard.md | Add DashboardEngine, DashboardBuilder, new widgets (Gauge, Number, Status, Table, Text, RawAxes, EventTimeline) |
 | API-Reference: Sensors.md | Add SensorRegistry, verify ThresholdRule API |
 | API-Reference: Event-Detection.md | Add IncrementalEventDetector, DataSourceMap, NotificationRule updates |

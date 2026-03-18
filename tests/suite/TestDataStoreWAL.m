@@ -8,7 +8,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
     methods (Test)
         function testEnableWAL(testCase)
             x = 1:1000; y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
             ds.enableWAL();
             ds.ensureOpen();
@@ -17,7 +17,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
         end
         function testDisableWAL(testCase)
             x = 1:1000; y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
             ds.enableWAL();
             ds.disableWAL();
@@ -27,7 +27,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
         end
         function testDataAccessAfterWAL(testCase)
             x = 1:1000; y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
             ds.enableWAL();
             [xOut, yOut] = ds.getRange(1, 1000);

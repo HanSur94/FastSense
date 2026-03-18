@@ -3,7 +3,7 @@ function test_linked_axes()
 %   Requires PostSet listeners (MATLAB only, skipped on Octave).
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')
         fprintf('    SKIPPED: Octave lacks PostSet listeners for axes properties.\n');
@@ -15,11 +15,11 @@ function test_linked_axes()
     ax1 = subplot(2,1,1, 'Parent', fig);
     ax2 = subplot(2,1,2, 'Parent', fig);
 
-    fp1 = FastPlot('Parent', ax1, 'LinkGroup', 'testgroup');
+    fp1 = FastSense('Parent', ax1, 'LinkGroup', 'testgroup');
     fp1.addLine(1:1000, rand(1,1000));
     fp1.render();
 
-    fp2 = FastPlot('Parent', ax2, 'LinkGroup', 'testgroup');
+    fp2 = FastSense('Parent', ax2, 'LinkGroup', 'testgroup');
     fp2.addLine(1:1000, rand(1,1000));
     fp2.render();
 
@@ -40,11 +40,11 @@ function test_linked_axes()
     ax1 = subplot(2,1,1, 'Parent', fig);
     ax2 = subplot(2,1,2, 'Parent', fig);
 
-    fp1 = FastPlot('Parent', ax1);
+    fp1 = FastSense('Parent', ax1);
     fp1.addLine(1:1000, rand(1,1000));
     fp1.render();
 
-    fp2 = FastPlot('Parent', ax2);
+    fp2 = FastSense('Parent', ax2);
     fp2.addLine(1:1000, rand(1,1000));
     fp2.render();
 

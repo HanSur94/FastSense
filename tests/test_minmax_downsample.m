@@ -2,7 +2,7 @@ function test_minmax_downsample()
 %TEST_MINMAX_DOWNSAMPLE Tests for minmax_downsample private function.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testBasicReduction: 10 buckets -> 20 output points
     x = 1:100;

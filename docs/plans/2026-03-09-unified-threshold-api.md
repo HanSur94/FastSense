@@ -6,15 +6,15 @@
 
 **Architecture:** Extend `addThreshold` to accept X/Y arrays (time-varying step functions) in addition to scalar values. Add `compute_violations_dynamic` for comparing data against interpolated thresholds. Rewrite `addSensor` to use `addThreshold` exclusively. Remove `addThresholdConnectors` (step transitions become native).
 
-**Tech Stack:** MATLAB/Octave, existing FastPlot private function pattern, `interp1(..., 'previous')` for step-function lookup.
+**Tech Stack:** MATLAB/Octave, existing FastSense private function pattern, `interp1(..., 'previous')` for step-function lookup.
 
 ---
 
 ### Task 1: Extend Thresholds struct and `addThreshold` to accept X/Y arrays
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:90-93` (Thresholds struct definition)
-- Modify: `libs/FastPlot/FastPlot.m:395-425` (addThreshold method)
+- Modify: `libs/FastSense/FastSense.m:90-93` (Thresholds struct definition)
+- Modify: `libs/FastSense/FastSense.m:395-425` (addThreshold method)
 - Test: `tests/test_add_threshold.m`
 
 **Step 1: Write the failing test**
@@ -23,7 +23,7 @@ Add to `tests/test_add_threshold.m` before the final fprintf:
 
 ```matlab
     % testTimeVaryingThreshold
-    fp = FastPlot();
+    fp = FastSense();
     thX = [0 10 20 30];
     thY = [5.0 5.0 7.0 7.0];
     fp.addThreshold(thX, thY, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'StepTh');
@@ -35,7 +35,7 @@ Add to `tests/test_add_threshold.m` before the final fprintf:
     assert(fp.Thresholds(1).ShowViolations == true, 'testTimeVarying: ShowViolations');
 
     % testMixedThresholds — scalar and time-varying coexist
-    fp = FastPlot();
+    fp = FastSense();
     fp.addThreshold(4.5);
     fp.addThreshold([0 10], [3.0 5.0], 'Direction', 'lower');
     assert(numel(fp.Thresholds) == 2, 'testMixed: count');
@@ -52,7 +52,7 @@ Expected: FAIL — addThreshold doesn't accept 3+ positional args.
 
 **Step 3: Implement the changes**
 
-In `libs/FastPlot/FastPlot.m`, modify the Thresholds struct definition (line 90-93) to add X and Y fields:
+In `libs/FastSense/FastSense.m`, modify the Thresholds struct definition (line 90-93) to add X and Y fields:
 
 ```matlab
         Thresholds = struct('Value', {}, 'X', {}, 'Y', {}, ...
@@ -72,7 +72,7 @@ Rewrite `addThreshold` (line 395-425) to detect scalar vs X/Y:
             %   fp.addThreshold(thX, thY, 'Direction', 'upper', 'ShowViolations', true)
 
             if obj.IsRendered
-                error('FastPlot:alreadyRendered', ...
+                error('FastSense:alreadyRendered', ...
                     'Cannot add thresholds after render() has been called.');
             end
 
@@ -141,7 +141,7 @@ feat: extend addThreshold to accept time-varying X/Y arrays
 ### Task 2: Create `compute_violations_dynamic` for time-varying thresholds
 
 **Files:**
-- Create: `libs/FastPlot/private/compute_violations_dynamic.m`
+- Create: `libs/FastSense/private/compute_violations_dynamic.m`
 - Create: `tests/test_compute_violations_dynamic.m`
 
 **Step 1: Write the failing test**
@@ -153,7 +153,7 @@ function test_compute_violations_dynamic()
 %TEST_COMPUTE_VIOLATIONS_DYNAMIC Tests for time-varying threshold violations.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testUpperStepFunction: threshold steps from 5 to 8 at x=10
     thX = [0 10 20];
@@ -235,7 +235,7 @@ Expected: FAIL — `compute_violations_dynamic` not found.
 
 **Step 3: Implement `compute_violations_dynamic.m`**
 
-Create `libs/FastPlot/private/compute_violations_dynamic.m`:
+Create `libs/FastSense/private/compute_violations_dynamic.m`:
 
 ```matlab
 function [xViol, yViol] = compute_violations_dynamic(x, y, thX, thY, direction)
@@ -252,7 +252,7 @@ function [xViol, yViol] = compute_violations_dynamic(x, y, thX, thY, direction)
 %     direction  — 'upper' (violation when y > threshold)
 %                   'lower' (violation when y < threshold)
 %
-%   See also compute_violations, FastPlot.addThreshold.
+%   See also compute_violations, FastSense.addThreshold.
 
     if isempty(x)
         xViol = zeros(1, 0);
@@ -296,7 +296,7 @@ feat: add compute_violations_dynamic for time-varying thresholds
 ### Task 3: Update threshold rendering for time-varying thresholds
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:770-834` (render method — threshold section)
+- Modify: `libs/FastSense/FastSense.m:770-834` (render method — threshold section)
 
 **Step 1: Modify threshold line rendering**
 
@@ -324,7 +324,7 @@ Replace the threshold line creation block (lines 774-785) with logic that handle
                         'LineWidth', 1.5, ...
                         'HandleVisibility', 'off');
                 end
-                udT.FastPlot = struct( ...
+                udT.FastSense = struct( ...
                     'Type', 'threshold', ...
                     'Name', T.Label, ...
                     'LineIndex', [], ...
@@ -391,7 +391,7 @@ feat: render time-varying thresholds and their violation markers
 ### Task 4: Update `updateViolations` for time-varying thresholds
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:1977-2015` (updateViolations method)
+- Modify: `libs/FastSense/FastSense.m:1977-2015` (updateViolations method)
 
 **Step 1: Modify updateViolations inner loop**
 
@@ -450,7 +450,7 @@ feat: updateViolations supports time-varying thresholds
 ### Task 5: Rewrite `addSensor` to use unified `addThreshold` path
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:344-393` (addSensor method)
+- Modify: `libs/FastSense/FastSense.m:344-393` (addSensor method)
 - Test: `tests/test_add_sensor.m`
 
 **Step 1: Update test expectations**
@@ -474,7 +474,7 @@ Update it to check Thresholds instead of Lines:
     s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
     s.resolve();
 
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s, 'ShowThresholds', true);
     assert(numel(fp.Lines) == 1, 'testWithThresholds: only data line');
     assert(numel(fp.Thresholds) >= 1, 'testWithThresholds: threshold(s) added');
@@ -485,7 +485,7 @@ Update it to check Thresholds instead of Lines:
 Also update `testAddSensorNoThresholds`:
 
 ```matlab
-    fp = FastPlot();
+    fp = FastSense();
     fp.addSensor(s, 'ShowThresholds', false);
     assert(numel(fp.Lines) == 1, 'testNoThresholds: only data line');
     assert(numel(fp.Thresholds) == 0, 'testNoThresholds: no thresholds');
@@ -543,7 +543,7 @@ feat: addSensor uses unified addThreshold path for time-varying thresholds
 ### Task 6: Clean up dead code
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:1438-1477` (remove addThresholdConnectors)
+- Modify: `libs/FastSense/FastSense.m:1438-1477` (remove addThresholdConnectors)
 
 **Step 1: Remove `addThresholdConnectors` method**
 

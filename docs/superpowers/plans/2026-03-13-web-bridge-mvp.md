@@ -29,7 +29,7 @@
 
 | File | Change |
 |------|--------|
-| `libs/FastPlot/FastPlotDataStore.m` | Add `enableWAL()` / `disableWAL()` methods |
+| `libs/FastSense/FastSenseDataStore.m` | Add `enableWAL()` / `disableWAL()` methods |
 | `setup.m` | Add `libs/WebBridge` to MATLAB path |
 | `tests/suite/TestDataStoreWAL.m` | Tests for WAL methods |
 
@@ -38,12 +38,12 @@
 | File | Responsibility |
 |------|---------------|
 | `bridge/python/pyproject.toml` | Package config, dependencies |
-| `bridge/python/fastplot_bridge/__init__.py` | Package init |
-| `bridge/python/fastplot_bridge/__main__.py` | CLI entry point |
-| `bridge/python/fastplot_bridge/blob_decoder.py` | mksqlite typed BLOB header parser |
-| `bridge/python/fastplot_bridge/sqlite_reader.py` | SQLite queries + BLOB decoding + downsampling |
-| `bridge/python/fastplot_bridge/tcp_client.py` | Async NDJSON-over-TCP client to MATLAB |
-| `bridge/python/fastplot_bridge/server.py` | FastAPI app: REST API + WebSocket + static files |
+| `bridge/python/fastsense_bridge/__init__.py` | Package init |
+| `bridge/python/fastsense_bridge/__main__.py` | CLI entry point |
+| `bridge/python/fastsense_bridge/blob_decoder.py` | mksqlite typed BLOB header parser |
+| `bridge/python/fastsense_bridge/sqlite_reader.py` | SQLite queries + BLOB decoding + downsampling |
+| `bridge/python/fastsense_bridge/tcp_client.py` | Async NDJSON-over-TCP client to MATLAB |
+| `bridge/python/fastsense_bridge/server.py` | FastAPI app: REST API + WebSocket + static files |
 | `bridge/python/tests/test_blob_decoder.py` | Unit tests for BLOB parser |
 | `bridge/python/tests/test_sqlite_reader.py` | Unit tests for SQLite reader |
 | `bridge/python/tests/test_tcp_client.py` | Unit tests for TCP client |
@@ -95,10 +95,10 @@ git commit -m "chore: add WebBridge to MATLAB path in setup.m"
 
 ---
 
-### Task 1: Add WAL Methods to FastPlotDataStore
+### Task 1: Add WAL Methods to FastSenseDataStore
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlotDataStore.m`
+- Modify: `libs/FastSense/FastSenseDataStore.m`
 - Test: `tests/suite/TestDataStoreWAL.m`
 
 - [ ] **Step 1: Write the failing test**
@@ -120,7 +120,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
             % Create a DataStore with some data
             x = 1:1000;
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
 
             % Enable WAL mode
@@ -135,7 +135,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
         function testDisableWAL(testCase)
             x = 1:1000;
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
 
             ds.enableWAL();
@@ -149,7 +149,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
         function testDataAccessAfterWAL(testCase)
             x = 1:1000;
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
 
             ds.enableWAL();
@@ -165,12 +165,12 @@ end
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestDataStoreWAL')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestDataStoreWAL')"`
 Expected: FAIL — `enableWAL` method not found
 
 - [ ] **Step 3: Implement enableWAL and disableWAL**
 
-Add to `libs/FastPlot/FastPlotDataStore.m` in the public methods block:
+Add to `libs/FastSense/FastSenseDataStore.m` in the public methods block:
 
 ```matlab
 function enableWAL(obj)
@@ -192,14 +192,14 @@ end
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestDataStoreWAL')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestDataStoreWAL')"`
 Expected: PASS (3/3 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add libs/FastPlot/FastPlotDataStore.m tests/suite/TestDataStoreWAL.m
-git commit -m "feat: add enableWAL/disableWAL to FastPlotDataStore for concurrent reads"
+git add libs/FastSense/FastSenseDataStore.m tests/suite/TestDataStoreWAL.m
+git commit -m "feat: add enableWAL/disableWAL to FastSenseDataStore for concurrent reads"
 ```
 
 ---
@@ -291,7 +291,7 @@ end
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestWebBridgeProtocol')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestWebBridgeProtocol')"`
 Expected: FAIL — WebBridgeProtocol not found
 
 - [ ] **Step 3: Create libs/WebBridge directory and implement WebBridgeProtocol**
@@ -358,7 +358,7 @@ end
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestWebBridgeProtocol')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestWebBridgeProtocol')"`
 Expected: PASS (7/7 tests)
 
 - [ ] **Step 5: Commit**
@@ -511,7 +511,7 @@ end
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestWebBridge')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestWebBridge')"`
 Expected: FAIL — WebBridge not found
 
 - [ ] **Step 3: Implement WebBridge.m**
@@ -694,7 +694,7 @@ classdef WebBridge < handle
             idx = 0;
             for i = 1:numel(obj.Dashboard.Widgets)
                 w = obj.Dashboard.Widgets{i};
-                if ~isa(w, 'FastPlotWidget'); continue; end
+                if ~isa(w, 'FastSenseWidget'); continue; end
                 idx = idx + 1;
                 if isprop(w, 'Sensor') && ~isempty(w.Sensor) && isprop(w.Sensor, 'Key')
                     sid = w.Sensor.Key;
@@ -779,7 +779,7 @@ classdef WebBridge < handle
             % Find the bridge script relative to this file
             bridgeDir = fullfile(fileparts(mfilename('fullpath')), ...
                 '..', '..', 'bridge', 'python');
-            cmd = sprintf('python -m fastplot_bridge --matlab-port %d', obj.TcpPort);
+            cmd = sprintf('python -m fastsense_bridge --matlab-port %d', obj.TcpPort);
             if ispc
                 fullCmd = sprintf('start /B %s', cmd);
             else
@@ -798,7 +798,7 @@ classdef WebBridge < handle
             end
             obj.stop();
             error('WebBridge:timeout', ...
-                'Bridge did not start within 10s. Check that fastplot-bridge is installed.');
+                'Bridge did not start within 10s. Check that fastsense-bridge is installed.');
         end
 
         function enableWALOnDataStores(obj)
@@ -822,7 +822,7 @@ classdef WebBridge < handle
             end
             for i = 1:numel(obj.Dashboard.Widgets)
                 w = obj.Dashboard.Widgets{i};
-                if ~isa(w, 'FastPlotWidget'); continue; end
+                if ~isa(w, 'FastSenseWidget'); continue; end
                 ds = [];
                 if isprop(w, 'DataStore') && ~isempty(w.DataStore)
                     ds = w.DataStore;
@@ -841,7 +841,7 @@ end
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestWebBridge')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestWebBridge')"`
 Expected: PASS (7/7 tests)
 
 - [ ] **Step 5: Commit**
@@ -859,21 +859,21 @@ git commit -m "feat: add WebBridge class with TCP server, action registry, and l
 
 **Files:**
 - Create: `bridge/python/pyproject.toml`
-- Create: `bridge/python/fastplot_bridge/__init__.py`
-- Create: `bridge/python/fastplot_bridge/blob_decoder.py`
+- Create: `bridge/python/fastsense_bridge/__init__.py`
+- Create: `bridge/python/fastsense_bridge/blob_decoder.py`
 - Test: `bridge/python/tests/test_blob_decoder.py`
 
 - [ ] **Step 1: Create project structure**
 
 ```bash
-mkdir -p bridge/python/fastplot_bridge bridge/python/tests
+mkdir -p bridge/python/fastsense_bridge bridge/python/tests
 ```
 
 Create `bridge/python/pyproject.toml`:
 
 ```toml
 [project]
-name = "fastplot-bridge"
+name = "fastsense-bridge"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -888,16 +888,16 @@ dependencies = [
 dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "httpx>=0.25"]
 
 [project.scripts]
-fastplot-bridge = "fastplot_bridge.__main__:main"
+fastsense-bridge = "fastsense_bridge.__main__:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 ```
 
-Create `bridge/python/fastplot_bridge/__init__.py`:
+Create `bridge/python/fastsense_bridge/__init__.py`:
 
 ```python
-"""FastPlot Bridge — serves MATLAB dashboard data via REST/WebSocket."""
+"""FastSense Bridge — serves MATLAB dashboard data via REST/WebSocket."""
 ```
 
 - [ ] **Step 2: Write the failing test for blob_decoder**
@@ -908,7 +908,7 @@ Create `bridge/python/tests/test_blob_decoder.py`:
 import struct
 import numpy as np
 import pytest
-from fastplot_bridge.blob_decoder import decode_typed_blob, MKSQ_MAGIC
+from fastsense_bridge.blob_decoder import decode_typed_blob, MKSQ_MAGIC
 
 MX_DOUBLE = 6
 MX_SINGLE = 7
@@ -972,12 +972,12 @@ class TestBlobDecoder:
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pip install -e ".[dev]" && pytest tests/test_blob_decoder.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pip install -e ".[dev]" && pytest tests/test_blob_decoder.py -v`
 Expected: FAIL — module not found
 
 - [ ] **Step 4: Implement blob_decoder.py**
 
-Create `bridge/python/fastplot_bridge/blob_decoder.py`:
+Create `bridge/python/fastsense_bridge/blob_decoder.py`:
 
 ```python
 """Decoder for mksqlite typed BLOB format (24-byte header + raw data)."""
@@ -1047,7 +1047,7 @@ def decode_typed_blob(data: bytes | memoryview) -> np.ndarray | str | list:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_blob_decoder.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_blob_decoder.py -v`
 Expected: PASS (8/8 tests)
 
 - [ ] **Step 6: Commit**
@@ -1062,7 +1062,7 @@ git commit -m "feat: add Python bridge project setup and mksqlite BLOB decoder"
 ### Task 5: Python SQLite Reader
 
 **Files:**
-- Create: `bridge/python/fastplot_bridge/sqlite_reader.py`
+- Create: `bridge/python/fastsense_bridge/sqlite_reader.py`
 - Test: `bridge/python/tests/test_sqlite_reader.py`
 
 **Dependencies:** Task 4 (blob_decoder)
@@ -1078,8 +1078,8 @@ import tempfile
 import numpy as np
 import pytest
 from pathlib import Path
-from fastplot_bridge.blob_decoder import MKSQ_MAGIC
-from fastplot_bridge.sqlite_reader import SqliteReader
+from fastsense_bridge.blob_decoder import MKSQ_MAGIC
+from fastsense_bridge.sqlite_reader import SqliteReader
 
 
 def _make_double_blob(values: list[float]) -> bytes:
@@ -1090,7 +1090,7 @@ def _make_double_blob(values: list[float]) -> bytes:
 
 @pytest.fixture
 def sample_db(tmp_path) -> Path:
-    """Create a minimal .fpdb file matching FastPlotDataStore schema."""
+    """Create a minimal .fpdb file matching FastSenseDataStore schema."""
     db_path = tmp_path / "test.fpdb"
     conn = sqlite3.connect(str(db_path))
 
@@ -1178,15 +1178,15 @@ class TestSqliteReader:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_sqlite_reader.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_sqlite_reader.py -v`
 Expected: FAIL — SqliteReader not found
 
 - [ ] **Step 3: Implement sqlite_reader.py**
 
-Create `bridge/python/fastplot_bridge/sqlite_reader.py`:
+Create `bridge/python/fastsense_bridge/sqlite_reader.py`:
 
 ```python
-"""Read FastPlotDataStore SQLite files and decode typed BLOBs."""
+"""Read FastSenseDataStore SQLite files and decode typed BLOBs."""
 
 import sqlite3
 import numpy as np
@@ -1194,7 +1194,7 @@ from .blob_decoder import decode_typed_blob
 
 
 class SqliteReader:
-    """Synchronous reader for .fpdb files created by FastPlotDataStore."""
+    """Synchronous reader for .fpdb files created by FastSenseDataStore."""
 
     def __init__(self, db_path: str):
         self._conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
@@ -1352,13 +1352,13 @@ def _minmax_downsample(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_sqlite_reader.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_sqlite_reader.py -v`
 Expected: PASS (5/5 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add bridge/python/fastplot_bridge/sqlite_reader.py bridge/python/tests/test_sqlite_reader.py
+git add bridge/python/fastsense_bridge/sqlite_reader.py bridge/python/tests/test_sqlite_reader.py
 git commit -m "feat: add SQLite reader with BLOB decoding and minmax downsampling"
 ```
 
@@ -1367,7 +1367,7 @@ git commit -m "feat: add SQLite reader with BLOB decoding and minmax downsamplin
 ### Task 6: Python TCP Client
 
 **Files:**
-- Create: `bridge/python/fastplot_bridge/tcp_client.py`
+- Create: `bridge/python/fastsense_bridge/tcp_client.py`
 - Test: `bridge/python/tests/test_tcp_client.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -1379,7 +1379,7 @@ import asyncio
 import json
 import pytest
 import pytest_asyncio
-from fastplot_bridge.tcp_client import MatlabTcpClient
+from fastsense_bridge.tcp_client import MatlabTcpClient
 
 
 @pytest_asyncio.fixture
@@ -1473,12 +1473,12 @@ class TestMatlabTcpClient:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_tcp_client.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_tcp_client.py -v`
 Expected: FAIL — MatlabTcpClient not found
 
 - [ ] **Step 3: Implement tcp_client.py**
 
-Create `bridge/python/fastplot_bridge/tcp_client.py`:
+Create `bridge/python/fastsense_bridge/tcp_client.py`:
 
 ```python
 """Async NDJSON-over-TCP client for connecting to MATLAB's WebBridge."""
@@ -1559,13 +1559,13 @@ class MatlabTcpClient:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_tcp_client.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_tcp_client.py -v`
 Expected: PASS (4/4 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add bridge/python/fastplot_bridge/tcp_client.py bridge/python/tests/test_tcp_client.py
+git add bridge/python/fastsense_bridge/tcp_client.py bridge/python/tests/test_tcp_client.py
 git commit -m "feat: add async NDJSON TCP client for MATLAB communication"
 ```
 
@@ -1574,8 +1574,8 @@ git commit -m "feat: add async NDJSON TCP client for MATLAB communication"
 ### Task 7: Python FastAPI Server
 
 **Files:**
-- Create: `bridge/python/fastplot_bridge/server.py`
-- Create: `bridge/python/fastplot_bridge/__main__.py`
+- Create: `bridge/python/fastsense_bridge/server.py`
+- Create: `bridge/python/fastsense_bridge/__main__.py`
 - Test: `bridge/python/tests/test_server.py`
 
 **Dependencies:** Task 5 (sqlite_reader), Task 6 (tcp_client)
@@ -1593,8 +1593,8 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
-from fastplot_bridge.blob_decoder import MKSQ_MAGIC
-from fastplot_bridge.server import create_app, AppState
+from fastsense_bridge.blob_decoder import MKSQ_MAGIC
+from fastsense_bridge.server import create_app, AppState
 
 
 def _make_double_blob(values: list[float]) -> bytes:
@@ -1709,12 +1709,12 @@ class TestServerAPI:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_server.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_server.py -v`
 Expected: FAIL — create_app / AppState not found
 
 - [ ] **Step 3: Implement server.py**
 
-Create `bridge/python/fastplot_bridge/server.py`:
+Create `bridge/python/fastsense_bridge/server.py`:
 
 ```python
 """FastAPI server: REST API + WebSocket + static file serving."""
@@ -1792,7 +1792,7 @@ class AppState:
 
 
 def create_app(state: AppState) -> FastAPI:
-    app = FastAPI(title="FastPlot Bridge")
+    app = FastAPI(title="FastSense Bridge")
 
     # --- REST API ---
 
@@ -1867,8 +1867,8 @@ def create_app(state: AppState) -> FastAPI:
 
     # --- Static files ---
 
-    # server.py is at bridge/python/fastplot_bridge/server.py
-    # Go up to bridge/python/fastplot_bridge → bridge/python → bridge, then /web
+    # server.py is at bridge/python/fastsense_bridge/server.py
+    # Go up to bridge/python/fastsense_bridge → bridge/python → bridge, then /web
     web_dir = Path(__file__).resolve().parent.parent.parent / "web"
     if web_dir.is_dir():
         @app.get("/")
@@ -1882,10 +1882,10 @@ def create_app(state: AppState) -> FastAPI:
 
 - [ ] **Step 4: Implement __main__.py**
 
-Create `bridge/python/fastplot_bridge/__main__.py`:
+Create `bridge/python/fastsense_bridge/__main__.py`:
 
 ```python
-"""CLI entry point for the FastPlot bridge server."""
+"""CLI entry point for the FastSense bridge server."""
 
 import argparse
 import asyncio
@@ -1927,7 +1927,7 @@ async def run(matlab_port: int, http_host: str, http_port: int):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FastPlot Bridge Server")
+    parser = argparse.ArgumentParser(description="FastSense Bridge Server")
     parser.add_argument("--matlab-port", type=int, required=True, help="MATLAB TCP port")
     parser.add_argument("--host", default="localhost", help="HTTP bind host")
     parser.add_argument("--port", type=int, default=8080, help="HTTP port")
@@ -1942,13 +1942,13 @@ if __name__ == "__main__":
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot/bridge/python && pytest tests/test_server.py -v`
+Run: `cd /Users/hannessuhr/FastSense/bridge/python && pytest tests/test_server.py -v`
 Expected: PASS (9/9 tests)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add bridge/python/fastplot_bridge/server.py bridge/python/fastplot_bridge/__main__.py bridge/python/tests/test_server.py
+git add bridge/python/fastsense_bridge/server.py bridge/python/fastsense_bridge/__main__.py bridge/python/tests/test_server.py
 git commit -m "feat: add FastAPI bridge server with REST API, WebSocket, and CLI entry point"
 ```
 
@@ -1979,13 +1979,13 @@ Create `bridge/web/index.html`:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastPlot Dashboard</title>
+    <title>FastSense Dashboard</title>
     <link rel="stylesheet" href="/static/vendor/uPlot.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <header id="header">
-        <h1 id="dashboard-title">FastPlot Dashboard</h1>
+        <h1 id="dashboard-title">FastSense Dashboard</h1>
         <div id="connection-status" class="status-connected">Connected</div>
     </header>
     <main id="dashboard-grid"></main>
@@ -2109,7 +2109,7 @@ Create `bridge/web/js/app.js`:
 
 ```javascript
 /**
- * FastPlot Bridge — Main entry point.
+ * FastSense Bridge — Main entry point.
  * Connects WebSocket, loads dashboard, handles live updates.
  */
 const App = (() => {
@@ -2126,7 +2126,7 @@ const App = (() => {
         try {
             const resp = await fetch('/api/dashboard');
             const config = await resp.json();
-            document.getElementById('dashboard-title').textContent = config.name || 'FastPlot Dashboard';
+            document.getElementById('dashboard-title').textContent = config.name || 'FastSense Dashboard';
             Dashboard.render(config);
         } catch (e) {
             showToast('Failed to load dashboard', 'error');
@@ -2219,7 +2219,7 @@ git commit -m "feat: add web frontend shell with HTML, CSS grid layout, and WebS
 - [ ] **Step 1: Download uPlot**
 
 ```bash
-cd /Users/hannessuhr/FastPlot/bridge/web/vendor
+cd /Users/hannessuhr/FastSense/bridge/web/vendor
 curl -L -o uPlot.min.js "https://unpkg.com/uplot@1.6.31/dist/uPlot.iife.min.js"
 curl -L -o uPlot.min.css "https://unpkg.com/uplot@1.6.31/dist/uPlot.min.css"
 ```
@@ -2349,7 +2349,7 @@ const Widgets = (() => {
     function render(widgetConfig, bodyEl) {
         const type = widgetConfig.type || '';
         switch (type) {
-            case 'fastplot': return renderFastPlot(widgetConfig, bodyEl);
+            case 'fastsense': return renderFastSense(widgetConfig, bodyEl);
             case 'kpi':      return renderKpi(widgetConfig, bodyEl);
             case 'status':   return renderStatus(widgetConfig, bodyEl);
             case 'table':    return renderTable(widgetConfig, bodyEl);
@@ -2361,7 +2361,7 @@ const Widgets = (() => {
         }
     }
 
-    function renderFastPlot(config, el) {
+    function renderFastSense(config, el) {
         // Determine signal ID from config source
         let signalId = '';
         if (config.source) {
@@ -2596,9 +2596,9 @@ git commit -m "feat: add action panel with button rendering and invocation"
 
 ## Chunk 4: Integration & Wiring
 
-### Task 12: Wire FastPlotWidget Signal IDs into Dashboard Config
+### Task 12: Wire FastSenseWidget Signal IDs into Dashboard Config
 
-The web frontend needs to know which signal ID maps to each FastPlotWidget. The `DashboardSerializer.widgetsToConfig` output must include this mapping.
+The web frontend needs to know which signal ID maps to each FastSenseWidget. The `DashboardSerializer.widgetsToConfig` output must include this mapping.
 
 **Files:**
 - Modify: `libs/WebBridge/WebBridge.m` (buildDashboardConfig method)
@@ -2621,7 +2621,7 @@ function config = buildDashboardConfig(obj)
     sigIdx = 0;
     for i = 1:numel(config.widgets)
         w = config.widgets{i};
-        if strcmp(w.type, 'fastplot') && sigIdx < numel(signals)
+        if strcmp(w.type, 'fastsense') && sigIdx < numel(signals)
             sigIdx = sigIdx + 1;
             config.widgets{i}.signalId = signals(sigIdx).id;
         end
@@ -2631,7 +2631,7 @@ end
 
 - [ ] **Step 2: Run existing WebBridge tests to verify no regressions**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestWebBridge')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestWebBridge')"`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
@@ -2658,7 +2658,7 @@ Create `tests/suite/TestWebBridgeE2E.m`:
 classdef TestWebBridgeE2E < matlab.unittest.TestCase
     %TESTWEBBRIDGEE2E End-to-end test: MATLAB WebBridge + Python bridge.
     %
-    %   Requires: Python 3.11+ with fastplot-bridge installed.
+    %   Requires: Python 3.11+ with fastsense-bridge installed.
     %   Skip if not available.
 
     methods (TestClassSetup)
@@ -2671,15 +2671,15 @@ classdef TestWebBridgeE2E < matlab.unittest.TestCase
     methods (Test)
         function testServeAndFetchData(testCase)
             % Skip if Python bridge not installed
-            [status, ~] = system('python -c "import fastplot_bridge"');
+            [status, ~] = system('python -c "import fastsense_bridge"');
             testCase.assumeTrue(status == 0, ...
-                'fastplot-bridge Python package not installed');
+                'fastsense-bridge Python package not installed');
 
             % Create a dashboard with one signal
             x = linspace(0, 100, 10000);
             y = sin(x);
             engine = DashboardEngine('E2E Test');
-            engine.addWidget('fastplot', 'Title', 'Sine Wave', ...
+            engine.addWidget('fastsense', 'Title', 'Sine Wave', ...
                 'XData', x, 'YData', y, 'Position', [1 1 6 3]);
 
             bridge = WebBridge(engine);
@@ -2710,7 +2710,7 @@ end
 
 - [ ] **Step 2: Run the E2E test (requires Python bridge installed)**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run_all_tests('TestWebBridgeE2E')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run_all_tests('TestWebBridgeE2E')"`
 Expected: PASS (or SKIP if Python not set up)
 
 - [ ] **Step 3: Commit**

@@ -4,9 +4,9 @@
 
 **Goal:** Build a live event detection pipeline that reads continuously-updated sensor data, detects threshold violations incrementally, stores events to a shared `.mat` file, and sends email notifications with event snapshot plots.
 
-**Architecture:** Monolithic orchestrator (`LiveEventPipeline`) owns a 15-second timer. Each cycle it reads new data via swappable `DataSource` objects, runs incremental detection with open-event carry-over, writes to an atomic `EventStore`, and triggers rule-based `NotificationService` with two FastPlot snapshot PNGs per event.
+**Architecture:** Monolithic orchestrator (`LiveEventPipeline`) owns a 15-second timer. Each cycle it reads new data via swappable `DataSource` objects, runs incremental detection with open-event carry-over, writes to an atomic `EventStore`, and triggers rule-based `NotificationService` with two FastSense snapshot PNGs per event.
 
-**Tech Stack:** MATLAB classes, `containers.Map`, MATLAB `timer`, `sendmail`, FastPlot for snapshot rendering.
+**Tech Stack:** MATLAB classes, `containers.Map`, MATLAB `timer`, `sendmail`, FastSense for snapshot rendering.
 
 **Test runner:** `cd tests && matlab -batch "run_all_tests"` or individual: `matlab -batch "test_data_source"`
 
@@ -1574,7 +1574,7 @@ function add_event_path()
     repoRoot = fileparts(thisDir);
     addpath(fullfile(repoRoot, 'libs', 'EventDetection'));
     addpath(fullfile(repoRoot, 'libs', 'SensorThreshold'));
-    addpath(fullfile(repoRoot, 'libs', 'FastPlot'));
+    addpath(fullfile(repoRoot, 'libs', 'FastSense'));
     setup();
 end
 
@@ -1654,7 +1654,7 @@ Expected: FAIL — `generateEventSnapshot` not found
 
 ```matlab
 function files = generateEventSnapshot(event, sensorData, varargin)
-    % generateEventSnapshot  Create two FastPlot PNG snapshots for an event.
+    % generateEventSnapshot  Create two FastSense PNG snapshots for an event.
     %
     %   files = generateEventSnapshot(event, sensorData, ...)
     %
@@ -1796,7 +1796,7 @@ function add_event_path()
     repoRoot = fileparts(thisDir);
     addpath(fullfile(repoRoot, 'libs', 'EventDetection'));
     addpath(fullfile(repoRoot, 'libs', 'SensorThreshold'));
-    addpath(fullfile(repoRoot, 'libs', 'FastPlot'));
+    addpath(fullfile(repoRoot, 'libs', 'FastSense'));
     setup();
 end
 
@@ -1910,7 +1910,7 @@ classdef NotificationService < handle
         SmtpPort        = 25
         SmtpUser        = ''
         SmtpPassword    = ''
-        FromAddress     = 'fastplot@noreply.com'
+        FromAddress     = 'fastsense@noreply.com'
         NotificationCount = 0
     end
 
@@ -1921,7 +1921,7 @@ classdef NotificationService < handle
             p.addParameter('DryRun', false, @islogical);
             p.addParameter('SnapshotDir', '', @ischar);
             p.addParameter('SmtpServer', '', @ischar);
-            p.addParameter('FromAddress', 'fastplot@noreply.com', @ischar);
+            p.addParameter('FromAddress', 'fastsense@noreply.com', @ischar);
             p.parse(varargin{:});
             obj.Enabled     = p.Results.Enabled;
             obj.DryRun      = p.Results.DryRun;
@@ -1929,7 +1929,7 @@ classdef NotificationService < handle
             obj.SmtpServer  = p.Results.SmtpServer;
             obj.FromAddress = p.Results.FromAddress;
             if isempty(obj.SnapshotDir)
-                obj.SnapshotDir = fullfile(tempdir, 'fastplot_snapshots');
+                obj.SnapshotDir = fullfile(tempdir, 'fastsense_snapshots');
             end
         end
 
@@ -2070,7 +2070,7 @@ function add_event_path()
     repoRoot = fileparts(thisDir);
     addpath(fullfile(repoRoot, 'libs', 'EventDetection'));
     addpath(fullfile(repoRoot, 'libs', 'SensorThreshold'));
-    addpath(fullfile(repoRoot, 'libs', 'FastPlot'));
+    addpath(fullfile(repoRoot, 'libs', 'FastSense'));
     setup();
 end
 
@@ -2447,7 +2447,7 @@ dsMap.add('vibration', MockDataSource( ...
     'SampleInterval', 3, 'Seed', 7));
 
 %% 3. Configure event store
-storeFile = fullfile(tempdir, 'fastplot_live_events.mat');
+storeFile = fullfile(tempdir, 'fastsense_live_events.mat');
 fprintf('Event store: %s\n', storeFile);
 
 %% 4. Create pipeline
@@ -2460,7 +2460,7 @@ pipeline = LiveEventPipeline(sensors, dsMap, ...
 notif = NotificationService('DryRun', true);
 notif.setDefaultRule(NotificationRule( ...
     'Recipients', {{'ops-team@company.com'}}, ...
-    'Subject', '[FastPlot] {sensor}: {threshold} violation', ...
+    'Subject', '[FastSense] {sensor}: {threshold} violation', ...
     'Message', 'Sensor {sensor} violated {threshold} ({direction}) from {startTime} to {endTime}. Peak: {peak}', ...
     'IncludeSnapshot', false));
 

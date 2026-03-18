@@ -1,4 +1,4 @@
-# FastPlot MEX Acceleration — Design Document
+# FastSense MEX Acceleration — Design Document
 
 **Date:** 2026-03-06
 **Status:** Approved
@@ -7,7 +7,7 @@
 
 ## 1. Goal
 
-Add C MEX implementations with SIMD intrinsics (AVX2 for x86_64, NEON for ARM64) for the three performance-critical functions in FastPlot. Existing pure-MATLAB implementations remain as automatic fallbacks.
+Add C MEX implementations with SIMD intrinsics (AVX2 for x86_64, NEON for ARM64) for the three performance-critical functions in FastSense. Existing pure-MATLAB implementations remain as automatic fallbacks.
 
 ---
 
@@ -28,7 +28,7 @@ Add C MEX implementations with SIMD intrinsics (AVX2 for x86_64, NEON for ARM64)
 ### File Layout
 
 ```
-FastPlot/
+FastSense/
 ├── private/
 │   ├── minmax_downsample.m      (modified: calls minmax_core_mex or minmax_core)
 │   ├── lttb_downsample.m        (modified: calls lttb_core_mex or lttb_core)
@@ -130,7 +130,7 @@ Provides unified macros for: load, store, min, max, fabs, multiply, subtract ope
 ## 8. What Does NOT Change
 
 - All existing `.m` files keep their pure-MATLAB fallback implementations
-- Public FastPlot API is unchanged
+- Public FastSense API is unchanged
 - Test suite passes with or without MEX compiled
 - Octave compatibility preserved for pure-MATLAB path
 - No new toolbox dependencies

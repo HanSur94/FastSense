@@ -164,10 +164,10 @@ A dedicated benchmark script compares old `resolve()` vs new at multiple data sc
 |------|--------|
 | `libs/SensorThreshold/ThresholdRule.m` | `ConditionFn` -> `Condition` (struct), add `matchesState()` |
 | `libs/SensorThreshold/Sensor.m` | Rewrite `resolve()` with segment algorithm + condition batching |
-| `libs/FastPlot/private/compute_violations_mex.c` | New: SIMD multi-threshold violation scan |
-| `libs/FastPlot/private/compute_violations_vec.m` | New: vectorized pure-MATLAB fallback |
-| `libs/FastPlot/private/compute_violations.m` | Keep for standalone FastPlot thresholds (no sensor) |
-| `libs/FastPlot/build_mex.m` | Add `compute_violations_mex` target |
+| `libs/FastSense/private/compute_violations_mex.c` | New: SIMD multi-threshold violation scan |
+| `libs/FastSense/private/compute_violations_vec.m` | New: vectorized pure-MATLAB fallback |
+| `libs/FastSense/private/compute_violations.m` | Keep for standalone FastSense thresholds (no sensor) |
+| `libs/FastSense/build_mex.m` | Add `compute_violations_mex` target |
 | `examples/*.m` | Update to new struct condition API |
 | `examples/benchmark_resolve.m` | New: before/after benchmark comparison |
 

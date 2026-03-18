@@ -1,4 +1,4 @@
-%% FastPlot Alarm Bands — Industrial sensor with 4 thresholds
+%% FastSense Alarm Bands — Industrial sensor with 4 thresholds
 % Demonstrates warning + alarm thresholds in both directions
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -17,7 +17,7 @@ y = base + noise + spikes;
 fprintf('Alarm Bands: %d points, 4 thresholds...\n', n);
 tic;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Process Variable', 'Color', [0.2 0.4 0.7]);
 
 % Alarm limits (red, dashed) — hard limits

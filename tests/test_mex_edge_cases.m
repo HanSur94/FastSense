@@ -3,7 +3,7 @@ function test_mex_edge_cases()
 %   Skips if MEX files are not compiled.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     has_bs  = (exist('binary_search_mex', 'file') == 3);
     has_mm  = (exist('minmax_core_mex', 'file') == 3);

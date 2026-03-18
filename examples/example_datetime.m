@@ -1,4 +1,4 @@
-%% FastPlot Datetime X-Axis Demo
+%% FastSense Datetime X-Axis Demo
 % Demonstrates auto-formatted date/time tick labels that adapt to zoom level.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -16,27 +16,27 @@ fprintf('Datetime example: %dM points (~579 days, 1-second resolution)...\n', n/
 
 %% Plot 1: With datetime X axis + toolbar
 tic;
-fp1 = FastPlot('Theme', 'light');
+fp1 = FastSense('Theme', 'light');
 fp1.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
 fp1.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp1.render();
 title(fp1.hAxes, 'With datenum + toolbar');
-tb1 = FastPlotToolbar(fp1);
+tb1 = FastSenseToolbar(fp1);
 fprintf('Datetime + toolbar rendered in %.3f seconds.\n', toc);
 
 %% Plot 2: Plain numeric X axis + toolbar
 tic;
-fp2 = FastPlot('Theme', 'light');
+fp2 = FastSense('Theme', 'light');
 fp2.addLine(x, y, 'DisplayName', 'Temperature');
 fp2.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp2.render();
 title(fp2.hAxes, 'Without datenum + toolbar');
-tb2 = FastPlotToolbar(fp2);
+tb2 = FastSenseToolbar(fp2);
 fprintf('Numeric + toolbar rendered in %.3f seconds.\n', toc);
 
 %% Plot 3: With datetime X axis, no toolbar
 tic;
-fp3 = FastPlot('Theme', 'light');
+fp3 = FastSense('Theme', 'light');
 fp3.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
 fp3.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp3.render();
@@ -45,7 +45,7 @@ fprintf('Datetime, no toolbar rendered in %.3f seconds.\n', toc);
 
 %% Plot 4: Plain numeric X axis, no toolbar
 tic;
-fp4 = FastPlot('Theme', 'light');
+fp4 = FastSense('Theme', 'light');
 fp4.addLine(x, y, 'DisplayName', 'Temperature');
 fp4.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
 fp4.render();

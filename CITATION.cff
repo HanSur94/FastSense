@@ -1,11 +1,11 @@
 cff-version: 1.2.0
-message: "If you use FastPlot in your research, please cite it as below."
-title: "FastPlot: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave"
+message: "If you use FastSense in your research, please cite it as below."
+title: "FastSense: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave"
 type: software
 authors:
   - family-names: Suhr
     given-names: Hannes
-repository-code: "https://github.com/HanSur94/FastPlot"
+repository-code: "https://github.com/HanSur94/FastSense"
 license: MIT
 keywords:
   - MATLAB

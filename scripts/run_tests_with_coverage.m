@@ -18,7 +18,7 @@ function run_tests_with_coverage()
 
     % Add code coverage for all library source files
     sourceFiles = {};
-    libDirs = {'FastPlot', 'SensorThreshold', 'EventDetection', 'Dashboard', 'WebBridge'};
+    libDirs = {'FastSense', 'SensorThreshold', 'EventDetection', 'Dashboard', 'WebBridge'};
     for i = 1:numel(libDirs)
         libPath = fullfile(repo_root, 'libs', libDirs{i});
         files = dir(fullfile(libPath, '*.m'));

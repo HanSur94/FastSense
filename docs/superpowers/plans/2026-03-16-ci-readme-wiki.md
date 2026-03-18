@@ -142,7 +142,7 @@ jobs:
       - name: Package release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DIRNAME="FastPlot-${VERSION}"
+          DIRNAME="FastSense-${VERSION}"
           mkdir -p "${DIRNAME}"
 
           # Copy release contents
@@ -173,8 +173,8 @@ jobs:
 
             Download the archive, extract it, and run `setup` in MATLAB/Octave to add libraries to path and compile MEX accelerators.
           files: |
-            FastPlot-${{ steps.version.outputs.VERSION }}.tar.gz
-            FastPlot-${{ steps.version.outputs.VERSION }}.zip
+            FastSense-${{ steps.version.outputs.VERSION }}.tar.gz
+            FastSense-${{ steps.version.outputs.VERSION }}.zip
 ```
 
 - [ ] **Step 2: Verify YAML syntax**
@@ -205,9 +205,9 @@ git commit -m "ci: add release pipeline with test gate and auto-packaging"
 Replace the entire `README.md` with a concise version. Key content:
 
 ```markdown
-# FastPlot
+# FastSense
 
-[![Tests](https://github.com/HanSur94/FastPlot/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastPlot/actions/workflows/tests.yml)
+[![Tests](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
 [![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org)
@@ -215,7 +215,7 @@ Replace the entire `README.md` with a concise version. Key content:
 Ultra-fast time series plotting for MATLAB and GNU Octave. Plot 100M+ data points with fluid zoom and pan — rendering only ~4,000 points at any zoom level.
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="FastPlot Dashboard" width="800">
+  <img src="docs/images/dashboard.png" alt="FastSense Dashboard" width="800">
 </p>
 
 ## Performance
@@ -253,7 +253,7 @@ setup;  % adds libraries to path + compiles MEX
 x = linspace(0, 100, 1e7);
 y = sin(x) + 0.1 * randn(size(x));
 
-fp = FastPlot('Theme', 'dark');
+fp = FastSense('Theme', 'dark');
 fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
 fp.render();
@@ -263,8 +263,8 @@ fp.render();
 ## Installation
 
 ```bash
-git clone https://github.com/HanSur94/FastPlot.git
-cd FastPlot
+git clone https://github.com/HanSur94/FastSense.git
+cd FastSense
 ```
 
 Then in MATLAB or Octave:
@@ -279,26 +279,26 @@ No toolbox dependencies. MEX compilation is optional — pure MATLAB fallbacks a
 
 ## Documentation
 
-Full documentation is available in the [Wiki](https://github.com/HanSur94/FastPlot/wiki):
+Full documentation is available in the [Wiki](https://github.com/HanSur94/FastSense/wiki):
 
-- [Getting Started](https://github.com/HanSur94/FastPlot/wiki/Getting-Started) — tutorial with examples
-- [API Reference: FastPlot](https://github.com/HanSur94/FastPlot/wiki/API-Reference:-FastPlot) — core plotting class
-- [API Reference: Dashboard](https://github.com/HanSur94/FastPlot/wiki/API-Reference:-Dashboard) — layouts, widgets, engine
-- [API Reference: Sensors](https://github.com/HanSur94/FastPlot/wiki/API-Reference:-Sensors) — sensor system
-- [API Reference: Event Detection](https://github.com/HanSur94/FastPlot/wiki/API-Reference:-Event-Detection) — event pipeline
-- [Architecture](https://github.com/HanSur94/FastPlot/wiki/Architecture) — render pipeline, data flow
-- [MEX Acceleration](https://github.com/HanSur94/FastPlot/wiki/MEX-Acceleration) — SIMD details
-- [Performance](https://github.com/HanSur94/FastPlot/wiki/Performance) — benchmarks
+- [Getting Started](https://github.com/HanSur94/FastSense/wiki/Getting-Started) — tutorial with examples
+- [API Reference: FastSense](https://github.com/HanSur94/FastSense/wiki/API-Reference:-FastSense) — core plotting class
+- [API Reference: Dashboard](https://github.com/HanSur94/FastSense/wiki/API-Reference:-Dashboard) — layouts, widgets, engine
+- [API Reference: Sensors](https://github.com/HanSur94/FastSense/wiki/API-Reference:-Sensors) — sensor system
+- [API Reference: Event Detection](https://github.com/HanSur94/FastSense/wiki/API-Reference:-Event-Detection) — event pipeline
+- [Architecture](https://github.com/HanSur94/FastSense/wiki/Architecture) — render pipeline, data flow
+- [MEX Acceleration](https://github.com/HanSur94/FastSense/wiki/MEX-Acceleration) — SIMD details
+- [Performance](https://github.com/HanSur94/FastSense/wiki/Performance) — benchmarks
 
 ## Examples
 
-See the [`examples/`](examples/) directory for 40+ runnable scripts covering basic plotting, dashboards, sensors, event detection, live mode, and disk-backed storage. A categorized guide is in the [wiki](https://github.com/HanSur94/FastPlot/wiki/Examples).
+See the [`examples/`](examples/) directory for 40+ runnable scripts covering basic plotting, dashboards, sensors, event detection, live mode, and disk-backed storage. A categorized guide is in the [wiki](https://github.com/HanSur94/FastSense/wiki/Examples).
 
 ## Libraries
 
 | Library | Path | Description |
 |---------|------|-------------|
-| FastPlot | `libs/FastPlot/` | Core plotting engine, layouts, toolbar, themes, disk storage |
+| FastSense | `libs/FastSense/` | Core plotting engine, layouts, toolbar, themes, disk storage |
 | SensorThreshold | `libs/SensorThreshold/` | Sensor containers, state channels, threshold rules |
 | EventDetection | `libs/EventDetection/` | Event detection, viewer, live pipeline, notifications |
 | Dashboard | `libs/Dashboard/` | Dashboard engine with widgets and JSON persistence |
@@ -306,17 +306,17 @@ See the [`examples/`](examples/) directory for 40+ runnable scripts covering bas
 
 ## Contributing
 
-Contributions are welcome! Please open an issue to discuss your idea before submitting a pull request. See the [wiki](https://github.com/HanSur94/FastPlot/wiki) for architecture details and API references.
+Contributions are welcome! Please open an issue to discuss your idea before submitting a pull request. See the [wiki](https://github.com/HanSur94/FastSense/wiki) for architecture details and API references.
 
 ## Citation
 
-If you use FastPlot in your research, please cite it:
+If you use FastSense in your research, please cite it:
 
 ```bibtex
-@software{fastplot,
+@software{fastsense,
   author = {Suhr, Hannes},
-  title = {FastPlot: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave},
-  url = {https://github.com/HanSur94/FastPlot},
+  title = {FastSense: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave},
+  url = {https://github.com/HanSur94/FastSense},
   license = {MIT}
 }
 ```
@@ -353,7 +353,7 @@ quick start, feature highlights, and links to detailed docs."
 
 Run:
 ```bash
-gh repo edit HanSur94/FastPlot \
+gh repo edit HanSur94/FastSense \
   --description "Ultra-fast time series plotting for MATLAB & Octave — 10M+ points at 200+ FPS with interactive zoom/pan"
 ```
 
@@ -361,7 +361,7 @@ gh repo edit HanSur94/FastPlot \
 
 Run:
 ```bash
-gh repo edit HanSur94/FastPlot \
+gh repo edit HanSur94/FastSense \
   --add-topic matlab \
   --add-topic octave \
   --add-topic plotting \
@@ -375,7 +375,7 @@ gh repo edit HanSur94/FastPlot \
 
 - [ ] **Step 3: Verify**
 
-Run: `gh repo view HanSur94/FastPlot --json description,repositoryTopics`
+Run: `gh repo view HanSur94/FastSense --json description,repositoryTopics`
 
 ---
 
@@ -390,7 +390,7 @@ The wiki lives in `wiki/` as a separate git repo. All edits are made to files in
 
 - [ ] **Step 1: Update the libraries table**
 
-Add the WebBridge row to the libraries table in `wiki/Home.md`. The current table lists 4 libraries (FastPlot, SensorThreshold, EventDetection, Dashboard) — add a 5th row:
+Add the WebBridge row to the libraries table in `wiki/Home.md`. The current table lists 4 libraries (FastSense, SensorThreshold, EventDetection, Dashboard) — add a 5th row:
 
 ```markdown
 | WebBridge | `libs/WebBridge/` | TCP server for web-based visualization |
@@ -437,7 +437,7 @@ Read the following files to extract current method signatures, properties, and c
 - `libs/Dashboard/TextWidget.m`
 - `libs/Dashboard/RawAxesWidget.m`
 - `libs/Dashboard/EventTimelineWidget.m`
-- `libs/Dashboard/FastPlotWidget.m`
+- `libs/Dashboard/FastSenseWidget.m`
 - `libs/Dashboard/DashboardLayout.m`
 - `libs/Dashboard/DashboardSerializer.m`
 - `libs/Dashboard/DashboardTheme.m`
@@ -532,11 +532,11 @@ cd wiki && git add -A && git commit -m "docs: add IncrementalEventDetector, Data
 - Modify: `wiki/Architecture.md`
 - Modify: `wiki/Examples.md`
 - Modify: `wiki/_Sidebar.md`
-- Verify (read-only): `wiki/Installation.md`, `wiki/Getting-Started.md`, `wiki/API-Reference:-FastPlot.md`, `wiki/API-Reference:-Themes.md`, `wiki/Live-Mode-Guide.md`, `wiki/Datetime-Guide.md`, `wiki/MEX-Acceleration.md`, `wiki/Performance.md`, `wiki/Use-Case:-Multi-Sensor-Shared-Threshold.md`
+- Verify (read-only): `wiki/Installation.md`, `wiki/Getting-Started.md`, `wiki/API-Reference:-FastSense.md`, `wiki/API-Reference:-Themes.md`, `wiki/Live-Mode-Guide.md`, `wiki/Datetime-Guide.md`, `wiki/MEX-Acceleration.md`, `wiki/Performance.md`, `wiki/Use-Case:-Multi-Sensor-Shared-Threshold.md`
 
 - [ ] **Step 1: Update Utilities API reference**
 
-Read `wiki/API-Reference:-Utilities.md` and `libs/FastPlot/ConsoleProgressBar.m`. Add documentation for hierarchical progress display features (nested bars, `addChild()`, etc.) if missing.
+Read `wiki/API-Reference:-Utilities.md` and `libs/FastSense/ConsoleProgressBar.m`. Add documentation for hierarchical progress display features (nested bars, `addChild()`, etc.) if missing.
 
 - [ ] **Step 2: Update Architecture page**
 
@@ -568,7 +568,7 @@ Add to `wiki/_Sidebar.md` under Guides:
 Read each of these pages and compare key details against current source code. Fix any discrepancies found:
 - `wiki/Installation.md` — verify requirements, setup steps
 - `wiki/Getting-Started.md` — verify example code runs
-- `wiki/API-Reference:-FastPlot.md` — verify method signatures
+- `wiki/API-Reference:-FastSense.md` — verify method signatures
 - `wiki/API-Reference:-Themes.md` — verify theme names and options
 - `wiki/Live-Mode-Guide.md` — verify live mode API
 - `wiki/Datetime-Guide.md` — verify datetime handling
@@ -601,7 +601,7 @@ Read:
 - [ ] **Step 2: Write the guide**
 
 Create `wiki/Dashboard-Engine-Guide.md` covering:
-- Overview of DashboardEngine vs FastPlotFigure (when to use which)
+- Overview of DashboardEngine vs FastSenseFigure (when to use which)
 - Building dashboards with DashboardBuilder (fluent API walkthrough)
 - Widget types and their options (with small code examples)
 - Saving and loading dashboards (JSON serialization)
@@ -646,9 +646,9 @@ Expected: A workflow run in progress or completed
 
 - [ ] **Step 3: Verify repo metadata**
 
-Run: `gh repo view HanSur94/FastPlot --json description,repositoryTopics`
+Run: `gh repo view HanSur94/FastSense --json description,repositoryTopics`
 Expected: Description and topics are set correctly
 
 - [ ] **Step 4: Verify README renders on GitHub**
 
-Open `https://github.com/HanSur94/FastPlot` and confirm the new README looks correct with badges, image, and formatting.
+Open `https://github.com/HanSur94/FastSense` and confirm the new README looks correct with badges, image, and formatting.

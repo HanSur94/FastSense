@@ -5,7 +5,7 @@ import struct
 import numpy as np
 import pytest
 
-from fastplot_bridge.blob_decoder import MKSQ_MAGIC, decode_typed_blob
+from fastsense_bridge.blob_decoder import MKSQ_MAGIC, decode_typed_blob
 
 MX_DOUBLE = 6
 MX_SINGLE = 7

@@ -1,43 +1,43 @@
 classdef TestDiskStorage < matlab.unittest.TestCase
-%TestDiskStorage Integration tests for FastPlot disk-backed storage.
-%   Tests that FastPlot correctly stores large datasets on disk via
-%   FastPlotDataStore and that render, zoom/pan, updateData, and cleanup
+%TestDiskStorage Integration tests for FastSense disk-backed storage.
+%   Tests that FastSense correctly stores large datasets on disk via
+%   FastSenseDataStore and that render, zoom/pan, updateData, and cleanup
 %   all work transparently with disk-backed lines.
 
     methods (TestClassSetup)
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testDefaultStorageMode(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10));
             testCase.verifyEqual(fp.StorageMode, 'auto', 'testDefaultStorageMode');
         end
 
         function testStorageModeConstructor(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             testCase.verifyEqual(fp.StorageMode, 'disk', 'testStorageModeConstructor');
         end
 
         function testMemoryLimitDefault(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10));
             testCase.verifyEqual(fp.MemoryLimit, 500e6, 'testMemoryLimitDefault');
         end
 
         function testMemoryLimitConstructor(testCase)
-            fp = FastPlot('MemoryLimit', 100e6);
+            fp = FastSense('MemoryLimit', 100e6);
             testCase.verifyEqual(fp.MemoryLimit, 100e6, 'testMemoryLimitConstructor');
         end
 
         function testAutoModeDiskTrigger(testCase)
             % data exceeding MemoryLimit goes to disk
-            fp = FastPlot('MemoryLimit', 1000);  % very low threshold: 1000 bytes
+            fp = FastSense('MemoryLimit', 1000);  % very low threshold: 1000 bytes
             n = 1000;  % 1000 points * 8 bytes * 2 = 16000 bytes > 1000
             x = linspace(0, 10, n);
             y = sin(x);
@@ -54,7 +54,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testAutoModeMemoryForSmall(testCase)
             % small data stays in memory
-            fp = FastPlot('MemoryLimit', 1e9);  % 1 GB threshold
+            fp = FastSense('MemoryLimit', 1e9);  % 1 GB threshold
             fp.addLine(1:100, rand(1, 100));
             testCase.verifyEmpty(fp.Lines(1).DataStore, ...
                 'testAutoModeMemoryForSmall: should NOT have DataStore');
@@ -64,7 +64,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testForceDiskMode(testCase)
             % StorageMode='disk' forces all data to disk
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             fp.addLine(1:50, rand(1, 50));
             testCase.verifyNotEmpty(fp.Lines(1).DataStore, ...
                 'testForceDiskMode: small data should still go to disk');
@@ -74,7 +74,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testForceMemoryMode(testCase)
             % StorageMode='memory' keeps all data in RAM
-            fp = FastPlot('StorageMode', 'memory', 'MemoryLimit', 100);
+            fp = FastSense('StorageMode', 'memory', 'MemoryLimit', 100);
             fp.addLine(1:10000, rand(1, 10000));
             testCase.verifyEmpty(fp.Lines(1).DataStore, ...
                 'testForceMemoryMode: should NOT use disk even if above limit');
@@ -82,7 +82,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testRenderDiskLine(testCase)
             % disk-backed line renders without error
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 20000;
             x = linspace(0, 100, n);
             y = sin(x);
@@ -102,7 +102,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testRenderMixedLines(testCase)
             % mix of memory and disk lines renders
-            fp = FastPlot('MemoryLimit', 1000);
+            fp = FastSense('MemoryLimit', 1000);
             fp.addLine(1:10, rand(1, 10), 'DisplayName', 'Small');      % memory
             fp.addLine(linspace(0,100,5000), rand(1,5000), 'DisplayName', 'Large'); % disk
             fp.render();
@@ -114,7 +114,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testZoomDiskLine(testCase)
             % zooming re-downsamples from disk correctly
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
@@ -136,7 +136,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testZoomDiskLineDataFidelity(testCase)
             % zoomed data preserves signal shape
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 100000;
             x = linspace(0, 100, n);
             y = x * 2;  % simple linear — easy to verify
@@ -158,7 +158,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testUpdateDataDisk(testCase)
             % updateData replaces disk-backed data
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             x = linspace(0, 10, 10000);
             y = sin(x);
             fp.addLine(x, y);
@@ -180,7 +180,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testThresholdsDiskLine(testCase)
             % violations render correctly on disk lines
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 10000;
             x = linspace(0, 100, n);
             y = sin(x);  % values between -1 and 1
@@ -193,8 +193,8 @@ classdef TestDiskStorage < matlab.unittest.TestCase
         end
 
         function testDeleteCleansDiskFiles(testCase)
-            % deleting FastPlot cleans up DataStore files
-            fp = FastPlot('StorageMode', 'disk');
+            % deleting FastSense cleans up DataStore files
+            fp = FastSense('StorageMode', 'disk');
             fp.addLine(1:5000, rand(1, 5000));
             ds = fp.Lines(1).DataStore;
             % Get the file path before deletion
@@ -212,7 +212,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testLineNumPoints(testCase)
             % works for both memory and disk lines
-            fp = FastPlot('MemoryLimit', 1000);
+            fp = FastSense('MemoryLimit', 1000);
             fp.addLine(1:50, rand(1, 50));             % memory
             fp.addLine(1:5000, rand(1, 5000));         % disk
             testCase.verifyEqual(fp.lineNumPoints(1), 50, 'testLineNumPoints: memory line');
@@ -221,7 +221,7 @@ classdef TestDiskStorage < matlab.unittest.TestCase
 
         function testLineXRange(testCase)
             % returns correct endpoints for both storage types
-            fp = FastPlot('MemoryLimit', 1000);
+            fp = FastSense('MemoryLimit', 1000);
             fp.addLine(5:100, rand(1, 96));            % memory
             fp.addLine(linspace(10,200,5000), rand(1,5000));  % disk
             [mn1, mx1] = fp.lineXRange(1);

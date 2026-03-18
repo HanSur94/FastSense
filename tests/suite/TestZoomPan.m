@@ -3,13 +3,13 @@ classdef TestZoomPan < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testZoomUpdatesPlottedData(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             n = 100000;
             x = linspace(0, 100, n);
             y = sin(x);
@@ -29,7 +29,7 @@ classdef TestZoomPan < matlab.unittest.TestCase
         end
 
         function testLazySkipsRedundantUpdate(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:1000, rand(1,1000));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -43,7 +43,7 @@ classdef TestZoomPan < matlab.unittest.TestCase
         end
 
         function testViolationsUpdateOnZoom(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             y = [zeros(1,500), ones(1,500)*10, zeros(1,500)];
             x = 1:1500;
             fp.addLine(x, y);

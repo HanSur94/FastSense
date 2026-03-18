@@ -1,4 +1,4 @@
-%EXAMPLE_SENSOR_THRESHOLD Demonstrates the Sensor/Threshold system with FastPlot.
+%EXAMPLE_SENSOR_THRESHOLD Demonstrates the Sensor/Threshold system with FastSense.
 %   Shows dynamic thresholds that change based on machine state.
 
 % Setup paths
@@ -36,8 +36,8 @@ s.addThresholdRule(struct('machine_state', 2), 45, ...
 % --- Precompute everything ---
 s.resolve();
 
-% --- Plot with FastPlot ---
-fp = FastPlot();
+% --- Plot with FastSense ---
+fp = FastSense();
 fp.addSensor(s, 'ShowThresholds', true);
 fp.render();
 title('Chamber Pressure with Dynamic Thresholds');

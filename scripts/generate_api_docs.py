@@ -640,16 +640,16 @@ def _escape_md_table(text: str) -> str:
 # Each page: (output filename, page title, library dir, class order)
 PAGES = [
     (
-        "API-Reference:-FastPlot.md",
-        "API Reference: FastPlot",
-        "FastPlot",
+        "API-Reference:-FastSense.md",
+        "API Reference: FastSense",
+        "FastSense",
         [
-            "FastPlot",
-            "FastPlotFigure",
-            "FastPlotDock",
-            "FastPlotToolbar",
-            "FastPlotTheme",
-            "FastPlotDataStore",
+            "FastSense",
+            "FastSenseFigure",
+            "FastSenseDock",
+            "FastSenseToolbar",
+            "FastSenseTheme",
+            "FastSenseDataStore",
             "NavigatorOverlay",
             "SensorDetailPlot",
         ],
@@ -662,7 +662,7 @@ PAGES = [
             "DashboardEngine",
             "DashboardBuilder",
             "DashboardWidget",
-            "FastPlotWidget",
+            "FastSenseWidget",
             "GaugeWidget",
             "NumberWidget",
             "StatusWidget",
@@ -705,7 +705,7 @@ PAGES = [
         "API-Reference:-Utilities.md",
         "API Reference: Utilities",
         None,  # special: pulls from multiple dirs
-        ["ConsoleProgressBar", "FastPlotDefaults"],
+        ["ConsoleProgressBar", "FastSenseDefaults"],
     ),
 ]
 
@@ -762,7 +762,7 @@ def generate_page(filename, title, classes_by_name, class_order):
 # ---------------------------------------------------------------------------
 
 def main():
-    print(f"FastPlot API Doc Generator")
+    print(f"FastSense API Doc Generator")
     print(f"Project root: {PROJECT_ROOT}")
     print(f"Libs dir:     {LIBS_DIR}")
     print(f"Wiki dir:     {WIKI_DIR}")
@@ -778,7 +778,7 @@ def main():
     all_classes = {}  # name -> MatlabClass
     lib_classes = {}  # lib_name -> {name: MatlabClass}
 
-    for lib_name in ["FastPlot", "Dashboard", "SensorThreshold", "EventDetection", "WebBridge"]:
+    for lib_name in ["FastSense", "Dashboard", "SensorThreshold", "EventDetection", "WebBridge"]:
         lib_dir = LIBS_DIR / lib_name
         print(f"[{lib_name}]")
         parsed = collect_classes(lib_dir)

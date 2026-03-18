@@ -13,7 +13,7 @@ function benchmark_datastore()
     matMaxSize = 50e6;
 
     fprintf('\n============================================================\n');
-    fprintf('  FastPlot DataStore Benchmark: .mat vs SQLite\n');
+    fprintf('  FastSense DataStore Benchmark: .mat vs SQLite\n');
     fprintf('============================================================\n\n');
 
     hasSqlite = (exist('mksqlite', 'file') == 3);
@@ -72,7 +72,7 @@ function benchmark_datastore()
 
         % --- DataStore create (SQLite or binary) ---
         tic;
-        ds = FastPlotDataStore(x, y);
+        ds = FastSenseDataStore(x, y);
         tDsCreate = toc;
 
         % Free source data immediately to reclaim memory
@@ -181,7 +181,7 @@ function benchmark_datastore()
         ce = min(c + chunkSz - 1, zoomN);
         y(c:ce) = y(c:ce) + 0.1 * randn(1, ce - c + 1);
     end
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     clear x y;
 
     % Simulate 20 zoom levels from full view down to 0.01% of data

@@ -1,5 +1,5 @@
 function profile_datastore()
-%PROFILE_DATASTORE Profile FastPlotDataStore and disk-backed rendering.
+%PROFILE_DATASTORE Profile FastSenseDataStore and disk-backed rendering.
 %   Uses MATLAB's profiler to identify bottlenecks in:
 %     1. DataStore creation (chunked write)
 %     2. Range queries (zoom simulation)
@@ -16,14 +16,14 @@ function profile_datastore()
     %% 1. Profile DataStore creation
     fprintf('\n=== Profiling DataStore creation (%dM pts) ===\n', n/1e6);
     profile on;
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     profile off;
     printTopFunctions('DataStore creation');
     ds.cleanup();
 
     %% 2. Profile range queries
     fprintf('\n=== Profiling 50 range queries ===\n');
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     profile on;
     for i = 1:50
         xCenter = rand * 800 + 100;
@@ -35,7 +35,7 @@ function profile_datastore()
 
     %% 3. Profile slice reads
     fprintf('\n=== Profiling 50 slice reads ===\n');
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     profile on;
     for i = 1:50
         startIdx = randi(n - 10000);
@@ -47,7 +47,7 @@ function profile_datastore()
 
     %% 4. Profile full render with disk-backed line
     fprintf('\n=== Profiling render (disk-backed, %dM pts) ===\n', n/1e6);
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     fp.addLine(x, y, 'DisplayName', 'Profile Test');
     profile on;
     fp.render();
@@ -69,7 +69,7 @@ function profile_datastore()
 
     %% 6. Profile render with memory-backed line (for comparison)
     fprintf('\n=== Profiling render (memory-backed, %dM pts) ===\n', n/1e6);
-    fp2 = FastPlot('StorageMode', 'memory');
+    fp2 = FastSense('StorageMode', 'memory');
     fp2.addLine(x, y, 'DisplayName', 'Memory Test');
     profile on;
     fp2.render();
@@ -89,7 +89,7 @@ function profile_datastore()
         y(c:ce) = y(c:ce) + 0.1 * randn(1, ce - c + 1);
     end
     profile on;
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     profile off;
     printTopFunctions('DataStore creation (50M)');
     clear x y;

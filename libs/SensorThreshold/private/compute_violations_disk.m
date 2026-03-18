@@ -8,7 +8,7 @@ function [batchViolX, batchViolY] = compute_violations_disk(ds, segLo, segHi, th
 %   single MEX call (direct SQLite + SIMD), eliminating MATLAB<->MEX overhead.
 %
 %   Inputs:
-%     ds              — FastPlotDataStore, disk-backed data source
+%     ds              — FastSenseDataStore, disk-backed data source
 %     segLo           — 1xS integer, start indices of active segments
 %     segHi           — 1xS integer, end indices of active segments
 %     thresholdValues — 1xT double, threshold value for each rule
@@ -18,7 +18,7 @@ function [batchViolX, batchViolY] = compute_violations_disk(ds, segLo, segHi, th
 %     batchViolX — 1xT cell array of violation X coordinates
 %     batchViolY — 1xT cell array of violation Y coordinates
 %
-%   See also compute_violations_batch, Sensor.resolve, FastPlotDataStore.
+%   See also compute_violations_batch, Sensor.resolve, FastSenseDataStore.
 
     persistent hasMex
     if isempty(hasMex)

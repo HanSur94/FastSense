@@ -4,22 +4,22 @@
 
 **Goal:** Add a toolbar toggle button that globally shows/hides all violation markers without changing per-threshold `ShowViolations` settings.
 
-**Architecture:** A `ViolationsVisible` property on `FastPlot` controls marker visibility. The toolbar gets a new `uitoggletool` with a `'violations'` icon. Toggling it calls `setViolationsVisible()` on each FastPlot instance, which sets `Visible` on all `hMarkers` handles and gates marker computation in `render()` and `updateViolations()`.
+**Architecture:** A `ViolationsVisible` property on `FastSense` controls marker visibility. The toolbar gets a new `uitoggletool` with a `'violations'` icon. Toggling it calls `setViolationsVisible()` on each FastSense instance, which sets `Visible` on all `hMarkers` handles and gates marker computation in `render()` and `updateViolations()`.
 
 **Tech Stack:** MATLAB (uitoggletool, graphics handle Visible property)
 
 ---
 
-### Task 1: Add `ViolationsVisible` property and `setViolationsVisible` method to FastPlot
+### Task 1: Add `ViolationsVisible` property and `setViolationsVisible` method to FastSense
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:64-81` (public properties)
-- Modify: `libs/FastPlot/FastPlot.m:828` (render gate)
-- Modify: `libs/FastPlot/FastPlot.m:1995` (updateViolations gate)
+- Modify: `libs/FastSense/FastSense.m:64-81` (public properties)
+- Modify: `libs/FastSense/FastSense.m:828` (render gate)
+- Modify: `libs/FastSense/FastSense.m:1995` (updateViolations gate)
 
 **Step 1: Add the `ViolationsVisible` property**
 
-In `libs/FastPlot/FastPlot.m`, in the public properties block (after line 80, `YScale`), add:
+In `libs/FastSense/FastSense.m`, in the public properties block (after line 80, `YScale`), add:
 
 ```matlab
         ViolationsVisible = true      % global toggle for violation markers
@@ -27,7 +27,7 @@ In `libs/FastPlot/FastPlot.m`, in the public properties block (after line 80, `Y
 
 **Step 2: Add the `setViolationsVisible` public method**
 
-In `libs/FastPlot/FastPlot.m`, add a new public method (in the public methods section, near other setter-style methods). Place it after the existing public methods like `addThreshold`, etc.:
+In `libs/FastSense/FastSense.m`, add a new public method (in the public methods section, near other setter-style methods). Place it after the existing public methods like `addThreshold`, etc.:
 
 ```matlab
         function setViolationsVisible(obj, on)
@@ -50,7 +50,7 @@ In `libs/FastPlot/FastPlot.m`, add a new public method (in the public methods se
 
 **Step 3: Gate violation marker creation in `render()`**
 
-In `libs/FastPlot/FastPlot.m:828`, change:
+In `libs/FastSense/FastSense.m:828`, change:
 
 ```matlab
                 if T.ShowViolations
@@ -64,7 +64,7 @@ to:
 
 **Step 4: Gate violation marker update in `updateViolations()`**
 
-In `libs/FastPlot/FastPlot.m:1984`, add an early return after the existing `ishandle` check. Before the existing dirty-flag block, insert:
+In `libs/FastSense/FastSense.m:1984`, add an early return after the existing `ishandle` check. Before the existing dirty-flag block, insert:
 
 ```matlab
             if ~obj.ViolationsVisible
@@ -83,28 +83,28 @@ So lines 1984+ become:
 
 **Step 5: Run existing tests to verify no regression**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run('tests/test_toolbar.m')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run('tests/test_toolbar.m')"`
 Expected: All 13 toolbar tests pass.
 
 **Step 6: Commit**
 
 ```bash
-git add libs/FastPlot/FastPlot.m
-git commit -m "feat: add ViolationsVisible property and setViolationsVisible method to FastPlot"
+git add libs/FastSense/FastSense.m
+git commit -m "feat: add ViolationsVisible property and setViolationsVisible method to FastSense"
 ```
 
 ---
 
-### Task 2: Add violations toggle button to FastPlotToolbar
+### Task 2: Add violations toggle button to FastSenseToolbar
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlotToolbar.m:48` (add handle property)
-- Modify: `libs/FastPlot/FastPlotToolbar.m:367-371` (createToolbar — insert before theme btn)
-- Modify: `libs/FastPlot/FastPlotToolbar.m:240-246` (rebind — sync state)
+- Modify: `libs/FastSense/FastSenseToolbar.m:48` (add handle property)
+- Modify: `libs/FastSense/FastSenseToolbar.m:367-371` (createToolbar — insert before theme btn)
+- Modify: `libs/FastSense/FastSenseToolbar.m:240-246` (rebind — sync state)
 
 **Step 1: Add the `hViolationsBtn` handle property**
 
-In `libs/FastPlot/FastPlotToolbar.m`, in the private properties block, after line 48 (`hThemeBtn`), add:
+In `libs/FastSense/FastSenseToolbar.m`, in the private properties block, after line 48 (`hThemeBtn`), add:
 
 ```matlab
         hViolationsBtn = []    % uitoggletool handle for violations toggle
@@ -112,11 +112,11 @@ In `libs/FastPlot/FastPlotToolbar.m`, in the private properties block, after lin
 
 **Step 2: Create the toggle button in `createToolbar()`**
 
-In `libs/FastPlot/FastPlotToolbar.m`, insert after the metadata button block (after line 366) and before the theme button (line 368):
+In `libs/FastSense/FastSenseToolbar.m`, insert after the metadata button block (after line 366) and before the theme button (line 368):
 
 ```matlab
             obj.hViolationsBtn = uitoggletool(obj.hToolbar, ...
-                'CData', FastPlotToolbar.makeIcon('violations'), ...
+                'CData', FastSenseToolbar.makeIcon('violations'), ...
                 'TooltipString', 'Toggle Violations', ...
                 'State', 'on', ...
                 'OnCallback',  @(s,e) obj.onViolationsOn(), ...
@@ -125,30 +125,30 @@ In `libs/FastPlot/FastPlotToolbar.m`, insert after the metadata button block (af
 
 **Step 3: Add the On/Off callback methods**
 
-In `libs/FastPlot/FastPlotToolbar.m`, in the private methods section (after the `onMetadataOff` method around line 392), add:
+In `libs/FastSense/FastSenseToolbar.m`, in the private methods section (after the `onMetadataOff` method around line 392), add:
 
 ```matlab
         function onViolationsOn(obj)
-            for i = 1:numel(obj.FastPlots)
-                obj.FastPlots{i}.setViolationsVisible(true);
+            for i = 1:numel(obj.FastSenses)
+                obj.FastSenses{i}.setViolationsVisible(true);
             end
         end
 
         function onViolationsOff(obj)
-            for i = 1:numel(obj.FastPlots)
-                obj.FastPlots{i}.setViolationsVisible(false);
+            for i = 1:numel(obj.FastSenses)
+                obj.FastSenses{i}.setViolationsVisible(false);
             end
         end
 ```
 
 **Step 4: Sync state in `rebind()`**
 
-In `libs/FastPlot/FastPlotToolbar.m`, after line 246 (`setappdata(obj.hFigure, 'FastPlotMetadataEnabled', obj.MetadataEnabled);`), add:
+In `libs/FastSense/FastSenseToolbar.m`, after line 246 (`setappdata(obj.hFigure, 'FastSenseMetadataEnabled', obj.MetadataEnabled);`), add:
 
 ```matlab
-            % Sync violations toggle to first FastPlot's state
-            if ~isempty(obj.FastPlots)
-                if obj.FastPlots{1}.ViolationsVisible
+            % Sync violations toggle to first FastSense's state
+            if ~isempty(obj.FastSenses)
+                if obj.FastSenses{1}.ViolationsVisible
                     set(obj.hViolationsBtn, 'State', 'on');
                 else
                     set(obj.hViolationsBtn, 'State', 'off');
@@ -159,7 +159,7 @@ In `libs/FastPlot/FastPlotToolbar.m`, after line 246 (`setappdata(obj.hFigure, '
 **Step 5: Commit**
 
 ```bash
-git add libs/FastPlot/FastPlotToolbar.m
+git add libs/FastSense/FastSenseToolbar.m
 git commit -m "feat: add violations toggle button to toolbar"
 ```
 
@@ -168,13 +168,13 @@ git commit -m "feat: add violations toggle button to toolbar"
 ### Task 3: Add violations icon to `makeIcon()`
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlotToolbar.m:1027` (add case before `end` of switch)
-- Modify: `libs/FastPlot/FastPlotToolbar.m:1033-1034` (add to initIcons list)
-- Modify: `libs/FastPlot/FastPlotToolbar.m:880-881` (update docstring)
+- Modify: `libs/FastSense/FastSenseToolbar.m:1027` (add case before `end` of switch)
+- Modify: `libs/FastSense/FastSenseToolbar.m:1033-1034` (add to initIcons list)
+- Modify: `libs/FastSense/FastSenseToolbar.m:880-881` (update docstring)
 
 **Step 1: Add the `'violations'` icon case**
 
-In `libs/FastPlot/FastPlotToolbar.m`, before the `end` of the switch block (line 1027), add a new case. The icon is a small exclamation mark in a triangle (warning style), drawn in orange/red:
+In `libs/FastSense/FastSenseToolbar.m`, before the `end` of the switch block (line 1027), add a new case. The icon is a small exclamation mark in a triangle (warning style), drawn in orange/red:
 
 ```matlab
                 case 'violations'
@@ -200,7 +200,7 @@ In `libs/FastPlot/FastPlotToolbar.m`, before the `end` of the switch block (line
 
 **Step 2: Add `'violations'` to initIcons list**
 
-In `libs/FastPlot/FastPlotToolbar.m:1033-1034`, change:
+In `libs/FastSense/FastSenseToolbar.m:1033-1034`, change:
 
 ```matlab
             names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', ...
@@ -216,7 +216,7 @@ to:
 
 **Step 3: Update makeIcon docstring**
 
-In `libs/FastPlot/FastPlotToolbar.m:880-881`, change:
+In `libs/FastSense/FastSenseToolbar.m:880-881`, change:
 
 ```matlab
             %   Available names: 'cursor', 'crosshair', 'grid', 'legend',
@@ -234,7 +234,7 @@ to:
 **Step 4: Commit**
 
 ```bash
-git add libs/FastPlot/FastPlotToolbar.m
+git add libs/FastSense/FastSenseToolbar.m
 git commit -m "feat: add violations icon to makeIcon()"
 ```
 
@@ -281,11 +281,11 @@ In `tests/test_toolbar.m`, before the final `fprintf` (line 149), add:
 
 ```matlab
     % testViolationsToggle
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100) * 10);
     fp.addThreshold(5, 'Direction', 'upper', 'ShowViolations', true);
     fp.render();
-    tb = FastPlotToolbar(fp);
+    tb = FastSenseToolbar(fp);
     % Violations should be visible initially
     assert(fp.ViolationsVisible, 'testViolationsToggle: default true');
     hM = fp.Thresholds(1).hMarkers;
@@ -316,7 +316,7 @@ to:
 
 **Step 5: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && matlab -batch "run('tests/test_toolbar.m')"`
+Run: `cd /Users/hannessuhr/FastSense && matlab -batch "run('tests/test_toolbar.m')"`
 Expected: All 14 toolbar tests pass.
 
 **Step 6: Commit**
@@ -331,11 +331,11 @@ git commit -m "test: add violations toggle test and update button count"
 ### Task 5: Update toolbar docstring
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlotToolbar.m:1-22` (classdef docstring)
+- Modify: `libs/FastSense/FastSenseToolbar.m:1-22` (classdef docstring)
 
 **Step 1: Add Violations to the button list in the docstring**
 
-In `libs/FastPlot/FastPlotToolbar.m`, after line 20 (`%     Metadata     — show/hide metadata in data cursor tooltips`), add:
+In `libs/FastSense/FastSenseToolbar.m`, after line 20 (`%     Metadata     — show/hide metadata in data cursor tooltips`), add:
 
 ```matlab
     %     Violations   — toggle violation marker visibility
@@ -344,6 +344,6 @@ In `libs/FastPlot/FastPlotToolbar.m`, after line 20 (`%     Metadata     — sho
 **Step 2: Commit**
 
 ```bash
-git add libs/FastPlot/FastPlotToolbar.m
+git add libs/FastSense/FastSenseToolbar.m
 git commit -m "docs: add violations button to toolbar docstring"
 ```

@@ -1,10 +1,10 @@
 function test_disk_advanced()
-%TEST_DISK_ADVANCED Advanced integration tests for FastPlot disk storage.
+%TEST_DISK_ADVANCED Advanced integration tests for FastSense disk storage.
 %   Covers: storage mode transitions, multiple disk lines, pyramid building,
 %   updateData edge cases, re-render after update, and stress scenarios.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')
         fprintf('    SKIPPED: requires MATLAB PostSet listeners.\n');
@@ -14,7 +14,7 @@ function test_disk_advanced()
     fprintf('  --- Advanced disk storage tests ---\n');
 
     % 1. Multiple disk lines in same figure
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     for i = 1:5
         x = linspace(0, 100, 10000);
         y = sin(x + i);
@@ -35,7 +35,7 @@ function test_disk_advanced()
     fprintf('    multiple disk lines: PASS\n');
 
     % 2. updateData: memory -> disk transition
-    fp = FastPlot('MemoryLimit', 10000);
+    fp = FastSense('MemoryLimit', 10000);
     fp.addLine(1:50, rand(1, 50));  % memory (800 bytes < 10000)
     fp.render();
     assert(isempty(fp.Lines(1).DataStore), 'memToDisk: starts in memory');
@@ -47,7 +47,7 @@ function test_disk_advanced()
     fprintf('    memory -> disk transition: PASS\n');
 
     % 3. updateData: disk -> memory transition
-    fp = FastPlot('MemoryLimit', 10000);
+    fp = FastSense('MemoryLimit', 10000);
     fp.addLine(linspace(0, 100, 5000), rand(1, 5000));  % disk
     fp.render();
     assert(~isempty(fp.Lines(1).DataStore), 'diskToMem: starts on disk');
@@ -68,7 +68,7 @@ function test_disk_advanced()
     fprintf('    disk -> memory transition: PASS\n');
 
     % 4. updateData preserves old DataStore cleanup
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     fp.addLine(1:5000, rand(1, 5000));
     fp.render();
     ds1 = fp.Lines(1).DataStore;
@@ -83,7 +83,7 @@ function test_disk_advanced()
     fprintf('    updateData cleans old DataStore: PASS\n');
 
     % 5. Render, update, re-render cycle
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     x = linspace(0, 100, 20000);
     fp.addLine(x, sin(x));
     fp.render();
@@ -98,7 +98,7 @@ function test_disk_advanced()
     fprintf('    render-update-rerender cycle: PASS\n');
 
     % 6. Zoom to very narrow range on disk line
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 100000;
     x = linspace(0, 1000, n);
     y = sin(x);
@@ -113,7 +113,7 @@ function test_disk_advanced()
     fprintf('    very narrow zoom on disk: PASS\n');
 
     % 7. Zoom out to full range after narrow zoom
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 50000;
     x = linspace(0, 100, n);
     y = sin(x);
@@ -133,7 +133,7 @@ function test_disk_advanced()
     fprintf('    zoom in then out: PASS\n');
 
     % 8. Mixed memory+disk lines render with correct data
-    fp = FastPlot('MemoryLimit', 1000);
+    fp = FastSense('MemoryLimit', 1000);
     x1 = 1:50; y1 = x1 * 2;       % memory
     x2 = linspace(0, 100, 5000); y2 = x2 * 3;  % disk
     fp.addLine(x1, y1, 'DisplayName', 'Mem');
@@ -151,7 +151,7 @@ function test_disk_advanced()
     fprintf('    mixed mem+disk data fidelity: PASS\n');
 
     % 9. Delete with multiple disk lines cleans all files
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     paths = {};
     for i = 1:3
         fp.addLine(1:5000, rand(1, 5000));
@@ -166,7 +166,7 @@ function test_disk_advanced()
     fprintf('    delete cleans all disk files: PASS\n');
 
     % 10. Disk line with NaN values renders without error
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 10000;
     x = linspace(0, 100, n);
     y = sin(x);
@@ -178,7 +178,7 @@ function test_disk_advanced()
     fprintf('    disk line with NaN gap: PASS\n');
 
     % 11. Threshold violations with disk line + NaN
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     x = linspace(0, 100, 10000);
     y = sin(x); y(500:600) = NaN;
     fp.addLine(x, y);
@@ -189,7 +189,7 @@ function test_disk_advanced()
     fprintf('    threshold on disk+NaN line: PASS\n');
 
     % 12. Threshold with lower direction on disk line
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     x = linspace(0, 100, 10000);
     y = sin(x);
     fp.addLine(x, y);
@@ -200,7 +200,7 @@ function test_disk_advanced()
     fprintf('    lower threshold on disk line: PASS\n');
 
     % 13. Multiple thresholds on disk line
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     x = linspace(0, 100, 20000);
     y = sin(x);
     fp.addLine(x, y);
@@ -213,7 +213,7 @@ function test_disk_advanced()
     fprintf('    multiple thresholds on disk: PASS\n');
 
     % 14. MemoryLimit boundary: exactly at threshold
-    fp = FastPlot('MemoryLimit', 1600);  % 100 points * 8 * 2 = 1600
+    fp = FastSense('MemoryLimit', 1600);  % 100 points * 8 * 2 = 1600
     fp.addLine(1:100, rand(1, 100));
     % 1600 bytes == 1600 limit → not strictly greater, stays in memory
     assert(isempty(fp.Lines(1).DataStore), 'boundary: at limit stays memory');
@@ -223,7 +223,7 @@ function test_disk_advanced()
     fprintf('    MemoryLimit exact boundary: PASS\n');
 
     % 15. Rapid sequential updateData calls
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     fp.addLine(1:5000, rand(1, 5000));
     fp.render();
     for i = 1:10

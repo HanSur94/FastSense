@@ -2,7 +2,7 @@
 
 ## Overview
 
-Third library (`libs/EventDetection/`) for FastPlot — detects events from threshold violations, groups consecutive violations into events with statistics, and supports configurable callbacks, debounce, UI viewer, console output, and live detection.
+Third library (`libs/EventDetection/`) for FastSense — detects events from threshold violations, groups consecutive violations into events with statistics, and supports configurable callbacks, debounce, UI viewer, console output, and live detection.
 
 ## Structure
 
@@ -102,7 +102,7 @@ Standalone MATLAB figure with two panels.
 - Columns: Start, End, Duration, Sensor, Threshold, Direction, Peak, NumPts, Min, Max, Mean, RMS, Std
 - Dropdown filter: sensor name
 - Dropdown filter: threshold label
-- Clicking a row → opens FastPlot showing that sensor's signal zoomed to the event time range
+- Clicking a row → opens FastSense showing that sensor's signal zoomed to the event time range
 
 ### Methods
 
@@ -174,6 +174,6 @@ events = detectEventsFromSensor(sensor, detector)
 
 ## Integration
 
-- No direct FastPlot dependency in core classes — `EventViewer` uses FastPlot for click-to-plot
+- No direct FastSense dependency in core classes — `EventViewer` uses FastSense for click-to-plot
 - No direct SensorThreshold dependency in core — `detectEventsFromSensor` and `EventConfig` bridge the two libraries
 - Path setup: root `setup.m` updated to add `libs/EventDetection/`

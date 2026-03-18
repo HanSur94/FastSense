@@ -54,11 +54,11 @@ fprintf('  Thresholds: %d, Violations: %d\n', ...
     numel(s.ResolvedThresholds), numel(s.ResolvedViolations));
 
 %% 3. Plot the disk-backed sensor
-% addSensor passes the DataStore directly to FastPlot — no copying.
+% addSensor passes the DataStore directly to FastSense — no copying.
 
 fprintf('\n=== 3. Plot disk-backed sensor ===\n');
 
-fp = FastPlot();
+fp = FastSense();
 fp.addSensor(s, 'ShowThresholds', true);
 tic;
 fp.render();
@@ -109,7 +109,7 @@ fprintf('  Columns: %s\n', strjoin(s3.DataStore.listColumns(), ', '));
 
 % Query a range
 slice = s3.DataStore.getColumnSlice('status', 1, 6);
-labels = FastPlotDataStore.toCategorical(slice);
+labels = FastSenseDataStore.toCategorical(slice);
 fprintf('  First 6 status labels: ');
 if iscell(labels)
     fprintf('%s\n', strjoin(labels, ', '));
@@ -118,7 +118,7 @@ else
 end
 
 % Plot it
-fp2 = FastPlot();
+fp2 = FastSense();
 fp2.addSensor(s3);
 tic;
 fp2.render();
@@ -145,7 +145,7 @@ for i = 1:4
     sensors{i} = si;
 end
 
-fpf = FastPlotGrid(2, 2);
+fpf = FastSenseGrid(2, 2);
 for i = 1:4
     fpf.tile(i).addSensor(sensors{i}, 'ShowThresholds', true);
 end

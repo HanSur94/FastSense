@@ -7,12 +7,12 @@ classdef TestWebBridgeE2E < matlab.unittest.TestCase
     end
     methods (Test)
         function testServeAndFetchData(testCase)
-            [status, ~] = system('python -c "import fastplot_bridge"');
-            testCase.assumeTrue(status == 0, 'fastplot-bridge Python package not installed');
+            [status, ~] = system('python -c "import fastsense_bridge"');
+            testCase.assumeTrue(status == 0, 'fastsense-bridge Python package not installed');
             x = linspace(0, 100, 10000);
             y = sin(x);
             engine = DashboardEngine('E2E Test');
-            engine.addWidget('fastplot', 'Title', 'Sine Wave', 'XData', x, 'YData', y, 'Position', [1 1 6 3]);
+            engine.addWidget('fastsense', 'Title', 'Sine Wave', 'XData', x, 'YData', y, 'Position', [1 1 6 3]);
             bridge = WebBridge(engine);
             testCase.addTeardown(@() bridge.stop());
             bridge.serve();

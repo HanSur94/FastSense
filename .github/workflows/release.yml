@@ -51,7 +51,7 @@ jobs:
       - name: Package release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DIRNAME="FastPlot-${VERSION}"
+          DIRNAME="FastSense-${VERSION}"
           mkdir -p "${DIRNAME}"
 
           # Copy release contents (allowlist — excludes tests/, benchmarks/, docs/, bridge/, private/, .git/)
@@ -82,5 +82,5 @@ jobs:
 
             Download the archive, extract it, and run `setup` in MATLAB/Octave to add libraries to path and compile MEX accelerators.
           files: |
-            FastPlot-${{ steps.version.outputs.VERSION }}.tar.gz
-            FastPlot-${{ steps.version.outputs.VERSION }}.zip
+            FastSense-${{ steps.version.outputs.VERSION }}.tar.gz
+            FastSense-${{ steps.version.outputs.VERSION }}.zip

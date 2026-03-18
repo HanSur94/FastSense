@@ -46,8 +46,8 @@ for i = 1:numel(sensors)
     fprintf('  [%d] key="%s", name="%s"\n', i, sensors{i}.Key, sensors{i}.Name);
 end
 
-% --- Plot the pressure sensor with FastPlot ---
-fp = FastPlot();
+% --- Plot the pressure sensor with FastSense ---
+fp = FastSense();
 fp.addSensor(s, 'ShowThresholds', true);
 fp.render();
 title(sprintf('%s (from SensorRegistry)', s.Name));

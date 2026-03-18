@@ -5,7 +5,7 @@ classdef DashboardWidget < handle
 %     render(parentPanel) — create graphics objects inside the panel
 %     refresh()           — update data/display (called by live timer)
 %     configure()         — open properties UI for edit mode
-%     getType()           — return widget type string (e.g. 'fastplot')
+%     getType()           — return widget type string (e.g. 'fastsense')
 %
 %   Subclasses must also provide a static fromStruct(s) method.
 

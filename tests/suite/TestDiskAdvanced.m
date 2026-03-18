@@ -1,5 +1,5 @@
 classdef TestDiskAdvanced < matlab.unittest.TestCase
-%TestDiskAdvanced Advanced integration tests for FastPlot disk storage.
+%TestDiskAdvanced Advanced integration tests for FastSense disk storage.
 %   Covers: storage mode transitions, multiple disk lines, pyramid building,
 %   updateData edge cases, re-render after update, and stress scenarios.
 
@@ -7,13 +7,13 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testMultipleDiskLines(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             for i = 1:5
                 x = linspace(0, 100, 10000);
                 y = sin(x + i);
@@ -34,7 +34,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testMemoryToDiskTransition(testCase)
-            fp = FastPlot('MemoryLimit', 10000);
+            fp = FastSense('MemoryLimit', 10000);
             fp.addLine(1:50, rand(1, 50));  % memory (800 bytes < 10000)
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -46,7 +46,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testDiskToMemoryTransition(testCase)
-            fp = FastPlot('MemoryLimit', 10000);
+            fp = FastSense('MemoryLimit', 10000);
             fp.addLine(linspace(0, 100, 5000), rand(1, 5000));  % disk
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -67,7 +67,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testUpdateDataPreservesCleanup(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             fp.addLine(1:5000, rand(1, 5000));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -82,7 +82,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testRenderUpdateReRenderCycle(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             x = linspace(0, 100, 20000);
             fp.addLine(x, sin(x));
             fp.render();
@@ -97,7 +97,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testVeryNarrowZoomOnDisk(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 100000;
             x = linspace(0, 1000, n);
             y = sin(x);
@@ -112,7 +112,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testZoomInThenOut(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 50000;
             x = linspace(0, 100, n);
             y = sin(x);
@@ -132,7 +132,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testMixedMemDiskDataFidelity(testCase)
-            fp = FastPlot('MemoryLimit', 1000);
+            fp = FastSense('MemoryLimit', 1000);
             x1 = 1:50; y1 = x1 * 2;       % memory
             x2 = linspace(0, 100, 5000); y2 = x2 * 3;  % disk
             fp.addLine(x1, y1, 'DisplayName', 'Mem');
@@ -150,7 +150,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testDeleteCleansAllDiskFiles(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             paths = {};
             for i = 1:3
                 fp.addLine(1:5000, rand(1, 5000));
@@ -165,7 +165,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testDiskLineWithNaN(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             n = 10000;
             x = linspace(0, 100, n);
             y = sin(x);
@@ -177,7 +177,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testThresholdDiskLineWithNaN(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             x = linspace(0, 100, 10000);
             y = sin(x); y(500:600) = NaN;
             fp.addLine(x, y);
@@ -188,7 +188,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testLowerThresholdOnDiskLine(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             x = linspace(0, 100, 10000);
             y = sin(x);
             fp.addLine(x, y);
@@ -199,7 +199,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testMultipleThresholdsOnDiskLine(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             x = linspace(0, 100, 20000);
             y = sin(x);
             fp.addLine(x, y);
@@ -212,7 +212,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testMemoryLimitExactBoundary(testCase)
-            fp = FastPlot('MemoryLimit', 1600);  % 100 points * 8 * 2 = 1600
+            fp = FastSense('MemoryLimit', 1600);  % 100 points * 8 * 2 = 1600
             fp.addLine(1:100, rand(1, 100));
             % 1600 bytes == 1600 limit -> not strictly greater, stays in memory
             testCase.verifyEmpty(fp.Lines(1).DataStore, 'boundary: at limit stays memory');
@@ -222,7 +222,7 @@ classdef TestDiskAdvanced < matlab.unittest.TestCase
         end
 
         function testRapidSequentialUpdates(testCase)
-            fp = FastPlot('StorageMode', 'disk');
+            fp = FastSense('StorageMode', 'disk');
             fp.addLine(1:5000, rand(1, 5000));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);

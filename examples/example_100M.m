@@ -1,4 +1,4 @@
-%% FastPlot Stress Test — 100M points
+%% FastSense Stress Test — 100M points
 % Demonstrates performance at maximum scale
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -14,11 +14,11 @@ fprintf('Data generated in %.1f seconds.\n', toc);
 fprintf('Rendering...\n');
 tic;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', '100M Random Walk', 'Color', [0 0.4 0.8]);
 fp.addThreshold(3, 'Direction', 'upper', 'ShowViolations', true);
 fp.addThreshold(-3, 'Direction', 'lower', 'ShowViolations', true);
 fp.render();
 
 fprintf('Rendered in %.3f seconds. Zoom in to see detail!\n', toc);
-title(fp.hAxes, 'FastPlot — 100M Points Stress Test');
+title(fp.hAxes, 'FastSense — 100M Points Stress Test');

@@ -436,7 +436,7 @@ function testPaletteButtonsAddWidgets()
         sprintf('testPaletteButtonsAddWidgets: only %d buttons', numel(btns)));
 
     initialCount = numel(engine.Widgets);
-    % Use the KPI button (2nd from last) to avoid FastPlot requiring a line
+    % Use the KPI button (2nd from last) to avoid FastSense requiring a line
     cb = get(btns(end-1), 'Callback');
     cb(btns(end-1), []);
 

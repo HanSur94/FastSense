@@ -8,7 +8,7 @@ function tests = test_NavigatorOverlay
 end
 
 function setup(testCase)
-    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastPlot'));
+    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'FastSense'));
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'SensorThreshold'));
     testCase.TestData.hFig = figure('Visible', 'off');
     testCase.TestData.hAxes = axes('Parent', testCase.TestData.hFig);

@@ -6,7 +6,7 @@ classdef Sensor < handle
     %   limit values).  The resolve() method evaluates all rules against
     %   the state channels to produce pre-computed threshold time series,
     %   violation indices, and state-band regions that can be rendered by
-    %   a plotting layer such as FastPlot.
+    %   a plotting layer such as FastSense.
     %
     %   Typical workflow:
     %     1. Create a Sensor and set X/Y data (or call load()).
@@ -63,7 +63,7 @@ classdef Sensor < handle
         X             % 1xN double: datenum time stamps
         Y             % 1xN (or MxN) double: sensor values
         Units         % char: measurement unit (e.g., 'degC', 'bar', 'rpm')
-        DataStore     % FastPlotDataStore: disk-backed storage (set by toDisk)
+        DataStore     % FastSenseDataStore: disk-backed storage (set by toDisk)
         StateChannels % cell array of StateChannel objects
         ThresholdRules % cell array of ThresholdRule objects
         ResolvedThresholds  % struct array: precomputed threshold step-function lines
@@ -214,11 +214,11 @@ classdef Sensor < handle
 
         function toDisk(obj)
             %TODISK Move sensor X/Y data to disk-backed DataStore.
-            %   s.toDisk() creates a FastPlotDataStore from the sensor's
+            %   s.toDisk() creates a FastSenseDataStore from the sensor's
             %   X and Y arrays, then clears X and Y from memory. The data
             %   remains accessible via s.DataStore.getRange() and
             %   s.DataStore.readSlice(). Subsequent calls to resolve(),
-            %   addSensor(), and FastPlot rendering all work transparently.
+            %   addSensor(), and FastSense rendering all work transparently.
             %
             %   Call toDisk() after setting X and Y but before or after
             %   resolve(). resolve() automatically reads from the DataStore
@@ -233,7 +233,7 @@ classdef Sensor < handle
             %     fp.addSensor(s);
             %     fp.render();
             %
-            %   See also toMemory, isOnDisk, FastPlotDataStore.
+            %   See also toMemory, isOnDisk, FastSenseDataStore.
 
             if isempty(obj.X) && ~isempty(obj.DataStore)
                 return;  % already on disk
@@ -241,7 +241,7 @@ classdef Sensor < handle
             if isempty(obj.X)
                 error('Sensor:noData', 'No X/Y data to move to disk.');
             end
-            obj.DataStore = FastPlotDataStore(obj.X, obj.Y);
+            obj.DataStore = FastSenseDataStore(obj.X, obj.Y);
 
             % Pre-compute resolve() while X/Y are still in memory (fastest
             % path).  Results are stored in the SQLite database so that

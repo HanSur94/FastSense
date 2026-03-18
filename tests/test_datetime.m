@@ -2,18 +2,18 @@ function test_datetime()
 %TEST_DATETIME Tests for datetime X axis support.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     close all force;
     drawnow;
 
     % testXTypeDefaultIsNumeric
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     assert(strcmp(fp.XType, 'numeric'), 'testXTypeDefault: should be numeric');
 
     % testXTypeDatenum
-    fp = FastPlot();
+    fp = FastSense();
     x = datenum(2024,1,1) + (0:99)/24;
     fp.addLine(x, rand(1,100), 'XType', 'datenum');
     assert(strcmp(fp.XType, 'datenum'), 'testXTypeDatenum: should be datenum');
@@ -21,7 +21,7 @@ function test_datetime()
     % testDatetimeAutoConvert
     % Only run in MATLAB where datetime exists
     if exist('datetime', 'class')
-        fp = FastPlot();
+        fp = FastSense();
         dt = datetime(2024,1,1) + hours(0:99);
         fp.addLine(dt, rand(1,100));
         assert(strcmp(fp.XType, 'datenum'), 'testDatetimeAutoConvert: should be datenum');
@@ -29,7 +29,7 @@ function test_datetime()
     end
 
     % testTickLabelsAreDateStrings
-    fp = FastPlot();
+    fp = FastSense();
     x = datenum(2024,1,1) + (0:99)/24;  % ~4 days of hourly data
     fp.addLine(x, rand(1,100), 'XType', 'datenum');
     fp.render();
@@ -47,7 +47,7 @@ function test_datetime()
 
     % testTickFormatChangesOnZoom (MATLAB only — Octave lacks PostSet listeners)
     if ~exist('OCTAVE_VERSION', 'builtin')
-        fp = FastPlot();
+        fp = FastSense();
         x = datenum(2024,1,1) + (0:9999)/86400;  % ~0.1s resolution
         fp.addLine(x, rand(1,10000), 'XType', 'datenum');
         fp.render();
@@ -70,9 +70,9 @@ function test_datetime()
     % testToolbarFormatX
     % Verify the static helper returns date string for datenum XType
     xVal = datenum(2024, 3, 15, 10, 30, 45);
-    result = FastPlotToolbar.formatX(xVal, 'datenum');
+    result = FastSenseToolbar.formatX(xVal, 'datenum');
     assert(any(result == ':'), 'testToolbarFormatX: should contain colon');
-    resultNum = FastPlotToolbar.formatX(42.5, 'numeric');
+    resultNum = FastSenseToolbar.formatX(42.5, 'numeric');
     assert(~any(resultNum == ':'), 'testToolbarFormatXNum: should not contain colon');
 
     fprintf('    All datetime tests passed.\n');

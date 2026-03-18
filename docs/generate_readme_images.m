@@ -1,5 +1,5 @@
-% generate_readme_images.m — Generate README screenshots for FastPlot features
-% Run from the FastPlot root directory:
+% generate_readme_images.m — Generate README screenshots for FastSense features
+% Run from the FastSense root directory:
 %   octave --no-gui --eval "setup; run('docs/generate_readme_images.m')"
 
 img_dir = fullfile(fileparts(mfilename('fullpath')), 'images');
@@ -12,7 +12,7 @@ fprintf('Generating: basic_thresholds.png ...\n');
 x = linspace(0, 100, 1e6);
 y = sin(x * 2*pi / 10) + 0.5 * randn(1, numel(x));
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Sensor1', 'Color', 'b');
 fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
 fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true, 'Color', 'r');
@@ -30,7 +30,7 @@ y2 = cos(x * 2*pi / 20) * 20 + 60 + 3 * randn(1, numel(x));
 y3 = sin(x * 2*pi / 8) * 15 + 30 + 4 * randn(1, numel(x));
 y4 = cumsum(randn(1, numel(x))) / 100 + 10;
 
-fig = FastPlotGrid(2, 2, 'Theme', 'dark');
+fig = FastSenseGrid(2, 2, 'Theme', 'dark');
 fig.setTileSpan(1, [1 2]);
 
 fp1 = fig.tile(1);
@@ -63,7 +63,7 @@ y2 = cos(x * 2*pi / 7) * 0.8 + 0.2 * randn(1, numel(x));
 hFig = figure('Position', [50 50 1600 600], 'Color', [0.95 0.95 0.95]);
 for i = 1:5
     ax = subplot(1, 5, i, 'Parent', hFig);
-    fp = FastPlot('Parent', ax, 'Theme', themes{i});
+    fp = FastSense('Parent', ax, 'Theme', themes{i});
     fp.addLine(x, y1, 'DisplayName', 'Sine');
     fp.addLine(x, y2, 'DisplayName', 'Cosine');
     fp.addThreshold(1.2, 'Direction', 'upper', 'ShowViolations', true);
@@ -83,21 +83,21 @@ y_vibration = sin(x * 2*pi / 5) * 5 + 2 * randn(1, numel(x));
 
 hFig = figure('Position', [100 100 1200 700]);
 ax1 = subplot(3, 1, 1, 'Parent', hFig);
-fp1 = FastPlot('Parent', ax1, 'LinkGroup', 'sensors');
+fp1 = FastSense('Parent', ax1, 'LinkGroup', 'sensors');
 fp1.addLine(x, y_pressure, 'DisplayName', 'Pressure', 'Color', [0 0.45 0.74]);
 fp1.addThreshold(125, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
 fp1.render();
 title(ax1, 'Pressure (linked)');
 
 ax2 = subplot(3, 1, 2, 'Parent', hFig);
-fp2 = FastPlot('Parent', ax2, 'LinkGroup', 'sensors');
+fp2 = FastSense('Parent', ax2, 'LinkGroup', 'sensors');
 fp2.addLine(x, y_temp, 'DisplayName', 'Temperature', 'Color', [0.85 0.33 0.1]);
 fp2.addThreshold(75, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
 fp2.render();
 title(ax2, 'Temperature (linked)');
 
 ax3 = subplot(3, 1, 3, 'Parent', hFig);
-fp3 = FastPlot('Parent', ax3, 'LinkGroup', 'sensors');
+fp3 = FastSense('Parent', ax3, 'LinkGroup', 'sensors');
 fp3.addLine(x, y_vibration, 'DisplayName', 'Vibration', 'Color', [0.47 0.67 0.19]);
 fp3.render();
 title(ax3, 'Vibration (linked)');
@@ -113,7 +113,7 @@ y(100000:120000) = NaN;
 y(250000:280000) = NaN;
 y(400000:410000) = NaN;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Sensor (with dropouts)', 'Color', [0 0.45 0.74]);
 fp.render();
 title(fp.hAxes, 'NaN Gap Handling');
@@ -126,7 +126,7 @@ fprintf('Generating: alarm_bands.png ...\n');
 x = linspace(0, 100, 5e5);
 y = sin(x * 2*pi / 15) * 40 + 50 + 8 * randn(1, numel(x));
 
-fp = FastPlot('Theme', 'dark');
+fp = FastSense('Theme', 'dark');
 fp.addLine(x, y, 'DisplayName', 'Process Value', 'Color', [0.3 0.75 0.93]);
 fp.addBand(85, 95, 'FaceColor', [1 0 0], 'FaceAlpha', 0.12, 'Label', 'HH Alarm');
 fp.addBand(75, 85, 'FaceColor', [1 0.6 0], 'FaceAlpha', 0.10, 'Label', 'H Alarm');
@@ -161,7 +161,7 @@ s.addThresholdRule(struct('machine', 2), 55, 'Direction', 'upper', 'Label', 'Boo
 s.addThresholdRule(struct('machine', 1), 30, 'Direction', 'lower', 'Label', 'Run LO');
 s.resolve();
 
-fp = FastPlot('Theme', 'dark');
+fp = FastSense('Theme', 'dark');
 fp.addSensor(s);
 fp.render();
 title(fp.hAxes, 'Condition-Dependent Sensor Thresholds');
@@ -174,7 +174,7 @@ fprintf('Generating: datetime_axes.png ...\n');
 x = datenum(2024,1,1) + (0:499999)/86400;
 y = sin((1:500000) * 2*pi/3600) + 0.3 * randn(1, 500000);
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'XType', 'datenum', 'DisplayName', 'Sensor');
 fp.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
 fp.render();

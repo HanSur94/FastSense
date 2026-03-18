@@ -3,7 +3,7 @@ function test_zoom_pan()
 %   Requires PostSet listeners (MATLAB only, skipped on Octave).
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')
         fprintf('    SKIPPED: Octave lacks PostSet listeners for axes properties.\n');
@@ -11,7 +11,7 @@ function test_zoom_pan()
     end
 
     % testZoomUpdatesPlottedData
-    fp = FastPlot();
+    fp = FastSense();
     n = 100000;
     x = linspace(0, 100, n);
     y = sin(x);
@@ -31,7 +31,7 @@ function test_zoom_pan()
     close(fp.hFigure);
 
     % testLazySkipsRedundantUpdate
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:1000, rand(1,1000));
     fp.render();
 
@@ -44,7 +44,7 @@ function test_zoom_pan()
     close(fp.hFigure);
 
     % testViolationsUpdateOnZoom
-    fp = FastPlot();
+    fp = FastSense();
     y = [zeros(1,500), ones(1,500)*10, zeros(1,500)];
     x = 1:1500;
     fp.addLine(x, y);

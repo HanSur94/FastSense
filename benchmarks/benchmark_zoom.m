@@ -1,9 +1,9 @@
-%% FastPlot Zoom & Pan Latency Benchmark
+%% FastSense Zoom & Pan Latency Benchmark
 % Measures per-frame latency for individual zoom and pan operations.
 % Forces GPU flush with getframe() to get true frame delivery time.
 
 addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastPlot', 'private'));
+addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastSense', 'private'));
 
 sizes = [1e5, 1e6, 10e6, 50e6];
 labels = {'100K', '1M', '10M', '50M'};
@@ -15,7 +15,7 @@ zoom_labels = {'100%', '50%', '10%', '1%', '0.1%'};
 n_pan_steps = 20; % pan operations per zoom level
 
 fprintf('================================================================\n');
-fprintf('  FastPlot Zoom & Pan Latency Benchmark\n');
+fprintf('  FastSense Zoom & Pan Latency Benchmark\n');
 fprintf('  Per-frame timing with forced GPU flush (getframe)\n');
 fprintf('================================================================\n\n');
 
@@ -32,7 +32,7 @@ for c = 1:numel(sizes)
     plot(ax_std, x, y);
     drawnow;
 
-    fprintf('  %-6s | %-22s | %-22s\n', 'Zoom', 'plot() per-frame (ms)', 'FastPlot per-frame (ms)');
+    fprintf('  %-6s | %-22s | %-22s\n', 'Zoom', 'plot() per-frame (ms)', 'FastSense per-frame (ms)');
     fprintf('  %-6s-+-%-22s-+-%-22s\n', '------', '----------------------', '----------------------');
 
     std_zoom_times = {};
@@ -59,8 +59,8 @@ for c = 1:numel(sizes)
 
     close(fig_std);
 
-    % --- FastPlot ---
-    fp = FastPlot();
+    % --- FastSense ---
+    fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
     fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true, 'Color', 'r');
@@ -120,8 +120,8 @@ for c = 1:numel(sizes)
     end
     close(fig_std);
 
-    % FastPlot
-    fp = FastPlot();
+    % FastSense
+    fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
     fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true, 'Color', 'r');
@@ -140,12 +140,12 @@ for c = 1:numel(sizes)
 
     fprintf('    plot():    avg=%5.1f ms  p95=%5.1f ms  max=%5.1f ms\n', ...
         mean(std_pan), prctile(std_pan, 95), max(std_pan));
-    fprintf('    FastPlot:  avg=%5.1f ms  p95=%5.1f ms  max=%5.1f ms\n', ...
+    fprintf('    FastSense:  avg=%5.1f ms  p95=%5.1f ms  max=%5.1f ms\n', ...
         mean(fp_pan), prctile(fp_pan, 95), max(fp_pan));
 
     std_fps = 1000 / mean(std_pan);
     fp_fps = 1000 / mean(fp_pan);
-    fprintf('    Effective FPS:  plot()=%.0f  FastPlot=%.0f\n', std_fps, fp_fps);
+    fprintf('    Effective FPS:  plot()=%.0f  FastSense=%.0f\n', std_fps, fp_fps);
     fprintf('\n');
 
     clear x y fp;
@@ -155,7 +155,7 @@ fprintf('================================================================\n');
 fprintf('  Notes\n');
 fprintf('================================================================\n');
 fprintf('  - getframe() forces GPU pipeline flush (true frame delivery).\n');
-fprintf('  - At deep zoom (0.1%%), FastPlot only processes ~0.1%% of data\n');
+fprintf('  - At deep zoom (0.1%%), FastSense only processes ~0.1%% of data\n');
 fprintf('    via binary search, while plot() still has all points in GPU.\n');
 fprintf('  - "p95" = 95th percentile latency (worst-case interactive feel).\n');
 fprintf('  - Target for smooth interaction: <33 ms (30 fps) per frame.\n');

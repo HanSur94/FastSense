@@ -6,7 +6,7 @@ import json
 import pytest
 import pytest_asyncio
 
-from fastplot_bridge.tcp_client import MatlabTcpClient
+from fastsense_bridge.tcp_client import MatlabTcpClient
 
 
 @pytest_asyncio.fixture

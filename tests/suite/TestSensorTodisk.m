@@ -80,7 +80,7 @@ classdef TestSensorTodisk < matlab.unittest.TestCase
             testCase.addTeardown(@() s2.DataStore.cleanup());
             s2.resolve();
 
-            fp = FastPlot();
+            fp = FastSense();
             fp.addSensor(s2, 'ShowThresholds', true);
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
@@ -94,7 +94,7 @@ classdef TestSensorTodisk < matlab.unittest.TestCase
             s3.Y = rand(1, 10000);
             s3.toDisk();
             testCase.addTeardown(@() s3.DataStore.cleanup());
-            fp2 = FastPlot();
+            fp2 = FastSense();
             fp2.addSensor(s3);
             fp2.render();
             testCase.addTeardown(@close, fp2.hFigure);

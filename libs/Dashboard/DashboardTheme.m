@@ -1,11 +1,11 @@
 function theme = DashboardTheme(preset, varargin)
-%DASHBOARDTHEME Returns a theme struct with FastPlotTheme + dashboard fields.
+%DASHBOARDTHEME Returns a theme struct with FastSenseTheme + dashboard fields.
 %
 %   theme = DashboardTheme()              % default preset
 %   theme = DashboardTheme('dark')        % named preset
 %   theme = DashboardTheme('dark', 'DashboardBackground', [0.1 0.1 0.2])
 %
-%   Returns a struct containing all FastPlotTheme fields plus dashboard-specific
+%   Returns a struct containing all FastSenseTheme fields plus dashboard-specific
 %   fields: DashboardBackground, WidgetBackground, WidgetBorderColor,
 %   WidgetBorderWidth, DragHandleColor, DropZoneColor, GridLineColor,
 %   ToolbarBackground, ToolbarFontColor, HeaderFontSize,
@@ -16,8 +16,8 @@ function theme = DashboardTheme(preset, varargin)
         preset = 'default';
     end
 
-    % Get base FastPlotTheme
-    base = FastPlotTheme(preset);
+    % Get base FastSenseTheme
+    base = FastSenseTheme(preset);
 
     % Append dashboard-specific fields
     dash = getDashboardDefaults(preset);

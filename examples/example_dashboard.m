@@ -1,14 +1,14 @@
-%% FastPlot Dashboard — Tiled layout with themes and visual enhancements
-% Demonstrates FastPlotGrid, theming, bands, shading, and markers.
+%% FastSense Dashboard — Tiled layout with themes and visual enhancements
+% Demonstrates FastSenseGrid, theming, bands, shading, and markers.
 %
 % Choosing your dashboard approach:
-%   FastPlotGrid — Lightweight tiled grid of FastPlot instances.
+%   FastSenseGrid — Lightweight tiled grid of FastSense instances.
 %       Best for: pure time-series dashboards with linked zoom, tile
 %       spanning, and SensorDetailPlot embedding.  No widget types beyond
 %       plots.  See also: example_dashboard_9tile, example_sensor_dashboard.
 %
 %   DashboardEngine — Full widget-based dashboard with toolbar, edit mode,
-%       JSON save/load, and 8 widget types (fastplot, number, status,
+%       JSON save/load, and 8 widget types (fastsense, number, status,
 %       gauge, text, table, rawaxes, timeline).  Uses a 24-column grid
 %       with Position = [col row width height].
 %       See also: example_dashboard_engine, example_dashboard_all_widgets.
@@ -24,8 +24,8 @@ x = linspace(0, 300, n);
 fprintf('Dashboard example: 4 tiles, %d points each, dark theme...\n', n);
 tic;
 
-fig = FastPlotGrid(2, 2, 'Theme', 'light', ...
-    'Name', 'FastPlot Dashboard Demo', 'Position', [50 50 1400 800]);
+fig = FastSenseGrid(2, 2, 'Theme', 'light', ...
+    'Name', 'FastSense Dashboard Demo', 'Position', [50 50 1400 800]);
 
 % --- Tile 1: Temperature with alarm bands (spans 2 columns) ---
 fig.setTileSpan(1, [1 2]);

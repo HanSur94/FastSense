@@ -1,5 +1,5 @@
 function run_all_examples(mode)
-%RUN_ALL_EXAMPLES Run each FastPlot example.
+%RUN_ALL_EXAMPLES Run each FastSense example.
 %   run_all_examples()        — interactive: press ENTER between examples
 %   run_all_examples('auto')  — non-interactive: 5s pause between examples
 %
@@ -11,7 +11,7 @@ function run_all_examples(mode)
 
     projectRoot = fileparts(fileparts(mfilename('fullpath')));
     run(fullfile(projectRoot, 'setup.m'));
-    addpath(fullfile(projectRoot, 'libs', 'FastPlot', 'private'));
+    addpath(fullfile(projectRoot, 'libs', 'FastSense', 'private'));
     addpath(fileparts(mfilename('fullpath')));
 
     examples = {
@@ -33,12 +33,12 @@ function run_all_examples(mode)
         'example_sensor_multi_state', 'Multi-state sensor, combined conditions, getThresholdsAt'
         'example_sensor_registry',  'SensorRegistry API (list, get, getMultiple)'
         'example_sensor_dashboard', 'Multi-sensor 2x2 dashboard with SensorRegistry'
-        'example_mixed_tiles',     'Mixed tile types: FastPlot + bar/scatter/histogram'
+        'example_mixed_tiles',     'Mixed tile types: FastSense + bar/scatter/histogram'
     };
 
     fprintf('\n');
     fprintf('========================================\n');
-    fprintf('  FastPlot Examples (%d total)\n', size(examples, 1));
+    fprintf('  FastSense Examples (%d total)\n', size(examples, 1));
     if strcmp(mode, 'auto')
         fprintf('  Auto mode: 5s pause between examples\n');
     else

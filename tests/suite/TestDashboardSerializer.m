@@ -26,7 +26,7 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             config.liveInterval = 5;
             config.grid = struct('columns', 24);
             config.widgets = {};
-            config.widgets{1} = struct('type', 'fastplot', ...
+            config.widgets{1} = struct('type', 'fastsense', ...
                 'title', 'Temperature', ...
                 'position', struct('col', 1, 'row', 1, 'width', 12, 'height', 3), ...
                 'source', struct('type', 'data', 'x', 1:10, 'y', rand(1,10)));
@@ -45,10 +45,10 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
         end
 
         function testWidgetsToConfig(testCase)
-            w1 = FastPlotWidget('Title', 'Plot 1', 'Position', [1 1 12 3]);
+            w1 = FastSenseWidget('Title', 'Plot 1', 'Position', [1 1 12 3]);
             w1.XData = 1:10;
             w1.YData = rand(1,10);
-            w2 = FastPlotWidget('Title', 'Plot 2', 'Position', [13 1 12 3]);
+            w2 = FastSenseWidget('Title', 'Plot 2', 'Position', [13 1 12 3]);
             w2.XData = 1:10;
             w2.YData = rand(1,10);
 
@@ -67,7 +67,7 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             config.grid = struct('columns', 24);
 
             ws = struct();
-            ws.type = 'fastplot';
+            ws.type = 'fastsense';
             ws.title = 'Temp';
             ws.position = struct('col', 1, 'row', 1, 'width', 12, 'height', 3);
             ws.source = struct('type', 'data', 'x', 1:5, 'y', [1 2 3 4 5]);
@@ -75,7 +75,7 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
 
             widgets = DashboardSerializer.configToWidgets(config);
             testCase.verifyEqual(numel(widgets), 1);
-            testCase.verifyTrue(isa(widgets{1}, 'FastPlotWidget'));
+            testCase.verifyTrue(isa(widgets{1}, 'FastSenseWidget'));
             testCase.verifyEqual(widgets{1}.Title, 'Temp');
         end
 
@@ -87,7 +87,7 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             config.grid = struct('columns', 24);
 
             ws = struct();
-            ws.type = 'fastplot';
+            ws.type = 'fastsense';
             ws.title = 'Temperature';
             ws.position = struct('col', 1, 'row', 1, 'width', 12, 'height', 3);
             ws.source = struct('type', 'data', 'x', 1:10, 'y', rand(1,10));

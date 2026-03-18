@@ -3,28 +3,28 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testConstruction(testCase)
-            fig = FastPlotGrid(2, 3);
+            fig = FastSenseGrid(2, 3);
             testCase.addTeardown(@close, fig.hFigure);
             testCase.verifyEqual(fig.Grid, [2 3], 'testConstruction: Grid');
             testCase.verifyNotEmpty(fig.hFigure, 'testConstruction: hFigure');
             testCase.verifyTrue(ishandle(fig.hFigure), 'testConstruction: hFigure valid');
         end
 
-        function testTileReturnsFastPlot(testCase)
-            fig = FastPlotGrid(2, 1);
+        function testTileReturnsFastSense(testCase)
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fp = fig.tile(1);
-            testCase.verifyTrue(isa(fp, 'FastPlot'), 'testTileReturnsFastPlot');
+            testCase.verifyTrue(isa(fp, 'FastSense'), 'testTileReturnsFastSense');
         end
 
         function testTileLazy(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fp1a = fig.tile(1);
             fp1b = fig.tile(1);
@@ -34,7 +34,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testTileCreatesAxes(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fp = fig.tile(1);
             fp.addLine(1:100, rand(1,100));
@@ -44,7 +44,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testMultipleTiles(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             for i = 1:4
                 fp = fig.tile(i);
@@ -58,7 +58,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testRenderAllSkipsRendered(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fp1 = fig.tile(1);
             fp1.addLine(1:10, rand(1,10));
@@ -70,7 +70,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testOutOfBoundsTileErrors(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             threw = false;
             try
@@ -82,7 +82,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testTileSpanning(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             fig.setTileSpan(1, [1 2]);  % tile 1 spans both columns
             fp1 = fig.tile(1);
@@ -94,14 +94,14 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testFigureThemePassedToTiles(testCase)
-            fig = FastPlotGrid(2, 1, 'Theme', 'dark');
+            fig = FastSenseGrid(2, 1, 'Theme', 'dark');
             testCase.addTeardown(@close, fig.hFigure);
             fp = fig.tile(1);
             testCase.verifyTrue(all(fp.Theme.Background < [0.2 0.2 0.2]), 'testFigureThemePassedToTiles');
         end
 
         function testTileThemeOverride(testCase)
-            fig = FastPlotGrid(2, 1, 'Theme', 'dark');
+            fig = FastSenseGrid(2, 1, 'Theme', 'dark');
             testCase.addTeardown(@close, fig.hFigure);
             fig.setTileTheme(1, struct('AxesColor', [0.3 0 0]));
             fp = fig.tile(1);
@@ -110,14 +110,14 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testFigureProperties(testCase)
-            fig = FastPlotGrid(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
+            fig = FastSenseGrid(1, 1, 'Name', 'MyDash', 'Position', [50 50 800 600]);
             testCase.addTeardown(@close, fig.hFigure);
             name = get(fig.hFigure, 'Name');
             testCase.verifyEqual(name, 'MyDash', 'testFigureProperties: Name');
         end
 
         function testTileLabels(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fp = fig.tile(1);
             fp.addLine(1:50, rand(1,50));
@@ -129,7 +129,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testAxesReturnsRawAxes(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             ax = fig.axes(1);
             testCase.verifyTrue(ishandle(ax), 'testAxesReturnsRawAxes: valid handle');
@@ -137,7 +137,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testAxesLazy(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             ax1 = fig.axes(1);
             ax2 = fig.axes(1);
@@ -145,7 +145,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testTileThenAxesErrors(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fig.tile(1);
             threw = false;
@@ -158,7 +158,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testAxesThenTileErrors(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             fig.axes(1);
             threw = false;
@@ -171,7 +171,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testMixedRenderAll(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             fig.tile(1).addLine(1:50, rand(1,50));
             ax2 = fig.axes(2); bar(ax2, [1 2 3], [10 20 15]);
@@ -186,7 +186,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testAxesThemeApplied(testCase)
-            fig = FastPlotGrid(1, 1, 'Theme', 'dark');
+            fig = FastSenseGrid(1, 1, 'Theme', 'dark');
             testCase.addTeardown(@close, fig.hFigure);
             ax = fig.axes(1);
             bgColor = get(ax, 'Color');
@@ -194,7 +194,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testLabelsOnRawAxes(testCase)
-            fig = FastPlotGrid(2, 1);
+            fig = FastSenseGrid(2, 1);
             testCase.addTeardown(@close, fig.hFigure);
             ax = fig.axes(1);
             bar(ax, [1 2 3], [10 20 15]);
@@ -207,7 +207,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testAxesOutOfBounds(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             threw = false;
             try
@@ -219,7 +219,7 @@ classdef TestFigureLayout < matlab.unittest.TestCase
         end
 
         function testAxesTileSpanning(testCase)
-            fig = FastPlotGrid(2, 2);
+            fig = FastSenseGrid(2, 2);
             testCase.addTeardown(@close, fig.hFigure);
             fig.setTileSpan(1, [1 2]);
             ax = fig.axes(1);

@@ -3,13 +3,13 @@ classdef TestMultiThreshold < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testEachThresholdGetsOwnLine(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, randn(1,100));
             fp.addThreshold(2.0, 'Direction', 'upper', 'Color', 'r', 'LineStyle', '--');
             fp.addThreshold(1.0, 'Direction', 'upper', 'Color', [1 0.6 0], 'LineStyle', ':');
@@ -36,7 +36,7 @@ classdef TestMultiThreshold < matlab.unittest.TestCase
         end
 
         function testEachThresholdGetsOwnViolationMarkers(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             y = [0 0 0 1.5 1.5 0 0 0 2.5 2.5 0 0];
             fp.addLine(1:12, y);
             fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
@@ -63,7 +63,7 @@ classdef TestMultiThreshold < matlab.unittest.TestCase
         end
 
         function testThresholdWithoutViolationsGetsNoMarkers(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, zeros(1,10));
             fp.addThreshold(5.0, 'Direction', 'upper', 'ShowViolations', true, 'Color', 'r');
             fp.render();
@@ -77,7 +77,7 @@ classdef TestMultiThreshold < matlab.unittest.TestCase
         end
 
         function testShowViolationsFalseGetsNoMarkerHandle(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, 5*ones(1,10));
             fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', false, 'Color', 'r');
             fp.render();
@@ -87,7 +87,7 @@ classdef TestMultiThreshold < matlab.unittest.TestCase
         end
 
         function testViolationsUpdateOnZoomPerThreshold(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             y = [zeros(1,100), 1.5*ones(1,100), zeros(1,100), 2.5*ones(1,100), zeros(1,100)];
             x = 1:500;
             fp.addLine(x, y);
@@ -111,16 +111,16 @@ classdef TestMultiThreshold < matlab.unittest.TestCase
         end
 
         function testUserDataTagging(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:100, randn(1,100));
             fp.addThreshold(1.0, 'Direction', 'upper', 'Label', 'AlarmHi', 'Color', 'r');
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
 
             ud = get(fp.Thresholds(1).hLine, 'UserData');
-            testCase.verifyEqual(ud.FastPlot.Type, 'threshold', 'UserData Type');
-            testCase.verifyEqual(ud.FastPlot.Name, 'AlarmHi', 'UserData Name');
-            testCase.verifyEqual(ud.FastPlot.ThresholdValue, 1.0, 'UserData ThresholdValue');
+            testCase.verifyEqual(ud.FastSense.Type, 'threshold', 'UserData Type');
+            testCase.verifyEqual(ud.FastSense.Name, 'AlarmHi', 'UserData Name');
+            testCase.verifyEqual(ud.FastSense.ThresholdValue, 1.0, 'UserData ThresholdValue');
         end
     end
 end

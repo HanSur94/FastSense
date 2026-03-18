@@ -13,12 +13,12 @@ classdef TestDashboardTheme < matlab.unittest.TestCase
                 'DashboardTheme should return a struct');
         end
 
-        function testContainsFastPlotFields(testCase)
+        function testContainsFastSenseFields(testCase)
             theme = DashboardTheme();
             testCase.verifyTrue(isfield(theme, 'Background'), ...
-                'Should contain FastPlotTheme fields');
+                'Should contain FastSenseTheme fields');
             testCase.verifyTrue(isfield(theme, 'FontSize'), ...
-                'Should contain FastPlotTheme FontSize field');
+                'Should contain FastSenseTheme FontSize field');
         end
 
         function testContainsDashboardFields(testCase)
@@ -57,11 +57,11 @@ classdef TestDashboardTheme < matlab.unittest.TestCase
 
         function testPresetInheritance(testCase)
             theme = DashboardTheme('dark');
-            baseDark = FastPlotTheme('dark');
+            baseDark = FastSenseTheme('dark');
             testCase.verifyEqual(theme.Background, baseDark.Background, ...
-                'Should inherit FastPlotTheme dark preset Background');
+                'Should inherit FastSenseTheme dark preset Background');
             testCase.verifyEqual(theme.FontSize, baseDark.FontSize, ...
-                'Should inherit FastPlotTheme dark preset FontSize');
+                'Should inherit FastSenseTheme dark preset FontSize');
         end
 
         function testNameValueOverrides(testCase)

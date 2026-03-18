@@ -1,11 +1,11 @@
 function test_render()
-%TEST_RENDER Tests for FastPlot.render method.
+%TEST_RENDER Tests for FastSense.render method.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     % testCreatesNewFigure
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100), 'DisplayName', 'Test');
     fp.render();
     assert(isfigure(fp.hFigure), 'testCreatesNewFigure: hFigure');
@@ -15,14 +15,14 @@ function test_render()
     % testUsesExistingAxes
     fig = figure('Visible', 'off');
     ax = axes('Parent', fig);
-    fp = FastPlot('Parent', ax);
+    fp = FastSense('Parent', ax);
     fp.addLine(1:100, rand(1,100));
     fp.render();
     assert(fp.hAxes == ax, 'testUsesExistingAxes');
     close(fig);
 
     % testCreatesLineObjects
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100), 'DisplayName', 'L1');
     fp.addLine(1:100, rand(1,100), 'DisplayName', 'L2');
     fp.render();
@@ -32,28 +32,28 @@ function test_render()
     close(fp.hFigure);
 
     % testUserDataTagging
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100), 'DisplayName', 'Sensor1');
     fp.addThreshold(0.5, 'Label', 'UpperLim');
     fp.render();
     ud = get(fp.Lines(1).hLine, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'data_line'), 'testUserDataTagging: Type');
-    assert(strcmp(ud.FastPlot.Name, 'Sensor1'), 'testUserDataTagging: Name');
-    assert(ud.FastPlot.LineIndex == 1, 'testUserDataTagging: LineIndex');
+    assert(strcmp(ud.FastSense.Type, 'data_line'), 'testUserDataTagging: Type');
+    assert(strcmp(ud.FastSense.Name, 'Sensor1'), 'testUserDataTagging: Name');
+    assert(ud.FastSense.LineIndex == 1, 'testUserDataTagging: LineIndex');
     close(fp.hFigure);
 
     % testThresholdLineCreated (per-threshold)
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.addThreshold(0.5, 'Direction', 'upper', 'Label', 'UL');
     fp.render();
     assert(isgraphics(fp.Thresholds(1).hLine, 'line'), 'testThresholdLineCreated');
     ud = get(fp.Thresholds(1).hLine, 'UserData');
-    assert(strcmp(ud.FastPlot.Type, 'threshold'), 'testThresholdLineCreated: Type');
+    assert(strcmp(ud.FastSense.Type, 'threshold'), 'testThresholdLineCreated: Type');
     close(fp.hFigure);
 
     % testViolationMarkersCreated (per-threshold)
-    fp = FastPlot();
+    fp = FastSense();
     y = [0.1 0.2 0.8 0.9 0.3 0.1];
     fp.addLine(1:6, y);
     fp.addThreshold(0.5, 'Direction', 'upper', 'ShowViolations', true);
@@ -66,7 +66,7 @@ function test_render()
     close(fp.hFigure);
 
     % testDoubleRenderError
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10));
     fp.render();
     threw = false;
@@ -79,7 +79,7 @@ function test_render()
     close(fp.hFigure);
 
     % testStaticAxisLimits
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.render();
     assert(strcmp(get(fp.hAxes, 'XLimMode'), 'manual'), 'testStaticAxisLimits: XLimMode');

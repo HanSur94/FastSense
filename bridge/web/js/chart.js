@@ -1,5 +1,5 @@
 /* ============================================================
-   chart.js — uPlot wrapper for FastPlot time-series signals
+   chart.js — uPlot wrapper for FastSense time-series signals
    ============================================================ */
 
 var Chart = (function () {

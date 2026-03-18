@@ -1,6 +1,6 @@
 classdef TestDatastore < matlab.unittest.TestCase
-%TestDatastore Unit tests for FastPlotDataStore class.
-%   Tests the SQLite/binary-backed data storage used by FastPlot to handle
+%TestDatastore Unit tests for FastSenseDataStore class.
+%   Tests the SQLite/binary-backed data storage used by FastSense to handle
 %   large datasets without running out of memory. Covers creation, range
 %   queries, slice reads, edge cases, and cleanup.
 
@@ -8,7 +8,7 @@ classdef TestDatastore < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
@@ -17,7 +17,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             % basic construction stores metadata correctly
             x = linspace(0, 100, 10000);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.NumPoints, 10000, 'testCreateStore: NumPoints');
             testCase.verifyEqual(ds.XMin, x(1), 'testCreateStore: XMin');
@@ -30,14 +30,14 @@ classdef TestDatastore < matlab.unittest.TestCase
             x = linspace(0, 100, 10000);
             y = sin(x);
             y(500) = NaN;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.HasNaN, true, 'testCreateStoreWithNaN: HasNaN should be true');
         end
 
         function testEmptyConstruction(testCase)
             % empty construction returns valid zero-state
-            ds = FastPlotDataStore();
+            ds = FastSenseDataStore();
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.NumPoints, 0, 'testEmptyConstruction: NumPoints');
             testCase.verifyTrue(isnan(ds.XMin), 'testEmptyConstruction: XMin should be NaN');
@@ -45,7 +45,7 @@ classdef TestDatastore < matlab.unittest.TestCase
 
         function testColumnVectorInput(testCase)
             % accepts column vectors
-            ds = FastPlotDataStore((1:100)', rand(100,1));
+            ds = FastSenseDataStore((1:100)', rand(100,1));
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.NumPoints, 100, 'testColumnVectorInput: NumPoints');
         end
@@ -54,7 +54,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             % query a middle range returns correct data
             x = linspace(0, 100, 50000);
             y = sin(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, yr] = ds.getRange(20, 40);
             testCase.verifyNotEmpty(xr, 'testGetRangeMiddle: should return data');
@@ -70,7 +70,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             % range covering entire dataset returns all points
             x = 1:1000;
             y = rand(1, 1000);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, yr] = ds.getRange(1, 1000);
             testCase.verifyEqual(numel(xr), 1000, 'testGetRangeFullSpan: should get all points');
@@ -84,7 +84,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             n = 200000;
             x = linspace(0, 1000, n);
             y = cumsum(randn(1, n));
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, yr] = ds.getRange(500, 501);
             % Should get a reasonable number of points (not all 200K)
@@ -99,7 +99,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             % range outside data returns empty or edge points
             x = 1:100;
             y = rand(1, 100);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xr, ~] = ds.getRange(200, 300);
             % Should either be empty or contain only the last data point
@@ -110,7 +110,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             % reading a specific index range returns correct data
             x = 1:5000;
             y = (1:5000) * 2;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xs, ys] = ds.readSlice(100, 200);
             testCase.verifyEqual(numel(xs), 101, 'testReadSliceExact: count');
@@ -124,7 +124,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             % reading entire range matches original data
             x = linspace(0, 10, 1000);
             y = cos(x);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xs, ys] = ds.readSlice(1, 1000);
             tol = 1e-12;
@@ -134,7 +134,7 @@ classdef TestDatastore < matlab.unittest.TestCase
 
         function testReadSliceClamped(testCase)
             % out-of-bounds indices are clamped
-            ds = FastPlotDataStore(1:100, rand(1, 100));
+            ds = FastSenseDataStore(1:100, rand(1, 100));
             testCase.addTeardown(@() ds.cleanup());
             [xs, ~] = ds.readSlice(-5, 200);
             testCase.verifyEqual(numel(xs), 100, 'testReadSliceClamped: should clamp to full range');
@@ -148,7 +148,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             n = 150000;
             x = sort(rand(1, n)) * 1000;
             y = randn(1, n);
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [xAll, yAll] = ds.readSlice(1, n);
             tol = 1e-12;
@@ -161,7 +161,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             x = 1:100;
             y = rand(1, 100);
             y([10, 50, 90]) = NaN;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             [~, yr] = ds.readSlice(1, 100);
             testCase.verifyTrue(isnan(yr(10)), 'testDataIntegrityNaN: NaN at 10');
@@ -171,7 +171,7 @@ classdef TestDatastore < matlab.unittest.TestCase
 
         function testOutputShape(testCase)
             % getRange and readSlice return row vectors
-            ds = FastPlotDataStore(1:1000, rand(1, 1000));
+            ds = FastSenseDataStore(1:1000, rand(1, 1000));
             testCase.addTeardown(@() ds.cleanup());
             [xr, yr] = ds.getRange(100, 200);
             testCase.verifyTrue(isrow(xr), 'testOutputShape: getRange X must be row');
@@ -183,7 +183,7 @@ classdef TestDatastore < matlab.unittest.TestCase
 
         function testCleanupDeletesFile(testCase)
             % cleanup removes temp files from disk
-            ds = FastPlotDataStore(1:1000, rand(1, 1000));
+            ds = FastSenseDataStore(1:1000, rand(1, 1000));
             % Store the path(s) before cleanup
             hasDb = ~isempty(ds.DbPath) && exist(ds.DbPath, 'file');
             hasBin = ~isempty(ds.BinPath) && exist(ds.BinPath, 'file');
@@ -199,7 +199,7 @@ classdef TestDatastore < matlab.unittest.TestCase
 
         function testDestructorCleanup(testCase)
             % deleting the object cleans up temp files
-            ds = FastPlotDataStore(1:1000, rand(1, 1000));
+            ds = FastSenseDataStore(1:1000, rand(1, 1000));
             if ~isempty(ds.DbPath) && exist(ds.DbPath, 'file')
                 fpath = ds.DbPath;
             else
@@ -214,7 +214,7 @@ classdef TestDatastore < matlab.unittest.TestCase
             n = 500000;
             x = linspace(0, 10000, n);
             y = sin(x / 100) + randn(1, n) * 0.1;
-            ds = FastPlotDataStore(x, y);
+            ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() ds.cleanup());
             testCase.verifyEqual(ds.NumPoints, n, 'testLargeDataset: NumPoints');
 

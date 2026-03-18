@@ -2,9 +2,9 @@
 
 **Goal:** Eliminate the dual rendering path for threshold violations by extending `addThreshold` to accept time-varying thresholds (X/Y arrays), then routing `addSensor` through it.
 
-**Architecture:** Sensor/resolve handles domain logic (which threshold value at which time). FastPlot handles rendering logic (what to show on screen now). Pre-computed violations are no longer fed to the renderer.
+**Architecture:** Sensor/resolve handles domain logic (which threshold value at which time). FastSense handles rendering logic (what to show on screen now). Pre-computed violations are no longer fed to the renderer.
 
-**Tech Stack:** MATLAB/Octave, existing FastPlot private function pattern.
+**Tech Stack:** MATLAB/Octave, existing FastSense private function pattern.
 
 ---
 

@@ -12,7 +12,7 @@ classdef NotificationService < handle
         SmtpPort        = 25
         SmtpUser        = ''
         SmtpPassword    = ''
-        FromAddress     = 'fastplot@noreply.com'
+        FromAddress     = 'fastsense@noreply.com'
         NotificationCount = 0
     end
 
@@ -23,7 +23,7 @@ classdef NotificationService < handle
             p.addParameter('DryRun', false, @islogical);
             p.addParameter('SnapshotDir', '', @ischar);
             p.addParameter('SmtpServer', '', @ischar);
-            p.addParameter('FromAddress', 'fastplot@noreply.com', @ischar);
+            p.addParameter('FromAddress', 'fastsense@noreply.com', @ischar);
             p.parse(varargin{:});
             obj.Enabled     = p.Results.Enabled;
             obj.DryRun      = p.Results.DryRun;
@@ -31,7 +31,7 @@ classdef NotificationService < handle
             obj.SmtpServer  = p.Results.SmtpServer;
             obj.FromAddress = p.Results.FromAddress;
             if isempty(obj.SnapshotDir)
-                obj.SnapshotDir = fullfile(tempdir, 'fastplot_snapshots');
+                obj.SnapshotDir = fullfile(tempdir, 'fastsense_snapshots');
             end
         end
 

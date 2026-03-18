@@ -1,11 +1,11 @@
 function test_disk_storage()
-%TEST_DISK_STORAGE Integration tests for FastPlot disk-backed storage.
-%   Tests that FastPlot correctly stores large datasets on disk via
-%   FastPlotDataStore and that render, zoom/pan, updateData, and cleanup
+%TEST_DISK_STORAGE Integration tests for FastSense disk-backed storage.
+%   Tests that FastSense correctly stores large datasets on disk via
+%   FastSenseDataStore and that render, zoom/pan, updateData, and cleanup
 %   all work transparently with disk-backed lines.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')
         fprintf('    SKIPPED: requires MATLAB PostSet listeners.\n');
@@ -15,27 +15,27 @@ function test_disk_storage()
     % --- StorageMode and MemoryLimit properties ---
 
     % testDefaultStorageMode: default is 'auto'
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10));
     assert(strcmp(fp.StorageMode, 'auto'), 'testDefaultStorageMode');
 
     % testStorageModeConstructor: can set via constructor
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     assert(strcmp(fp.StorageMode, 'disk'), 'testStorageModeConstructor');
 
     % testMemoryLimitDefault: default is 500e6
-    fp = FastPlot();
+    fp = FastSense();
     fp.addLine(1:10, rand(1,10));
     assert(fp.MemoryLimit == 500e6, 'testMemoryLimitDefault');
 
     % testMemoryLimitConstructor: can override via constructor
-    fp = FastPlot('MemoryLimit', 100e6);
+    fp = FastSense('MemoryLimit', 100e6);
     assert(fp.MemoryLimit == 100e6, 'testMemoryLimitConstructor');
 
     % --- Auto storage mode triggers disk for large data ---
 
     % testAutoModeDiskTrigger: data exceeding MemoryLimit goes to disk
-    fp = FastPlot('MemoryLimit', 1000);  % very low threshold: 1000 bytes
+    fp = FastSense('MemoryLimit', 1000);  % very low threshold: 1000 bytes
     n = 1000;  % 1000 points * 8 bytes * 2 = 16000 bytes > 1000
     x = linspace(0, 10, n);
     y = sin(x);
@@ -50,7 +50,7 @@ function test_disk_storage()
         'testAutoModeDiskTrigger: NumPoints must be correct');
 
     % testAutoModeMemoryForSmall: small data stays in memory
-    fp = FastPlot('MemoryLimit', 1e9);  % 1 GB threshold
+    fp = FastSense('MemoryLimit', 1e9);  % 1 GB threshold
     fp.addLine(1:100, rand(1, 100));
     assert(isempty(fp.Lines(1).DataStore), ...
         'testAutoModeMemoryForSmall: should NOT have DataStore');
@@ -58,7 +58,7 @@ function test_disk_storage()
         'testAutoModeMemoryForSmall: X should be in memory');
 
     % testForceDiskMode: StorageMode='disk' forces all data to disk
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     fp.addLine(1:50, rand(1, 50));
     assert(~isempty(fp.Lines(1).DataStore), ...
         'testForceDiskMode: small data should still go to disk');
@@ -66,7 +66,7 @@ function test_disk_storage()
         'testForceDiskMode: NumPoints');
 
     % testForceMemoryMode: StorageMode='memory' keeps all data in RAM
-    fp = FastPlot('StorageMode', 'memory', 'MemoryLimit', 100);
+    fp = FastSense('StorageMode', 'memory', 'MemoryLimit', 100);
     fp.addLine(1:10000, rand(1, 10000));
     assert(isempty(fp.Lines(1).DataStore), ...
         'testForceMemoryMode: should NOT use disk even if above limit');
@@ -74,7 +74,7 @@ function test_disk_storage()
     % --- Render with disk-backed data ---
 
     % testRenderDiskLine: disk-backed line renders without error
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 20000;
     x = linspace(0, 100, n);
     y = sin(x);
@@ -92,7 +92,7 @@ function test_disk_storage()
     close(fp.hFigure);
 
     % testRenderMixedLines: mix of memory and disk lines renders
-    fp = FastPlot('MemoryLimit', 1000);
+    fp = FastSense('MemoryLimit', 1000);
     fp.addLine(1:10, rand(1, 10), 'DisplayName', 'Small');      % memory
     fp.addLine(linspace(0,100,5000), rand(1,5000), 'DisplayName', 'Large'); % disk
     fp.render();
@@ -104,7 +104,7 @@ function test_disk_storage()
     % --- Zoom/pan with disk-backed data ---
 
     % testZoomDiskLine: zooming re-downsamples from disk correctly
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 50000;
     x = linspace(0, 100, n);
     y = sin(x);
@@ -124,7 +124,7 @@ function test_disk_storage()
     close(fp.hFigure);
 
     % testZoomDiskLineDataFidelity: zoomed data preserves signal shape
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 100000;
     x = linspace(0, 100, n);
     y = x * 2;  % simple linear — easy to verify
@@ -146,7 +146,7 @@ function test_disk_storage()
     % --- updateData with disk-backed storage ---
 
     % testUpdateDataDisk: updateData replaces disk-backed data
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     x = linspace(0, 10, 10000);
     y = sin(x);
     fp.addLine(x, y);
@@ -168,7 +168,7 @@ function test_disk_storage()
     % --- Threshold violations with disk-backed data ---
 
     % testThresholdsDiskLine: violations render correctly on disk lines
-    fp = FastPlot('StorageMode', 'disk');
+    fp = FastSense('StorageMode', 'disk');
     n = 10000;
     x = linspace(0, 100, n);
     y = sin(x);  % values between -1 and 1
@@ -181,8 +181,8 @@ function test_disk_storage()
 
     % --- Cleanup on delete ---
 
-    % testDeleteCleansDiskFiles: deleting FastPlot cleans up DataStore files
-    fp = FastPlot('StorageMode', 'disk');
+    % testDeleteCleansDiskFiles: deleting FastSense cleans up DataStore files
+    fp = FastSense('StorageMode', 'disk');
     fp.addLine(1:5000, rand(1, 5000));
     ds = fp.Lines(1).DataStore;
     % Get the file path before deletion
@@ -200,7 +200,7 @@ function test_disk_storage()
     % --- lineNumPoints helper ---
 
     % testLineNumPoints: works for both memory and disk lines
-    fp = FastPlot('MemoryLimit', 1000);
+    fp = FastSense('MemoryLimit', 1000);
     fp.addLine(1:50, rand(1, 50));             % memory
     fp.addLine(1:5000, rand(1, 5000));         % disk
     assert(fp.lineNumPoints(1) == 50, 'testLineNumPoints: memory line');
@@ -209,7 +209,7 @@ function test_disk_storage()
     % --- lineXRange helper ---
 
     % testLineXRange: returns correct endpoints for both storage types
-    fp = FastPlot('MemoryLimit', 1000);
+    fp = FastSense('MemoryLimit', 1000);
     fp.addLine(5:100, rand(1, 96));            % memory
     fp.addLine(linspace(10,200,5000), rand(1,5000));  % disk
     [mn1, mx1] = fp.lineXRange(1);

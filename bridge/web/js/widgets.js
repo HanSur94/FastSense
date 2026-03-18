@@ -9,7 +9,7 @@ var Widgets = (function () {
     function render(config, bodyEl) {
         var type = config.type || "text";
         switch (type) {
-            case "fastplot": return renderFastplot(config, bodyEl);
+            case "fastsense": return renderFastSense(config, bodyEl);
             case "kpi":      return renderKPI(config, bodyEl);
             case "status":   return renderStatus(config, bodyEl);
             case "table":    return renderTable(config, bodyEl);
@@ -22,8 +22,8 @@ var Widgets = (function () {
         }
     }
 
-    /* --- fastplot (uPlot chart) ---------------------------- */
-    function renderFastplot(cfg, el) {
+    /* --- fastsense (uPlot chart) ---------------------------- */
+    function renderFastSense(cfg, el) {
         el.classList.add("chart-body");
         var signalId = cfg.signalId || cfg.id;
         Chart.create(signalId, el);

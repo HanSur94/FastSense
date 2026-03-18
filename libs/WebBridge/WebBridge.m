@@ -144,7 +144,7 @@ classdef WebBridge < handle
             idx = 0;
             for i = 1:numel(obj.Dashboard.Widgets)
                 w = obj.Dashboard.Widgets{i};
-                if ~isa(w, 'FastPlotWidget'); continue; end
+                if ~isa(w, 'FastSenseWidget'); continue; end
                 idx = idx + 1;
                 if isprop(w, 'Sensor') && ~isempty(w.Sensor) && isprop(w.Sensor, 'Key')
                     sid = w.Sensor.Key;
@@ -225,7 +225,7 @@ classdef WebBridge < handle
         end
         function launchBridge(obj)
             bridgeDir = fullfile(fileparts(mfilename('fullpath')), '..', '..', 'bridge', 'python');
-            cmd = sprintf('python -m fastplot_bridge --matlab-port %d', obj.TcpPort);
+            cmd = sprintf('python -m fastsense_bridge --matlab-port %d', obj.TcpPort);
             if ispc
                 fullCmd = sprintf('start /B %s', cmd);
             else
@@ -239,7 +239,7 @@ classdef WebBridge < handle
                 pause(0.1);
             end
             obj.stop();
-            error('WebBridge:timeout', 'Bridge did not start within 10s. Check that fastplot-bridge is installed.');
+            error('WebBridge:timeout', 'Bridge did not start within 10s. Check that fastsense-bridge is installed.');
         end
         function enableWALOnDataStores(obj)
             stores = obj.collectDataStores();
@@ -254,7 +254,7 @@ classdef WebBridge < handle
             if isempty(obj.Dashboard) || isempty(obj.Dashboard.Widgets); return; end
             for i = 1:numel(obj.Dashboard.Widgets)
                 w = obj.Dashboard.Widgets{i};
-                if ~isa(w, 'FastPlotWidget'); continue; end
+                if ~isa(w, 'FastSenseWidget'); continue; end
                 ds = [];
                 if isprop(w, 'DataStore') && ~isempty(w.DataStore)
                     ds = w.DataStore;

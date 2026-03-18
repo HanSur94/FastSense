@@ -3,13 +3,13 @@ classdef TestAddLine < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
     methods (Test)
         function testAddSingleLine(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             x = 1:100;
             y = rand(1, 100);
             fp.addLine(x, y);
@@ -19,7 +19,7 @@ classdef TestAddLine < matlab.unittest.TestCase
         end
 
         function testAddMultipleLines(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10));
             fp.addLine(1:20, rand(1,20));
             fp.addLine(1:5, rand(1,5));
@@ -27,26 +27,26 @@ classdef TestAddLine < matlab.unittest.TestCase
         end
 
         function testLineOptions(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10), 'Color', 'r', 'DisplayName', 'S1');
             testCase.verifyEqual(fp.Lines(1).Options.Color, 'r', 'testLineOptions: Color');
             testCase.verifyEqual(fp.Lines(1).Options.DisplayName, 'S1', 'testLineOptions: DisplayName');
         end
 
         function testDownsampleMethodDefault(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10));
             testCase.verifyEqual(fp.Lines(1).DownsampleMethod, 'minmax', 'testDownsampleMethodDefault');
         end
 
         function testDownsampleMethodOverride(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(1:10, rand(1,10), 'DownsampleMethod', 'lttb');
             testCase.verifyEqual(fp.Lines(1).DownsampleMethod, 'lttb', 'testDownsampleMethodOverride');
         end
 
         function testRejectsNonMonotonicX(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             threw = false;
             try
                 fp.addLine([1 3 2 4], rand(1,4));
@@ -58,7 +58,7 @@ classdef TestAddLine < matlab.unittest.TestCase
         end
 
         function testRejectsMismatchedLengths(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             threw = false;
             try
                 fp.addLine(1:10, rand(1,5));
@@ -70,7 +70,7 @@ classdef TestAddLine < matlab.unittest.TestCase
         end
 
         function testColumnVectorsAccepted(testCase)
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine((1:10)', rand(10,1));
             testCase.verifyEqual(numel(fp.Lines(1).X), 10, 'testColumnVectors: numel');
             testCase.verifyTrue(isrow(fp.Lines(1).X), 'testColumnVectors: must be row');

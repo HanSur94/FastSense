@@ -4,7 +4,7 @@
 
 **Goal:** Replace the separate compute_violations + downsample_violations pipeline with a single SIMD-accelerated MEX function that fuses step-function threshold lookup, violation detection, and pixel-density culling into one pass.
 
-**Architecture:** A new `violation_cull_mex.c` replaces the unused `compute_violations_mex.c`. It accepts data arrays, threshold knots, direction, and pixel parameters, returning culled violation points directly. The MATLAB wrappers (`compute_violations.m`, `compute_violations_dynamic.m`) gain MEX fast-paths, and `FastPlot.m` render/updateViolations call a fused path skipping `downsample_violations` when MEX is available.
+**Architecture:** A new `violation_cull_mex.c` replaces the unused `compute_violations_mex.c`. It accepts data arrays, threshold knots, direction, and pixel parameters, returning culled violation points directly. The MATLAB wrappers (`compute_violations.m`, `compute_violations_dynamic.m`) gain MEX fast-paths, and `FastSense.m` render/updateViolations call a fused path skipping `downsample_violations` when MEX is available.
 
 **Tech Stack:** C with `simd_utils.h` (AVX2/SSE2/NEON/scalar), MATLAB MEX API, Octave mkoctfile.
 
@@ -13,18 +13,18 @@
 ### Task 1: Delete unused `compute_violations_mex` and clean up `build_mex.m`
 
 **Files:**
-- Delete: `libs/FastPlot/private/mex_src/compute_violations_mex.c`
-- Delete: `libs/FastPlot/private/compute_violations_mex.mex`
-- Delete: `libs/FastPlot/private/compute_violations_mex.mexmaca64`
-- Modify: `libs/FastPlot/build_mex.m:84-90` (mex_files list)
-- Modify: `libs/FastPlot/build_mex.m:142-144` (copy_mex_to call)
+- Delete: `libs/FastSense/private/mex_src/compute_violations_mex.c`
+- Delete: `libs/FastSense/private/compute_violations_mex.mex`
+- Delete: `libs/FastSense/private/compute_violations_mex.mexmaca64`
+- Modify: `libs/FastSense/build_mex.m:84-90` (mex_files list)
+- Modify: `libs/FastSense/build_mex.m:142-144` (copy_mex_to call)
 
 **Step 1: Delete the old MEX source and compiled binaries**
 
 ```bash
-rm libs/FastPlot/private/mex_src/compute_violations_mex.c
-rm -f libs/FastPlot/private/compute_violations_mex.mex
-rm -f libs/FastPlot/private/compute_violations_mex.mexmaca64
+rm libs/FastSense/private/mex_src/compute_violations_mex.c
+rm -f libs/FastSense/private/compute_violations_mex.mex
+rm -f libs/FastSense/private/compute_violations_mex.mexmaca64
 rm -f libs/SensorThreshold/private/compute_violations_mex.mex
 rm -f libs/SensorThreshold/private/compute_violations_mex.mexmaca64
 ```
@@ -73,11 +73,11 @@ refactor: remove unused compute_violations_mex, prepare for violation_cull_mex
 ### Task 2: Create `violation_cull_mex.c`
 
 **Files:**
-- Create: `libs/FastPlot/private/mex_src/violation_cull_mex.c`
+- Create: `libs/FastSense/private/mex_src/violation_cull_mex.c`
 
 **Step 1: Write the MEX C source**
 
-Create `libs/FastPlot/private/mex_src/violation_cull_mex.c`:
+Create `libs/FastSense/private/mex_src/violation_cull_mex.c`:
 
 ```c
 /*
@@ -131,7 +131,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
                  int nrhs, const mxArray *prhs[])
 {
     if (nrhs != 7) {
-        mexErrMsgIdAndTxt("FastPlot:violation_cull_mex:nrhs",
+        mexErrMsgIdAndTxt("FastSense:violation_cull_mex:nrhs",
             "Seven inputs required: x, y, thX, thY, direction, pixelWidth, xmin.");
     }
 
@@ -317,7 +317,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
 **Step 2: Compile**
 
-Run: `octave --eval "cd libs/FastPlot; build_mex"` (or in MATLAB: `cd libs/FastPlot; build_mex`)
+Run: `octave --eval "cd libs/FastSense; build_mex"` (or in MATLAB: `cd libs/FastSense; build_mex`)
 
 Expected: `violation_cull_mex.c ... OK`
 
@@ -343,7 +343,7 @@ function test_violation_cull_mex()
 %TEST_VIOLATION_CULL_MEX Parity tests: MEX vs MATLAB fallback.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
-    add_fastplot_private_path();
+    add_fastsense_private_path();
 
     hasMex = (exist('violation_cull_mex', 'file') == 3);
     if ~hasMex
@@ -471,7 +471,7 @@ end
 
 **Step 2: Run test**
 
-Run: `octave --eval "cd libs/FastPlot; build_mex" && octave --eval "cd tests; addpath('..'); setup; test_violation_cull_mex"`
+Run: `octave --eval "cd libs/FastSense; build_mex" && octave --eval "cd tests; addpath('..'); setup; test_violation_cull_mex"`
 
 Expected: All 7 parity tests pass.
 
@@ -486,8 +486,8 @@ test: add violation_cull_mex parity tests against MATLAB reference
 ### Task 4: Wire MEX into MATLAB wrappers
 
 **Files:**
-- Modify: `libs/FastPlot/private/compute_violations.m`
-- Modify: `libs/FastPlot/private/compute_violations_dynamic.m`
+- Modify: `libs/FastSense/private/compute_violations.m`
+- Modify: `libs/FastSense/private/compute_violations_dynamic.m`
 
 **Step 1: Add MEX fast-path to `compute_violations.m`**
 
@@ -500,7 +500,7 @@ function [xViol, yViol] = compute_violations(x, y, thresholdValue, direction)
 %
 %   Uses violation_cull_mex if compiled (without pixel culling — pw=0 skips it).
 %
-%   See also compute_violations_dynamic, FastPlot.addThreshold.
+%   See also compute_violations_dynamic, FastSense.addThreshold.
 
     if strcmp(direction, 'upper')
         mask = y > thresholdValue;
@@ -513,15 +513,15 @@ function [xViol, yViol] = compute_violations(x, y, thresholdValue, direction)
 end
 ```
 
-Note: we keep this function simple — the MEX fast-path is wired at the FastPlot.m level in Task 5 where we have pixel parameters available. This function remains the pure "find violations" step for callers that don't need culling.
+Note: we keep this function simple — the MEX fast-path is wired at the FastSense.m level in Task 5 where we have pixel parameters available. This function remains the pure "find violations" step for callers that don't need culling.
 
 **Step 2: Same for `compute_violations_dynamic.m`**
 
-No changes needed — keep as-is. The MEX fast-path is at the FastPlot.m level.
+No changes needed — keep as-is. The MEX fast-path is at the FastSense.m level.
 
 **Step 3: Create a new helper `violation_cull.m`**
 
-Create `libs/FastPlot/private/violation_cull.m` — the MATLAB-side entry point that tries MEX, falls back to MATLAB:
+Create `libs/FastSense/private/violation_cull.m` — the MATLAB-side entry point that tries MEX, falls back to MATLAB:
 
 ```matlab
 function [xOut, yOut] = violation_cull(x, y, thX, thY, direction, pixelWidth, xmin)
@@ -580,11 +580,11 @@ feat: add violation_cull wrapper with MEX fast-path
 
 ---
 
-### Task 5: Wire fused path into FastPlot.m render and updateViolations
+### Task 5: Wire fused path into FastSense.m render and updateViolations
 
 **Files:**
-- Modify: `libs/FastPlot/FastPlot.m:827-865` (render violation section)
-- Modify: `libs/FastPlot/FastPlot.m:2003-2051` (updateViolations)
+- Modify: `libs/FastSense/FastSense.m:827-865` (render violation section)
+- Modify: `libs/FastSense/FastSense.m:2003-2051` (updateViolations)
 
 **Step 1: Update render violation loop**
 

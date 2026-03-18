@@ -18,7 +18,7 @@ jobs:
 
       - name: Clone wiki
         run: |
-          git clone https://github.com/HanSur94/FastPlot.wiki.git wiki-check
+          git clone https://github.com/HanSur94/FastSense.wiki.git wiki-check
 
       - name: Check markdown links
         uses: lycheeverse/lychee-action@v2
@@ -26,7 +26,7 @@ jobs:
           args: >-
             --no-progress
             --exclude-loopback
-            --exclude 'github.com/HanSur94/FastPlot/wiki'
+            --exclude 'github.com/HanSur94/FastSense/wiki'
             --suggest
             wiki-check/*.md
           fail: true

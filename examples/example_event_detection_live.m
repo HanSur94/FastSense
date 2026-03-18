@@ -2,7 +2,7 @@ function example_event_detection_live()
 %EXAMPLE_EVENT_DETECTION_LIVE Live event detection demo with industrial sensors.
 %   Demonstrates the EventDetection library with 3 mock industrial sensors,
 %   threshold-based event detection, console logging, EventViewer UI,
-%   and a live FastPlot dashboard using startLive for real-time plotting.
+%   and a live FastSense dashboard using startLive for real-time plotting.
 %
 %   Run:  example_event_detection_live()
 %   Stop: Close the Event Viewer or Live Plot figure to stop.
@@ -79,7 +79,7 @@ function example_event_detection_live()
     liveN = N;
 
     % --- 6. Write initial .mat files for live plotting ---
-    liveDir = fullfile(tempdir, 'fastplot_event_live');
+    liveDir = fullfile(tempdir, 'fastsense_event_live');
     if ~exist(liveDir, 'dir'); mkdir(liveDir); end
 
     tempFile = fullfile(liveDir, 'temperature.mat');
@@ -90,13 +90,13 @@ function example_event_detection_live()
     x = t; y = pressure;  save(presFile, 'x', 'y');
     x = t; y = vibration; save(vibFile,  'x', 'y');
 
-    % --- 7. Open live FastPlot dashboard ---
+    % --- 7. Open live FastSense dashboard ---
     hPlotFig = figure('Name', 'Live Sensor Dashboard', ...
         'NumberTitle', 'off', 'Position', [150 50 1200 700]);
 
     % Temperature plot
     ax1 = subplot(3,1,1, 'Parent', hPlotFig);
-    fpTemp = FastPlot('Parent', ax1, 'LinkGroup', 'live_demo');
+    fpTemp = FastSense('Parent', ax1, 'LinkGroup', 'live_demo');
     fpTemp.addLine(t, temp, 'DisplayName', 'Temperature', 'Color', [0.8 0.2 0.1]);
     fpTemp.addThreshold(85, 'Direction', 'upper', 'ShowViolations', true, ...
         'Color', [1 0.8 0], 'LineStyle', '--', 'Label', 'temp warning');
@@ -108,7 +108,7 @@ function example_event_detection_live()
 
     % Pressure plot
     ax2 = subplot(3,1,2, 'Parent', hPlotFig);
-    fpPres = FastPlot('Parent', ax2, 'LinkGroup', 'live_demo');
+    fpPres = FastSense('Parent', ax2, 'LinkGroup', 'live_demo');
     fpPres.addLine(t, pressure, 'DisplayName', 'Pressure', 'Color', [0.2 0.5 1]);
     fpPres.addThreshold(4, 'Direction', 'lower', 'ShowViolations', true, ...
         'Color', [0.2 0.5 1], 'LineStyle', '--', 'Label', 'pressure low');
@@ -118,7 +118,7 @@ function example_event_detection_live()
 
     % Vibration plot
     ax3 = subplot(3,1,3, 'Parent', hPlotFig);
-    fpVib = FastPlot('Parent', ax3, 'LinkGroup', 'live_demo');
+    fpVib = FastSense('Parent', ax3, 'LinkGroup', 'live_demo');
     fpVib.addLine(t, vibration, 'DisplayName', 'Vibration', 'Color', [0.8 0.3 0.8]);
     fpVib.addThreshold(5, 'Direction', 'upper', 'ShowViolations', true, ...
         'Color', [0.8 0.3 0.8], 'LineStyle', '--', 'Label', 'vibration high');
@@ -127,7 +127,7 @@ function example_event_detection_live()
     ylabel(ax3, 'mm/s');
     xlabel(ax3, 'Time (s)');
 
-    % --- 8. Start FastPlot live mode (polls .mat files, auto-scrolls) ---
+    % --- 8. Start FastSense live mode (polls .mat files, auto-scrolls) ---
     fpTemp.startLive(tempFile, @(fp, d) fp.updateData(1, d.x, d.y), ...
         'Interval', 2, 'ViewMode', 'follow');
     fpPres.startLive(presFile, @(fp, d) fp.updateData(1, d.x, d.y), ...
@@ -187,7 +187,7 @@ function example_event_detection_live()
                 liveCfg.SensorData(i).y = s.Y;
             end
 
-            % Write updated data to .mat files — FastPlot startLive picks them up
+            % Write updated data to .mat files — FastSense startLive picks them up
             sT = liveCfg.Sensors{1}; x = sT.X; y = sT.Y; save(tempFile, 'x', 'y');
             sP = liveCfg.Sensors{2}; x = sP.X; y = sP.Y; save(presFile, 'x', 'y');
             sV = liveCfg.Sensors{3}; x = sV.X; y = sV.Y; save(vibFile,  'x', 'y');
@@ -211,7 +211,7 @@ function example_event_detection_live()
             stop(dataTimer);
             delete(dataTimer);
         end
-        % Stop FastPlot live timers
+        % Stop FastSense live timers
         try fpTemp.stopLive(); catch; end
         try fpPres.stopLive(); catch; end
         try fpVib.stopLive();  catch; end

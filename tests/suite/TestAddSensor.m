@@ -3,7 +3,7 @@ classdef TestAddSensor < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             setup();
-            add_fastplot_private_path();
+            add_fastsense_private_path();
         end
     end
 
@@ -14,7 +14,7 @@ classdef TestAddSensor < matlab.unittest.TestCase
             s.Y = rand(1, 100) * 10;
             s.resolve();
 
-            fp = FastPlot();
+            fp = FastSense();
             fp.addSensor(s);
             testCase.verifyEqual(numel(fp.Lines), 1, 'testBasic: one line added');
             testCase.verifyEqual(fp.Lines(1).Options.DisplayName, 'Chamber Pressure', 'testBasic: display name');
@@ -31,7 +31,7 @@ classdef TestAddSensor < matlab.unittest.TestCase
             s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
             s.resolve();
 
-            fp = FastPlot();
+            fp = FastSense();
             fp.addSensor(s, 'ShowThresholds', true);
             testCase.verifyEqual(numel(fp.Lines), 1, 'testWithThresholds: only data line');
             testCase.verifyTrue(numel(fp.Thresholds) >= 1, 'testWithThresholds: threshold(s) added');
@@ -46,7 +46,7 @@ classdef TestAddSensor < matlab.unittest.TestCase
             s.addThresholdRule(struct(), 5, 'Direction', 'upper');
             s.resolve();
 
-            fp = FastPlot();
+            fp = FastSense();
             fp.addSensor(s, 'ShowThresholds', false);
             testCase.verifyEqual(numel(fp.Lines), 1, 'testNoThresholds: only data line');
             testCase.verifyEqual(numel(fp.Thresholds), 0, 'testNoThresholds: no thresholds');
@@ -58,7 +58,7 @@ classdef TestAddSensor < matlab.unittest.TestCase
             s.Y = rand(1, 10);
             s.resolve();
 
-            fp = FastPlot();
+            fp = FastSense();
             fp.addSensor(s);
             testCase.verifyEqual(fp.Lines(1).Options.DisplayName, 'flow_rate', 'testFallbackName: uses Key');
         end

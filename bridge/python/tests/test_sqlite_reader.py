@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from fastplot_bridge.blob_decoder import MKSQ_MAGIC
-from fastplot_bridge.sqlite_reader import SqliteReader, _minmax_downsample
+from fastsense_bridge.blob_decoder import MKSQ_MAGIC
+from fastsense_bridge.sqlite_reader import SqliteReader, _minmax_downsample
 
 
 def _make_double_blob(values: list[float]) -> bytes:
@@ -20,7 +20,7 @@ def _make_double_blob(values: list[float]) -> bytes:
 
 @pytest.fixture
 def sample_db(tmp_path: Path) -> Path:
-    """Create a minimal .fpdb file matching FastPlotDataStore schema."""
+    """Create a minimal .fpdb file matching FastSenseDataStore schema."""
     db_path = tmp_path / "test.fpdb"
     conn = sqlite3.connect(str(db_path))
 

@@ -1,4 +1,4 @@
-%% FastPlot ECG — Simulated heart rhythm with arrhythmia detection
+%% FastSense ECG — Simulated heart rhythm with arrhythmia detection
 % Demonstrates high sample rate biomedical data with tight thresholds
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -44,7 +44,7 @@ end
 fprintf('ECG: %d points at %d Hz (%.0f min recording)...\n', n, fs, n/fs/60);
 tic;
 
-fp = FastPlot();
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'ECG Lead II', 'Color', [0 0.5 0]);
 
 % Arrhythmia detection thresholds

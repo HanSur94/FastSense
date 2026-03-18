@@ -1,4 +1,4 @@
-# Lazy Multi-Resolution Pyramid for FastPlot
+# Lazy Multi-Resolution Pyramid for FastSense
 
 ## Design Document
 
@@ -77,9 +77,9 @@ Replaces the inner loop of `updateLines()`:
 
 | Component | Change |
 |---|---|
-| `FastPlot.m` Lines struct | Add `Pyramid` field (cell array) |
-| `FastPlot.m` `updateLines()` | Level selection + pyramid query |
-| `FastPlot.m` new private method | `buildPyramidLevel()`, `selectPyramidLevel()` |
+| `FastSense.m` Lines struct | Add `Pyramid` field (cell array) |
+| `FastSense.m` `updateLines()` | Level selection + pyramid query |
+| `FastSense.m` new private method | `buildPyramidLevel()`, `selectPyramidLevel()` |
 | `private/minmax_downsample.m` | No change |
 | Tests | New `test_pyramid.m` |
 
@@ -95,6 +95,6 @@ Full zoom-out query: read level 2 (5K points) → downsample to ~4K → **<1ms**
 
 ## 6. Constraints
 
-- Pyramid is invalidated if data changes (FastPlot data is immutable after `addLine()`, so this is safe)
+- Pyramid is invalidated if data changes (FastSense data is immutable after `addLine()`, so this is safe)
 - NaN-aware: pyramid levels preserve NaN segment structure via `minmax_downsample`
 - No render-time cost: zero overhead if user never zooms out far enough to trigger pyramid build

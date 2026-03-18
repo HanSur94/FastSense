@@ -38,10 +38,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            libs/FastPlot/private/*.mex
+            libs/FastSense/private/*.mex
             libs/SensorThreshold/private/*.mex
-            libs/FastPlot/mksqlite.mex
-          key: mex-linux-${{ hashFiles('libs/FastPlot/private/mex_src/**', 'libs/FastPlot/build_mex.m') }}
+            libs/FastSense/mksqlite.mex
+          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
@@ -52,9 +52,9 @@ jobs:
         with:
           name: mex-linux
           path: |
-            libs/FastPlot/private/*.mex
+            libs/FastSense/private/*.mex
             libs/SensorThreshold/private/*.mex
-            libs/FastPlot/mksqlite.mex
+            libs/FastSense/mksqlite.mex
           retention-days: 1
 
   octave:
@@ -64,8 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
     env:
-      FASTPLOT_SKIP_BUILD: "1"
-      FASTPLOT_RESULTS_FILE: /tmp/test-results.txt
+      FASTSENSE_SKIP_BUILD: "1"
+      FASTSENSE_RESULTS_FILE: /tmp/test-results.txt
     steps:
       - uses: actions/checkout@v4
 

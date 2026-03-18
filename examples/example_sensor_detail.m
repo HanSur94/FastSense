@@ -3,7 +3,7 @@
 % Demonstrates:
 %   1. Standalone sensor detail plot with thresholds
 %   2. Adding events from EventStore
-%   3. Embedding in a FastPlotGrid tile
+%   3. Embedding in a FastSenseGrid tile
 
 %% Setup path
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
@@ -83,20 +83,20 @@ sdp2.render();
 fprintf('  Press any key to continue...\n');
 pause;
 
-%% 5. Embedded in FastPlotGrid
-fprintf('=== SensorDetailPlot: Embedded in FastPlotGrid ===\n');
-fig = FastPlotGrid(1, 2, 'Theme', 'light', 'Name', 'Sensor Dashboard');
+%% 5. Embedded in FastSenseGrid
+fprintf('=== SensorDetailPlot: Embedded in FastSenseGrid ===\n');
+fig = FastSenseGrid(1, 2, 'Theme', 'light', 'Name', 'Sensor Dashboard');
 sdp3 = SensorDetailPlot(s, 'Parent', fig.tilePanel(1), ...
     'Events', events, 'Title', 'Temperature');
 sdp3.render();
 
-% Second tile: plain FastPlot for comparison
+% Second tile: plain FastSense for comparison
 fp = fig.tile(2);
 fp.addLine(t, data, 'DisplayName', 'Raw Data');
 fig.setTileTitle(2, 'Raw Data');
 fig.renderAll();
 
-fprintf('  Two tiles: SensorDetailPlot + plain FastPlot\n');
+fprintf('  Two tiles: SensorDetailPlot + plain FastSense\n');
 fprintf('  Press any key to exit...\n');
 pause;
 

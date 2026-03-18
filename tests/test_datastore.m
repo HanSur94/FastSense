@@ -1,6 +1,6 @@
 function test_datastore()
-%TEST_DATASTORE Unit tests for FastPlotDataStore class.
-%   Tests the SQLite/binary-backed data storage used by FastPlot to handle
+%TEST_DATASTORE Unit tests for FastSenseDataStore class.
+%   Tests the SQLite/binary-backed data storage used by FastSense to handle
 %   large datasets without running out of memory. Covers creation, range
 %   queries, slice reads, edge cases, and cleanup.
 
@@ -11,7 +11,7 @@ function test_datastore()
     % testCreateStore: basic construction stores metadata correctly
     x = linspace(0, 100, 10000);
     y = sin(x);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     assert(ds.NumPoints == 10000, 'testCreateStore: NumPoints');
     assert(ds.XMin == x(1), 'testCreateStore: XMin');
     assert(ds.XMax == x(end), 'testCreateStore: XMax');
@@ -20,18 +20,18 @@ function test_datastore()
 
     % testCreateStoreWithNaN: detects NaN in Y data
     y2 = y; y2(500) = NaN;
-    ds = FastPlotDataStore(x, y2);
+    ds = FastSenseDataStore(x, y2);
     assert(ds.HasNaN == true, 'testCreateStoreWithNaN: HasNaN should be true');
     ds.cleanup();
 
     % testEmptyConstruction: empty construction returns valid zero-state
-    ds = FastPlotDataStore();
+    ds = FastSenseDataStore();
     assert(ds.NumPoints == 0, 'testEmptyConstruction: NumPoints');
     assert(isnan(ds.XMin), 'testEmptyConstruction: XMin should be NaN');
     ds.cleanup();
 
     % testColumnVectorInput: accepts column vectors
-    ds = FastPlotDataStore((1:100)', rand(100,1));
+    ds = FastSenseDataStore((1:100)', rand(100,1));
     assert(ds.NumPoints == 100, 'testColumnVectorInput: NumPoints');
     ds.cleanup();
 
@@ -40,7 +40,7 @@ function test_datastore()
     % testGetRangeMiddle: query a middle range returns correct data
     x = linspace(0, 100, 50000);
     y = sin(x);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xr, yr] = ds.getRange(20, 40);
     assert(~isempty(xr), 'testGetRangeMiddle: should return data');
     % All interior points must be within range (edges may have 1-pt padding)
@@ -54,7 +54,7 @@ function test_datastore()
     % testGetRangeFullSpan: range covering entire dataset returns all points
     x = 1:1000;
     y = rand(1, 1000);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xr, yr] = ds.getRange(1, 1000);
     assert(numel(xr) == 1000, 'testGetRangeFullSpan: should get all points');
     assert(isequal(xr, x), 'testGetRangeFullSpan: X data must match');
@@ -66,7 +66,7 @@ function test_datastore()
     n = 200000;
     x = linspace(0, 1000, n);
     y = cumsum(randn(1, n));
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xr, yr] = ds.getRange(500, 501);
     % Should get a reasonable number of points (not all 200K)
     assert(numel(xr) > 10, 'testGetRangeSmall: too few points');
@@ -79,7 +79,7 @@ function test_datastore()
     % testGetRangeOutside: range outside data returns empty or edge points
     x = 1:100;
     y = rand(1, 100);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xr, ~] = ds.getRange(200, 300);
     % Should either be empty or contain only the last data point
     assert(numel(xr) <= 1, 'testGetRangeOutside: should be empty or single edge');
@@ -90,7 +90,7 @@ function test_datastore()
     % testReadSliceExact: reading a specific index range returns correct data
     x = 1:5000;
     y = (1:5000) * 2;
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xs, ys] = ds.readSlice(100, 200);
     assert(numel(xs) == 101, 'testReadSliceExact: count');
     assert(xs(1) == 100, 'testReadSliceExact: first X');
@@ -102,7 +102,7 @@ function test_datastore()
     % testReadSliceFullRange: reading entire range matches original data
     x = linspace(0, 10, 1000);
     y = cos(x);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xs, ys] = ds.readSlice(1, 1000);
     tol = 1e-12;
     assert(max(abs(xs - x)) < tol, 'testReadSliceFullRange: X mismatch');
@@ -110,7 +110,7 @@ function test_datastore()
     ds.cleanup();
 
     % testReadSliceClamped: out-of-bounds indices are clamped
-    ds = FastPlotDataStore(1:100, rand(1, 100));
+    ds = FastSenseDataStore(1:100, rand(1, 100));
     [xs, ~] = ds.readSlice(-5, 200);
     assert(numel(xs) == 100, 'testReadSliceClamped: should clamp to full range');
     assert(xs(1) == 1, 'testReadSliceClamped: start clamped');
@@ -124,7 +124,7 @@ function test_datastore()
     n = 150000;
     x = sort(rand(1, n)) * 1000;
     y = randn(1, n);
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [xAll, yAll] = ds.readSlice(1, n);
     tol = 1e-12;
     assert(max(abs(xAll - x)) < tol, 'testDataIntegrity: X drift');
@@ -135,7 +135,7 @@ function test_datastore()
     x = 1:100;
     y = rand(1, 100);
     y([10, 50, 90]) = NaN;
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     [~, yr] = ds.readSlice(1, 100);
     assert(isnan(yr(10)), 'testDataIntegrityNaN: NaN at 10');
     assert(isnan(yr(50)), 'testDataIntegrityNaN: NaN at 50');
@@ -145,7 +145,7 @@ function test_datastore()
     % --- Range query returns row vectors ---
 
     % testOutputShape: getRange and readSlice return row vectors
-    ds = FastPlotDataStore(1:1000, rand(1, 1000));
+    ds = FastSenseDataStore(1:1000, rand(1, 1000));
     [xr, yr] = ds.getRange(100, 200);
     assert(isrow(xr), 'testOutputShape: getRange X must be row');
     assert(isrow(yr), 'testOutputShape: getRange Y must be row');
@@ -157,7 +157,7 @@ function test_datastore()
     % --- Cleanup ---
 
     % testCleanupDeletesFile: cleanup removes temp files from disk
-    ds = FastPlotDataStore(1:1000, rand(1, 1000));
+    ds = FastSenseDataStore(1:1000, rand(1, 1000));
     % Store the path(s) before cleanup
     hasDb = ~isempty(ds.DbPath) && exist(ds.DbPath, 'file');
     hasBin = ~isempty(ds.BinPath) && exist(ds.BinPath, 'file');
@@ -171,7 +171,7 @@ function test_datastore()
     assert(~exist(fpath, 'file'), 'testCleanupDeletesFile: file should be gone');
 
     % testDestructorCleanup: deleting the object cleans up temp files
-    ds = FastPlotDataStore(1:1000, rand(1, 1000));
+    ds = FastSenseDataStore(1:1000, rand(1, 1000));
     if ~isempty(ds.DbPath) && exist(ds.DbPath, 'file')
         fpath = ds.DbPath;
     else
@@ -186,7 +186,7 @@ function test_datastore()
     n = 500000;
     x = linspace(0, 10000, n);
     y = sin(x / 100) + randn(1, n) * 0.1;
-    ds = FastPlotDataStore(x, y);
+    ds = FastSenseDataStore(x, y);
     assert(ds.NumPoints == n, 'testLargeDataset: NumPoints');
 
     % Query a narrow range — should be fast and return correct subset

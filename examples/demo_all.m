@@ -1,25 +1,25 @@
-%% FastPlot Interactive Demo
+%% FastSense Interactive Demo
 % Opens all example plots and keeps them alive for interactive exploration.
 % Zoom and pan on any figure as long as you want.
 % Press Enter in the command window to close all figures and exit.
 %
 % Usage:
 %   From MATLAB/Octave command window:
-%     cd FastPlot/examples
+%     cd FastSense/examples
 %     demo_all
 %
 %   From terminal (Octave — requires GUI for interactive zoom/pan):
-%     cd FastPlot
-%     octave --gui --eval "run('setup.m'); addpath('libs/FastPlot/private'); addpath('examples'); demo_all;"
+%     cd FastSense
+%     octave --gui --eval "run('setup.m'); addpath('libs/FastSense/private'); addpath('examples'); demo_all;"
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
 run(fullfile(projectRoot, 'setup.m'));
-addpath(fullfile(projectRoot, 'libs', 'FastPlot', 'private'));
+addpath(fullfile(projectRoot, 'libs', 'FastSense', 'private'));
 addpath(fileparts(mfilename('fullpath')));
 
 fprintf('\n');
 fprintf('  =============================================\n');
-fprintf('  FastPlot Interactive Demo\n');
+fprintf('  FastSense Interactive Demo\n');
 fprintf('  =============================================\n');
 fprintf('  Opening all example plots...\n\n');
 

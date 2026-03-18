@@ -1,4 +1,4 @@
-%% FastPlot 3x3 Dashboard — Industrial Monitoring Console
+%% FastSense 3x3 Dashboard — Industrial Monitoring Console
 % 9 tiles with different signals, data sizes, and features.
 
 close all force;
@@ -9,7 +9,7 @@ run(fullfile(projectRoot, 'setup.m'));
 fprintf('3x3 Dashboard: 9 tiles, mixed data sizes, dark theme...\n');
 tic;
 
-fig = FastPlotGrid(3, 3, 'Theme', 'light', ...
+fig = FastSenseGrid(3, 3, 'Theme', 'light', ...
     'Name', 'Industrial Monitoring Console', 'Position', [30 30 1800 1000]);
 
 % =========================================================================

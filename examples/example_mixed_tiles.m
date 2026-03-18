@@ -1,6 +1,6 @@
-%% Mixed Tile Types — FastPlot + raw MATLAB axes in one dashboard
+%% Mixed Tile Types — FastSense + raw MATLAB axes in one dashboard
 % Demonstrates using fig.axes(n) alongside fig.tile(n) for plot types
-% that FastPlot doesn't handle (bar, scatter, histogram, stem, etc.)
+% that FastSense doesn't handle (bar, scatter, histogram, stem, etc.)
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
 run(fullfile(projectRoot, 'setup.m'));
@@ -8,13 +8,13 @@ run(fullfile(projectRoot, 'setup.m'));
 n = 500000;
 x = linspace(0, 120, n);
 
-fprintf('Mixed tile dashboard: 2x3 grid, FastPlot + raw axes...\n');
+fprintf('Mixed tile dashboard: 2x3 grid, FastSense + raw axes...\n');
 tic;
 
-fig = FastPlotGrid(2, 3, 'Theme', 'light', ...
+fig = FastSenseGrid(2, 3, 'Theme', 'light', ...
     'Name', 'Mixed Tile Types Demo', 'Position', [50 50 1500 800]);
 
-% --- Tile 1: FastPlot time series (temperature) ---
+% --- Tile 1: FastSense time series (temperature) ---
 fp1 = fig.tile(1);
 y_temp = 70 + 10*sin(x*2*pi/30) + 2*randn(1,n);
 fp1.addLine(x, y_temp, 'DisplayName', 'Temperature');
@@ -37,7 +37,7 @@ scatter(ax3, s_temp, s_press, 25, s_temp, 'filled', 'MarkerFaceAlpha', 0.6);
 colormap(ax3, 'parula');
 grid(ax3, 'on');
 
-% --- Tile 4: FastPlot time series (pressure, spans 2 cols) ---
+% --- Tile 4: FastSense time series (pressure, spans 2 cols) ---
 fig.setTileSpan(4, [1 2]);
 fp4 = fig.tile(4);
 y_press = 100 + 15*sin(x*2*pi/60) + 3*randn(1,n);
@@ -55,7 +55,7 @@ grid(ax6, 'on');
 % Render all tiles
 fig.renderAll();
 
-% Apply labels (works on both FastPlot and raw axes tiles)
+% Apply labels (works on both FastSense and raw axes tiles)
 fig.setTileTitle(1, 'Temperature (C)');
 fig.setTileXLabel(1, 'Time (s)');
 fig.setTileTitle(2, 'Alarm Events / Day');

@@ -22,34 +22,34 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
 
         function testAddWidget(testCase)
             d = DashboardEngine('Test');
-            d.addWidget('fastplot', 'Title', 'Plot 1', ...
+            d.addWidget('fastsense', 'Title', 'Plot 1', ...
                 'Position', [1 1 12 3], ...
                 'XData', 1:10, 'YData', rand(1,10));
             testCase.verifyEqual(numel(d.Widgets), 1);
-            testCase.verifyTrue(isa(d.Widgets{1}, 'FastPlotWidget'));
+            testCase.verifyTrue(isa(d.Widgets{1}, 'FastSenseWidget'));
         end
 
         function testAddMultipleWidgets(testCase)
             d = DashboardEngine('Test');
-            d.addWidget('fastplot', 'Title', 'Plot 1', ...
+            d.addWidget('fastsense', 'Title', 'Plot 1', ...
                 'Position', [1 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
-            d.addWidget('fastplot', 'Title', 'Plot 2', ...
+            d.addWidget('fastsense', 'Title', 'Plot 2', ...
                 'Position', [13 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
             testCase.verifyEqual(numel(d.Widgets), 2);
         end
 
         function testOverlapResolution(testCase)
             d = DashboardEngine('Test');
-            d.addWidget('fastplot', 'Title', 'Plot 1', ...
+            d.addWidget('fastsense', 'Title', 'Plot 1', ...
                 'Position', [1 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
-            d.addWidget('fastplot', 'Title', 'Plot 2', ...
+            d.addWidget('fastsense', 'Title', 'Plot 2', ...
                 'Position', [5 1 12 3], 'XData', 1:10, 'YData', rand(1,10));
             testCase.verifyEqual(d.Widgets{2}.Position(2), 4);
         end
 
         function testRender(testCase)
             d = DashboardEngine('Render Test');
-            d.addWidget('fastplot', 'Title', 'Plot 1', ...
+            d.addWidget('fastsense', 'Title', 'Plot 1', ...
                 'Position', [1 1 24 3], 'XData', 1:100, 'YData', rand(1,100));
             d.render();
             testCase.addTeardown(@() close(d.hFigure));
@@ -62,7 +62,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             d = DashboardEngine('Save Test');
             d.Theme = 'dark';
             d.LiveInterval = 3;
-            d.addWidget('fastplot', 'Title', 'Temp', ...
+            d.addWidget('fastsense', 'Title', 'Temp', ...
                 'Position', [1 1 12 3], 'XData', 1:10, 'YData', [1:10]);
 
             filepath = fullfile(tempdir, 'test_save_dashboard.json');
@@ -79,7 +79,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
 
         function testExportScript(testCase)
             d = DashboardEngine('Export Test');
-            d.addWidget('fastplot', 'Title', 'Pressure', ...
+            d.addWidget('fastsense', 'Title', 'Pressure', ...
                 'Position', [1 1 12 3], 'XData', 1:5, 'YData', [5 4 3 2 1]);
 
             filepath = fullfile(tempdir, 'test_export_dashboard.m');
@@ -94,7 +94,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testLiveStartStop(testCase)
             d = DashboardEngine('Live Test');
             d.LiveInterval = 1;
-            d.addWidget('fastplot', 'Title', 'Plot', ...
+            d.addWidget('fastsense', 'Title', 'Plot', ...
                 'Position', [1 1 24 3], 'XData', 1:10, 'YData', rand(1,10));
             d.render();
             testCase.addTeardown(@() close(d.hFigure));
@@ -115,7 +115,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             s.resolve();
 
             d = DashboardEngine('Sensor Test');
-            d.addWidget('fastplot', 'Sensor', s, 'Position', [1 1 16 3]);
+            d.addWidget('fastsense', 'Sensor', s, 'Position', [1 1 16 3]);
             testCase.verifyEqual(d.Widgets{1}.Title, 'Temperature');
             testCase.verifyEqual(d.Widgets{1}.Sensor, s);
         end
@@ -123,7 +123,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         function testCloseDeletesTimer(testCase)
             d = DashboardEngine('Timer Cleanup');
             d.LiveInterval = 1;
-            d.addWidget('fastplot', 'Title', 'P', ...
+            d.addWidget('fastsense', 'Title', 'P', ...
                 'Position', [1 1 24 3], 'XData', 1:10, 'YData', rand(1,10));
             d.render();
             d.startLive();

@@ -79,8 +79,8 @@ for i = 1:numel(queryTimes)
     end
 end
 
-% --- Plot with FastPlot ---
-fp = FastPlot();
+% --- Plot with FastSense ---
+fp = FastSense();
 fp.addSensor(s, 'ShowThresholds', true);
 fp.render();
 title('Gas Flow — Multi-State Dynamic Thresholds');

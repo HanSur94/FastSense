@@ -1,6 +1,6 @@
-%% Multi-Sensor Dashboard — FastPlotGrid + SensorRegistry
+%% Multi-Sensor Dashboard — FastSenseGrid + SensorRegistry
 % Demonstrates:
-%   - FastPlotGrid tiled layout (2x2 grid)
+%   - FastSenseGrid tiled layout (2x2 grid)
 %   - SensorRegistry for predefined sensor definitions
 %   - Multiple sensors each with different threshold configurations
 %   - Tile titles, labels, and per-tile theming
@@ -90,9 +90,9 @@ s4.addThresholdRule(struct('machine', 2), 25, ...
 s4.resolve();
 
 % ========================================================
-% Build 2x2 dashboard with FastPlotGrid
+% Build 2x2 dashboard with FastSenseGrid
 % ========================================================
-fig = FastPlotGrid(2, 2, 'Name', 'Sensor Dashboard');
+fig = FastSenseGrid(2, 2, 'Name', 'Sensor Dashboard');
 
 % Tile 1: Pressure
 fp1 = fig.tile(1);

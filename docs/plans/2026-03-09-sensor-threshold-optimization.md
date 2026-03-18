@@ -72,7 +72,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/test_declarative_condition.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/test_declarative_condition.m')"`
 Expected: FAIL — ThresholdRule constructor expects function_handle, not struct
 
 **Step 3: Implement ThresholdRule with declarative conditions**
@@ -158,7 +158,7 @@ end
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/test_declarative_condition.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/test_declarative_condition.m')"`
 Expected: PASS — All 6 tests
 
 **Step 5: Commit**
@@ -235,7 +235,7 @@ Replace all `@(st) st.xxx == N` with `struct('xxx', N)` in `tests/test_sensor.m`
 
 **Step 5: Run tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/test_sensor.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/test_sensor.m')"`
 Expected: PASS — All 5 tests
 
 **Step 6: Commit**
@@ -342,7 +342,7 @@ end
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/test_resolve_segments.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/test_resolve_segments.m')"`
 Expected: FAIL — addThresholdRule still expects old API in resolve()
 
 **Step 3: Rewrite resolve() in Sensor.m**
@@ -646,7 +646,7 @@ In `tests/test_sensor_resolve.m`, replace all function-handle conditions:
 
 **Step 6: Run all sensor tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/test_sensor_resolve.m'); run('tests/test_resolve_segments.m'); run('tests/test_declarative_condition.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/test_sensor_resolve.m'); run('tests/test_resolve_segments.m'); run('tests/test_declarative_condition.m')"`
 Expected: PASS — All tests
 
 **Step 7: Commit**
@@ -665,8 +665,8 @@ git commit -m "feat: rewrite Sensor.resolve() with segment-based vectorized algo
 ### Task 4: SIMD MEX — compute_violations_mex.c
 
 **Files:**
-- Create: `libs/FastPlot/private/mex_src/compute_violations_mex.c`
-- Modify: `libs/FastPlot/build_mex.m:61-65` (add to mex_files list)
+- Create: `libs/FastSense/private/mex_src/compute_violations_mex.c`
+- Modify: `libs/FastSense/build_mex.m:61-65` (add to mex_files list)
 - Create: `tests/test_violations_mex_parity.m`
 
 **Step 1: Write MEX parity test**
@@ -780,7 +780,7 @@ end
 
 **Step 2: Write compute_violations_mex.c**
 
-Create `libs/FastPlot/private/mex_src/compute_violations_mex.c`:
+Create `libs/FastSense/private/mex_src/compute_violations_mex.c`:
 
 ```c
 /*
@@ -874,7 +874,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
                  int nrhs, const mxArray *prhs[])
 {
     if (nrhs != 5) {
-        mexErrMsgIdAndTxt("FastPlot:compute_violations_mex:nrhs",
+        mexErrMsgIdAndTxt("FastSense:compute_violations_mex:nrhs",
                           "Five inputs required: sensorY, segLo, segHi, thresholdValues, directions.");
     }
 
@@ -942,7 +942,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
 **Step 3: Add to build_mex.m**
 
-In `libs/FastPlot/build_mex.m`, add to the `mex_files` cell array (line 61-65):
+In `libs/FastSense/build_mex.m`, add to the `mex_files` cell array (line 61-65):
 
 ```matlab
 mex_files = {
@@ -955,19 +955,19 @@ mex_files = {
 
 **Step 4: Compile MEX**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('setup.m'); build_mex()"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('setup.m'); build_mex()"`
 Expected: All 4 MEX files compile, including compute_violations_mex
 
 **Step 5: Run parity test**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/test_violations_mex_parity.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/test_violations_mex_parity.m')"`
 Expected: PASS — All 5 parity tests
 
 **Step 6: Commit**
 
 ```bash
-git add libs/FastPlot/private/mex_src/compute_violations_mex.c \
-    libs/FastPlot/build_mex.m tests/test_violations_mex_parity.m
+git add libs/FastSense/private/mex_src/compute_violations_mex.c \
+    libs/FastSense/build_mex.m tests/test_violations_mex_parity.m
 git commit -m "feat: add SIMD MEX for batch threshold violation detection"
 ```
 
@@ -1046,7 +1046,7 @@ end
 
 **Step 2: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/run_all_tests.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/run_all_tests.m')"`
 Expected: All 31+ tests pass
 
 **Step 3: Commit**
@@ -1157,7 +1157,7 @@ end
 
 **Step 2: Run benchmark**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('examples/benchmark_resolve.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('examples/benchmark_resolve.m')"`
 Expected: Sub-second times for all data sizes (vs multi-second for old implementation)
 
 **Step 3: Commit**
@@ -1175,17 +1175,17 @@ git commit -m "feat: add before/after benchmark for Sensor.resolve() optimizatio
 
 **Step 1: Compile MEX**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('setup.m'); build_mex()"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('setup.m'); build_mex()"`
 Expected: All 4 MEX files compiled
 
 **Step 2: Run all tests**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('tests/run_all_tests.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('tests/run_all_tests.m')"`
 Expected: All tests pass (31 original + 3 new = 34 tests)
 
 **Step 3: Run benchmark**
 
-Run: `cd /Users/hannessuhr/FastPlot && octave --eval "run('examples/benchmark_resolve.m')"`
+Run: `cd /Users/hannessuhr/FastSense && octave --eval "run('examples/benchmark_resolve.m')"`
 Expected: Performance table printed with sub-second resolve times
 
 **Step 4: Final commit (if any fixups needed)**

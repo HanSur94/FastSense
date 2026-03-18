@@ -13,7 +13,7 @@ function benchmark_memory()
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
 
-    fprintf('=== FastPlot Memory Benchmark ===\n\n');
+    fprintf('=== FastSense Memory Benchmark ===\n\n');
 
     %% 1. Scaling: memory vs disk across sizes
     sizes = [1e5, 5e5, 1e6, 2e6, 5e6, 10e6];
