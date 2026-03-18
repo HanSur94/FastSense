@@ -1,6 +1,7 @@
 # FastSense
 
 [![Tests](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml)
+[![Benchmark](https://github.com/HanSur94/FastSense/actions/workflows/benchmark.yml/badge.svg)](https://hansur94.github.io/FastSense/dev/bench/)
 [![codecov](https://codecov.io/gh/HanSur94/FastSense/graph/badge.svg)](https://codecov.io/gh/HanSur94/FastSense)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
@@ -42,15 +43,25 @@ fp.addThreshold(-2.0, 'Direction', 'lower', 'ShowViolations', true, ...
 fp.render();
 ```
 
+**Local benchmarks** (Apple M4, GNU Octave 11, 10M points, MEX+NEON):
+
 | Operation | Time |
 |---|---|
-| MinMax downsample (MEX) | 7.4 ms |
+| MinMax downsample | 7.4 ms |
 | Full zoom cycle (2 thresholds) | 4.7 ms |
 | Effective zoom FPS | **212 FPS** |
 | Point reduction | 99.96% |
-| GPU memory (10M pts) | 0.06 MB vs 153 MB for `plot()` |
+| GPU memory | 0.06 MB vs 153 MB for `plot()` |
 
-<sub>Benchmarked on Apple M4, GNU Octave 11, 10M data points.</sub>
+**CI benchmarks** (Ubuntu, Octave 8.4, 1M points, MEX without SIMD):
+
+| Operation | Time |
+|---|---|
+| MinMax downsample | ~2.1 ms |
+| Binary search | ~100 us |
+| Zoom cycle | ~26 ms |
+
+Performance is tracked on every commit — regressions trigger alerts. [Live benchmark charts](https://hansur94.github.io/FastSense/dev/bench/)
 
 - **Smart downsampling** — per-pixel MinMax and LTTB, auto-selected per zoom level
 - **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB

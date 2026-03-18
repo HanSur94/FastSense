@@ -5,7 +5,7 @@ function run_ci_benchmark()
 %   github-action-benchmark (customSmallerIsBetter format).
 %
 %   Metrics measured:
-%     - Instantiation: FastPlot() + addLine + addThreshold
+%     - Instantiation: FastSense() + addLine + addThreshold
 %     - Render: render() + drawnow
 %     - Zoom cycle: set XLim + drawnow (interactive responsiveness)
 %     - Downsample: minmax_downsample kernel
@@ -13,11 +13,11 @@ function run_ci_benchmark()
 %   Dataset sizes: 1M, 5M, 10M, 50M, 100M, 500M points
 %   Iterations: scaled per size to keep CI runtime reasonable
 
-    % Support both FastPlot and FastSense directory names
+    % Support both FastSense and FastSense directory names
     if exist(fullfile(pwd, 'libs', 'FastSense', 'private'), 'dir')
         addpath(fullfile(pwd, 'libs', 'FastSense', 'private'));
     else
-        addpath(fullfile(pwd, 'libs', 'FastPlot', 'private'));
+        addpath(fullfile(pwd, 'libs', 'FastSense', 'private'));
     end
 
     sizes  = [1e6, 5e6, 10e6, 50e6, 100e6, 500e6];
@@ -68,7 +68,7 @@ function run_ci_benchmark()
         t_init = zeros(1, N_INIT);
         for r = 1:N_INIT
             tic;
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(x, y, 'DisplayName', 'Sensor');
             fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true);
             fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true);
@@ -80,7 +80,7 @@ function run_ci_benchmark()
         % --- Render benchmark ---
         t_render = zeros(1, N_INIT);
         for r = 1:N_INIT
-            fp = FastPlot();
+            fp = FastSense();
             fp.addLine(x, y, 'DisplayName', 'Sensor');
             fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true);
             fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true);
@@ -93,7 +93,7 @@ function run_ci_benchmark()
         results = add_result(results, sprintf('Render mean (%s)', lbl), 'ms', t_render * 1000);
 
         % --- Zoom cycle benchmark ---
-        fp = FastPlot();
+        fp = FastSense();
         fp.addLine(x, y, 'DisplayName', 'Sensor');
         fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true);
         fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true);
