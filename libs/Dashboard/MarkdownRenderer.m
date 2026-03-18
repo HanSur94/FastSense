@@ -7,7 +7,7 @@ classdef MarkdownRenderer
 %
 %   Converts a subset of Markdown to a self-contained HTML document.
 %   Supported: headings (#-###), **bold**, *italic*, `inline code`,
-%   fenced code blocks, [links](url), ![images](src), unordered/ordered
+%   fenced code blocks, `[links](url)`, `![images](src)`, unordered/ordered
 %   lists, horizontal rules (---), tables (pipe-delimited), and paragraph
 %   breaks.
 %
