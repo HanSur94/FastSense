@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773854167749,
+  "lastUpdate": 1773855044568,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -759,6 +759,270 @@ window.BENCHMARK_DATA = {
           {
             "name": "Zoom cycle mean ( std00M)",
             "value": 1.147,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sannahrush@googlemail.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "sannahrush@googlemail.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "distinct": true,
+          "id": "2154d0d7c56b919ba3add4529e12e1557b4114d6",
+          "message": "ci: enforce MISS_HIT complexity metrics and enable more style rules\n\nAdd mh_metric --ci to CI workflow with thresholds for cyclomatic\ncomplexity, nesting depth, parameter count, and function length.\nUn-suppress 7 low-count style rules and auto-fix violations across\nthe codebase (whitespace around brackets, semicolons, colons,\nassignments, continuations, and operator placement).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-18T18:23:49+01:00",
+          "tree_id": "7fab65657b46df1ae76bb1783094ffa1cca10632",
+          "url": "https://github.com/HanSur94/FastSense/commit/2154d0d7c56b919ba3add4529e12e1557b4114d6"
+        },
+        "date": 1773855043826,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 2.091,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.064,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 141.895,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 12.799,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 228.114,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 5.982,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 13.554,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 4.3,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 9.816,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.047,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 153.769,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 1.028,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 229.777,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 1.761,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 12.949,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 1.842,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 19.377,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.228,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 174.632,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 0.43,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 237.941,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 2.382,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 12.632,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.759,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 96.971,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.072,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1531.715,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 88.378,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 237.174,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 0.85,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 12.874,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 1.058,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 194.953,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.152,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2922.751,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 173.967,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 242.122,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 0.491,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 12.773,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.162,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 972.16,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 25.628,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22847.489,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 501.856,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 749.234,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 695.171,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 13.742,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 2.145,
             "unit": "ms"
           }
         ]
