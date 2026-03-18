@@ -7,3 +7,4 @@
 .worktrees/
 *.egg-info/
 __pycache__/
+wiki-gen-summary.md
