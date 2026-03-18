@@ -86,6 +86,10 @@ function test_no_data_no_events()
 end
 
 function test_severity_escalation()
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (Octave classdef limitation)\n');
+        return;
+    end
     det = IncrementalEventDetector('MinDuration', 0, 'EscalateSeverity', true);
     sensor = Sensor('temp');
     sensor.addThresholdRule(struct(), 100, 'Direction', 'upper', 'Label', 'H');
