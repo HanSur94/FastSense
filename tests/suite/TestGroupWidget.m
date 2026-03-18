@@ -170,6 +170,11 @@ classdef TestGroupWidget < matlab.unittest.TestCase
             testCase.verifyLength(outer.Children, 1);
         end
 
+        function testLayoutReflow(testCase)
+            layout = DashboardLayout();
+            testCase.verifyTrue(ismethod(layout, 'reflow'));
+        end
+
         function testThemeHasGroupFields(testCase)
             presets = {'dark', 'light', 'industrial', 'scientific', 'ocean', 'default'};
             for i = 1:numel(presets)

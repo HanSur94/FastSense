@@ -266,6 +266,15 @@ classdef DashboardLayout < handle
             end
         end
 
+        function reflow(obj, hFigure, widgets, theme)
+        % Re-run layout after dynamic changes (e.g., group collapse/expand).
+        % Tears down and recreates all panels, calling render() on each widget.
+            if isempty(hFigure) || ~ishandle(hFigure)
+                return;
+            end
+            obj.createPanels(hFigure, widgets, theme);
+        end
+
         function onScroll(obj, val)
         %ONSCROLL Adjust canvas position from scrollbar value.
         %   val=1 shows top, val=0 shows bottom.
