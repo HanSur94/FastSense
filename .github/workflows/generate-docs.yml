@@ -23,25 +23,18 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Clone wiki repo
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/HanSur94/FastSense.wiki.git" wiki
-
       - name: Generate API docs
         run: python3 scripts/generate_api_docs.py
 
-      - name: Push updated wiki
+      - name: Commit updated wiki
         run: |
-          cd wiki
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add wiki/
           if git diff --cached --quiet; then
             echo "No documentation changes"
           else
             git commit -m "docs: auto-update API reference from source code"
             git push
-            echo "Wiki API docs updated"
+            echo "Wiki API docs updated in main repo"
           fi
