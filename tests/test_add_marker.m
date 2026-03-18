@@ -1,7 +1,7 @@
 function test_add_marker()
 %TEST_ADD_MARKER Tests for FastSense.addMarker method.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     % testAddMarker

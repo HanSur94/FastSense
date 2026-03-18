@@ -833,7 +833,7 @@ classdef DashboardBuilder < handle
                 'Color', 'none', ...
                 'Visible', 'off', ...
                 'HitTest', 'off');
-            try set(hAx, 'PickableParts', 'none'); catch, end
+            try set(hAx, 'PickableParts', 'none'); catch , end
             hold(hAx, 'on');
 
             gc = theme.GridLineColor;
@@ -854,7 +854,7 @@ classdef DashboardBuilder < handle
             end
             hL = line(hAx, xV, yV, 'Color', gc, ...
                 'LineStyle', ':', 'LineWidth', 0.5, 'HitTest', 'off');
-            try set(hL, 'PickableParts', 'none'); catch, end
+            try set(hL, 'PickableParts', 'none'); catch , end
 
             % Build all horizontal lines as a single NaN-separated line
             nH = rows + 1;
@@ -872,7 +872,7 @@ classdef DashboardBuilder < handle
             end
             hL = line(hAx, xH, yH, 'Color', gc, ...
                 'LineStyle', ':', 'LineWidth', 0.5, 'HitTest', 'off');
-            try set(hL, 'PickableParts', 'none'); catch, end
+            try set(hL, 'PickableParts', 'none'); catch , end
 
             hold(hAx, 'off');
             obj.hGridOverlay = hAx;

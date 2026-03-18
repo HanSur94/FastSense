@@ -1,7 +1,7 @@
 function test_theme()
 %TEST_THEME Tests for FastSenseTheme function.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
 
     % testDefaultPreset
     t = FastSenseTheme('default');

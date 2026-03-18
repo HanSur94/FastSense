@@ -4,7 +4,7 @@ function test_mksqlite_edge_cases()
 %   empty strings, large arrays, empty cells, struct edge cases, and
 %   multi-row matrices.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
 
     if ~(exist('mksqlite', 'file') == 3)
         fprintf('    SKIPPED: mksqlite MEX not available.\n');

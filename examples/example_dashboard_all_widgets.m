@@ -25,7 +25,7 @@ t = linspace(0, 86400, N);  % 24 hours in seconds
 
 % --- Machine mode state channel (idle=0, running=1, maintenance=2) ---
 modeChangeTimes = [0, 3600, 7200, 28800, 36000, 72000, 79200, 82800];
-modeValues      = [0, 1,    1,    2,     1,     0,     1,     1    ];
+modeValues      = [0, 1,    1,    2,     1,     0,     1,     1];
 
 scMode = StateChannel('machine');
 scMode.X = modeChangeTimes;

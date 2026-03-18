@@ -204,9 +204,9 @@ function c = movCorr(x, y, w)
     % Simple moving-window Pearson correlation (no toolbox needed)
     c = nan(1, numel(x));
     half = floor(w / 2);
-    for i = half+1 : numel(x)-half
-        xi = x(i-half : i+half);
-        yi = y(i-half : i+half);
+    for i = half+1:numel(x)-half
+        xi = x(i-half:i+half);
+        yi = y(i-half:i+half);
         xi = xi - mean(xi);
         yi = yi - mean(yi);
         denom = sqrt(sum(xi.^2) * sum(yi.^2));

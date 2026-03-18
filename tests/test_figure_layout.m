@@ -1,7 +1,7 @@
 function test_figure_layout()
 %TEST_FIGURE_LAYOUT Tests for FastSenseGrid layout manager.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     % testConstruction

@@ -1,7 +1,7 @@
 function test_render()
 %TEST_RENDER Tests for FastSense.render method.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     % testCreatesNewFigure

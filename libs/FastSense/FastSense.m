@@ -565,8 +565,8 @@ classdef FastSense < handle
                 obj.addLine(sensor.X, sensor.Y, 'DisplayName', displayName);
             end
 
-            if showThresholds && ~isempty(sensor.ResolvedThresholds) ...
-                    && isfield(sensor.ResolvedThresholds, 'Label')
+            if showThresholds && ~isempty(sensor.ResolvedThresholds) && ...
+                    isfield(sensor.ResolvedThresholds, 'Label')
                 resolvedTh = sensor.ResolvedThresholds;
                 for i = 1:numel(resolvedTh)
                     th = resolvedTh(i);
@@ -1962,8 +1962,8 @@ classdef FastSense < handle
                 end
                 % Set visible only for thresholds that have ShowViolations
                 for t = 1:numel(obj.Thresholds)
-                    if ~isempty(obj.Thresholds(t).hMarkers) && ishandle(obj.Thresholds(t).hMarkers) ...
-                            && obj.Thresholds(t).ShowViolations
+                    if ~isempty(obj.Thresholds(t).hMarkers) && ishandle(obj.Thresholds(t).hMarkers) && ...
+                            obj.Thresholds(t).ShowViolations
                         set(obj.Thresholds(t).hMarkers, 'Visible', 'on');
                     end
                 end
@@ -2904,8 +2904,8 @@ classdef FastSense < handle
                 return;
             end
             for t = 1:numel(obj.Thresholds)
-                if isempty(obj.Thresholds(t).X) && ~isempty(obj.Thresholds(t).hLine) ...
-                        && ishandle(obj.Thresholds(t).hLine)
+                if isempty(obj.Thresholds(t).X) && ~isempty(obj.Thresholds(t).hLine) && ...
+                        ishandle(obj.Thresholds(t).hLine)
                     set(obj.Thresholds(t).hLine, 'XData', [xmin, xmax]);
                 end
             end

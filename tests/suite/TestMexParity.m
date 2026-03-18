@@ -14,14 +14,14 @@ classdef TestMexParity < matlab.unittest.TestCase
             x = [1 3 5 7 9 11 13 15 17 19];
 
             test_cases = {
-                4,   'left',  3;
-                6,   'right', 3;
-                5,   'left',  3;
-                5,   'right', 3;
-                0,   'left',  1;
-                100, 'right', 10;
-                100, 'left',  10;
-                0,   'right', 1;
+                4,   'left',  3
+                6,   'right', 3
+                5,   'left',  3
+                5,   'right', 3
+                0,   'left',  1
+                100, 'right', 10
+                100, 'left',  10
+                0,   'right', 1
             };
 
             for t = 1:size(test_cases, 1)

@@ -164,7 +164,7 @@ gasPeriod  = [600    500    700    400   300    800];
 gasNoise   = [5       4       3      2   1.5     8];
 gasSizes   = [3e6   3e6    2e6    2e6   2e6    3e6];
 gasWarnOff = [25     20      15     8     5     40];
-gasAlarmOff= [40     35      25    14    10     65];
+gasAlarmOff = [40     35      25    14    10     65];
 
 for gi = 1:6
     s = make_sensor(lower(gasNames{gi}), [gasNames{gi} ' Flow'], ...

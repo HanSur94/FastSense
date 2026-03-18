@@ -3,7 +3,7 @@ function test_disk_advanced()
 %   Covers: storage mode transitions, multiple disk lines, pyramid building,
 %   updateData edge cases, re-render after update, and stress scenarios.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')

@@ -8,9 +8,9 @@ run(fullfile(projectRoot, 'setup.m'));
 n = 50000000;
 x = datenum(2024,1,1) + (0:n-1)/86400;  % ~579 days
 t = (0:n-1) / 86400;  % time in days
-y = 20 + 5*sin(t * 2*pi - pi/2) ...  % daily cycle (peak at midday)
-    + 0.3*sin(t * 2*pi*24) ...        % hourly ripple
-    + 0.1*randn(1,n);                 % sensor noise
+y = 20 + 5*sin(t * 2*pi - pi/2) + ...  % daily cycle (peak at midday)
+    0.3*sin(t * 2*pi*24) + ...            % hourly ripple
+    0.1*randn(1,n);                       % sensor noise
 
 fprintf('Datetime example: %dM points (~579 days, 1-second resolution)...\n', n/1e6);
 

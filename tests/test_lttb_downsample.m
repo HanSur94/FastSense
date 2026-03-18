@@ -1,7 +1,7 @@
 function test_lttb_downsample()
 %TEST_LTTB_DOWNSAMPLE Tests for lttb_downsample private function.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     % testOutputSize

@@ -1,7 +1,7 @@
 function test_add_line()
 %TEST_ADD_LINE Tests for FastSense.addLine method.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
 
     % testAddSingleLine
     fp = FastSense();

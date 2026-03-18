@@ -4,7 +4,7 @@ function test_datastore()
 %   large datasets without running out of memory. Covers creation, range
 %   queries, slice reads, edge cases, and cleanup.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
 
     % --- Construction ---
 

@@ -215,8 +215,8 @@ function [xOut, yOut] = lttb_core(x, y, numOut, logX, logY)
         pX = xArea(prevSelectedIdx);
         pY = yArea(prevSelectedIdx);
         candidates = bStart:bEnd;
-        areas = abs((pX - avgX) .* (yArea(candidates) - pY) ...
-                   - (pX - xArea(candidates)) .* (avgY - pY));
+        areas = abs((pX - avgX) .* (yArea(candidates) - pY) - ...
+                   (pX - xArea(candidates)) .* (avgY - pY));
 
         % Pick the candidate with the largest triangle area
         [~, bestLocal] = max(areas);

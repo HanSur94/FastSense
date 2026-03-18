@@ -234,7 +234,7 @@ function colors = getPalette(name)
                 0.47 0.67 0.19; ...  % green
                 0.30 0.75 0.93; ...  % cyan
                 0.64 0.08 0.18; ...  % dark red
-                0.00 0.62 0.45; ...  % teal
+                0.00 0.62 0.45 ...  % teal
             ];
         case 'muted'
             colors = [ ...
@@ -245,7 +245,7 @@ function colors = getPalette(name)
                 0.45 0.62 0.50; ...  % sage
                 0.65 0.55 0.40; ...  % tan
                 0.40 0.55 0.60; ...  % slate
-                0.62 0.42 0.52; ...  % plum
+                0.62 0.42 0.52 ...  % plum
             ];
         case 'colorblind'
             % Wong (2011) colorblind-safe palette
@@ -257,7 +257,7 @@ function colors = getPalette(name)
                 0.94 0.89 0.26; ...  % yellow
                 0.34 0.71 0.91; ...  % sky blue
                 0.84 0.37 0.00; ...  % vermillion
-                0.00 0.00 0.00; ...  % black
+                0.00 0.00 0.00 ...  % black
             ];
         case 'ocean'
             % Blue-to-green gradient palette
@@ -269,7 +269,7 @@ function colors = getPalette(name)
                 0.00 0.68 0.53; ...  % sea green
                 0.10 0.72 0.42; ...  % emerald
                 0.22 0.76 0.32; ...  % green
-                0.16 0.62 0.24; ...  % forest green
+                0.16 0.62 0.24 ...  % forest green
             ];
         otherwise
             error('FastSenseTheme:unknownPalette', ...

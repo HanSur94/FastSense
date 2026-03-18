@@ -1,7 +1,7 @@
 function test_add_band()
 %TEST_ADD_BAND Tests for FastSense.addBand method.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     % testAddBand

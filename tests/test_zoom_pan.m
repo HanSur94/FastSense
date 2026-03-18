@@ -2,7 +2,7 @@ function test_zoom_pan()
 %TEST_ZOOM_PAN Tests for zoom/pan callbacks.
 %   Requires PostSet listeners (MATLAB only, skipped on Octave).
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')

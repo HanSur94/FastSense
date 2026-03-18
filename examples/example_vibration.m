@@ -13,9 +13,9 @@ rpm = 1800; % shaft speed
 f_shaft = rpm / 60;
 f_bearing = 5.2 * f_shaft; % BPFO frequency
 
-y = 0.5 * sin(2*pi*f_shaft*x) ...          % 1x shaft
-  + 0.2 * sin(2*pi*2*f_shaft*x) ...        % 2x harmonic
-  + 0.05 * randn(1, n);                     % noise floor
+y = 0.5 * sin(2*pi*f_shaft*x) + ...          % 1x shaft
+  0.2 * sin(2*pi*2*f_shaft*x) + ...           % 2x harmonic
+  0.05 * randn(1, n);                          % noise floor
 
 % Add intermittent bearing defect bursts
 burst_times = [50 120 250 350];  % seconds

@@ -3,7 +3,7 @@ function test_mex_parity()
 %   Runs both MEX and MATLAB implementations side-by-side and compares.
 %   Skips if MEX files are not compiled.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     has_bs  = (exist('binary_search_mex', 'file') == 3);
@@ -24,14 +24,14 @@ function test_mex_parity()
         x = [1 3 5 7 9 11 13 15 17 19];
 
         test_cases = {
-            4,   'left',  3;
-            6,   'right', 3;
-            5,   'left',  3;
-            5,   'right', 3;
-            0,   'left',  1;
-            100, 'right', 10;
-            100, 'left',  10;
-            0,   'right', 1;
+            4,   'left',  3
+            6,   'right', 3
+            5,   'left',  3
+            5,   'right', 3
+            0,   'left',  1
+            100, 'right', 10
+            100, 'left',  10
+            0,   'right', 1
         };
 
         for t = 1:size(test_cases, 1)

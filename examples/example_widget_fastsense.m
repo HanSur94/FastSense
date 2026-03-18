@@ -31,7 +31,7 @@ t = linspace(0, 86400, N);  % 24 hours in seconds
 % Machine mode state channel (idle=0, running=1)
 scMode = StateChannel('machine');
 scMode.X = [0, 7200, 43200, 57600];
-scMode.Y = [0, 1,    0,     1    ];
+scMode.Y = [0, 1,    0,     1];
 
 % Temperature sensor — state-dependent thresholds
 sTemp = Sensor('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);

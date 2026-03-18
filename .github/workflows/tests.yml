@@ -25,6 +25,9 @@ jobs:
       - name: Run linter
         run: mh_lint libs/ tests/ examples/
 
+      - name: Run complexity metrics
+        run: mh_metric --ci libs/ tests/ examples/
+
   build-mex:
     name: Build MEX (Linux)
     if: github.event_name != 'schedule'

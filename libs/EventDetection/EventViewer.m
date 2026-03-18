@@ -374,8 +374,8 @@ classdef EventViewer < handle
         end
 
         function onHover(obj)
-            if isempty(obj.BarRects) || isempty(obj.BarEvents) ...
-                    || isempty(obj.hTooltip) || ~ishandle(obj.hTooltip)
+            if isempty(obj.BarRects) || isempty(obj.BarEvents) || ...
+                    isempty(obj.hTooltip) || ~ishandle(obj.hTooltip)
                 return;
             end
 
@@ -539,9 +539,9 @@ classdef EventViewer < handle
 
         function selectBar(obj, idx)
             % Reset previous selection highlight
-            if ~isempty(obj.SelectedBarIdx) && obj.SelectedBarIdx > 0 ...
-                    && obj.SelectedBarIdx <= numel(obj.BarRects) ...
-                    && ishandle(obj.BarRects(obj.SelectedBarIdx))
+            if ~isempty(obj.SelectedBarIdx) && obj.SelectedBarIdx > 0 && ...
+                    obj.SelectedBarIdx <= numel(obj.BarRects) && ...
+                    ishandle(obj.BarRects(obj.SelectedBarIdx))
                 ev = obj.BarEvents(obj.SelectedBarIdx);
                 if obj.ThresholdColors.isKey(ev.ThresholdLabel)
                     c = obj.ThresholdColors(ev.ThresholdLabel);
@@ -767,8 +767,8 @@ classdef EventViewer < handle
         function tc = deserializeThresholdColors(data, sensorData)
             %DESERIALIZETHRESHOLDCOLORS Parse thresholdColors from loaded file data.
             tc = containers.Map();
-            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) ...
-                    && ~isempty(fieldnames(data.thresholdColors))
+            if isfield(data, 'thresholdColors') && isstruct(data.thresholdColors) && ...
+                    ~isempty(fieldnames(data.thresholdColors))
                 fields = fieldnames(data.thresholdColors);
                 for i = 1:numel(fields)
                     entry = data.thresholdColors.(fields{i});

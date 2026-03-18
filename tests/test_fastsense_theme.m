@@ -1,7 +1,7 @@
 function test_fastsense_theme()
 %TEST_FASTSENSE_THEME Tests for FastSense theme integration.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
     add_fastsense_private_path();
 
     % testThemeConstructorString

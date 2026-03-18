@@ -8,7 +8,7 @@ classdef TestTableWidget < matlab.unittest.TestCase
 
     methods (Test)
         function testConstruction(testCase)
-            w = TableWidget('Title', 'Data', 'Data', {{'A',1;'B',2}});
+            w = TableWidget('Title', 'Data', 'Data', {{'A',1; 'B',2}});
             testCase.verifyEqual(w.Title, 'Data');
         end
 
@@ -37,7 +37,7 @@ classdef TestTableWidget < matlab.unittest.TestCase
 
         function testRender(testCase)
             w = TableWidget('Title', 'Test Table', ...
-                'Data', {'A',1;'B',2}, 'ColumnNames', {'Name','Val'});
+                'Data', {'A',1; 'B',2}, 'ColumnNames', {'Name','Val'});
             hFig = figure('Visible', 'off');
             testCase.addTeardown(@() close(hFig));
             hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
