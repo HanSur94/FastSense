@@ -572,6 +572,10 @@ CONFIGTOWIDGETS Create widget objects from config struct.
   configToWidgets(config, resolver) — resolver is a function
     handle @(name) that returns a Sensor object by name.
 
+#### `DashboardSerializer.w = createWidgetFromStruct(ws)`
+
+CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+
 #### `DashboardSerializer.exportScript(config, filepath)`
 
 EXPORTSCRIPT Generate a readable .m script from config.
@@ -634,6 +638,11 @@ FIGURETOCANVASDELTA Convert figure-normalized deltas to canvas deltas.
 
 Save current scroll state before any updates
 
+#### `reflow(obj, hFigure, widgets, theme)`
+
+Re-run layout after dynamic changes (e.g., group collapse/expand).
+Tears down and recreates all panels, calling render() on each widget.
+
 #### `onScroll(obj, val)`
 
 ONSCROLL Adjust canvas position from scrollbar value.
@@ -679,6 +688,59 @@ SETLASTUPDATETIME Update the last-update label with a timestamp.
 #### `onEdit(obj)`
 
 #### `contentArea = getContentArea(obj)`
+
+---
+
+## `GroupWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = GroupWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Mode | `'panel'` | 'panel', 'collapsible', 'tabbed' |
+| Label | `''` | Title shown in header bar |
+| Collapsed | `false` | Collapsed state (collapsible mode only) |
+| Children | `{}` | Cell array of DashboardWidget (panel/collapsible) |
+| Tabs | `{}` | Cell array of struct('name','...','widgets',{{}}) |
+| ActiveTab | `''` | Current tab name (tabbed mode) |
+| ChildColumns | `24` | Sub-grid column count |
+| ChildAutoFlow | `true` | Auto-arrange children |
+
+### Methods
+
+#### `addChild(obj, widget, tabName)`
+
+Check nesting depth for GroupWidget children
+
+#### `removeChild(obj, idx)`
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(obj)`
+
+#### `setTimeRange(obj, tStart, tEnd)`
+
+#### `s = toStruct(obj)`
+
+#### `collapse(obj)`
+
+#### `expand(obj)`
+
+#### `switchTab(obj, tabName)`
+
+### Static Methods
+
+#### `GroupWidget.obj = fromStruct(s)`
 
 ---
 
