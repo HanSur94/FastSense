@@ -25,6 +25,7 @@ jobs:
 
       - name: Copy wiki content
         run: |
+          rm -f wiki-remote/*.md
           cp wiki/*.md wiki-remote/
 
       - name: Push to wiki repo
