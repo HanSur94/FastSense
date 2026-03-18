@@ -125,6 +125,8 @@ AGGREGATE_PAGES = {"Home.md", "Architecture.md"}
 EXCLUDED_PAGES = {"_Sidebar.md", "Installation.md"}
 EXCLUDED_PREFIXES = ("API-Reference:-",)
 
+TOKEN_BUDGET = 50_000
+
 
 # ---------------------------------------------------------------------------
 # Change detection
@@ -141,6 +143,11 @@ def detect_affected_pages(changed_files: list[str]) -> list[dict]:
 
     for f in changed_files:
         p = Path(f)
+        if p.is_absolute():
+            try:
+                p = p.relative_to(PROJECT_ROOT)
+            except ValueError:
+                continue  # file outside project root, skip
         parts = p.parts
         if len(parts) >= 2 and parts[0] == "libs":
             touched_dirs.add(parts[1])
@@ -282,7 +289,6 @@ def assemble_context(page: dict) -> dict:
         sidebar = sidebar_path.read_text(encoding="utf-8", errors="replace")
 
     # Token budget enforcement: drop examples if context is too large
-    TOKEN_BUDGET = 50_000
     source_text = "\n\n".join(source_parts)
     example_text = "\n\n".join(example_parts)
     est_tokens = (len(source_text) + len(example_text) + len(current_page) + len(sidebar)) // 4
@@ -373,7 +379,11 @@ def main():
 
     # Determine pages to regenerate
     if args.all:
-        pages = PAGE_MAP
+        pages = [
+            p for p in PAGE_MAP
+            if p["filename"] not in EXCLUDED_PAGES
+            and not any(p["filename"].startswith(pfx) for pfx in EXCLUDED_PREFIXES)
+        ]
         print(f"Full refresh: regenerating all {len(pages)} pages")
     else:
         pages = detect_affected_pages(args.changed_files)
@@ -425,6 +435,10 @@ def main():
         for w in link_warnings:
             print(f"  WARNING: {w}")
 
+        # Ensure auto-generated notice is present (safety net — LLM should include it)
+        if not new_content.startswith("<!-- AUTO-GENERATED"):
+            new_content = AUTO_GENERATED_NOTICE + "\n" + new_content
+
         wiki_path = WIKI_DIR / page["filename"]
         wiki_path.write_text(new_content, encoding="utf-8")
         print(f"  Written: {wiki_path.relative_to(PROJECT_ROOT)}")
@@ -440,7 +454,7 @@ def main():
 
     # Write results for workflow to read
     summary_path = PROJECT_ROOT / "wiki-gen-summary.md"
-    summary_lines = ["## Wiki Auto-Update\n"]
+    summary_lines = ["## Wiki Auto-Update"]
     if updated:
         summary_lines.append("**Pages regenerated:**")
         for fname, _, warns in updated:
@@ -454,7 +468,7 @@ def main():
             summary_lines.append(f"- {fname}: {errs[0] if errs else 'unknown error'}")
         summary_lines.append("")
     summary_lines.append("Review carefully — LLM-generated content may contain inaccuracies.")
-    summary_path.write_text("\n".join(summary_lines), encoding="utf-8")
+    summary_path.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
 
     if failed and not updated:
         print("All pages failed — no PR will be created.", file=sys.stderr)
