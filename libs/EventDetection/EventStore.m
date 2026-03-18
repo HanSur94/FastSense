@@ -25,9 +25,9 @@ classdef EventStore < handle
         function append(obj, newEvents)
             if isempty(newEvents); return; end
             if isempty(obj.events_)
-                obj.events_ = newEvents(:)';
+                obj.events_ = newEvents(:).';
             else
-                obj.events_ = [obj.events_, newEvents(:)'];
+                obj.events_ = [obj.events_, newEvents(:).'];
             end
         end
 
@@ -62,7 +62,11 @@ classdef EventStore < handle
             if ~isempty(timestamp)
                 varList{end+1} = 'timestamp';
             end
-            builtin('save', tmpFile, varList{:}, '-v7.3');
+            if exist('OCTAVE_VERSION', 'builtin')
+                builtin('save', tmpFile, varList{:});
+            else
+                builtin('save', tmpFile, varList{:}, '-v7.3');
+            end
             movefile(tmpFile, obj.FilePath);
         end
 

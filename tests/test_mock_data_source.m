@@ -63,6 +63,12 @@ function test_unchanged_if_called_too_fast()
 end
 
 function test_deterministic_seed()
+    if exist('OCTAVE_VERSION', 'builtin')
+        % Octave uses global RNG (no RandStream) — seeded instances share
+        % state so two back-to-back runs are not independent.
+        fprintf('  SKIPPED (no RandStream in Octave)\n');
+        return;
+    end
     ds1 = MockDataSource('Seed', 42, 'BacklogDays', 0.01);
     ds2 = MockDataSource('Seed', 42, 'BacklogDays', 0.01);
     r1 = ds1.fetchNew();
