@@ -691,6 +691,40 @@ SETLASTUPDATETIME Update the last-update label with a timestamp.
 
 ---
 
+## `BarChartWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = BarChartWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| DataFcn | `[]` | @() struct('categories',{},'values',[]) |
+| Orientation | `'vertical'` | 'vertical' or 'horizontal' |
+| Stacked | `false` |  |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `BarChartWidget.obj = fromStruct(s)`
+
+---
+
 ## `GroupWidget`
 
 > Inherits from: `DashboardWidget`
@@ -744,6 +778,112 @@ Check nesting depth for GroupWidget children
 
 ---
 
+## `HeatmapWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = HeatmapWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| DataFcn | `[]` | function_handle returning matrix |
+| Colormap | `'parula'` | colormap name or Nx3 matrix |
+| ShowColorbar | `true` |  |
+| XLabels | `{}` | cell array of axis labels |
+| YLabels | `{}` | cell array of axis labels |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `HeatmapWidget.obj = fromStruct(s)`
+
+---
+
+## `HistogramWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = HistogramWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| DataFcn | `[]` |  |
+| NumBins | `[]` | empty = auto |
+| ShowNormalFit | `false` |  |
+| EdgeColor | `[]` | RGB or empty for default |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `HistogramWidget.obj = fromStruct(s)`
+
+---
+
+## `ImageWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = ImageWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| File | `''` | Path to image file (PNG, JPG) |
+| ImageFcn | `[]` | function_handle returning image matrix |
+| Scaling | `'fit'` | 'fit', 'fill', 'stretch' |
+| Caption | `''` |  |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `ImageWidget.obj = fromStruct(s)`
+
+---
+
 ## `MarkdownRenderer` --- Lightweight Markdown-to-HTML converter.
 
 html = MarkdownRenderer.render(mdText)
@@ -762,4 +902,77 @@ html = MarkdownRenderer.render(mdText)
 ### Static Methods
 
 #### `MarkdownRenderer.html = render(mdText, themeName, basePath)`
+
+---
+
+## `MultiStatusWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = MultiStatusWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Sensors | `{}` | Cell array of Sensor objects |
+| Columns | `[]` | Grid columns (empty = auto) |
+| ShowLabels | `true` |  |
+| IconStyle | `'dot'` | 'dot', 'square', 'icon' |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `s = toStruct(obj)`
+
+Fully override — does not use base Sensor property
+
+### Static Methods
+
+#### `MultiStatusWidget.obj = fromStruct(s)`
+
+---
+
+## `ScatterWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = ScatterWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| SensorX | `[]` | Sensor for X axis |
+| SensorY | `[]` | Sensor for Y axis |
+| SensorColor | `[]` | Optional: color-code by third sensor |
+| MarkerSize | `6` |  |
+| Colormap | `'parula'` |  |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `ScatterWidget.obj = fromStruct(s)`
 
