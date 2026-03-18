@@ -30,7 +30,7 @@ A non-singleton registry where sensors are explicitly defined in code and wired 
 
 ### Public API
 
-#### Sensor Management (mirrors SensorRegistry)
+#### Sensor Management (based on SensorRegistry, with additions)
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -74,7 +74,7 @@ reg.wireMatFile(matFilePath, mappings)
    - Sets `Sensor.KeyName` to the YVar field name
    - Creates a `MatFileDataSource(matFilePath, 'XVar', xField, 'YVar', yField)`
    - Adds it to the internal `DataSourceMap` under the sensor key
-2. If a sensor key is already wired, the new wiring overwrites with a warning
+2. If a sensor key is already wired (checked via `DataSourceMap.has()`), the new wiring overwrites with a warning issued via `warning()`
 
 ### wireStateChannel
 
@@ -87,9 +87,10 @@ reg.wireStateChannel(sensorKey, stateKey, matFilePath, 'XVar', xField, 'YVar', y
 
 **Behavior:**
 1. Validates `sensorKey` exists in the catalog (error if not)
-2. Creates a `StateChannel('Key', stateKey, 'MatFile', matFilePath, 'KeyName', yField)`
+2. Creates a `StateChannel(stateKey, 'MatFile', matFilePath, 'KeyName', yField)` (note: `stateKey` is positional)
 3. Calls `sensor.addStateChannel(sc)` on the target sensor
-4. Updates the `MatFileDataSource` for the sensor to include `StateXVar`/`StateYVar` if present
+4. If the state data lives in the **same** .mat file as the sensor data, updates the existing `MatFileDataSource` to include `StateXVar`/`StateYVar`
+5. If the state data lives in a **different** .mat file, the `StateChannel` loads its own data via `StateChannel.MatFile` / `StateChannel.load()` — no changes to the sensor's `MatFileDataSource`
 
 ### getDataSourceMap
 
@@ -101,14 +102,15 @@ Returns the internal `DataSourceMap` so it can be passed directly to `LiveEventP
 %% 1. Define the registry
 reg = ExternalSensorRegistry('VibrationLab');
 
-%% 2. Define sensors explicitly
-s1 = Sensor('Key', 'bearing_temp', 'Name', 'Bearing Temperature', ...
+%% 2. Define sensors explicitly (note: key is positional first argument)
+s1 = Sensor('bearing_temp', 'Name', 'Bearing Temperature', ...
             'Units', 'degC', 'ID', 101);
+% struct() = empty condition = unconditional (always active regardless of state)
 s1.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'Warning');
 s1.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'Critical');
 reg.register('bearing_temp', s1);
 
-s2 = Sensor('Key', 'oil_pressure', 'Name', 'Oil Pressure', ...
+s2 = Sensor('oil_pressure', 'Name', 'Oil Pressure', ...
             'Units', 'bar', 'ID', 102);
 s2.addThresholdRule(struct(), 2.0, 'Direction', 'lower', 'Label', 'Low Pressure');
 reg.register('oil_pressure', s2);
@@ -128,7 +130,7 @@ dsMap = reg.getDataSourceMap();
 sensors = reg.getAll();
 
 pipeline = LiveEventPipeline(sensors, dsMap, ...
-    'EventStorePath', 'output/events.mat', ...
+    'EventFile', 'output/events.mat', ...
     'Interval', 15);
 pipeline.start();
 ```
