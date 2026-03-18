@@ -281,3 +281,91 @@ VIEWER Open a GUI figure showing all registered sensors.
   uitable listing every sensor's Key, Name, ID, Source,
   MatFile, #States, #Rules, and #Points.
 
+---
+
+## `ExternalSensorRegistry` --- Non-singleton sensor registry for external data.
+
+> Inherits from: `handle`
+
+ExternalSensorRegistry holds explicitly registered Sensor objects
+  and wires them to .mat file data sources for use with
+  LiveEventPipeline.
+
+  Unlike SensorRegistry (singleton with hardcoded catalog), this
+  class supports multiple instances and is populated via register().
+
+### Constructor
+
+```matlab
+obj = ExternalSensorRegistry(name)
+```
+
+EXTERNALSENSORREGISTRY Construct a named registry.
+  reg = ExternalSensorRegistry('MyLab')
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Name |  | char: human-readable label for this registry |
+
+### Methods
+
+#### `n = count(obj)`
+
+COUNT Number of registered sensors.
+
+#### `k = keys(obj)`
+
+KEYS Return all registered sensor keys.
+
+#### `register(obj, key, sensor)`
+
+REGISTER Add a Sensor to the catalog.
+  reg.register('key', sensorObj)
+
+#### `unregister(obj, key)`
+
+UNREGISTER Remove a Sensor from the catalog.
+
+#### `s = get(obj, key)`
+
+GET Retrieve a sensor by key.
+
+#### `sensors = getMultiple(obj, keys)`
+
+GETMULTIPLE Retrieve multiple sensors by key.
+
+#### `m = getAll(obj)`
+
+GETALL Return a copy of the catalog as a containers.Map.
+
+#### `list(obj)`
+
+LIST Print all registered sensor keys and names.
+
+#### `printTable(obj)`
+
+PRINTTABLE Print a detailed table of all registered sensors.
+
+#### `wireMatFile(obj, matFilePath, mappings)`
+
+WIREMATFILE Wire .mat file fields to registered sensor keys.
+  reg.wireMatFile('data.mat', {
+      'sensorKey', 'XVar', 'time', 'YVar', 'value';
+  })
+
+#### `dsMap = getDataSourceMap(obj)`
+
+GETDATASOURCEMAP Return the DataSourceMap for pipeline use.
+
+#### `hFig = viewer(obj)`
+
+VIEWER Open a GUI figure showing all registered sensors.
+
+#### `wireStateChannel(obj, sensorKey, stateKey, matFilePath, varargin)`
+
+WIRESTATECHANNEL Wire state channel data to a registered sensor.
+  reg.wireStateChannel('sensorKey', 'stateKey', 'states.mat', ...
+      'XVar', 'state_time', 'YVar', 'state_val')
+
