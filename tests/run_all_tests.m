@@ -72,28 +72,66 @@ end
 
 function results = run_octave_tests(test_dir)
 %RUN_OCTAVE_TESTS Run function-based tests for Octave compatibility.
-    add_fastsense_private_path();
+%   Each test runs in a separate Octave subprocess to survive the known
+%   Octave 8.x crash during handle-class cleanup (break_closure_cycles).
     files = dir(fullfile(test_dir, 'test_*.m'));
+    repo_root = fileparts(test_dir);
 
     total = 0;
     passed = 0;
     failed = 0;
     failures = {};
+    marker = '__OCTAVE_TEST_PASSED__';
+    newline_char = sprintf('\n');
+
+    fprintf('=== FastSense Test Suite (Octave – subprocess isolation) ===\n\n');
+    fprintf('Discovered %d test files.\n\n', numel(files));
 
     for i = 1:numel(files)
         [~, name, ~] = fileparts(files(i).name);
         fprintf('Running %s...\n', name);
-        try
-            feval(name);
+
+        % Run each test in an isolated subprocess so that an Octave
+        % crash (e.g. break_closure_cycles) cannot kill the suite.
+        eval_str = sprintf( ...
+            'addpath(''%s''); install(); cd(''%s''); add_fastsense_private_path(); %s(); fprintf(''%s\\n'');', ...
+            repo_root, test_dir, name, marker);
+        cmd = sprintf( ...
+            'octave --no-gui --no-init-file --quiet --eval "%s" 2>&1', ...
+            eval_str);
+        [status, output] = system(cmd);
+
+        % Parse output: look for success marker, strip noise
+        lines = strsplit(output, newline_char);
+        clean = {};
+        test_ok = false;
+        for j = 1:numel(lines)
+            ln = lines{j};
+            if strcmp(strtrim(ln), marker)
+                test_ok = true;
+                continue;
+            end
+            if isempty(strtrim(ln)); continue; end
+            if strncmp(ln, 'octave:', 7); continue; end
+            clean{end+1} = ln;
+        end
+
+        for j = 1:numel(clean)
+            fprintf('    %s\n', clean{j});
+        end
+
+        if test_ok
             fprintf('  PASSED\n');
             passed = passed + 1;
-        catch e
-            fprintf('  FAILED: %s\n', e.message);
+        else
+            fprintf('  FAILED (exit code %d)\n', status);
             failed = failed + 1;
-            failures{end+1} = sprintf('%s: %s', name, e.message);
+            failures{end+1} = sprintf('%s: %s', name, ...
+                strjoin(clean, ' | '));
         end
         total = total + 1;
-        % Write results incrementally so they survive Octave crashes
+
+        % Write results incrementally so they survive crashes
         resultsFile = getenv('FASTSENSE_RESULTS_FILE');
         if ~isempty(resultsFile)
             fid = fopen(resultsFile, 'w');
@@ -102,7 +140,8 @@ function results = run_octave_tests(test_dir)
         end
     end
 
-    fprintf('\n=== Results: %d/%d passed, %d failed ===\n', passed, total, failed);
+    fprintf('\n=== Results: %d/%d passed, %d failed ===\n', ...
+        passed, total, failed);
     if ~isempty(failures)
         fprintf('\nFailures:\n');
         for i = 1:numel(failures)
