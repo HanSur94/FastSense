@@ -26,7 +26,7 @@ jobs:
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
-        run: octave --eval "setup();"
+        run: octave --eval "install();"
 
       - name: Upload MEX artifacts
         uses: actions/upload-artifact@v4
@@ -56,7 +56,7 @@ jobs:
       - name: Run example smoke tests
         run: |
           xvfb-run octave --eval "
-            addpath(pwd); setup();
+            addpath(pwd); install();
             examples = {
               'example_basic',
               'example_multi',

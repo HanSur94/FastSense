@@ -29,3 +29,4 @@ jobs:
             --suggest
             wiki/*.md
           fail: true
+          failIfEmpty: false

@@ -30,7 +30,7 @@ jobs:
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
-        run: octave --eval "setup();"
+        run: octave --eval "install();"
 
       - name: Upload MEX artifacts
         uses: actions/upload-artifact@v4
@@ -59,7 +59,7 @@ jobs:
 
       - name: Run benchmark
         run: |
-          xvfb-run octave --eval "addpath(pwd); setup(); addpath('scripts'); run_ci_benchmark();"
+          xvfb-run octave --eval "addpath(pwd); install(); addpath('scripts'); run_ci_benchmark();"
 
       - name: Fix git ownership
         run: git config --global --add safe.directory /__w/FastSense/FastSense

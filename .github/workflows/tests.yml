@@ -48,7 +48,7 @@ jobs:
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
-        run: octave --eval "setup();"
+        run: octave --eval "install();"
 
       - name: Upload MEX artifacts
         uses: actions/upload-artifact@v4
@@ -115,7 +115,7 @@ jobs:
         run: brew install octave
 
       - name: Compile MEX files
-        run: octave --eval "setup(); fprintf('All MEX files compiled successfully on %s\n', computer());"
+        run: octave --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
 
   matlab:
     name: MATLAB Tests
