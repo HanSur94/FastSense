@@ -8,6 +8,9 @@ classdef GroupWidget < DashboardWidget
         ActiveTab     = ''         % Current tab name (tabbed mode)
         ChildColumns  = 24         % Sub-grid column count
         ChildAutoFlow = true       % Auto-arrange children
+    end
+
+    properties (SetAccess = protected)
         ExpandedHeight = []        % Stores original Position(4) when collapsed
         ParentGroup   = []         % Reference to parent GroupWidget (if nested)
     end
@@ -22,8 +25,8 @@ classdef GroupWidget < DashboardWidget
     methods
         function obj = GroupWidget(varargin)
             obj = obj@DashboardWidget(varargin{:});
-            % Default position: wide, medium height
-            if nargin == 0 || ~any(strcmp(varargin(1:2:end), 'Position'))
+            % Default position: wide, medium height (override base default)
+            if isequal(obj.Position, [1 1 6 2])
                 obj.Position = [1 1 12 4];
             end
         end
@@ -57,9 +60,11 @@ classdef GroupWidget < DashboardWidget
         end
 
         function removeChild(obj, idx)
-            if idx >= 1 && idx <= numel(obj.Children)
-                obj.Children(idx) = [];
+            if idx < 1 || idx > numel(obj.Children)
+                error('GroupWidget:invalidIndex', ...
+                    'Child index %d out of range [1, %d]', idx, numel(obj.Children));
             end
+            obj.Children(idx) = [];
         end
 
         function render(obj, parentPanel)
@@ -154,6 +159,17 @@ classdef GroupWidget < DashboardWidget
                     obj.Tabs{i}.widgets{j}.setTimeRange(tStart, tEnd);
                 end
             end
+        end
+
+        function s = toStruct(obj) %#ok<MANU>
+            % Stub - will be fully implemented in serialization task
+            s = struct();
+            s.type = 'group';
+            s.title = obj.Title;
+            s.label = obj.Label;
+            s.mode = obj.Mode;
+            s.position = struct('col', obj.Position(1), 'row', obj.Position(2), ...
+                'width', obj.Position(3), 'height', obj.Position(4));
         end
 
         function collapse(obj) %#ok<MANU>
