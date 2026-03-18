@@ -251,5 +251,20 @@ classdef TestExternalSensorRegistry < matlab.unittest.TestCase
             end
             testCase.verifyTrue(threw, 'should_throw');
         end
+
+        function testViewer(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            reg.register('temp', Sensor('temp', 'Name', 'Temperature', 'ID', 1));
+            hFig = reg.viewer();
+            testCase.addTeardown(@close, hFig);
+            testCase.verifyTrue(ishandle(hFig), 'returns_figure');
+        end
+
+        function testViewerEmpty(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            hFig = reg.viewer();
+            testCase.addTeardown(@close, hFig);
+            testCase.verifyTrue(ishandle(hFig), 'handles_empty');
+        end
     end
 end
