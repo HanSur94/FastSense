@@ -6,38 +6,11 @@
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
 [![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org)
 
-Ultra-fast time series plotting for MATLAB and GNU Octave. Plot 100M+ data points with fluid zoom and pan — rendering only ~4,000 points at any zoom level.
+Sensor monitoring and dashboarding platform for MATLAB and GNU Octave. Plot 100M+ points at 200+ FPS, define state-dependent thresholds, detect events in real time, and build interactive dashboards — all without toolbox dependencies.
 
 <p align="center">
   <img src="docs/images/dashboard.png" alt="FastSense Dashboard" width="800">
 </p>
-
-## Performance
-
-Benchmarked on Apple M4 with GNU Octave 11, 10M data points:
-
-| Operation | Time |
-|---|---|
-| MinMax downsample (MEX) | 7.4 ms |
-| Full zoom cycle (2 thresholds) | 4.7 ms |
-| Effective zoom FPS | **212 FPS** |
-| Point reduction | 99.96% |
-| GPU memory (10M pts) | 0.06 MB vs 153 MB for `plot()` |
-
-## Features
-
-- **Smart downsampling** — per-pixel MinMax and LTTB, auto-selected per zoom level
-- **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB
-- **Dashboard layouts** — tiled grids, tabbed containers, serializable dashboard engine
-- **Sensor system** — state-dependent thresholds with condition-based rules
-- **Event detection** — violation grouping, Gantt viewer, live pipeline, notifications
-- **Disk-backed storage** — SQLite-backed DataStore for 100M+ datasets exceeding memory
-- **6 built-in themes** — dark, light, industrial, scientific, ocean (colorblind palette)
-- **Linked axes** — synchronized zoom/pan across subplots
-- **Datetime support** — datenum and MATLAB datetime with auto-formatting
-- **Live mode** — file polling with auto-refresh
-- **Navigator overlay** — minimap for quick orientation
-- **Interactive toolbar** — data cursor, crosshair, grid toggle, PNG export
 
 ## Quick Start
 
@@ -51,8 +24,116 @@ fp = FastSense('Theme', 'dark');
 fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
 fp.render();
-% → zoom and pan interactively at 200+ FPS
 ```
+
+## The Five Pillars
+
+### FastSense — Ultra-Fast Time Series Engine
+
+The core plotting engine. Renders 10M+ data points with automatic downsampling (MinMax and LTTB), dynamic thresholds, and interactive zoom/pan — all at 200+ FPS.
+
+```matlab
+fp = FastSense('Theme', 'dark');
+fp.addLine(x, y, 'DisplayName', 'Noisy Sine');
+fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, ...
+    'Color', 'r', 'Label', 'Alarm Hi');
+fp.addThreshold(-2.0, 'Direction', 'lower', 'ShowViolations', true, ...
+    'Color', 'r', 'Label', 'Alarm Lo');
+fp.render();
+```
+
+| Operation | Time |
+|---|---|
+| MinMax downsample (MEX) | 7.4 ms |
+| Full zoom cycle (2 thresholds) | 4.7 ms |
+| Effective zoom FPS | **212 FPS** |
+| Point reduction | 99.96% |
+| GPU memory (10M pts) | 0.06 MB vs 153 MB for `plot()` |
+
+<sub>Benchmarked on Apple M4, GNU Octave 11, 10M data points.</sub>
+
+- **Smart downsampling** — per-pixel MinMax and LTTB, auto-selected per zoom level
+- **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB
+- **Linked axes** — synchronized zoom/pan across subplots
+- **Datetime support** — datenum and MATLAB datetime with auto-formatting
+- **6 built-in themes** — dark, light, industrial, scientific, ocean, colorblind
+- **SQLite-backed storage** — disk-backed DataStore for 100M+ datasets exceeding memory
+
+### SensorThreshold — State-Dependent Sensor Modeling
+
+Bundles time-series data with discrete system states and condition-based threshold rules. A running machine has different alarm limits than an idle one — SensorThreshold models exactly that.
+
+```matlab
+s = Sensor('pressure', 'Name', 'Chamber Pressure', 'ID', 101);
+s.X = t;  s.Y = pressure_data;
+
+sc = StateChannel('machine_state');
+sc.X = [0 25 50 75];  sc.Y = [0 1 2 1];  % idle→running→error→running
+s.addStateChannel(sc);
+
+s.addThresholdRule(struct('machine_state', 1), 55, ...
+    'Direction', 'upper', 'Label', 'HH (running)');
+s.resolve();
+```
+
+- **State channels** — discrete system states (idle, running, error) as zero-order-hold lookups
+- **Condition-based rules** — thresholds that activate only when conditions match
+- **Automatic violation grouping** — pre-computed during `resolve()`
+- **Sensor registry** — predefined sensor catalog for quick setup
+
+### EventDetection — Violation Detection & Live Pipeline
+
+Groups threshold violations into discrete events with statistics, live monitoring, and notifications. Detects when sensors exceed limits, how long, and how severe.
+
+```matlab
+cfg = EventConfig();
+cfg.MinDuration = 0.5;
+cfg.addSensor(sTemp);
+cfg.addSensor(sPres);
+cfg.setColor('temp warning', [1.0 0.8 0.0]);
+events = cfg.runDetection();
+```
+
+- **Event grouping** — consecutive violations merged into events with debouncing
+- **Statistics** — peak, mean, RMS, std, duration automatically computed per event
+- **Live pipeline** — real-time file polling with streaming event detection
+- **Gantt viewer** — interactive timeline UI for event exploration
+- **Notifications** — event-triggered callbacks for alerting
+
+### Dashboard — Widget-Based Dashboard Engine
+
+Build monitoring dashboards from composable widgets on a 24-column grid. Supports live data, JSON persistence, and 8 widget types.
+
+```matlab
+d = DashboardEngine('Process Monitoring');
+d.Theme = 'light';
+d.addWidget('fastsense', 'Position', [1 1 16 8], 'Sensor', sTemp);
+d.addWidget('number',    'Position', [17 1 8 4], 'Sensor', sTemp, ...
+    'Label', 'Temperature');
+d.addWidget('gauge',     'Position', [17 5 8 4], 'Sensor', sPres, ...
+    'Label', 'Pressure');
+d.render();
+d.save('dashboard.json');
+```
+
+- **8 widget types** — fastsense, number, status, gauge, table, text, timeline, rawaxes
+- **24-column grid** — flexible positioning with `[col, row, width, height]` tuples
+- **JSON persistence** — save/load complete dashboard configurations
+- **Live mode** — synchronized data refresh across all widgets
+
+### WebBridge — Browser-Based Visualization
+
+Exposes dashboards to a web frontend over TCP. MATLAB stays the data engine; the browser handles rendering.
+
+```matlab
+bridge = WebBridge(dashboard);
+bridge.serve();
+bridge.registerAction('update_threshold', @myCallback);
+```
+
+- **TCP server** — bridges MATLAB dashboard to web/Electron frontend
+- **Bidirectional callbacks** — actions and data-change notifications between MATLAB and browser
+- **HTML5 charts** — uPlot-based rendering in the browser
 
 ## Installation
 
@@ -88,20 +169,6 @@ Full documentation is available in the [Wiki](https://github.com/HanSur94/FastSe
 
 See the [`examples/`](examples/) directory for 40+ runnable scripts covering basic plotting, dashboards, sensors, event detection, live mode, and disk-backed storage. A categorized guide is in the [wiki](https://github.com/HanSur94/FastSense/wiki/Examples).
 
-## Libraries
-
-| Library | Path | Description |
-|---------|------|-------------|
-| FastSense | `libs/FastSense/` | Core plotting engine, layouts, toolbar, themes, disk storage |
-| SensorThreshold | `libs/SensorThreshold/` | Sensor containers, state channels, threshold rules |
-| EventDetection | `libs/EventDetection/` | Event detection, viewer, live pipeline, notifications |
-| Dashboard | `libs/Dashboard/` | Dashboard engine with widgets and JSON persistence |
-| WebBridge | `libs/WebBridge/` | TCP server for web-based visualization |
-
-## Contributing
-
-Contributions are welcome! Please open an issue to discuss your idea before submitting a pull request. See the [wiki](https://github.com/HanSur94/FastSense/wiki) for architecture details and API references.
-
 ## Citation
 
 If you use FastSense in your research, please cite it:
@@ -109,7 +176,7 @@ If you use FastSense in your research, please cite it:
 ```bibtex
 @software{fastsense,
   author = {Suhr, Hannes},
-  title = {FastSense: Ultra-Fast Time Series Plotting for MATLAB and GNU Octave},
+  title = {FastSense: Sensor Monitoring and Dashboarding for MATLAB and GNU Octave},
   url = {https://github.com/HanSur94/FastSense},
   license = {MIT}
 }
