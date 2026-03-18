@@ -1,6 +1,11 @@
 function test_event_store()
 %TEST_EVENT_STORE Tests for event store persistence and EventViewer.fromFile.
 
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (requires datetime and EventViewer — MATLAB only)\n');
+        return;
+    end
+
     add_event_path();
 
     % testAutoSave

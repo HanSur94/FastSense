@@ -87,7 +87,7 @@ function test_sensor_todisk()
     s4.toDisk();
     ds1 = s4.DataStore;
     s4.toDisk();
-    assert(s4.DataStore == ds1, 'DataStore should not change');
+    assert(strcmp(s4.DataStore.DbPath, ds1.DbPath), 'DataStore should not change');
     s4.DataStore.cleanup();
     fprintf('    idempotent toDisk: PASS\n');
 

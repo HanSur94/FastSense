@@ -68,7 +68,7 @@ function renderSnapshot(X, Y, thVal, thDir, evStart, evEnd, xMin, xMax, figSize,
     hold(ax, 'on');
 
     % Shaded violation region
-    yLims = ax.YLim;
+    yLims = get(ax, 'YLim');
     patch(ax, [evStart evEnd evEnd evStart], ...
         [yLims(1) yLims(1) yLims(2) yLims(2)], ...
         [1 0 0], 'FaceAlpha', 0.15, 'EdgeColor', 'none');

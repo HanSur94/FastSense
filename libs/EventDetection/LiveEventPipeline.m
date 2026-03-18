@@ -85,7 +85,7 @@ classdef LiveEventPipeline < handle
 
         function runCycle(obj)
             obj.cycleCount_ = obj.cycleCount_ + 1;
-            allNewEvents = Event.empty();
+            allNewEvents = [];
             hasNewData = false;
 
             sensorKeys = obj.Sensors.keys();
@@ -141,7 +141,7 @@ classdef LiveEventPipeline < handle
 
     methods (Access = private)
         function [newEvents, gotData] = processSensor(obj, key)
-            newEvents = Event.empty();
+            newEvents = [];
             gotData = false;
 
             if ~obj.DataSourceMap.has(key)

@@ -52,9 +52,15 @@ function [mergedTh, mergedViol] = mergeResolvedByLabel(resolvedTh, resolvedViol,
         end
     end
 
-    % Group entries by their merge key (stable preserves original order)
-    [uniqueKeys, ~, groupIdx] = unique(mergeKeys, 'stable');
+    % Group entries by their merge key (stable preserves original order).
+    % Octave's unique() does not support the 3rd output for cell arrays,
+    % so we compute groupIdx manually.
+    [uniqueKeys, ~] = unique(mergeKeys, 'stable');
     nGroups = numel(uniqueKeys);
+    groupIdx = zeros(1, nEntries);
+    for gi = 1:nGroups
+        groupIdx(strcmp(mergeKeys, uniqueKeys{gi})) = gi;
+    end
 
     mergedTh = [];
     mergedViol = [];

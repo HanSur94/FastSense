@@ -29,7 +29,7 @@ classdef IncrementalEventDetector < handle
         end
 
         function newEvents = process(obj, sensorKey, sensor, newX, newY, newStateX, newStateY)
-            newEvents = Event.empty();
+            newEvents = [];
             if isempty(newX); return; end
 
             st = obj.getState(sensorKey);
@@ -95,7 +95,7 @@ classdef IncrementalEventDetector < handle
 
             % Filter to only events that touch the new data window
             sliceStartTime = newX(1);
-            relevantEvents = Event.empty();
+            relevantEvents = [];
             if ~isempty(allEvents)
                 for i = 1:numel(allEvents)
                     ev = allEvents(i);
@@ -106,7 +106,7 @@ classdef IncrementalEventDetector < handle
             end
 
             % Handle open events
-            completedEvents = Event.empty();
+            completedEvents = [];
             newOpenEvent = [];
 
             for i = 1:numel(relevantEvents)

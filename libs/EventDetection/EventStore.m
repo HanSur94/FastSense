@@ -11,7 +11,7 @@ classdef EventStore < handle
     end
 
     properties (Access = private)
-        events_     = Event.empty()
+        events_     = []
     end
 
     methods
@@ -79,7 +79,7 @@ classdef EventStore < handle
                 lastData = containers.Map('KeyType', 'char', 'ValueType', 'any');
             end
 
-            events = Event.empty();
+            events = [];
             meta = struct();
             changed = false;
 

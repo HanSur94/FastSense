@@ -2,7 +2,7 @@ classdef NotificationService < handle
     % NotificationService  Rule-based email notifications with event snapshots.
 
     properties
-        Rules           = NotificationRule.empty()
+        Rules           = []
         DefaultRule     = []
         Enabled         = true
         DryRun          = false

@@ -47,10 +47,19 @@ classdef MockDataSource < DataSource
             for i = 1:numel(flds)
                 obj.(flds{i}) = p.Results.(flds{i});
             end
-            if ~isempty(obj.Seed)
-                obj.rng_ = RandStream('mt19937ar', 'Seed', obj.Seed);
+            if exist('RandStream', 'class')
+                if ~isempty(obj.Seed)
+                    obj.rng_ = RandStream('mt19937ar', 'Seed', obj.Seed);
+                else
+                    obj.rng_ = RandStream('mt19937ar', 'Seed', 'shuffle');
+                end
             else
-                obj.rng_ = RandStream('mt19937ar', 'Seed', 'shuffle');
+                % Octave: seed the global RNG instead
+                if ~isempty(obj.Seed)
+                    rand('state', obj.Seed);
+                    randn('state', obj.Seed);
+                end
+                obj.rng_ = [];
             end
             if ~isempty(obj.StateValues) && ~isempty(obj.StateValues{1})
                 obj.currentState_ = obj.StateValues{1}{1};
@@ -68,6 +77,16 @@ classdef MockDataSource < DataSource
     end
 
     methods (Access = private)
+        function v = rngRand(obj)
+            if isempty(obj.rng_); v = rand(); else; v = obj.rng_.rand(); end
+        end
+        function v = rngRandn(obj)
+            if isempty(obj.rng_); v = randn(); else; v = obj.rng_.randn(); end
+        end
+        function v = rngRandi(obj, n)
+            if isempty(obj.rng_); v = randi(n); else; v = obj.rng_.randi(n); end
+        end
+
         function result = generateBacklog(obj)
             nPoints = floor(obj.BacklogDays * 86400 / obj.SampleInterval);
             if ~isempty(obj.Seed)
@@ -105,7 +124,7 @@ classdef MockDataSource < DataSource
                 obj.driftAccum_ = obj.driftAccum_ + obj.DriftRate * obj.SampleInterval;
 
                 % Base + noise + drift
-                noise = obj.NoiseStd * obj.rng_.randn();
+                noise = obj.NoiseStd * obj.rngRandn();
                 val = obj.BaseValue + obj.driftAccum_ + noise;
 
                 % Violation episode
@@ -121,19 +140,19 @@ classdef MockDataSource < DataSource
                         val = val + obj.violationSign_ * obj.ViolationAmplitude * envelope;
                     end
                 else
-                    if obj.rng_.rand() < obj.ViolationProbability
+                    if obj.rngRand() < obj.ViolationProbability
                         obj.inViolation_ = true;
                         obj.violationEnd_ = X(i) + obj.ViolationDuration / 86400;
-                        obj.violationSign_ = 2 * (obj.rng_.rand() > 0.5) - 1;
+                        obj.violationSign_ = 2 * (obj.rngRand() > 0.5) - 1;
                     end
                 end
 
                 Y(i) = val;
 
                 % State transitions (sparse)
-                if hasStates && obj.rng_.rand() < obj.StateChangeProbability
+                if hasStates && obj.rngRand() < obj.StateChangeProbability
                     states = obj.StateValues{1};
-                    newIdx = obj.rng_.randi(numel(states));
+                    newIdx = obj.rngRandi(numel(states));
                     newState = states{newIdx};
                     if ~strcmp(newState, obj.currentState_)
                         obj.currentState_ = newState;

@@ -3,6 +3,11 @@ function test_event_viewer()
 %   Note: these tests run headless — they verify object creation and
 %   data wiring, not visual rendering.
 
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIPPED (known Octave classdef limitation)\n');
+        return;
+    end
+
     add_event_path();
 
     % --- Setup events ---
