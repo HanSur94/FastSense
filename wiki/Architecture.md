@@ -24,7 +24,6 @@ FastPlot/
 │   │   ├── ConsoleProgressBar.m   # Progress indication
 │   │   ├── binary_search.m        # Binary search utility
 │   │   ├── build_mex.m            # MEX compilation script
-│   │   ├── mksqlite.c             # SQLite3 MEX interface
 │   │   └── private/               # Internal algorithms + MEX sources
 │   ├── SensorThreshold/           # Sensor and threshold system
 │   │   ├── Sensor.m
@@ -48,7 +47,6 @@ FastPlot/
 │   │   └── private/               # Event grouping algorithms
 │   ├── Dashboard/                 # Dashboard engine (serializable)
 │   │   ├── DashboardEngine.m
-│   │   ├── DashboardBuilder.m
 │   │   ├── DashboardLayout.m
 │   │   ├── DashboardSerializer.m
 │   │   ├── DashboardTheme.m
@@ -63,10 +61,7 @@ FastPlot/
 │   │   ├── RawAxesWidget.m
 │   │   └── EventTimelineWidget.m
 │   └── WebBridge/                 # TCP server for web visualization
-│       ├── WebBridge.m
-│       └── WebBridgeProtocol.m
-├── examples/                      # 40+ runnable examples
-└── tests/                         # 30+ test suites
+└── examples/                      # 40+ runnable examples
 ```
 
 ## Render Pipeline
@@ -136,7 +131,6 @@ Optional C MEX functions with SIMD intrinsics (AVX2 on x86_64, NEON on arm64):
 | compute_violations_mex | significant | Batch violation detection for resolve() |
 | resolve_disk_mex | significant | SQLite disk-based sensor resolution |
 | build_store_mex | 2-3x | Bulk SQLite writer for DataStore init |
-| mksqlite | — | SQLite3 interface with typed BLOB support |
 
 All share a common `simd_utils.h` abstraction layer. If MEX is unavailable, pure-MATLAB implementations are used with identical behavior.
 
@@ -204,10 +198,9 @@ The `DashboardEngine` provides a serializable, widget-based dashboard system sep
 
 ```
 DashboardEngine
-├── DashboardToolbar      — Top toolbar (Live, Edit, Save, Export, Sync)
+├── DashboardToolbar      — Top toolbar (Live, Edit, Save, Export, Info)
 ├── DashboardLayout       — 24-column grid with scrollable canvas
 ├── DashboardTheme        — FastSenseTheme + dashboard-specific fields
-├── DashboardBuilder      — Edit mode overlay (drag/resize, palette, properties)
 ├── DashboardSerializer   — JSON save/load and .m script export
 └── Widgets (DashboardWidget subclasses)
     ├── FastSenseWidget         — FastSense instance (Sensor/DataStore/inline)
@@ -237,23 +230,6 @@ When `startLive()` is called, a timer fires at `LiveInterval` seconds:
 2. Each widget's `refresh()` is called (sensor-bound widgets re-read `Sensor.Y(end)`)
 3. The toolbar timestamp label is updated
 4. Current slider positions are re-applied to the updated time range
-
-### Edit Mode
-
-Clicking "Edit" in the toolbar creates a `DashboardBuilder` instance:
-1. A palette sidebar (left) shows widget type buttons
-2. A properties panel (right) shows selected widget settings
-3. Drag/resize overlays are added on top of each widget panel
-4. The content area narrows to accommodate sidebars
-5. Mouse move/up callbacks handle drag and resize interactions
-6. Grid snap rounds positions to the nearest column/row
-
-### JSON Persistence
-
-`DashboardSerializer` handles round-trip serialization:
-- **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually (MATLAB's `jsonencode` cannot handle cell arrays of mixed structs).
-- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method. An optional `SensorResolver` function handle re-binds Sensor objects by name.
-- **Export script:** generates a `.m` file with `DashboardEngine` constructor calls and `addWidget` calls for each widget.
 
 ## Event Detection Architecture
 
@@ -292,52 +268,6 @@ When `EscalateSeverity` is enabled, events are promoted to the highest violated 
 - A violation starts at "Warning" level
 - If "Alarm" threshold is also crossed, the event is escalated to "Alarm"
 - The event retains the highest severity level encountered
-
-## WebBridge Architecture
-
-The `WebBridge` class provides a TCP server that bridges MATLAB dashboards to web-based visualization. It uses NDJSON (newline-delimited JSON) for message framing over TCP.
-
-### Protocol
-
-All messages are JSON objects terminated by a newline character. The protocol is defined in `WebBridgeProtocol`:
-
-| Message Type | Direction | Description |
-|-------------|-----------|-------------|
-| `init` | MATLAB → Bridge | Initial handshake with signal list, dashboard config, and registered actions |
-| `data_changed` | MATLAB → Bridge | Notify that signal data has been updated |
-| `config_changed` | MATLAB → Bridge | Dashboard layout/theme has changed |
-| `actions_changed` | MATLAB → Bridge | Available custom actions have changed |
-| `action` | Bridge → MATLAB | Execute a registered action (with optional args) |
-| `action_result` | MATLAB → Bridge | Result of action execution (ok/error) |
-| `bridge_ready` | Bridge → MATLAB | Bridge reports its HTTP port |
-| `shutdown` | MATLAB → Bridge | Graceful shutdown signal |
-
-### Data Flow
-
-```
-MATLAB (DashboardEngine)
-    │
-    ├── WebBridge.serve()
-    │       ├── Start TCP server (localhost, random port)
-    │       ├── Launch Python bridge process
-    │       └── Start config poll timer
-    │
-    ├── On connection:
-    │       └── Send init message (signals + dashboard config + actions)
-    │
-    ├── On data change:
-    │       └── notifyDataChanged(signalId) → data_changed message
-    │
-    └── On config change (poll timer):
-            └── MD5 hash comparison → config_changed message
-```
-
-### Key Features
-
-- **Signal list:** FastSenseWidgets with Sensor or DataStore bindings are enumerated as signals with `id`, `dbPath`, and `title`
-- **Custom actions:** MATLAB callbacks registered via `registerAction(name, callback)` are exposed to the web UI and invoked over TCP
-- **Config polling:** a timer periodically hashes the dashboard config JSON and sends `config_changed` when the layout changes
-- **WAL mode:** SQLite DataStore databases are switched to WAL (Write-Ahead Logging) mode during serving for concurrent MATLAB writes and bridge reads
 
 ## Interactive Features
 
