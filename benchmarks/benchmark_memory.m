@@ -11,7 +11,7 @@ function benchmark_memory()
 %   Example:
 %     benchmark_memory();
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));install();
 
     fprintf('=== FastSense Memory Benchmark ===\n\n');
 

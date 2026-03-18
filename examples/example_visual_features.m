@@ -2,7 +2,7 @@
 % Demonstrates all new visual enhancement methods in a 2x2 dashboard
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 5e5;
 x = linspace(0, 100, n);

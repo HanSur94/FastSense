@@ -16,7 +16,7 @@ close all force;
 clear functions;  % flush MATLAB function cache
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% ========== Generate realistic process data ==========
 rng(42);  % reproducible

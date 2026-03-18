@@ -41,7 +41,7 @@ function build_mex()
 %   Example:
 %     build_mex();   % compile everything; prints per-file status
 %
-%   See also binary_search, setup.
+%   See also binary_search, install.
 
     rootDir = fileparts(mfilename('fullpath'));
     srcDir  = fullfile(rootDir, 'private', 'mex_src');

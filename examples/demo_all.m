@@ -10,10 +10,10 @@
 %
 %   From terminal (Octave — requires GUI for interactive zoom/pan):
 %     cd FastSense
-%     octave --gui --eval "run('setup.m'); addpath('libs/FastSense/private'); addpath('examples'); demo_all;"
+%     octave --gui --eval "run('install.m'); addpath('libs/FastSense/private'); addpath('examples'); demo_all;"
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 addpath(fullfile(projectRoot, 'libs', 'FastSense', 'private'));
 addpath(fileparts(mfilename('fullpath')));
 

@@ -4,7 +4,7 @@ function benchmark_datastore()
 %   and disk footprint across multiple dataset sizes up to 500M points.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-    setup();
+    install();
 
     sizes = [1e4, 1e5, 1e6, 5e6, 10e6, 50e6, 100e6, 200e6, 500e6];
     labels = {'10K', '100K', '1M', '5M', '10M', '50M', '100M', '200M', '500M'};

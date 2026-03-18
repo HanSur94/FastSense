@@ -7,7 +7,7 @@ function benchmark_resolve()
     test_dir = fileparts(mfilename('fullpath'));
     repo_root = fileparts(test_dir);
     addpath(repo_root);
-    setup();
+    install();
 
     sizes = [1e4, 1e5, 1e6, 1e7, 1e8];
     naiveMaxN = Inf;  % run naive for all sizes

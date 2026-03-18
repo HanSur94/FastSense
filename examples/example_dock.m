@@ -3,7 +3,7 @@
 % All tabs use datetime X axes (auto-detected by FastSense).
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 % Suppress MATLAB Variable Editor warnings during datetime/linspace
 wState = warning('off', 'all');
@@ -196,3 +196,7 @@ fig5.setTileYLabel(4, 'CO2 (ppm)');
 elapsed = toc;
 fprintf('Docked tabs rendered in %.2f seconds (~21M total pts).\n', elapsed);
 fprintf('Click tabs at top to switch between 5 dashboards.\n');
+
+%% undockTab — pop a tab out into its own window
+dock.undockTab(5);
+fprintf('undockTab(5): Environment tab undocked to a separate window.\n');

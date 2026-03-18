@@ -11,7 +11,7 @@ function results = run_all_tests()
 
     test_dir = fileparts(mfilename('fullpath'));
     repo_root = fileparts(test_dir);
-    addpath(repo_root); setup();
+    addpath(repo_root); install();
 
     if exist('OCTAVE_VERSION', 'builtin')
         results = run_octave_tests(test_dir);

@@ -3,7 +3,7 @@
 % Each tab gets a simple 1x1 figure with a sine wave variant.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 wState = warning('off', 'all');
 restoreWarn = onCleanup(@() warning(wState));

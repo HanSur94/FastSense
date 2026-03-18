@@ -15,7 +15,7 @@ close all force;
 clear functions;  % flush MATLAB function cache
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% ========== Build Dashboard ==========
 d = DashboardEngine('Text Widget Demo');

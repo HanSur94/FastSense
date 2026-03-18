@@ -7,7 +7,7 @@
 
 %% Setup path
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Create sensor with realistic data
 t = linspace(0, 300, 100000);  % 5 minutes at ~333 Hz

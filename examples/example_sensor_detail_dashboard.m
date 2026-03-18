@@ -5,7 +5,7 @@
 close all force;
 clear functions;
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% Create shared state channel
 sc = StateChannel('mode');

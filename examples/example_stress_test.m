@@ -7,7 +7,7 @@
 %   - Tests rendering, downsampling, threshold resolve, and zoom/pan
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 fprintf('\n=== FastSense Stress Test: 5 Tabbed Dashboards ===\n');
 totalTic = tic;

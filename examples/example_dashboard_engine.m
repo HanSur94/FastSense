@@ -11,7 +11,7 @@
 close all force;
 clear functions;
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Generate data and create Sensors with thresholds
 rng(7);
@@ -74,6 +74,14 @@ fprintf('Dashboard saved to: %s\n', jsonPath);
 fprintf('Temperature violations: %d\n', sTemp.countViolations());
 fprintf('Pressure violations: %d\n', sPress.countViolations());
 
-%% 4. Load from JSON (demonstrates roundtrip)
-% d2 = DashboardEngine.load(jsonPath);
-% d2.render();  % opens a second figure from the saved config
+%% 4. Export to .m script
+scriptPath = fullfile(tempdir, 'example_dashboard_export.m');
+d.exportScript(scriptPath);
+fprintf('Dashboard exported to script: %s\n', scriptPath);
+
+%% 5. Load from JSON (demonstrates roundtrip)
+% SensorResolver maps sensor keys back to Sensor objects for the loaded config
+sensorMap = containers.Map({'T-401', 'P-201'}, {sTemp, sPress});
+d2 = DashboardEngine.load(jsonPath, 'SensorResolver', @(key) sensorMap(key));
+d2.render();
+fprintf('Dashboard reloaded from JSON and rendered in a second figure.\n');

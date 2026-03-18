@@ -5,7 +5,7 @@ classdef TestEventSnapshot < matlab.unittest.TestCase
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'EventDetection'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'SensorThreshold'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'FastSense'));
-            setup();
+            install();
         end
     end
 

@@ -1,7 +1,7 @@
 function test_datetime()
 %TEST_DATETIME Tests for datetime X axis support.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     close all force;

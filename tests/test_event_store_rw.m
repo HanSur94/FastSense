@@ -16,7 +16,7 @@ function add_event_path()
     addpath(repoRoot);
     addpath(fullfile(repoRoot, 'libs', 'EventDetection'));
     addpath(fullfile(repoRoot, 'libs', 'SensorThreshold'));
-    setup();
+    install();
 end
 
 function test_constructor()

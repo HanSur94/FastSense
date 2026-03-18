@@ -4,7 +4,7 @@ function test_sensor_todisk()
 %   large sensor performance, idempotent toDisk, error on empty data.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-    setup();
+    install();
 
     fprintf('  --- Sensor.toDisk() tests ---\n');
 

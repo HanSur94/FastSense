@@ -1,7 +1,7 @@
 function test_compute_violations_dynamic()
 %TEST_COMPUTE_VIOLATIONS_DYNAMIC Tests for time-varying threshold violations.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     % testUpperStepFunction: threshold steps from 5 to 8 at x=10

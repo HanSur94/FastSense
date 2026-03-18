@@ -5,7 +5,7 @@ function test_mksqlite_types()
 %   columns (addColumn / getColumnRange / getColumnSlice / listColumns).
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-    setup();
+    install();
 
     if ~(exist('mksqlite', 'file') == 3)
         fprintf('    SKIPPED: mksqlite MEX not available.\n');

@@ -4,7 +4,7 @@
 % and only the visible slice is loaded into memory on zoom/pan.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Automatic disk offload (default behaviour)
 % In 'auto' mode (the default), FastSense stores data on disk when it

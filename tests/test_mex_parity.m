@@ -3,7 +3,7 @@ function test_mex_parity()
 %   Runs both MEX and MATLAB implementations side-by-side and compares.
 %   Skips if MEX files are not compiled.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     has_bs  = (exist('binary_search_mex', 'file') == 3);

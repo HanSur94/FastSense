@@ -14,7 +14,7 @@ function add_event_path()
     repoRoot = fileparts(thisDir);
     addpath(repoRoot);
     addpath(fullfile(repoRoot, 'libs', 'EventDetection'));
-    setup();
+    install();
 end
 
 function test_cannot_instantiate()

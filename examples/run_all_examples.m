@@ -10,30 +10,33 @@ function run_all_examples(mode)
     end
 
     projectRoot = fileparts(fileparts(mfilename('fullpath')));
-    run(fullfile(projectRoot, 'setup.m'));
+    run(fullfile(projectRoot, 'install.m'));
     addpath(fullfile(projectRoot, 'libs', 'FastSense', 'private'));
     addpath(fileparts(mfilename('fullpath')));
 
     examples = {
-        'example_basic',            '10M pts, 4 alarm/warning thresholds'
-        'example_multi',            '5 sensors x 1M pts on one axes'
-        'example_alarm_bands',      '2M pts, industrial HH/H/L/LL alarm bands'
+        'example_basic',            '10M pts, thresholds, setScale (log axis)'
+        'example_multi',            '5 sensors x 1M pts, resetColorIndex'
+        'example_alarm_bands',      '2M pts, HH/H/L/LL bands, setViolationsVisible'
         'example_nan_gaps',         '1M pts with sensor dropout gaps'
         'example_lttb_vs_minmax',   '5M pts, side-by-side downsampling comparison (linked)'
         'example_vibration',        '20M pts @ 50kHz, bearing fault detection'
         'example_ecg',              '5M pts ECG with arrhythmia thresholds'
         'example_multi_sensor_linked', '4-channel dashboard, 2M pts each (linked)'
-        'example_linked',           '3 linked subplots, 5M pts each'
+        'example_linked',           '3 linked subplots, 5M pts each, setViewMode'
         'example_uneven_sampling',  '260K pts, event-driven variable rate'
         'example_visual_features',  '500K pts, bands/shading/fill/markers in 2x2 dashboard'
-        'example_themes',           '100K pts, all 5 theme presets side by side'
-        'example_dashboard',        '1M pts, dark-themed 4-tile dashboard'
-        'example_100M',             '100M pts stress test (needs ~1.6 GB RAM)'
+        'example_themes',           'Themes, palettes, defaults, reapplyTheme, distFig'
+        'example_toolbar',          'Toolbar, metadata lookup, openLoupe'
+        'example_dashboard',        '1M pts, 4-tile dashboard, setTileTheme'
+        'example_100M',             '100M pts stress test, DeferDraw/ShowProgress'
         'example_sensor_static',    'Sensor with static upper & lower thresholds'
         'example_sensor_multi_state', 'Multi-state sensor, combined conditions, getThresholdsAt'
-        'example_sensor_registry',  'SensorRegistry API (list, get, getMultiple)'
+        'example_sensor_registry',  'SensorRegistry: list, get, register, viewer, printTable'
         'example_sensor_dashboard', 'Multi-sensor 2x2 dashboard with SensorRegistry'
-        'example_mixed_tiles',     'Mixed tile types: FastSense + bar/scatter/histogram'
+        'example_dock',             'Tabbed dock: 5 dashboards, undockTab'
+        'example_dashboard_engine', 'DashboardEngine: widgets, JSON save/load, exportScript'
+        'example_mixed_tiles',      'Mixed tile types: FastSense + bar/scatter/histogram'
     };
 
     fprintf('\n');

@@ -2,7 +2,7 @@ classdef TestGroupViolations < matlab.unittest.TestCase
     methods (TestClassSetup)
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
-            setup();
+            install();
             TestGroupViolations.addEventPrivatePath();
         end
     end

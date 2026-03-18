@@ -2,7 +2,7 @@ function test_mex_edge_cases()
 %TEST_MEX_EDGE_CASES Edge case tests for MEX functions.
 %   Skips if MEX files are not compiled.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     has_bs  = (exist('binary_search_mex', 'file') == 3);

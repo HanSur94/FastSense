@@ -8,7 +8,7 @@ function run_tests_with_coverage()
     test_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'tests');
     repo_root = fullfile(test_dir, '..');
     addpath(repo_root);
-    setup();
+    install();
 
     suite_dir = fullfile(test_dir, 'suite');
     addpath(suite_dir);

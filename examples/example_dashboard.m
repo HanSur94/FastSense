@@ -16,7 +16,7 @@
 close all force;
 clear functions;
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 1e6;
 x = linspace(0, 300, n);
@@ -65,5 +65,12 @@ fig.setTileTitle(3, 'Pressure (bar)');
 fig.setTileTitle(4, 'Vibration (mm/s)');
 fig.setTileXLabel(3, 'Time (s)');
 fig.setTileXLabel(4, 'Time (s)');
+
+%% setTileTheme — per-tile theme overrides
+% Override individual tile appearance without changing the whole grid theme
+fig.setTileTheme(4, struct('Background', [0.15 0.15 0.2], ...
+    'AxesColor', [0.1 0.1 0.15], 'ForegroundColor', [0.9 0.9 0.9]));
+fig.reapplyTheme();
+fprintf('setTileTheme() applied dark override to tile 4 (Vibration).\n');
 
 fprintf('Dashboard rendered in %.3f seconds.\n', toc);

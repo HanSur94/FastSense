@@ -1,7 +1,7 @@
 function test_add_shaded()
 %TEST_ADD_SHADED Tests for FastSense.addShaded method.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     % testAddShaded

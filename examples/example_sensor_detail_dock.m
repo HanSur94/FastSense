@@ -9,7 +9,7 @@
 %   Tab 4: Trends              — 6 plain FastSenses showing z-score overlays
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% ===== Shared data =====
 rng(42);  % reproducible

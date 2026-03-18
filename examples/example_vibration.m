@@ -2,7 +2,7 @@
 % Simulates accelerometer data from a rotating machine
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 20e6;
 fs = 50000; % 50 kHz sample rate

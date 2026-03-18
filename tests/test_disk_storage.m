@@ -4,7 +4,7 @@ function test_disk_storage()
 %   FastSenseDataStore and that render, zoom/pan, updateData, and cleanup
 %   all work transparently with disk-backed lines.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')

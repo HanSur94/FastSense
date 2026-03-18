@@ -17,7 +17,7 @@ function add_event_path()
     addpath(fullfile(repoRoot, 'libs', 'EventDetection'));
     addpath(fullfile(repoRoot, 'libs', 'SensorThreshold'));
     addpath(fullfile(repoRoot, 'libs', 'FastSense'));
-    setup();
+    install();
 end
 
 function test_constructor()

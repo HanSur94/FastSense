@@ -3,7 +3,7 @@
 % Static thresholds apply everywhere (condition is always true).
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 % --- Create sensor with synthetic vibration data ---
 s = Sensor('vibration', 'Name', 'Motor Vibration', 'ID', 201);

@@ -1,7 +1,7 @@
 function test_add_threshold()
 %TEST_ADD_THRESHOLD Tests for FastSense.addThreshold method.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
 
     % testAddUpperThreshold
     fp = FastSense();

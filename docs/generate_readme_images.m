@@ -1,6 +1,6 @@
 % generate_readme_images.m — Generate README screenshots for FastSense features
 % Run from the FastSense root directory:
-%   octave --no-gui --eval "setup; run('docs/generate_readme_images.m')"
+%   octave --no-gui --eval "install; run('docs/generate_readme_images.m')"
 
 img_dir = fullfile(fileparts(mfilename('fullpath')), 'images');
 if ~exist(img_dir, 'dir'); mkdir(img_dir); end

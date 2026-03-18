@@ -2,7 +2,7 @@
 % Demonstrates warning + alarm thresholds in both directions
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 2e6;
 x = linspace(0, 3600, n); % 1 hour of data at ~556 Hz
@@ -39,3 +39,10 @@ title(fp.hAxes, 'Process Variable — Alarm Bands');
 xlabel(fp.hAxes, 'Time (s)');
 ylabel(fp.hAxes, 'Value');
 legend(fp.hAxes, 'show');
+
+%% setViolationsVisible — toggle violation markers on/off
+fp.setViolationsVisible(false);
+fprintf('setViolationsVisible(false): violation markers hidden.\n');
+pause(1);
+fp.setViolationsVisible(true);
+fprintf('setViolationsVisible(true): violation markers restored.\n');

@@ -2,7 +2,7 @@
 % Simulates a real monitoring dashboard with different alarm levels per channel
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 2e6;
 x = linspace(0, 600, n); % 10 minutes

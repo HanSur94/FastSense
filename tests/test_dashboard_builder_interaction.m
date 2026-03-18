@@ -11,7 +11,7 @@ function test_dashboard_builder_interaction()
 %   invokes the figure's WindowButtonMotionFcn / WindowButtonUpFcn callbacks.
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
-    setup();
+    install();
 
     close all force;
     drawnow;

@@ -2,7 +2,7 @@ function test_linked_axes()
 %TEST_LINKED_AXES Tests for linked axes zoom propagation.
 %   Requires PostSet listeners (MATLAB only, skipped on Octave).
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     if exist('OCTAVE_VERSION', 'builtin')

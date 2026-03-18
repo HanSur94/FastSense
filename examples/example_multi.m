@@ -1,8 +1,8 @@
 %% FastSense Multi-Line Example — 5 sensors, 1M points each
-% Demonstrates multiple lines with thresholds
+% Demonstrates multiple lines with thresholds and resetColorIndex.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 1e6;
 x = linspace(0, 60, n); % 60 seconds
@@ -24,3 +24,17 @@ fp.render();
 fprintf('Rendered in %.3f seconds.\n', toc);
 title(fp.hAxes, 'FastSense — 5 Lines x 1M Points');
 legend(fp.hAxes, 'show');
+
+%% resetColorIndex — restart the auto color cycle
+% Useful when replacing all lines and wanting colors to restart
+fp2 = FastSense('Theme', 'light');
+for i = 1:3
+    fp2.addLine(x, sin(x*2*pi*i/10) + i*3, 'DisplayName', sprintf('Group A-%d', i));
+end
+fp2.resetColorIndex();  % next addLine starts from first palette color again
+for i = 1:3
+    fp2.addLine(x, cos(x*2*pi*i/8) + i*3, 'DisplayName', sprintf('Group B-%d', i));
+end
+fp2.render();
+title(fp2.hAxes, 'resetColorIndex — Group B reuses Group A colors');
+fprintf('resetColorIndex() demo: color cycle restarted for second group.\n');

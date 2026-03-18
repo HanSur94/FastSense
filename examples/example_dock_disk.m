@@ -13,7 +13,7 @@
 %   Tab 5: Environmental          — 1x3, 3 tiles, 5 sensors   (~11M pts)
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 wState = warning('off', 'all');
 restoreWarn = onCleanup(@() warning(wState));

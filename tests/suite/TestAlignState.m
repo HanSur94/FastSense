@@ -2,7 +2,7 @@ classdef TestAlignState < matlab.unittest.TestCase
     methods (TestClassSetup)
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
-            setup();
+            install();
 
             % Make private functions accessible
             test_dir = fileparts(mfilename('fullpath'));

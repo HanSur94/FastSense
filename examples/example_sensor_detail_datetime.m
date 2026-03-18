@@ -4,7 +4,7 @@
 % x-axis shows human-readable date/time labels.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Create sensor with datetime-based timestamps
 % Simulate 2 hours of data at ~10 Hz

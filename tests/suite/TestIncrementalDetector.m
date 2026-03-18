@@ -4,7 +4,7 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'EventDetection'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'SensorThreshold'));
-            setup();
+            install();
         end
     end
 

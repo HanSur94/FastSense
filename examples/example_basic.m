@@ -1,8 +1,9 @@
 %% FastSense Basic Example — 10M points single line
-% Demonstrates basic usage with a large time series
+% Demonstrates basic usage with a large time series, plus setScale for
+% logarithmic axes.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 10e6;
 x = linspace(0, 100, n);
@@ -31,3 +32,20 @@ fp.render();
 fprintf('Rendered in %.3f seconds. Try zooming and panning!\n', toc);
 title(fp.hAxes, 'FastSense — 10M Points');
 legend(fp.hAxes, 'show');
+
+%% setScale — logarithmic Y axis
+% Exponential growth data is best viewed with log scaling
+n2 = 1e6;
+x2 = linspace(1, 1000, n2);
+y2 = exp(x2 / 200) + 0.1 * abs(randn(1, n2)) .* exp(x2 / 200);
+
+fp2 = FastSense();
+fp2.addLine(x2, y2, 'DisplayName', 'Exponential Growth');
+fp2.addThreshold(100, 'Direction', 'upper', 'ShowViolations', true, ...
+    'Label', 'Warning');
+fp2.render();
+
+% Switch Y axis to log scale (can be called before or after render)
+fp2.setScale('YScale', 'log');
+title(fp2.hAxes, 'setScale — Logarithmic Y Axis');
+fprintf('setScale() demo: Y axis switched to log scale.\n');

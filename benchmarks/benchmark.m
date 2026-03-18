@@ -10,7 +10,7 @@
 %   4. Linked axes with automatic re-downsample
 % In MATLAB (with JIT compilation), the downsampling cost is much lower.
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+addpath(fullfile(fileparts(mfilename('fullpath')), '..'));install();
 addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastSense', 'private'));
 
 sizes = [1e4, 1e5, 1e6, 5e6, 10e6, 50e6];

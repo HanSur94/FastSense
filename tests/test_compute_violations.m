@@ -1,7 +1,7 @@
 function test_compute_violations()
 %TEST_COMPUTE_VIOLATIONS Tests for compute_violations private function.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     % testUpperViolation

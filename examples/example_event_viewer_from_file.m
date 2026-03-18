@@ -10,7 +10,7 @@ function example_event_viewer_from_file()
 %   Stop: Close the Event Viewer figure to stop the background timer.
 
     projectRoot = fileparts(fileparts(mfilename('fullpath')));
-    run(fullfile(projectRoot, 'setup.m'));
+    run(fullfile(projectRoot, 'install.m'));
 
     persistent sensors;
 

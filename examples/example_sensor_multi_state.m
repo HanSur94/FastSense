@@ -7,7 +7,7 @@
 %   - getThresholdsAt() for querying active thresholds at a time point
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 % --- Create sensor with synthetic flow data ---
 s = Sensor('flow', 'Name', 'Gas Flow Rate', 'ID', 301);

@@ -3,7 +3,7 @@
 % that FastSense doesn't handle (bar, scatter, histogram, stem, etc.)
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 500000;
 x = linspace(0, 120, n);

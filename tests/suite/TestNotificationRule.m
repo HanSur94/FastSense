@@ -3,7 +3,7 @@ classdef TestNotificationRule < matlab.unittest.TestCase
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'EventDetection'));
-            setup();
+            install();
         end
     end
 

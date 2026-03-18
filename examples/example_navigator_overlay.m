@@ -5,7 +5,7 @@
 % custom overview+detail views.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% Create a figure with two axes: overview (bottom) + detail (top)
 fig = figure('Name', 'NavigatorOverlay Demo', 'Position', [100 100 900 500]);

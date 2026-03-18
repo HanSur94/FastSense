@@ -2,7 +2,7 @@
 % Demonstrates high sample rate biomedical data with tight thresholds
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 5e6;
 fs = 1000; % 1 kHz ECG sample rate

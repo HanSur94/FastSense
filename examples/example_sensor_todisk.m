@@ -7,7 +7,7 @@
 % points) that would otherwise consume too much memory.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Basic toDisk workflow
 % Build sensor data normally, then call toDisk() to offload to SQLite.

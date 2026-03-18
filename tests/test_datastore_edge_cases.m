@@ -7,7 +7,7 @@ function test_datastore_edge_cases()
 %   Covers: boundary conditions, special values (Inf, NaN), single-point
 %   datasets, repeated X values, multi-chunk queries, and binary fallback.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
 
     fprintf('  --- DataStore edge cases ---\n');
 

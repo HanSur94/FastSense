@@ -10,7 +10,7 @@
 %   6. FastSenseGrid tiled dashboard overhead
 %   7. Combined: all features together vs baseline
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '..'));setup();
+addpath(fullfile(fileparts(mfilename('fullpath')), '..'));install();
 addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'libs', 'FastSense', 'private'));
 
 sizes  = [1e4, 1e5, 1e6, 5e6, 10e6];

@@ -2,7 +2,7 @@
 % Demonstrates auto-formatted date/time tick labels that adapt to zoom level.
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 %% ~579 days of temperature data at 1-second resolution
 n = 50000000;

@@ -1,7 +1,7 @@
 function test_toolbar()
 %TEST_TOOLBAR Tests for FastSenseToolbar class.
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
     close all force;

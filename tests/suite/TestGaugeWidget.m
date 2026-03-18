@@ -2,7 +2,7 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
     methods (TestClassSetup)
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
-            setup();
+            install();
         end
     end
 

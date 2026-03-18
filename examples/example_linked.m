@@ -2,7 +2,7 @@
 % Demonstrates synchronized zoom/pan across subplots
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 n = 5e6;
 x = linspace(0, 100, n);
@@ -35,3 +35,11 @@ fp3.render();
 title(ax3, 'Vibration');
 
 fprintf('All 3 plots linked. Zoom one — all follow!\n');
+
+%% setViewMode — control how X-axis adjusts during live updates
+% 'preserve' keeps current zoom, 'follow' scrolls to track latest data,
+% 'reset' fits full X range.
+fp1.setViewMode('follow');
+fp2.setViewMode('follow');
+fp3.setViewMode('follow');
+fprintf('setViewMode(''follow'') set on all 3 plots — ready for live scrolling.\n');

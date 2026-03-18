@@ -2,7 +2,7 @@
 % Demonstrates that FastSense handles non-uniform X spacing correctly
 
 projectRoot = fileparts(fileparts(mfilename('fullpath')));
-run(fullfile(projectRoot, 'setup.m'));
+run(fullfile(projectRoot, 'install.m'));
 
 % Simulate event-driven data: high rate during events, sparse between
 fprintf('Generating unevenly sampled data...\n');
