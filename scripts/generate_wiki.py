@@ -127,6 +127,81 @@ EXCLUDED_PREFIXES = ("API-Reference:-",)
 
 TOKEN_BUDGET = 50_000
 
+# ---------------------------------------------------------------------------
+# Prompt templates
+# ---------------------------------------------------------------------------
+
+SHARED_INSTRUCTIONS = """
+CRITICAL RULES:
+- Do NOT invent features, classes, methods, or parameters that do not exist in the provided source code.
+- Only document what you can verify from the source files provided.
+- Use MATLAB syntax highlighting in code blocks (```matlab).
+- Use [[Page Name]] wiki link syntax for cross-references (see the sidebar for valid page names).
+- Start the page with the auto-generated notice exactly as shown.
+- Write in a technical, concise style. No marketing language.
+- Every code example must be runnable if copy-pasted (given proper setup).
+
+AUTO-GENERATED NOTICE (must be the first line):
+<!-- AUTO-GENERATED from source code by scripts/generate_wiki.py — do not edit manually -->
+"""
+
+PROMPTS = {
+    "overview": SHARED_INSTRUCTIONS + """
+PAGE TYPE: Project Overview (Home page)
+
+Generate the main wiki home page for the FastPlot MATLAB library.
+- Start with a one-line description, then key metrics table (pull exact numbers from source/benchmarks).
+- Summarize each library component (FastSense, Dashboard, SensorThreshold, EventDetection, WebBridge).
+- Include a Quick Start section with a minimal runnable code example from the examples provided.
+- End with links to the Getting Started guide and API reference pages.
+- Keep the overall structure similar to the existing page if one is provided.
+""",
+
+    "architecture": SHARED_INSTRUCTIONS + """
+PAGE TYPE: Architecture Overview
+
+Generate a technical architecture page for the FastPlot library.
+- Explain the high-level design: render pipeline, zoom/pan callbacks, data flow.
+- Describe the class hierarchy and how components interact.
+- Document the downsampling strategy (MinMax vs LTTB, pyramid cache).
+- Explain MEX acceleration and the fallback mechanism.
+- Use text-based diagrams or bullet-point flows (no image references).
+- Keep the overall structure similar to the existing page if one is provided.
+""",
+
+    "guide": SHARED_INSTRUCTIONS + """
+PAGE TYPE: Feature Guide
+
+Generate a tutorial-style guide for the specified feature.
+- Start with a brief overview of what the feature does and when to use it.
+- Walk through usage step by step with code examples from the provided example scripts.
+- Document key classes, their properties, and methods (reference the API pages, don't duplicate them).
+- Include common patterns, tips, and gotchas.
+- Keep the overall structure similar to the existing page if one is provided.
+""",
+
+    "usecase": SHARED_INSTRUCTIONS + """
+PAGE TYPE: Use Case Walkthrough
+
+Generate a problem → solution walkthrough.
+- Start with the problem statement: what scenario does this solve?
+- Walk through the solution step by step with complete, runnable code.
+- Draw code examples from the provided example scripts.
+- Explain the key decisions and trade-offs.
+- Keep the overall structure similar to the existing page if one is provided.
+""",
+
+    "examples": SHARED_INSTRUCTIONS + """
+PAGE TYPE: Examples Index
+
+Generate an index page listing all example scripts.
+- Group examples by category (basic, dashboard, sensors, events, etc.).
+- For each example, include: filename, one-line description (from the file's first comment line).
+- Use a table or bulleted list format.
+- Link to relevant guide pages where applicable.
+""",
+}
+
 
 # ---------------------------------------------------------------------------
 # Change detection
