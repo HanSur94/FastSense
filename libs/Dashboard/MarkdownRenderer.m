@@ -198,16 +198,19 @@ classdef MarkdownRenderer
 
             bodyHtml = strjoin(bodyParts, char(10));
 
-            css = MarkdownRenderer.getCSS(themeName);
-            baseTag = '';
+            % Resolve relative image paths to absolute file:// URLs
             if ~isempty(basePath)
-                % file:// URL so relative paths resolve against the .md dir
-                baseUrl = ['file://' strrep(basePath, '\', '/') '/'];
-                baseTag = ['<base href="' baseUrl '">' char(10)];
+                absPrefix = ['file://' strrep(basePath, '\', '/') '/'];
+                % Match <img src="X" where X does not start with
+                % http://, https://, file://, or /
+                bodyHtml = regexprep(bodyHtml, ...
+                    '<img src="(?!https?://|file://|/)', ...
+                    ['<img src="' absPrefix]);
             end
+
+            css = MarkdownRenderer.getCSS(themeName);
             html = ['<!DOCTYPE html>' char(10) ...
                 '<html><head><meta charset="utf-8">' char(10) ...
-                baseTag ...
                 '<style>' char(10) css char(10) '</style>' char(10) ...
                 '</head><body>' char(10) ...
                 bodyHtml char(10) ...
@@ -219,7 +222,7 @@ classdef MarkdownRenderer
         function text = inlineFormat(text)
             text = MarkdownRenderer.escapeHtml(text);
             % Images: ![alt](src) — must run before links
-            text = regexprep(text, '!\[([^\]]*)\]\(([^)]+)\)', '<img src="$2" alt="$1" style="max-width:100%%">');
+            text = regexprep(text, '!\[([^\]]*)\]\(([^)]+)\)', '<img src="$2" alt="$1" style="max-width:100%">');
             % Links: [text](url)
             text = regexprep(text, '\[([^\]]+)\]\(([^)]+)\)', '<a href="$2">$1</a>');
             % Bold: **text**
