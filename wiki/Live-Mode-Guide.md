@@ -34,7 +34,7 @@ The callback `@(fp, s) fp.updateData(1, s.x, s.y)` is called every poll cycle:
 fp.stopLive();
 ```
 
-Or use the Live Mode button in the toolbar.
+Or use the Live Mode button in the [[FastSenseToolbar|API Reference: FastSenseToolbar]].
 
 ---
 
@@ -132,7 +132,6 @@ Combine live mode with event detection for real-time monitoring using the LiveEv
 tempSensor = Sensor('temperature', 'Name', 'Temperature');
 tempSensor.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
 tempSensor.addThresholdRule(struct(), 82, 'Direction', 'upper', 'Label', 'Hi Alarm');
-tempSensor.resolve();
 
 sensors = containers.Map();
 sensors('temperature') = tempSensor;
@@ -149,6 +148,54 @@ pipeline = LiveEventPipeline(sensors, dsMap, ...
 
 % Start live event detection
 pipeline.start();
+```
+
+---
+
+## Dashboard Live Mode
+
+The example_dashboard_live.m script shows a complete live dashboard with sensor-bound widgets:
+
+```matlab
+% Create dashboard with live sensor data
+d = DashboardEngine('Live Process Monitoring');
+d.Theme = 'light';
+d.LiveInterval = 1;
+
+% Sensor-bound widgets auto-update from Sensor.Y data
+d.addWidget('number', 'Title', 'Temperature', ...
+    'Position', [5 1 5 2], ...
+    'Sensor', sTemp, ...
+    'Format', '%.1f');
+
+d.addWidget('status', 'Title', 'Temp', ...
+    'Position', [15 1 5 2], ...
+    'Sensor', sTemp);
+
+d.addWidget('fastsense', ...
+    'Position', [1 3 12 8], ...
+    'Sensor', sTemp);
+
+% Background timer generates sensor data at 10 Hz
+hDataTimer = timer('ExecutionMode', 'fixedRate', ...
+    'Period', 0.1, ...
+    'TimerFcn', @(~,~) updateSensorData());
+
+% Start dashboard live mode (refreshes display every second)
+d.render();
+start(hDataTimer);
+d.startLive();
+```
+
+---
+
+## Manual Refresh
+
+Trigger a one-shot data reload without starting continuous polling:
+
+```matlab
+fp.refresh();
+fig.refresh();
 ```
 
 ---
@@ -176,38 +223,9 @@ fig.runLive();
 
 ---
 
-## Manual Refresh
+## Progress Indication
 
-Trigger a one-shot data reload without starting continuous polling:
-
-```matlab
-fp.refresh();
-fig.refresh();
-```
-
----
-
-## Toolbar Integration
-
-The [[FastSenseToolbar|API Reference: FastSenseToolbar]] provides a Live Mode button:
-
-```matlab
-tb = FastSenseToolbar(fp);
-% Click the Live Mode button to toggle polling on/off
-% Or programmatically:
-tb.toggleLive();
-```
-
-The Refresh button triggers a manual one-shot reload:
-```matlab
-tb.refresh();
-```
-
----
-
-## Console Progress Bars
-
-Use ConsoleProgressBar for visual feedback during long operations:
+Use [[ConsoleProgressBar|API Reference: Utilities]] for visual feedback during long operations:
 
 ```matlab
 pb = ConsoleProgressBar(2);   % 2-space indent
@@ -229,6 +247,7 @@ pb.freeze();   % becomes permanent line
 - The .mat file should be written atomically (write to temp file, then rename) to avoid partial reads
 - Live mode works with linked axes — all linked plots update together
 - Use `DeferDraw = true` to skip drawnow during batch render for better performance
+- Dashboard widgets bound to Sensor objects automatically update when the Sensor.Y data changes
 
 ---
 

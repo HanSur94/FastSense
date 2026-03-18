@@ -173,6 +173,27 @@ The navigator and main plot both show human-readable time labels.
 
 ---
 
+## Large Dataset Example
+
+The example scripts demonstrate datetime with massive datasets:
+
+```matlab
+% ~579 days of temperature data at 1-second resolution
+n = 50000000;
+x = datenum(2024,1,1) + (0:n-1)/86400;  % ~579 days
+t = (0:n-1) / 86400;  % time in days
+y = 20 + 5*sin(t * 2*pi - pi/2) + ...  % daily cycle (peak at midday)
+    0.3*sin(t * 2*pi*24) + ...          % hourly ripple
+    0.1*randn(1,n);                     % sensor noise
+
+fp = FastSense('Theme', 'light');
+fp.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
+fp.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
+fp.render();
+```
+
+---
+
 ## GNU Octave Notes
 
 - Octave does not support MATLAB's `datetime` class
