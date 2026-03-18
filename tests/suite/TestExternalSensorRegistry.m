@@ -1,4 +1,16 @@
 classdef TestExternalSensorRegistry < matlab.unittest.TestCase
+    properties
+        TempDir
+    end
+
+    methods (TestMethodSetup)
+        function createTempDir(testCase)
+            testCase.TempDir = tempname();
+            mkdir(testCase.TempDir);
+            testCase.addTeardown(@() rmdir(testCase.TempDir, 's'));
+        end
+    end
+
     methods (TestClassSetup)
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
@@ -110,6 +122,70 @@ classdef TestExternalSensorRegistry < matlab.unittest.TestCase
         function testPrintTableEmpty(testCase)
             reg = ExternalSensorRegistry('TestLab');
             reg.printTable();  % should not error on empty registry
+        end
+
+        function testWireMatFile(testCase)
+            % Create a .mat file with two signals
+            time = [1 2 3 4 5];
+            temp_bearing = [20 21 22 23 24];
+            press_oil = [5 5.1 5.2 5.3 5.4];
+            matPath = fullfile(testCase.TempDir, 'data.mat');
+            save(matPath, 'time', 'temp_bearing', 'press_oil');
+
+            reg = ExternalSensorRegistry('TestLab');
+            reg.register('bearing_temp', Sensor('bearing_temp'));
+            reg.register('oil_pressure', Sensor('oil_pressure'));
+
+            reg.wireMatFile(matPath, {
+                'bearing_temp',  'XVar', 'time', 'YVar', 'temp_bearing';
+                'oil_pressure',  'XVar', 'time', 'YVar', 'press_oil';
+            });
+
+            % Verify Sensor properties were set
+            s1 = reg.get('bearing_temp');
+            testCase.verifyEqual(s1.MatFile, matPath, 'matfile_set');
+
+            % Verify DataSourceMap was populated
+            dsMap = reg.getDataSourceMap();
+            testCase.verifyTrue(dsMap.has('bearing_temp'), 'ds_bearing');
+            testCase.verifyTrue(dsMap.has('oil_pressure'), 'ds_oil');
+        end
+
+        function testWireMatFileUnknownKeyThrows(testCase)
+            matPath = fullfile(testCase.TempDir, 'empty.mat');
+            x = 1; save(matPath, 'x');
+
+            reg = ExternalSensorRegistry('TestLab');
+            threw = false;
+            try
+                reg.wireMatFile(matPath, {'nonexistent', 'XVar', 'x', 'YVar', 'x'});
+            catch
+                threw = true;
+            end
+            testCase.verifyTrue(threw, 'should_throw_unknown_key');
+        end
+
+        function testWireMatFileDuplicateWarns(testCase)
+            time = [1 2 3]; val = [10 20 30];
+            matPath = fullfile(testCase.TempDir, 'data.mat');
+            save(matPath, 'time', 'val');
+
+            reg = ExternalSensorRegistry('TestLab');
+            reg.register('s1', Sensor('s1'));
+            reg.wireMatFile(matPath, {'s1', 'XVar', 'time', 'YVar', 'val'});
+
+            % Wire again — should warn but not error
+            reg.wireMatFile(matPath, {'s1', 'XVar', 'time', 'YVar', 'val'});
+
+            % Should still work
+            dsMap = reg.getDataSourceMap();
+            testCase.verifyTrue(dsMap.has('s1'), 'still_wired');
+        end
+
+        function testGetDataSourceMap(testCase)
+            reg = ExternalSensorRegistry('TestLab');
+            dsMap = reg.getDataSourceMap();
+            testCase.verifyTrue(isa(dsMap, 'DataSourceMap'), 'returns_dsmap');
         end
     end
 end

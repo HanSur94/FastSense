@@ -117,6 +117,50 @@ classdef ExternalSensorRegistry < handle
             end
             fprintf('\n  %d sensor(s) total.\n\n', nSensors);
         end
+
+        function wireMatFile(obj, matFilePath, mappings)
+            %WIREMATFILE Wire .mat file fields to registered sensor keys.
+            %   reg.wireMatFile('data.mat', {
+            %       'sensorKey', 'XVar', 'time', 'YVar', 'value';
+            %   })
+            %
+            %   Each row of mappings: {sensorKey, 'XVar', xField, 'YVar', yField}
+            for i = 1:size(mappings, 1)
+                key = mappings{i, 1};
+                if ~obj.catalog_.isKey(key)
+                    error('ExternalSensorRegistry:unknownKey', ...
+                        'Cannot wire ''%s'': not registered in ''%s''.', key, obj.Name);
+                end
+
+                % Parse name-value pairs from remaining columns
+                nvPairs = mappings(i, 2:end);
+                p = inputParser();
+                p.addParameter('XVar', 'X', @ischar);
+                p.addParameter('YVar', 'Y', @ischar);
+                p.parse(nvPairs{:});
+
+                % Set Sensor properties
+                s = obj.catalog_(key);
+                s.MatFile = matFilePath;
+                s.KeyName = p.Results.YVar;
+
+                % Create MatFileDataSource
+                ds = MatFileDataSource(matFilePath, ...
+                    'XVar', p.Results.XVar, 'YVar', p.Results.YVar);
+
+                % Warn on overwrite
+                if obj.dsMap_.has(key)
+                    warning('ExternalSensorRegistry:overwrite', ...
+                        'Overwriting data source for ''%s'' in ''%s''.', key, obj.Name);
+                end
+                obj.dsMap_.add(key, ds);
+            end
+        end
+
+        function dsMap = getDataSourceMap(obj)
+            %GETDATASOURCEMAP Return the DataSourceMap for pipeline use.
+            dsMap = obj.dsMap_;
+        end
     end
 
     methods (Static, Access = private)
