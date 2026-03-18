@@ -24,7 +24,6 @@ FastPlot/
 │   │   ├── ConsoleProgressBar.m   # Progress indication
 │   │   ├── binary_search.m        # Binary search utility
 │   │   ├── build_mex.m            # MEX compilation script
-│   │   ├── mksqlite.c             # SQLite3 MEX interface
 │   │   └── private/               # Internal algorithms + MEX sources
 │   ├── SensorThreshold/           # Sensor and threshold system
 │   │   ├── Sensor.m
@@ -198,7 +197,7 @@ Each level fills in only the fields it specifies; unspecified fields cascade fro
 
 ## Dashboard Engine Architecture
 
-The `DashboardEngine` provides a serializable, widget-based dashboard system separate from `FastSenseGrid`. While `FastSenseGrid` is a tiled grid of FastSense instances, `DashboardEngine` uses a 24-column responsive grid with heterogeneous widget types (plots, gauges, numbers, status indicators, tables, timelines, and raw axes).
+The `DashboardEngine` provides a serializable, widget-based dashboard system separate from `FastSenseGrid`. While `FastSenseGrid` is a tiled grid of FastSense instances, `DashboardEngine` uses a 24-column responsive grid with heterogeneous widget types.
 
 ### Key Components
 
@@ -251,8 +250,8 @@ Clicking "Edit" in the toolbar creates a `DashboardBuilder` instance:
 ### JSON Persistence
 
 `DashboardSerializer` handles round-trip serialization:
-- **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually (MATLAB's `jsonencode` cannot handle cell arrays of mixed structs).
-- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method. An optional `SensorResolver` function handle re-binds Sensor objects by name.
+- **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually.
+- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method.
 - **Export script:** generates a `.m` file with `DashboardEngine` constructor calls and `addWidget` calls for each widget.
 
 ## Event Detection Architecture
@@ -292,52 +291,6 @@ When `EscalateSeverity` is enabled, events are promoted to the highest violated 
 - A violation starts at "Warning" level
 - If "Alarm" threshold is also crossed, the event is escalated to "Alarm"
 - The event retains the highest severity level encountered
-
-## WebBridge Architecture
-
-The `WebBridge` class provides a TCP server that bridges MATLAB dashboards to web-based visualization. It uses NDJSON (newline-delimited JSON) for message framing over TCP.
-
-### Protocol
-
-All messages are JSON objects terminated by a newline character. The protocol is defined in `WebBridgeProtocol`:
-
-| Message Type | Direction | Description |
-|-------------|-----------|-------------|
-| `init` | MATLAB → Bridge | Initial handshake with signal list, dashboard config, and registered actions |
-| `data_changed` | MATLAB → Bridge | Notify that signal data has been updated |
-| `config_changed` | MATLAB → Bridge | Dashboard layout/theme has changed |
-| `actions_changed` | MATLAB → Bridge | Available custom actions have changed |
-| `action` | Bridge → MATLAB | Execute a registered action (with optional args) |
-| `action_result` | MATLAB → Bridge | Result of action execution (ok/error) |
-| `bridge_ready` | Bridge → MATLAB | Bridge reports its HTTP port |
-| `shutdown` | MATLAB → Bridge | Graceful shutdown signal |
-
-### Data Flow
-
-```
-MATLAB (DashboardEngine)
-    │
-    ├── WebBridge.serve()
-    │       ├── Start TCP server (localhost, random port)
-    │       ├── Launch Python bridge process
-    │       └── Start config poll timer
-    │
-    ├── On connection:
-    │       └── Send init message (signals + dashboard config + actions)
-    │
-    ├── On data change:
-    │       └── notifyDataChanged(signalId) → data_changed message
-    │
-    └── On config change (poll timer):
-            └── MD5 hash comparison → config_changed message
-```
-
-### Key Features
-
-- **Signal list:** FastSenseWidgets with Sensor or DataStore bindings are enumerated as signals with `id`, `dbPath`, and `title`
-- **Custom actions:** MATLAB callbacks registered via `registerAction(name, callback)` are exposed to the web UI and invoked over TCP
-- **Config polling:** a timer periodically hashes the dashboard config JSON and sends `config_changed` when the layout changes
-- **WAL mode:** SQLite DataStore databases are switched to WAL (Write-Ahead Logging) mode during serving for concurrent MATLAB writes and bridge reads
 
 ## Interactive Features
 
