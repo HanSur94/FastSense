@@ -51,10 +51,10 @@ classdef TestDashboardSerializerRoundTrip < matlab.unittest.TestCase
             config = DashboardSerializer.widgetsToConfig( ...
                 'RoundTrip Test', 'dark', 5, widgets);
             filepath = fullfile(testCase.TempDir, 'roundtrip.json');
-            DashboardSerializer.save(config, filepath);
+            DashboardSerializer.saveJSON(config, filepath);
 
             % Load back and reconstruct widgets
-            loaded = DashboardSerializer.load(filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
             rebuilt = DashboardSerializer.configToWidgets(loaded);
 
             testCase.verifyEqual(numel(rebuilt), 8, ...
@@ -117,9 +117,9 @@ classdef TestDashboardSerializerRoundTrip < matlab.unittest.TestCase
             config = DashboardSerializer.widgetsToConfig( ...
                 'Props Test', 'dark', 5, widgets);
             filepath = fullfile(testCase.TempDir, 'props.json');
-            DashboardSerializer.save(config, filepath);
+            DashboardSerializer.saveJSON(config, filepath);
 
-            loaded = DashboardSerializer.load(filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
             rebuilt = DashboardSerializer.configToWidgets(loaded);
 
             % FastSenseWidget: XData and YData via source.data

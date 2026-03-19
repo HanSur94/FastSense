@@ -63,7 +63,7 @@ classdef DashboardEngine < handle
             obj.Layout = DashboardLayout();
         end
 
-        function addWidget(obj, type, varargin)
+        function w = addWidget(obj, type, varargin)
             switch type
                 case 'fastsense'
                     w = FastSenseWidget(varargin{:});
@@ -794,28 +794,40 @@ classdef DashboardEngine < handle
                 end
             end
 
-            config = DashboardSerializer.load(filepath);
-            obj = DashboardEngine(config.name);
-            if isfield(config, 'theme')
-                obj.Theme = config.theme;
-            end
-            if isfield(config, 'liveInterval')
-                obj.LiveInterval = config.liveInterval;
-            end
-            obj.FilePath = filepath;
-            if isfield(config, 'infoFile')
-                obj.InfoFile = config.infoFile;
-            end
+            [~, ~, ext] = fileparts(filepath);
 
-            widgets = DashboardSerializer.configToWidgets(config, resolver);
-            for i = 1:numel(widgets)
-                w = widgets{i};
-                existingPositions = cell(1, numel(obj.Widgets));
-                for j = 1:numel(obj.Widgets)
-                    existingPositions{j} = obj.Widgets{j}.Position;
+            if strcmp(ext, '.m')
+                % .m function file returns a DashboardEngine directly
+                [fdir, funcname] = fileparts(filepath);
+                addpath(fdir);
+                cleanupPath = onCleanup(@() rmpath(fdir));
+                obj = feval(funcname);
+                obj.FilePath = filepath;
+            else
+                % Legacy JSON path
+                config = DashboardSerializer.load(filepath);
+                obj = DashboardEngine(config.name);
+                if isfield(config, 'theme')
+                    obj.Theme = config.theme;
                 end
-                w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
-                obj.Widgets{end+1} = w;
+                if isfield(config, 'liveInterval')
+                    obj.LiveInterval = config.liveInterval;
+                end
+                obj.FilePath = filepath;
+                if isfield(config, 'infoFile')
+                    obj.InfoFile = config.infoFile;
+                end
+
+                widgets = DashboardSerializer.configToWidgets(config, resolver);
+                for i = 1:numel(widgets)
+                    w = widgets{i};
+                    existingPositions = cell(1, numel(obj.Widgets));
+                    for j = 1:numel(obj.Widgets)
+                        existingPositions{j} = obj.Widgets{j}.Position;
+                    end
+                    w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
+                    obj.Widgets{end+1} = w;
+                end
             end
         end
     end

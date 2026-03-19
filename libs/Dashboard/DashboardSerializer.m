@@ -3,7 +3,106 @@ classdef DashboardSerializer
 
     methods (Static)
         function save(config, filepath)
-            %SAVE Write dashboard config struct to JSON file.
+            %SAVE Write dashboard config as a MATLAB function file.
+            %   The output is a function returning a DashboardEngine.
+            [~, funcname] = fileparts(filepath);
+
+            % Generate the script body (reuse exportScript logic)
+            lines = {};
+            lines{end+1} = sprintf('function d = %s()', funcname);
+            lines{end+1} = sprintf('%%%s Recreate dashboard.', upper(funcname));
+            lines{end+1} = sprintf('%%   d = %s() returns a DashboardEngine.', funcname);
+            lines{end+1} = '';
+            lines{end+1} = sprintf('    d = DashboardEngine(''%s'');', strrep(config.name, '''', ''''''));
+            if isfield(config, 'theme')
+                lines{end+1} = sprintf('    d.Theme = ''%s'';', config.theme);
+            end
+            if isfield(config, 'liveInterval')
+                lines{end+1} = sprintf('    d.LiveInterval = %g;', config.liveInterval);
+            end
+            if isfield(config, 'infoFile') && ~isempty(config.infoFile)
+                lines{end+1} = sprintf('    d.InfoFile = ''%s'';', strrep(config.infoFile, '''', ''''''));
+            end
+            lines{end+1} = '';
+
+            % Write widget calls (indented, with return value)
+            for i = 1:numel(config.widgets)
+                ws = config.widgets{i};
+                pos = sprintf('[%d %d %d %d]', ws.position.col, ws.position.row, ...
+                    ws.position.width, ws.position.height);
+
+                switch ws.type
+                    case 'fastsense'
+                        if isfield(ws, 'source')
+                            switch ws.source.type
+                                case 'sensor'
+                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
+                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
+                                    lines{end+1} = sprintf('        ''Sensor'', SensorRegistry.get(''%s''));', ws.source.name);
+                                case 'file'
+                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
+                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
+                                    lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
+                                        ws.source.path, ws.source.xVar, ws.source.yVar);
+                                case 'data'
+                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
+                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
+                                    lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s);', ...
+                                        mat2str(ws.source.x), mat2str(ws.source.y));
+                                otherwise
+                                    lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                            end
+                        else
+                            lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                        end
+                    case 'number'
+                        line = sprintf('    d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
+                        if isfield(ws, 'units') && ~isempty(ws.units)
+                            line = [line, sprintf(', ...\n        ''Units'', ''%s''', ws.units)];
+                        end
+                        lines{end+1} = [line, ');'];
+                    case 'status'
+                        line = sprintf('    d.addWidget(''status'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
+                        lines{end+1} = [line, ');'];
+                    case 'text'
+                        line = sprintf('    d.addWidget(''text'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
+                        if isfield(ws, 'content') && ~isempty(ws.content)
+                            line = [line, sprintf(', ...\n        ''Content'', ''%s''', ws.content)];
+                        end
+                        lines{end+1} = [line, ');'];
+                    case 'gauge'
+                        line = sprintf('    d.addWidget(''gauge'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
+                        if isfield(ws, 'range')
+                            line = [line, sprintf(', ...\n        ''Range'', [%g %g]', ws.range(1), ws.range(2))];
+                        end
+                        if isfield(ws, 'units') && ~isempty(ws.units)
+                            line = [line, sprintf(', ...\n        ''Units'', ''%s''', ws.units)];
+                        end
+                        lines{end+1} = [line, ');'];
+                    case 'group'
+                        line = sprintf('    d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ws.label, pos);
+                        if isfield(ws, 'mode') && ~isempty(ws.mode)
+                            line = [line, sprintf(', ...\n        ''Mode'', ''%s''', ws.mode)];
+                        end
+                        lines{end+1} = [line, ');'];
+                    otherwise
+                        lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
+                end
+                lines{end+1} = '';
+            end
+
+            lines{end+1} = 'end';
+
+            fid = fopen(filepath, 'w');
+            if fid == -1
+                error('DashboardSerializer:fileError', 'Cannot open file: %s', filepath);
+            end
+            fprintf(fid, '%s\n', lines{:});
+            fclose(fid);
+        end
+
+        function saveJSON(config, filepath)
+            %SAVEJSON Legacy: write dashboard config struct to JSON file.
             %  Widgets may have heterogeneous fields, so encode each
             %  widget individually and assemble the JSON array by hand.
             parts = cell(1, numel(config.widgets));
@@ -26,19 +125,33 @@ classdef DashboardSerializer
             fclose(fid);
         end
 
-        function config = load(filepath)
-            %LOAD Read dashboard config from JSON file.
+        function result = load(filepath)
+            %LOAD Load dashboard config from file.
+            %   For .m files: uses feval to execute the function and return the engine.
+            %   For .json files: uses legacy JSON parsing.
             if ~exist(filepath, 'file')
                 error('DashboardSerializer:fileNotFound', 'File not found: %s', filepath);
             end
 
+            [fdir, funcname, ext] = fileparts(filepath);
+
+            if strcmp(ext, '.json')
+                result = DashboardSerializer.loadJSON(filepath);
+                return;
+            end
+
+            % .m function file
+            addpath(fdir);
+            cleanupPath = onCleanup(@() rmpath(fdir));
+            result = feval(funcname);
+        end
+
+        function config = loadJSON(filepath)
+            %LOADJSON Legacy: read dashboard config from JSON file.
             fid = fopen(filepath, 'r');
             jsonStr = fread(fid, '*char')';
             fclose(fid);
-
             config = jsondecode(jsonStr);
-
-            % Ensure widgets is a cell array
             if isstruct(config.widgets)
                 wa = config.widgets;
                 config.widgets = cell(1, numel(wa));

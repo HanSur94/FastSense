@@ -65,7 +65,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             d.addWidget('fastsense', 'Title', 'Temp', ...
                 'Position', [1 1 12 3], 'XData', 1:10, 'YData', [1:10]);
 
-            filepath = fullfile(tempdir, 'test_save_dashboard.json');
+            filepath = fullfile(tempdir, 'test_save_dashboard.m');
             testCase.addTeardown(@() delete(filepath));
             d.save(filepath);
 

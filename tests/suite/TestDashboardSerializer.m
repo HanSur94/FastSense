@@ -32,12 +32,12 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
                 'source', struct('type', 'data', 'x', 1:10, 'y', rand(1,10)));
 
             filepath = fullfile(testCase.TempDir, 'test_dashboard.json');
-            DashboardSerializer.save(config, filepath);
+            DashboardSerializer.saveJSON(config, filepath);
 
             testCase.verifyTrue(exist(filepath, 'file') == 2, ...
                 'JSON file should exist');
 
-            loaded = DashboardSerializer.load(filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
             testCase.verifyEqual(loaded.name, 'Test Dashboard');
             testCase.verifyEqual(loaded.theme, 'dark');
             testCase.verifyEqual(loaded.liveInterval, 5);
