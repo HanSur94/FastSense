@@ -569,6 +569,15 @@ classdef DashboardEngine < handle
             % Update global time range from live data
             obj.updateLiveTimeRange();
 
+            % In live mode, mark sensor-bound widgets dirty because
+            % PostSet listeners on Sensor.X/Y do not fire reliably in
+            % Octave for indexed assignment (sTemp.X(end+1) = val).
+            for i = 1:numel(obj.Widgets)
+                if ~isempty(obj.Widgets{i}.Sensor)
+                    obj.Widgets{i}.markDirty();
+                end
+            end
+
             % Only refresh widgets that are dirty, realized, and visible
             for i = 1:numel(obj.Widgets)
                 w = obj.Widgets{i};
