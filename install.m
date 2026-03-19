@@ -12,6 +12,8 @@ function install()
 %     2. Adds examples, benchmarks, and tests to the path
 %     3. Compiles MEX accelerators if not yet built (first run only)
 %     4. Verifies the installation (first run only)
+%     5. JIT warmup — runs a tiny end-to-end workflow to force-compile
+%        all hot code paths (once per MATLAB session)
 %
 %   Directories added:
 %     libs/FastSense          — core plotting engine
@@ -60,6 +62,9 @@ function install()
     if needs_build(root)
         first_run(root);
     end
+
+    % --- Once per session: JIT warmup ---
+    jit_warmup();
 end
 
 function yes = needs_build(root)
@@ -167,5 +172,47 @@ function verify_installation(root)
         fprintf('  All checks passed  (%d/%d)\n', n_ok, total);
     else
         fprintf('  %d/%d checks passed, %d warnings\n', n_ok, total, n_warn);
+    end
+end
+
+
+function jit_warmup()
+%JIT_WARMUP Force MATLAB's JIT to compile all hot code paths once per session.
+%   Runs a tiny end-to-end workflow (sensor creation, state channels,
+%   threshold resolve, downsampling, rendering setup) on trivial data.
+%   Subsequent calls are no-ops. Adds ~0.1-0.3 s on first install() call
+%   but eliminates multi-second JIT overhead on real workloads.
+    persistent warmedUp;
+    if ~isempty(warmedUp)
+        return;
+    end
+    warmedUp = true;
+
+    try
+        % --- Sensor + StateChannel + resolve pipeline ---
+        sw = Sensor('__jit_warmup__');
+        sw.X = [0 1 2 3 4 5];
+        sw.Y = [50 60 40 70 30 80];
+
+        sc1 = StateChannel('s1');
+        sc1.X = [0 2 4]; sc1.Y = [0 1 2];
+        sc2 = StateChannel('s2');
+        sc2.X = [0 3];   sc2.Y = {'A', 'B'};
+        sw.addStateChannel(sc1);
+        sw.addStateChannel(sc2);
+
+        sw.addThresholdRule(struct('s1', 1), 65, 'Direction', 'upper');
+        sw.addThresholdRule(struct('s1', 2), 35, 'Direction', 'lower');
+        sw.addThresholdRule(struct('s1', 1, 's2', 'B'), 55, 'Direction', 'upper');
+        sw.addThresholdRule(struct('s1', 0, 's2', 'A'), 45, 'Direction', 'lower');
+        sw.resolve();
+
+        % --- FastSense downsample + render setup ---
+        fp = FastSense();
+        fp.addSensor(sw, 'ShowThresholds', true);
+        fp.render();
+        close(gcf);
+    catch
+        % Warmup is best-effort — never block install on failure
     end
 end
