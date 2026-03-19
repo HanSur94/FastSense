@@ -161,7 +161,25 @@ function benchmark_resolve_stress()
     end
 
     % ------------------------------------------------------------------
-    % 5. Run resolve() with timing
+    % 5. JIT warmup — resolve a tiny sensor to force-compile all code paths
+    % ------------------------------------------------------------------
+    fprintf('\n  JIT warmup... ');
+    tWarm = tic;
+    sw = Sensor('warmup');
+    sw.X = [0 1 2 3]; sw.Y = [50 60 40 70];
+    scw1 = StateChannel('machine'); scw1.X = [0 1 2]; scw1.Y = [0 1 2];
+    scw2 = StateChannel('zone');    scw2.X = [0 1];   scw2.Y = {'A','B'};
+    sw.addStateChannel(scw1); sw.addStateChannel(scw2);
+    sw.addThresholdRule(struct('machine', 1), 55, 'Direction', 'upper');
+    sw.addThresholdRule(struct('machine', 2), 35, 'Direction', 'lower');
+    sw.addThresholdRule(struct('machine', 1, 'zone', 'B'), 50, 'Direction', 'upper');
+    sw.addThresholdRule(struct('machine', 0, 'zone', 'A'), 40, 'Direction', 'lower');
+    sw.resolve();
+    clear sw scw1 scw2;
+    fprintf('%.3f s\n', toc(tWarm));
+
+    % ------------------------------------------------------------------
+    % 6. Run resolve() with timing
     % ------------------------------------------------------------------
     nRuns = 3;
     fprintf('\n  Resolving (%d runs)...\n', nRuns);
@@ -193,7 +211,7 @@ function benchmark_resolve_stress()
     s = sr;
 
     % ------------------------------------------------------------------
-    % 6. Results summary
+    % 7. Results summary
     % ------------------------------------------------------------------
     fprintf('\n============================================================\n');
     fprintf('  RESULTS\n');
@@ -233,7 +251,7 @@ function benchmark_resolve_stress()
         N * 8 * 2 / 1e9, (memBytes - N*8*2) / 1e6);
 
     % ------------------------------------------------------------------
-    % 7. Plot with FastSense
+    % 8. Plot with FastSense
     % ------------------------------------------------------------------
     fprintf('\n  Rendering with FastSense...\n');
     tPlot = tic;
