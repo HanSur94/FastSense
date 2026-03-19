@@ -139,14 +139,24 @@ function benchmark_resolve_stress()
 
     % ------------------------------------------------------------------
     % 4. MEX availability check
+    %    MEX files live in private/ dirs, so exist() can't see them from
+    %    here. Probe the actual file paths instead.
     % ------------------------------------------------------------------
-    mexNames = {'compute_violations_mex', 'to_step_function_mex', 'binary_search_mex'};
+    ext = mexext();
+    fsPriv = fullfile(repo_root, 'libs', 'FastSense', 'private');
+    stPriv = fullfile(repo_root, 'libs', 'SensorThreshold', 'private');
+    mexProbes = {
+        'binary_search_mex',      fsPriv
+        'compute_violations_mex', stPriv
+        'to_step_function_mex',   stPriv
+    };
     fprintf('\n  MEX status:\n');
-    for i = 1:numel(mexNames)
-        if exist(mexNames{i}, 'file') == 3
-            fprintf('    %-30s  compiled\n', mexNames{i});
+    for i = 1:size(mexProbes, 1)
+        mexFile = fullfile(mexProbes{i,2}, [mexProbes{i,1} '.' ext]);
+        if exist(mexFile, 'file')
+            fprintf('    %-30s  compiled\n', mexProbes{i,1});
         else
-            fprintf('    %-30s  NOT compiled (MATLAB fallback)\n', mexNames{i});
+            fprintf('    %-30s  NOT compiled (MATLAB fallback)\n', mexProbes{i,1});
         end
     end
 
