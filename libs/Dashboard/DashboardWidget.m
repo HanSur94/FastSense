@@ -84,6 +84,32 @@ classdef DashboardWidget < handle
             % Override in subclasses to report data time range.
             tMin = inf; tMax = -inf;
         end
+
+        function lines = asciiRender(obj, width, height)
+        %ASCIIRENDER Return ASCII representation of this widget.
+        %   lines = asciiRender(obj, width, height) returns a cell array
+        %   of strings, each exactly WIDTH characters. HEIGHT is the
+        %   available number of lines. Default implementation shows
+        %   [type] Title; subclasses override for richer content.
+            if height <= 0
+                lines = {};
+                return;
+            end
+            label = sprintf('[%s]', obj.getType());
+            if ~isempty(obj.Title)
+                label = sprintf('%s %s', label, obj.Title);
+            end
+            if numel(label) > width
+                label = label(1:width);
+            end
+            label = [label, repmat(' ', 1, width - numel(label))];
+            lines = cell(1, height);
+            lines{1} = label;
+            blank = repmat(' ', 1, width);
+            for i = 2:height
+                lines{i} = blank;
+            end
+        end
     end
 
     methods (Access = protected)
