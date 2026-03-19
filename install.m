@@ -207,11 +207,13 @@ function jit_warmup()
         sw.addThresholdRule(struct('s1', 0, 's2', 'A'), 45, 'Direction', 'lower');
         sw.resolve();
 
-        % --- FastSense downsample + render setup ---
-        fp = FastSense();
+        % --- FastSense downsample + render setup (hidden figure) ---
+        fig = figure('Visible', 'off');
+        ax = axes('Parent', fig);
+        fp = FastSense('Parent', ax);
         fp.addSensor(sw, 'ShowThresholds', true);
         fp.render();
-        close(gcf);
+        close(fig);
     catch
         % Warmup is best-effort — never block install on failure
     end
