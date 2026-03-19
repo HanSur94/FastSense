@@ -515,7 +515,7 @@ Add to `StatusWidget.m` after `getType`:
                         rule = obj.Sensor.ThresholdRules{k};
                         if (rule.IsUpper && val > rule.Value) || ...
                                 (~rule.IsUpper && val < rule.Value)
-                            status = 'VIOLATION';
+                            status = 'violation';
                             break;
                         end
                     end
