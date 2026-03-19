@@ -116,6 +116,46 @@ classdef StatusWidget < DashboardWidget
             t = 'status';
         end
 
+        function lines = asciiRender(obj, width, height)
+            if height <= 0, lines = {}; return; end
+            blank = repmat(' ', 1, width);
+            lines = cell(1, height);
+            for i = 1:height, lines{i} = blank; end
+
+            dot = char(9679);  % ●
+            status = obj.StaticStatus;
+            if isempty(status) && ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
+                status = 'ok';
+                if ~isempty(obj.Sensor.ThresholdRules)
+                    val = obj.Sensor.Y(end);
+                    for k = 1:numel(obj.Sensor.ThresholdRules)
+                        rule = obj.Sensor.ThresholdRules{k};
+                        if (rule.IsUpper && val > rule.Value) || ...
+                                (~rule.IsUpper && val < rule.Value)
+                            status = 'violation';
+                            break;
+                        end
+                    end
+                end
+            end
+
+            if ~isempty(status)
+                displayStatus = upper(status);
+                if strcmp(status, 'violation'), displayStatus = 'ALARM'; end
+                label = sprintf('%s %s: %s', dot, obj.Title, displayStatus);
+            else
+                label = sprintf('%s %s', dot, obj.Title);
+            end
+            if numel(label) > width, label = label(1:width); end
+            lines{1} = [label, repmat(' ', 1, width - numel(label))];
+
+            if isempty(status) && height >= 2
+                ph = '[-- status --]';
+                if numel(ph) > width, ph = ph(1:width); end
+                lines{2} = [ph, repmat(' ', 1, width - numel(ph))];
+            end
+        end
+
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
             if isempty(obj.Sensor)

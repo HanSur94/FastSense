@@ -103,6 +103,25 @@ classdef TextWidget < DashboardWidget
             t = 'text';
         end
 
+        function lines = asciiRender(obj, width, height)
+            if height <= 0, lines = {}; return; end
+            blank = repmat(' ', 1, width);
+            lines = cell(1, height);
+            for i = 1:height, lines{i} = blank; end
+
+            ttl = obj.Title;
+            if numel(ttl) > width, ttl = ttl(1:width); end
+            if ~isempty(ttl)
+                lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
+            end
+
+            if ~isempty(obj.Content) && height >= 2
+                ct = obj.Content;
+                if numel(ct) > width, ct = ct(1:width); end
+                lines{2} = [ct, repmat(' ', 1, width - numel(ct))];
+            end
+        end
+
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
             s.content = obj.Content;

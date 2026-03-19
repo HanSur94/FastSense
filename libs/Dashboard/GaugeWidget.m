@@ -79,6 +79,52 @@ classdef GaugeWidget < DashboardWidget
             t = 'gauge';
         end
 
+        function lines = asciiRender(obj, width, height)
+            if height <= 0, lines = {}; return; end
+            blank = repmat(' ', 1, width);
+            lines = cell(1, height);
+            for i = 1:height, lines{i} = blank; end
+
+            ttl = obj.Title;
+            if numel(ttl) > width, ttl = ttl(1:width); end
+            lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
+
+            % Try to get value
+            val = obj.StaticValue;
+            if isempty(val) && ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
+                val = obj.Sensor.Y(end);
+            end
+
+            if ~isempty(val) && height >= 2
+                rng = obj.Range;
+                frac = max(0, min(1, (val - rng(1)) / (rng(2) - rng(1))));
+                barW = max(1, width - 10);
+                filled = round(frac * barW);
+                barStr = [char(9608)*ones(1,filled), char(9617)*ones(1,barW-filled)];
+                valStr = sprintf(' %.0f%%', frac * 100);
+                gauge = [barStr, valStr];
+                if numel(gauge) > width, gauge = gauge(1:width); end
+                if numel(gauge) < width
+                    gauge = [gauge, repmat(' ', 1, width - numel(gauge))];
+                end
+                lines{2} = gauge;
+
+                if height >= 3
+                    if ~isempty(obj.Units)
+                        info = sprintf('%.1f %s  [%.0f - %.0f]', val, obj.Units, rng(1), rng(2));
+                    else
+                        info = sprintf('%.1f  [%.0f - %.0f]', val, rng(1), rng(2));
+                    end
+                    if numel(info) > width, info = info(1:width); end
+                    lines{3} = [info, repmat(' ', 1, width - numel(info))];
+                end
+            elseif height >= 2
+                ph = '[-- gauge --]';
+                if numel(ph) > width, ph = ph(1:width); end
+                lines{2} = [ph, repmat(' ', 1, width - numel(ph))];
+            end
+        end
+
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
             s.range = obj.Range;

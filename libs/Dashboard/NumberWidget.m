@@ -149,6 +149,41 @@ classdef NumberWidget < DashboardWidget
             t = 'number';
         end
 
+        function lines = asciiRender(obj, width, height)
+            if height <= 0, lines = {}; return; end
+            blank = repmat(' ', 1, width);
+            lines = cell(1, height);
+            for i = 1:height, lines{i} = blank; end
+
+            % Try to get current value
+            val = obj.StaticValue;
+            units = obj.Units;
+            if isempty(val) && ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
+                val = obj.Sensor.Y(end);
+                if isempty(units) && ~isempty(obj.Sensor.Units)
+                    units = obj.Sensor.Units;
+                end
+            end
+
+            if ~isempty(val)
+                valStr = sprintf(obj.Format, val);
+                if ~isempty(units)
+                    valStr = sprintf('%s %s', valStr, units);
+                end
+                label = sprintf('%s  %s', obj.Title, valStr);
+            else
+                label = obj.Title;
+            end
+            if numel(label) > width, label = label(1:width); end
+            lines{1} = [label, repmat(' ', 1, width - numel(label))];
+
+            if isempty(val) && height >= 2
+                ph = '[-- number --]';
+                if numel(ph) > width, ph = ph(1:width); end
+                lines{2} = [ph, repmat(' ', 1, width - numel(ph))];
+            end
+        end
+
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
             s.units = obj.Units;
