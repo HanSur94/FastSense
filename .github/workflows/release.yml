@@ -13,7 +13,7 @@ jobs:
     name: Gate Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Octave and Xvfb
         run: sudo apt-get update && sudo apt-get install -y octave octave-dev xvfb
@@ -27,7 +27,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

@@ -14,7 +14,7 @@ jobs:
     name: MATLAB Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install MISS_HIT
         run: pip install miss_hit
@@ -34,11 +34,11 @@ jobs:
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Cache MEX binaries
         id: cache-mex
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             libs/FastSense/private/*.mex
@@ -51,7 +51,7 @@ jobs:
         run: octave --eval "install();"
 
       - name: Upload MEX artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mex-linux
           path: |
@@ -70,10 +70,10 @@ jobs:
       FASTSENSE_SKIP_BUILD: "1"
       FASTSENSE_RESULTS_FILE: /tmp/test-results.txt
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download MEX binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mex-linux
 
@@ -109,7 +109,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Octave
         run: brew install octave
@@ -125,7 +125,7 @@ jobs:
       - name: Allow paths with colons (wiki files)
         run: git config --global core.protectNTFS false
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: |
             libs
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v2

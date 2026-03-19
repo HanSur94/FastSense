@@ -16,11 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Cache MEX binaries
         id: cache-mex
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             libs/FastSense/private/*.mex
@@ -33,7 +33,7 @@ jobs:
         run: octave --eval "install();"
 
       - name: Upload MEX artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mex-linux-bench
           path: |
@@ -50,10 +50,10 @@ jobs:
     env:
       FASTSENSE_SKIP_BUILD: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download MEX binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mex-linux-bench
 
@@ -65,7 +65,7 @@ jobs:
         run: git config --global --add safe.directory /__w/FastSense/FastSense
 
       - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@v1.21.0
         with:
           name: FastSense Performance
           tool: customSmallerIsBetter
