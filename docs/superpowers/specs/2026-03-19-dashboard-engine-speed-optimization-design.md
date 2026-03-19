@@ -50,7 +50,7 @@ Live tick drops from N_widgets refreshes to N_dirty updates. With 30 widgets and
       obj.refresh();  % fall back to full rebuild
   end
   ```
-- `FastSenseObj.updateData()` (FastSense.m lines 1527–1625) replaces the underlying data, rebuilds the pyramid cache, re-downsamples to the current view, and calls `drawnowLimitRate()`.
+- `FastSenseObj.updateData()` (FastSense.m lines 1514–1625) replaces the underlying data, rebuilds the pyramid cache, re-downsamples to the current view, and calls `drawnowLimitRate()`.
 - No `hLines` property needed — `FastSenseObj` already owns the line handles and manages downsampling internally.
 - `onLiveTick()` calls `update()` for dirty FastSenseWidgets instead of `refresh()` when possible.
 
@@ -181,13 +181,18 @@ Current `addWidget()` signature: `function addWidget(obj, type, varargin)` — n
 New signature: `function w = addWidget(obj, type, varargin)` — returns created widget.
 This is backward-compatible: callers that ignore the return value are unaffected.
 
+### Load-path widget initialization
+The current `DashboardEngine.load()` static method bypasses `addWidget()` entirely — it calls `DashboardSerializer.configToWidgets()` and pushes widgets directly into `obj.Widgets{}`. This means any initialization logic added to `addWidget()` (dirty-flag setup, `Realized = false`, type-dispatch) will NOT apply to deserialized widgets.
+
+**Fix:** After the `.m` serialization change, the `load` path goes through `feval` which executes `.m` scripts that call `addWidget()` directly — so this divergence is automatically resolved. However, during the transition period (steps 1-4, while JSON loading still exists), ensure that `DashboardEngine.load()` also initializes `Dirty = true` and `Realized = false` on deserialized widgets, or refactor `load()` to call `addWidget()` internally.
+
 ### Changes
 - `DashboardSerializer.save()` writes `.m` function file (replaces `saveJSON()`)
 - `DashboardSerializer.load()` uses `feval()` on the function, returns the engine
 - Remove `saveJSON()`, `loadJSON()`, and all JSON parsing code
 - Dashboard file extension changes from `.json` to `.m`
 - `DashboardEngine.addWidget()` returns the widget handle
-- Migration: existing JSON dashboards can be converted via `DashboardEngine.load('old.json').save('new.m')` using the existing `exportScript()` method before JSON code is removed
+- Migration (run BEFORE removing JSON code): `DashboardEngine.load('old.json').exportScript('new.m')` converts existing JSON dashboards to `.m` format using the existing `exportScript()` method
 
 ### Benefits
 - Users can read, edit, version-control dashboards as plain MATLAB code
