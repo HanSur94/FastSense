@@ -35,6 +35,12 @@ obj = DashboardEngine(name, varargin)
 
 #### `exportScript(obj, filepath)`
 
+#### `preview(obj, varargin)`
+
+PREVIEW Print ASCII representation of the dashboard to console.
+  d.preview()              % default 120 chars wide
+  d.preview('Width', 120)  % custom width
+
 #### `showInfo(obj)`
 
 SHOWINFO Display the linked Markdown info file in a browser.
@@ -85,6 +91,21 @@ BROADCASTTIMERANGE Push time range to widgets using global time.
 #### `resetGlobalTime(obj)`
 
 RESETGLOBALTIME Re-attach all widgets to global time and apply.
+
+#### `realizeBatch(obj, batchSize)`
+
+REALIZEBATCH Render widgets in batches with drawnow between.
+
+#### `onScrollRealize(obj, topRow, bottomRow)`
+
+ONSCROLLREALIZE Realize widgets that scroll into view.
+
+#### `onLiveTick(obj)`
+
+#### `markAllDirty(obj)`
+
+MARKALLDIRTY Flag all widgets as needing refresh.
+  Called on theme change, figure resize, or other global state changes.
 
 ### Static Methods
 
@@ -176,12 +197,19 @@ obj = DashboardWidget(varargin)
 | Description | `''` | Optional tooltip text shown via info icon hover |
 | Sensor | `[]` | Sensor object for data binding (primary source) |
 | ParentTheme | `[]` | Theme inherited from DashboardEngine |
+| Dirty | `true` | true when widget needs refresh (data changed) |
+| Realized | `false` | true after render() has been called |
+| hPanel | `[]` | Handle to the uipanel this widget renders into |
 
 ### Methods
 
 #### `t = get()`
 
 #### `s = toStruct(obj)`
+
+#### `markDirty(obj)`
+
+MARKDIRTY Flag this widget as needing a refresh.
 
 #### `setTimeRange(~, ~, ~)`
 
@@ -190,6 +218,14 @@ Override in subclasses to respond to global time changes.
 #### `[tMin, tMax] = getTimeRange(~)`
 
 Override in subclasses to report data time range.
+
+#### `lines = asciiRender(obj, width, height)`
+
+ASCIIRENDER Return ASCII representation of this widget.
+  lines = asciiRender(obj, width, height) returns a cell array
+  of strings, each exactly WIDTH characters. HEIGHT is the
+  available number of lines. Default implementation shows
+  [type] Title; subclasses override for richer content.
 
 ---
 
@@ -233,6 +269,13 @@ obj = FastSenseWidget(varargin)
 
 Re-render sensor-bound widgets so updated data + violations show.
 Preserves current zoom state (xlim) across the rebuild.
+
+#### `update(obj)`
+
+UPDATE Incrementally update sensor data without full axes rebuild.
+  Uses FastSenseObj.updateData() to replace data and re-downsample,
+  avoiding the expensive delete/recreate cycle of refresh().
+  Falls back to refresh() if FastSenseObj is not in a renderable state.
 
 #### `setTimeRange(obj, tStart, tEnd)`
 
@@ -608,6 +651,8 @@ obj = DashboardLayout(varargin)
 | GapV | `0.015` |  |
 | RowHeight | `0.22` |  |
 | ScrollbarWidth | `0.015` |  |
+| OnScrollCallback | `[]` | function handle: @(topRow, bottomRow) |
+| VisibleRows | `[1 Inf]` | [topRow bottomRow] currently visible |
 
 ### Methods
 
@@ -647,6 +692,14 @@ Tears down and recreates all panels, calling render() on each widget.
 
 ONSCROLL Adjust canvas position from scrollbar value.
   val=1 shows top, val=0 shows bottom.
+
+#### `rows = computeVisibleRows(obj, scrollVal)`
+
+COMPUTEVISIBLEROWS Derive visible row range from scroll position.
+
+#### `vis = isWidgetVisible(obj, gridPos, buffer)`
+
+ISWIDGETVISIBLE Check if widget rows overlap visible range + buffer.
 
 ---
 
