@@ -123,6 +123,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            libs
+            tests
+            benchmarks
+            examples
+            install.m
+          sparse-checkout-cone-mode: false
 
       - name: Install Octave
         run: choco install octave.portable --yes --version=9.2.0
