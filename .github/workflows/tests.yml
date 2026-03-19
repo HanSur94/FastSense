@@ -125,13 +125,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Octave
-        run: choco install octave.portable --yes
+        run: choco install octave.portable --yes --version=9.2.0
+
+      - name: Verify Octave installation
+        run: |
+          octave-cli --version || octave --version
+          echo "Octave found on PATH"
 
       - name: Compile MEX files
-        shell: bash
-        run: |
-          export PATH="/c/ProgramData/chocolatey/bin:$PATH"
-          octave-cli --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
+        run: octave-cli --no-window-system --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
 
   matlab:
     name: MATLAB Tests
