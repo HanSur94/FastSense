@@ -214,51 +214,6 @@ classdef FastSenseWidget < DashboardWidget
             t = 'fastsense';
         end
 
-        function lines = asciiRender(obj, width, height)
-            if height <= 0, lines = {}; return; end
-            blank = repmat(' ', 1, width);
-            lines = cell(1, height);
-            for i = 1:height, lines{i} = blank; end
-
-            % Title line
-            ttl = obj.Title;
-            if numel(ttl) > width, ttl = ttl(1:width); end
-            lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
-
-            % Data: sparkline or placeholder
-            yData = [];
-            if ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
-                yData = obj.Sensor.Y;
-            elseif ~isempty(obj.YData)
-                yData = obj.YData;
-            end
-
-            if ~isempty(yData) && height >= 2
-                bars = char(9601):char(9608);  % ▁▂▃▄▅▆▇█
-                nBars = numel(bars);
-                yMin = min(yData); yMax = max(yData);
-                if yMax == yMin, yMax = yMin + 1; end
-                % Resample to fit width
-                nPts = min(numel(yData), width);
-                idx = round(linspace(1, numel(yData), nPts));
-                sampled = yData(idx);
-                spark = blanks(nPts);
-                for si = 1:nPts
-                    level = round((sampled(si) - yMin) / (yMax - yMin) * (nBars - 1)) + 1;
-                    level = max(1, min(nBars, level));
-                    spark(si) = bars(level);
-                end
-                if numel(spark) < width
-                    spark = [spark, repmat(' ', 1, width - numel(spark))];
-                end
-                lines{2} = spark(1:width);
-            elseif height >= 2
-                ph = '[~~ fastsense ~~]';
-                if numel(ph) > width, ph = ph(1:width); end
-                lines{2} = [ph, repmat(' ', 1, width - numel(ph))];
-            end
-        end
-
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
             if ~isempty(obj.XLabel), s.xLabel = obj.XLabel; end
