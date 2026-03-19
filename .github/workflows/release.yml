@@ -12,11 +12,9 @@ jobs:
   test:
     name: Gate Tests
     runs-on: ubuntu-latest
+    container: gnuoctave/octave:8.4.0
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install Octave and Xvfb
-        run: sudo apt-get update && sudo apt-get install -y octave octave-dev xvfb
 
       - name: Run tests
         run: |
