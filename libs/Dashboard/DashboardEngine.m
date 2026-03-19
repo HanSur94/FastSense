@@ -141,7 +141,9 @@ classdef DashboardEngine < handle
             toolbarH = obj.Toolbar.Height;
             obj.Layout.ContentArea = [0, obj.TimePanelHeight, ...
                 1, 1 - toolbarH - obj.TimePanelHeight];
-            obj.Layout.createPanels(obj.hFigure, obj.Widgets, themeStruct);
+            obj.Layout.allocatePanels(obj.hFigure, obj.Widgets, themeStruct);
+            obj.Layout.OnScrollCallback = @(r1, r2) obj.onScrollRealize(r1, r2);
+            obj.realizeBatch(5);
 
             % Auto-detect time range from data
             obj.updateGlobalTimeRange();
@@ -178,6 +180,123 @@ classdef DashboardEngine < handle
             config = DashboardSerializer.widgetsToConfig( ...
                 obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
             DashboardSerializer.exportScript(config, filepath);
+        end
+
+        function preview(obj, varargin)
+        %PREVIEW Print ASCII representation of the dashboard to console.
+        %   d.preview()              % default 120 chars wide
+        %   d.preview('Width', 120)  % custom width
+            width = 120;
+            for k = 1:2:numel(varargin)
+                if strcmp(varargin{k}, 'Width')
+                    width = varargin{k+1};
+                end
+            end
+
+            % Enforce minimum width
+            if width < 48
+                warning('DashboardEngine:previewWidth', ...
+                    'Width %d too small, clamping to 48.', width);
+                width = 48;
+            end
+
+            nWidgets = numel(obj.Widgets);
+
+            % Empty dashboard
+            if nWidgets == 0
+                fprintf('  %s (empty -- no widgets)\n', obj.Name);
+                return;
+            end
+
+            % Grid dimensions
+            cols = obj.Layout.Columns;
+            maxRow = 1;
+            for i = 1:nWidgets
+                p = obj.Widgets{i}.Position;
+                bottomRow = p(2) + p(4) - 1;
+                if bottomRow > maxRow
+                    maxRow = bottomRow;
+                end
+            end
+
+            % Character sizing
+            colW = floor(width / cols);
+            linesPerRow = 4;
+            bufW = cols * colW;
+            bufH = maxRow * linesPerRow;
+
+            % Create character buffer (space-filled)
+            buf = repmat(' ', bufH, bufW);
+
+            % Render each widget
+            for i = 1:nWidgets
+                w = obj.Widgets{i};
+                p = w.Position;  % [col, row, wCols, hRows]
+
+                % Character coordinates (1-based)
+                x1 = (p(1) - 1) * colW + 1;
+                y1 = (p(2) - 1) * linesPerRow + 1;
+                cw = p(3) * colW;
+                ch = p(4) * linesPerRow;
+
+                % Clamp to buffer bounds
+                x2 = min(x1 + cw - 1, bufW);
+                y2 = min(y1 + ch - 1, bufH);
+                cw = x2 - x1 + 1;
+                ch = y2 - y1 + 1;
+
+                if cw < 3 || ch < 3
+                    continue;
+                end
+
+                % Draw box border
+                topBorder = [char(9484), repmat(char(9472), 1, cw - 2), char(9488)];
+                bottomBorder = [char(9492), repmat(char(9472), 1, cw - 2), char(9496)];
+                buf(y1, x1:x2) = topBorder;
+                buf(y2, x1:x2) = bottomBorder;
+                for row = y1+1:y2-1
+                    buf(row, x1) = char(9474);
+                    buf(row, x2) = char(9474);
+                end
+
+                % Get widget ASCII content
+                innerW = cw - 4;
+                innerH = ch - 2;
+                if innerW > 0 && innerH > 0
+                    lines = w.asciiRender(innerW, innerH);
+
+                    % Pad/truncate to innerH lines
+                    blank = repmat(' ', 1, innerW);
+                    if numel(lines) < innerH
+                        for li = numel(lines)+1:innerH
+                            lines{li} = blank;
+                        end
+                    elseif numel(lines) > innerH
+                        lines = lines(1:innerH);
+                    end
+
+                    % Ensure each line is exactly innerW chars
+                    for li = 1:numel(lines)
+                        ln = lines{li};
+                        if numel(ln) < innerW
+                            ln = [ln, repmat(' ', 1, innerW - numel(ln))];
+                        elseif numel(ln) > innerW
+                            ln = ln(1:innerW);
+                        end
+                        buf(y1 + li, x1+2:x1+1+innerW) = ln;
+                    end
+                end
+            end
+
+            % Print header
+            fprintf('\n  %s (%d widgets, %dx%d grid)\n', ...
+                obj.Name, nWidgets, cols, maxRow);
+
+            % Print buffer
+            for row = 1:bufH
+                fprintf('%s\n', buf(row, :));
+            end
+            fprintf('\n');
         end
 
         function showInfo(obj)
@@ -392,6 +511,41 @@ classdef DashboardEngine < handle
             obj.onTimeSlidersChanged();
         end
 
+        function realizeBatch(obj, batchSize)
+        %REALIZEBATCH Render widgets in batches with drawnow between.
+            if nargin < 2, batchSize = 5; end
+            visible = [];
+            offscreen = [];
+            for i = 1:numel(obj.Widgets)
+                if ~obj.Widgets{i}.Realized
+                    if obj.Layout.isWidgetVisible(obj.Widgets{i}.Position)
+                        visible(end+1) = i; %#ok<AGROW>
+                    else
+                        offscreen(end+1) = i; %#ok<AGROW>
+                    end
+                end
+            end
+            order = [visible, offscreen];
+            for b = 1:batchSize:numel(order)
+                bEnd = min(b + batchSize - 1, numel(order));
+                for i = b:bEnd
+                    obj.Layout.realizeWidget(obj.Widgets{order(i)});
+                end
+                drawnow;
+            end
+        end
+
+        function onScrollRealize(obj, topRow, bottomRow)
+        %ONSCROLLREALIZE Realize widgets that scroll into view.
+            for i = 1:numel(obj.Widgets)
+                w = obj.Widgets{i};
+                if ~w.Realized && obj.Layout.isWidgetVisible(w.Position)
+                    obj.Layout.realizeWidget(w);
+                end
+            end
+            drawnow;
+        end
+
         function onLiveTick(obj)
             if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
                 return;
@@ -400,19 +554,20 @@ classdef DashboardEngine < handle
             % Update global time range from live data
             obj.updateLiveTimeRange();
 
-            % Only refresh widgets with dirty flag set
+            % Only refresh widgets that are dirty, realized, and visible
             for i = 1:numel(obj.Widgets)
-                if obj.Widgets{i}.Dirty
+                w = obj.Widgets{i};
+                if w.Dirty && w.Realized && obj.Layout.isWidgetVisible(w.Position)
                     try
-                        if isa(obj.Widgets{i}, 'FastSenseWidget')
-                            obj.Widgets{i}.update();
+                        if isa(w, 'FastSenseWidget')
+                            w.update();
                         else
-                            obj.Widgets{i}.refresh();
+                            w.refresh();
                         end
                     catch ME
                         warning('DashboardEngine:refreshError', ...
                             'Widget "%s" refresh failed: %s', ...
-                            obj.Widgets{i}.Title, ME.message);
+                            w.Title, ME.message);
                     end
                 end
             end

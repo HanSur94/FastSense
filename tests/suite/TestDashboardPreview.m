@@ -35,5 +35,48 @@ classdef TestDashboardPreview < matlab.unittest.TestCase
             lines = w.asciiRender(10, 1);
             testCase.verifyEqual(numel(lines{1}), 10);
         end
+
+        function testPreviewEmpty(testCase)
+            d = DashboardEngine('Empty');
+            output = evalc('d.preview()');
+            testCase.verifyTrue(contains(output, 'empty'));
+            testCase.verifyTrue(contains(output, 'Empty'));
+        end
+
+        function testPreviewSingleWidget(testCase)
+            d = DashboardEngine('Test');
+            d.addWidget('text', 'Title', 'Hello', 'Position', [1 1 12 1]);
+            output = evalc('d.preview()');
+            testCase.verifyTrue(contains(output, 'Test'));
+            testCase.verifyTrue(contains(output, 'Hello'));
+        end
+
+        function testPreviewMultiWidget(testCase)
+            d = DashboardEngine('Multi');
+            d.addWidget('text', 'Title', 'A', 'Position', [1 1 12 1]);
+            d.addWidget('text', 'Title', 'B', 'Position', [13 1 12 1]);
+            output = evalc('d.preview()');
+            testCase.verifyTrue(contains(output, 'A'));
+            testCase.verifyTrue(contains(output, 'B'));
+        end
+
+        function testPreviewCustomWidth(testCase)
+            d = DashboardEngine('Wide');
+            d.addWidget('text', 'Title', 'X', 'Position', [1 1 24 1]);
+            output80 = evalc('d.preview(''Width'', 80)');
+            output120 = evalc('d.preview(''Width'', 120)');
+            lines80 = strsplit(output80, newline);
+            lines120 = strsplit(output120, newline);
+            maxLen80 = max(cellfun(@numel, lines80));
+            maxLen120 = max(cellfun(@numel, lines120));
+            testCase.verifyGreaterThan(maxLen120, maxLen80);
+        end
+
+        function testPreviewMinWidth(testCase)
+            d = DashboardEngine('Narrow');
+            d.addWidget('text', 'Title', 'X', 'Position', [1 1 24 1]);
+            output = evalc('d.preview(''Width'', 20)');
+            testCase.verifyTrue(~isempty(output));
+        end
     end
 end
