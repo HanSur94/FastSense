@@ -163,7 +163,10 @@ classdef DashboardLayout < handle
             end
         end
 
-        function createPanels(obj, hFigure, widgets, theme)
+        function allocatePanels(obj, hFigure, widgets, theme)
+        %ALLOCATEPANELS Create viewport, canvas, scrollbar and placeholder panels.
+        %   Like createPanels but does NOT call widget.render(). Instead,
+        %   each widget gets its hPanel assigned and a placeholder label.
             % Save current scroll state before any updates
             prevCr = obj.canvasRatio();
             prevScrollVal = 1;  % default = top
@@ -252,7 +255,7 @@ classdef DashboardLayout < handle
                 try set(hFigure, 'WindowScrollWheelFcn', ''); catch , end
             end
 
-            % Create widget panels on canvas
+            % Create widget panels on canvas (placeholder only, no render)
             for i = 1:numel(widgets)
                 w = widgets{i};
                 w.ParentTheme = theme;
@@ -264,7 +267,38 @@ classdef DashboardLayout < handle
                     'BorderWidth', theme.WidgetBorderWidth, ...
                     'ForegroundColor', theme.WidgetBorderColor, ...
                     'BackgroundColor', theme.WidgetBackground);
-                w.render(hp);
+                w.hPanel = hp;
+                uicontrol('Parent', hp, 'Style', 'text', 'Units', 'normalized', ...
+                    'Position', [0.05 0.4 0.9 0.2], ...
+                    'String', [w.Title, ' -- Loading...'], ...
+                    'HorizontalAlignment', 'center', ...
+                    'BackgroundColor', theme.WidgetBackground, ...
+                    'ForegroundColor', theme.TextColor, ...
+                    'Tag', 'placeholder');
+            end
+
+            % Compute initial VisibleRows from scrollbar value
+            obj.VisibleRows = obj.computeVisibleRows(scrollVal);
+        end
+
+        function realizeWidget(obj, widget)
+        %REALIZEWIDGET Render a single widget into its pre-allocated panel.
+            if widget.Realized, return; end
+            if isempty(widget.hPanel) || ~ishandle(widget.hPanel), return; end
+            % Remove placeholder
+            ph = findobj(widget.hPanel, 'Tag', 'placeholder');
+            delete(ph);
+            % Render actual content
+            widget.render(widget.hPanel);
+            widget.Realized = true;
+            widget.Dirty = false;
+        end
+
+        function createPanels(obj, hFigure, widgets, theme)
+        %CREATEPANELS Create and render all widget panels (legacy path).
+            obj.allocatePanels(hFigure, widgets, theme);
+            for i = 1:numel(widgets)
+                obj.realizeWidget(widgets{i});
             end
         end
 

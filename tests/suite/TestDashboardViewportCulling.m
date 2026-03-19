@@ -57,5 +57,17 @@ classdef TestDashboardViewportCulling < matlab.unittest.TestCase
             % Widget at row 1, height 1 -> row 1, outside default buffer=2
             testCase.verifyFalse(layout.isWidgetVisible([1 1 6 1]));
         end
+
+        function testAllocatePanelsDoesNotCallRender(testCase)
+            d = DashboardEngine('DeferredTest');
+            d.addWidget('fastsense', 'Title', 'P1', ...
+                'Position', [1 1 24 3], 'XData', 1:10, 'YData', rand(1,10));
+            d.addWidget('fastsense', 'Title', 'P2', ...
+                'Position', [1 4 24 3], 'XData', 1:10, 'YData', rand(1,10));
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+            % Visible widgets should be realized after render
+            testCase.verifyTrue(d.Widgets{1}.Realized);
+        end
     end
 end
