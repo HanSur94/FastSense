@@ -446,6 +446,7 @@ classdef DashboardEngine < handle
             theme = DashboardTheme(obj.Theme);
             for i = 1:numel(obj.Widgets)
                 w = obj.Widgets{i};
+                w.Realized = false;
                 if ~isempty(w.hPanel) && ishandle(w.hPanel)
                     delete(w.hPanel);
                 end
