@@ -232,6 +232,21 @@ function benchmark_resolve_stress()
     fprintf('    approx memory: %.1f GB (sensor) + %.1f MB (results)\n', ...
         N * 8 * 2 / 1e9, (memBytes - N*8*2) / 1e6);
 
+    % ------------------------------------------------------------------
+    % 7. Plot with FastSense
+    % ------------------------------------------------------------------
+    fprintf('\n  Rendering with FastSense...\n');
+    tPlot = tic;
+
+    fp = FastSense();
+    fp.addSensor(s, 'ShowThresholds', true);
+    fp.render();
+    title('Sensor.resolve() Stress Test — 500M pts, 4 thresholds, ~9K state transitions');
+    xlabel('Time [s]');
+    ylabel('Process Value [bar]');
+
+    fprintf('  Render time: %.3f s\n', toc(tPlot));
+
     fprintf('\n============================================================\n');
     fprintf('  Done.\n');
     fprintf('============================================================\n');
