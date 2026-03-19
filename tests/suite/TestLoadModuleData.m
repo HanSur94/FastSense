@@ -10,10 +10,11 @@ classdef TestLoadModuleData < matlab.unittest.TestCase
     methods (Static)
         function ms = makeModuleStruct(sensorKeys, nPoints)
             %MAKEMODULESTRUCT Build a fake module struct for testing.
-            ms.doc.date = 'time_utc';
             ms.time_utc = linspace(datenum(2024,1,1), datenum(2024,1,2), nPoints);
             for i = 1:numel(sensorKeys)
                 ms.(sensorKeys{i}) = randn(1, nPoints);
+                ms.doc.(sensorKeys{i}).name = sensorKeys{i};
+                ms.doc.(sensorKeys{i}).datum = 'time_utc';
             end
         end
     end
@@ -102,8 +103,8 @@ classdef TestLoadModuleData < matlab.unittest.TestCase
             reg.register('doc', Sensor('doc'));
             reg.register('temp', Sensor('temp'));
 
-            % Manually build struct so 'doc' is a data field that also has .date
-            ms.doc.date = 'time_utc';
+            ms.doc.temp.name = 'Temperature';
+            ms.doc.temp.datum = 'time_utc';
             ms.time_utc = linspace(datenum(2024,1,1), datenum(2024,1,2), 50);
             ms.temp = randn(1, 50);
             sensors = loadModuleData(reg, ms);
@@ -137,21 +138,25 @@ classdef TestLoadModuleData < matlab.unittest.TestCase
             testCase.verifyTrue(threw, 'missing_doc_throws');
         end
 
-        function testMissingDocDateErrors(testCase)
+        function testDocMissingDatumErrors(testCase)
+            % doc entry without .datum field
             reg = ExternalSensorRegistry('Test');
-            ms = struct('doc', struct('version', '1.0'), 'temp', [1 2 3]);
+            ms.doc.temp.name = 'Temperature';  % no .datum
+            ms.temp = [1 2 3];
             threw = false;
             try
                 loadModuleData(reg, ms);
             catch
                 threw = true;
             end
-            testCase.verifyTrue(threw, 'missing_doc_date_throws');
+            testCase.verifyTrue(threw, 'missing_datum_throws');
         end
 
         function testDatenumFieldNotInStructErrors(testCase)
             reg = ExternalSensorRegistry('Test');
-            ms = struct('doc', struct('date', 'nonexistent'), 'temp', [1 2 3]);
+            ms.doc.temp.name = 'Temperature';
+            ms.doc.temp.datum = 'nonexistent';
+            ms.temp = [1 2 3];
             threw = false;
             try
                 loadModuleData(reg, ms);
@@ -161,17 +166,19 @@ classdef TestLoadModuleData < matlab.unittest.TestCase
             testCase.verifyTrue(threw, 'bad_datenum_ref_throws');
         end
 
-        function testDocDateNotCharErrors(testCase)
-            % Defensive test beyond spec scope: validates doc.date type
+        function testDatumNotCharErrors(testCase)
+            % Defensive test: validates datum type
             reg = ExternalSensorRegistry('Test');
-            ms = struct('doc', struct('date', 42), 'temp', [1 2 3]);
+            ms.doc.temp.name = 'Temperature';
+            ms.doc.temp.datum = 42;
+            ms.temp = [1 2 3];
             threw = false;
             try
                 loadModuleData(reg, ms);
             catch
                 threw = true;
             end
-            testCase.verifyTrue(threw, 'non_char_date_throws');
+            testCase.verifyTrue(threw, 'non_char_datum_throws');
         end
 
         function testOutputIsRowCell(testCase)

@@ -2,10 +2,11 @@ function sensors = loadModuleData(registry, moduleStruct)
 %LOADMODULEDATA Match module struct fields to registered sensors and assign X/Y.
 %   sensors = loadModuleData(registry, moduleStruct) takes an
 %   ExternalSensorRegistry and a module struct loaded from the external
-%   system. The struct must contain a .doc.date field naming the datenum
-%   field. Each struct field whose name matches a registered sensor key
-%   gets its data assigned as sensor.Y, with the shared datenum as
-%   sensor.X.
+%   system. The struct must contain a .doc field where each sub-field has
+%   .name and .datum properties. The .datum value names the shared
+%   datenum field. Each struct field whose name matches a registered
+%   sensor key gets its data assigned as sensor.Y, with the shared
+%   datenum as sensor.X.
 %
 %   Returns a 1xN cell array of filled Sensor handles (empty 1x0 if no
 %   matches). Output order follows fieldnames(moduleStruct).
@@ -17,27 +18,8 @@ function sensors = loadModuleData(registry, moduleStruct)
 
     narginchk(2, 2);
 
-    % --- Validate doc metadata ---
-    if ~isfield(moduleStruct, 'doc')
-        error('loadModuleData:missingDoc', ...
-            'Module struct must contain a ''doc'' field.');
-    end
-    if ~isfield(moduleStruct.doc, 'date')
-        error('loadModuleData:missingDocDate', ...
-            'Module struct .doc must contain a ''date'' field naming the datenum variable.');
-    end
-
-    datenumField = moduleStruct.doc.date;
-
-    if ~ischar(datenumField)
-        error('loadModuleData:invalidDocDate', ...
-            'Module struct .doc.date must be a char (field name), got %s.', class(datenumField));
-    end
-
-    if ~isfield(moduleStruct, datenumField)
-        error('loadModuleData:missingDatenum', ...
-            'Datenum field ''%s'' (from doc.date) not found in module struct.', datenumField);
-    end
+    % --- Extract datenum field name from doc metadata ---
+    datenumField = extractDatenumField(moduleStruct, 'loadModuleData');
 
     % --- Extract shared time vector ---
     X = moduleStruct.(datenumField);

@@ -6,8 +6,9 @@ function sensors = loadModuleMetadata(metadataStruct, sensors)
 %   whose ThresholdRules reference matching state keys.
 %
 %   metadataStruct must have the same format as module data: fields +
-%   doc.date naming the datenum field. State signals can be numeric
-%   arrays or cell arrays of char.
+%   .doc with per-field .name/.datum entries. The .datum value names the
+%   shared datenum field. State signals can be numeric arrays or cell
+%   arrays of char.
 %
 %   ThresholdRules must be attached to sensors before calling this
 %   function. Sensors with no rules are skipped. Rules with empty
@@ -24,29 +25,8 @@ function sensors = loadModuleMetadata(metadataStruct, sensors)
 
     narginchk(2, 2);
 
-    % --- Validate doc metadata (same pattern as loadModuleData) ---
-    if ~isfield(metadataStruct, 'doc')
-        error('loadModuleMetadata:missingDoc', ...
-            'Metadata struct must contain a ''doc'' field.');
-    end
-    if ~isfield(metadataStruct.doc, 'date')
-        error('loadModuleMetadata:missingDocDate', ...
-            'Metadata struct .doc must contain a ''date'' field naming the datenum variable.');
-    end
-
-    datenumField = metadataStruct.doc.date;
-
-    if ~ischar(datenumField)
-        error('loadModuleMetadata:invalidDocDate', ...
-            'Metadata struct .doc.date must be a char (field name), got %s.', ...
-            class(datenumField));
-    end
-
-    if ~isfield(metadataStruct, datenumField)
-        error('loadModuleMetadata:missingDatenum', ...
-            'Datenum field ''%s'' (from doc.date) not found in metadata struct.', ...
-            datenumField);
-    end
+    % --- Extract datenum field name from doc metadata ---
+    datenumField = extractDatenumField(metadataStruct, 'loadModuleMetadata');
 
     % --- Early exit for empty sensors ---
     if isempty(sensors)

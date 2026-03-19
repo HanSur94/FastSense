@@ -10,10 +10,11 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
     methods (Static)
         function ms = makeMetadataStruct(stateKeys, nPoints)
             %MAKEMETADATASTRUCT Build a fake metadata struct for testing.
-            ms.doc.date = 'time_utc';
             ms.time_utc = linspace(datenum(2024,1,1), datenum(2024,1,2), nPoints);
             for i = 1:numel(stateKeys)
                 ms.(stateKeys{i}) = zeros(1, nPoints);
+                ms.doc.(stateKeys{i}).name = stateKeys{i};
+                ms.doc.(stateKeys{i}).datum = 'time_utc';
             end
         end
 
@@ -53,7 +54,8 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
             s = TestLoadModuleMetadata.makeSensorWithRule( ...
                 'temp', struct('recipe', 'bake'), 80);
 
-            ms.doc.date = 'time_utc';
+            ms.doc.recipe.name = 'recipe';
+            ms.doc.recipe.datum = 'time_utc';
             ms.time_utc = linspace(datenum(2024,1,1), datenum(2024,1,2), 6);
             ms.recipe = {'idle', 'idle', 'bake', 'bake', 'bake', 'idle'};
 
@@ -156,7 +158,8 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
             s = TestLoadModuleMetadata.makeSensorWithRule( ...
                 'temp', struct('machine', 1), 50);
 
-            ms.doc.date = 'time_utc';
+            ms.doc.machine.name = 'machine';
+            ms.doc.machine.datum = 'time_utc';
             ms.time_utc = datenum(2024,1,1);
             ms.machine = 1;
 
@@ -172,7 +175,8 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
             s = TestLoadModuleMetadata.makeSensorWithRule( ...
                 'temp', struct('machine', 1), 50);
 
-            ms.doc.date = 'time_utc';
+            ms.doc.machine.name = 'machine';
+            ms.doc.machine.datum = 'time_utc';
             ms.time_utc = linspace(datenum(2024,1,1), datenum(2024,1,2), 6)';
             ms.machine = [0; 0; 1; 1; 0; 0];
 
@@ -200,20 +204,23 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
             testCase.verifyTrue(threw, 'missing_doc_throws');
         end
 
-        function testMissingDocDateErrors(testCase)
-            ms = struct('doc', struct('version', '1.0'), 'machine', [1 2 3]);
+        function testDocMissingDatumErrors(testCase)
+            % doc entry without .datum field
+            ms.doc.machine.name = 'machine';  % no .datum
+            ms.machine = [1 2 3];
             threw = false;
             try
                 loadModuleMetadata(ms, {});
             catch
                 threw = true;
             end
-            testCase.verifyTrue(threw, 'missing_doc_date_throws');
+            testCase.verifyTrue(threw, 'missing_datum_throws');
         end
 
-        function testDocDateNotInStructErrors(testCase)
-            ms = struct('doc', struct('date', 'nonexistent'), ...
-                'machine', [1 2 3]);
+        function testDatenumFieldNotInStructErrors(testCase)
+            ms.doc.machine.name = 'machine';
+            ms.doc.machine.datum = 'nonexistent';
+            ms.machine = [1 2 3];
             threw = false;
             try
                 loadModuleMetadata(ms, {});
@@ -223,16 +230,18 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
             testCase.verifyTrue(threw, 'bad_datenum_ref_throws');
         end
 
-        function testDocDateNotCharErrors(testCase)
-            % Defensive test beyond spec scope
-            ms = struct('doc', struct('date', 42), 'machine', [1 2 3]);
+        function testDatumNotCharErrors(testCase)
+            % Defensive test: validates datum type
+            ms.doc.machine.name = 'machine';
+            ms.doc.machine.datum = 42;
+            ms.machine = [1 2 3];
             threw = false;
             try
                 loadModuleMetadata(ms, {});
             catch
                 threw = true;
             end
-            testCase.verifyTrue(threw, 'non_char_date_throws');
+            testCase.verifyTrue(threw, 'non_char_datum_throws');
         end
 
         function testOutputRowOrientation(testCase)
