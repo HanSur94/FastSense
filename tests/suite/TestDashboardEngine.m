@@ -87,8 +87,8 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             d.exportScript(filepath);
 
             content = fileread(filepath);
-            testCase.verifyTrue(contains(content, 'DashboardEngine'));
-            testCase.verifyTrue(contains(content, 'Pressure'));
+            testCase.verifyFalse(isempty(strfind(content, 'DashboardEngine')));
+            testCase.verifyFalse(isempty(strfind(content, 'Pressure')));
         end
 
         function testLiveStartStop(testCase)
