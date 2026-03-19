@@ -116,6 +116,19 @@ classdef DashboardEngine < handle
             w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
 
             obj.Widgets{end+1} = w;
+
+            % Wire sensor data-change listener to mark widget dirty
+            if ~isempty(w.Sensor) && isprop(w.Sensor, 'X')
+                try
+                    addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
+                catch
+                    % Octave may not support addlistener on all properties
+                end
+                try
+                    addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
+                catch
+                end
+            end
         end
 
         function render(obj)
