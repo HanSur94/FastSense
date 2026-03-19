@@ -17,6 +17,8 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Build MEX and run tests
+        env:
+          FASTSENSE_SKIP_BUILD: "1"
         run: |
           octave --eval "install();"
           xvfb-run octave --eval "install(); cd('tests'); r = run_all_tests(); if r.failed > 0; exit(1); end"
