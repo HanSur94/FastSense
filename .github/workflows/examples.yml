@@ -130,6 +130,12 @@ jobs:
             #   example_sensor_detail          — bare pause; calls
           )
 
+          # Start a persistent Xvfb so individual runs don't race for displays
+          Xvfb :99 -screen 0 1280x1024x24 &
+          XVFB_PID=$!
+          export DISPLAY=:99
+          sleep 1
+
           PASSED=0
           FAILED=0
           FAIL_LIST=""
@@ -137,7 +143,7 @@ jobs:
 
           for name in "${EXAMPLES[@]}"; do
             printf "Running %s... " "$name"
-            if xvfb-run octave --eval "
+            if octave --eval "
               addpath(pwd); install();
               cd('examples');
               $name();
@@ -146,12 +152,15 @@ jobs:
               echo "OK"
               PASSED=$((PASSED + 1))
             else
-              echo "FAILED (exit code $?)"
-              tail -20 /tmp/example_out.log | sed 's/^/  /'
+              EC=$?
+              echo "FAILED (exit code $EC)"
+              tail -40 /tmp/example_out.log | grep -v '^\s*$' | tail -15 | sed 's/^/  /'
               FAILED=$((FAILED + 1))
               FAIL_LIST="${FAIL_LIST}\n  - ${name}"
             fi
           done
+
+          kill $XVFB_PID 2>/dev/null || true
 
           echo ""
           echo "=== ${PASSED}/${TOTAL} examples passed ==="
