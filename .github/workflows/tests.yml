@@ -117,6 +117,38 @@ jobs:
       - name: Compile MEX files
         run: octave --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
 
+  mex-build-windows:
+    name: MEX Build (Windows)
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    steps:
+      - name: Allow paths with colons (wiki files)
+        run: git config --global core.protectNTFS false
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            libs
+            tests
+            benchmarks
+            examples
+            install.m
+          sparse-checkout-cone-mode: false
+
+      - name: Install Octave
+        run: choco install octave.portable --yes --version=9.2.0
+
+      - name: Compile MEX files
+        shell: pwsh
+        run: |
+          $octExe = "C:\ProgramData\chocolatey\lib\octave.portable\tools\octave\mingw64\bin\octave-cli.exe"
+          if (-not (Test-Path $octExe)) {
+            Write-Error "octave-cli.exe not found at $octExe"
+            exit 1
+          }
+          & $octExe --version
+          & $octExe --no-window-system --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
+
   matlab:
     name: MATLAB Tests
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
