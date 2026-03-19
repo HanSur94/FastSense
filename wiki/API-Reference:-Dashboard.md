@@ -23,7 +23,7 @@ obj = DashboardEngine(name, varargin)
 
 ### Methods
 
-#### `addWidget(obj, type, varargin)`
+#### `w = addWidget(obj, type, varargin)`
 
 #### `render(obj)`
 
@@ -616,13 +616,24 @@ obj = EventTimelineWidget(varargin)
 
 #### `DashboardSerializer.save(config, filepath)`
 
-SAVE Write dashboard config struct to JSON file.
+SAVE Write dashboard config as a MATLAB function file.
+  The output is a function returning a DashboardEngine.
+
+#### `DashboardSerializer.saveJSON(config, filepath)`
+
+SAVEJSON Legacy: write dashboard config struct to JSON file.
  Widgets may have heterogeneous fields, so encode each
  widget individually and assemble the JSON array by hand.
 
-#### `DashboardSerializer.config = load(filepath)`
+#### `DashboardSerializer.result = load(filepath)`
 
-LOAD Read dashboard config from JSON file.
+LOAD Load dashboard config from file.
+  For .m files: uses feval to execute the function and return the engine.
+  For .json files: uses legacy JSON parsing.
+
+#### `DashboardSerializer.config = loadJSON(filepath)`
+
+LOADJSON Legacy: read dashboard config from JSON file.
 
 #### `DashboardSerializer.config = widgetsToConfig(name, theme, liveInterval, widgets, infoFile)`
 
