@@ -1,104 +1,29 @@
 name: Generate Wiki Pages
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'libs/**'
-      - 'examples/**'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no wiki push)'
+        type: boolean
+        default: false
 
-permissions:
-  contents: write
-  pull-requests: write
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  generate:
-    name: Generate Wiki Pages with LLM
+  docs:
     runs-on: ubuntu-latest
-    if: ${{ github.actor != 'github-actions[bot]' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Checkout main repo
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      - uses: HanSur94/wiki-gen-action@v1
         with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install anthropic
-
-      - name: Detect changed files
-        id: changes
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "mode=all" >> "$GITHUB_OUTPUT"
-          else
-            BEFORE="${{ github.event.before }}"
-            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              echo "mode=all" >> "$GITHUB_OUTPUT"
-            else
-              CHANGED=$(git diff "$BEFORE" "${{ github.sha }}" --name-only -- libs/ examples/ || echo "")
-              if [ -z "$CHANGED" ]; then
-                echo "mode=none" >> "$GITHUB_OUTPUT"
-              else
-                echo "mode=diff" >> "$GITHUB_OUTPUT"
-                echo "$CHANGED" > changed_files.txt
-                echo "Changed files:"
-                cat changed_files.txt
-              fi
-            fi
-          fi
-
-      - name: Generate wiki pages
-        if: steps.changes.outputs.mode != 'none'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          if [ "${{ steps.changes.outputs.mode }}" = "all" ]; then
-            python3 scripts/generate_wiki.py --all
-          else
-            mapfile -t CHANGED < changed_files.txt
-            python3 scripts/generate_wiki.py --changed-files "${CHANGED[@]}"
-          fi
-
-      - name: Create pull request
-        if: steps.changes.outputs.mode != 'none'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Check if wiki/ has changes
-          if git diff --quiet wiki/; then
-            echo "No wiki changes to commit"
-            exit 0
-          fi
-
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          BRANCH="wiki-update/${SHORT_SHA}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git checkout -b "$BRANCH"
-          git add wiki/
-          git commit -m "docs: update wiki pages [auto-generated]"
-          git push origin "$BRANCH"
-
-          # Read the summary file for the PR body
-          if [ -f wiki-gen-summary.md ]; then
-            PR_BODY=$(cat wiki-gen-summary.md)
-          else
-            PR_BODY="Wiki pages auto-updated by LLM."
-          fi
-
-          TRIGGER_LINE="Triggered by: commit ${{ github.sha }}"
-          PR_BODY=$(printf '%s\n\n%s' "$PR_BODY" "$TRIGGER_LINE")
-
-          gh pr create \
-            --title "docs: update wiki pages [auto-generated]" \
-            --body "$PR_BODY" \
-            --base main \
-            --head "$BRANCH"
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          wiki_pat: ${{ secrets.WIKI_PAT }}
+          dry_run: ${{ inputs.dry_run || 'false' }}
