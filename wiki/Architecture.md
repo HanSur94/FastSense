@@ -30,6 +30,7 @@ FastPlot/
 │   │   ├── StateChannel.m
 │   │   ├── ThresholdRule.m
 │   │   ├── SensorRegistry.m
+│   │   ├── ExternalSensorRegistry.m
 │   │   └── private/                  # Resolution algorithms
 │   ├── EventDetection/               # Event detection and viewer
 │   │   ├── Event.m
@@ -52,7 +53,7 @@ FastPlot/
 │   │   ├── DashboardSerializer.m
 │   │   ├── DashboardTheme.m
 │   │   ├── DashboardToolbar.m
-│   │   ├── DashboardWidget.m
+│   │   ├── DashboardWidget.m         # Abstract widget base
 │   │   ├── FastSenseWidget.m
 │   │   ├── GaugeWidget.m
 │   │   ├── NumberWidget.m
@@ -60,7 +61,15 @@ FastPlot/
 │   │   ├── TextWidget.m
 │   │   ├── TableWidget.m
 │   │   ├── RawAxesWidget.m
-│   │   └── EventTimelineWidget.m
+│   │   ├── EventTimelineWidget.m
+│   │   ├── GroupWidget.m             # Collapsible/tabbed widget groups
+│   │   ├── MultiStatusWidget.m       # Grid of status indicators
+│   │   ├── BarChartWidget.m
+│   │   ├── ScatterWidget.m
+│   │   ├── HeatmapWidget.m
+│   │   ├── HistogramWidget.m
+│   │   ├── ImageWidget.m
+│   │   └── MarkdownRenderer.m        # HTML conversion for info panels
 │   └── WebBridge/                    # TCP server for web visualization
 │       ├── WebBridge.m
 │       └── WebBridgeProtocol.m
@@ -73,12 +82,13 @@ FastPlot/
 1. User calls `render()`
 2. Create figure/axes if not parented
 3. Validate all data (X monotonic, dimensions match)
-4. Allocate downsampling buffers based on axes pixel width
-5. For each line: initial downsample of full range, create graphics object
-6. Create threshold, band, shading, marker objects
-7. Install XLim PostSet listener for zoom/pan events
-8. Set axis limits, disable auto-limits
-9. `drawnow` to display
+4. Switch to disk storage mode if data exceeds `MemoryLimit`
+5. Allocate downsampling buffers based on axes pixel width
+6. For each line: initial downsample of full range, create graphics object
+7. Create threshold, band, shading, marker objects
+8. Install XLim PostSet listener for zoom/pan events
+9. Set axis limits, disable auto-limits
+10. `drawnow` to display
 
 ## Zoom/Pan Callback
 
@@ -135,6 +145,7 @@ Optional C MEX functions with SIMD intrinsics (AVX2 on x86_64, NEON on arm64):
 | compute_violations_mex | significant | Batch violation detection for resolve() |
 | resolve_disk_mex | significant | SQLite disk-based sensor resolution |
 | build_store_mex | 2-3x | Bulk SQLite writer for DataStore init |
+| to_step_function_mex | significant | SIMD step-function conversion for thresholds |
 
 All share a common `simd_utils.h` abstraction layer. If MEX is unavailable, pure-MATLAB implementations are used with identical behavior.
 
@@ -194,16 +205,19 @@ Element override  >  Tile theme  >  Figure theme  >  'default' preset
 
 Each level fills in only the fields it specifies; unspecified fields cascade from the next level.
 
-## Dashboard Engine Architecture
+## Dashboard Architecture
 
-The `DashboardEngine` provides a serializable, widget-based dashboard system separate from `FastSenseGrid`. While `FastSenseGrid` is a tiled grid of FastSense instances, `DashboardEngine` uses a 24-column responsive grid with heterogeneous widget types (plots, gauges, numbers, status indicators, tables, timelines, and raw axes).
+### FastSenseGrid vs DashboardEngine
 
-### Key Components
+- **[[Dashboard|FastSenseGrid]]**: Simple tiled grid of FastSense instances with synchronized live mode
+- **[[Dashboard Engine Guide|DashboardEngine]]**: Full widget-based dashboard with gauges, numbers, status indicators, tables, timelines, and edit mode
+
+### DashboardEngine Components
 
 ```
 DashboardEngine
 ├── DashboardToolbar      — Top toolbar (Live, Edit, Save, Export, Sync)
-├── DashboardLayout       — 24-column grid with scrollable canvas
+├── DashboardLayout       — 24-column responsive grid with scrollable canvas
 ├── DashboardTheme        — FastSenseTheme + dashboard-specific fields
 ├── DashboardBuilder      — Edit mode overlay (drag/resize, palette, properties)
 ├── DashboardSerializer   — JSON save/load and .m script export
@@ -211,11 +225,13 @@ DashboardEngine
     ├── FastSenseWidget         — FastSense instance (Sensor/DataStore/inline)
     ├── GaugeWidget            — Arc/donut/bar/thermometer gauge
     ├── NumberWidget            — Big number with trend arrow
-    ├── StatusWidget            — Colored dot indicator
+    ├── StatusWidget           — Colored dot indicator
     ├── TextWidget             — Static label or header
     ├── TableWidget            — uitable display
     ├── RawAxesWidget          — User-supplied plot function
-    └── EventTimelineWidget    — Colored event bars on timeline
+    ├── EventTimelineWidget    — Colored event bars on timeline
+    ├── GroupWidget            — Collapsible panels, tabbed containers
+    └── MultiStatusWidget      — Grid of sensor status dots
 ```
 
 ### Render Flow
@@ -301,7 +317,7 @@ When `EscalateSeverity` is enabled, events are promoted to the highest violated 
 ## Interactive Features
 
 ### Toolbars and Navigation
-- **FastSenseToolbar**: Data cursor, crosshair, grid toggle, autoscale, export, live mode
+- **[[API Reference: FastPlot|FastSenseToolbar]]**: Data cursor, crosshair, grid toggle, autoscale, export, live mode
 - **DashboardToolbar**: Live toggle, edit mode, save/export, name editing
 - **NavigatorOverlay**: Minimap with draggable zoom rectangle for `SensorDetailPlot`
 

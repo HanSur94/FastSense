@@ -39,7 +39,7 @@ Multi-tile dashboards show increasing advantage as tile count grows:
 | 2x2 | 0.451 s | 0.377 s | 1.2x |
 | 3x3 | 0.964 s | 0.709 s | 1.4x |
 
-Each FastSenseGrid tile downsamples independently to ~4K points regardless of raw data size, so rendering cost stays nearly flat. Traditional approaches scale linearly with total point count.
+Each [[FastSenseGrid]] tile downsamples independently to ~4K points regardless of raw data size, so rendering cost stays nearly flat. Traditional approaches scale linearly with total point count.
 
 ## MEX vs Pure MATLAB
 
@@ -56,30 +56,20 @@ MEX kernels use SIMD instructions (AVX2/NEON) to process 4 doubles per CPU cycle
 
 ## Running Your Own Benchmarks
 
-FastSense includes several benchmark scripts to measure performance on your system:
+FastSense includes benchmark scripts to measure performance on your system. From the `examples/` directory:
 
 ```matlab
-install;
-cd examples
+% Stress test with 100M points
+example_100M;
 
-% Compare FastSense vs plot() across different data sizes
-benchmark;
+% Compare LTTB vs MinMax downsampling algorithms
+example_lttb_vs_minmax;
 
-% Measure zoom/pan latency frame-by-frame
-benchmark_zoom;
-
-% Test specific features (downsampling, violations, etc.)
-benchmark_features;
-
-% Benchmark Sensor.resolve() with thresholds
-benchmark_resolve;
+% Multi-dashboard stress test: 5 tabs, 26 sensors, 104 thresholds
+example_stress_test;
 ```
 
-The stress test example creates a realistic large-scale scenario:
-
-```matlab
-example_stress_test;  % 5 tabs, 26 sensors, 86M points, 104 thresholds
-```
+The stress test creates a realistic large-scale scenario with 5 tabbed dashboards, 26 sensors, ~86M total points, and 104 dynamic thresholds that change based on machine state.
 
 ## Why FastSense is Fast
 
@@ -87,7 +77,13 @@ example_stress_test;  % 5 tabs, 26 sensors, 86M points, 104 thresholds
 Only renders ~4,000 points regardless of dataset size. A 100M point dataset uses the same GPU memory as a 4K dataset once downsampled.
 
 ### 2. Binary Search for Range Queries
-Uses O(log N) binary search instead of O(N) linear scanning to find visible data ranges on zoom/pan.
+Uses O(log N) binary search instead of O(N) linear scanning to find visible data ranges on zoom/pan:
+
+```matlab
+% Binary search is 20x faster than MATLAB fallback
+idx = binary_search(x, xValue, 'left');  % First index where x >= xValue
+idx = binary_search(x, xValue, 'right'); % Last index where x <= xValue
+```
 
 ### 3. Lazy Multi-Level Pyramid
 Pre-computes downsampled levels (100:1, 10000:1, etc.) so zooming out never touches raw data. Cache is built incrementally as needed.
@@ -96,6 +92,12 @@ Pre-computes downsampled levels (100:1, 10000:1, etc.) so zooming out never touc
 C implementations use vectorized instructions to process multiple data points per CPU cycle:
 - **AVX2** on x86_64: processes 4 doubles simultaneously
 - **NEON** on ARM64: processes 2-4 elements per cycle
+
+Build the MEX kernels for maximum performance:
+
+```matlab
+build_mex();  % Compile with platform-specific SIMD optimization
+```
 
 ### 5. Fused Operations
 Combines multiple operations in single passes:
@@ -144,7 +146,7 @@ fp.StorageMode = 'disk';    % always SQLite
 fp.MemoryLimit = 1e9;  % 1 GB threshold
 ```
 
-The `'auto'` mode uses [[FastSenseDataStore|API Reference: FastSenseDataStore]] for lines exceeding the memory limit, seamlessly providing disk-based storage without performance degradation.
+The `'auto'` mode uses [[FastSenseDataStore]] for lines exceeding the memory limit, seamlessly providing disk-based storage without performance degradation.
 
 ## Monitoring Performance
 
@@ -173,3 +175,18 @@ for k = 1:1000
 end
 pb.finish();
 ```
+
+## Batch Rendering Options
+
+For headless or batch workflows, use `DeferDraw` to skip intermediate display updates:
+
+```matlab
+fp = FastSense();
+fp.DeferDraw = true;     % Skip drawnow during render
+fp.ShowProgress = false; % Hide console progress bar
+fp.addLine(x, y);
+fp.render();
+drawnow;  % Manual drawnow when ready to display
+```
+
+This is demonstrated in the 100M point stress test example, where it provides measurable performance gains for very large datasets.

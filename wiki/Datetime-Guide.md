@@ -122,6 +122,8 @@ tb = FastSenseToolbar(fp);
 % Crosshair shows: "Jan 15, 2024 10:30:15  Y: 52.3"
 ```
 
+The [[API Reference: FastPlot|FastSenseToolbar]] provides `formatX()` for consistent datetime formatting.
+
 ---
 
 ## Sensor Data with Datetime
@@ -173,6 +175,27 @@ The navigator and main plot both show human-readable time labels.
 
 ---
 
+## Large Dataset Example
+
+FastSense handles massive datetime datasets efficiently:
+
+```matlab
+% ~579 days of temperature data at 1-second resolution
+n = 50000000;
+x = datenum(2024,1,1) + (0:n-1)/86400;  % ~579 days
+t = (0:n-1) / 86400;  % time in days
+y = 20 + 5*sin(t * 2*pi - pi/2) + ...  % daily cycle (peak at midday)
+    0.3*sin(t * 2*pi*24) + ...            % hourly ripple
+    0.1*randn(1,n);                       % sensor noise
+
+fp = FastSense('Theme', 'light');
+fp.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
+fp.addThreshold(24, 'Direction', 'upper', 'ShowViolations', true);
+fp.render();
+```
+
+---
+
 ## GNU Octave Notes
 
 - Octave does not support MATLAB's `datetime` class
@@ -188,6 +211,8 @@ The navigator and main plot both show human-readable time labels.
 - For high-frequency data (kHz+), datenum precision is sufficient (double-precision days)
 - Use `datenum()` for generating time stamps: `datenum(year, month, day, hour, min, sec)`
 - Use `datestr()` for converting back: `datestr(x(1), 'yyyy-mm-dd HH:MM:SS')`
+- Datetime formatting automatically adapts to zoom level — no manual intervention needed
+- The [[API Reference: FastPlot|FastSenseToolbar]] crosshair and data cursor show formatted datetime strings
 
 ---
 
@@ -195,4 +220,4 @@ The navigator and main plot both show human-readable time labels.
 
 - [[API Reference: FastPlot]] — addLine() with XType parameter
 - [[API Reference: Sensors]] — Sensor X data
-- [[Examples]] — example_datetime.m
+- [[Examples]] — example_datetime.m, example_sensor_detail_datetime.m
