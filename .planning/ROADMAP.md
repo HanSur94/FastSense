@@ -45,8 +45,10 @@ Plans:
   2. Expanding a collapsed GroupWidget pushes widgets below it downward to make room
   3. A tabbed GroupWidget's active tab is preserved after a JSON save/load round-trip
   4. Tab labels are legible in both light and dark themes without visual ambiguity
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 2 plans
+Plans:
+- [ ] 02-01-PLAN.md — Wire ReflowCallback into GroupWidget collapse/expand and inject via DashboardEngine (LAYOUT-01, LAYOUT-02)
+- [ ] 02-02-PLAN.md — Test ActiveTab JSON round-trip and verify/fix tab contrast in all themes (LAYOUT-07, LAYOUT-08)
 
 ### Phase 3: Widget Info Tooltips
 **Goal**: Users can view a widget's written description without leaving the dashboard, via an info icon in the widget header that opens a Markdown-rendered popup
@@ -105,7 +107,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Hardening | 4/4 | Complete   | 2026-04-01 |
-| 2. Collapsible Sections | 0/? | Not started | - |
+| 2. Collapsible Sections | 0/2 | Not started | - |
 | 3. Widget Info Tooltips | 0/? | Not started | - |
 | 4. Multi-Page Navigation | 0/? | Not started | - |
 | 5. Detachable Widgets | 0/? | Not started | - |
