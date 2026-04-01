@@ -75,7 +75,7 @@ Plans:
   4. Existing single-page dashboards open without a visible page bar and behave identically to before
 **Plans**: 3 plans
 Plans:
-- [ ] 04-01-PLAN.md — DashboardPage class + TestDashboardMultiPage scaffold (LAYOUT-03, LAYOUT-04, LAYOUT-05, LAYOUT-06)
+- [x] 04-01-PLAN.md — DashboardPage class + TestDashboardMultiPage scaffold (LAYOUT-03, LAYOUT-04, LAYOUT-05, LAYOUT-06)
 - [ ] 04-02-PLAN.md — DashboardEngine: Pages model, PageBar UI, switchPage, scoped onLiveTick (LAYOUT-03, LAYOUT-04, LAYOUT-06)
 - [ ] 04-03-PLAN.md — DashboardSerializer: multi-page JSON save/load + backward compat (LAYOUT-05, LAYOUT-03)
 
@@ -114,6 +114,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Infrastructure Hardening | 4/4 | Complete   | 2026-04-01 |
 | 2. Collapsible Sections | 0/2 | Not started | - |
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
-| 4. Multi-Page Navigation | 0/3 | Not started | - |
+| 4. Multi-Page Navigation | 1/3 | In Progress|  |
 | 5. Detachable Widgets | 0/? | Not started | - |
 | 6. Serialization & Persistence | 0/? | Not started | - |

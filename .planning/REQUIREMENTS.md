@@ -11,10 +11,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **LAYOUT-01**: Collapsible sections reflow the grid — collapsing a GroupWidget reclaims screen space by shifting widgets below upward
 - [x] **LAYOUT-02**: Expanding a collapsed section pushes widgets below downward to make room
-- [ ] **LAYOUT-03**: Multi-page dashboards — user can define multiple pages within a single dashboard figure
-- [ ] **LAYOUT-04**: Page navigation UI — toolbar buttons or tab strip to switch between pages
-- [ ] **LAYOUT-05**: Active page persists through save/load cycle
-- [ ] **LAYOUT-06**: Only the active page's widgets are rendered; inactive pages are hidden
+- [x] **LAYOUT-03**: Multi-page dashboards — user can define multiple pages within a single dashboard figure
+- [x] **LAYOUT-04**: Page navigation UI — toolbar buttons or tab strip to switch between pages
+- [x] **LAYOUT-05**: Active page persists through save/load cycle
+- [x] **LAYOUT-06**: Only the active page's widgets are rendered; inactive pages are hidden
 - [x] **LAYOUT-07**: Existing tabbed GroupWidget persists active tab through save/load round-trip
 - [x] **LAYOUT-08**: Tab visual contrast is legible in both light and dark themes
 
@@ -102,10 +102,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | LAYOUT-01 | Phase 2 | Complete |
 | LAYOUT-02 | Phase 2 | Complete |
-| LAYOUT-03 | Phase 4 | Pending |
-| LAYOUT-04 | Phase 4 | Pending |
-| LAYOUT-05 | Phase 4 | Pending |
-| LAYOUT-06 | Phase 4 | Pending |
+| LAYOUT-03 | Phase 4 | Complete |
+| LAYOUT-04 | Phase 4 | Complete |
+| LAYOUT-05 | Phase 4 | Complete |
+| LAYOUT-06 | Phase 4 | Complete |
 | LAYOUT-07 | Phase 2 | Complete |
 | LAYOUT-08 | Phase 2 | Complete |
 | INFO-01 | Phase 3 | Complete |
