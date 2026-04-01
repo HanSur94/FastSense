@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 03-02-PLAN.md (hFigure wiring and integration tests)
-last_updated: "2026-04-01T21:21:05.125Z"
+stopped_at: Completed 03-03-PLAN.md (MarkdownRenderer wiring in openInfoPopup)
+last_updated: "2026-04-01T21:30:21.936Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
   percent: 0
 ---
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-collapsible-sections P02-01 | 11min | 2 tasks | 4 files |
 | Phase 03-widget-info-tooltips P01 | 6min | 2 tasks | 2 files |
 | Phase 03-widget-info-tooltips P02 | 15min | 2 tasks | 2 files |
+| Phase 03-widget-info-tooltips P03-03 | 1min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase 03-widget-info-tooltips]: openInfoPopup/closeInfoPopup made public for testability; hFigure/hInfoPopup as public properties for test injection and state verification
 - [Phase 03-widget-info-tooltips]: closeInfoPopup guards callback restore with wasOpen flag to prevent overwriting prior figure callbacks during guard call at start of openInfoPopup
 - [Phase 03-widget-info-tooltips]: hFigure already stored in allocatePanels() by 03-01 — no DashboardEngine wiring needed; reflow() guard added via closeInfoPopup() before createPanels()
+- [Phase 03-widget-info-tooltips]: Strip HTML tags after MarkdownRenderer.render() to produce plain text for uicontrol edit control; static private stripHtmlTags helper added to DashboardLayout
 
 ### Pending Todos
 
@@ -91,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T21:21:05.121Z
-Stopped at: Completed 03-02-PLAN.md (hFigure wiring and integration tests)
+Last session: 2026-04-01T21:30:21.933Z
+Stopped at: Completed 03-03-PLAN.md (MarkdownRenderer wiring in openInfoPopup)
 Resume file: None
