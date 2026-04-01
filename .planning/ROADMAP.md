@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Infrastructure Hardening** - Fix timer safety, GroupWidget .m export bug, jsondecode normalization, and validate backward compatibility (completed 2026-04-01)
 - [ ] **Phase 2: Collapsible Sections** - Wire grid reflow into GroupWidget collapse/expand so collapsing reclaims screen space
 - [x] **Phase 3: Widget Info Tooltips** - Add info icon and click-driven description popup to all widget header chrome (completed 2026-04-01)
-- [ ] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence
+- [x] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence (completed 2026-04-01)
 - [ ] **Phase 5: Detachable Widgets** - Detach button on every widget; DetachedMirror class; live sync via shared timer
 - [ ] **Phase 6: Serialization & Persistence** - Verify and harden round-trip correctness for all new structures across JSON and .m formats
 
@@ -77,7 +77,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — DashboardPage class + TestDashboardMultiPage scaffold (LAYOUT-03, LAYOUT-04, LAYOUT-05, LAYOUT-06)
 - [x] 04-02-PLAN.md — DashboardEngine: Pages model, PageBar UI, switchPage, scoped onLiveTick (LAYOUT-03, LAYOUT-04, LAYOUT-06)
-- [ ] 04-03-PLAN.md — DashboardSerializer: multi-page JSON save/load + backward compat (LAYOUT-05, LAYOUT-03)
+- [x] 04-03-PLAN.md — DashboardSerializer: multi-page JSON save/load + backward compat (LAYOUT-05, LAYOUT-03)
 
 ### Phase 5: Detachable Widgets
 **Goal**: Users can pop any widget out as a standalone figure window that stays live-synced with the dashboard's data updates, without degrading dashboard refresh rate
@@ -114,6 +114,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Infrastructure Hardening | 4/4 | Complete   | 2026-04-01 |
 | 2. Collapsible Sections | 0/2 | Not started | - |
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
-| 4. Multi-Page Navigation | 2/3 | In Progress|  |
+| 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
 | 5. Detachable Widgets | 0/? | Not started | - |
 | 6. Serialization & Persistence | 0/? | Not started | - |
