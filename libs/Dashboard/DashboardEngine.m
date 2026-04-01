@@ -117,6 +117,11 @@ classdef DashboardEngine < handle
 
             obj.Widgets{end+1} = w;
 
+            % Inject ReflowCallback into collapsible GroupWidgets
+            if isa(w, 'GroupWidget') && strcmp(w.Mode, 'collapsible')
+                w.ReflowCallback = @() obj.reflowAfterCollapse();
+            end
+
             % Wire sensor data-change listener to mark widget dirty
             if ~isempty(w.Sensor) && isprop(w.Sensor, 'X')
                 try
@@ -794,6 +799,14 @@ classdef DashboardEngine < handle
             end
         end
 
+        function reflowAfterCollapse(obj)
+        %REFLOWAFTERCOLLAPSE Recompute grid layout after GroupWidget height change.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            obj.rerenderWidgets();
+        end
+
     end
 
     methods (Static)
@@ -859,6 +872,14 @@ classdef DashboardEngine < handle
                     end
                     w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
                     obj.Widgets{end+1} = w;
+                end
+
+                % Inject ReflowCallback into collapsible GroupWidgets loaded from JSON
+                for i = 1:numel(obj.Widgets)
+                    wi = obj.Widgets{i};
+                    if isa(wi, 'GroupWidget') && strcmp(wi.Mode, 'collapsible')
+                        wi.ReflowCallback = @() obj.reflowAfterCollapse();
+                    end
                 end
             end
         end

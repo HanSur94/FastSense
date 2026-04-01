@@ -1,13 +1,14 @@
 classdef GroupWidget < DashboardWidget
     properties (Access = public)
-        Mode          = 'panel'    % 'panel', 'collapsible', 'tabbed'
-        Label         = ''         % Title shown in header bar
-        Collapsed     = false      % Collapsed state (collapsible mode only)
-        Children      = {}         % Cell array of DashboardWidget (panel/collapsible)
-        Tabs          = {}         % Cell array of struct('name','...','widgets',{{}})
-        ActiveTab     = ''         % Current tab name (tabbed mode)
-        ChildColumns  = 24         % Sub-grid column count
-        ChildAutoFlow = true       % Auto-arrange children
+        Mode            = 'panel'  % 'panel', 'collapsible', 'tabbed'
+        Label           = ''       % Title shown in header bar
+        Collapsed       = false    % Collapsed state (collapsible mode only)
+        Children        = {}       % Cell array of DashboardWidget (panel/collapsible)
+        Tabs            = {}       % Cell array of struct('name','...','widgets',{{}})
+        ActiveTab       = ''       % Current tab name (tabbed mode)
+        ChildColumns    = 24       % Sub-grid column count
+        ChildAutoFlow   = true     % Auto-arrange children
+        ReflowCallback  = []       % Callback invoked after collapse/expand (injected by DashboardEngine)
     end
 
     properties (SetAccess = protected)
@@ -238,9 +239,9 @@ classdef GroupWidget < DashboardWidget
             if ~isempty(obj.hChildPanel) && ishandle(obj.hChildPanel)
                 set(obj.hChildPanel, 'Visible', 'off');
             end
-            % TODO: call DashboardLayout.reflow() to re-compact the grid.
-            % Requires engine-level wiring (LayoutRef/FigureRef) — tracked
-            % as a follow-up. Position(4) is updated for serialization.
+            if ~isempty(obj.ReflowCallback)
+                obj.ReflowCallback();
+            end
         end
 
         function expand(obj)
@@ -257,7 +258,9 @@ classdef GroupWidget < DashboardWidget
             if ~isempty(obj.hChildPanel) && ishandle(obj.hChildPanel)
                 set(obj.hChildPanel, 'Visible', 'on');
             end
-            % TODO: call DashboardLayout.reflow() — same as collapse()
+            if ~isempty(obj.ReflowCallback)
+                obj.ReflowCallback();
+            end
         end
 
         function switchTab(obj, tabName)
