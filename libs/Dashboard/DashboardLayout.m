@@ -323,6 +323,7 @@ classdef DashboardLayout < handle
             if isempty(hFigure) || ~ishandle(hFigure)
                 return;
             end
+            obj.closeInfoPopup();    % dismiss any open popup before panel teardown
             obj.createPanels(hFigure, widgets, theme);
         end
 
