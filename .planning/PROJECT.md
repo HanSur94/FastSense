@@ -17,7 +17,10 @@ Users can organize complex dashboards into navigable sections and pop out any wi
 - ✓ Dashboard serialization (JSON/.m export) — existing
 - ✓ Theming (light/dark, custom colors) — existing
 - ✓ Live data refresh via DashboardEngine timer — existing
+- ✓ Timer error recovery (ErrorFcn + auto-restart) — Phase 1
 - ✓ GroupWidget for basic widget grouping — existing
+- ✓ GroupWidget .m export preserves children — Phase 1
+- ✓ Shared normalizeToCell helper for jsondecode normalization — Phase 1
 - ✓ DashboardToolbar with global controls — existing
 - ✓ WebBridge for browser-based visualization — existing
 
@@ -81,4 +84,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after initialization*
+*Last updated: 2026-04-01 after Phase 1 completion*
