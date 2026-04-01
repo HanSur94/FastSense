@@ -272,16 +272,52 @@ classdef DashboardEngine < handle
         end
 
         function save(obj, filepath)
-            config = DashboardSerializer.widgetsToConfig( ...
-                obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
-            DashboardSerializer.save(config, filepath);
+            [~, ~, ext] = fileparts(filepath);
+            isMultiPage = numel(obj.Pages) > 1;
+            isSingleImplicitPage = numel(obj.Pages) == 1 && strcmp(obj.Pages{1}.Name, 'Default');
+
+            if isMultiPage
+                activePageName = obj.Pages{obj.ActivePage}.Name;
+                cfg = DashboardSerializer.widgetsPagesToConfig( ...
+                    obj.Name, obj.Theme, obj.LiveInterval, obj.Pages, activePageName, obj.InfoFile);
+                if strcmp(ext, '.json')
+                    DashboardSerializer.saveJSON(cfg, filepath);
+                else
+                    DashboardSerializer.exportScriptPages(cfg, filepath);
+                end
+            else
+                if isSingleImplicitPage
+                    cfg = DashboardSerializer.widgetsToConfig( ...
+                        obj.Name, obj.Theme, obj.LiveInterval, obj.Pages{1}.Widgets, obj.InfoFile);
+                else
+                    cfg = DashboardSerializer.widgetsToConfig( ...
+                        obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
+                end
+                if strcmp(ext, '.json')
+                    DashboardSerializer.saveJSON(cfg, filepath);
+                else
+                    DashboardSerializer.save(cfg, filepath);
+                end
+            end
             obj.FilePath = filepath;
         end
 
         function exportScript(obj, filepath)
-            config = DashboardSerializer.widgetsToConfig( ...
-                obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
-            DashboardSerializer.exportScript(config, filepath);
+            if numel(obj.Pages) > 1
+                % Multi-page: emit addPage() calls before each page's widgets
+                activePageName = obj.Pages{obj.ActivePage}.Name;
+                cfg = DashboardSerializer.widgetsPagesToConfig( ...
+                    obj.Name, obj.Theme, obj.LiveInterval, obj.Pages, activePageName, obj.InfoFile);
+                DashboardSerializer.exportScriptPages(cfg, filepath);
+            elseif numel(obj.Pages) == 1 && strcmp(obj.Pages{1}.Name, 'Default')
+                cfg = DashboardSerializer.widgetsToConfig( ...
+                    obj.Name, obj.Theme, obj.LiveInterval, obj.Pages{1}.Widgets, obj.InfoFile);
+                DashboardSerializer.exportScript(cfg, filepath);
+            else
+                cfg = DashboardSerializer.widgetsToConfig( ...
+                    obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
+                DashboardSerializer.exportScript(cfg, filepath);
+            end
         end
 
         function preview(obj, varargin)
@@ -995,7 +1031,7 @@ classdef DashboardEngine < handle
                 obj = feval(funcname);
                 obj.FilePath = filepath;
             else
-                % Legacy JSON path
+                % JSON path
                 config = DashboardSerializer.load(filepath);
                 obj = DashboardEngine(config.name);
                 if isfield(config, 'theme')
@@ -1009,22 +1045,58 @@ classdef DashboardEngine < handle
                     obj.InfoFile = config.infoFile;
                 end
 
-                widgets = DashboardSerializer.configToWidgets(config, resolver);
-                for i = 1:numel(widgets)
-                    w = widgets{i};
-                    existingPositions = cell(1, numel(obj.Widgets));
-                    for j = 1:numel(obj.Widgets)
-                        existingPositions{j} = obj.Widgets{j}.Position;
+                if isfield(config, 'pages') && ~isempty(config.pages)
+                    % Multi-page JSON: reconstruct DashboardPage objects
+                    for i = 1:numel(config.pages)
+                        pg = DashboardPage(config.pages{i}.name);
+                        pgWidgets = config.pages{i}.widgets;
+                        if ~iscell(pgWidgets), pgWidgets = {}; end
+                        for j = 1:numel(pgWidgets)
+                            w = DashboardSerializer.createWidgetFromStruct(pgWidgets{j});
+                            if ~isempty(w), pg.addWidget(w); end
+                        end
+                        obj.Pages{end+1} = pg;
                     end
-                    w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
-                    obj.Widgets{end+1} = w;
-                end
+                    % Set ActivePage to 1 so multi-page mode is enabled
+                    obj.ActivePage = 1;
+                    % Restore active page by name
+                    if isfield(config, 'activePage') && ~isempty(config.activePage)
+                        for i = 1:numel(obj.Pages)
+                            if strcmp(obj.Pages{i}.Name, config.activePage)
+                                obj.ActivePage = i;
+                                break;
+                            end
+                        end
+                    end
+                    if obj.ActivePage == 0, obj.ActivePage = 1; end
 
-                % Inject ReflowCallback into collapsible GroupWidgets loaded from JSON
-                for i = 1:numel(obj.Widgets)
-                    wi = obj.Widgets{i};
-                    if isa(wi, 'GroupWidget') && strcmp(wi.Mode, 'collapsible')
-                        wi.ReflowCallback = @() obj.reflowAfterCollapse();
+                    % Inject ReflowCallback into all collapsible GroupWidgets on all pages
+                    ws = obj.allPageWidgets();
+                    for i = 1:numel(ws)
+                        wi = ws{i};
+                        if isa(wi, 'GroupWidget') && strcmp(wi.Mode, 'collapsible')
+                            wi.ReflowCallback = @() obj.reflowAfterCollapse();
+                        end
+                    end
+                else
+                    % Legacy single-page flat widgets path
+                    widgets = DashboardSerializer.configToWidgets(config, resolver);
+                    for i = 1:numel(widgets)
+                        w = widgets{i};
+                        existingPositions = cell(1, numel(obj.Widgets));
+                        for j = 1:numel(obj.Widgets)
+                            existingPositions{j} = obj.Widgets{j}.Position;
+                        end
+                        w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
+                        obj.Widgets{end+1} = w;
+                    end
+
+                    % Inject ReflowCallback into collapsible GroupWidgets loaded from JSON
+                    for i = 1:numel(obj.Widgets)
+                        wi = obj.Widgets{i};
+                        if isa(wi, 'GroupWidget') && strcmp(wi.Mode, 'collapsible')
+                            wi.ReflowCallback = @() obj.reflowAfterCollapse();
+                        end
                     end
                 end
             end
