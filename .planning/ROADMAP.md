@@ -1,0 +1,108 @@
+# Roadmap: FastSense Advanced Dashboard
+
+## Overview
+
+This milestone extends the existing FastSense dashboard engine with three major capabilities: nested layout organization (collapsible sections and multi-page navigation), per-widget info tooltips, and detachable live-mirrored widgets. Infrastructure hardening runs first to fix known timer and serializer bugs that would otherwise destabilize later phases. The work then proceeds through self-contained feature deliveries before a final serialization and compatibility verification pass.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Infrastructure Hardening** - Fix timer safety, GroupWidget .m export bug, jsondecode normalization, and validate backward compatibility
+- [ ] **Phase 2: Collapsible Sections** - Wire grid reflow into GroupWidget collapse/expand so collapsing reclaims screen space
+- [ ] **Phase 3: Widget Info Tooltips** - Add info icon and click-driven description popup to all widget header chrome
+- [ ] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence
+- [ ] **Phase 5: Detachable Widgets** - Detach button on every widget; DetachedMirror class; live sync via shared timer
+- [ ] **Phase 6: Serialization & Persistence** - Verify and harden round-trip correctness for all new structures across JSON and .m formats
+
+## Phase Details
+
+### Phase 1: Infrastructure Hardening
+**Goal**: The dashboard engine is safe to extend — timer errors cannot silently kill refresh, GroupWidget children survive .m export, and jsondecode normalization is applied wherever nested arrays are decoded
+**Depends on**: Nothing (first phase)
+**Requirements**: INFRA-01, INFRA-02, INFRA-03, COMPAT-01, COMPAT-02, COMPAT-03, COMPAT-04
+**Success Criteria** (what must be TRUE):
+  1. When an error occurs inside the live timer tick, the timer continues running and the error is logged (does not silently stop)
+  2. A GroupWidget with children exported to .m and re-imported loads all children correctly
+  3. All existing dashboard scripts run without modification after infrastructure changes
+  4. Previously saved JSON and .m dashboards load without errors or data loss
+**Plans**: TBD
+
+### Phase 2: Collapsible Sections
+**Goal**: Users can collapse GroupWidget sections to reclaim screen space, with the grid reflowing immediately and the expanded/collapsed state surviving save/load
+**Depends on**: Phase 1
+**Requirements**: LAYOUT-01, LAYOUT-02, LAYOUT-07, LAYOUT-08
+**Success Criteria** (what must be TRUE):
+  1. Collapsing a GroupWidget causes widgets below it to shift upward, filling the reclaimed space
+  2. Expanding a collapsed GroupWidget pushes widgets below it downward to make room
+  3. A tabbed GroupWidget's active tab is preserved after a JSON save/load round-trip
+  4. Tab labels are legible in both light and dark themes without visual ambiguity
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 3: Widget Info Tooltips
+**Goal**: Users can view a widget's written description without leaving the dashboard, via an info icon in the widget header that opens a Markdown-rendered popup
+**Depends on**: Phase 2
+**Requirements**: INFO-01, INFO-02, INFO-03, INFO-04, INFO-05
+**Success Criteria** (what must be TRUE):
+  1. Any widget with a non-empty Description shows an info icon in its header; widgets without a Description do not
+  2. Clicking the info icon opens a popup displaying the description text rendered as Markdown
+  3. The popup can be dismissed by clicking outside it or pressing Escape
+  4. All 20+ existing widget types show the info icon and popup without any per-widget code changes
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 4: Multi-Page Navigation
+**Goal**: Users can organize a dashboard into multiple named pages, navigate between them via a page bar, and have the active page survive a save/load cycle
+**Depends on**: Phase 1
+**Requirements**: LAYOUT-03, LAYOUT-04, LAYOUT-05, LAYOUT-06
+**Success Criteria** (what must be TRUE):
+  1. A dashboard defined with multiple pages shows a navigation bar (toolbar buttons or tab strip) that switches the visible page
+  2. Only the active page's widgets are rendered; widgets on other pages are hidden and do not consume render time
+  3. After saving and reloading a multi-page dashboard, the same page is active as when it was saved
+  4. Existing single-page dashboards open without a visible page bar and behave identically to before
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 5: Detachable Widgets
+**Goal**: Users can pop any widget out as a standalone figure window that stays live-synced with the dashboard's data updates, without degrading dashboard refresh rate
+**Depends on**: Phase 1, Phase 4
+**Requirements**: DETACH-01, DETACH-02, DETACH-03, DETACH-04, DETACH-05, DETACH-06, DETACH-07
+**Success Criteria** (what must be TRUE):
+  1. Every widget shows a detach button in its header; clicking it opens the widget in a new MATLAB figure window
+  2. The detached figure continues to update with new data on each dashboard timer tick
+  3. Closing a detached figure window removes it from the engine's mirror registry; subsequent timer ticks produce no errors
+  4. A detached FastSenseWidget has independent time axis zoom/pan (UseGlobalTime = false) without affecting the in-dashboard copy
+  5. Detaching multiple widgets simultaneously does not measurably increase per-tick execution time in the dashboard
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 6: Serialization & Persistence
+**Goal**: All new structures (multi-page layouts, collapsed state) survive both JSON and .m save/load round-trips, and detached widget state is correctly excluded from persistence
+**Depends on**: Phase 4, Phase 5
+**Requirements**: SERIAL-01, SERIAL-02, SERIAL-03, SERIAL-04, SERIAL-05
+**Success Criteria** (what must be TRUE):
+  1. A multi-page dashboard saved as JSON and reloaded has the same pages, widgets, and active page as before saving
+  2. A multi-page dashboard exported to .m and re-imported reconstructs all pages and widgets identically
+  3. The collapsed/expanded state of every section is preserved after a save/load round-trip
+  4. Saving and reloading a dashboard does not include detached window state (windows do not auto-reopen on load)
+  5. A dashboard JSON created before this milestone loads without errors on the updated engine
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Infrastructure Hardening | 0/? | Not started | - |
+| 2. Collapsible Sections | 0/? | Not started | - |
+| 3. Widget Info Tooltips | 0/? | Not started | - |
+| 4. Multi-Page Navigation | 0/? | Not started | - |
+| 5. Detachable Widgets | 0/? | Not started | - |
+| 6. Serialization & Persistence | 0/? | Not started | - |

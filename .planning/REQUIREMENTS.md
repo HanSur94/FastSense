@@ -100,44 +100,44 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | — | Pending |
-| LAYOUT-02 | — | Pending |
-| LAYOUT-03 | — | Pending |
-| LAYOUT-04 | — | Pending |
-| LAYOUT-05 | — | Pending |
-| LAYOUT-06 | — | Pending |
-| LAYOUT-07 | — | Pending |
-| LAYOUT-08 | — | Pending |
-| INFO-01 | — | Pending |
-| INFO-02 | — | Pending |
-| INFO-03 | — | Pending |
-| INFO-04 | — | Pending |
-| INFO-05 | — | Pending |
-| DETACH-01 | — | Pending |
-| DETACH-02 | — | Pending |
-| DETACH-03 | — | Pending |
-| DETACH-04 | — | Pending |
-| DETACH-05 | — | Pending |
-| DETACH-06 | — | Pending |
-| DETACH-07 | — | Pending |
-| INFRA-01 | — | Pending |
-| INFRA-02 | — | Pending |
-| INFRA-03 | — | Pending |
-| SERIAL-01 | — | Pending |
-| SERIAL-02 | — | Pending |
-| SERIAL-03 | — | Pending |
-| SERIAL-04 | — | Pending |
-| SERIAL-05 | — | Pending |
-| COMPAT-01 | — | Pending |
-| COMPAT-02 | — | Pending |
-| COMPAT-03 | — | Pending |
-| COMPAT-04 | — | Pending |
+| LAYOUT-01 | Phase 2 | Pending |
+| LAYOUT-02 | Phase 2 | Pending |
+| LAYOUT-03 | Phase 4 | Pending |
+| LAYOUT-04 | Phase 4 | Pending |
+| LAYOUT-05 | Phase 4 | Pending |
+| LAYOUT-06 | Phase 4 | Pending |
+| LAYOUT-07 | Phase 2 | Pending |
+| LAYOUT-08 | Phase 2 | Pending |
+| INFO-01 | Phase 3 | Pending |
+| INFO-02 | Phase 3 | Pending |
+| INFO-03 | Phase 3 | Pending |
+| INFO-04 | Phase 3 | Pending |
+| INFO-05 | Phase 3 | Pending |
+| DETACH-01 | Phase 5 | Pending |
+| DETACH-02 | Phase 5 | Pending |
+| DETACH-03 | Phase 5 | Pending |
+| DETACH-04 | Phase 5 | Pending |
+| DETACH-05 | Phase 5 | Pending |
+| DETACH-06 | Phase 5 | Pending |
+| DETACH-07 | Phase 5 | Pending |
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| INFRA-03 | Phase 1 | Pending |
+| SERIAL-01 | Phase 6 | Pending |
+| SERIAL-02 | Phase 6 | Pending |
+| SERIAL-03 | Phase 6 | Pending |
+| SERIAL-04 | Phase 6 | Pending |
+| SERIAL-05 | Phase 6 | Pending |
+| COMPAT-01 | Phase 1 | Pending |
+| COMPAT-02 | Phase 1 | Pending |
+| COMPAT-03 | Phase 1 | Pending |
+| COMPAT-04 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32
+- Mapped to phases: 32
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after initial definition*
+*Last updated: 2026-04-01 after roadmap creation*
