@@ -47,7 +47,7 @@ Plans:
   4. Tab labels are legible in both light and dark themes without visual ambiguity
 **Plans**: 2 plans
 Plans:
-- [ ] 02-01-PLAN.md — Wire ReflowCallback into GroupWidget collapse/expand and inject via DashboardEngine (LAYOUT-01, LAYOUT-02)
+- [x] 02-01-PLAN.md — Wire ReflowCallback into GroupWidget collapse/expand and inject via DashboardEngine (LAYOUT-01, LAYOUT-02)
 - [x] 02-02-PLAN.md — Test ActiveTab JSON round-trip and verify/fix tab contrast in all themes (LAYOUT-07, LAYOUT-08)
 
 ### Phase 3: Widget Info Tooltips

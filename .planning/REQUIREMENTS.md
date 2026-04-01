@@ -9,8 +9,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Layout Organization
 
-- [ ] **LAYOUT-01**: Collapsible sections reflow the grid — collapsing a GroupWidget reclaims screen space by shifting widgets below upward
-- [ ] **LAYOUT-02**: Expanding a collapsed section pushes widgets below downward to make room
+- [x] **LAYOUT-01**: Collapsible sections reflow the grid — collapsing a GroupWidget reclaims screen space by shifting widgets below upward
+- [x] **LAYOUT-02**: Expanding a collapsed section pushes widgets below downward to make room
 - [ ] **LAYOUT-03**: Multi-page dashboards — user can define multiple pages within a single dashboard figure
 - [ ] **LAYOUT-04**: Page navigation UI — toolbar buttons or tab strip to switch between pages
 - [ ] **LAYOUT-05**: Active page persists through save/load cycle
@@ -100,8 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | Phase 2 | Pending |
-| LAYOUT-02 | Phase 2 | Pending |
+| LAYOUT-01 | Phase 2 | Complete |
+| LAYOUT-02 | Phase 2 | Complete |
 | LAYOUT-03 | Phase 4 | Pending |
 | LAYOUT-04 | Phase 4 | Pending |
 | LAYOUT-05 | Phase 4 | Pending |
