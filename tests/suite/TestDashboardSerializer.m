@@ -114,5 +114,50 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
             testCase.verifyTrue(contains(content, 'addWidget'));
             testCase.verifyTrue(contains(content, 'Temperature'));
         end
+
+        function testNormalizeToCellHelper(testCase)
+            % normalizeToCell lives in libs/Dashboard/private/ so it is not
+            % callable directly from test files outside that directory.
+            % We test its behaviour indirectly through DashboardSerializer,
+            % which calls normalizeToCell in loadJSON().
+
+            % Build a minimal JSON with a single widget and round-trip it.
+            % When jsondecode parses a JSON array with one object it produces
+            % a struct (not a cell), triggering the struct-array branch of
+            % normalizeToCell.  DashboardSerializer.loadJSON must convert it
+            % back to a cell so configToWidgets can index with {}.
+            config = struct();
+            config.name = 'NormTest';
+            config.theme = 'default';
+            config.liveInterval = 1;
+            config.grid = struct('columns', 24);
+            ws.type = 'text';
+            ws.title = 'T1';
+            ws.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 2);
+            config.widgets = {ws};
+
+            filepath = fullfile(testCase.TempDir, 'norm_test.json');
+            DashboardSerializer.saveJSON(config, filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
+
+            % After normalizeToCell the widgets field must be a cell array
+            % regardless of whether jsondecode returned a struct or cell.
+            testCase.verifyClass(loaded.widgets, 'cell', ...
+                'loadJSON must return widgets as a cell array (normalizeToCell)');
+            testCase.verifyGreaterThanOrEqual(numel(loaded.widgets), 1);
+
+            % Test multi-widget case (jsondecode may return struct array for
+            % homogeneous arrays — normalizeToCell must convert to cell).
+            ws2.type = 'text';
+            ws2.title = 'T2';
+            ws2.position = struct('col', 7, 'row', 1, 'width', 6, 'height', 2);
+            config.widgets = {ws, ws2};
+            filepath2 = fullfile(testCase.TempDir, 'norm_test2.json');
+            DashboardSerializer.saveJSON(config, filepath2);
+            loaded2 = DashboardSerializer.loadJSON(filepath2);
+            testCase.verifyClass(loaded2.widgets, 'cell', ...
+                'loadJSON must return multi-widget list as cell array');
+            testCase.verifyLength(loaded2.widgets, 2);
+        end
     end
 end
