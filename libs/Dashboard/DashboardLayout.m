@@ -30,6 +30,16 @@ classdef DashboardLayout < handle
         hScrollbar  = []
     end
 
+    properties (Access = public)
+        hFigure           = []  % Figure handle for popup dismiss callbacks
+        hInfoPopup        = []  % Handle to active info popup uipanel (at most one)
+    end
+
+    properties (Access = private)
+        PrevButtonDownFcn = []  % Saved WindowButtonDownFcn before popup open
+        PrevKeyPressFcn   = []  % Saved KeyPressFcn before popup open
+    end
+
     methods (Access = public)
         function obj = DashboardLayout(varargin)
             for k = 1:2:numel(varargin)
@@ -167,6 +177,7 @@ classdef DashboardLayout < handle
         %ALLOCATEPANELS Create viewport, canvas, scrollbar and placeholder panels.
         %   Like createPanels but does NOT call widget.render(). Instead,
         %   each widget gets its hPanel assigned and a placeholder label.
+            obj.hFigure = hFigure;
             % Save current scroll state before any updates
             prevCr = obj.canvasRatio();
             prevScrollVal = 1;  % default = top
@@ -292,6 +303,10 @@ classdef DashboardLayout < handle
             widget.render(widget.hPanel);
             widget.Realized = true;
             widget.Dirty = false;
+            % Inject info icon when widget has a description
+            if ~isempty(widget.Description)
+                obj.addInfoIcon(widget);
+            end
         end
 
         function createPanels(obj, hFigure, widgets, theme)
@@ -370,6 +385,102 @@ classdef DashboardLayout < handle
         end
     end
 
+    methods (Access = public)
+
+        function openInfoPopup(obj, widget, theme)
+        %OPENINFOPOPUP Open an info popup panel on widget.hPanel showing Description.
+            obj.closeInfoPopup();
+            descText = widget.Description;
+            popupPanel = uipanel('Parent', widget.hPanel, ...
+                'Units', 'normalized', ...
+                'Position', [0.0 0.0 1.0 0.88], ...
+                'BackgroundColor', theme.WidgetBackground, ...
+                'BorderType', 'line', ...
+                'ForegroundColor', theme.WidgetBorderColor, ...
+                'Tag', 'InfoPopupPanel');
+            if isfield(theme, 'ForegroundColor')
+                fgColor = theme.ForegroundColor;
+            else
+                fgColor = theme.ToolbarFontColor;
+            end
+            uicontrol('Parent', popupPanel, ...
+                'Style', 'edit', ...
+                'Max', 10, 'Min', 0, ...
+                'String', descText, ...
+                'Units', 'normalized', ...
+                'Position', [0.02 0.10 0.96 0.82], ...
+                'HorizontalAlignment', 'left', ...
+                'Enable', 'inactive', ...
+                'FontSize', 10, ...
+                'BackgroundColor', theme.WidgetBackground, ...
+                'ForegroundColor', fgColor);
+            uicontrol('Parent', popupPanel, ...
+                'Style', 'pushbutton', ...
+                'String', 'Close', ...
+                'Units', 'normalized', ...
+                'Position', [0.35 0.01 0.30 0.08], ...
+                'Callback', @(~,~) obj.closeInfoPopup());
+            obj.hInfoPopup = popupPanel;
+            % Wire figure callbacks for dismiss-on-click and dismiss-on-Escape
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.PrevButtonDownFcn = get(obj.hFigure, 'WindowButtonDownFcn');
+                obj.PrevKeyPressFcn   = get(obj.hFigure, 'KeyPressFcn');
+                set(obj.hFigure, 'WindowButtonDownFcn', @(~,~) obj.onFigureClickForDismiss());
+                set(obj.hFigure, 'KeyPressFcn', @(~,e) obj.onKeyPressForDismiss(e));
+            end
+        end
+
+        function closeInfoPopup(obj)
+        %CLOSEINFOPOPUP Close and delete the active info popup panel.
+            wasOpen = ~isempty(obj.hInfoPopup) && ishandle(obj.hInfoPopup);
+            if wasOpen
+                delete(obj.hInfoPopup);
+            end
+            obj.hInfoPopup = [];
+            % Restore prior figure callbacks only if a popup was actually open
+            % (i.e. we had previously saved them in openInfoPopup)
+            if wasOpen && ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                set(obj.hFigure, 'WindowButtonDownFcn', obj.PrevButtonDownFcn);
+                set(obj.hFigure, 'KeyPressFcn', obj.PrevKeyPressFcn);
+            end
+            obj.PrevButtonDownFcn = [];
+            obj.PrevKeyPressFcn   = [];
+        end
+
+        function onFigureClickForDismiss(obj)
+        %ONFIGURECLICKFORDISMISS Dismiss popup if click was outside the popup panel.
+            if isempty(obj.hInfoPopup) || ~ishandle(obj.hInfoPopup)
+                obj.closeInfoPopup();
+                return;
+            end
+            clicked = gco;
+            insidePopup = false;
+            h = clicked;
+            while ~isempty(h) && ishandle(h)
+                if h == obj.hInfoPopup
+                    insidePopup = true;
+                    break;
+                end
+                try
+                    h = get(h, 'Parent');
+                catch
+                    break;
+                end
+            end
+            if ~insidePopup
+                obj.closeInfoPopup();
+            end
+        end
+
+        function onKeyPressForDismiss(obj, eventData)
+        %ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
+            if strcmp(eventData.Key, 'escape')
+                obj.closeInfoPopup();
+            end
+        end
+
+    end
+
     methods (Access = private)
         function onScrollWheel(obj, evt)
             if isempty(obj.hScrollbar) || ~ishandle(obj.hScrollbar)
@@ -380,6 +491,29 @@ classdef DashboardLayout < handle
             val = max(0, min(1, val - step));
             set(obj.hScrollbar, 'Value', val);
             obj.onScroll(val);
+        end
+
+        function addInfoIcon(obj, widget)
+        %ADDINFOICON Add a small info button to widget.hPanel for Description display.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            iconBg = theme.ToolbarBackground;
+            iconFg = theme.ToolbarFontColor;
+            uicontrol('Parent', widget.hPanel, ...
+                'Style', 'pushbutton', ...
+                'String', 'i', ...
+                'Units', 'normalized', ...
+                'Position', [0.90 0.90 0.08 0.08], ...
+                'FontSize', 9, ...
+                'FontWeight', 'bold', ...
+                'ForegroundColor', iconFg, ...
+                'BackgroundColor', iconBg, ...
+                'Tag', 'InfoIconButton', ...
+                'TooltipString', 'Widget info', ...
+                'Callback', @(~,~) obj.openInfoPopup(widget, theme));
         end
     end
 end
