@@ -59,8 +59,10 @@ Plans:
   2. Clicking the info icon opens a popup displaying the description text rendered as Markdown
   3. The popup can be dismissed by clicking outside it or pressing Escape
   4. All 20+ existing widget types show the info icon and popup without any per-widget code changes
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 2 plans
+Plans:
+- [ ] 03-01-PLAN.md — Test scaffold (TestInfoTooltip) + DashboardLayout info icon injection and popup methods (INFO-01, INFO-02, INFO-03, INFO-04, INFO-05)
+- [ ] 03-02-PLAN.md — Wire hFigure into DashboardLayout from DashboardEngine, add reflow popup guard, integration tests (INFO-01, INFO-02, INFO-03, INFO-04, INFO-05)
 
 ### Phase 4: Multi-Page Navigation
 **Goal**: Users can organize a dashboard into multiple named pages, navigate between them via a page bar, and have the active page survive a save/load cycle
@@ -108,7 +110,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Hardening | 4/4 | Complete   | 2026-04-01 |
 | 2. Collapsible Sections | 0/2 | Not started | - |
-| 3. Widget Info Tooltips | 0/? | Not started | - |
+| 3. Widget Info Tooltips | 0/2 | Not started | - |
 | 4. Multi-Page Navigation | 0/? | Not started | - |
 | 5. Detachable Widgets | 0/? | Not started | - |
 | 6. Serialization & Persistence | 0/? | Not started | - |
