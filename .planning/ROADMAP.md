@@ -30,7 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. A GroupWidget with children exported to .m and re-imported loads all children correctly
   3. All existing dashboard scripts run without modification after infrastructure changes
   4. Previously saved JSON and .m dashboards load without errors or data loss
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Add ErrorFcn to DashboardEngine.LiveTimer (INFRA-01)
+- [ ] 01-02-PLAN.md — Extract normalizeToCell shared helper and refactor call sites (INFRA-03)
+- [ ] 01-03-PLAN.md — Fix GroupWidget .m export children + full suite backward compatibility gate (INFRA-02, COMPAT-01..04)
 
 ### Phase 2: Collapsible Sections
 **Goal**: Users can collapse GroupWidget sections to reclaim screen space, with the grid reflowing immediately and the expanded/collapsed state surviving save/load
@@ -100,7 +104,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Hardening | 0/? | Not started | - |
+| 1. Infrastructure Hardening | 0/3 | Not started | - |
 | 2. Collapsible Sections | 0/? | Not started | - |
 | 3. Widget Info Tooltips | 0/? | Not started | - |
 | 4. Multi-Page Navigation | 0/? | Not started | - |
