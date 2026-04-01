@@ -39,7 +39,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Infrastructure Hardening
 
 - [x] **INFRA-01**: DashboardEngine.LiveTimer has an ErrorFcn that logs errors and keeps the timer running
-- [ ] **INFRA-02**: DashboardSerializer .m export correctly serializes GroupWidget children (fix existing bug)
+- [x] **INFRA-02**: DashboardSerializer .m export correctly serializes GroupWidget children (fix existing bug)
 - [x] **INFRA-03**: jsondecode struct-vs-cell normalization applied at all new nesting levels (pages, detached registry)
 
 ### Serialization & Persistence
@@ -54,8 +54,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **COMPAT-01**: Existing dashboard scripts run without modification
 - [x] **COMPAT-02**: Previously serialized JSON dashboards load correctly
-- [ ] **COMPAT-03**: Previously serialized .m dashboards load correctly
-- [ ] **COMPAT-04**: DashboardBuilder API remains unchanged for single-page dashboards
+- [x] **COMPAT-03**: Previously serialized .m dashboards load correctly
+- [x] **COMPAT-04**: DashboardBuilder API remains unchanged for single-page dashboards
 
 ## v2 Requirements
 
@@ -121,7 +121,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DETACH-06 | Phase 5 | Pending |
 | DETACH-07 | Phase 5 | Pending |
 | INFRA-01 | Phase 1 | Complete |
-| INFRA-02 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |
 | SERIAL-01 | Phase 6 | Pending |
 | SERIAL-02 | Phase 6 | Pending |
@@ -130,8 +130,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SERIAL-05 | Phase 6 | Pending |
 | COMPAT-01 | Phase 1 | Complete |
 | COMPAT-02 | Phase 1 | Complete |
-| COMPAT-03 | Phase 1 | Pending |
-| COMPAT-04 | Phase 1 | Pending |
+| COMPAT-03 | Phase 1 | Complete |
+| COMPAT-04 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 32 total

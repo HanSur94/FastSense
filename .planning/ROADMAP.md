@@ -12,7 +12,7 @@ This milestone extends the existing FastSense dashboard engine with three major 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Infrastructure Hardening** - Fix timer safety, GroupWidget .m export bug, jsondecode normalization, and validate backward compatibility
+- [x] **Phase 1: Infrastructure Hardening** - Fix timer safety, GroupWidget .m export bug, jsondecode normalization, and validate backward compatibility (completed 2026-04-01)
 - [ ] **Phase 2: Collapsible Sections** - Wire grid reflow into GroupWidget collapse/expand so collapsing reclaims screen space
 - [ ] **Phase 3: Widget Info Tooltips** - Add info icon and click-driven description popup to all widget header chrome
 - [ ] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence
@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Add ErrorFcn to DashboardEngine.LiveTimer (INFRA-01)
 - [x] 01-02-PLAN.md — Extract normalizeToCell shared helper and refactor call sites (INFRA-03)
-- [ ] 01-03-PLAN.md — Fix GroupWidget .m export children + full suite backward compatibility gate (INFRA-02, COMPAT-01..04)
+- [x] 01-03-PLAN.md — Fix GroupWidget .m export children + full suite backward compatibility gate (INFRA-02, COMPAT-01..04)
 
 ### Phase 2: Collapsible Sections
 **Goal**: Users can collapse GroupWidget sections to reclaim screen space, with the grid reflowing immediately and the expanded/collapsed state surviving save/load
@@ -104,7 +104,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Hardening | 2/3 | In Progress|  |
+| 1. Infrastructure Hardening | 3/3 | Complete   | 2026-04-01 |
 | 2. Collapsible Sections | 0/? | Not started | - |
 | 3. Widget Info Tooltips | 0/? | Not started | - |
 | 4. Multi-Page Navigation | 0/? | Not started | - |
