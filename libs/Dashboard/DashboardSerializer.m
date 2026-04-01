@@ -26,6 +26,7 @@ classdef DashboardSerializer
             lines{end+1} = '';
 
             % Write widget calls (indented, with return value)
+            groupCount = 1;
             for i = 1:numel(config.widgets)
                 ws = config.widgets{i};
                 pos = sprintf('[%d %d %d %d]', ws.position.col, ws.position.row, ...
@@ -80,11 +81,37 @@ classdef DashboardSerializer
                         end
                         lines{end+1} = [line, ');'];
                     case 'group'
-                        line = sprintf('    d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ws.label, pos);
+                        groupVarName = sprintf('g%d', groupCount);
+                        groupCount = groupCount + 1;
+                        line = sprintf('    %s = d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ...
+                            groupVarName, ws.label, pos);
                         if isfield(ws, 'mode') && ~isempty(ws.mode)
                             line = [line, sprintf(', ...\n        ''Mode'', ''%s''', ws.mode)];
                         end
                         lines{end+1} = [line, ');'];
+                        % Emit children
+                        if isfield(ws, 'mode') && strcmp(ws.mode, 'tabbed') && isfield(ws, 'tabs') && ~isempty(ws.tabs)
+                            tabs = normalizeToCell(ws.tabs);
+                            for ti = 1:numel(tabs)
+                                tab = tabs{ti};
+                                tabWidgets = normalizeToCell(tab.widgets);
+                                for ci = 1:numel(tabWidgets)
+                                    [childLines, childVar, groupCount] = ...
+                                        DashboardSerializer.emitChildWidget(tabWidgets{ci}, groupCount);
+                                    lines = [lines, childLines];
+                                    lines{end+1} = sprintf('    %s.addChild(%s, ''%s'');', ...
+                                        groupVarName, childVar, tab.name);
+                                end
+                            end
+                        elseif isfield(ws, 'children') && ~isempty(ws.children)
+                            ch = normalizeToCell(ws.children);
+                            for ci = 1:numel(ch)
+                                [childLines, childVar, groupCount] = ...
+                                    DashboardSerializer.emitChildWidget(ch{ci}, groupCount);
+                                lines = [lines, childLines];
+                                lines{end+1} = sprintf('    %s.addChild(%s);', groupVarName, childVar);
+                            end
+                        end
                     otherwise
                         lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
                 end
@@ -380,6 +407,116 @@ classdef DashboardSerializer
             end
             fprintf(fid, '%s\n', lines{:});
             fclose(fid);
+        end
+
+        function [childLines, varName, groupCount] = emitChildWidget(cw, groupCount)
+        %EMITCHILDWIDGET Emit .m constructor lines for a child widget.
+        %   Used by DashboardSerializer.save() to emit child code for GroupWidget
+        %   children. Children are created by constructor, not d.addWidget().
+        %   Returns the generated code lines, the variable name assigned, and the
+        %   updated groupCount (in case the child is itself a GroupWidget).
+            childLines = {};
+            cpos = sprintf('[%d %d %d %d]', cw.position.col, cw.position.row, ...
+                cw.position.width, cw.position.height);
+            ctitle = '';
+            if isfield(cw, 'title'), ctitle = cw.title; end
+
+            switch cw.type
+                case 'number'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = NumberWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'status'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = StatusWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'text'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = TextWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'gauge'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = GaugeWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'table'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = TableWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'heatmap'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = HeatmapWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'barchart'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = BarChartWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'histogram'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = HistogramWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'scatter'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = ScatterWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'multistatus'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = MultiStatusWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'group'
+                    % Nested GroupWidget (max depth 2 per codebase constraint)
+                    varName = sprintf('g%d', groupCount);
+                    groupCount = groupCount + 1;
+                    nestedLabel = '';
+                    if isfield(cw, 'label'), nestedLabel = cw.label; end
+                    nestedMode = '';
+                    if isfield(cw, 'mode'), nestedMode = cw.mode; end
+                    nestedLine = sprintf('    %s = GroupWidget(''Label'', ''%s'', ''Position'', %s', ...
+                        varName, nestedLabel, cpos);
+                    if ~isempty(nestedMode)
+                        nestedLine = [nestedLine, sprintf(', ''Mode'', ''%s''', nestedMode)];
+                    end
+                    childLines{end+1} = [nestedLine, ');'];
+                    % Emit nested children recursively
+                    if strcmp(nestedMode, 'tabbed') && isfield(cw, 'tabs') && ~isempty(cw.tabs)
+                        tabs = normalizeToCell(cw.tabs);
+                        for ti = 1:numel(tabs)
+                            tab = tabs{ti};
+                            tabWidgets = normalizeToCell(tab.widgets);
+                            for ci = 1:numel(tabWidgets)
+                                [cl, cv, groupCount] = DashboardSerializer.emitChildWidget(tabWidgets{ci}, groupCount);
+                                childLines = [childLines, cl];
+                                childLines{end+1} = sprintf('    %s.addChild(%s, ''%s'');', varName, cv, tab.name);
+                            end
+                        end
+                    elseif isfield(cw, 'children') && ~isempty(cw.children)
+                        ch = normalizeToCell(cw.children);
+                        for ci = 1:numel(ch)
+                            [cl, cv, groupCount] = DashboardSerializer.emitChildWidget(ch{ci}, groupCount);
+                            childLines = [childLines, cl];
+                            childLines{end+1} = sprintf('    %s.addChild(%s);', varName, cv);
+                        end
+                    end
+                otherwise
+                    % Generic fallback for unknown/unhandled types
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    typeName = cw.type;
+                    if ~isempty(typeName)
+                        typeName = [upper(typeName(1)), typeName(2:end), 'Widget'];
+                    end
+                    childLines{end+1} = sprintf('    %s = %s(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, typeName, ctitle, cpos);
+            end
         end
     end
 end
