@@ -280,5 +280,95 @@ classdef TestGroupWidget < matlab.unittest.TestCase
             testCase.verifyClass(d2.Widgets{1}, 'GroupWidget');
             testCase.verifyEqual(numel(d2.Widgets{1}.Children), 1);
         end
+
+        function testReflowCallbackDefaultsToEmpty(testCase)
+            g = GroupWidget('Label', 'T', 'Mode', 'collapsible');
+            testCase.verifyEmpty(g.ReflowCallback);
+        end
+
+        function testCollapseCallsReflowCallback(testCase)
+            g = GroupWidget('Label', 'T', 'Mode', 'collapsible');
+            g.Position = [1 1 12 4];
+            g.ReflowCallback = @() setappdata(0, 'reflow02_01', true);
+            setappdata(0, 'reflow02_01', false);
+            g.collapse();
+            testCase.verifyTrue(getappdata(0, 'reflow02_01'));
+            rmappdata(0, 'reflow02_01');
+        end
+
+        function testExpandCallsReflowCallback(testCase)
+            g = GroupWidget('Label', 'T', 'Mode', 'collapsible');
+            g.Position = [1 1 12 4];
+            g.collapse();
+            setappdata(0, 'reflow02_01', false);
+            g.ReflowCallback = @() setappdata(0, 'reflow02_01', true);
+            g.expand();
+            testCase.verifyTrue(getappdata(0, 'reflow02_01'));
+            rmappdata(0, 'reflow02_01');
+        end
+
+        function testPanelModeCollapseDoesNotCallReflowCallback(testCase)
+            g = GroupWidget('Label', 'T', 'Mode', 'panel');
+            setappdata(0, 'reflow02_01', false);
+            g.ReflowCallback = @() setappdata(0, 'reflow02_01', true);
+            g.collapse();   % panel mode -- should be a no-op
+            testCase.verifyFalse(getappdata(0, 'reflow02_01'));
+            rmappdata(0, 'reflow02_01');
+        end
+
+        function testActiveTabPersistsThroughJSONRoundTrip(testCase)
+            % Verify that a tabbed GroupWidget's ActiveTab is preserved after
+            % a JSON save/load round-trip (LAYOUT-07).
+            d = DashboardEngine('TabRoundTripTest');
+            g = d.addWidget('group', 'Label', 'Analysis', 'Mode', 'tabbed', ...
+                'Position', [1 1 24 4]);
+            g.addChild(TextWidget('Title', 'W1'), 'Overview');
+            g.addChild(TextWidget('Title', 'W2'), 'Detail');
+            g.switchTab('Detail');
+
+            testCase.verifyEqual(g.ActiveTab, 'Detail');
+
+            tmpFile = [tempname '.json'];
+            cleanupFile = onCleanup(@() delete(tmpFile));
+
+            config = DashboardSerializer.widgetsToConfig( ...
+                d.Name, d.Theme, d.LiveInterval, d.Widgets);
+            DashboardSerializer.saveJSON(config, tmpFile);
+
+            loaded = DashboardSerializer.loadJSON(tmpFile);
+            widgets = DashboardSerializer.configToWidgets(loaded);
+
+            testCase.verifyClass(widgets{1}, 'GroupWidget');
+            testCase.verifyEqual(widgets{1}.ActiveTab, 'Detail');
+        end
+
+        function testTabContrastAllThemes(testCase)
+            % Verify that all 6 theme presets have sufficient visual contrast
+            % between TabActiveBg and TabInactiveBg, and that GroupHeaderFg
+            % is legible against TabActiveBg (LAYOUT-08).
+            %
+            % Thresholds (empirical, appropriate for MATLAB dashboards):
+            %   - abs(mean(TabActiveBg) - mean(TabInactiveBg)) >= 0.05
+            %   - abs(mean(GroupHeaderFg) - mean(TabActiveBg)) >= 0.15
+            presets = {'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'};
+            for i = 1:numel(presets)
+                preset = presets{i};
+                theme = DashboardTheme(preset);
+
+                activeLum   = mean(theme.TabActiveBg);
+                inactiveLum = mean(theme.TabInactiveBg);
+                fgLum       = mean(theme.GroupHeaderFg);
+
+                tabDelta = abs(activeLum - inactiveLum);
+                fgDelta  = abs(fgLum - activeLum);
+
+                testCase.verifyGreaterThanOrEqual(tabDelta, 0.05, ...
+                    sprintf('Preset ''%s'': TabActiveBg/TabInactiveBg luminance delta %.4f < 0.05', ...
+                    preset, tabDelta));
+                testCase.verifyGreaterThanOrEqual(fgDelta, 0.15, ...
+                    sprintf('Preset ''%s'': GroupHeaderFg vs TabActiveBg luminance delta %.4f < 0.15', ...
+                    preset, fgDelta));
+            end
+        end
     end
 end

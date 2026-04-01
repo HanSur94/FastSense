@@ -163,5 +163,31 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             close(d.hFigure);
             testCase.verifyFalse(d.IsLive);
         end
+
+        function testAddWidgetInjectsReflowCallbackForCollapsibleGroup(testCase)
+            d = DashboardEngine('ReflowInjectTest');
+            g = d.addWidget('group', 'Label', 'G', 'Mode', 'collapsible', 'Position', [1 1 24 4]);
+            testCase.verifyNotEmpty(g.ReflowCallback);
+            testCase.verifyTrue(isa(g.ReflowCallback, 'function_handle'));
+        end
+
+        function testAddWidgetDoesNotInjectReflowCallbackForPanelGroup(testCase)
+            d = DashboardEngine('ReflowInjectTest2');
+            g = d.addWidget('group', 'Label', 'G', 'Mode', 'panel', 'Position', [1 1 24 4]);
+            testCase.verifyEmpty(g.ReflowCallback);
+        end
+
+        function testCollapseGroupWidgetReflowsGrid(testCase)
+            fig = figure('Visible', 'off');
+            cleanup = onCleanup(@() close(fig));
+            d = DashboardEngine('ReflowGridTest');
+            g = d.addWidget('group', 'Label', 'G', 'Mode', 'collapsible', 'Position', [1 1 24 4]);
+            d.addWidget('text', 'Title', 'Below', 'Position', [1 5 12 2]);
+            d.render();
+            g.collapse();
+            w2 = d.Widgets{2};
+            testCase.verifyTrue(~isempty(w2.hPanel) && ishandle(w2.hPanel));
+            testCase.verifyTrue(g.Collapsed);
+        end
     end
 end
