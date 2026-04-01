@@ -265,5 +265,20 @@ classdef TestGroupWidget < matlab.unittest.TestCase
                     sprintf('%s missing TabInactiveBg', presets{i}));
             end
         end
+
+        function testMExportPreservesChildren(testCase)
+            d = DashboardEngine('MExportTest');
+            g = d.addWidget('group', 'Label', 'Section', 'Mode', 'collapsible', ...
+                'Position', [1 1 24 3]);
+            g.addChild(NumberWidget('Title', 'Count', 'Position', [1 1 6 1]));
+
+            filepath = fullfile(tempdir, 'test_m_export_children.m');
+            testCase.addTeardown(@() delete(filepath));
+            d.save(filepath);
+
+            d2 = DashboardEngine.load(filepath);
+            testCase.verifyClass(d2.Widgets{1}, 'GroupWidget');
+            testCase.verifyEqual(numel(d2.Widgets{1}.Children), 1);
+        end
     end
 end
