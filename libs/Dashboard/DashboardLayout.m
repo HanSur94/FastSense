@@ -391,7 +391,11 @@ classdef DashboardLayout < handle
         function openInfoPopup(obj, widget, theme)
         %OPENINFOPOPUP Open an info popup panel on widget.hPanel showing Description.
             obj.closeInfoPopup();
-            descText = widget.Description;
+            % INFO-03: Render Description as Markdown using MarkdownRenderer (per locked decision).
+            % MarkdownRenderer.render() produces a full HTML document. Strip HTML tags to produce
+            % formatted plain text suitable for the uicontrol edit control (preserves in-panel UX).
+            rawHtml = MarkdownRenderer.render(widget.Description);
+            descText = DashboardLayout.stripHtmlTags(rawHtml);
             popupPanel = uipanel('Parent', widget.hPanel, ...
                 'Units', 'normalized', ...
                 'Position', [0.0 0.0 1.0 0.88], ...
@@ -516,5 +520,23 @@ classdef DashboardLayout < handle
                 'TooltipString', 'Widget info', ...
                 'Callback', @(~,~) obj.openInfoPopup(widget, theme));
         end
+    end
+
+    methods (Static, Access = private)
+
+        function plain = stripHtmlTags(html)
+        %STRIPHTMLTAGS Remove HTML tags and decode basic HTML entities.
+        %   plain = DashboardLayout.stripHtmlTags(html) removes all <tag> and </tag>
+        %   sequences, decodes &amp; &lt; &gt; entities, and collapses excess whitespace.
+            plain = regexprep(html, '<[^>]*>', ' ');
+            plain = strrep(plain, '&amp;',  '&');
+            plain = strrep(plain, '&lt;',   '<');
+            plain = strrep(plain, '&gt;',   '>');
+            plain = strrep(plain, '&quot;', '"');
+            % Collapse multiple whitespace / newline sequences to single spaces
+            plain = regexprep(plain, '[\r\n\t ]+', ' ');
+            plain = strtrim(plain);
+        end
+
     end
 end
