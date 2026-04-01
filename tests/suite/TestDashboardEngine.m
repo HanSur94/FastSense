@@ -107,6 +107,29 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             testCase.verifyFalse(d.IsLive);
         end
 
+        function testTimerContinuesAfterError(testCase)
+            d = DashboardEngine('ErrorTest');
+            d.LiveInterval = 0.1;
+            d.render();
+            testCase.addTeardown(@() d.stopLive());
+            testCase.addTeardown(@() close(d.hFigure));
+
+            d.startLive();
+            testCase.verifyTrue(d.IsLive);
+
+            % Force timer to fire its ErrorFcn by stopping it and calling the
+            % ErrorFcn directly (simulates an escaped error from onLiveTick).
+            % Build a fake eventData matching MATLAB's timer error shape.
+            fakeEvent = struct('Data', struct('message', 'simulated error'));
+            warnState = warning('off', 'DashboardEngine:timerError');
+            testCase.addTeardown(@() warning(warnState));
+
+            d.onLiveTimerError(d.LiveTimer, fakeEvent);
+
+            % Timer must still be running (restarted inside ErrorFcn)
+            testCase.verifyTrue(isrunning(d.LiveTimer));
+        end
+
         function testAddWidgetWithSensor(testCase)
             s = Sensor('T-401', 'Name', 'Temperature');
             s.X = 1:100;
