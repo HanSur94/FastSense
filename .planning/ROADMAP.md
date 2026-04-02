@@ -89,8 +89,11 @@ Plans:
   3. Closing a detached figure window removes it from the engine's mirror registry; subsequent timer ticks produce no errors
   4. A detached FastSenseWidget has independent time axis zoom/pan (UseGlobalTime = false) without affecting the in-dashboard copy
   5. Detaching multiple widgets simultaneously does not measurably increase per-tick execution time in the dashboard
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 3 plans
+Plans:
+- [ ] 05-01-PLAN.md — DetachedMirror class + TestDashboardDetach test scaffold (DETACH-01..07)
+- [ ] 05-02-PLAN.md — DashboardLayout: DetachCallback property + addDetachButton() injection (DETACH-01)
+- [ ] 05-03-PLAN.md — DashboardEngine: DetachedMirrors registry, detachWidget(), removeDetached(), onLiveTick() mirror tail (DETACH-02..07)
 
 ### Phase 6: Serialization & Persistence
 **Goal**: All new structures (multi-page layouts, collapsed state) survive both JSON and .m save/load round-trips, and detached widget state is correctly excluded from persistence
@@ -115,5 +118,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Collapsible Sections | 0/2 | Not started | - |
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
-| 5. Detachable Widgets | 0/? | Not started | - |
+| 5. Detachable Widgets | 0/3 | Not started | - |
 | 6. Serialization & Persistence | 0/? | Not started | - |
