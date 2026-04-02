@@ -39,8 +39,9 @@ classdef DashboardEngine < handle
         LiveTimer      = []
         IsLive         = false
         LastUpdateTime = []
-        FilePath       = ''
-        InfoTempFile   = ''
+        FilePath        = ''
+        InfoTempFile    = ''
+        DetachedMirrors = {}   % Cell array of DetachedMirror objects
         % Time control
         TimePanelHeight = 0.06
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
@@ -572,6 +573,49 @@ classdef DashboardEngine < handle
             end
         end
 
+        function detachWidget(obj, widget)
+        %DETACHWIDGET Pop a widget out as a standalone figure window.
+        %
+        %   Creates a DetachedMirror for the given widget and adds it to
+        %   DetachedMirrors. The mirror's figure is driven by the engine's
+        %   existing LiveTimer via the onLiveTick() mirror loop.
+        %
+        %   The removeCallback uses a containers.Map (a handle object) as an
+        %   indirect reference so the mirror identity can be captured after
+        %   construction — MATLAB closures capture values, but containers.Map
+        %   is a handle class, so mutations to it are visible through all
+        %   references.
+
+            themeStruct = DashboardTheme(obj.Theme);
+            % containers.Map is a handle object — mutations after closure creation
+            % are visible through the captured reference (unlike cells/structs).
+            mirrorHolder = containers.Map({'mirror'}, {[]});
+            removeCallback = @() obj.removeDetachedByRef(mirrorHolder);
+            mirror = DetachedMirror(widget, themeStruct, removeCallback);
+            mirrorHolder('mirror') = mirror;
+            obj.DetachedMirrors{end+1} = mirror;
+        end
+
+        function removeDetached(obj, widget)
+        %REMOVEDETACHED Remove mirrors by original widget handle or stale state.
+        %
+        %   Called during tick cleanup. Filters DetachedMirrors to remove entries
+        %   where the mirror is stale. The widget argument is accepted for API
+        %   compatibility but mirror identity is the primary removal criterion.
+        %   Guards with isvalid() before comparing handle to avoid deleted-handle errors.
+
+            keep = true(1, numel(obj.DetachedMirrors));
+            for i = 1:numel(obj.DetachedMirrors)
+                m = obj.DetachedMirrors{i};
+                if m.isStale()
+                    keep(i) = false;
+                elseif ~isvalid(widget)
+                    keep(i) = false;
+                end
+            end
+            obj.DetachedMirrors = obj.DetachedMirrors(keep);
+        end
+
         function setContentArea(obj, contentArea)
         %SETCONTENTAREA Update the Layout content area.
         %   Provided so that DashboardBuilder can modify the layout
@@ -592,6 +636,8 @@ classdef DashboardEngine < handle
                 end
             end
             obj.Layout.createPanels(obj.hFigure, ws, theme);
+            % Re-wire detach callback after panel recreation (Pitfall 3 in RESEARCH.md)
+            obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
         end
 
         function updateGlobalTimeRange(obj)
@@ -724,6 +770,21 @@ classdef DashboardEngine < handle
                     end
                 end
             end
+
+            % Tick detached mirrors; clean stale handles (DETACH-03, DETACH-04, DETACH-06)
+            staleIdx = [];
+            for i = 1:numel(obj.DetachedMirrors)
+                m = obj.DetachedMirrors{i};
+                if m.isStale()
+                    staleIdx(end+1) = i; %#ok<AGROW>
+                    continue;
+                end
+                m.tick();
+            end
+            if ~isempty(staleIdx)
+                obj.DetachedMirrors(staleIdx) = [];
+            end
+
             obj.LastUpdateTime = now;
             if ~isempty(obj.Toolbar)
                 obj.Toolbar.setLastUpdateTime(obj.LastUpdateTime);
@@ -763,6 +824,30 @@ classdef DashboardEngine < handle
     end
 
     methods (Access = private)
+
+        function removeDetachedByRef(obj, mirrorHolder)
+        %REMOVEDETACHEDBYREF Remove a specific mirror from the registry by indirect reference.
+        %
+        %   mirrorHolder is a containers.Map (handle object) with key 'mirror'
+        %   holding the DetachedMirror handle. Using a handle-class container
+        %   ensures the closure captures the live reference rather than a frozen
+        %   copy (MATLAB closures capture value-class variables by value).
+
+            if ~isKey(mirrorHolder, 'mirror')
+                return;
+            end
+            target = mirrorHolder('mirror');
+            if isempty(target)
+                return;
+            end
+            keep = true(1, numel(obj.DetachedMirrors));
+            for i = 1:numel(obj.DetachedMirrors)
+                if obj.DetachedMirrors{i} == target
+                    keep(i) = false;
+                end
+            end
+            obj.DetachedMirrors = obj.DetachedMirrors(keep);
+        end
 
         function ws = activePageWidgets(obj)
         %ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
