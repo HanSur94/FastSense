@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 06-02-PLAN.md (multi-page .m round-trip + collapsed state tests)
-last_updated: "2026-04-02T06:34:46.061Z"
+status: verifying
+stopped_at: Completed 06-01-PLAN.md (multi-page JSON round-trip tests + detached exclusion + legacy compat)
+last_updated: "2026-04-02T06:38:56.687Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 Phase: 06 (serialization-persistence) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-02
 
 Progress: [░░░░░░░░░░] 0%
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05-detachable-widgets P05-02 | 2min | 2 tasks | 2 files |
 | Phase 05-detachable-widgets P05-03 | 25min | 2 tasks | 1 files |
 | Phase 06-serialization-persistence P06-02 | 25 | 2 tasks | 2 files |
+| Phase 06-serialization-persistence P01 | 11min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Recent decisions affecting current work:
 - [Phase 05-detachable-widgets]: removeDetachedByRef() (private, identity-based) separates close-triggered removal from stale-scan cleanup in onLiveTick()
 - [Phase 06-serialization-persistence]: exportScriptPages fixed to emit function wrapper + two-pass addPage/switchPage so feval and widget routing work correctly for multi-page .m files
 - [Phase 06-serialization-persistence]: Pre-existing TestDashboardSerializerRoundTrip/testRoundTripPreservesWidgetSpecificProperties failure confirmed out-of-scope for plan-02
+- [Phase 06-serialization-persistence]: Single non-default named page must serialize with widgetsPagesToConfig (pages field) not widgetsToConfig (widgets field)
+- [Phase 06-serialization-persistence]: switchPage() required before addWidget() to route widget to non-first page in multi-page mode
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T06:34:46.058Z
-Stopped at: Completed 06-02-PLAN.md (multi-page .m round-trip + collapsed state tests)
+Last session: 2026-04-02T06:38:56.684Z
+Stopped at: Completed 06-01-PLAN.md (multi-page JSON round-trip tests + detached exclusion + legacy compat)
 Resume file: None

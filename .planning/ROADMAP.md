@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Widget Info Tooltips** - Add info icon and click-driven description popup to all widget header chrome (completed 2026-04-01)
 - [x] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence (completed 2026-04-01)
 - [x] **Phase 5: Detachable Widgets** - Detach button on every widget; DetachedMirror class; live sync via shared timer (completed 2026-04-02)
-- [ ] **Phase 6: Serialization & Persistence** - Verify and harden round-trip correctness for all new structures across JSON and .m formats
+- [x] **Phase 6: Serialization & Persistence** - Verify and harden round-trip correctness for all new structures across JSON and .m formats (completed 2026-04-02)
 
 ## Phase Details
 
@@ -107,7 +107,7 @@ Plans:
   5. A dashboard JSON created before this milestone loads without errors on the updated engine
 **Plans**: 2 plans
 Plans:
-- [ ] 06-01-PLAN.md — Multi-page JSON round-trip + detached exclusion + legacy backward compat tests (SERIAL-01, SERIAL-04, SERIAL-05)
+- [x] 06-01-PLAN.md — Multi-page JSON round-trip + detached exclusion + legacy backward compat tests (SERIAL-01, SERIAL-04, SERIAL-05)
 - [x] 06-02-PLAN.md — Multi-page .m export/import round-trip + collapsed state persistence tests (SERIAL-02, SERIAL-03)
 
 ## Progress
@@ -122,4 +122,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
 | 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
-| 6. Serialization & Persistence | 1/2 | In Progress|  |
+| 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |

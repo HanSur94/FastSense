@@ -44,11 +44,11 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Serialization & Persistence
 
-- [ ] **SERIAL-01**: Multi-page structure persists through JSON save/load cycle
+- [x] **SERIAL-01**: Multi-page structure persists through JSON save/load cycle
 - [x] **SERIAL-02**: Multi-page structure persists through .m export/import cycle
 - [x] **SERIAL-03**: Collapsed/expanded state of sections persists through save/load
-- [ ] **SERIAL-04**: Detached widget state is NOT persisted (detached windows are session-only)
-- [ ] **SERIAL-05**: Existing single-page dashboards load without errors (backward compatibility)
+- [x] **SERIAL-04**: Detached widget state is NOT persisted (detached windows are session-only)
+- [x] **SERIAL-05**: Existing single-page dashboards load without errors (backward compatibility)
 
 ### Backward Compatibility
 
@@ -123,11 +123,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |
-| SERIAL-01 | Phase 6 | Pending |
+| SERIAL-01 | Phase 6 | Complete |
 | SERIAL-02 | Phase 6 | Complete |
 | SERIAL-03 | Phase 6 | Complete |
-| SERIAL-04 | Phase 6 | Pending |
-| SERIAL-05 | Phase 6 | Pending |
+| SERIAL-04 | Phase 6 | Complete |
+| SERIAL-05 | Phase 6 | Complete |
 | COMPAT-01 | Phase 1 | Complete |
 | COMPAT-02 | Phase 1 | Complete |
 | COMPAT-03 | Phase 1 | Complete |
