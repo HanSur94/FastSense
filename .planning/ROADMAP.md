@@ -105,7 +105,10 @@ Plans:
   3. The collapsed/expanded state of every section is preserved after a save/load round-trip
   4. Saving and reloading a dashboard does not include detached window state (windows do not auto-reopen on load)
   5. A dashboard JSON created before this milestone loads without errors on the updated engine
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Multi-page JSON round-trip + detached exclusion + legacy backward compat tests (SERIAL-01, SERIAL-04, SERIAL-05)
+- [ ] 06-02-PLAN.md — Multi-page .m export/import round-trip + collapsed state persistence tests (SERIAL-02, SERIAL-03)
 
 ## Progress
 
@@ -119,4 +122,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
 | 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
-| 6. Serialization & Persistence | 0/? | Not started | - |
+| 6. Serialization & Persistence | 0/2 | Not started | - |
