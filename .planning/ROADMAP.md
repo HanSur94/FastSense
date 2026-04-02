@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Collapsible Sections** - Wire grid reflow into GroupWidget collapse/expand so collapsing reclaims screen space
 - [x] **Phase 3: Widget Info Tooltips** - Add info icon and click-driven description popup to all widget header chrome (completed 2026-04-01)
 - [x] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence (completed 2026-04-01)
-- [ ] **Phase 5: Detachable Widgets** - Detach button on every widget; DetachedMirror class; live sync via shared timer
+- [x] **Phase 5: Detachable Widgets** - Detach button on every widget; DetachedMirror class; live sync via shared timer (completed 2026-04-02)
 - [ ] **Phase 6: Serialization & Persistence** - Verify and harden round-trip correctness for all new structures across JSON and .m formats
 
 ## Phase Details
@@ -93,7 +93,7 @@ Plans:
 Plans:
 - [x] 05-01-PLAN.md — DetachedMirror class + TestDashboardDetach test scaffold (DETACH-01..07)
 - [x] 05-02-PLAN.md — DashboardLayout: DetachCallback property + addDetachButton() injection (DETACH-01)
-- [ ] 05-03-PLAN.md — DashboardEngine: DetachedMirrors registry, detachWidget(), removeDetached(), onLiveTick() mirror tail (DETACH-02..07)
+- [x] 05-03-PLAN.md — DashboardEngine: DetachedMirrors registry, detachWidget(), removeDetached(), onLiveTick() mirror tail (DETACH-02..07)
 
 ### Phase 6: Serialization & Persistence
 **Goal**: All new structures (multi-page layouts, collapsed state) survive both JSON and .m save/load round-trips, and detached widget state is correctly excluded from persistence
@@ -118,5 +118,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Collapsible Sections | 0/2 | Not started | - |
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
-| 5. Detachable Widgets | 2/3 | In Progress|  |
+| 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
 | 6. Serialization & Persistence | 0/? | Not started | - |

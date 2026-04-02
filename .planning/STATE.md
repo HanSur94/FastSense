@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-02-PLAN.md (DetachCallback + addDetachButton injection)
-last_updated: "2026-04-02T06:05:45.663Z"
+status: verifying
+stopped_at: Completed 05-03-PLAN.md (DashboardEngine DetachedMirrors + onLiveTick mirror loop)
+last_updated: "2026-04-02T06:15:41.674Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 Phase: 05 (detachable-widgets) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-02
 
 Progress: [░░░░░░░░░░] 0%
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-multi-page-navigation P04-04 | 2 | 1 tasks | 1 files |
 | Phase 05-detachable-widgets P05-01 | 8min | 2 tasks | 2 files |
 | Phase 05-detachable-widgets P05-02 | 2min | 2 tasks | 2 files |
+| Phase 05-detachable-widgets P05-03 | 25min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Recent decisions affecting current work:
 - [Phase 05-detachable-widgets]: cloneWidget() uses explicit 15-type dispatch switch in DetachedMirror for self-containment
 - [Phase 05-detachable-widgets]: DashboardEngine.render() sets Layout.DetachCallback = @(w) obj.detachWidget(w) as forward reference; plan 03 implements detachWidget() method
 - [Phase 05-detachable-widgets]: Detach button String='^' (ASCII caret) per RESEARCH.md open question 2 — safe cross-platform fallback
+- [Phase 05-detachable-widgets]: containers.Map used as handle-class indirect reference for removeCallback forward-reference pattern in detachWidget()
+- [Phase 05-detachable-widgets]: removeDetachedByRef() (private, identity-based) separates close-triggered removal from stale-scan cleanup in onLiveTick()
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T06:05:45.659Z
-Stopped at: Completed 05-02-PLAN.md (DetachCallback + addDetachButton injection)
+Last session: 2026-04-02T06:15:41.670Z
+Stopped at: Completed 05-03-PLAN.md (DashboardEngine DetachedMirrors + onLiveTick mirror loop)
 Resume file: None
