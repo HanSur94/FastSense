@@ -92,7 +92,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 05-01-PLAN.md — DetachedMirror class + TestDashboardDetach test scaffold (DETACH-01..07)
-- [ ] 05-02-PLAN.md — DashboardLayout: DetachCallback property + addDetachButton() injection (DETACH-01)
+- [x] 05-02-PLAN.md — DashboardLayout: DetachCallback property + addDetachButton() injection (DETACH-01)
 - [ ] 05-03-PLAN.md — DashboardEngine: DetachedMirrors registry, detachWidget(), removeDetached(), onLiveTick() mirror tail (DETACH-02..07)
 
 ### Phase 6: Serialization & Persistence
@@ -118,5 +118,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Collapsible Sections | 0/2 | Not started | - |
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
-| 5. Detachable Widgets | 1/3 | In Progress|  |
+| 5. Detachable Widgets | 2/3 | In Progress|  |
 | 6. Serialization & Persistence | 0/? | Not started | - |

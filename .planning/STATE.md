@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md (DetachedMirror + TestDashboardDetach scaffold)
-last_updated: "2026-04-02T06:00:35.987Z"
+stopped_at: Completed 05-02-PLAN.md (DetachCallback + addDetachButton injection)
+last_updated: "2026-04-02T06:05:45.663Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 05 (detachable-widgets) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-02
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-multi-page-navigation P04-03 | 6min | 2 tasks | 2 files |
 | Phase 04-multi-page-navigation P04-04 | 2 | 1 tasks | 1 files |
 | Phase 05-detachable-widgets P05-01 | 8min | 2 tasks | 2 files |
+| Phase 05-detachable-widgets P05-02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,8 @@ Recent decisions affecting current work:
 - [Phase 04-multi-page-navigation]: Added switchPage(2) before save() in testSaveLoadRoundTrip to establish non-default active page before asserting loaded.ActivePage == 2
 - [Phase 05-detachable-widgets]: DetachedMirror is NOT a DashboardWidget subclass - wraps one to avoid grid layout entanglement
 - [Phase 05-detachable-widgets]: cloneWidget() uses explicit 15-type dispatch switch in DetachedMirror for self-containment
+- [Phase 05-detachable-widgets]: DashboardEngine.render() sets Layout.DetachCallback = @(w) obj.detachWidget(w) as forward reference; plan 03 implements detachWidget() method
+- [Phase 05-detachable-widgets]: Detach button String='^' (ASCII caret) per RESEARCH.md open question 2 — safe cross-platform fallback
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T06:00:35.980Z
-Stopped at: Completed 05-01-PLAN.md (DetachedMirror + TestDashboardDetach scaffold)
+Last session: 2026-04-02T06:05:45.659Z
+Stopped at: Completed 05-02-PLAN.md (DetachCallback + addDetachButton injection)
 Resume file: None
