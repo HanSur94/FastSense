@@ -242,6 +242,7 @@ classdef DashboardEngine < handle
             % Content area between toolbar and time panel
             obj.Layout.ContentArea = [0, obj.TimePanelHeight, ...
                 1, 1 - toolbarH - pageBarH - obj.TimePanelHeight];
+            obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             obj.Layout.allocatePanels(obj.hFigure, obj.activePageWidgets(), themeStruct);
             obj.Layout.OnScrollCallback = @(r1, r2) obj.onScrollRealize(r1, r2);
             obj.realizeBatch(5);

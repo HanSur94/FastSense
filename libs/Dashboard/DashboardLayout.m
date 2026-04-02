@@ -21,6 +21,7 @@ classdef DashboardLayout < handle
         RowHeight       = 0.22
         ScrollbarWidth  = 0.015
         OnScrollCallback = []       % function handle: @(topRow, bottomRow)
+        DetachCallback   = []       % function handle: @(widget) — set by DashboardEngine
         VisibleRows      = [1 Inf]  % [topRow bottomRow] currently visible
     end
 
@@ -307,6 +308,10 @@ classdef DashboardLayout < handle
             if ~isempty(widget.Description)
                 obj.addInfoIcon(widget);
             end
+            % Inject detach button when DetachCallback is wired
+            if ~isempty(obj.DetachCallback)
+                obj.addDetachButton(widget);
+            end
         end
 
         function createPanels(obj, hFigure, widgets, theme)
@@ -519,6 +524,26 @@ classdef DashboardLayout < handle
                 'Tag', 'InfoIconButton', ...
                 'TooltipString', 'Widget info', ...
                 'Callback', @(~,~) obj.openInfoPopup(widget, theme));
+        end
+
+        function addDetachButton(obj, widget)
+        %ADDDETACHBUTTON Add a detach button to widget.hPanel for popping out the widget.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            uicontrol('Parent', widget.hPanel, ...
+                'Style', 'pushbutton', ...
+                'String', '^', ...
+                'Units', 'normalized', ...
+                'Position', [0.82 0.90 0.08 0.08], ...
+                'FontSize', 9, ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'Tag', 'DetachButton', ...
+                'TooltipString', 'Detach widget', ...
+                'Callback', @(~,~) obj.DetachCallback(widget));
         end
     end
 
