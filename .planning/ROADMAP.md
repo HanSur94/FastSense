@@ -40,4 +40,4 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 7. Tech Debt Cleanup | v1.0 | 1/1 | Complete | 2026-04-03 |
 | 8. Widget Improvements | v1.0 | 3/3 | Complete | 2026-04-03 |
 | 9. Threshold Mini-Labels | v1.0 | 2/2 | Complete | 2026-04-03 |
-| 01. Dashboard Engine Code Review Fixes | v2.0 | 3/4 | In Progress|  |
+| 01. Dashboard Engine Code Review Fixes | v2.0 | 4/4 | Complete   | 2026-04-03 |
