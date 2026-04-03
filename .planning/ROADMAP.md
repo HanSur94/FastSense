@@ -144,11 +144,19 @@ Plans:
 ### Phase 9: Threshold Mini-Labels in FastSense Plots
 **Goal:** Add optional small inline labels within FastSense plot axes that display the name of each threshold line, so users can identify thresholds at a glance without relying on legends or tooltips
 **Depends on:** Phase 8
-**Requirements:** TBD
-**Plans:** 0 plans
+**Requirements:** LABEL-01, LABEL-02, LABEL-03, LABEL-04, LABEL-05, LABEL-06
+**Success Criteria** (what must be TRUE):
+  1. FastSense with ShowThresholdLabels=false (default) creates no text labels on threshold lines
+  2. FastSense with ShowThresholdLabels=true creates 8pt right-aligned labels on each threshold line
+  3. Labels reposition to the current right edge of visible axes on zoom, pan, and live data update
+  4. FastSenseWidget.ShowThresholdLabels propagates to the underlying FastSense instance
+  5. ShowThresholdLabels survives toStruct/fromStruct JSON round-trip (omitted when false)
+  6. All existing tests continue to pass
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 9 to break down)
+- [ ] 09-01-PLAN.md — ShowThresholdLabels property + hText struct field + label creation in render() + updateThresholdLabels() method + call sites (LABEL-01, LABEL-02, LABEL-03)
+- [ ] 09-02-PLAN.md — FastSenseWidget ShowThresholdLabels wiring + toStruct/fromStruct + TestThresholdLabels test suite (LABEL-04, LABEL-05, LABEL-06)
 
 ## Progress
 
@@ -165,4 +173,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |
 | 7. Tech Debt Cleanup | 1/1 | Complete   | 2026-04-03 |
 | 8. Widget Improvements | 3/3 | Complete   | 2026-04-03 |
-| 9. Threshold Mini-Labels | 0/0 | Not started | - |
+| 9. Threshold Mini-Labels | 0/2 | Not started | - |
