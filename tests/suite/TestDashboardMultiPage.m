@@ -69,7 +69,7 @@ classdef TestDashboardMultiPage < matlab.unittest.TestCase
 
         function testSwitchPage(testCase)
         %TESTSWITCHPAGE switchPage(2) sets ActivePage to 2.
-        %   Verifies LAYOUT-05: page switching updates ActivePage index.
+        %   Verifies LAYOUT-06: page switching updates ActivePage index.
         %   STUB: fails until plan 04-02 adds switchPage() and ActivePage.
             d = DashboardEngine('Test');
             d.addPage('A');
