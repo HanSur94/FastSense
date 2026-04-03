@@ -181,6 +181,7 @@ classdef DashboardEngine < handle
                         'Pages is non-empty but ActivePage is 0. Call addPage() first.');
                 end
                 obj.Pages{obj.ActivePage}.addWidget(w);
+                obj.wireListeners(w);
                 return;
             end
 
@@ -191,19 +192,7 @@ classdef DashboardEngine < handle
             w.Position = obj.Layout.resolveOverlap(w.Position, existingPositions);
 
             obj.Widgets{end+1} = w;
-
-            % Wire sensor data-change listener to mark widget dirty
-            if ~isempty(w.Sensor) && isprop(w.Sensor, 'X')
-                try
-                    addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
-                catch
-                    % Octave may not support addlistener on all properties
-                end
-                try
-                    addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
-                catch
-                end
-            end
+            obj.wireListeners(w);
         end
 
         function w = addCollapsible(obj, label, children, varargin)
@@ -536,12 +525,24 @@ classdef DashboardEngine < handle
 
         function removeWidget(obj, idx)
         %REMOVEWIDGET Remove widget at given index and re-layout.
-            if idx >= 1 && idx <= numel(obj.Widgets)
-                w = obj.Widgets{idx};
-                obj.Widgets(idx) = [];
-                delete(w);
-                if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
-                    obj.rerenderWidgets();
+            if ~isempty(obj.Pages)
+                widgets = obj.Pages{obj.ActivePage}.Widgets;
+                if idx >= 1 && idx <= numel(widgets)
+                    w = widgets{idx};
+                    obj.Pages{obj.ActivePage}.Widgets(idx) = [];
+                    delete(w);
+                    if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                        obj.rerenderWidgets();
+                    end
+                end
+            else
+                if idx >= 1 && idx <= numel(obj.Widgets)
+                    w = obj.Widgets{idx};
+                    obj.Widgets(idx) = [];
+                    delete(w);
+                    if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                        obj.rerenderWidgets();
+                    end
                 end
             end
         end
@@ -608,20 +609,17 @@ classdef DashboardEngine < handle
             obj.DetachedMirrors{end+1} = mirror;
         end
 
-        function removeDetached(obj, widget)
-        %REMOVEDETACHED Remove mirrors by original widget handle or stale state.
+        function removeDetached(obj)
+        %REMOVEDETACHED Remove stale mirrors from the registry.
         %
-        %   Called during tick cleanup. Filters DetachedMirrors to remove entries
-        %   where the mirror is stale. The widget argument is accepted for API
-        %   compatibility but mirror identity is the primary removal criterion.
-        %   Guards with isvalid() before comparing handle to avoid deleted-handle errors.
+        %   Scans DetachedMirrors and removes any entries where isStale() is
+        %   true (figure closed or handle deleted). Called from test code to
+        %   explicitly prune stale mirrors. onLiveTick() performs the same
+        %   scan inline each tick.
 
             keep = true(1, numel(obj.DetachedMirrors));
             for i = 1:numel(obj.DetachedMirrors)
-                m = obj.DetachedMirrors{i};
-                if m.isStale()
-                    keep(i) = false;
-                elseif ~isvalid(widget)
+                if obj.DetachedMirrors{i}.isStale()
                     keep(i) = false;
                 end
             end
@@ -826,10 +824,9 @@ classdef DashboardEngine < handle
         end
 
         function onResize(obj)
-        %ONRESIZE Handle figure resize: mark all dirty and re-realize visible.
-            obj.markAllDirty();
-            if ~isempty(obj.Layout)
-                obj.realizeBatch(5);
+        %ONRESIZE Handle figure resize: reposition all widget panels.
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.rerenderWidgets();
             end
         end
 
@@ -840,6 +837,23 @@ classdef DashboardEngine < handle
     end
 
     methods (Access = private)
+
+        function wireListeners(obj, w)
+        %WIRELISTENERS Wire sensor data-change listeners to mark widget dirty.
+        %   Called for both single-page and multi-page addWidget paths so
+        %   sensor PostSet events mark widgets dirty regardless of page routing.
+            if ~isempty(w.Sensor) && isprop(w.Sensor, 'X')
+                try
+                    addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
+                catch
+                    % Octave may not support addlistener on all property types
+                end
+                try
+                    addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
+                catch
+                end
+            end
+        end
 
         function removeDetachedByRef(obj, mirrorHolder)
         %REMOVEDETACHEDBYREF Remove a specific mirror from the registry by indirect reference.
