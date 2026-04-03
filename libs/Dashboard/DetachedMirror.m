@@ -138,6 +138,11 @@ classdef DetachedMirror < handle
 
             s = original.toStruct();
 
+            % Remove sensor source references so fromStruct doesn't call
+            % SensorRegistry.get() (which throws when sensors aren't registered).
+            % restoreLiveRefs copies live Sensor references directly afterward.
+            s = DetachedMirror.stripSensorRefs(s);
+
             switch s.type
                 case 'fastsense'
                     w = FastSenseWidget.fromStruct(s);
@@ -247,6 +252,53 @@ classdef DetachedMirror < handle
             % Histogram sensor
             if isprop(cloned, 'EventStoreObj') && ~isempty(original.EventStoreObj)
                 cloned.EventStoreObj = original.EventStoreObj;
+            end
+        end
+
+        function s = stripSensorRefs(s)
+        %STRIPSENSORREFS Remove sensor source fields from a widget struct.
+        %   Prevents fromStruct from calling SensorRegistry.get() which may throw.
+            sensorFields = {'source', 'sourceX', 'sourceY', 'sourceColor', 'sources'};
+            for k = 1:numel(sensorFields)
+                if isfield(s, sensorFields{k})
+                    s = rmfield(s, sensorFields{k});
+                end
+            end
+            % Recurse into GroupWidget children
+            if isfield(s, 'children') && ~isempty(s.children)
+                if iscell(s.children)
+                    for i = 1:numel(s.children)
+                        s.children{i} = DetachedMirror.stripSensorRefs(s.children{i});
+                    end
+                elseif isstruct(s.children)
+                    for i = 1:numel(s.children)
+                        s.children(i) = DetachedMirror.stripSensorRefs(s.children(i));
+                    end
+                end
+            end
+            % Recurse into GroupWidget tabs
+            if isfield(s, 'tabs') && ~isempty(s.tabs)
+                tabs = s.tabs;
+                if iscell(tabs)
+                    for ti = 1:numel(tabs)
+                        t = tabs{ti};
+                        if isfield(t, 'widgets')
+                            ws = t.widgets;
+                            if iscell(ws)
+                                for j = 1:numel(ws)
+                                    ws{j} = DetachedMirror.stripSensorRefs(ws{j});
+                                end
+                            elseif isstruct(ws)
+                                for j = 1:numel(ws)
+                                    ws(j) = DetachedMirror.stripSensorRefs(ws(j));
+                                end
+                            end
+                            t.widgets = ws;
+                        end
+                        tabs{ti} = t;
+                    end
+                end
+                s.tabs = tabs;
             end
         end
     end
