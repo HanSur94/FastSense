@@ -37,6 +37,7 @@ function run_all_examples(mode)
         'example_dock',             'Tabbed dock: 5 dashboards, undockTab'
         'example_dashboard_engine', 'DashboardEngine: widgets, save/load, removeWidget, setWidgetPosition'
         'example_mixed_tiles',      'Mixed tile types: FastSense + bar/scatter/histogram'
+        'example_dashboard_advanced', 'Advanced dashboard: multi-page, tooltips, detach, dividers, collapsible, YLimits, save/load'
     };
 
     fprintf('\n');
