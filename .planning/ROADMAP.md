@@ -135,8 +135,8 @@ Plans:
   4. All existing tests continue to pass
 **Plans**: 3 plans
 Plans:
-- [ ] 08-01-PLAN.md — DividerWidget class + all 6 type-dispatch switch integrations (DIVIDER-01, DIVIDER-02, DIVIDER-03)
-- [ ] 08-02-PLAN.md — addCollapsible convenience method on DashboardEngine (COLLAPSIBLE-01)
+- [x] 08-01-PLAN.md — DividerWidget class + all 6 type-dispatch switch integrations (DIVIDER-01, DIVIDER-02, DIVIDER-03)
+- [x] 08-02-PLAN.md — addCollapsible convenience method on DashboardEngine (COLLAPSIBLE-01)
 - [x] 08-03-PLAN.md — YLimits property on FastSenseWidget with render/refresh/serialization (YLIMITS-01, YLIMITS-02, YLIMITS-03)
 
 ## Progress
@@ -153,4 +153,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
 | 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |
 | 7. Tech Debt Cleanup | 1/1 | Complete   | 2026-04-03 |
-| 8. Widget Improvements | 1/3 | In Progress|  |
+| 8. Widget Improvements | 3/3 | Complete   | 2026-04-03 |
