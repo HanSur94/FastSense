@@ -154,3 +154,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |
 | 7. Tech Debt Cleanup | 1/1 | Complete   | 2026-04-03 |
 | 8. Widget Improvements | 3/3 | Complete   | 2026-04-03 |
+
+## Backlog
+
+### Phase 999.1: Threshold Mini-Labels in FastSense Plots (BACKLOG)
+
+**Goal:** Add optional small inline labels within FastSense plot axes that display the name of each threshold line, so users can identify thresholds at a glance without relying on legends or tooltips
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
