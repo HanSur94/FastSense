@@ -124,10 +124,25 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md — Fix 4 time panel methods + correct test comment labels
 
+### Phase 8: Widget improvements: DividerWidget, CollapsibleWidget, Y-axis limits
+**Goal**: Add DividerWidget for visual section separation, addCollapsible convenience API on DashboardEngine, and configurable Y-axis limits on FastSenseWidget
+**Depends on:** Phase 7
+**Requirements**: DIVIDER-01, DIVIDER-02, DIVIDER-03, COLLAPSIBLE-01, YLIMITS-01, YLIMITS-02, YLIMITS-03
+**Success Criteria** (what must be TRUE):
+  1. DividerWidget renders a horizontal line with theme-colored appearance and is fully integrated into all type-dispatch switches
+  2. d.addCollapsible('label', {children}) creates a collapsible GroupWidget with children attached
+  3. FastSenseWidget with YLimits=[min max] clamps Y-axis range that persists across refresh cycles and save/load round-trips
+  4. All existing tests continue to pass
+**Plans**: 3 plans
+Plans:
+- [ ] 08-01-PLAN.md — DividerWidget class + all 6 type-dispatch switch integrations (DIVIDER-01, DIVIDER-02, DIVIDER-03)
+- [ ] 08-02-PLAN.md — addCollapsible convenience method on DashboardEngine (COLLAPSIBLE-01)
+- [ ] 08-03-PLAN.md — YLimits property on FastSenseWidget with render/refresh/serialization (YLIMITS-01, YLIMITS-02, YLIMITS-03)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -138,3 +153,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
 | 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |
 | 7. Tech Debt Cleanup | 1/1 | Complete   | 2026-04-03 |
+| 8. Widget Improvements | 0/3 | Not started | - |
