@@ -120,7 +120,9 @@ Plans:
   1. updateGlobalTimeRange(), updateLiveTimeRange(), broadcastTimeRange(), resetGlobalTime() iterate activePageWidgets() instead of obj.Widgets
   2. Time panel functions correctly in multi-page dashboards
   3. testSwitchPage comment references LAYOUT-06, testSaveLoadRoundTrip references LAYOUT-05
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 07-01-PLAN.md — Fix 4 time panel methods + correct test comment labels
 
 ## Progress
 
@@ -135,4 +137,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
 | 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
 | 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |
-| 7. Tech Debt Cleanup | 0/? | Not started | - |
+| 7. Tech Debt Cleanup | 0/1 | Not started | - |
