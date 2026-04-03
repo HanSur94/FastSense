@@ -200,6 +200,10 @@ classdef DashboardSerializer
         function config = loadJSON(filepath)
             %LOADJSON Legacy: read dashboard config from JSON file.
             fid = fopen(filepath, 'r');
+            if fid == -1
+                error('DashboardSerializer:fileNotFound', ...
+                    'Cannot open JSON file: %s', filepath);
+            end
             jsonStr = fread(fid, '*char')';
             fclose(fid);
             config = jsondecode(jsonStr);
@@ -358,116 +362,8 @@ classdef DashboardSerializer
                 ws = config.widgets{i};
                 pos = sprintf('[%d %d %d %d]', ws.position.col, ws.position.row, ...
                     ws.position.width, ws.position.height);
-
-                switch ws.type
-                    case 'fastsense'
-                        if isfield(ws, 'source')
-                            switch ws.source.type
-                                case 'sensor'
-                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('    ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('    ''Sensor'', SensorRegistry.get(''%s''));', ws.source.name);
-                                case 'file'
-                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('    ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('    ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
-                                        ws.source.path, ws.source.xVar, ws.source.yVar);
-                                case 'data'
-                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('    ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('    ''XData'', %s, ''YData'', %s);', ...
-                                        mat2str(ws.source.x), mat2str(ws.source.y));
-                                otherwise
-                                    lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                            end
-                        else
-                            lines{end+1} = sprintf('d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                        end
-                    case 'number'
-                        line = sprintf('d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n    ''Units'', ''%s''', ws.units)];
-                        end
-                        if isfield(ws, 'source') && isfield(ws.source, 'type')
-                            if strcmp(ws.source.type, 'callback')
-                                line = [line, sprintf(', ...\n    ''ValueFcn'', @%s', ws.source.function)];
-                            elseif strcmp(ws.source.type, 'static')
-                                line = [line, sprintf(', ...\n    ''StaticValue'', %g', ws.source.value)];
-                            end
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'kpi'
-                        line = sprintf('d.addWidget(''kpi'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n    ''Units'', ''%s''', ws.units)];
-                        end
-                        if isfield(ws, 'source') && isfield(ws.source, 'type')
-                            if strcmp(ws.source.type, 'callback')
-                                line = [line, sprintf(', ...\n    ''ValueFcn'', @%s', ws.source.function)];
-                            elseif strcmp(ws.source.type, 'static')
-                                line = [line, sprintf(', ...\n    ''StaticValue'', %g', ws.source.value)];
-                            end
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'status'
-                        line = sprintf('d.addWidget(''status'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'source') && isfield(ws.source, 'type')
-                            if strcmp(ws.source.type, 'callback')
-                                line = [line, sprintf(', ...\n    ''StatusFcn'', @%s', ws.source.function)];
-                            elseif strcmp(ws.source.type, 'static')
-                                line = [line, sprintf(', ...\n    ''StaticStatus'', ''%s''', ws.source.value)];
-                            end
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'text'
-                        line = sprintf('d.addWidget(''text'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'content') && ~isempty(ws.content)
-                            line = [line, sprintf(', ...\n    ''Content'', ''%s''', ws.content)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'gauge'
-                        line = sprintf('d.addWidget(''gauge'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'range')
-                            line = [line, sprintf(', ...\n    ''Range'', [%g %g]', ws.range(1), ws.range(2))];
-                        end
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n    ''Units'', ''%s''', ws.units)];
-                        end
-                        if isfield(ws, 'source') && isfield(ws.source, 'type')
-                            if strcmp(ws.source.type, 'callback')
-                                line = [line, sprintf(', ...\n    ''ValueFcn'', @%s', ws.source.function)];
-                            elseif strcmp(ws.source.type, 'static')
-                                line = [line, sprintf(', ...\n    ''StaticValue'', %g', ws.source.value)];
-                            end
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'group'
-                        line = sprintf('d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ws.label, pos);
-                        if isfield(ws, 'mode') && ~isempty(ws.mode)
-                            line = [line, sprintf(', ...\n    ''Mode'', ''%s''', ws.mode)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'heatmap'
-                        lines{end+1} = sprintf('d.addWidget(''heatmap'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                    case 'barchart'
-                        lines{end+1} = sprintf('d.addWidget(''barchart'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                    case 'histogram'
-                        lines{end+1} = sprintf('d.addWidget(''histogram'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                    case 'scatter'
-                        lines{end+1} = sprintf('d.addWidget(''scatter'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                    case 'image'
-                        line = sprintf('d.addWidget(''image'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'file') && ~isempty(ws.file)
-                            line = [line, sprintf(', ...\n    ''File'', ''%s''', ws.file)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'multistatus'
-                        lines{end+1} = sprintf('d.addWidget(''multistatus'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                    case 'divider'
-                        lines{end+1} = sprintf('d.addWidget(''divider'', ''Position'', %s);', pos);
-                    otherwise
-                        lines{end+1} = sprintf('d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
-                end
+                wLines = DashboardSerializer.linesForWidget(ws, pos, '');
+                lines = [lines, wLines];
                 lines{end+1} = '';
             end
 
@@ -526,22 +422,8 @@ classdef DashboardSerializer
                     ws = pgWidgets{i};
                     pos = sprintf('[%d %d %d %d]', ws.position.col, ws.position.row, ...
                         ws.position.width, ws.position.height);
-                    switch ws.type
-                        case 'fastsense'
-                            lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                        case {'number', 'kpi'}
-                            lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
-                        case 'status'
-                            lines{end+1} = sprintf('    d.addWidget(''status'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                        case 'text'
-                            lines{end+1} = sprintf('    d.addWidget(''text'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                        case 'divider'
-                            lines{end+1} = sprintf('    d.addWidget(''divider'', ''Position'', %s);', pos);
-                        otherwise
-                            if isfield(ws, 'title')
-                                lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
-                            end
-                    end
+                    wLines = DashboardSerializer.linesForWidget(ws, pos, '    ');
+                    lines = [lines, wLines];
                 end
                 lines{end+1} = '';
             end
@@ -668,6 +550,128 @@ classdef DashboardSerializer
                     end
                     childLines{end+1} = sprintf('    %s = %s(''Title'', ''%s'', ''Position'', %s);', ...
                         varName, typeName, ctitle, cpos);
+            end
+        end
+    end
+
+    methods (Static, Access = private)
+        function wLines = linesForWidget(ws, pos, indent)
+        %LINESFORWIDGET Generate addWidget code lines for a single widget struct.
+        %   ws     - widget config struct
+        %   pos    - position string, e.g. '[1 1 6 2]'
+        %   indent - indentation prefix string, e.g. '' or '    '
+        %   Returns wLines, a cell array of code lines (no trailing blank line).
+            wLines = {};
+            switch ws.type
+                case 'fastsense'
+                    if isfield(ws, 'source')
+                        switch ws.source.type
+                            case 'sensor'
+                                wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
+                                wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
+                                wLines{end+1} = sprintf('%s    ''Sensor'', SensorRegistry.get(''%s''));', indent, ws.source.name);
+                            case 'file'
+                                wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
+                                wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
+                                wLines{end+1} = sprintf('%s    ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
+                                    indent, ws.source.path, ws.source.xVar, ws.source.yVar);
+                            case 'data'
+                                wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
+                                wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
+                                wLines{end+1} = sprintf('%s    ''XData'', %s, ''YData'', %s);', ...
+                                    indent, mat2str(ws.source.x), mat2str(ws.source.y));
+                            otherwise
+                                wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                        end
+                    else
+                        wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                    end
+                case 'number'
+                    line = sprintf('%sd.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'units') && ~isempty(ws.units)
+                        line = [line, sprintf(', ...\n%s    ''Units'', ''%s''', indent, ws.units)];
+                    end
+                    if isfield(ws, 'source') && isfield(ws.source, 'type')
+                        if strcmp(ws.source.type, 'callback')
+                            line = [line, sprintf(', ...\n%s    ''ValueFcn'', @%s', indent, ws.source.function)];
+                        elseif strcmp(ws.source.type, 'static')
+                            line = [line, sprintf(', ...\n%s    ''StaticValue'', %g', indent, ws.source.value)];
+                        end
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'kpi'
+                    line = sprintf('%sd.addWidget(''kpi'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'units') && ~isempty(ws.units)
+                        line = [line, sprintf(', ...\n%s    ''Units'', ''%s''', indent, ws.units)];
+                    end
+                    if isfield(ws, 'source') && isfield(ws.source, 'type')
+                        if strcmp(ws.source.type, 'callback')
+                            line = [line, sprintf(', ...\n%s    ''ValueFcn'', @%s', indent, ws.source.function)];
+                        elseif strcmp(ws.source.type, 'static')
+                            line = [line, sprintf(', ...\n%s    ''StaticValue'', %g', indent, ws.source.value)];
+                        end
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'status'
+                    line = sprintf('%sd.addWidget(''status'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'source') && isfield(ws.source, 'type')
+                        if strcmp(ws.source.type, 'callback')
+                            line = [line, sprintf(', ...\n%s    ''StatusFcn'', @%s', indent, ws.source.function)];
+                        elseif strcmp(ws.source.type, 'static')
+                            line = [line, sprintf(', ...\n%s    ''StaticStatus'', ''%s''', indent, ws.source.value)];
+                        end
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'text'
+                    line = sprintf('%sd.addWidget(''text'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'content') && ~isempty(ws.content)
+                        line = [line, sprintf(', ...\n%s    ''Content'', ''%s''', indent, ws.content)];
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'gauge'
+                    line = sprintf('%sd.addWidget(''gauge'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'range')
+                        line = [line, sprintf(', ...\n%s    ''Range'', [%g %g]', indent, ws.range(1), ws.range(2))];
+                    end
+                    if isfield(ws, 'units') && ~isempty(ws.units)
+                        line = [line, sprintf(', ...\n%s    ''Units'', ''%s''', indent, ws.units)];
+                    end
+                    if isfield(ws, 'source') && isfield(ws.source, 'type')
+                        if strcmp(ws.source.type, 'callback')
+                            line = [line, sprintf(', ...\n%s    ''ValueFcn'', @%s', indent, ws.source.function)];
+                        elseif strcmp(ws.source.type, 'static')
+                            line = [line, sprintf(', ...\n%s    ''StaticValue'', %g', indent, ws.source.value)];
+                        end
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'group'
+                    line = sprintf('%sd.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', indent, ws.label, pos);
+                    if isfield(ws, 'mode') && ~isempty(ws.mode)
+                        line = [line, sprintf(', ...\n%s    ''Mode'', ''%s''', indent, ws.mode)];
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'heatmap'
+                    wLines{end+1} = sprintf('%sd.addWidget(''heatmap'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                case 'barchart'
+                    wLines{end+1} = sprintf('%sd.addWidget(''barchart'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                case 'histogram'
+                    wLines{end+1} = sprintf('%sd.addWidget(''histogram'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                case 'scatter'
+                    wLines{end+1} = sprintf('%sd.addWidget(''scatter'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                case 'image'
+                    line = sprintf('%sd.addWidget(''image'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'file') && ~isempty(ws.file)
+                        line = [line, sprintf(', ...\n%s    ''File'', ''%s''', indent, ws.file)];
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'multistatus'
+                    wLines{end+1} = sprintf('%sd.addWidget(''multistatus'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                case 'divider'
+                    wLines{end+1} = sprintf('%sd.addWidget(''divider'', ''Position'', %s);', indent, pos);
+                otherwise
+                    if isfield(ws, 'title')
+                        wLines{end+1} = sprintf('%sd.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.type, ws.title, pos);
+                    end
             end
         end
     end
