@@ -799,7 +799,7 @@ ISWIDGETVISIBLE Check if widget rows overlap visible range + buffer.
 
 #### `openInfoPopup(obj, widget, theme)`
 
-OPENINFOPOPUP Open an info popup panel on widget.hPanel showing Description.
+OPENINFOPOPUP Open a modal figure window showing widget Description.
 
 #### `closeInfoPopup(obj)`
 
