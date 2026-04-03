@@ -152,10 +152,10 @@ Plans:
   4. FastSenseWidget.ShowThresholdLabels propagates to the underlying FastSense instance
   5. ShowThresholdLabels survives toStruct/fromStruct JSON round-trip (omitted when false)
   6. All existing tests continue to pass
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 09-01-PLAN.md — ShowThresholdLabels property + hText struct field + label creation in render() + updateThresholdLabels() method + call sites (LABEL-01, LABEL-02, LABEL-03)
+- [x] 09-01-PLAN.md — ShowThresholdLabels property + hText struct field + label creation in render() + updateThresholdLabels() method + call sites (LABEL-01, LABEL-02, LABEL-03)
 - [ ] 09-02-PLAN.md — FastSenseWidget ShowThresholdLabels wiring + toStruct/fromStruct + TestThresholdLabels test suite (LABEL-04, LABEL-05, LABEL-06)
 
 ## Progress
@@ -173,4 +173,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Serialization & Persistence | 2/2 | Complete   | 2026-04-02 |
 | 7. Tech Debt Cleanup | 1/1 | Complete   | 2026-04-03 |
 | 8. Widget Improvements | 3/3 | Complete   | 2026-04-03 |
-| 9. Threshold Mini-Labels | 0/2 | Not started | - |
+| 9. Threshold Mini-Labels | 1/2 | In Progress|  |
