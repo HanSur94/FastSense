@@ -43,9 +43,9 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 **Goal:** Make dashboard creation, instantiation, and interactivity significantly faster — target 2x improvement in creation+render time and <50ms per live tick refresh for a 20-widget mixed dashboard.
 **Requirements**: [PERF-BENCH, PERF-THEME, PERF-DISPATCH, PERF-RESIZE, PERF-LIVETICK, PERF-PAGESWITCH, PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06]
 **Depends on:** Phase 0
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 01-01-PLAN.md — Benchmark script and test scaffolding
+- [x] 01-01-PLAN.md — Benchmark script and test scaffolding
 - [ ] 01-02-PLAN.md — Theme caching and containers.Map widget dispatch
 - [ ] 01-03-PLAN.md — onLiveTick consolidation, panel repositioning, and page switch visibility toggle
