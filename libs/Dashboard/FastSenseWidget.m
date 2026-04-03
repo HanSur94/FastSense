@@ -19,7 +19,8 @@ classdef FastSenseWidget < DashboardWidget
         Thresholds   = 'auto'
         XLabel       = ''    % X-axis label (auto-set from Sensor if empty)
         YLabel       = ''    % Y-axis label (auto-set from Sensor if empty)
-        YLimits      = []    % Fixed Y-axis range [min max]; empty = auto-scale
+        YLimits             = []    % Fixed Y-axis range [min max]; empty = auto-scale
+        ShowThresholdLabels = false % show inline name labels on threshold lines
     end
 
     properties (SetAccess = private)
@@ -58,6 +59,7 @@ classdef FastSenseWidget < DashboardWidget
             % Create FastSense on this axes
             fp = FastSense('Parent', ax);
             obj.FastSenseObj = fp;
+            fp.ShowThresholdLabels = obj.ShowThresholdLabels;
 
             % Bind data
             if ~isempty(obj.Sensor)
@@ -126,6 +128,7 @@ classdef FastSenseWidget < DashboardWidget
 
             fp = FastSense('Parent', ax);
             obj.FastSenseObj = fp;
+            fp.ShowThresholdLabels = obj.ShowThresholdLabels;
             fp.addSensor(obj.Sensor);
 
             if ~isempty(obj.Title)
@@ -272,6 +275,7 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.XLabel), s.xLabel = obj.XLabel; end
             if ~isempty(obj.YLabel), s.yLabel = obj.YLabel; end
             if ~isempty(obj.YLimits), s.yLimits = obj.YLimits; end
+            if obj.ShowThresholdLabels, s.showThresholdLabels = true; end
 
             if ~isempty(obj.Sensor)
                 % base class handles sensor source
@@ -328,6 +332,9 @@ classdef FastSenseWidget < DashboardWidget
             end
             if isfield(s, 'yLimits')
                 obj.YLimits = s.yLimits;
+            end
+            if isfield(s, 'showThresholdLabels')
+                obj.ShowThresholdLabels = s.showThresholdLabels;
             end
         end
     end
