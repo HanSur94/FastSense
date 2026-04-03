@@ -302,5 +302,70 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
                 testCase.verifyFail(['removeDetached() errored unexpectedly: ' ME.message]);
             end
         end
+
+        %% Bug FIX-06: loadJSON crashes with unhelpful error on missing file
+        function testLoadJSONFileNotFound(testCase)
+            testCase.verifyError(@() DashboardSerializer.loadJSON( ...
+                '/tmp/nonexistent_dashboard_test_xyz.json'), ...
+                'DashboardSerializer:fileNotFound');
+        end
+
+        %% Bug FIX-07: exportScriptPages drops sensor bindings
+        function testExportScriptPagesPreservesSensorBinding(testCase)
+            config = struct();
+            config.name = 'TestDash';
+            config.theme = 'light';
+            config.liveInterval = 5;
+            config.infoFile = '';
+            pg = struct();
+            pg.name = 'Page1';
+            ws = struct();
+            ws.type = 'fastsense';
+            ws.title = 'Temperature';
+            ws.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 2);
+            ws.source = struct('type', 'sensor', 'name', 'temperature');
+            pg.widgets = {ws};
+            config.pages = {pg};
+
+            outFile = [tempname, '.m'];
+            testCase.addTeardown(@() delete(outFile));
+            DashboardSerializer.exportScriptPages(config, outFile);
+
+            fid = fopen(outFile, 'r');
+            content = fread(fid, '*char')';
+            fclose(fid);
+
+            testCase.verifySubstring(content, 'SensorRegistry.get');
+            testCase.verifySubstring(content, 'temperature');
+        end
+
+        %% Bug FIX-07: exportScriptPages drops number widget units
+        function testExportScriptPagesPreservesNumberUnits(testCase)
+            config = struct();
+            config.name = 'TestDash';
+            config.theme = 'light';
+            config.liveInterval = 5;
+            config.infoFile = '';
+            pg = struct();
+            pg.name = 'Page1';
+            ws = struct();
+            ws.type = 'number';
+            ws.title = 'RPM';
+            ws.units = 'rpm';
+            ws.position = struct('col', 1, 'row', 1, 'width', 3, 'height', 2);
+            pg.widgets = {ws};
+            config.pages = {pg};
+
+            outFile = [tempname, '.m'];
+            testCase.addTeardown(@() delete(outFile));
+            DashboardSerializer.exportScriptPages(config, outFile);
+
+            fid = fopen(outFile, 'r');
+            content = fread(fid, '*char')';
+            fclose(fid);
+
+            testCase.verifySubstring(content, '''Units''');
+            testCase.verifySubstring(content, 'rpm');
+        end
     end
 end
