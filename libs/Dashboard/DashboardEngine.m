@@ -643,8 +643,9 @@ classdef DashboardEngine < handle
         function updateGlobalTimeRange(obj)
         %UPDATEGLOBALTIMERANGE Scan all widgets for data time bounds.
             tMin = inf; tMax = -inf;
-            for i = 1:numel(obj.Widgets)
-                [wMin, wMax] = obj.Widgets{i}.getTimeRange();
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
+                [wMin, wMax] = ws{i}.getTimeRange();
                 if wMin < tMin, tMin = wMin; end
                 if wMax > tMax, tMax = wMax; end
             end
@@ -666,8 +667,9 @@ classdef DashboardEngine < handle
         %UPDATELIVETIMERANGE Update DataTimeRange without resetting sliders.
         %   Called during live mode to expand the time range as data grows.
             tMin = inf; tMax = -inf;
-            for i = 1:numel(obj.Widgets)
-                [wMin, wMax] = obj.Widgets{i}.getTimeRange();
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
+                [wMin, wMax] = ws{i}.getTimeRange();
                 if wMin < tMin, tMin = wMin; end
                 if wMax > tMax, tMax = wMax; end
             end
@@ -679,21 +681,23 @@ classdef DashboardEngine < handle
 
         function broadcastTimeRange(obj, tStart, tEnd)
         %BROADCASTTIMERANGE Push time range to widgets using global time.
-            for i = 1:numel(obj.Widgets)
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
                 try
-                    obj.Widgets{i}.setTimeRange(tStart, tEnd);
+                    ws{i}.setTimeRange(tStart, tEnd);
                 catch ME
                     warning('DashboardEngine:timeRangeError', ...
                         'Widget "%s" setTimeRange failed: %s', ...
-                        obj.Widgets{i}.Title, ME.message);
+                        ws{i}.Title, ME.message);
                 end
             end
         end
 
         function resetGlobalTime(obj)
         %RESETGLOBALTIME Re-attach all widgets to global time and apply.
-            for i = 1:numel(obj.Widgets)
-                obj.Widgets{i}.UseGlobalTime = true;
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
+                ws{i}.UseGlobalTime = true;
             end
             obj.onTimeSlidersChanged();
         end
