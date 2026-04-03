@@ -579,8 +579,8 @@ classdef DashboardLayout < handle
 
         function anchorTopRight(btn, offsetFromRight)
         %ANCHORTOPRIGHT Position a pixel-sized button at the top-right of its parent.
-        %   anchorTopRight(btn, offsetFromRight) places btn at the top-right corner
-        %   of its parent, inset by offsetFromRight pixels from the right edge.
+        %   anchorTopRight(btn, offsetFromRight) places btn so its right edge is
+        %   offsetFromRight pixels from the parent's right edge, top-aligned.
             parent = get(btn, 'Parent');
             oldUnits = get(parent, 'Units');
             set(parent, 'Units', 'pixels');
@@ -589,7 +589,7 @@ classdef DashboardLayout < handle
             btnPos = get(btn, 'Position');
             btnW = btnPos(3);
             btnH = btnPos(4);
-            x = pp(3) - offsetFromRight;
+            x = pp(3) - btnW - offsetFromRight;
             y = pp(4) - btnH - 4;
             set(btn, 'Position', [x y btnW btnH]);
         end
