@@ -13,7 +13,7 @@ This milestone extends the existing FastSense dashboard engine with three major 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure Hardening** - Fix timer safety, GroupWidget .m export bug, jsondecode normalization, and validate backward compatibility (completed 2026-04-01)
-- [ ] **Phase 2: Collapsible Sections** - Wire grid reflow into GroupWidget collapse/expand so collapsing reclaims screen space
+- [x] **Phase 2: Collapsible Sections** - Wire grid reflow into GroupWidget collapse/expand so collapsing reclaims screen space (completed 2026-04-01)
 - [x] **Phase 3: Widget Info Tooltips** - Add info icon and click-driven description popup to all widget header chrome (completed 2026-04-01)
 - [x] **Phase 4: Multi-Page Navigation** - Add DashboardPage container, PageBar UI, and page-switching with active-page persistence (completed 2026-04-01)
 - [x] **Phase 5: Detachable Widgets** - Detach button on every widget; DetachedMirror class; live sync via shared timer (completed 2026-04-02)
@@ -166,7 +166,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Hardening | 4/4 | Complete   | 2026-04-01 |
-| 2. Collapsible Sections | 0/2 | Not started | - |
+| 2. Collapsible Sections | 2/2 | Complete   | 2026-04-01 |
 | 3. Widget Info Tooltips | 3/3 | Complete   | 2026-04-01 |
 | 4. Multi-Page Navigation | 3/3 | Complete   | 2026-04-01 |
 | 5. Detachable Widgets | 3/3 | Complete   | 2026-04-02 |
