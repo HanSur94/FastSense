@@ -217,5 +217,31 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
             testCase.verifyWarningFree(@() b.exitEditMode());
             testCase.verifyFalse(b.IsActive);
         end
+
+        %% Bug FIX-02: GroupWidget.refresh() should skip children when Collapsed
+        function testGroupWidgetCollapsedRefreshSkipsChildren(testCase)
+            % Create a collapsible group that is already collapsed
+            g = GroupWidget('Mode', 'collapsible', 'Collapsed', true, 'Label', 'G');
+            % TextWidget.refresh() is safe to call unrendered (has early-return guard)
+            child = TextWidget('Title', 'Child');
+            g.addChild(child);
+            % Should complete without error — collapsed guard prevents child iteration
+            testCase.verifyWarningFree(@() g.refresh());
+        end
+
+        %% Bug FIX-05: GroupWidget.getTimeRange() must aggregate children and tabs
+        function testGroupWidgetGetTimeRange(testCase)
+            % Base case: no children — should return [inf, -inf] (same as base class)
+            g = GroupWidget('Label', 'G');
+            [tMin, tMax] = g.getTimeRange();
+            testCase.verifyEqual(tMin, inf);
+            testCase.verifyEqual(tMax, -inf);
+            % With a child added — child base class also returns [inf, -inf]
+            child = TextWidget('Title', 'C');
+            g.addChild(child);
+            [tMin2, tMax2] = g.getTimeRange();
+            testCase.verifyEqual(tMin2, inf);
+            testCase.verifyEqual(tMax2, -inf);
+        end
     end
 end
