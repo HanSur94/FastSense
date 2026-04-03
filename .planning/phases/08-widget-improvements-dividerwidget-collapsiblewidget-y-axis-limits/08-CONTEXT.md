@@ -25,7 +25,7 @@ Three widget improvements for the dashboard engine:
 
 ### CollapsibleWidget Behavior
 - Reuse existing GroupWidget with Mode='collapsible' — already built in Phase 2 with reflow, serialization, theming
-- Add DashboardBuilder convenience method: addCollapsible(label, children) that creates GroupWidget with Mode='collapsible'
+- Add DashboardEngine convenience method: addCollapsible(label, children) that creates GroupWidget with Mode='collapsible' (DashboardEngine owns the programmatic API; DashboardBuilder is the GUI overlay)
 - No new collapse features needed — existing collapse/expand + reflow + serialization is sufficient
 - Default collapsed state configurable via existing Collapsed property on GroupWidget
 
