@@ -640,7 +640,7 @@ classdef DashboardEngine < handle
             ws = obj.activePageWidgets();
             for i = 1:numel(ws)
                 w = ws{i};
-                w.Realized = false;
+                w.markUnrealized();
                 if ~isempty(w.hPanel) && ishandle(w.hPanel)
                     delete(w.hPanel);
                 end

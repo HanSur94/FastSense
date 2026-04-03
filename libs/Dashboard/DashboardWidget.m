@@ -17,7 +17,10 @@ classdef DashboardWidget < handle
         Sensor      = []           % Sensor object for data binding (primary source)
         ParentTheme = []           % Theme inherited from DashboardEngine
         Dirty       = true         % true when widget needs refresh (data changed)
-        Realized    = false        % true after render() has been called
+    end
+
+    properties (SetAccess = private)
+        Realized    = false        % true after render() has been called (use markRealized/markUnrealized)
     end
 
     properties (SetAccess = public)
@@ -72,6 +75,16 @@ classdef DashboardWidget < handle
         function markDirty(obj)
         %MARKDIRTY Flag this widget as needing a refresh.
             obj.Dirty = true;
+        end
+
+        function markRealized(obj)
+        %MARKREALIZED Mark this widget as having been rendered.
+            obj.Realized = true;
+        end
+
+        function markUnrealized(obj)
+        %MARKUNREALIZED Mark this widget as needing re-render.
+            obj.Realized = false;
         end
     end
 

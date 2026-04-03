@@ -311,7 +311,7 @@ classdef DashboardLayout < handle
             delete(ph);
             % Render actual content
             widget.render(widget.hPanel);
-            widget.Realized = true;
+            widget.markRealized();
             widget.Dirty = false;
             % Inject info icon when widget has a description
             if ~isempty(widget.Description)
@@ -411,6 +411,12 @@ classdef DashboardLayout < handle
                 titleText = 'Widget Info';
             end
 
+            % Save current figure callbacks before popup overwrites them
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.PrevButtonDownFcn = get(obj.hFigure, 'WindowButtonDownFcn');
+                obj.PrevKeyPressFcn   = get(obj.hFigure, 'KeyPressFcn');
+            end
+
             % Create a standalone modal figure
             fig = figure('Name', ['Info: ' titleText], ...
                 'NumberTitle', 'off', ...
@@ -424,11 +430,7 @@ classdef DashboardLayout < handle
             % Center on screen
             movegui(fig, 'center');
 
-            if isfield(theme, 'ForegroundColor')
-                fgColor = theme.ForegroundColor;
-            else
-                fgColor = theme.ToolbarFontColor;
-            end
+            fgColor = theme.ForegroundColor;
 
             % Title label
             uicontrol('Parent', fig, ...
@@ -594,19 +596,6 @@ classdef DashboardLayout < handle
             set(btn, 'Position', [x y btnW btnH]);
         end
 
-        function plain = stripHtmlTags(html)
-        %STRIPHTMLTAGS Remove HTML tags and decode basic HTML entities.
-        %   plain = DashboardLayout.stripHtmlTags(html) removes all <tag> and </tag>
-        %   sequences, decodes &amp; &lt; &gt; entities, and collapses excess whitespace.
-            plain = regexprep(html, '<[^>]*>', ' ');
-            plain = strrep(plain, '&amp;',  '&');
-            plain = strrep(plain, '&lt;',   '<');
-            plain = strrep(plain, '&gt;',   '>');
-            plain = strrep(plain, '&quot;', '"');
-            % Collapse multiple whitespace / newline sequences to single spaces
-            plain = regexprep(plain, '[\r\n\t ]+', ' ');
-            plain = strtrim(plain);
-        end
 
     end
 end

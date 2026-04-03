@@ -6,11 +6,18 @@ function theme = DashboardTheme(preset, varargin)
 %   theme = DashboardTheme('dark', 'DashboardBackground', [0.1 0.1 0.2])
 %
 %   Returns a struct containing all FastSenseTheme fields plus dashboard-specific
-%   fields: DashboardBackground, WidgetBackground, WidgetBorderColor,
-%   WidgetBorderWidth, DragHandleColor, DropZoneColor, GridLineColor,
-%   ToolbarBackground, ToolbarFontColor, HeaderFontSize,
-%   WidgetTitleFontSize, StatusOkColor, StatusWarnColor, StatusAlarmColor,
-%   GaugeArcWidth, KpiFontSize.
+%   fields.
+%
+%   Inherited from FastSenseTheme (guaranteed on all presets):
+%     ForegroundColor, AxesColor, AxisColor, FontName, Background,
+%     LineColors, GridColor, GridAlpha, MinorGridColor, MinorGridAlpha
+%
+%   Dashboard-specific fields:
+%     DashboardBackground, WidgetBackground, WidgetBorderColor,
+%     WidgetBorderWidth, DragHandleColor, DropZoneColor, GridLineColor,
+%     ToolbarBackground, ToolbarFontColor, HeaderFontSize,
+%     WidgetTitleFontSize, StatusOkColor, StatusWarnColor, StatusAlarmColor,
+%     GaugeArcWidth, KpiFontSize.
 
     if nargin == 0
         preset = 'default';
