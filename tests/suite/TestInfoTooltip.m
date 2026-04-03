@@ -61,17 +61,18 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
             testCase.verifyEmpty(btn, 'InfoIconButton should NOT appear when Description is empty');
         end
 
-        function testOpenInfoPopupCreatesPanel(testCase)
-        % INFO-03: openInfoPopup creates InfoPopupPanel on widget.hPanel.
+        function testOpenInfoPopupCreatesFigure(testCase)
+        % INFO-03: openInfoPopup creates a modal figure window.
             widget = testCase.makeWidget('Some description text');
             theme = DashboardTheme('light');
             testCase.Layout.openInfoPopup(widget, theme);
-            panel = findobj(widget.hPanel, 'Tag', 'InfoPopupPanel');
-            testCase.verifyNotEmpty(panel, 'InfoPopupPanel should be created by openInfoPopup');
             testCase.verifyNotEmpty(testCase.Layout.hInfoPopup, ...
                 'hInfoPopup should be set after openInfoPopup');
             testCase.verifyTrue(ishandle(testCase.Layout.hInfoPopup), ...
                 'hInfoPopup should be a valid handle');
+            testCase.verifyTrue(strcmp(get(testCase.Layout.hInfoPopup, 'Type'), 'figure'), ...
+                'hInfoPopup should be a figure');
+            testCase.addTeardown(@() testCase.Layout.closeInfoPopup());
         end
 
         function testPopupDisplaysDescriptionText(testCase)
@@ -80,6 +81,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
             widget = testCase.makeWidget(desc);
             theme = DashboardTheme('light');
             testCase.Layout.openInfoPopup(widget, theme);
+            testCase.addTeardown(@() testCase.Layout.closeInfoPopup());
             popup = testCase.Layout.hInfoPopup;
             editCtrl = findobj(popup, 'Style', 'edit');
             testCase.verifyNotEmpty(editCtrl, 'Edit control should exist inside popup');
@@ -92,8 +94,8 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
                 'Popup edit should contain the Description text');
         end
 
-        function testCloseInfoPopupDeletesPanel(testCase)
-        % INFO-05: closeInfoPopup removes the popup and clears hInfoPopup.
+        function testCloseInfoPopupDeletesFigure(testCase)
+        % INFO-05: closeInfoPopup removes the popup figure and clears hInfoPopup.
             widget = testCase.makeWidget('Close test');
             theme = DashboardTheme('light');
             testCase.Layout.openInfoPopup(widget, theme);
@@ -102,67 +104,22 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
             testCase.verifyEmpty(testCase.Layout.hInfoPopup, ...
                 'hInfoPopup should be empty after closeInfoPopup');
             testCase.verifyFalse(ishandle(popupHandle), ...
-                'InfoPopupPanel handle should be invalid after closeInfoPopup');
+                'Popup figure handle should be invalid after closeInfoPopup');
         end
 
-        function testEscapeKeyDismissesPopup(testCase)
-        % Pressing Escape while popup is open should close it.
-            widget = testCase.makeWidget('Escape test');
+        function testSecondOpenClosesFirst(testCase)
+        % Opening a second popup should close the first one.
+            widget = testCase.makeWidget('First popup');
             theme = DashboardTheme('light');
             testCase.Layout.openInfoPopup(widget, theme);
-            evt.Key = 'escape';
-            testCase.Layout.onKeyPressForDismiss(evt);
-            testCase.verifyEmpty(testCase.Layout.hInfoPopup, ...
-                'Popup should be gone after Escape key press');
-        end
-
-        function testNonEscapeKeyDoesNotDismiss(testCase)
-        % Pressing a non-Escape key should leave the popup open.
-            widget = testCase.makeWidget('Non-escape test');
-            theme = DashboardTheme('light');
-            testCase.Layout.openInfoPopup(widget, theme);
-            evt.Key = 'a';
-            testCase.Layout.onKeyPressForDismiss(evt);
-            testCase.verifyNotEmpty(testCase.Layout.hInfoPopup, ...
-                'Popup should still be open after non-Escape key press');
+            firstHandle = testCase.Layout.hInfoPopup;
+            widget2 = testCase.makeWidget('Second popup');
+            testCase.Layout.openInfoPopup(widget2, theme);
+            testCase.addTeardown(@() testCase.Layout.closeInfoPopup());
+            testCase.verifyFalse(ishandle(firstHandle), ...
+                'First popup figure should be deleted when second opens');
             testCase.verifyTrue(ishandle(testCase.Layout.hInfoPopup), ...
-                'hInfoPopup handle should still be valid after non-Escape key');
-        end
-
-        function testClickInsidePopupDoesNotDismiss(testCase)
-        % Click inside popup should not dismiss it (headless: gco cannot be set, skip gracefully).
-            widget = testCase.makeWidget('Click inside test');
-            theme = DashboardTheme('light');
-            testCase.Layout.openInfoPopup(widget, theme);
-            % In a headless test gco() returns [] (nothing clicked).
-            % onFigureClickForDismiss with gco=[] walks no ancestor chain
-            % and should NOT close the popup (empty gco is treated as outside).
-            % If it closes, that is also acceptable behaviour — test is advisory.
-            % We simply verify no error is thrown.
-            testCase.Layout.onFigureClickForDismiss();
-            % No assertion — just ensure no error is thrown headlessly.
-        end
-
-        function testPriorCallbacksRestoredAfterClose(testCase)
-        % After closeInfoPopup, figure callbacks should be restored to pre-open values.
-            widget = testCase.makeWidget('Callback restore test');
-            theme = DashboardTheme('light');
-            sentinelDown = @(~,~) disp('down');
-            sentinelKey  = @(~,~) disp('key');
-            set(testCase.hFig, 'WindowButtonDownFcn', sentinelDown);
-            set(testCase.hFig, 'KeyPressFcn', sentinelKey);
-
-            % Wire figure so layout can save/restore callbacks
-            testCase.Layout.hFigure = testCase.hFig;
-            testCase.Layout.openInfoPopup(widget, theme);
-            testCase.Layout.closeInfoPopup();
-
-            restoredDown = get(testCase.hFig, 'WindowButtonDownFcn');
-            restoredKey  = get(testCase.hFig, 'KeyPressFcn');
-            testCase.verifyEqual(restoredDown, sentinelDown, ...
-                'WindowButtonDownFcn should be restored after popup close');
-            testCase.verifyEqual(restoredKey, sentinelKey, ...
-                'KeyPressFcn should be restored after popup close');
+                'Second popup should be open');
         end
 
         function testAllWidgetTypesGetIconWhenDescriptionSet(testCase)
@@ -276,12 +233,13 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
                 'Layout.hFigure should equal DashboardEngine.hFigure after render()');
         end
 
-        function testPopupRendersMarkdown(testCase)
-        % INFO-03: popup edit control shows Markdown-rendered content, not raw Markdown syntax.
-            desc = sprintf('## Hello\n\nThis is **bold** text.');
+        function testPopupShowsPlainDescription(testCase)
+        % Popup shows the raw Description string (no HTML/CSS contamination).
+            desc = 'Temperature sensor T-401. Y-axis fixed to 55-100.';
             widget = testCase.makeWidget(desc);
             theme = DashboardTheme('light');
             testCase.Layout.openInfoPopup(widget, theme);
+            testCase.addTeardown(@() testCase.Layout.closeInfoPopup());
             popup = testCase.Layout.hInfoPopup;
             editCtrl = findobj(popup, 'Style', 'edit');
             testCase.verifyNotEmpty(editCtrl, 'Edit control should exist inside popup');
@@ -289,16 +247,10 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
             if iscell(str)
                 str = strjoin(str, ' ');
             end
-            % Raw Markdown delimiters must NOT appear — MarkdownRenderer must have been called
-            testCase.verifyEmpty(regexp(str, '##', 'once'), ...
-                'Popup should not contain raw ## heading syntax — MarkdownRenderer must be called');
-            testCase.verifyEmpty(regexp(str, '\*\*', 'once'), ...
-                'Popup should not contain raw ** bold syntax — MarkdownRenderer must be called');
-            % Rendered plain text content MUST be present
-            testCase.verifySubstring(str, 'Hello', ...
-                'Popup should contain rendered heading text "Hello"');
-            testCase.verifySubstring(str, 'bold', ...
-                'Popup should contain rendered inline text "bold"');
+            testCase.verifySubstring(str, 'Temperature sensor', ...
+                'Popup should contain the Description text verbatim');
+            testCase.verifyEmpty(regexp(str, '<style>', 'once'), ...
+                'Popup should NOT contain HTML style tags');
         end
 
     end
