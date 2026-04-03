@@ -145,8 +145,28 @@ classdef GroupWidget < DashboardWidget
                     end
                 end
             else
+                if obj.Collapsed
+                    return;
+                end
                 for i = 1:numel(obj.Children)
                     obj.Children{i}.refresh();
+                end
+            end
+        end
+
+        function [tMin, tMax] = getTimeRange(obj)
+        %GETTIMERANGE Aggregate time range from all children and tabs.
+            tMin = inf; tMax = -inf;
+            for i = 1:numel(obj.Children)
+                [cMin, cMax] = obj.Children{i}.getTimeRange();
+                tMin = min(tMin, cMin);
+                tMax = max(tMax, cMax);
+            end
+            for i = 1:numel(obj.Tabs)
+                for j = 1:numel(obj.Tabs{i}.widgets)
+                    [cMin, cMax] = obj.Tabs{i}.widgets{j}.getTimeRange();
+                    tMin = min(tMin, cMin);
+                    tMax = max(tMax, cMax);
                 end
             end
         end
