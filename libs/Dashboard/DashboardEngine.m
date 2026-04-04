@@ -101,8 +101,8 @@ classdef DashboardEngine < handle
         end
 
         function switchPage(obj, pageIdx)
-        %SWITCHPAGE Switch the active page and re-render its widgets.
-        %   d.switchPage(2) sets ActivePage = 2 and calls rerenderWidgets().
+        %SWITCHPAGE Switch the active page using panel visibility toggling.
+        %   d.switchPage(2) sets ActivePage = 2 and toggles panel visibility.
             if pageIdx < 1 || pageIdx > numel(obj.Pages)
                 return;
             end
@@ -124,9 +124,28 @@ classdef DashboardEngine < handle
                     end
                 end
             end
-            % Re-render widgets for the newly active page
+            % Toggle panel visibility instead of full rerender
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
-                obj.rerenderWidgets();
+                % Show active page panels, hide others
+                for pgIdx = 1:numel(obj.Pages)
+                    pgWidgets = obj.Pages{pgIdx}.Widgets;
+                    for wi = 1:numel(pgWidgets)
+                        if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
+                            if pgIdx == obj.ActivePage
+                                set(pgWidgets{wi}.hPanel, 'Visible', 'on');
+                            else
+                                set(pgWidgets{wi}.hPanel, 'Visible', 'off');
+                            end
+                        end
+                    end
+                end
+                % Realize any not-yet-realized widgets on the now-active page
+                activeWs = obj.Pages{obj.ActivePage}.Widgets;
+                for wi = 1:numel(activeWs)
+                    if ~activeWs{wi}.Realized
+                        obj.Layout.realizeWidget(activeWs{wi});
+                    end
+                end
             end
         end
 
@@ -246,6 +265,23 @@ classdef DashboardEngine < handle
             obj.Layout.allocatePanels(obj.hFigure, obj.activePageWidgets(), themeStruct);
             obj.Layout.OnScrollCallback = @(r1, r2) obj.onScrollRealize(r1, r2);
             obj.realizeBatch(5);
+
+            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle
+            if numel(obj.Pages) > 1
+                for pgIdx = 1:numel(obj.Pages)
+                    if pgIdx == obj.ActivePage
+                        continue;
+                    end
+                    pgWidgets = obj.Pages{pgIdx}.Widgets;
+                    obj.Layout.createPanels(obj.hFigure, pgWidgets, themeStruct);
+                    % Hide panels for non-active pages
+                    for wi = 1:numel(pgWidgets)
+                        if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
+                            set(pgWidgets{wi}.hPanel, 'Visible', 'off');
+                        end
+                    end
+                end
+            end
 
             % Auto-detect time range from data
             obj.updateGlobalTimeRange();
@@ -835,7 +871,7 @@ classdef DashboardEngine < handle
         function onResize(obj)
         %ONRESIZE Handle figure resize: reposition all widget panels.
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
-                obj.rerenderWidgets();
+                obj.repositionPanels();
             end
         end
 
@@ -846,6 +882,31 @@ classdef DashboardEngine < handle
     end
 
     methods (Access = private)
+
+        function repositionPanels(obj)
+        %REPOSITIONPANELS Reposition existing widget panels in-place after resize.
+        %   Updates panel positions based on current figure size without destroying
+        %   or recreating panels. Falls back to rerenderWidgets if any panel is missing.
+            ws = obj.activePageWidgets();
+            % Check all panels exist; if any is missing, fall back to full rebuild
+            for i = 1:numel(ws)
+                if isempty(ws{i}.hPanel) || ~ishandle(ws{i}.hPanel)
+                    obj.rerenderWidgets();
+                    return;
+                end
+            end
+            % Update viewport position from current ContentArea
+            if ~isempty(obj.Layout.hViewport) && ishandle(obj.Layout.hViewport)
+                set(obj.Layout.hViewport, 'Position', obj.Layout.ContentArea);
+            end
+            % Reposition each panel and mark dirty so widgets re-render at new size
+            for i = 1:numel(ws)
+                w = ws{i};
+                newPos = obj.Layout.computePosition(w.Position);
+                set(w.hPanel, 'Position', newPos);
+                w.markDirty();
+            end
+        end
 
         function wireListeners(obj, w)
         %WIRELISTENERS Wire sensor data-change listeners to mark widget dirty.
