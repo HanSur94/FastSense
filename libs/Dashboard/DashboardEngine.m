@@ -42,6 +42,11 @@ classdef DashboardEngine < handle
         FilePath        = ''
         InfoTempFile    = ''
         DetachedMirrors = {}   % Cell array of DetachedMirror objects
+        % Theme caching
+        ThemeCache_        = []  % Cached DashboardTheme struct; lazy-computed by getCachedTheme()
+        ThemeCachePreset_  = ''  % Theme preset string that ThemeCache_ was built for
+        % Widget dispatch table
+        WidgetTypeMap_     = []  % containers.Map: type string -> constructor function handle
         % Time control
         TimePanelHeight = 0.06
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
@@ -67,6 +72,15 @@ classdef DashboardEngine < handle
                 obj.(key) = varargin{k+1};
             end
             obj.Layout = DashboardLayout();
+            obj.WidgetTypeMap_ = containers.Map({ ...
+                'fastsense',   'number',     'status',    'text', ...
+                'gauge',       'table',      'rawaxes',   'timeline', ...
+                'group',       'heatmap',    'barchart',  'histogram', ...
+                'scatter',     'image',      'multistatus', 'divider'}, ...
+                {@FastSenseWidget, @NumberWidget, @StatusWidget, @TextWidget, ...
+                 @GaugeWidget, @TableWidget, @RawAxesWidget, @EventTimelineWidget, ...
+                 @GroupWidget, @HeatmapWidget, @BarChartWidget, @HistogramWidget, ...
+                 @ScatterWidget, @ImageWidget, @MultiStatusWidget, @DividerWidget});
         end
 
         function pg = addPage(obj, name)
@@ -95,7 +109,7 @@ classdef DashboardEngine < handle
             obj.ActivePage = pageIdx;
             % Update button colors if PageBar exists
             if ~isempty(obj.hPageButtons)
-                themeStruct = DashboardTheme(obj.Theme);
+                themeStruct = obj.getCachedTheme();
                 for i = 1:numel(obj.hPageButtons)
                     if ~isempty(obj.hPageButtons{i}) && ishandle(obj.hPageButtons{i})
                         if i == obj.ActivePage
@@ -121,51 +135,26 @@ classdef DashboardEngine < handle
             if isa(type, 'DashboardWidget')
                 w = type;
             else
-                switch type
-                    case 'fastsense'
-                        w = FastSenseWidget(varargin{:});
-                    case 'number'
-                        w = NumberWidget(varargin{:});
-                    case 'kpi'
-                        warning('DashboardEngine:deprecated', ...
-                            '''kpi'' type is deprecated, use ''number'' instead.');
-                        w = NumberWidget(varargin{:});
-                    case 'status'
-                        w = StatusWidget(varargin{:});
-                    case 'text'
-                        w = TextWidget(varargin{:});
-                    case 'gauge'
-                        w = GaugeWidget(varargin{:});
-                    case 'table'
-                        w = TableWidget(varargin{:});
-                    case 'rawaxes'
-                        w = RawAxesWidget(varargin{:});
-                    case 'timeline'
-                        w = EventTimelineWidget(varargin{:});
-                        if isempty(w.EventStoreObj) && isempty(w.EventFcn) && isempty(w.Events)
-                            warning('DashboardEngine:timelineNoStore', ...
-                                'Timeline widget "%s" has no data source. Bind via EventStoreObj.', ...
-                                w.Title);
-                        end
-                    case 'group'
-                        w = GroupWidget(varargin{:});
-                    case 'heatmap'
-                        w = HeatmapWidget(varargin{:});
-                    case 'barchart'
-                        w = BarChartWidget(varargin{:});
-                    case 'histogram'
-                        w = HistogramWidget(varargin{:});
-                    case 'scatter'
-                        w = ScatterWidget(varargin{:});
-                    case 'image'
-                        w = ImageWidget(varargin{:});
-                    case 'multistatus'
-                        w = MultiStatusWidget(varargin{:});
-                    case 'divider'
-                        w = DividerWidget(varargin{:});
-                    otherwise
-                        error('DashboardEngine:unknownType', ...
-                            'Unknown widget type: %s', type);
+                % Handle deprecated 'kpi' type
+                if strcmp(type, 'kpi')
+                    warning('DashboardEngine:deprecated', ...
+                        '''kpi'' type is deprecated, use ''number'' instead.');
+                    type = 'number';
+                end
+
+                if isKey(obj.WidgetTypeMap_, type)
+                    ctor = obj.WidgetTypeMap_(type);
+                    w = ctor(varargin{:});
+                else
+                    error('DashboardEngine:unknownType', ...
+                        'Unknown widget type: %s', type);
+                end
+
+                % Preserve timeline no-store warning
+                if strcmp(type, 'timeline') && isempty(w.EventStoreObj) && isempty(w.EventFcn) && isempty(w.Events)
+                    warning('DashboardEngine:timelineNoStore', ...
+                        'Timeline widget "%s" has no data source. Bind via EventStoreObj.', ...
+                        w.Title);
                 end
             end
 
@@ -205,12 +194,21 @@ classdef DashboardEngine < handle
             end
         end
 
+        function t = getCachedTheme(obj)
+        %GETCACHEDTHEME Return cached theme struct, recomputing only when Theme changes.
+            if isempty(obj.ThemeCache_) || ~strcmp(obj.ThemeCachePreset_, obj.Theme)
+                obj.ThemeCache_ = DashboardTheme(obj.Theme);
+                obj.ThemeCachePreset_ = obj.Theme;
+            end
+            t = obj.ThemeCache_;
+        end
+
         function render(obj)
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 return;
             end
 
-            themeStruct = DashboardTheme(obj.Theme);
+            themeStruct = obj.getCachedTheme();
 
             obj.hFigure = figure('Name', obj.Name, ...
                 'NumberTitle', 'off', ...
@@ -599,7 +597,7 @@ classdef DashboardEngine < handle
         %   is a handle class, so mutations to it are visible through all
         %   references.
 
-            themeStruct = DashboardTheme(obj.Theme);
+            themeStruct = obj.getCachedTheme();
             % containers.Map is a handle object — mutations after closure creation
             % are visible through the captured reference (unlike cells/structs).
             mirrorHolder = containers.Map({'mirror'}, {[]});
@@ -636,7 +634,7 @@ classdef DashboardEngine < handle
 
         function rerenderWidgets(obj)
         %RERENDERWIDGETS Delete all widget panels and recreate them.
-            theme = DashboardTheme(obj.Theme);
+            theme = obj.getCachedTheme();
             ws = obj.activePageWidgets();
             for i = 1:numel(ws)
                 w = ws{i};
@@ -685,6 +683,21 @@ classdef DashboardEngine < handle
             end
             if isinf(tMin) || isinf(tMax)
                 return;  % no widgets report time data
+            end
+            obj.DataTimeRange = [tMin, tMax];
+        end
+
+        function updateLiveTimeRangeFrom(obj, ws)
+        %UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
+        %   Like updateLiveTimeRange but accepts ws to avoid re-fetching activePageWidgets().
+            tMin = inf; tMax = -inf;
+            for i = 1:numel(ws)
+                [wMin, wMax] = ws{i}.getTimeRange();
+                if wMin < tMin, tMin = wMin; end
+                if wMax > tMax, tMax = wMax; end
+            end
+            if isinf(tMin) || isinf(tMax)
+                return;
             end
             obj.DataTimeRange = [tMin, tMax];
         end
@@ -754,22 +767,19 @@ classdef DashboardEngine < handle
                 return;
             end
 
-            % Update global time range from live data
-            obj.updateLiveTimeRange();
-
-            % In live mode, mark sensor-bound widgets dirty because
-            % PostSet listeners on Sensor.X/Y do not fire reliably in
-            % Octave for indexed assignment (sTemp.X(end+1) = val).
+            % Fetch active page widgets ONCE
             ws = obj.activePageWidgets();
-            for i = 1:numel(ws)
-                if ~isempty(ws{i}.Sensor)
-                    ws{i}.markDirty();
-                end
-            end
 
-            % Only refresh widgets that are dirty, realized, and visible
+            % Update global time range from pre-fetched list
+            obj.updateLiveTimeRangeFrom(ws);
+
+            % Single pass: mark sensor-bound dirty, then refresh if dirty+realized+visible
+            % (PostSet listeners on Sensor.X/Y do not fire reliably in Octave for indexed assignment)
             for i = 1:numel(ws)
                 w = ws{i};
+                if ~isempty(w.Sensor)
+                    w.markDirty();
+                end
                 if w.Dirty && w.Realized && obj.Layout.isWidgetVisible(w.Position)
                     try
                         if isa(w, 'FastSenseWidget')
@@ -779,8 +789,7 @@ classdef DashboardEngine < handle
                         end
                     catch ME
                         warning('DashboardEngine:refreshError', ...
-                            'Widget "%s" refresh failed: %s', ...
-                            w.Title, ME.message);
+                            'Widget "%s" refresh failed: %s', w.Title, ME.message);
                     end
                 end
             end
