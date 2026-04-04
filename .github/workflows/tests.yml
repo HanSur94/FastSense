@@ -105,9 +105,13 @@ jobs:
           fi
 
   mex-build-macos:
-    name: MEX Build (macOS)
+    name: MEX Build (macOS ${{ matrix.os == 'macos-latest' && 'ARM64' || 'x64' }})
     if: github.event_name != 'schedule'
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
     steps:
       - uses: actions/checkout@v6
 
@@ -115,12 +119,19 @@ jobs:
         run: brew install octave
 
       - name: Compile MEX files
-        run: octave --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
+        run: octave --eval "install(); fprintf('All MEX files compiled successfully on %s (%s)\n', computer(), getenv('RUNNER_OS'));"
+
+      - name: List compiled MEX binaries
+        run: find libs -name '*.mex*' -type f | sort
 
   mex-build-windows:
-    name: MEX Build (Windows)
+    name: MEX Build (Windows ${{ matrix.os == 'windows-2022' && '11' || '10' }})
     if: github.event_name != 'schedule'
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2019, windows-2022]
     steps:
       - name: Allow paths with colons (wiki files)
         run: git config --global core.protectNTFS false
@@ -148,6 +159,10 @@ jobs:
           }
           & $octExe --version
           & $octExe --no-window-system --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
+
+      - name: List compiled MEX binaries
+        shell: pwsh
+        run: Get-ChildItem -Recurse libs -Filter '*.mex' | ForEach-Object { $_.FullName }
 
   matlab:
     name: MATLAB Tests

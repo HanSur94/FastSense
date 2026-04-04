@@ -156,6 +156,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260403-nvv | Add example_dashboard_advanced.m showcasing all phase 01-08 features | 2026-04-03 | 45e456f | [260403-nvv-add-or-edit-example-script-showcasing-al](./quick/260403-nvv-add-or-edit-example-script-showcasing-al/) |
+| 260404-gaj | CI MEX build matrix: macOS ARM64, Windows 10+11, Linux Ubuntu | 2026-04-04 | pending | [260404-gaj-implement-github-actions-ci-workflow-tha](./quick/260404-gaj-implement-github-actions-ci-workflow-tha/) |
 
 ## Session Continuity
 
