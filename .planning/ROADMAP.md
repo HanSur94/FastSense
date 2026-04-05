@@ -93,3 +93,15 @@ Plans:
 - [x] 1000-01-PLAN.md — Incremental FastSenseWidget refresh + cached time ranges
 - [x] 1000-02-PLAN.md — Debounced slider broadcast + resize without dirty marking
 - [ ] 1000-03-PLAN.md — Lazy page panel realization + batched switchPage realize
+
+### Phase 1001: First-Class Threshold Entities
+
+**Goal:** Make thresholds independent, reusable entities with ThresholdRegistry and shared-reference semantics (TrendMiner-style). Breaking change: replace ThresholdRules/addThresholdRule with Threshold handle class + addThreshold across all libraries.
+**Requirements**: [THR-01: Threshold handle class, THR-02: ThresholdRegistry singleton, THR-03: Sensor integration (addThreshold/removeThreshold), THR-04: Resolve adaptation, THR-05: Downstream consumer migration, THR-06: Test migration]
+**Depends on:** Phase 1000
+**Plans:** 3 plans
+
+Plans:
+- [ ] 1001-01-PLAN.md — Threshold handle class + ThresholdRegistry singleton + tests
+- [ ] 1001-02-PLAN.md — Sensor.m refactor (Thresholds property, addThreshold, resolve adaptation) + sensor test migration
+- [ ] 1001-03-PLAN.md — Dashboard widgets, EventDetection, SensorRegistry display migration + remaining test migration
