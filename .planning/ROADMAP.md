@@ -108,3 +108,24 @@ Plans:
 - [x] 1001-04-PLAN.md — EventDetection migration (IncrementalEventDetector, LiveEventPipeline, EventViewer) + EventDetection tests
 - [x] 1001-05-PLAN.md — Gap closure: migrate 10 core sensor + consumer widget test files from addThresholdRule
 - [x] 1001-06-PLAN.md — Gap closure: migrate 5 EventDetection test files from addThresholdRule
+
+### Phase 1002: Direct Widget-Threshold Binding — StatusWidget, GaugeWidget, and other widgets can reference Threshold objects directly without requiring a Sensor. Enables standalone threshold-driven status indicators.
+
+**Goal:** Add Threshold + Value/ValueFcn properties to StatusWidget, GaugeWidget, IconCardWidget, MultiStatusWidget, and ChipBarWidget so they can display threshold-driven status without requiring a Sensor object. Purely additive — existing Sensor-bound behavior unchanged.
+**Requirements**: [THRBIND-01: StatusWidget + GaugeWidget threshold binding, THRBIND-02: IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding, THRBIND-03: Serialization round-trip for threshold-bound widgets, THRBIND-04: Backward compatibility, THRBIND-05: ValueFcn live tick support]
+**Depends on:** Phase 1001
+**Plans:** 2 plans
+
+Plans:
+- [ ] 1002-01-PLAN.md — StatusWidget + GaugeWidget threshold binding + serialization + tests
+- [ ] 1002-02-PLAN.md — IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding + serialization + tests
+
+### Phase 1003: Composite Thresholds — CompositeThreshold class that aggregates child Threshold objects for hierarchical status. Component A is green only if children A.A and A.B are both green. Enables system health trees and nested status monitoring.
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 1002
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 1003 to break down)
