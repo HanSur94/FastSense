@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 1001-01-PLAN.md
-last_updated: "2026-04-05T18:04:47.937Z"
+stopped_at: Completed 1001-02-PLAN.md
+last_updated: "2026-04-05T18:13:54.021Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 1001 (first-class-threshold-entities) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-05
 
@@ -91,6 +91,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1000 P03 | 5min | 2 tasks | 2 files |
 >>>>>>> worktree-agent-a9506b74
 | Phase 1001 P01 | 5min | 2 tasks | 6 files |
+| Phase 1001 P02 | 6min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,8 @@ Recent decisions affecting current work:
 - [Phase 1001]: Label dependent property on Threshold returns Name for buildThresholdEntry backward compatibility
 - [Phase 1001]: ThresholdRegistry catalog starts EMPTY per D-09 — no predefined entries, users populate at runtime
 - [Phase 1001]: Handle identity verified via mutation semantics not == operator for Octave compatibility
+- [Phase 1001]: allRules flattening in Sensor.resolve() iterates Thresholds->conditions_ enabling zero MEX changes
+- [Phase 1001]: addThreshold dual-input accepts Threshold object or char registry key via ThresholdRegistry.get()
 
 ### Roadmap Evolution
 
@@ -191,6 +194,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T18:04:47.932Z
-Stopped at: Completed 1001-01-PLAN.md
+Last session: 2026-04-05T18:13:54.017Z
+Stopped at: Completed 1001-02-PLAN.md
 Resume file: None
