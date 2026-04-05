@@ -6,82 +6,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
 [![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#installation)
 
 **200+ FPS. 100M+ points. Zero toolbox dependencies.**
 
-Sensor monitoring and dashboarding platform for MATLAB and GNU Octave. Plot massive time series with adaptive downsampling, define state-dependent threshold rules, detect threshold violations in real time, and compose interactive dashboards — all in pure MATLAB.
+Sensor monitoring and dashboarding platform for MATLAB and GNU Octave. Plot massive time series with SIMD-accelerated downsampling, define state-dependent threshold rules, detect violations in real time, and compose interactive dashboards with 21 widget types — all in pure MATLAB.
 
 <p align="center">
   <img src="docs/images/dashboard.png" alt="FastSense Dashboard" width="800">
 </p>
-
----
-
-## Table of Contents
-
-- [Why FastSense?](#why-fastsense)
-- [Features at a Glance](#features-at-a-glance)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [The Five Pillars](#the-five-pillars)
-  - [FastSense — Ultra-Fast Time Series Engine](#fastsense--ultra-fast-time-series-engine)
-  - [SensorThreshold — State-Dependent Sensor Modeling](#sensorthreshold--state-dependent-sensor-modeling)
-  - [EventDetection — Violation Detection and Live Pipeline](#eventdetection--violation-detection-and-live-pipeline)
-  - [Dashboard — Widget-Based Dashboard Engine](#dashboard--widget-based-dashboard-engine)
-  - [WebBridge — Browser-Based Visualization](#webbridge--browser-based-visualization)
-- [Examples](#examples)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [Citation](#citation)
-- [License](#license)
-
----
-
-## Why FastSense?
-
-MATLAB's built-in `plot()` loads every data point into GPU memory and redraws the entire figure on each zoom or pan. For sensor data at 10M+ points, this means multi-second lag, memory exhaustion, or a crash.
-
-FastSense was built to solve three specific problems that no existing MATLAB toolbox addresses together:
-
-- **Scale** — render 100M+ point datasets without loading them fully into memory, using SIMD-accelerated MinMax and LTTB downsampling that keeps only the pixels you can actually see
-- **Context** — model real industrial sensors where alarm limits change based on machine state (idle vs. running vs. fault), not just static threshold values
-- **Organization** — compose multi-widget monitoring dashboards with tabbed pages, collapsible sections, and detachable pop-out windows — without writing layout code
-
-All of this runs in pure MATLAB with no toolbox requirements. MEX C extensions with AVX2/NEON SIMD are optional accelerators; pure MATLAB fallbacks are used automatically.
-
----
-
-## Features at a Glance
-
-**Time Series Engine**
-- Render 10M+ points at 200+ FPS with automatic per-pixel downsampling
-- MinMax and LTTB algorithms, auto-selected per zoom level
-- Linked axes, datetime support, 6 built-in themes
-- Optional MEX C acceleration (AVX2/NEON) with pure-MATLAB fallback
-
-**Sensor Modeling**
-- State-dependent threshold rules (different limits per machine state)
-- Automatic violation grouping and statistics
-- Sensor registry for predefined catalog management
-
-**Dashboard Engine**
-- 21 widget types on a 24-column responsive grid
-- Multi-page navigation, collapsible sections, detachable pop-out widgets
-- Per-widget info tooltips with Markdown documentation
-- JSON persistence — save and reload complete dashboard configurations
-- Live mode — synchronized refresh across all widgets on a timer
-
-**Event Detection**
-- Groups threshold violations into discrete events with debouncing
-- Peak, mean, RMS, duration statistics per event
-- Real-time file polling pipeline
-- Interactive Gantt timeline viewer
-
-**Browser Visualization**
-- TCP bridge from MATLAB to a FastAPI + uPlot web frontend
-- Bidirectional callbacks between MATLAB and browser
-
----
 
 ## Quick Start
 
@@ -97,18 +30,74 @@ fp.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
 fp.render();
 ```
 
-For a full dashboard in under 10 lines:
+Build a full dashboard in under 10 lines:
 
 ```matlab
-install;
-
 d = DashboardEngine('Process Monitor');
 d.addWidget('fastsense', 'Position', [1 1 16 8]);
 d.addWidget('number',    'Position', [17 1 8 4], 'Label', 'Peak');
 d.addWidget('gauge',     'Position', [17 5 8 4], 'Label', 'Pressure');
 d.render();
-d.save('my_dashboard.json');
+d.save('my_dashboard.json');  % reload later with DashboardEngine.load()
 ```
+
+---
+
+## Table of Contents
+
+- [Why FastSense?](#why-fastsense)
+- [Performance](#performance)
+- [Features at a Glance](#features-at-a-glance)
+- [Installation](#installation)
+- [The Five Pillars](#the-five-pillars)
+- [Examples](#examples)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Citation](#citation)
+- [License](#license)
+
+---
+
+## Why FastSense?
+
+MATLAB's built-in `plot()` loads every data point into GPU memory and redraws the entire figure on each zoom or pan. For sensor data at 10M+ points, this means multi-second lag, memory exhaustion, or a crash.
+
+FastSense solves three problems that no existing MATLAB toolbox addresses together:
+
+- **Scale** — render 100M+ point datasets without loading them fully into memory, using SIMD-accelerated MinMax and LTTB downsampling that keeps only the pixels you can actually see
+- **Context** — model real industrial sensors where alarm limits change based on machine state (idle vs. running vs. fault), not just static threshold values
+- **Organization** — compose multi-widget monitoring dashboards with tabbed pages, collapsible sections, and detachable pop-out windows — without writing layout code
+
+All of this runs in pure MATLAB with no toolbox requirements. MEX C extensions with AVX2/NEON SIMD are optional accelerators; pure MATLAB fallbacks are used automatically.
+
+---
+
+## Performance
+
+FastSense vs. MATLAB's built-in `plot()` on 10M data points:
+
+|  | `plot()` | FastSense |
+|---|---|---|
+| Render time | ~3.2 s | **4.7 ms** |
+| Memory usage | 153 MB | **0.06 MB** |
+| Zoom/pan FPS | ~2 FPS | **212 FPS** |
+| Points displayed | 10,000,000 | ~400 (perceptually identical) |
+
+<sub>MacBook Pro M1 Pro, 16 GB, GNU Octave 11, MEX+NEON. Point reduction: 99.96%. Performance is tracked on every commit — regressions trigger alerts. <a href="https://hansur94.github.io/FastSense/dev/bench/">Live benchmark charts</a></sub>
+
+---
+
+## Features at a Glance
+
+**Time Series Engine** — Render 10M+ points at 200+ FPS with automatic per-pixel downsampling. MinMax and LTTB algorithms, linked axes, datetime support, 6 built-in themes. Optional MEX C acceleration (AVX2/NEON) with pure-MATLAB fallback.
+
+**Sensor Modeling** — State-dependent threshold rules where alarm limits change based on machine state. Automatic violation grouping, statistics, and a sensor registry for predefined catalogs.
+
+**Dashboard Engine** — 21 widget types on a 24-column responsive grid. Multi-page navigation, collapsible sections, detachable pop-out widgets, per-widget info tooltips. JSON persistence and live mode with synchronized refresh.
+
+**Event Detection** — Groups threshold violations into discrete events with debouncing. Peak, mean, RMS, duration statistics per event. Real-time file polling pipeline with interactive Gantt timeline viewer.
+
+**Browser Visualization** — TCP bridge from MATLAB to a FastAPI + uPlot web frontend. Bidirectional callbacks between MATLAB and browser.
 
 ---
 
@@ -122,12 +111,12 @@ cd FastSense
 Then in MATLAB or Octave:
 
 ```matlab
-install;  % adds paths + compiles MEX accelerators (requires C compiler)
+install;  % adds paths + compiles MEX accelerators
 ```
 
-No toolbox dependencies. MEX compilation is optional — pure MATLAB fallbacks are used automatically if no C compiler is available.
+No toolbox dependencies. No internet required. MEX compilation is optional — pure MATLAB fallbacks are used automatically if no C compiler is available.
 
-**Requirements:** MATLAB R2020b+ or GNU Octave 7+
+**Requirements:** MATLAB R2020b+ or GNU Octave 7+ | Linux, macOS, or Windows
 
 ---
 
@@ -135,7 +124,7 @@ No toolbox dependencies. MEX compilation is optional — pure MATLAB fallbacks a
 
 ### FastSense — Ultra-Fast Time Series Engine
 
-The core plotting engine. Renders 10M+ data points with automatic downsampling (MinMax and LTTB), dynamic thresholds, and interactive zoom/pan — all at 200+ FPS.
+The core plotting engine. Renders 10M+ data points with automatic downsampling (MinMax and LTTB), dynamic thresholds, and interactive zoom/pan — all at 200+ FPS. See [Performance](#performance) for benchmarks.
 
 ```matlab
 fp = FastSense('Theme', 'dark');
@@ -146,26 +135,6 @@ fp.addThreshold(-2.0, 'Direction', 'lower', 'ShowViolations', true, ...
     'Color', 'r', 'Label', 'Alarm Lo');
 fp.render();
 ```
-
-**Local benchmarks** (MacBook Pro M1 Pro, 16 GB, GNU Octave 11, 10M points, MEX+NEON):
-
-| Operation | Time |
-|---|---|
-| MinMax downsample | 7.4 ms |
-| Full zoom cycle (2 thresholds) | 4.7 ms |
-| Effective zoom FPS | **212 FPS** |
-| Point reduction | 99.96% |
-| GPU memory | 0.06 MB vs 153 MB for `plot()` |
-
-**CI benchmarks** (Ubuntu, Octave 8.4, 1M points, MEX without SIMD):
-
-| Operation | Time |
-|---|---|
-| MinMax downsample | ~2.1 ms |
-| Binary search | ~100 us |
-| Zoom cycle | ~26 ms |
-
-Performance is tracked on every commit — regressions trigger alerts. [Live benchmark charts](https://hansur94.github.io/FastSense/dev/bench/)
 
 - **Smart downsampling** — per-pixel MinMax and LTTB, auto-selected per zoom level
 - **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB
@@ -305,7 +274,13 @@ Full documentation is available in the [Wiki](https://github.com/HanSur94/FastSe
 
 ## Contributing
 
-Contributions are welcome. Open an issue to discuss a bug or feature before submitting a pull request. For development setup, see the [Architecture wiki page](https://github.com/HanSur94/FastSense/wiki/Architecture).
+Contributions are welcome! Here's how to get started:
+
+1. **Report a bug** — open an [issue](https://github.com/HanSur94/FastSense/issues) with a minimal reproducer
+2. **Suggest a feature** — open an issue to discuss before writing code
+3. **Submit a fix** — fork, branch, and open a pull request
+
+For architecture details and development setup, see the [Architecture wiki page](https://github.com/HanSur94/FastSense/wiki/Architecture). The test suite runs with `run_all_tests` in MATLAB/Octave.
 
 ---
 

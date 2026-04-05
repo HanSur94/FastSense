@@ -1,101 +1,30 @@
----
-phase: quick
-plan: 260405-ovf
-subsystem: documentation
-tags: [readme, documentation, research, open-source-best-practices]
-dependency_graph:
-  requires: []
-  provides: [improved-readme]
-  affects: [README.md]
-tech_stack:
-  added: []
-  patterns: [research-driven-documentation, feature-at-a-glance, table-of-contents]
-key_files:
-  created:
-    - .planning/quick/260405-ovf-update-project-readme-based-on-research-/README-RESEARCH.md
-  modified:
-    - README.md
-decisions:
-  - "Added Table of Contents for 330-line README — standard for long project READMEs (Netdata, Homepage pattern)"
-  - "Added 'Why FastSense?' motivation section before features — proven pattern from export_fig and uPlot"
-  - "Updated widget count from 8 to 21 to reflect current accurate state"
-  - "No emojis added — consistent with professional MATLAB engineering tool tone (export_fig, plotly_matlab pattern)"
-  - "Kept Five Pillars structure — distinctive enough to preserve as brand identity"
-  - "Added Contributing section with one-liner — standard for any project with stars"
-metrics:
-  duration: "3 minutes"
-  completed_date: "2026-04-05"
-  tasks: 2
-  files_changed: 2
----
+# Quick Task 260405-ovf: Update README — Summary
 
-# Phase Quick Plan 260405-ovf: README Research and Rewrite Summary
+**Completed:** 2026-04-05
 
-Researched 11 highly-starred open-source projects to identify README best practices, then rewrote the FastSense README incorporating the top patterns identified.
+## What Changed
 
-## Tasks Completed
+Improved README.md based on research of 12 highly-starred open-source projects (Grafana, Netdata, Metabase, D3.js, ECharts, Plotly, uPlot, Polars, DuckDB, export_fig, gramm, Recharts).
 
-| Task | Name | Commit | Files |
-|------|------|--------|-------|
-| 1 | Research READMEs of 11 highly-starred projects | c39201a | README-RESEARCH.md (459 lines) |
-| 2 | Rewrite README.md based on research findings | 54c21aa | README.md (+151/-20) |
-| 3 | Checkpoint: human review | — | (noted, not blocking) |
+### Key improvements:
 
-## What Was Built
+1. **Quick Start moved above TOC** — following the Plotly/ECharts pattern of getting users to runnable code within the first 2 scrolls
+2. **New Performance comparison table** — side-by-side FastSense vs. `plot()` on 10M points (render time, memory, FPS). Follows uPlot's benchmark-as-social-proof pattern
+3. **Platform badge added** — Linux | macOS | Windows badge in header
+4. **Features at a Glance reformatted** — compact paragraph style instead of nested bullet lists, more scannable
+5. **Benchmark tables consolidated** — moved from Five Pillars into dedicated Performance section to reduce duplication
+6. **Contributing section expanded** — 3-step numbered guide (report bug, suggest feature, submit fix) following Grafana pattern
+7. **Hero description strengthened** — mentions "21 widget types" and "SIMD-accelerated downsampling" upfront
+8. **Installation section tightened** — added "No internet required" and multi-platform requirements line
+9. **Dashboard quick start** — added `DashboardEngine.load()` hint
 
-### Task 1: README Research
+### Research patterns applied:
+- Quick Start before deep content (ECharts, Plotly)
+- Performance comparison table as proof (uPlot, Polars)
+- Platform compatibility badge (Netdata, DuckDB)
+- Expanded contributing guide (Grafana, Recharts)
+- Paragraph-style feature summaries for scannability (Grafana)
 
-Analyzed 11 projects across 4 categories:
-- **MATLAB tools:** export_fig, plotly_matlab, shadedErrorBar
-- **Dashboard frameworks:** Grafana, Netdata, Homepage
-- **High-performance plotting:** plotly.js, uPlot, ECharts
-- **Data visualization:** D3.js, vega-lite
+## Files Modified
 
-Documented 10 cross-project patterns and 8 actionable takeaways in `README-RESEARCH.md`.
-
-### Task 2: README Rewrite
-
-Applied 7 of the 8 identified patterns:
-
-1. **Lead with performance numbers** — Tagline now reads "200+ FPS. 100M+ points. Zero toolbox dependencies."
-2. **Table of Contents** — Added for the 330-line document
-3. **"Why FastSense?" section** — Explains the problem (MATLAB plot() limitations) before the solution
-4. **Updated feature counts** — Widget count corrected from 8 to 21; newer features documented (collapsible, multi-page, detachable, info tooltips)
-5. **Contributing section** — One-liner with link to architecture wiki
-6. **Features at a Glance** — Compact 4-category summary before the detailed Five Pillars
-7. **Examples table** — Organized by category with file counts
-
-Pattern not applied: custom performance badges (build step would add friction).
-
-## Deviations from Plan
-
-### Auto-fixed Issues
-
-None.
-
-### Decisions Made
-
-- Preserved Five Pillars structure with section separators instead of converting to a flat features page — the pillar framing is a strong project identity element
-- Did not add emojis — research showed top MATLAB tools (export_fig, plotly_matlab) use no emojis, consistent with professional engineering audience
-- Added horizontal rules (`---`) between major sections for visual scanning in raw markdown view
-
-## Checkpoint Note
-
-Task 3 is a `checkpoint:human-verify` gate. Per task constraints, this is noted but not blocking. The README rewrite is complete and ready for human review:
-1. Review `.planning/quick/260405-ovf-update-project-readme-based-on-research-/README-RESEARCH.md` for research quality
-2. Open `README.md` and review the structure and content
-3. Confirm no information was lost from the original (all badges, citation, license, wiki links preserved)
-
-## Known Stubs
-
-None — all content is wired to real project facts.
-
-## Self-Check: PASSED
-
-- [x] README-RESEARCH.md exists at expected path
-- [x] README.md exists and has 331 lines (>150 required)
-- [x] All original badge URLs preserved
-- [x] Citation section preserved
-- [x] License section preserved
-- [x] Wiki documentation links preserved
-- [x] Commits c39201a and 54c21aa exist in git log
+- `README.md` — restructured and improved (331 -> 306 lines, more content density)
