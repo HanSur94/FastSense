@@ -66,8 +66,12 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
         function testSeverityEscalation(testCase)
             det = IncrementalEventDetector('MinDuration', 0, 'EscalateSeverity', true);
             sensor = Sensor('temp');
-            sensor.addThresholdRule(struct(), 100, 'Direction', 'upper', 'Label', 'H');
-            sensor.addThresholdRule(struct(), 150, 'Direction', 'upper', 'Label', 'HH');
+            tH = Threshold('h', 'Name', 'H', 'Direction', 'upper');
+            tH.addCondition(struct(), 100);
+            sensor.addThreshold(tH);
+            tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+            tHH.addCondition(struct(), 150);
+            sensor.addThreshold(tHH);
             t = linspace(now-1, now, 100);
             y = 80*ones(1,100); y(40:60) = 160;
             ev = det.process('temp', sensor, t, y, [], {});
@@ -107,7 +111,9 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
     methods (Static, Access = private)
         function sensor = makeSensor(key, threshVal, dir)
             sensor = Sensor(key);
-            sensor.addThresholdRule(struct(), threshVal, 'Direction', dir, 'Label', 'H');
+            t = Threshold('h', 'Name', 'H', 'Direction', dir);
+            t.addCondition(struct(), threshVal);
+            sensor.addThreshold(t);
         end
     end
 end

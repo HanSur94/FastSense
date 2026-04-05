@@ -64,9 +64,13 @@ classdef TestLivePipeline < matlab.unittest.TestCase
 
         function testSensorFailureSkipped(testCase)
             s1 = Sensor('temp');
-            s1.addThresholdRule(struct(), 100, 'Direction', 'upper', 'Label', 'HH');
+            tHH1 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+            tHH1.addCondition(struct(), 100);
+            s1.addThreshold(tHH1);
             s2 = Sensor('broken');
-            s2.addThresholdRule(struct(), 50, 'Direction', 'upper', 'Label', 'H');
+            tH2 = Threshold('h', 'Name', 'H', 'Direction', 'upper');
+            tH2.addCondition(struct(), 50);
+            s2.addThreshold(tH2);
 
             dsMap = DataSourceMap();
             dsMap.add('temp', MockDataSource('BaseValue', 80, 'BacklogDays', 0.001, 'Seed', 1));
@@ -86,7 +90,9 @@ classdef TestLivePipeline < matlab.unittest.TestCase
     methods (Static, Access = private)
         function [pipeline, storeFile] = makePipeline()
             s1 = Sensor('temp');
-            s1.addThresholdRule(struct(), 100, 'Direction', 'upper', 'Label', 'HH');
+            tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+            tHH.addCondition(struct(), 100);
+            s1.addThreshold(tHH);
 
             dsMap = DataSourceMap();
             dsMap.add('temp', MockDataSource('BaseValue', 80, 'NoiseStd', 1, ...

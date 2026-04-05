@@ -23,7 +23,9 @@ end
 function [pipeline, storeFile] = makePipeline()
     % Create registry sensors
     s1 = Sensor('temp');
-    s1.addThresholdRule(struct(), 100, 'Direction', 'upper', 'Label', 'HH');
+    tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+    tHH.addCondition(struct(), 100);
+    s1.addThreshold(tHH);
 
     % Create data source map with mock
     dsMap = DataSourceMap();
@@ -118,9 +120,13 @@ end
 function test_sensor_failure_skipped()
     % Add a sensor with a broken data source
     s1 = Sensor('temp');
-    s1.addThresholdRule(struct(), 100, 'Direction', 'upper', 'Label', 'HH');
+    tHH1 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+    tHH1.addCondition(struct(), 100);
+    s1.addThreshold(tHH1);
     s2 = Sensor('broken');
-    s2.addThresholdRule(struct(), 50, 'Direction', 'upper', 'Label', 'H');
+    tH2 = Threshold('h', 'Name', 'H', 'Direction', 'upper');
+    tH2.addCondition(struct(), 50);
+    s2.addThreshold(tH2);
 
     dsMap = DataSourceMap();
     dsMap.add('temp', MockDataSource('BaseValue', 80, 'BacklogDays', 0.001, 'Seed', 1));

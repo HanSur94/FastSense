@@ -626,10 +626,13 @@ classdef EventViewer < handle
 
             % Y range for shaded event regions (data + thresholds + padding)
             yLo = min(sd.y); yHi = max(sd.y);
-            if isfield(sd, 'thresholdRules') && ~isempty(sd.thresholdRules)
-                for i = 1:numel(sd.thresholdRules)
-                    yLo = min(yLo, sd.thresholdRules{i}.Value);
-                    yHi = max(yHi, sd.thresholdRules{i}.Value);
+            if isfield(sd, 'thresholds') && ~isempty(sd.thresholds)
+                for i = 1:numel(sd.thresholds)
+                    vals = sd.thresholds{i}.allValues();
+                    for vi = 1:numel(vals)
+                        yLo = min(yLo, vals(vi));
+                        yHi = max(yHi, vals(vi));
+                    end
                 end
             end
             yPad = max((yHi - yLo) * 0.15, 1);
@@ -720,17 +723,9 @@ classdef EventViewer < handle
             sensor = Sensor(sd.name, 'Name', sd.name);
             sensor.X = sd.t;
             sensor.Y = sd.y;
-            if isfield(sd, 'thresholdRules') && ~isempty(sd.thresholdRules)
-                for i = 1:numel(sd.thresholdRules)
-                    r = sd.thresholdRules{i};
-                    args = {'Direction', r.Direction, 'Label', r.Label};
-                    if ~isempty(r.Color)
-                        args = [args, {'Color', r.Color}]; %#ok<AGROW>
-                    end
-                    if ~isempty(r.LineStyle)
-                        args = [args, {'LineStyle', r.LineStyle}]; %#ok<AGROW>
-                    end
-                    sensor.addThresholdRule(struct(), r.Value, args{:});
+            if isfield(sd, 'thresholds') && ~isempty(sd.thresholds)
+                for i = 1:numel(sd.thresholds)
+                    sensor.addThreshold(sd.thresholds{i});
                 end
             end
             sensor.resolve();
@@ -780,17 +775,17 @@ classdef EventViewer < handle
         end
 
         function colors = extractThresholdColors(sensorData)
-            %EXTRACTTHRESHOLDCOLORS Build label->RGB map from sensorData threshold rules.
+            %EXTRACTTHRESHOLDCOLORS Build label->RGB map from sensorData thresholds.
             colors = containers.Map();
             for i = 1:numel(sensorData)
                 sd = sensorData(i);
-                if ~isfield(sd, 'thresholdRules') || isempty(sd.thresholdRules)
+                if ~isfield(sd, 'thresholds') || isempty(sd.thresholds)
                     continue;
                 end
-                for j = 1:numel(sd.thresholdRules)
-                    r = sd.thresholdRules{j};
-                    if ~isempty(r.Color) && ~isempty(r.Label) && ~colors.isKey(r.Label)
-                        colors(r.Label) = r.Color;
+                for j = 1:numel(sd.thresholds)
+                    t = sd.thresholds{j};
+                    if ~isempty(t.Color) && ~isempty(t.Name) && ~colors.isKey(t.Name)
+                        colors(t.Name) = t.Color;
                     end
                 end
             end
