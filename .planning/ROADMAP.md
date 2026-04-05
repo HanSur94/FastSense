@@ -59,6 +59,6 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation
-- [x] 999.1-02-PLAN.md — ChipBarWidget implementation
-- [ ] 999.1-03-PLAN.md — SparklineCardWidget implementation
+- [ ] 999.1-02-PLAN.md — ChipBarWidget implementation
+- [x] 999.1-03-PLAN.md — SparklineCardWidget implementation
 - [ ] 999.1-04-PLAN.md — Infrastructure wiring (Engine, Serializer, DetachedMirror, Builder)

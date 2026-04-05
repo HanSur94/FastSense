@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 999.1-02-PLAN.md (ChipBarWidget: horizontal chip bar with statusFcn color resolution)"
-last_updated: "2026-04-05T12:08:58.841Z"
+stopped_at: "Completed 999.1-03-PLAN.md (SparklineCardWidget: KPI card with sparkline and delta)"
+last_updated: "2026-04-05T12:08:06.651Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 2
@@ -81,7 +81,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-dashboard-engine-code-review-fixes P04 | 2min | 2 tasks | 7 files |
 | Phase 01-dashboard-performance-optimization P01 | 3 | 2 tasks | 2 files |
 | Phase 01-dashboard-performance-optimization P03 | 10min | 2 tasks | 1 files |
-| Phase 999.1-mushroom-cards-for-dashboard-engine P02 | 3min | 2 tasks | 2 files |
+| Phase 999.1-mushroom-cards-for-dashboard-engine P03 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -137,8 +137,7 @@ Recent decisions affecting current work:
 - [Phase 01-dashboard-performance-optimization]: updateLiveTimeRangeFrom(ws) added alongside updateLiveTimeRange() so onLiveTick can pass pre-fetched widget list
 - [Phase 01-dashboard-performance-optimization]: repositionPanels() falls back to rerenderWidgets() if any panel handle is missing — safe degradation at first render
 - [Phase 01-dashboard-performance-optimization]: render() pre-allocates all page panels at startup with non-active pages hidden so switchPage is pure visibility toggle
-- [Phase 999.1-mushroom-cards-for-dashboard-engine]: containers.Map used in testChipColorUpdate so anonymous function closure sees state mutation (cell array captures by value in MATLAB)
-- [Phase 999.1-mushroom-cards-for-dashboard-engine]: Single shared axes with XLim=[0 nChips] and evenly-spaced chip centers provides clean chip layout without per-chip axes overhead
+- [Phase 999.1-mushroom-cards-for-dashboard-engine]: SparklineCardWidget: sparkline axes at bottom 35% with flat-data yRange=1 guard; delta color from StatusOkColor/StatusAlarmColor; lazy hSparkLine creation in refresh() enables refresh-before-render guard
 
 ### Roadmap Evolution
 
@@ -163,6 +162,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T12:08:58.837Z
-Stopped at: Completed 999.1-02-PLAN.md (ChipBarWidget: horizontal chip bar with statusFcn color resolution)
+Last session: 2026-04-05T12:08:06.647Z
+Stopped at: Completed 999.1-03-PLAN.md (SparklineCardWidget: KPI card with sparkline and delta)
 Resume file: None
