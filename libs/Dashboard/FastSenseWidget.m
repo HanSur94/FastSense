@@ -24,8 +24,11 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     properties (SetAccess = private)
-        FastSenseObj = []
+        FastSenseObj  = []
         IsSettingTime = false  % guard to distinguish programmatic vs user xlim change
+        CachedXMin    = inf    % cached minimum of X data for O(1) getTimeRange()
+        CachedXMax    = -inf   % cached maximum of X data for O(1) getTimeRange()
+        LastSensorRef = []     % sensor handle snapshot for cache invalidation check
     end
 
     methods
@@ -45,6 +48,8 @@ classdef FastSenseWidget < DashboardWidget
                         obj.YLabel = obj.Sensor.Key;
                     end
                 end
+                obj.LastSensorRef = obj.Sensor;
+                obj.updateTimeRangeCache();
             end
         end
 
@@ -93,6 +98,10 @@ classdef FastSenseWidget < DashboardWidget
                 ylim(ax, obj.YLimits);
             end
 
+            % Update time range cache and sensor identity snapshot
+            obj.LastSensorRef = obj.Sensor;
+            obj.updateTimeRangeCache();
+
             % Listen for manual zoom/pan to disable global time for this widget
             try
                 addlistener(ax, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
@@ -102,10 +111,30 @@ classdef FastSenseWidget < DashboardWidget
 
         function refresh(obj)
             % Re-render sensor-bound widgets so updated data + violations show.
-            % Preserves current zoom state (xlim) across the rebuild.
+            % Uses incremental updateData() path when sensor identity is unchanged
+            % (PERF2-01); falls back to full teardown/rebuild on first render,
+            % sensor swap, or error.  Zoom state (xlim) is preserved in both paths.
             if isempty(obj.Sensor), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
 
+            % --- Incremental path (sensor identity unchanged, already rendered) ---
+            sensorUnchanged = ~isempty(obj.LastSensorRef) && ...
+                              obj.Sensor == obj.LastSensorRef;
+            fpValid = ~isempty(obj.FastSenseObj) && ...
+                      obj.FastSenseObj.IsRendered && ...
+                      ~isempty(obj.FastSenseObj.hAxes) && ...
+                      ishandle(obj.FastSenseObj.hAxes);
+            if sensorUnchanged && fpValid
+                try
+                    obj.FastSenseObj.updateData(1, obj.Sensor.X, obj.Sensor.Y);
+                    obj.updateTimeRangeCache();
+                    return;
+                catch
+                    % Fall through to full rebuild on any error
+                end
+            end
+
+            % --- Full teardown/rebuild path ---
             % Save zoom state before teardown
             savedXLim = [];
             if ~isempty(obj.FastSenseObj) && ~isempty(obj.FastSenseObj.hAxes) && ...
@@ -148,6 +177,10 @@ classdef FastSenseWidget < DashboardWidget
                 ylim(ax, obj.YLimits);
             end
 
+            % Update cache and sensor identity after successful rebuild
+            obj.LastSensorRef = obj.Sensor;
+            obj.updateTimeRangeCache();
+
             % Restore zoom state
             if ~isempty(savedXLim)
                 obj.IsSettingTime = true;
@@ -175,6 +208,7 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.FastSenseObj) && obj.FastSenseObj.IsRendered
                 try
                     obj.FastSenseObj.updateData(1, obj.Sensor.X, obj.Sensor.Y);
+                    obj.updateTimeRangeCache();
                     return;
                 catch
                     % Fall through to full refresh on any error
@@ -212,15 +246,12 @@ classdef FastSenseWidget < DashboardWidget
         end
 
         function [tMin, tMax] = getTimeRange(obj)
-            tMin = inf; tMax = -inf;
-            if ~isempty(obj.Sensor)
-                if ~isempty(obj.Sensor.X)
-                    tMin = min(obj.Sensor.X);
-                    tMax = max(obj.Sensor.X);
-                end
-            elseif ~isempty(obj.XData)
-                tMin = min(obj.XData);
-                tMax = max(obj.XData);
+            % Return cached min/max in O(1). Cache is kept up to date by
+            % updateTimeRangeCache() which is called from render/refresh/update.
+            tMin = obj.CachedXMin;
+            tMax = obj.CachedXMax;
+            if isinf(tMin) || isinf(tMax)
+                tMin = inf; tMax = -inf;
             end
         end
 
@@ -285,6 +316,36 @@ classdef FastSenseWidget < DashboardWidget
                                   'xVar', obj.XVar, 'yVar', obj.YVar);
             elseif ~isempty(obj.XData)
                 s.source = struct('type', 'data', 'x', obj.XData, 'y', obj.YData);
+            end
+        end
+    end
+
+    methods (Access = private)
+        function updateTimeRangeCache(obj)
+        %UPDATETIMERANGECACHE Maintain CachedXMin/CachedXMax incrementally.
+        %   For sorted time arrays (the common case) the last element is the
+        %   max candidate and the first is the min candidate, so this avoids
+        %   a full-array scan on every live tick.
+            if ~isempty(obj.Sensor) && ~isempty(obj.Sensor.X)
+                x = obj.Sensor.X;
+                n = numel(x);
+                if n == 0
+                    obj.CachedXMin = inf;
+                    obj.CachedXMax = -inf;
+                    return;
+                end
+                % Max always updated — last element of sorted time array
+                obj.CachedXMax = x(n);
+                % Min only changes on full reassignment, not incremental append
+                if isinf(obj.CachedXMin)
+                    obj.CachedXMin = x(1);
+                end
+            elseif ~isempty(obj.XData)
+                obj.CachedXMin = min(obj.XData);
+                obj.CachedXMax = max(obj.XData);
+            else
+                obj.CachedXMin = inf;
+                obj.CachedXMax = -inf;
             end
         end
     end
