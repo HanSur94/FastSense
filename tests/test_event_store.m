@@ -13,7 +13,9 @@ function test_event_store()
     s = Sensor('temp', 'Name', 'Temperature');
     s.X = 1:10;
     s.Y = [5 5 12 14 11 13 5 5 5 5];
-    s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s.addThreshold(t_warn);
     cfg.addSensor(s);
     cfg.setColor('warn', [1 0.8 0]);
 
@@ -45,7 +47,9 @@ function test_event_store()
     s2 = Sensor('temp', 'Name', 'Temperature');
     s2.X = 1:10;
     s2.Y = [5 5 12 14 11 13 5 5 5 5];
-    s2.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s2.addThreshold(t_warn);
     cfg2.addSensor(s2);
     tmpFile2 = fullfile(tempdir, 'test_event_store_2.mat');
     if exist(tmpFile2, 'file'); delete(tmpFile2); end
@@ -76,7 +80,9 @@ function test_event_store()
     s3 = Sensor('temp', 'Name', 'Temperature');
     s3.X = 1:10;
     s3.Y = [5 5 12 14 11 13 5 5 5 5];
-    s3.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s3.addThreshold(t_warn);
     cfg3.addSensor(s3);
     cfg3.EventFile = tmpFile3;
     cfg3.MaxBackups = 2;
@@ -110,7 +116,9 @@ function test_event_store()
     s4 = Sensor('temp', 'Name', 'Temperature');
     s4.X = 1:10;
     s4.Y = [5 5 12 14 11 13 5 5 5 5];
-    s4.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s4.addThreshold(t_warn);
     cfg4.addSensor(s4);
     cfg4.EventFile = tmpFile4;
     cfg4.MaxBackups = 0;
@@ -134,7 +142,9 @@ function test_event_store()
     s5 = Sensor('temp', 'Name', 'Temperature');
     s5.X = 1:10;
     s5.Y = [5 5 12 14 11 13 5 5 5 5];
-    s5.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s5.addThreshold(t_warn);
     cfg5.addSensor(s5);
     tmpFile5 = fullfile(tempdir, 'test_event_refresh.mat');
     cfg5.EventFile = tmpFile5;
