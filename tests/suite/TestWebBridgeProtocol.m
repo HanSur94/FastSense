@@ -8,9 +8,8 @@ classdef TestWebBridgeProtocol < matlab.unittest.TestCase
     methods (Test)
         function testEncodeInit(testCase)
             signals = struct('id', {'s1', 's2'}, 'dbPath', {'/tmp/a.fpdb', '/tmp/b.fpdb'}, 'title', {'Temp', 'Pressure'});
-            dashboard = struct('name', 'Test', 'theme', 'light');
             actions = {'recalc', 'setRange'};
-            msg = WebBridgeProtocol.encodeInit(signals, dashboard, actions);
+            msg = WebBridgeProtocol.encodeInit(signals, actions);
             testCase.verifyTrue(endsWith(msg, newline));
             decoded = jsondecode(msg);
             testCase.verifyEqual(decoded.type, 'init');

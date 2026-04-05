@@ -1,6 +1,7 @@
 [project]
 name = "fastsense-bridge"
-version = "0.1.0"
+version = "0.2.0"
+description = "Lean connectivity bridge between MATLAB and external frameworks"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.104",

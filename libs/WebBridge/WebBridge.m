@@ -1,7 +1,26 @@
 classdef WebBridge < handle
+    %WEBBRIDGE Connectivity bridge between MATLAB and external frameworks.
+    %   Exposes signal data (from FastSenseDataStore SQLite files) and
+    %   registered actions via a REST API + WebSocket push channel.
+    %   External clients (Python, JS, React, etc.) can query data and
+    %   invoke MATLAB callbacks through the HTTP API.
+    %
+    %   This is a pure data relay — no dashboard rendering or UI logic.
+    %
+    %   Architecture:
+    %     MATLAB (tcpserver) —TCP/NDJSON—> Python (FastAPI) —HTTP/WS—> Clients
+    %
+    %   Usage:
+    %     bridge = WebBridge(dashboard);
+    %     bridge.registerAction('recalc', @() sensor.resolve());
+    %     bridge.serve();  % starts at http://localhost:8080
+    %     bridge.notifyDataChanged('temperature');
+    %     bridge.stop();
+    %
+    %   See also WebBridgeProtocol, FastSenseDataStore.
+
     properties (Access = public)
         Dashboard
-        ConfigPollInterval = 1
     end
     properties (SetAccess = private)
         TcpPort = 0
@@ -12,34 +31,37 @@ classdef WebBridge < handle
         TcpServer = []
         ClientConnected = false
         Actions = struct()
-        ConfigTimer = []
-        LastConfigHash = ''
     end
     methods (Access = public)
         function obj = WebBridge(dashboard, varargin)
+            %WEBBRIDGE Create a bridge for the given dashboard.
             obj.Dashboard = dashboard;
+            validKeys = {};
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                key = varargin{k};
+                if ~ismember(key, validKeys)
+                    error('WebBridge:unknownOption', 'Unknown option ''%s''.', key);
+                end
+                obj.(key) = varargin{k+1};
             end
         end
         function serve(obj)
+            %SERVE Start the TCP server and launch the Python bridge.
             if obj.IsServing; return; end
+            obj.registerBuiltinActions();
             obj.enableWALOnDataStores();
             obj.startTcp();
-            obj.launchBridge();
-            obj.startConfigPoll();
-        end
-        function startTcp(obj)
-            if obj.IsServing; return; end
-            obj.TcpServer = tcpserver('localhost', 0, ...
-                'ConnectionChangedFcn', @(src, evt) obj.onConnectionChanged(src, evt));
-            obj.TcpPort = obj.TcpServer.ServerPort;
-            obj.IsServing = true;
+            try
+                obj.launchBridge();
+            catch ex
+                obj.stop();
+                rethrow(ex);
+            end
         end
         function stop(obj)
+            %STOP Shut down the bridge and clean up resources.
             if ~obj.IsServing; return; end
             obj.sendToClient(WebBridgeProtocol.encodeShutdown());
-            obj.stopConfigPoll();
             pause(0.1);
             delete(obj.TcpServer);
             obj.TcpServer = [];
@@ -48,15 +70,18 @@ classdef WebBridge < handle
             obj.disableWALOnDataStores();
         end
         function registerAction(obj, name, callback)
+            %REGISTERACTION Register a named action callable from external clients.
             obj.Actions.(name) = callback;
             if obj.IsServing && obj.ClientConnected
                 obj.sendActionsChanged();
             end
         end
         function tf = hasAction(obj, name)
+            %HASACTION Check if an action is registered.
             tf = isfield(obj.Actions, name);
         end
         function notifyDataChanged(obj, signalId)
+            %NOTIFYDATACHANGED Tell connected clients that signal data has updated.
             if ~obj.IsServing; return; end
             if iscell(signalId)
                 msg = WebBridgeProtocol.encodeDataChanged(signalId);
@@ -72,6 +97,17 @@ classdef WebBridge < handle
         end
     end
     methods (Access = private)
+        function startTcp(obj)
+            if obj.IsServing; return; end
+            if exist('OCTAVE_VERSION', 'builtin')
+                error('WebBridge:unsupported', ...
+                    'WebBridge requires MATLAB R2021a+ (tcpserver). GNU Octave is not supported.');
+            end
+            obj.TcpServer = tcpserver('localhost', 0, ...
+                'ConnectionChangedFcn', @(src, evt) obj.onConnectionChanged(src, evt));
+            obj.TcpPort = obj.TcpServer.ServerPort;
+            obj.IsServing = true;
+        end
         function onConnectionChanged(obj, src, ~)
             if src.Connected
                 obj.ClientConnected = true;
@@ -97,13 +133,125 @@ classdef WebBridge < handle
                 warning('WebBridge:receiveError', 'Error reading TCP: %s', ex.message);
             end
         end
+        function registerBuiltinActions(obj)
+            %REGISTERBUILTINACTIONS Register built-in bridge actions.
+            obj.Actions.openInMatlab = @(args) obj.openInMatlab(args);
+        end
+        function openInMatlab(obj, args)
+            %OPENINMATLAB Export signal data and open an analysis script.
+            %   Called when a frontend user clicks "Open in MATLAB".
+            %   Saves the viewed data to a .mat file and creates a starter
+            %   analysis script, then opens it in the MATLAB editor.
+            signalId = args.signalId;
+            [widget, ds] = obj.findWidgetAndStore(signalId);
+            if isempty(widget)
+                error('WebBridge:signalNotFound', 'Signal ''%s'' not found.', signalId);
+            end
+            % Load data for the viewed range
+            xMin = args.xMin;
+            xMax = args.xMax;
+            if ~isempty(ds)
+                if xMin <= -1e29; xMin = ds.XMin; end
+                if xMax >= 1e29; xMax = ds.XMax; end
+                [x, y] = ds.getRange(xMin, xMax);
+            else
+                x = []; y = [];
+            end
+            % Collect threshold info
+            thresholds = struct('value', {}, 'label', {}, 'direction', {});
+            if isprop(widget, 'Sensor') && ~isempty(widget.Sensor) && ...
+                    isprop(widget.Sensor, 'Thresholds')
+                for t = 1:numel(widget.Sensor.Thresholds)
+                    th = widget.Sensor.Thresholds(t);
+                    thresholds(end+1) = struct('value', th.Value, ...
+                        'label', th.Label, 'direction', th.Direction);
+                end
+            end
+            % Build metadata
+            signalTitle = widget.Title;
+            viewRange = [xMin, xMax];
+            nPoints = numel(x);
+            exportTime = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+            % Save .mat file
+            exportDir = fullfile(tempdir, 'fastsense_exports');
+            if ~exist(exportDir, 'dir'); mkdir(exportDir); end
+            matFile = fullfile(exportDir, sprintf('%s.mat', signalId));
+            save(matFile, 'x', 'y', 'signalId', 'signalTitle', 'viewRange', ...
+                'thresholds', 'nPoints', 'exportTime');
+            % Generate analysis script
+            scriptFile = fullfile(exportDir, sprintf('analyze_%s.m', signalId));
+            obj.writeAnalysisScript(scriptFile, matFile, signalId, signalTitle);
+            % Open in editor
+            try
+                edit(scriptFile);
+            catch
+                % editor may not be available in some environments
+            end
+            fprintf('[WebBridge] Exported %d points to %s\n', nPoints, matFile);
+            fprintf('[WebBridge] Analysis script: %s\n', scriptFile);
+        end
+        function writeAnalysisScript(~, scriptFile, matFile, signalId, signalTitle)
+            %WRITEANALYSISSCRIPT Generate a starter .m script for analysis.
+            fid = fopen(scriptFile, 'w');
+            fprintf(fid, '%%%% Analysis: %s\n', signalTitle);
+            fprintf(fid, '%% Exported from FastSense WebBridge\n');
+            fprintf(fid, '%% Signal: %s\n\n', signalId);
+            fprintf(fid, '%%%% Load data\n');
+            fprintf(fid, 'data = load(''%s'');\n', strrep(matFile, '''', ''''''));
+            fprintf(fid, 'x = data.x;\n');
+            fprintf(fid, 'y = data.y;\n');
+            fprintf(fid, 'fprintf(''Loaded %%d points for: %s\\n'', numel(x));\n\n', signalTitle);
+            fprintf(fid, '%%%% Quick plot\n');
+            fprintf(fid, 'figure(''Name'', ''%s'', ''NumberTitle'', ''off'');\n', signalTitle);
+            fprintf(fid, 'plot(x, y);\n');
+            fprintf(fid, 'title(''%s'');\n', signalTitle);
+            fprintf(fid, 'xlabel(''Time''); ylabel(''Value'');\n');
+            fprintf(fid, 'grid on;\n\n');
+            fprintf(fid, '%%%% Thresholds\n');
+            fprintf(fid, 'if ~isempty(data.thresholds)\n');
+            fprintf(fid, '    hold on;\n');
+            fprintf(fid, '    for i = 1:numel(data.thresholds)\n');
+            fprintf(fid, '        yline(data.thresholds(i).value, ''--r'', data.thresholds(i).label);\n');
+            fprintf(fid, '    end\n');
+            fprintf(fid, '    hold off;\n');
+            fprintf(fid, 'end\n\n');
+            fprintf(fid, '%%%% Your analysis below\n');
+            fprintf(fid, '%% e.g. find peaks, compute FFT, detect anomalies...\n');
+            fprintf(fid, '\n');
+            fclose(fid);
+        end
+        function [widget, ds] = findWidgetAndStore(obj, signalId)
+            %FINDWIDGETANDSTORE Find the widget and DataStore for a signal ID.
+            widget = [];
+            ds = [];
+            if isempty(obj.Dashboard) || isempty(obj.Dashboard.Widgets); return; end
+            for i = 1:numel(obj.Dashboard.Widgets)
+                w = obj.Dashboard.Widgets{i};
+                if ~isa(w, 'FastSenseWidget'); continue; end
+                sid = '';
+                if isprop(w, 'Sensor') && ~isempty(w.Sensor) && isprop(w.Sensor, 'Key')
+                    sid = w.Sensor.Key;
+                end
+                if strcmp(sid, signalId)
+                    widget = w;
+                    if isprop(w, 'DataStore') && ~isempty(w.DataStore)
+                        ds = w.DataStore;
+                    elseif isprop(w, 'Sensor') && ~isempty(w.Sensor) && ...
+                            isprop(w.Sensor, 'DataStore') && ~isempty(w.Sensor.DataStore)
+                        ds = w.Sensor.DataStore;
+                    end
+                    return;
+                end
+            end
+        end
         function handleMessage(obj, msg)
             switch msg.type
                 case 'action'
                     obj.executeAction(msg);
                 case 'bridge_ready'
                     obj.HttpPort = msg.httpPort;
-                    fprintf('Dashboard served at http://localhost:%d\n', obj.HttpPort);
+                    fprintf('Bridge serving at http://localhost:%d\n', obj.HttpPort);
+                    fprintf('  API docs:  http://localhost:%d/docs\n', obj.HttpPort);
             end
         end
         function executeAction(obj, msg)
@@ -129,17 +277,15 @@ classdef WebBridge < handle
             writeline(obj.TcpServer, strtrim(resp));
         end
         function sendInit(obj)
-            [signals, ~] = obj.buildSignalList();
-            dashConfig = obj.buildDashboardConfig();
+            signals = obj.buildSignalList();
             actionNames = fieldnames(obj.Actions);
             if isempty(actionNames); actionNames = {}; end
-            msg = WebBridgeProtocol.encodeInit(signals, dashConfig, actionNames);
+            msg = WebBridgeProtocol.encodeInit(signals, actionNames);
             writeline(obj.TcpServer, strtrim(msg));
         end
-        function [signals, widgetSignalMap] = buildSignalList(obj)
-            %BUILDSIGNALLIST Build signal list and a map from widget index to signal ID.
+        function signals = buildSignalList(obj)
+            %BUILDSIGNALLIST Build signal list from dashboard widgets.
             signals = struct('id', {}, 'dbPath', {}, 'title', {});
-            widgetSignalMap = containers.Map('KeyType', 'int32', 'ValueType', 'char');
             if isempty(obj.Dashboard) || isempty(obj.Dashboard.Widgets); return; end
             idx = 0;
             for i = 1:numel(obj.Dashboard.Widgets)
@@ -158,20 +304,6 @@ classdef WebBridge < handle
                     dbPath = w.Sensor.DataStore.DbPath;
                 end
                 signals(end+1) = struct('id', sid, 'dbPath', dbPath, 'title', w.Title);
-                widgetSignalMap(int32(i)) = sid;
-            end
-        end
-        function config = buildDashboardConfig(obj)
-            if isempty(obj.Dashboard)
-                config = struct('name', '', 'theme', 'light', 'widgets', {{}});
-                return;
-            end
-            config = DashboardSerializer.widgetsToConfig(obj.Dashboard.Name, obj.Dashboard.Theme, obj.Dashboard.LiveInterval, obj.Dashboard.Widgets);
-            [~, widgetSignalMap] = obj.buildSignalList();
-            for i = 1:numel(config.widgets)
-                if widgetSignalMap.isKey(int32(i))
-                    config.widgets{i}.signalId = widgetSignalMap(int32(i));
-                end
             end
         end
         function sendToClient(obj, msg)
@@ -182,54 +314,20 @@ classdef WebBridge < handle
                 obj.ClientConnected = false;
             end
         end
-        function sendConfigChanged(obj)
-            config = obj.buildDashboardConfig();
-            msg = WebBridgeProtocol.encodeConfigChanged(config);
-            obj.sendToClient(msg);
-        end
         function sendActionsChanged(obj)
             actionNames = fieldnames(obj.Actions);
             if isempty(actionNames); actionNames = {}; end
             msg = WebBridgeProtocol.encodeActionsChanged(actionNames);
             obj.sendToClient(msg);
         end
-        function startConfigPoll(obj)
-            obj.LastConfigHash = obj.computeConfigHash();
-            obj.ConfigTimer = timer('ExecutionMode', 'fixedRate', 'Period', obj.ConfigPollInterval, 'TimerFcn', @(~,~) obj.checkConfigChanged());
-            start(obj.ConfigTimer);
-        end
-        function stopConfigPoll(obj)
-            if ~isempty(obj.ConfigTimer)
-                stop(obj.ConfigTimer);
-                delete(obj.ConfigTimer);
-                obj.ConfigTimer = [];
-            end
-        end
-        function checkConfigChanged(obj)
-            h = obj.computeConfigHash();
-            if ~strcmp(h, obj.LastConfigHash)
-                obj.LastConfigHash = h;
-                obj.sendConfigChanged();
-            end
-        end
-        function h = computeConfigHash(obj)
-            config = obj.buildDashboardConfig();
-            json = jsonencode(config);
-            try
-                md = java.security.MessageDigest.getInstance('MD5');
-                md.update(uint8(json));
-                h = sprintf('%02x', typecast(md.digest(), 'uint8'));
-            catch
-                h = sprintf('%d_%d', length(json), sum(uint8(json)));
-            end
-        end
         function launchBridge(obj)
             bridgeDir = fullfile(fileparts(mfilename('fullpath')), '..', '..', 'bridge', 'python');
+            logFile = [tempname, '_webbridge.log'];
             cmd = sprintf('python -m fastsense_bridge --matlab-port %d', obj.TcpPort);
             if ispc
-                fullCmd = sprintf('start /B %s', cmd);
+                fullCmd = sprintf('cd /d "%s" && start /B %s >"%s" 2>&1', bridgeDir, cmd, logFile);
             else
-                fullCmd = sprintf('cd "%s" && %s &', bridgeDir, cmd);
+                fullCmd = sprintf('cd "%s" && %s >"%s" 2>&1 &', bridgeDir, cmd, logFile);
             end
             system(fullCmd);
             t0 = tic;
@@ -238,8 +336,22 @@ classdef WebBridge < handle
                 if obj.HttpPort > 0; return; end
                 pause(0.1);
             end
+            diagMsg = '';
+            try
+                fid = fopen(logFile, 'r');
+                if fid ~= -1
+                    diagMsg = fread(fid, '*char')';
+                    fclose(fid);
+                    delete(logFile);
+                end
+            catch
+            end
             obj.stop();
-            error('WebBridge:timeout', 'Bridge did not start within 10s. Check that fastsense-bridge is installed.');
+            if ~isempty(diagMsg)
+                error('WebBridge:timeout', 'Bridge did not start within 10s.\nOutput:\n%s', diagMsg);
+            else
+                error('WebBridge:timeout', 'Bridge did not start within 10s. Check that fastsense-bridge is installed.');
+            end
         end
         function enableWALOnDataStores(obj)
             stores = obj.collectDataStores();

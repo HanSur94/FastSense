@@ -1,16 +1,12 @@
 classdef WebBridgeProtocol
     %WEBBRIDGEPROTOCOL NDJSON message encoding/decoding for WebBridge TCP protocol.
     methods (Static)
-        function msg = encodeInit(signals, dashboard, actions)
-            s = struct('type', 'init', 'signals', {signals}, 'dashboard', dashboard, 'actions', {actions});
+        function msg = encodeInit(signals, actions)
+            s = struct('type', 'init', 'signals', {signals}, 'actions', {actions});
             msg = [jsonencode(s), newline];
         end
         function msg = encodeDataChanged(signalIds)
             s = struct('type', 'data_changed', 'signals', {signalIds});
-            msg = [jsonencode(s), newline];
-        end
-        function msg = encodeConfigChanged(dashboard)
-            s = struct('type', 'config_changed', 'dashboard', dashboard);
             msg = [jsonencode(s), newline];
         end
         function msg = encodeActionsChanged(actionNames)
@@ -26,10 +22,6 @@ classdef WebBridgeProtocol
         end
         function msg = encodeShutdown()
             msg = [jsonencode(struct('type', 'shutdown')), newline];
-        end
-        function msg = encodeBridgeReady(httpPort)
-            s = struct('type', 'bridge_ready', 'httpPort', httpPort);
-            msg = [jsonencode(s), newline];
         end
         function msg = decode(raw)
             msg = jsondecode(strtrim(raw));

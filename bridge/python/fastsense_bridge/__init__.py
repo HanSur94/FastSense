@@ -1,1 +1,1 @@
-"""FastSense Bridge — serves MATLAB dashboard data via REST/WebSocket."""
+"""FastSense Bridge — lean connectivity layer between MATLAB and external frameworks."""

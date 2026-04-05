@@ -18,13 +18,7 @@ from .tcp_client import MatlabTcpClient
 
 
 async def run(matlab_port: int, http_host: str, http_port: int) -> None:
-    """Main async entry point: connect to MATLAB and start serving.
-
-    Args:
-        matlab_port: Port of the MATLAB tcpserver.
-        http_host: Host to bind the HTTP server to.
-        http_port: Port to bind the HTTP server to.
-    """
+    """Main async entry point: connect to MATLAB and start serving."""
     state = AppState()
 
     # Connect to MATLAB
@@ -32,7 +26,6 @@ async def run(matlab_port: int, http_host: str, http_port: int) -> None:
     init_msg = await client.connect()
 
     state.signals = init_msg.get("signals", [])
-    state.dashboard = init_msg.get("dashboard", {})
     state.actions = init_msg.get("actions", [])
     state.tcp_client = client
     client.on_message = state.on_matlab_message
@@ -61,7 +54,7 @@ async def run(matlab_port: int, http_host: str, http_port: int) -> None:
 def main() -> None:
     """Parse CLI arguments and run the bridge server."""
     parser = argparse.ArgumentParser(
-        description="FastSense Bridge Server"
+        description="FastSense Bridge — MATLAB connectivity layer"
     )
     parser.add_argument(
         "--matlab-port",
@@ -72,7 +65,8 @@ def main() -> None:
     parser.add_argument(
         "--host",
         default="localhost",
-        help="HTTP bind host (default: localhost)",
+        help="HTTP bind host (default: localhost). "
+             "Warning: do not expose to untrusted networks.",
     )
     parser.add_argument(
         "--port",

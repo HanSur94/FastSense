@@ -33,7 +33,6 @@ classdef TestWebBridge < matlab.unittest.TestCase
             msg = jsondecode(data);
             testCase.verifyEqual(msg.type, 'init');
             testCase.verifyTrue(isfield(msg, 'signals'));
-            testCase.verifyTrue(isfield(msg, 'dashboard'));
             testCase.verifyTrue(isfield(msg, 'actions'));
         end
         function testShutdownSendsMessage(testCase)

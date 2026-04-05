@@ -1,20 +1,18 @@
-"""FastAPI server: REST API + WebSocket + static file serving.
+"""FastAPI server: lean REST API + WebSocket connectivity bridge.
 
 Provides endpoints for listing signals, querying time-series data,
-reading thresholds/violations, managing dashboard config, and invoking
-MATLAB actions. WebSocket endpoint broadcasts real-time events from
-MATLAB to connected browsers.
+reading thresholds/violations, and invoking MATLAB actions. WebSocket
+endpoint broadcasts real-time events from MATLAB to connected clients.
+
+No UI — this is a pure data relay for external frameworks to consume.
 """
 
 import asyncio
-import json
 import uuid
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .sqlite_reader import SqliteReader
@@ -29,13 +27,12 @@ class ActionRequest(BaseModel):
 class AppState:
     """Shared state between the TCP client and the HTTP server.
 
-    Holds the current signal list, dashboard config, action registry,
-    SQLite readers, WebSocket clients, and pending action futures.
+    Holds the current signal list, action registry, SQLite readers,
+    WebSocket clients, and pending action futures.
     """
 
     def __init__(self) -> None:
         self.signals: list[dict[str, Any]] = []
-        self.dashboard: dict[str, Any] = {}
         self.actions: list[str] = []
         self.tcp_client: Any = None
         self._readers: dict[str, SqliteReader] = {}
@@ -43,14 +40,7 @@ class AppState:
         self._pending_actions: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     def get_reader(self, signal_id: str) -> SqliteReader | None:
-        """Get or create a SqliteReader for the given signal.
-
-        Args:
-            signal_id: The signal identifier.
-
-        Returns:
-            A SqliteReader instance, or None if the signal is not found.
-        """
+        """Get or create a SqliteReader for the given signal."""
         sig = next((s for s in self.signals if s["id"] == signal_id), None)
         if not sig or not sig.get("dbPath"):
             return None
@@ -68,7 +58,7 @@ class AppState:
     async def broadcast_ws(self, msg: dict[str, Any]) -> None:
         """Send a JSON message to all connected WebSocket clients."""
         dead: set[WebSocket] = set()
-        for ws in self._ws_clients:
+        for ws in list(self._ws_clients):
             try:
                 await ws.send_json(msg)
             except Exception:
@@ -78,12 +68,11 @@ class AppState:
     def on_matlab_message(self, msg: dict[str, Any]) -> None:
         """Handle incoming message from MATLAB (called by tcp_client).
 
-        Dispatches based on message type: data_changed, config_changed,
-        action_result, or shutdown.
+        Must be called from within the asyncio event loop context,
+        as it uses asyncio.create_task() internally.
         """
         msg_type = msg.get("type", "")
         if msg_type == "data_changed":
-            # Close affected readers so they reopen with fresh data
             for sig_id in msg.get("signals", []):
                 sig = next(
                     (s for s in self.signals if s["id"] == sig_id), None
@@ -91,11 +80,6 @@ class AppState:
                 if sig and sig.get("dbPath") in self._readers:
                     self._readers[sig["dbPath"]].close()
                     del self._readers[sig["dbPath"]]
-            asyncio.create_task(self.broadcast_ws(msg))
-        elif msg_type == "config_changed":
-            self.dashboard = msg.get("dashboard", self.dashboard)
-            if "actions" in msg:
-                self.actions = msg["actions"]
             asyncio.create_task(self.broadcast_ws(msg))
         elif msg_type == "actions_changed":
             self.actions = msg.get("actions", self.actions)
@@ -105,28 +89,29 @@ class AppState:
             if req_id in self._pending_actions:
                 self._pending_actions[req_id].set_result(msg)
         elif msg_type == "shutdown":
+            for fut in self._pending_actions.values():
+                if not fut.done():
+                    fut.set_exception(ConnectionError("MATLAB disconnected"))
+            self._pending_actions.clear()
             asyncio.create_task(
                 self.broadcast_ws({"type": "shutdown"})
             )
 
 
 def create_app(state: AppState) -> FastAPI:
-    """Create the FastAPI application with all routes.
+    """Create the FastAPI application with all routes."""
+    app = FastAPI(
+        title="FastSense Bridge",
+        description="Lean connectivity bridge for MATLAB data access",
+    )
 
-    Args:
-        state: Shared application state.
-
-    Returns:
-        Configured FastAPI app instance.
-    """
-    app = FastAPI(title="FastSense Bridge")
-
-    # --- REST API ---
+    # --- Signal Data API ---
 
     @app.get("/api/signals")
     def list_signals() -> list[dict[str, str]]:
         return [
-            {"id": s["id"], "title": s["title"]} for s in state.signals
+            {"id": s["id"], "title": s.get("title", s["id"])}
+            for s in state.signals
         ]
 
     @app.get("/api/signals/{signal_id}/data")
@@ -135,11 +120,23 @@ def create_app(state: AppState) -> FastAPI:
         xMin: float = -1e30,
         xMax: float = 1e30,
         maxPoints: int = 4000,
-    ) -> dict[str, list[float]]:
+        fmt: str = "json",
+    ) -> Any:
         reader = state.get_reader(signal_id)
         if reader is None:
             raise HTTPException(404, f"Signal '{signal_id}' not found")
         x, y = reader.get_range(xMin, xMax, max_points=maxPoints)
+        if fmt == "binary":
+            # Return raw float64 binary: [n_points (uint32), x_data, y_data]
+            import struct
+            import numpy as np
+            xa = np.array(x, dtype=np.float64)
+            ya = np.array(y, dtype=np.float64)
+            header = struct.pack("<I", len(x))
+            return Response(
+                content=header + xa.tobytes() + ya.tobytes(),
+                media_type="application/octet-stream",
+            )
         return {"x": x, "y": y}
 
     @app.get("/api/signals/{signal_id}/thresholds")
@@ -158,16 +155,38 @@ def create_app(state: AppState) -> FastAPI:
 
     @app.get("/api/signals/{signal_id}/columns/{col_name}")
     def get_column(
-        signal_id: str, col_name: str, xMin: float = -1e30, xMax: float = 1e30
+        signal_id: str, col_name: str,
+        xMin: float = -1e30, xMax: float = 1e30,
     ) -> list:
         reader = state.get_reader(signal_id)
         if reader is None:
             raise HTTPException(404, f"Signal '{signal_id}' not found")
         return reader.get_column(col_name, xMin, xMax)
 
-    @app.get("/api/dashboard")
-    def get_dashboard() -> dict[str, Any]:
-        return state.dashboard
+    # --- Bulk Data API (fetch multiple signals in one request) ---
+
+    @app.post("/api/signals/bulk")
+    def bulk_signal_data(
+        request: dict[str, Any],
+    ) -> dict[str, dict[str, list[float]]]:
+        """Fetch data for multiple signals in a single request.
+
+        Body: {"signals": ["id1", "id2"], "xMin": 0, "xMax": 100, "maxPoints": 2000}
+        """
+        signal_ids = request.get("signals", [])
+        x_min = request.get("xMin", -1e30)
+        x_max = request.get("xMax", 1e30)
+        max_points = request.get("maxPoints", 4000)
+        result: dict[str, dict[str, list[float]]] = {}
+        for sid in signal_ids:
+            reader = state.get_reader(sid)
+            if reader is None:
+                continue
+            x, y = reader.get_range(x_min, x_max, max_points=max_points)
+            result[sid] = {"x": x, "y": y}
+        return result
+
+    # --- Action API ---
 
     @app.get("/api/actions")
     def list_actions() -> list[str]:
@@ -206,25 +225,49 @@ def create_app(state: AppState) -> FastAPI:
         state._ws_clients.add(ws)
         try:
             while True:
-                await ws.receive_text()  # keep connection alive
+                await ws.receive_text()
         except WebSocketDisconnect:
             state._ws_clients.discard(ws)
 
-    # --- Static files ---
+    # --- MATLAB Integration ---
 
-    # server.py is at bridge/python/fastsense_bridge/server.py
-    # Go up: fastsense_bridge -> python -> bridge, then into /web
-    web_dir = Path(__file__).resolve().parent.parent.parent / "web"
-    if web_dir.is_dir():
+    @app.post("/api/open-in-matlab/{signal_id}")
+    async def open_in_matlab(
+        signal_id: str,
+        xMin: float = -1e30,
+        xMax: float = 1e30,
+    ) -> dict[str, Any]:
+        """Open a signal in MATLAB for deeper analysis.
 
-        @app.get("/")
-        def index() -> FileResponse:
-            return FileResponse(web_dir / "index.html")
-
-        app.mount(
-            "/static",
-            StaticFiles(directory=str(web_dir)),
-            name="static",
+        Saves the viewed data to a .mat file, generates a starter
+        analysis script, and opens it in the MATLAB editor.
+        Requires an active bridge connection.
+        """
+        if "openInMatlab" not in state.actions:
+            raise HTTPException(
+                503, "Bridge not connected or openInMatlab action not registered"
+            )
+        req_id = str(uuid.uuid4())
+        future: asyncio.Future[dict[str, Any]] = (
+            asyncio.get_running_loop().create_future()
         )
+        state._pending_actions[req_id] = future
+        try:
+            await state.tcp_client.send_action(
+                req_id, "openInMatlab",
+                {"signalId": signal_id, "xMin": xMin, "xMax": xMax},
+            )
+            result = await asyncio.wait_for(future, timeout=10.0)
+            return result
+        except asyncio.TimeoutError:
+            return {"ok": False, "error": "MATLAB did not respond"}
+        finally:
+            state._pending_actions.pop(req_id, None)
+
+    # --- Health ---
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
 
     return app

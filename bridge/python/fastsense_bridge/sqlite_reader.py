@@ -203,8 +203,10 @@ def _minmax_downsample(
         segment_y = y[start:end]
         idx_min = start + int(np.argmin(segment_y))
         idx_max = start + int(np.argmax(segment_y))
-        # Keep min before max to preserve visual shape
-        if idx_min <= idx_max:
+        if idx_min == idx_max:
+            x_out.append(float(x[idx_min]))
+            y_out.append(float(y[idx_min]))
+        elif idx_min < idx_max:
             x_out.extend([float(x[idx_min]), float(x[idx_max])])
             y_out.extend([float(y[idx_min]), float(y[idx_max])])
         else:

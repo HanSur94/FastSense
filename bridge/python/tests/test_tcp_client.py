@@ -18,7 +18,6 @@ async def mock_matlab_server():
             "signals": [
                 {"id": "s1", "dbPath": "/tmp/test.fpdb", "title": "Temp"}
             ],
-            "dashboard": {"name": "Test", "theme": "light", "widgets": []},
             "actions": ["recalc"],
         }
     )
@@ -62,7 +61,6 @@ class TestMatlabTcpClient:
         assert init_msg["type"] == "init"
         assert len(init_msg["signals"]) == 1
         assert init_msg["signals"][0]["id"] == "s1"
-        assert init_msg["dashboard"]["name"] == "Test"
         assert init_msg["actions"] == ["recalc"]
         await client.close()
 
@@ -129,7 +127,7 @@ class TestMatlabTcpClient:
         ) -> None:
             # Send init
             init = json.dumps({"type": "init", "signals": [],
-                              "dashboard": {}, "actions": []})
+                              "actions": []})
             writer.write((init + "\n").encode())
             await writer.drain()
             # Send a data_changed message
