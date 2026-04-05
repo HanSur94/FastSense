@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 999.3-01-PLAN.md
-last_updated: "2026-04-05T16:39:59.839Z"
+stopped_at: Completed 999.3-02-PLAN.md
+last_updated: "2026-04-05T16:43:41.456Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 999.3 — graph-data-export-mat-csv
+**Current focus:** Phase 1000 — dashboard-engine-performance-optimization-phase-2
 
 ## Current Position
 
-Phase: 999.3 (graph-data-export-mat-csv) — EXECUTING
-Plan: 2 of 2
+Phase: 1000 (dashboard-engine-performance-optimization-phase-2) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-05
 
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-dashboard-performance-optimization P03 | 10min | 2 tasks | 1 files |
 | Phase 999.1-mushroom-cards-for-dashboard-engine P04 | 5min | 2 tasks | 8 files |
 | Phase 999.3 P01 | 3min | 2 tasks | 2 files |
+| Phase 999.3-graph-data-export-mat-csv P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Recent decisions affecting current work:
 - [Phase 999.1-mushroom-cards-for-dashboard-engine]: Wave 1 widget files copied from main repo to worktree for plan 04; DetachedMirror restoreLiveRefs handles ValueFcn generically via isprop so no per-type clone code needed beyond fromStruct dispatch
 - [Phase 999.3]: No render() required before exportData() — buildExportStruct_ accesses raw Lines/Thresholds directly
 - [Phase 999.3]: testExportCSVDatetime guarded with ~exist('OCTAVE_VERSION') since datetime is MATLAB-only
+- [Phase 999.3]: exportData dual-API mirrors exportPNG: no-arg opens dialog, with-arg saves directly (extension determines format)
+- [Phase 999.3]: Used regexp for Octave-safe extension guard in onExportData instead of endsWith()
 
 ### Roadmap Evolution
 
@@ -170,6 +173,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T16:39:59.835Z
-Stopped at: Completed 999.3-01-PLAN.md
+Last session: 2026-04-05T16:43:41.452Z
+Stopped at: Completed 999.3-02-PLAN.md
 Resume file: None

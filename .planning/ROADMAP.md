@@ -76,11 +76,11 @@ Plans:
 
 **Goal:** Enable exporting any graph's underlying data as .mat or .csv files, so users can easily extract plotted data for further analysis in MATLAB or external tools.
 **Requirements:** [EXPORT-01: CSV export with time + Y columns, EXPORT-02: MAT export with lines + thresholds structs, EXPORT-03: NaN-filled union for mismatched X arrays, EXPORT-04: Datetime ISO 8601 + datenum columns, EXPORT-05: Toolbar Export Data button, EXPORT-06: Empty plot error guard]
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 999.3-01-PLAN.md — Core exportData method + private helpers + tests
-- [ ] 999.3-02-PLAN.md — Toolbar button, icon, callbacks + test updates
+- [x] 999.3-02-PLAN.md — Toolbar button, icon, callbacks + test updates
 
 ### Phase 1000: Dashboard Engine Performance Optimization Phase 2
 
