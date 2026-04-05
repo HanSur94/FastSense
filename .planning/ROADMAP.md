@@ -125,9 +125,9 @@ Plans:
 **Goal:** Create CompositeThreshold class that aggregates child Threshold objects with AND/OR/MAJORITY logic for hierarchical system health monitoring. Wire into all dashboard widgets (StatusWidget, GaugeWidget, IconCardWidget, MultiStatusWidget) with isa-guards and auto-expansion. Add serialization for save/load persistence.
 **Requirements**: [COMP-01: CompositeThreshold inherits Threshold, COMP-02: AND/OR/MAJORITY aggregation, COMP-03: Nested composites, COMP-04: computeStatus method, COMP-05: addChild dual-input, COMP-06: Per-child ValueFcn/Value, COMP-07: Shared handle references, COMP-08: MultiStatusWidget expansion, COMP-09: ThresholdRegistry + serialization]
 **Depends on:** Phase 1002
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 1003-01-PLAN.md — CompositeThreshold class + TDD test suite (AND/OR/MAJORITY, addChild, computeStatus, nesting)
 - [ ] 1003-02-PLAN.md — Widget isa-guards (StatusWidget, GaugeWidget, IconCardWidget) + MultiStatusWidget composite expansion
-- [ ] 1003-03-PLAN.md — CompositeThreshold toStruct/fromStruct serialization + round-trip tests
+- [x] 1003-03-PLAN.md — CompositeThreshold toStruct/fromStruct serialization + round-trip tests
