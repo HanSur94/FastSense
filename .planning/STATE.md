@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 Phase: 999.1
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-05 - Completed quick task 260405-ovf: Update README based on research
+Last activity: 2026-04-05 - Completed quick task 260405-plc: Change Edit button to open source MATLAB file
 
 Progress: [░░░░░░░░░░] 0%
 
