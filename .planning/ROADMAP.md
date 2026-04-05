@@ -99,9 +99,10 @@ Plans:
 **Goal:** Make thresholds independent, reusable entities with ThresholdRegistry and shared-reference semantics (TrendMiner-style). Breaking change: replace ThresholdRules/addThresholdRule with Threshold handle class + addThreshold across all libraries.
 **Requirements**: [THR-01: Threshold handle class, THR-02: ThresholdRegistry singleton, THR-03: Sensor integration (addThreshold/removeThreshold), THR-04: Resolve adaptation, THR-05: Downstream consumer migration, THR-06: Test migration]
 **Depends on:** Phase 1000
-**Plans:** 3 plans
+**Plans:** 4 plans
 
 Plans:
 - [ ] 1001-01-PLAN.md — Threshold handle class + ThresholdRegistry singleton + tests
 - [ ] 1001-02-PLAN.md — Sensor.m refactor (Thresholds property, addThreshold, resolve adaptation) + sensor test migration
-- [ ] 1001-03-PLAN.md — Dashboard widgets, EventDetection, SensorRegistry display migration + remaining test migration
+- [ ] 1001-03-PLAN.md — Dashboard widgets, SensorRegistry display, loadModuleMetadata migration + widget tests
+- [ ] 1001-04-PLAN.md — EventDetection migration (IncrementalEventDetector, LiveEventPipeline, EventViewer) + EventDetection tests
