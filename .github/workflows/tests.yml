@@ -125,13 +125,13 @@ jobs:
         run: find libs -name '*.mex*' -type f | sort
 
   mex-build-windows:
-    name: MEX Build (Windows ${{ matrix.os == 'windows-2022' && '11' || '10' }})
+    name: MEX Build (Windows ${{ matrix.os == 'windows-latest' && '11' || '10' }})
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2019, windows-2022]
+        os: [windows-2019, windows-latest]
     steps:
       - name: Allow paths with colons (wiki files)
         run: git config --global core.protectNTFS false
