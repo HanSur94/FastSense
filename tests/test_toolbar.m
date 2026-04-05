@@ -31,7 +31,7 @@ function test_toolbar()
     fp.render();
     tb = FastSenseToolbar(fp);
     children = get(tb.hToolbar, 'Children');
-    assert(numel(children) == 11, ...
+    assert(numel(children) == 12, ...
         sprintf('testToolbarHasAllButtons: got %d', numel(children)));
     close(fp.hFigure);
 
@@ -40,7 +40,7 @@ function test_toolbar()
     assert(isequal(size(icons), [16 16 3]), 'testIconsAre16x16x3');
 
     % testAllIconNames
-    names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', 'export', 'violations'};
+    names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', 'export', 'exportdata', 'violations'};
     for i = 1:numel(names)
         icon = FastSenseToolbar.makeIcon(names{i});
         assert(isequal(size(icon), [16 16 3]), ...
