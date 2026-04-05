@@ -68,7 +68,7 @@ classdef TestDashboardPerformance < matlab.unittest.TestCase
             end
         end
 
-        function testResizeMarksDirtyAndRealizeBatch(testCase)
+        function testResizeDoesNotMarkDirty(testCase)
             d = DashboardEngine('ResizePerfTest');
             d.addWidget('number', 'Title', 'N1', ...
                 'Position', [1 1 24 1]);
@@ -80,7 +80,27 @@ classdef TestDashboardPerformance < matlab.unittest.TestCase
             end
 
             d.onResize();
-            testCase.verifyTrue(d.Widgets{1}.Dirty);
+            % After PERF2-06: resize repositions panels but does NOT mark dirty
+            testCase.verifyFalse(d.Widgets{1}.Dirty);
+        end
+
+        function testSliderDebounceCreatesTimer(testCase)
+            d = DashboardEngine('DebounceTest');
+            d.addWidget('fastsense', 'Title', 'Temp', ...
+                'Position', [1 1 12 3], 'XData', 1:100, 'YData', rand(1, 100));
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+            % Update global time range so sliders have valid range
+            d.updateGlobalTimeRange();
+            % Simulate slider change
+            set(d.hTimeSliderL, 'Value', 0.2);
+            d.onTimeSlidersChanged();
+            % Debounce timer should have been created (SliderDebounceTimer is readable)
+            testCase.verifyFalse(isempty(d.SliderDebounceTimer));
+            % Clean up the timer via its readable handle before test teardown
+            t = d.SliderDebounceTimer;
+            try stop(t); catch, end
+            try delete(t); catch, end
         end
 
         function testThemeCacheReturnsSameStruct(testCase)
