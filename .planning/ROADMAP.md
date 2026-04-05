@@ -84,9 +84,9 @@ Plans:
 
 ### Phase 1000: Dashboard Engine Performance Optimization Phase 2
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 999
+**Goal:** Fix 6 identified performance bottlenecks in DashboardEngine: (1) FastSenseWidget.refresh() full teardown → incremental update reusing axes/FastSense, (2) broadcastTimeRange synchronous slider → debounced/coalesced updates, (3) All-page panel creation at startup → lazy page realization on first switchPage(), (4) getTimeRange full-array scan per widget per tick → cached min/max with incremental update, (5) switchPage synchronous realize → batched with drawnow, (6) Resize marks all dirty → debounced resize without dirty marking. Goal: 10-50x faster live ticks, 2-5x faster startup, smooth slider interactivity.
+**Requirements**: [PERF2-01: Incremental FastSenseWidget refresh, PERF2-02: Debounced time slider broadcast, PERF2-03: Lazy page panel realization, PERF2-04: Cached widget time ranges, PERF2-05: Batched switchPage realize, PERF2-06: Debounced resize without dirty]
+**Depends on:** None
 **Plans:** 0 plans
 
 Plans:

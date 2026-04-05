@@ -143,6 +143,7 @@ Recent decisions affecting current work:
 
 - Phase 8 added: Widget improvements — DividerWidget, CollapsibleWidget, Y-axis limits
 - Phase 1 added: Dashboard Performance Optimization — faster creation, instantiation, and interactivity
+- Phase 1000 added: Dashboard Engine Performance Optimization Phase 2 — 6 bottlenecks: incremental FastSenseWidget refresh, debounced slider broadcast, lazy page realization, cached time ranges, batched page switch, debounced resize
 
 ### Pending Todos
 
