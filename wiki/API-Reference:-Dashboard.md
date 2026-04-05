@@ -32,8 +32,8 @@ ADDPAGE Add a named page and make it the active page for addWidget.
 
 #### `switchPage(obj, pageIdx)`
 
-SWITCHPAGE Switch the active page and re-render its widgets.
-  d.switchPage(2) sets ActivePage = 2 and calls rerenderWidgets().
+SWITCHPAGE Switch the active page using panel visibility toggling.
+  d.switchPage(2) sets ActivePage = 2 and toggles panel visibility.
 
 #### `w = addWidget(obj, type, varargin)`
 
@@ -44,6 +44,10 @@ Accept a pre-constructed widget object directly
 ADDCOLLAPSIBLE Convenience: add a GroupWidget with Mode='collapsible'.
   w = d.addCollapsible('Sensors', {w1, w2})
   w = d.addCollapsible('Sensors', {w1, w2}, 'Collapsed', true)
+
+#### `t = getCachedTheme(obj)`
+
+GETCACHEDTHEME Return cached theme struct, recomputing only when Theme changes.
 
 #### `render(obj)`
 
@@ -88,9 +92,9 @@ GETWIDGETBYTITLE Find a widget by its Title property.
 
 DETACHWIDGET Pop a widget out as a standalone figure window.
 
-#### `removeDetached(obj, widget)`
+#### `removeDetached(obj)`
 
-REMOVEDETACHED Remove mirrors by original widget handle or stale state.
+REMOVEDETACHED Remove stale mirrors from the registry.
 
 #### `setContentArea(obj, contentArea)`
 
@@ -111,6 +115,11 @@ UPDATEGLOBALTIMERANGE Scan all widgets for data time bounds.
 
 UPDATELIVETIMERANGE Update DataTimeRange without resetting sliders.
   Called during live mode to expand the time range as data grows.
+
+#### `updateLiveTimeRangeFrom(obj, ws)`
+
+UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
+  Like updateLiveTimeRange but accepts ws to avoid re-fetching activePageWidgets().
 
 #### `broadcastTimeRange(obj, tStart, tEnd)`
 
@@ -137,7 +146,7 @@ MARKALLDIRTY Flag all widgets as needing refresh.
 
 #### `onResize(obj)`
 
-ONRESIZE Handle figure resize: mark all dirty and re-realize visible.
+ONRESIZE Handle figure resize: reposition all widget panels.
 
 ### Static Methods
 
@@ -230,7 +239,6 @@ obj = DashboardWidget(varargin)
 | Sensor | `[]` | Sensor object for data binding (primary source) |
 | ParentTheme | `[]` | Theme inherited from DashboardEngine |
 | Dirty | `true` | true when widget needs refresh (data changed) |
-| Realized | `false` | true after render() has been called |
 | hPanel | `[]` | Handle to the uipanel this widget renders into |
 
 ### Methods
@@ -242,6 +250,14 @@ obj = DashboardWidget(varargin)
 #### `markDirty(obj)`
 
 MARKDIRTY Flag this widget as needing a refresh.
+
+#### `markRealized(obj)`
+
+MARKREALIZED Mark this widget as having been rendered.
+
+#### `markUnrealized(obj)`
+
+MARKUNREALIZED Mark this widget as needing re-render.
 
 #### `setTimeRange(~, ~, ~)`
 
@@ -1069,6 +1085,10 @@ Check nesting depth for GroupWidget children
 #### `render(obj, parentPanel)`
 
 #### `refresh(obj)`
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+GETTIMERANGE Aggregate time range from all children and tabs.
 
 #### `t = getType(obj)`
 
