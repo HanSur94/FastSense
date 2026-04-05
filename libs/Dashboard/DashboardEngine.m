@@ -141,12 +141,17 @@ classdef DashboardEngine < handle
                         end
                     end
                 end
-                % Realize any not-yet-realized widgets on the now-active page
+                % Batch-realize any not-yet-realized widgets on the now-active page
+                hasUnrealized = false;
                 activeWs = obj.Pages{obj.ActivePage}.Widgets;
                 for wi = 1:numel(activeWs)
                     if ~activeWs{wi}.Realized
-                        obj.Layout.realizeWidget(activeWs{wi});
+                        hasUnrealized = true;
+                        break;
                     end
+                end
+                if hasUnrealized
+                    obj.realizeBatch(5);
                 end
             end
         end
@@ -275,7 +280,7 @@ classdef DashboardEngine < handle
                         continue;
                     end
                     pgWidgets = obj.Pages{pgIdx}.Widgets;
-                    obj.Layout.createPanels(obj.hFigure, pgWidgets, themeStruct);
+                    obj.Layout.allocatePanels(obj.hFigure, pgWidgets, themeStruct);
                     % Hide panels for non-active pages
                     for wi = 1:numel(pgWidgets)
                         if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
