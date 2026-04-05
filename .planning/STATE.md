@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 1001-05-PLAN.md (migrate 10 test files from addThresholdRule to Threshold API)
-last_updated: "2026-04-05T18:41:14.047Z"
+stopped_at: Completed 1001-06-PLAN.md
+last_updated: "2026-04-05T18:42:02.646Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -95,6 +95,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1001 P04 | 4min | 2 tasks | 9 files |
 | Phase 1001 P03 | 10min | 2 tasks | 13 files |
 | Phase 1001 P05 | 10min | 2 tasks | 10 files |
+| Phase 1001 P06 | 8min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,7 @@ Recent decisions affecting current work:
 - [Phase 1001]: Threshold violation checks iterate allValues() for each Threshold (no single .Value property — all condition values checked)
 - [Phase 1001]: loadModuleMetadata uses getConditionFields() on each Threshold for state channel discovery
 - [Phase 1001]: Threshold key derived from lowercased label with spaces replaced by underscores; no-label calls use upper_N key format
+- [Phase 1001]: All 5 EventDetection test files migrated: 34 addThresholdRule calls replaced with Threshold+addCondition+addThreshold pattern
 
 ### Roadmap Evolution
 
@@ -201,6 +203,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T18:41:14.044Z
-Stopped at: Completed 1001-05-PLAN.md (migrate 10 test files from addThresholdRule to Threshold API)
+Last session: 2026-04-05T18:42:02.642Z
+Stopped at: Completed 1001-06-PLAN.md
 Resume file: None
