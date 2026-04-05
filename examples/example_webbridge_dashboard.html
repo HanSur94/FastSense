@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastSense Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e4e6ef;
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: #1a1d27;
+    border-bottom: 1px solid #2a2d3a;
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #f87171;
+  }
+  .status-dot.connected { background: #34d399; }
+  .status-dot.reconnecting { background: #fbbf24; }
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 24px;
+    background: #13151d;
+  }
+  button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #2a2d3a;
+    background: #1a1d27;
+    color: #e4e6ef;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: #2a2d3a; }
+  button.primary {
+    background: #3b82f6;
+    border-color: #3b82f6;
+  }
+  button.primary:hover { background: #2563eb; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px 24px 24px;
+  }
+  @media (min-width: 900px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .grid .full { grid-column: 1 / -1; }
+  }
+  .card {
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2d3a;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .card-header .meta {
+    font-weight: 400;
+    color: #8b8fa3;
+    font-size: 12px;
+  }
+  .card-body { padding: 0; }
+  .chart { width: 100%; height: 220px; }
+  .full .chart { height: 280px; }
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .signal-select {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #2a2d3a;
+    background: #1a1d27;
+    color: #e4e6ef;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>FastSense Dashboard</h1>
+  <div class="status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting...</span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button onclick="refreshAll()">Refresh</button>
+  <button class="primary" onclick="openInMatlab()">Open in MATLAB</button>
+  <select class="signal-select" id="signalSelect"></select>
+  <span style="flex:1"></span>
+  <button onclick="invokeAction('recalculate')">Recalculate</button>
+  <button onclick="invokeAction('resetAlarms')">Reset Alarms</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BRIDGE = "http://localhost:8080";
+const WS_URL = "ws://localhost:8080/ws";
+const plotlyLayout = {
+  paper_bgcolor: "transparent",
+  plot_bgcolor: "transparent",
+  font: { color: "#8b8fa3", size: 11 },
+  margin: { t: 10, r: 20, b: 40, l: 50 },
+  xaxis: {
+    gridcolor: "#2a2d3a",
+    zerolinecolor: "#2a2d3a",
+    title: { text: "Time (s)", font: { size: 11 } },
+  },
+  yaxis: {
+    gridcolor: "#2a2d3a",
+    zerolinecolor: "#2a2d3a",
+  },
+  showlegend: false,
+};
+const plotlyConfig = { responsive: true, displayModeBar: false };
+
+let signals = [];
+let charts = {};
+let ws = null;
+
+// --- API ---
+async function api(path, opts) {
+  const resp = await fetch(BRIDGE + path, opts);
+  if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+  return resp.json();
+}
+
+async function loadSignals() {
+  signals = await api("/api/signals");
+  const sel = document.getElementById("signalSelect");
+  sel.innerHTML = signals.map(s =>
+    '<option value="' + s.id + '">' + s.title + "</option>"
+  ).join("");
+}
+
+async function fetchBulk(ids, maxPoints) {
+  return api("/api/signals/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signals: ids, maxPoints: maxPoints || 2000 }),
+  });
+}
+
+async function fetchThresholds(id) {
+  return api("/api/signals/" + id + "/thresholds");
+}
+
+// --- Rendering ---
+function buildGrid() {
+  var grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  signals.forEach(function(sig, i) {
+    var card = document.createElement("div");
+    card.className = "card" + (i === 0 ? " full" : "");
+    card.innerHTML =
+      '<div class="card-header">' +
+        '<span>' + sig.title + '</span>' +
+        '<span class="meta" id="meta-' + sig.id + '">loading...</span>' +
+      '</div>' +
+      '<div class="card-body">' +
+        '<div class="chart" id="chart-' + sig.id + '"></div>' +
+      '</div>';
+    grid.appendChild(card);
+  });
+}
+
+async function initCharts() {
+  var ids = signals.map(function(s) { return s.id; });
+  var bulk = await fetchBulk(ids);
+
+  for (var i = 0; i < signals.length; i++) {
+    var sig = signals[i];
+    var data = bulk[sig.id] || { x: [], y: [] };
+    var el = document.getElementById("chart-" + sig.id);
+
+    var traces = [{
+      x: data.x,
+      y: data.y,
+      type: "scattergl",
+      mode: "lines",
+      line: { color: "#3b82f6", width: 1.5 },
+      name: sig.title,
+    }];
+
+    // Add thresholds
+    try {
+      var thresholds = await fetchThresholds(sig.id);
+      thresholds.forEach(function(th) {
+        var color = th.label.toLowerCase().indexOf("alarm") >= 0 ? "#f87171" : "#fbbf24";
+        traces.push({
+          x: [data.x[0], data.x[data.x.length - 1]],
+          y: [th.value, th.value],
+          type: "scattergl",
+          mode: "lines",
+          line: { color: color, width: 1, dash: "dash" },
+          name: th.label,
+          showlegend: true,
+        });
+      });
+    } catch (e) { /* no thresholds */ }
+
+    var layout = JSON.parse(JSON.stringify(plotlyLayout));
+    layout.showlegend = traces.length > 1;
+    if (layout.showlegend) {
+      layout.legend = { x: 1, y: 1, xanchor: "right", font: { size: 10 } };
+    }
+
+    Plotly.newPlot(el, traces, layout, plotlyConfig);
+    charts[sig.id] = { el: el, nTraces: traces.length };
+    updateMeta(sig.id, data);
+  }
+}
+
+function updateMeta(id, data) {
+  var el = document.getElementById("meta-" + id);
+  if (!el || !data.y || data.y.length === 0) return;
+  var last = data.y[data.y.length - 1];
+  var min = Math.min.apply(null, data.y);
+  var max = Math.max.apply(null, data.y);
+  el.textContent = last.toFixed(2) + " | range: " + min.toFixed(1) + " .. " + max.toFixed(1) + " | " + data.x.length + " pts";
+}
+
+async function refreshAll() {
+  var ids = signals.map(function(s) { return s.id; });
+  var bulk = await fetchBulk(ids);
+
+  for (var i = 0; i < signals.length; i++) {
+    var sig = signals[i];
+    var data = bulk[sig.id];
+    if (!data || !charts[sig.id]) continue;
+
+    // Update main trace
+    Plotly.restyle(charts[sig.id].el, {
+      x: [data.x],
+      y: [data.y],
+    }, [0]);
+
+    // Update threshold x range
+    for (var t = 1; t < charts[sig.id].nTraces; t++) {
+      Plotly.restyle(charts[sig.id].el, {
+        x: [[data.x[0], data.x[data.x.length - 1]]],
+      }, [t]);
+    }
+
+    // Relayout x axis
+    Plotly.relayout(charts[sig.id].el, {
+      "xaxis.range": [data.x[0], data.x[data.x.length - 1]],
+    });
+
+    updateMeta(sig.id, data);
+  }
+}
+
+// --- Actions ---
+async function invokeAction(name) {
+  try {
+    showToast("Running " + name + "...");
+    var result = await api("/api/actions/" + name, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    showToast(result.ok ? name + " done" : "Error: " + (result.error || "failed"));
+    refreshAll();
+  } catch (e) {
+    showToast("Error: " + e.message);
+  }
+}
+
+async function openInMatlab() {
+  var sel = document.getElementById("signalSelect");
+  var id = sel.value;
+  try {
+    showToast("Opening " + id + " in MATLAB...");
+    var result = await api("/api/open-in-matlab/" + id, { method: "POST" });
+    if (result.ok && result.mode === "script") {
+      // No live MATLAB — download the .m script
+      showToast("Downloading analysis script...");
+      window.open(BRIDGE + result.scriptUrl, "_blank");
+    } else if (result.ok) {
+      showToast("Opened in MATLAB");
+    } else {
+      showToast("Error: " + (result.error || "failed"));
+    }
+  } catch (e) {
+    showToast("Error: " + e.message);
+  }
+}
+
+// --- WebSocket ---
+function connectWS() {
+  if (ws) { try { ws.close(); } catch(e){} }
+  ws = new WebSocket(WS_URL);
+  ws.onopen = function() {
+    setStatus("connected", "Connected");
+  };
+  ws.onmessage = function(evt) {
+    var msg = JSON.parse(evt.data);
+    if (msg.type === "data_changed") {
+      refreshAll();
+    } else if (msg.type === "shutdown") {
+      setStatus("reconnecting", "MATLAB stopped");
+      showToast("MATLAB shut down");
+    }
+  };
+  ws.onclose = function() {
+    setStatus("reconnecting", "Reconnecting...");
+    setTimeout(connectWS, 3000);
+  };
+  ws.onerror = function() {
+    setStatus("", "Disconnected");
+  };
+}
+
+function setStatus(cls, text) {
+  document.getElementById("statusDot").className = "status-dot " + cls;
+  document.getElementById("statusText").textContent = text;
+}
+
+function showToast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() { t.classList.remove("show"); }, 3000);
+}
+
+// --- Init ---
+async function init() {
+  try {
+    await api("/health");
+  } catch (e) {
+    document.getElementById("grid").innerHTML =
+      '<div class="card full" style="padding:40px;text-align:center">' +
+      '<h2>Bridge not running</h2>' +
+      '<p style="margin-top:12px;color:#8b8fa3">Start the bridge first:</p>' +
+      '<pre style="margin-top:8px;color:#3b82f6">python examples/mock_matlab_bridge.py</pre>' +
+      '<p style="margin-top:8px;color:#8b8fa3">or in MATLAB:</p>' +
+      '<pre style="color:#3b82f6">example_webbridge</pre>' +
+      '</div>';
+    setStatus("", "Disconnected");
+    return;
+  }
+  await loadSignals();
+  buildGrid();
+  await initCharts();
+  connectWS();
+}
+
+init();
+</script>
+</body>
+</html>

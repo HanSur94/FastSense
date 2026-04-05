@@ -269,12 +269,16 @@ class TestAppState:
 class TestMatlabIntegration:
     """Tests for MATLAB integration endpoints."""
 
-    def test_open_in_matlab_no_action_registered(
+    def test_open_in_matlab_fallback_script(
         self, client: TestClient, app_state: AppState
     ) -> None:
-        # openInMatlab is not in the actions list
+        # No MATLAB connection — falls back to script download
         resp = client.post("/api/open-in-matlab/s1?xMin=0&xMax=10")
-        assert resp.status_code == 503
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["mode"] == "script"
+        assert "/api/export/script/s1" in data["scriptUrl"]
 
     def test_open_in_matlab_sends_action(
         self, client: TestClient, app_state: AppState
@@ -288,6 +292,20 @@ class TestMatlabIntegration:
         assert call_args[0][2]["signalId"] == "s1"
         assert call_args[0][2]["xMin"] == 2.0
         assert call_args[0][2]["xMax"] == 8.0
+
+
+    def test_export_script(self, client: TestClient) -> None:
+        resp = client.get("/api/export/script/s1?xMin=0&xMax=10")
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]
+        assert "analyze_s1.m" in resp.headers["content-disposition"]
+        script = resp.text
+        assert "Temperature" in script
+        assert "x = [" in script  # data embedded (100 pts < 5000 threshold)
+
+    def test_export_script_not_found(self, client: TestClient) -> None:
+        resp = client.get("/api/export/script/nonexistent")
+        assert resp.status_code == 404
 
 
 class TestHealth:
