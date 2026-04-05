@@ -238,6 +238,8 @@ classdef ChipBarWidget < DashboardWidget
                     chipColor = theme.StatusWarnColor;
                 case 'alarm'
                     chipColor = theme.StatusAlarmColor;
+                case 'info'
+                    chipColor = theme.InfoColor;
                 otherwise
                     chipColor = [0.5 0.5 0.5];
             end
