@@ -35,29 +35,34 @@ s.addStateChannel(scZone);
 
 % --- Upper thresholds per machine state ---
 % Idle: lenient upper limit
-s.addThresholdRule(struct('machine', 0), 80, ...
-    'Direction', 'upper', 'Label', 'HH (idle)', ...
-    'Color', [0.9 0.4 0.1], 'LineStyle', '--');
+tHhIdle = Threshold('hh_idle', 'Name', 'HH (idle)', ...
+    'Direction', 'upper', 'Color', [0.9 0.4 0.1], 'LineStyle', '--');
+tHhIdle.addCondition(struct('machine', 0), 80);
+s.addThreshold(tHhIdle);
 
 % Running: tighter upper limit
-s.addThresholdRule(struct('machine', 1), 68, ...
-    'Direction', 'upper', 'Label', 'HH (running)', ...
-    'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+tHhRunning = Threshold('hh_running', 'Name', 'HH (running)', ...
+    'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+tHhRunning.addCondition(struct('machine', 1), 68);
+s.addThreshold(tHhRunning);
 
 % Evacuated: strictest upper limit
-s.addThresholdRule(struct('machine', 2), 55, ...
-    'Direction', 'upper', 'Label', 'HH (evacuated)', ...
-    'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuated = Threshold('hh_evacuated', 'Name', 'HH (evacuated)', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuated.addCondition(struct('machine', 2), 55);
+s.addThreshold(tHhEvacuated);
 
 % --- Lower threshold only when evacuated ---
-s.addThresholdRule(struct('machine', 2), 30, ...
-    'Direction', 'lower', 'Label', 'LL (evacuated)', ...
-    'Color', [0.1 0.1 0.9], 'LineStyle', '-');
+tLlEvacuated = Threshold('ll_evacuated', 'Name', 'LL (evacuated)', ...
+    'Direction', 'lower', 'Color', [0.1 0.1 0.9], 'LineStyle', '-');
+tLlEvacuated.addCondition(struct('machine', 2), 30);
+s.addThreshold(tLlEvacuated);
 
 % --- Combined condition: running AND zone B → extra-strict upper ---
-s.addThresholdRule(struct('machine', 1, 'zone', 'B'), 60, ...
-    'Direction', 'upper', 'Label', 'HH (running+zoneB)', ...
-    'Color', [0.8 0 0.8], 'LineStyle', ':');
+tHhRunningZoneB = Threshold('hh_running_zoneb', 'Name', 'HH (running+zoneB)', ...
+    'Direction', 'upper', 'Color', [0.8 0 0.8], 'LineStyle', ':');
+tHhRunningZoneB.addCondition(struct('machine', 1, 'zone', 'B'), 60);
+s.addThreshold(tHhRunningZoneB);
 
 % --- Resolve all thresholds and violations ---
 s.resolve();

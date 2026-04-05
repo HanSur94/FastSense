@@ -19,19 +19,22 @@ s.addStateChannel(sc);
 
 % --- Define dynamic thresholds per state ---
 % Idle: threshold at 70
-s.addThresholdRule(struct('machine_state', 0), 70, ...
-    'Direction', 'upper', 'Label', 'HH (idle)', ...
-    'Color', [0.8 0 0], 'LineStyle', '--');
+tHhIdle = Threshold('hh_idle', 'Name', 'HH (idle)', ...
+    'Direction', 'upper', 'Color', [0.8 0 0], 'LineStyle', '--');
+tHhIdle.addCondition(struct('machine_state', 0), 70);
+s.addThreshold(tHhIdle);
 
 % Running: stricter threshold at 55
-s.addThresholdRule(struct('machine_state', 1), 55, ...
-    'Direction', 'upper', 'Label', 'HH (running)', ...
-    'Color', [1 0.3 0], 'LineStyle', '--');
+tHhRunning = Threshold('hh_running', 'Name', 'HH (running)', ...
+    'Direction', 'upper', 'Color', [1 0.3 0], 'LineStyle', '--');
+tHhRunning.addCondition(struct('machine_state', 1), 55);
+s.addThreshold(tHhRunning);
 
 % Evacuated: very strict threshold at 45
-s.addThresholdRule(struct('machine_state', 2), 45, ...
-    'Direction', 'upper', 'Label', 'HH (evacuated)', ...
-    'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuated = Threshold('hh_evacuated', 'Name', 'HH (evacuated)', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuated.addCondition(struct('machine_state', 2), 45);
+s.addThreshold(tHhEvacuated);
 
 % --- Precompute everything ---
 s.resolve();

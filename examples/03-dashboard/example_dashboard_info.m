@@ -22,16 +22,27 @@ sTemp = Sensor('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'C'];
 sTemp.X = t;
 sTemp.Y = 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8;
-sTemp.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
-sTemp.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarnTemp.addCondition(struct(), 78);
+sTemp.addThreshold(tHiWarnTemp);
+
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmTemp.addCondition(struct(), 85);
+sTemp.addThreshold(tHiAlarmTemp);
 sTemp.resolve();
 
 sPress = Sensor('P-201', 'Name', 'Pressure');
 sPress.Units = 'bar';
 sPress.X = t;
 sPress.Y = 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5;
-sPress.addThresholdRule(struct(), 65, 'Direction', 'upper', 'Label', 'Hi Warn');
-sPress.addThresholdRule(struct(), 70, 'Direction', 'upper', 'Label', 'Hi Alarm');
+
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarnPress.addCondition(struct(), 65);
+sPress.addThreshold(tHiWarnPress);
+
+tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmPress.addCondition(struct(), 70);
+sPress.addThreshold(tHiAlarmPress);
 sPress.resolve();
 
 %% 2. Generate a process diagram image for the info page

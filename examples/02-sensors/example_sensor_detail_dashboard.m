@@ -21,10 +21,15 @@ s1 = Sensor('temp', 'Name', 'Furnace Temperature');
 s1.Units = [char(176) 'C'];
 s1.X = t1; s1.Y = d1;
 s1.addStateChannel(sc);
-s1.addThresholdRule(struct('mode', 1), 140, ...
-    'Direction', 'upper', 'Label', 'H Warning', 'Color', [1 0.75 0]);
-s1.addThresholdRule(struct('mode', 1), 155, ...
-    'Direction', 'upper', 'Label', 'HH Alarm', 'Color', [1 0 0]);
+tHWarning1 = Threshold('h_warning', 'Name', 'H Warning', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tHWarning1.addCondition(struct('mode', 1), 140);
+s1.addThreshold(tHWarning1);
+
+tHhAlarm1 = Threshold('hh_alarm', 'Name', 'HH Alarm', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tHhAlarm1.addCondition(struct('mode', 1), 155);
+s1.addThreshold(tHhAlarm1);
 s1.resolve();
 
 ev1 = Event(t1(25000), t1(25300), 'temp', 'HH Alarm', 155, 'upper');
@@ -38,8 +43,10 @@ s2 = Sensor('pressure', 'Name', 'Chamber Pressure');
 s2.Units = 'bar';
 s2.X = t2; s2.Y = d2;
 s2.addStateChannel(sc);
-s2.addThresholdRule(struct('mode', 1), 1.0, ...
-    'Direction', 'lower', 'Label', 'L Warning', 'Color', [0.3 0.6 1]);
+tLWarning2 = Threshold('l_warning', 'Name', 'L Warning', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tLWarning2.addCondition(struct('mode', 1), 1.0);
+s2.addThreshold(tLWarning2);
 s2.resolve();
 
 ev2 = Event(t2(40000), t2(40150), 'pressure', 'L Warning', 1.0, 'lower');

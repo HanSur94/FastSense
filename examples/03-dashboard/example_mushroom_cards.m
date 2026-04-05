@@ -59,12 +59,15 @@ sTemp.Units = [char(176) 'F'];
 sTemp.X = t;
 sTemp.Y = temp;
 sTemp.addStateChannel(scMode);
-sTemp.addThresholdRule(struct('machine', 1), 78, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
-sTemp.addThresholdRule(struct('machine', 1), 85, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnTemp.addCondition(struct('machine', 1), 78);
+sTemp.addThreshold(tHiWarnTemp);
+
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmTemp.addCondition(struct('machine', 1), 85);
+sTemp.addThreshold(tHiAlarmTemp);
 sTemp.resolve();
 
 % --- Pressure sensor P-201 ---
@@ -85,12 +88,15 @@ sPress.Units = 'psi';
 sPress.X = t;
 sPress.Y = pressure;
 sPress.addStateChannel(scMode);
-sPress.addThresholdRule(struct('machine', 1), 65, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
-sPress.addThresholdRule(struct('machine', 1), 70, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnPress.addCondition(struct('machine', 1), 65);
+sPress.addThreshold(tHiWarnPress);
+
+tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmPress.addCondition(struct('machine', 1), 70);
+sPress.addThreshold(tHiAlarmPress);
 sPress.resolve();
 
 %% ========== Create DashboardEngine ==========

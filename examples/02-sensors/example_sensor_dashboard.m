@@ -26,15 +26,20 @@ s1.X = t1;
 s1.Y = 40 + 20*sin(2*pi*t1/25) + 4*randn(1, numel(t1));
 s1.addStateChannel(scMachine);
 
-s1.addThresholdRule(struct('machine', 0), 75, ...
-    'Direction', 'upper', 'Label', 'HH (idle)', ...
-    'Color', [0.9 0.4 0.1], 'LineStyle', '--');
-s1.addThresholdRule(struct('machine', 1), 60, ...
-    'Direction', 'upper', 'Label', 'HH (running)', ...
-    'Color', [0.9 0.1 0.1], 'LineStyle', '--');
-s1.addThresholdRule(struct('machine', 2), 50, ...
-    'Direction', 'upper', 'Label', 'HH (evacuated)', ...
-    'Color', [1 0 0], 'LineStyle', '-');
+tHhIdleS1 = Threshold('hh_idle', 'Name', 'HH (idle)', ...
+    'Direction', 'upper', 'Color', [0.9 0.4 0.1], 'LineStyle', '--');
+tHhIdleS1.addCondition(struct('machine', 0), 75);
+s1.addThreshold(tHhIdleS1);
+
+tHhRunningS1 = Threshold('hh_running', 'Name', 'HH (running)', ...
+    'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+tHhRunningS1.addCondition(struct('machine', 1), 60);
+s1.addThreshold(tHhRunningS1);
+
+tHhEvacuatedS1 = Threshold('hh_evacuated', 'Name', 'HH (evacuated)', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuatedS1.addCondition(struct('machine', 2), 50);
+s1.addThreshold(tHhEvacuatedS1);
 s1.resolve();
 
 % ========================================================
@@ -47,12 +52,15 @@ s2.X = t2;
 s2.Y = 22 + 5*sin(2*pi*t2/40) + 1.5*randn(1, numel(t2));
 s2.Y(3000:3100) = s2.Y(3000:3100) + 12;  % spike
 
-s2.addThresholdRule(struct(), 30, ...
-    'Direction', 'upper', 'Label', 'High Temp', ...
-    'Color', [0.9 0.1 0.1], 'LineStyle', '--');
-s2.addThresholdRule(struct(), 15, ...
-    'Direction', 'lower', 'Label', 'Low Temp', ...
-    'Color', [0.1 0.1 0.9], 'LineStyle', '--');
+tHighTemp = Threshold('high_temp', 'Name', 'High Temp', ...
+    'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+tHighTemp.addCondition(struct(), 30);
+s2.addThreshold(tHighTemp);
+
+tLowTemp = Threshold('low_temp', 'Name', 'Low Temp', ...
+    'Direction', 'lower', 'Color', [0.1 0.1 0.9], 'LineStyle', '--');
+tLowTemp.addCondition(struct(), 15);
+s2.addThreshold(tLowTemp);
 s2.resolve();
 
 % ========================================================
@@ -65,9 +73,10 @@ s3.X = t3;
 s3.Y = 3 + 1.2*sin(2*pi*t3/15) + 0.5*randn(1, numel(t3));
 s3.Y(7000:7050) = s3.Y(7000:7050) + 5;
 
-s3.addThresholdRule(struct(), 5.5, ...
-    'Direction', 'upper', 'Label', 'Vib Alarm', ...
-    'Color', [0.8 0.2 0], 'LineStyle', '--');
+tVibAlarm = Threshold('vib_alarm', 'Name', 'Vib Alarm', ...
+    'Direction', 'upper', 'Color', [0.8 0.2 0], 'LineStyle', '--');
+tVibAlarm.addCondition(struct(), 5.5);
+s3.addThreshold(tVibAlarm);
 s3.resolve();
 
 % ========================================================
@@ -81,12 +90,15 @@ s4.Y = 50 + 10*sin(2*pi*t4/18) + 3*randn(1, numel(t4));
 s4.Y(5000:5200) = s4.Y(5000:5200) - 30;
 s4.addStateChannel(scMachine);
 
-s4.addThresholdRule(struct('machine', 1), 65, ...
-    'Direction', 'upper', 'Label', 'Flow HH', ...
-    'Color', [0.9 0.1 0.1], 'LineStyle', '--');
-s4.addThresholdRule(struct('machine', 2), 25, ...
-    'Direction', 'lower', 'Label', 'Flow LL', ...
-    'Color', [0.1 0.1 0.9], 'LineStyle', '-');
+tFlowHh = Threshold('flow_hh', 'Name', 'Flow HH', ...
+    'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+tFlowHh.addCondition(struct('machine', 1), 65);
+s4.addThreshold(tFlowHh);
+
+tFlowLl = Threshold('flow_ll', 'Name', 'Flow LL', ...
+    'Direction', 'lower', 'Color', [0.1 0.1 0.9], 'LineStyle', '-');
+tFlowLl.addCondition(struct('machine', 2), 25);
+s4.addThreshold(tFlowLl);
 s4.resolve();
 
 % ========================================================

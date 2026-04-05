@@ -30,12 +30,15 @@ s_temp = Sensor('temp_bearing', 'Name', 'Bearing Temp');
 s_temp.Units = [char(176) 'C'];
 s_temp.X = t;
 s_temp.Y = 60 + 5*randn(1, N);
-s_temp.addThresholdRule(struct(), 65, ...
-    'Direction', 'upper', 'Label', 'Warning', ...
-    'Color', [0.91 0.63 0.27], 'LineStyle', '--');
-s_temp.addThresholdRule(struct(), 70, ...
-    'Direction', 'upper', 'Label', 'Alarm', ...
-    'Color', [0.91 0.27 0.38], 'LineStyle', '-');
+tWarning = Threshold('warning', 'Name', 'Warning', ...
+    'Direction', 'upper', 'Color', [0.91 0.63 0.27], 'LineStyle', '--');
+tWarning.addCondition(struct(), 65);
+s_temp.addThreshold(tWarning);
+
+tAlarm = Threshold('alarm', 'Name', 'Alarm', ...
+    'Direction', 'upper', 'Color', [0.91 0.27 0.38], 'LineStyle', '-');
+tAlarm.addCondition(struct(), 70);
+s_temp.addThreshold(tAlarm);
 s_temp.resolve();
 
 % Line pressure sensor

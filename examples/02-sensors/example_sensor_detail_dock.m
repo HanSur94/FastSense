@@ -34,10 +34,15 @@ d1(100000:100200) = d1(100000:100200) + 40; % spike ~09:47
 s1 = Sensor('temp', 'Name', 'Furnace Temperature');
 s1.X = tNum; s1.Y = d1;
 s1.addStateChannel(sc);
-s1.addThresholdRule(struct('mode', 1), 140, ...
-    'Direction', 'upper', 'Label', 'H Warning', 'Color', [1 0.75 0]);
-s1.addThresholdRule(struct('mode', 1), 155, ...
-    'Direction', 'upper', 'Label', 'HH Alarm', 'Color', [1 0 0]);
+tHWarningS1 = Threshold('h_warning', 'Name', 'H Warning', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tHWarningS1.addCondition(struct('mode', 1), 140);
+s1.addThreshold(tHWarningS1);
+
+tHhAlarmS1 = Threshold('hh_alarm', 'Name', 'HH Alarm', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tHhAlarmS1.addCondition(struct('mode', 1), 155);
+s1.addThreshold(tHhAlarmS1);
 s1.resolve();
 
 ev1a = Event(tNum(40000), tNum(40600), 'temp', 'HH Alarm', 155, 'upper');
@@ -50,8 +55,10 @@ d2(60000:60400) = d2(60000:60400) - 1.5;  % dip ~07:40
 s2 = Sensor('pressure', 'Name', 'Chamber Pressure');
 s2.X = tNum; s2.Y = d2;
 s2.addStateChannel(sc);
-s2.addThresholdRule(struct('mode', 1), 3.2, ...
-    'Direction', 'lower', 'Label', 'L Warning', 'Color', [0.3 0.6 1]);
+tLWarningS2 = Threshold('l_warning', 'Name', 'L Warning', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tLWarningS2.addCondition(struct('mode', 1), 3.2);
+s2.addThreshold(tLWarningS2);
 s2.resolve();
 
 ev2 = Event(tNum(60000), tNum(60400), 'pressure', 'L Warning', 3.2, 'lower');
@@ -63,8 +70,10 @@ d3(80000:80300) = d3(80000:80300) + 0.9;  % spike ~08:13
 s3 = Sensor('vib', 'Name', 'Motor Vibration');
 s3.X = tNum; s3.Y = d3;
 s3.addStateChannel(sc);
-s3.addThresholdRule(struct('mode', 1), 1.4, ...
-    'Direction', 'upper', 'Label', 'H Warning', 'Color', [1 0.75 0]);
+tHWarningS3 = Threshold('h_warning', 'Name', 'H Warning', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tHWarningS3.addCondition(struct('mode', 1), 1.4);
+s3.addThreshold(tHWarningS3);
 s3.resolve();
 
 ev3 = Event(tNum(80000), tNum(80300), 'vib', 'H Warning', 1.4, 'upper');
