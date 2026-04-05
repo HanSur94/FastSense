@@ -190,6 +190,18 @@ obj = DashboardBuilder(engine)
 
 #### `selectWidget(obj, idx)`
 
+#### `w = addIconCard(obj, varargin)`
+
+ADDICONCARD Add an IconCardWidget via the builder.
+
+#### `w = addChipBar(obj, varargin)`
+
+ADDCHIPBAR Add a ChipBarWidget via the builder.
+
+#### `w = addSparkline(obj, varargin)`
+
+ADDSPARKLINE Add a SparklineCardWidget via the builder.
+
 #### `addWidget(obj, type)`
 
 #### `deleteWidget(obj, idx)`
@@ -909,6 +921,53 @@ obj = BarChartWidget(varargin)
 
 ---
 
+## `ChipBarWidget` --- Horizontal row of mini status chips for system health summary.
+
+> Inherits from: `DashboardWidget`
+
+Displays N colored circle icons with labels in a compact horizontal strip.
+  Designed as a dense multi-sensor status overview at a glance.
+
+### Constructor
+
+```matlab
+obj = ChipBarWidget(varargin)
+```
+
+CHIPBARWIDGET Construct a ChipBarWidget with optional name-value pairs.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Chips | `{}` | Cell array of chip structs (label, statusFcn, sensor, iconColor) |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+RENDER Draw all chips in a single shared axes inside parentPanel.
+
+#### `refresh(obj)`
+
+REFRESH Update chip circle colors from statusFcn or sensor state.
+
+#### `t = getType(~)`
+
+GETTYPE Return widget type string.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize widget to struct for JSON export.
+
+### Static Methods
+
+#### `ChipBarWidget.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct ChipBarWidget from a saved struct.
+
+---
+
 ## `DashboardPage` --- Named page container within a multi-page dashboard.
 
 > Inherits from: `handle`
@@ -1185,6 +1244,60 @@ obj = HistogramWidget(varargin)
 
 ---
 
+## `IconCardWidget` --- Compact Mushroom Card-style widget with colored icon, value, and label.
+
+> Inherits from: `DashboardWidget`
+
+Displays a state-colored circle icon at the left, a primary numeric value in
+  the center, and a secondary label below the value. Icon color reflects the
+  current threshold state (ok/warn/alarm/info/inactive).
+
+### Constructor
+
+```matlab
+obj = IconCardWidget(varargin)
+```
+
+ICONCARDWIDGET Construct an IconCardWidget with optional name-value pairs.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| IconColor | `'auto'` | RGB triplet or 'auto' (derive from state) |
+| StaticValue | `[]` | Fixed static value (number) |
+| ValueFcn | `[]` | Function handle returning scalar or struct |
+| StaticState | `''` | 'ok','warn','alarm','info','inactive','' |
+| Units | `''` | Display units string |
+| Format | `'%.1f'` | sprintf format for numeric value |
+| SecondaryLabel | `''` | Subtitle text below primary value |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+RENDER Create icon, value text, and label inside parentPanel.
+
+#### `refresh(obj)`
+
+REFRESH Update icon color, value display, and label.
+
+#### `t = getType(~)`
+
+GETTYPE Return widget type string.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize widget to struct for JSON export.
+
+### Static Methods
+
+#### `IconCardWidget.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct IconCardWidget from a serialized struct.
+
+---
+
 ## `ImageWidget`
 
 > Inherits from: `DashboardWidget`
@@ -1317,4 +1430,81 @@ obj = ScatterWidget(varargin)
 ### Static Methods
 
 #### `ScatterWidget.obj = fromStruct(s)`
+
+---
+
+## `SparklineCardWidget` --- KPI card combining a big-number display with a mini sparkline chart and delta indicator.
+
+> Inherits from: `DashboardWidget`
+
+w = SparklineCardWidget('Title', 'CPU', 'StaticValue', 42.0, ...
+                          'SparkData', cpuHistory, 'Units', '%');
+
+  The card is divided into three zones:
+    Top row   — title (left) and delta indicator (right)
+    Middle    — large primary value
+    Bottom    — sparkline mini-chart (bottom 35% of card)
+
+  Data binding (three-path, resolved in priority order):
+    1. Sensor   — uses Sensor.Y for both value and sparkline
+    2. ValueFcn — function_handle returning scalar or struct
+    3. StaticValue + SparkData — static numeric value with separate sparkline vector
+
+  Properties:
+    StaticValue  — fixed scalar value
+    ValueFcn     — function handle returning scalar or struct(.value, .unit)
+    Units        — display unit string
+    Format       — sprintf format for primary value (default '%.1f')
+    NSparkPoints — number of tail points shown in sparkline (default 50)
+    ShowDelta    — show delta indicator (default true)
+    DeltaFormat  — sprintf format for delta (default '%+.1f')
+    SparkColor   — sparkline line color; empty => theme.DragHandleColor
+    SparkData    — numeric vector for sparkline (used when no Sensor)
+
+### Constructor
+
+```matlab
+obj = SparklineCardWidget(varargin)
+```
+
+SPARKLINECARDWIDGET Construct a SparklineCardWidget.
+  Accepts name-value pairs for any public property.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| StaticValue | `[]` | Fixed scalar value displayed in the card |
+| ValueFcn | `[]` | Function handle returning scalar or struct |
+| Units | `''` | Unit label appended to primary value |
+| Format | `'%.1f'` | sprintf format string for primary value |
+| NSparkPoints | `50` | Number of tail data points in sparkline |
+| ShowDelta | `true` | Whether to show the delta indicator |
+| DeltaFormat | `'%+.1f'` | sprintf format string for delta value |
+| SparkColor | `[]` | Sparkline line color (empty = theme default) |
+| SparkData | `[]` | Numeric vector for sparkline (alternative to Sensor) |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+RENDER Create all graphics objects inside parentPanel.
+
+#### `refresh(obj)`
+
+REFRESH Update displayed value, sparkline, and delta indicator.
+
+#### `t = getType(~)`
+
+GETTYPE Return widget type string.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize widget to a struct for JSON export.
+
+### Static Methods
+
+#### `SparklineCardWidget.obj = fromStruct(s)`
+
+FROMSTRUCT Deserialize a SparklineCardWidget from a struct.
 
