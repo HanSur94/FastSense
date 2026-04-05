@@ -136,6 +136,7 @@ function d = getDashboardDefaults(preset)
     d.StatusOkColor        = [0.31 0.80 0.64];
     d.StatusWarnColor      = [0.91 0.63 0.27];
     d.StatusAlarmColor     = [0.91 0.27 0.38];
+    d.InfoColor            = [0.27 0.52 0.85];
     d.GaugeArcWidth        = 8;
     d.KpiFontSize          = 28;
 
