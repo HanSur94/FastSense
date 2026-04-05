@@ -15,6 +15,7 @@ classdef FastSenseToolbar < handle
     %     Legend        — toggle legend visibility
     %     Autoscale Y  — fit Y-axis to visible data range
     %     Export PNG   — save figure as PNG with file dialog
+    %     Export Data  — save raw data as CSV or MAT with file dialog
     %     Refresh      — manual one-shot data reload
     %     Live Mode    — toggle automatic file polling
     %     Metadata     — show/hide metadata in data cursor tooltips
@@ -140,6 +141,27 @@ classdef FastSenseToolbar < handle
                 return;
             end
             print(obj.hFigure, '-dpng', '-r150', filepath);
+        end
+
+        function exportData(obj, filepath)
+            %EXPORTDATA Export raw plot data as CSV or MAT file.
+            %   tb.exportData()          — opens file dialog
+            %   tb.exportData(filepath)  — saves directly (format from extension)
+            if nargin < 2
+                obj.onExportData();
+                return;
+            end
+            [~, ~, ext] = fileparts(filepath);
+            if strcmpi(ext, '.mat')
+                fmt = 'mat';
+            else
+                fmt = 'csv';
+            end
+            [fp, ~] = obj.getActiveTarget();
+            if isempty(fp)
+                fp = obj.FastSenses{1};
+            end
+            fp.exportData(filepath, fmt);
         end
 
         function setCrosshair(obj, on)
@@ -412,6 +434,11 @@ classdef FastSenseToolbar < handle
                 'CData', FastSenseToolbar.makeIcon('export'), ...
                 'TooltipString', 'Export PNG', ...
                 'ClickedCallback', @(s,e) obj.onExportPNG());
+
+            uipushtool(obj.hToolbar, ...
+                'CData', FastSenseToolbar.makeIcon('exportdata'), ...
+                'TooltipString', 'Export Data', ...
+                'ClickedCallback', @(s,e) obj.onExportData());
 
             obj.hRefreshBtn = uipushtool(obj.hToolbar, ...
                 'CData', FastSenseToolbar.makeIcon('refresh'), ...
@@ -924,6 +951,28 @@ classdef FastSenseToolbar < handle
             obj.exportPNG(fullpath);
         end
 
+        function onExportData(obj)
+            %ONEXPORTDATA Open file dialog and export raw data as CSV or MAT.
+            [fname, fpath, idx] = uiputfile({'*.csv'; '*.mat'}, 'Export Data');
+            if isequal(fname, 0); return; end
+            if idx == 1 && isempty(regexp(fname, '\.csv$', 'once'))
+                fname = [fname '.csv'];
+            end
+            if idx == 2 && isempty(regexp(fname, '\.mat$', 'once'))
+                fname = [fname '.mat'];
+            end
+            fullpath = fullfile(fpath, fname);
+            [fp, ~] = obj.getActiveTarget();
+            if isempty(fp)
+                fp = obj.FastSenses{1};
+            end
+            if idx == 1
+                fp.exportData(fullpath, 'csv');
+            else
+                fp.exportData(fullpath, 'mat');
+            end
+        end
+
         function [fp, ax] = getActiveTarget(obj)
             %GETACTIVETARGET Find the FastSense instance under the mouse.
             %   [fp, ax] = getActiveTarget(obj) checks the current mouse
@@ -1149,6 +1198,20 @@ classdef FastSenseToolbar < handle
                         end
                     end
 
+                case 'exportdata'
+                    % Down-arrow into grid (data export)
+                    % Grid base
+                    icon(10, 4:12, :) = repmat(reshape(fg,1,1,3), 1, 9, 1);
+                    icon(13, 4:12, :) = repmat(reshape(fg,1,1,3), 1, 9, 1);
+                    icon(10:13, 4, :) = repmat(reshape(fg,1,1,3), 4, 1, 1);
+                    icon(10:13, 8, :) = repmat(reshape(fg,1,1,3), 4, 1, 1);
+                    icon(10:13, 12, :) = repmat(reshape(fg,1,1,3), 4, 1, 1);
+                    % Down arrow shaft
+                    icon(3:9, 8, :) = repmat(reshape(fg,1,1,3), 7, 1, 1);
+                    % Arrow head
+                    icon(8, 6:10, :) = repmat(reshape(fg,1,1,3), 1, 5, 1);
+                    icon(9, 7:9, :) = repmat(reshape(fg,1,1,3), 1, 3, 1);
+
                 case 'refresh'
                     % Circular arrow
                     icon(4, 7:11, :) = repmat(reshape(fg,1,1,3), 1, 5, 1);
@@ -1246,7 +1309,7 @@ classdef FastSenseToolbar < handle
         function initIcons()
             %INITICONS Pre-warm the icon cache for all toolbar buttons.
             names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', ...
-                     'export', 'refresh', 'live', 'metadata', 'violations', 'theme'};
+                     'export', 'exportdata', 'refresh', 'live', 'metadata', 'violations', 'theme'};
             for i = 1:numel(names)
                 FastSenseToolbar.makeIcon(names{i});
             end
