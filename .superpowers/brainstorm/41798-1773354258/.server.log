@@ -1,0 +1,5 @@
+{"type":"server-started","port":58324,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:58324","screen_dir":"/Users/hannessuhr/FastPlot/.superpowers/brainstorm/41798-1773354258"}
+{"type":"screen-added","file":"/Users/hannessuhr/FastPlot/.superpowers/brainstorm/41798-1773354258/layout-engine.html"}
+{"type":"screen-added","file":"/Users/hannessuhr/FastPlot/.superpowers/brainstorm/41798-1773354258/edit-mode.html"}
+{"type":"screen-added","file":"/Users/hannessuhr/FastPlot/.superpowers/brainstorm/41798-1773354258/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

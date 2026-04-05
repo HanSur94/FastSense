@@ -626,6 +626,17 @@ def main():
 
     if failed and not updated:
         print("All pages failed — no PR will be created.", file=sys.stderr)
+        # Exit 0 for billing/auth errors so the workflow doesn't show red
+        # for issues the CI cannot fix on its own.
+        billing_keywords = ("credit balance", "authentication", "401", "403")
+        all_billing = all(
+            any(kw in err for err in errs for kw in billing_keywords)
+            for _, _, errs in failed if errs
+        )
+        if all_billing:
+            print("Exiting 0: failures are billing/auth related, not code errors.",
+                  file=sys.stderr)
+            sys.exit(0)
         sys.exit(1)
 
 

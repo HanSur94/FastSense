@@ -1,0 +1,70 @@
+<h2>Where should the Info button go?</h2>
+<p class="subtitle">Current toolbar: Title (left) — Last update — Sync | Live | Edit | Save | Export (right)</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Right after the title</h3>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Toolbar Layout</div>
+        <div class="mockup-body" style="padding:8px 16px; display:flex; align-items:center; gap:12px; font-family:monospace; font-size:13px;">
+          <span style="font-weight:bold; font-size:15px;">My Dashboard</span>
+          <span style="background:#4a9eff; color:white; padding:4px 14px; border-radius:4px; font-size:12px; cursor:pointer;">ℹ Info</span>
+          <span style="flex:1"></span>
+          <span style="opacity:0.5; font-size:11px;">Last update: 14:32:01</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Sync</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Live</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Edit</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Save</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Export</span>
+        </div>
+      </div>
+      <p style="margin-top:8px; opacity:0.7;">Discoverable — next to the dashboard name it describes. Visually distinct from action buttons.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Leftmost in the right button group</h3>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Toolbar Layout</div>
+        <div class="mockup-body" style="padding:8px 16px; display:flex; align-items:center; gap:12px; font-family:monospace; font-size:13px;">
+          <span style="font-weight:bold; font-size:15px;">My Dashboard</span>
+          <span style="flex:1"></span>
+          <span style="opacity:0.5; font-size:11px;">Last update: 14:32:01</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Info</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Sync</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Live</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Edit</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Save</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Export</span>
+        </div>
+      </div>
+      <p style="margin-top:8px; opacity:0.7;">Grouped with other toolbar actions. Consistent style. Furthest left = least-used actions convention.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Small icon-style button next to the title</h3>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Toolbar Layout</div>
+        <div class="mockup-body" style="padding:8px 16px; display:flex; align-items:center; gap:8px; font-family:monospace; font-size:13px;">
+          <span style="font-weight:bold; font-size:15px;">My Dashboard</span>
+          <span style="background:transparent; border:1px solid #888; color:#aaa; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; cursor:pointer; font-style:italic; font-family:serif;">i</span>
+          <span style="flex:1"></span>
+          <span style="opacity:0.5; font-size:11px;">Last update: 14:32:01</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Sync</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Live</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Edit</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Save</span>
+          <span style="background:#555; color:white; padding:4px 10px; border-radius:3px; font-size:11px;">Export</span>
+        </div>
+      </div>
+      <p style="margin-top:8px; opacity:0.7;">Subtle, doesn't compete with action buttons. Common ⓘ pattern. But may be too small in MATLAB's uicontrol system.</p>
+    </div>
+  </div>
+</div>

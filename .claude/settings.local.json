@@ -4,7 +4,21 @@
       "Bash",
       "Write",
       "Edit",
-      "WebFetch"
+      "WebFetch",
+      "mcp__matlab-mcp__*",
+      "Skill(gsd:new-project)",
+      "Skill(gsd:map-codebase)",
+      "Skill(gsd:plan-phase)",
+      "Skill(gsd:execute-phase)",
+      "Skill(gsd:audit-milestone)",
+      "Skill(gsd:audit-milestone:*)",
+      "Skill(gsd:autonomous)",
+      "Skill(gsd:complete-milestone)",
+      "Skill(gsd:add-phase)",
+      "Skill(gsd:quick)",
+      "Skill(gsd:debug)",
+      "Skill(gsd:research-phase)",
+      "WebSearch"
     ]
   }
 }

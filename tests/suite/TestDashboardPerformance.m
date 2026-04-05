@@ -222,5 +222,73 @@ classdef TestDashboardPerformance < matlab.unittest.TestCase
             % Page 2 widget should be realized and visible
             testCase.verifyTrue(d.Pages{2}.Widgets{1}.Realized);
         end
+
+        function testLazyPageRealizationDefersNonActive(testCase)
+            d = DashboardEngine('LazyPageTest');
+            d.addPage('Page1');
+            d.switchPage(1);
+            d.addWidget('number', 'Title', 'P1W1', ...
+                'Position', [1 1 12 1], 'ValueFcn', @() 42);
+            d.addPage('Page2');
+            d.switchPage(2);
+            d.addWidget('number', 'Title', 'P2W1', ...
+                'Position', [1 1 12 1], 'ValueFcn', @() 99);
+            d.addWidget('number', 'Title', 'P2W2', ...
+                'Position', [13 1 12 1], 'ValueFcn', @() 100);
+            d.switchPage(1);
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+
+            % Page 1 widgets should be realized after render
+            testCase.verifyTrue(d.Pages{1}.Widgets{1}.Realized, ...
+                'Active page widget should be realized after render');
+
+            % Page 2 widgets should NOT be realized yet (lazy)
+            testCase.verifyFalse(d.Pages{2}.Widgets{1}.Realized, ...
+                'Non-active page widget should not be realized after render');
+            testCase.verifyFalse(d.Pages{2}.Widgets{2}.Realized, ...
+                'Non-active page widget 2 should not be realized after render');
+
+            % But Page 2 widgets should have panels allocated (hPanel non-empty)
+            testCase.verifyFalse(isempty(d.Pages{2}.Widgets{1}.hPanel), ...
+                'Non-active page widget should have placeholder panel');
+
+            % Switch to page 2 — should realize via batch
+            d.switchPage(2);
+            testCase.verifyTrue(d.Pages{2}.Widgets{1}.Realized, ...
+                'Page 2 widget should be realized after switchPage');
+            testCase.verifyTrue(d.Pages{2}.Widgets{2}.Realized, ...
+                'Page 2 widget 2 should be realized after switchPage');
+        end
+
+        function testSwitchPageBatchRealize(testCase)
+            d = DashboardEngine('BatchSwitchTest');
+            d.addPage('Page1');
+            d.switchPage(1);
+            d.addWidget('number', 'Title', 'P1', 'Position', [1 1 12 1]);
+            d.addPage('Page2');
+            d.switchPage(2);
+            % Add several widgets to exercise batching
+            for k = 1:8
+                d.addWidget('number', 'Title', sprintf('P2W%d', k), ...
+                    'Position', [mod((k-1)*6, 24)+1, ceil(k*6/24), 6, 1], ...
+                    'ValueFcn', @() k);
+            end
+            d.switchPage(1);
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+
+            % All page 2 widgets unrealized
+            for k = 1:8
+                testCase.verifyFalse(d.Pages{2}.Widgets{k}.Realized);
+            end
+
+            % Switch — all should be realized (batch of 5 + batch of 3)
+            d.switchPage(2);
+            for k = 1:8
+                testCase.verifyTrue(d.Pages{2}.Widgets{k}.Realized, ...
+                    sprintf('Page 2 widget %d should be realized', k));
+            end
+        end
     end
 end

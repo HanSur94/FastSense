@@ -1,0 +1,124 @@
+<h2>Dashboard Widgets: Current vs. Potential</h2>
+<p class="subtitle">What you have today, and what we could add. Which new widgets interest you?</p>
+
+<div class="section">
+  <h3>Current Widgets (8)</h3>
+  <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:24px;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">📈</div>
+      <strong>FastSenseWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Time-series charts</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">🔢</div>
+      <strong>NumberWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Big number + trend</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">🎯</div>
+      <strong>GaugeWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Arc / donut / bar / thermo</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">🟢</div>
+      <strong>StatusWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">OK / Warning / Alarm</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">📊</div>
+      <strong>TableWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Data & event tables</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">🎨</div>
+      <strong>RawAxesWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Custom MATLAB axes</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">📅</div>
+      <strong>EventTimelineWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Gantt-style events</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:28px; margin-bottom:8px;">📝</div>
+      <strong>TextWidget</strong>
+      <p style="font-size:12px; color:var(--text-secondary); margin:4px 0 0;">Static labels/headers</p>
+    </div>
+  </div>
+</div>
+
+<h3>Potential New Widgets</h3>
+<p class="subtitle">Click all that sound useful — you can select multiple</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="heatmap" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>HeatmapWidget</h3>
+      <p>2D color grid — e.g. sensor values over time-of-day vs. day-of-week, or spatial temperature maps. Great for spotting patterns in large datasets.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="bar" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>BarChartWidget</h3>
+      <p>Horizontal or vertical bar charts for comparing discrete categories — e.g. sensor averages by zone, event counts by type, or throughput per shift.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="histogram" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>HistogramWidget</h3>
+      <p>Distribution of sensor values — bin counts, overlay normal curve. Useful for quality control, understanding value spread.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="scatter" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>ScatterWidget</h3>
+      <p>X vs Y scatter plot for correlating two sensors. Optional color-coding by a third variable or time. Good for finding relationships.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="image" onclick="toggleSelect(this)">
+    <div class="letter">5</div>
+    <div class="content">
+      <h3>ImageWidget</h3>
+      <p>Display a static image, diagram, or photo — e.g. a plant layout, P&ID diagram, or camera snapshot. Supports PNG/JPG/SVG.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="progress" onclick="toggleSelect(this)">
+    <div class="letter">6</div>
+    <div class="content">
+      <h3>ProgressWidget</h3>
+      <p>Progress/completion bars — e.g. batch progress, tank fill level, production target vs actual. Horizontal bar with percentage.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="log" onclick="toggleSelect(this)">
+    <div class="letter">7</div>
+    <div class="content">
+      <h3>LogWidget</h3>
+      <p>Scrollable log/feed of recent events or messages — newest on top. Like a mini console showing what's happening in the system.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="sparkline" onclick="toggleSelect(this)">
+    <div class="letter">8</div>
+    <div class="content">
+      <h3>SparklineWidget</h3>
+      <p>Compact inline trend line — like NumberWidget but with a mini chart showing recent history. Great for "number + context" at a glance.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="multistat" onclick="toggleSelect(this)">
+    <div class="letter">9</div>
+    <div class="content">
+      <h3>MultiStatusWidget</h3>
+      <p>Grid of multiple status indicators in one tile — monitor 10-20 sensors at once with colored dots/icons. Overview-of-everything widget.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="pie" onclick="toggleSelect(this)">
+    <div class="letter">10</div>
+    <div class="content">
+      <h3>PieChartWidget</h3>
+      <p>Pie or donut chart for showing proportions — e.g. uptime vs downtime, event category breakdown, resource allocation.</p>
+    </div>
+  </div>
+</div>
