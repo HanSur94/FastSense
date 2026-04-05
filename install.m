@@ -54,7 +54,7 @@ function install()
     for i = 1:numel(dirs)
         d = fullfile(root, dirs{i});
         if isfolder(d)
-            addpath(d);
+            addpath(genpath(d));
         end
     end
 
@@ -140,8 +140,8 @@ function verify_installation(root)
     end
 
     % Check examples
-    if exist(fullfile(root, 'examples', 'example_basic.m'), 'file') == 2
-        n_examples = numel(dir(fullfile(root, 'examples', 'example_*.m')));
+    if exist(fullfile(root, 'examples', '01-basics', 'example_basic.m'), 'file') == 2
+        n_examples = numel(dir(fullfile(root, 'examples', '**', 'example_*.m')));
         fprintf('  Examples:          %d scripts\n', n_examples);
         n_ok = n_ok + 1;
     else

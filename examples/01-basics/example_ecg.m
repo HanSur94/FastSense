@@ -1,7 +1,7 @@
 %% FastSense ECG — Simulated heart rhythm with arrhythmia detection
 % Demonstrates high sample rate biomedical data with tight thresholds
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 5e6;

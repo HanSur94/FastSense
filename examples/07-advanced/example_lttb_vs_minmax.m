@@ -1,7 +1,7 @@
 %% FastSense LTTB vs MinMax — Compare downsampling methods side by side
 % Shows visual difference between MinMax (preserves extremes) and LTTB (preserves shape)
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 5e6;

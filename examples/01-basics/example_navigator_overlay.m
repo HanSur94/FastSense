@@ -4,7 +4,7 @@
 % firing a callback when the range changes. It can be used to build
 % custom overview+detail views.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% Create a figure with two axes: overview (bottom) + detail (top)

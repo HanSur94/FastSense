@@ -5,7 +5,7 @@
 % string-valued recipe-phase channel. Each sensor has 6 threshold
 % rules that activate only under specific state combinations.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% Configuration

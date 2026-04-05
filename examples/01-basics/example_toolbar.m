@@ -2,7 +2,7 @@
 % Demonstrates the interactive toolbar: data cursor, crosshair,
 % grid toggle, legend toggle, autoscale Y, and PNG export.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 1e6;

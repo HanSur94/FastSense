@@ -6,7 +6,7 @@
 % This is useful when working with large sensor datasets (millions of
 % points) that would otherwise consume too much memory.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Basic toDisk workflow

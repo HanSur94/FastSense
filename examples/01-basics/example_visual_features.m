@@ -1,7 +1,7 @@
 %% FastSense Visual Features — Bands, Shading, Fill, and Markers
 % Demonstrates all new visual enhancement methods in a 2x2 dashboard
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 5e5;

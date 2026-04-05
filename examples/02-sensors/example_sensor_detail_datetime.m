@@ -3,7 +3,7 @@
 % Demonstrates SensorDetailPlot with datenum timestamps so the
 % x-axis shows human-readable date/time labels.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Create sensor with datetime-based timestamps

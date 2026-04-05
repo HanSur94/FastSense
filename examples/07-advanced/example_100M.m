@@ -1,7 +1,7 @@
 %% FastSense Stress Test — 100M points
 % Demonstrates performance at maximum scale, DeferDraw, and ShowProgress.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 100e6;

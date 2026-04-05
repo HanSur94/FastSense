@@ -1,7 +1,7 @@
 %% FastSense Unevenly Sampled Data — Event-driven acquisition
 % Demonstrates that FastSense handles non-uniform X spacing correctly
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 % Simulate event-driven data: high rate during events, sparse between

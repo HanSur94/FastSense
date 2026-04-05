@@ -2,7 +2,7 @@
 % Five dashboards docked in a single window with tab switching.
 % All tabs use datetime X axes (auto-detected by FastSense).
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 % Suppress MATLAB Variable Editor warnings during datetime/linspace

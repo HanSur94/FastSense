@@ -2,7 +2,7 @@
 % 20 tabs in a single dock window to exercise the scrollable tab bar.
 % Each tab gets a simple 1x1 figure with a sine wave variant.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 wState = warning('off', 'all');

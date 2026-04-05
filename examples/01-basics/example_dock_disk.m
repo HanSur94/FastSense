@@ -12,7 +12,7 @@
 %   Tab 4: Power Generation       — 2x2, 4 tiles, 8 sensors   (~24M pts)
 %   Tab 5: Environmental          — 1x3, 3 tiles, 5 sensors   (~11M pts)
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 wState = warning('off', 'all');

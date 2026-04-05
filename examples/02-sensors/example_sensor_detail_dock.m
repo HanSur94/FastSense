@@ -8,7 +8,7 @@
 %   Tab 3: Event Analysis      — 1 large SensorDetailPlot + event details
 %   Tab 4: Trends              — 6 plain FastSenses showing z-score overlays
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% ===== Shared data =====

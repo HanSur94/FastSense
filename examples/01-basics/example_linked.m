@@ -1,7 +1,7 @@
 %% FastSense Linked Axes Example
 % Demonstrates synchronized zoom/pan across subplots
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 5e6;

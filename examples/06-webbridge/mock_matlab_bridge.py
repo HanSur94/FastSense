@@ -5,10 +5,10 @@ Simulates what MATLAB does: creates SQLite data files with live sensor
 data, runs the bridge server, and pushes data_changed notifications.
 
 Usage:
-    python examples/mock_matlab_bridge.py
+    python examples/06-webbridge/mock_matlab_bridge.py
 
 Then in another terminal:
-    python examples/example_webbridge_dashboard.py
+    python examples/06-webbridge/example_webbridge_dashboard.py
 """
 
 import asyncio
@@ -158,7 +158,7 @@ async def main():
     print(f"  Actions: {', '.join(state.actions)}")
     print()
     print("  Now run in another terminal:")
-    print("    python examples/example_webbridge_dashboard.py")
+    print("    python examples/06-webbridge/example_webbridge_dashboard.py")
     print()
 
     await asyncio.gather(server.serve(), live_updates())

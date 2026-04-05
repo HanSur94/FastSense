@@ -6,7 +6,7 @@
 %   - ~86M total data points across all tabs
 %   - Tests rendering, downsampling, threshold resolve, and zoom/pan
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 fprintf('\n=== FastSense Stress Test: 5 Tabbed Dashboards ===\n');

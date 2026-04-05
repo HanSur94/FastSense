@@ -10,7 +10,7 @@ Prerequisites:
   2. pip install matplotlib requests websockets
 
 Usage:
-  python examples/example_webbridge_dashboard.py
+  python examples/06-webbridge/example_webbridge_dashboard.py
 
 The dashboard:
   - Fetches all available signals from the bridge

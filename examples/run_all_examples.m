@@ -12,7 +12,15 @@ function run_all_examples(mode)
     projectRoot = fileparts(fileparts(mfilename('fullpath')));
     run(fullfile(projectRoot, 'install.m'));
     addpath(fullfile(projectRoot, 'libs', 'FastSense', 'private'));
-    addpath(fileparts(mfilename('fullpath')));
+    exDir = fileparts(mfilename('fullpath'));
+    addpath(exDir);
+    addpath(fullfile(exDir, '01-basics'));
+    addpath(fullfile(exDir, '02-sensors'));
+    addpath(fullfile(exDir, '03-dashboard'));
+    addpath(fullfile(exDir, '04-widgets'));
+    addpath(fullfile(exDir, '05-events'));
+    addpath(fullfile(exDir, '06-webbridge'));
+    addpath(fullfile(exDir, '07-advanced'));
 
     examples = {
         'example_basic',            '10M pts, thresholds, setScale, updateData'

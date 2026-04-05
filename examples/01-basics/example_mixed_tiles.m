@@ -2,7 +2,7 @@
 % Demonstrates using fig.axes(n) alongside fig.tile(n) for plot types
 % that FastSense doesn't handle (bar, scatter, histogram, stem, etc.)
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 500000;

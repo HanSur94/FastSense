@@ -1,7 +1,7 @@
 %% FastSense Multi-Line Example — 5 sensors, 1M points each
 % Demonstrates multiple lines with thresholds and resetColorIndex.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 1e6;

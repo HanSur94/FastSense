@@ -2,7 +2,7 @@
 % Demonstrates basic usage with a large time series dataset, plus setScale
 % for logarithmic axes.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 10e6;

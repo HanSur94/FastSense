@@ -1,7 +1,7 @@
 %% FastSense Multi-Sensor Linked — 4 sensors with independent thresholds, synchronized zoom
 % Simulates a real monitoring dashboard with different alarm levels per channel
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 2e6;

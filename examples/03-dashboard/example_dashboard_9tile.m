@@ -3,7 +3,7 @@
 
 close all force;
 clear functions;
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 fprintf('3x3 Dashboard: 9 tiles, mixed data sizes, dark theme...\n');

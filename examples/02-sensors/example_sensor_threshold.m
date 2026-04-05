@@ -2,7 +2,7 @@
 %   Shows dynamic thresholds that change based on machine state.
 
 % Setup paths
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 % --- Create sensor with synthetic data ---

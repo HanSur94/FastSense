@@ -9,7 +9,7 @@
 %   - SensorRegistry.viewer()      — interactive GUI viewer
 %   - Adding data + thresholds to registry sensors, then plotting
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% 1. List all sensors in the catalog

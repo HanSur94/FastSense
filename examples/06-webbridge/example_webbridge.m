@@ -15,7 +15,7 @@
 %   WS   /ws                       — real-time push notifications
 %   GET  /docs                     — interactive API documentation
 %
-% Pair this with examples/example_webbridge_dashboard.py on the Python side.
+% Pair this with examples/06-webbridge/example_webbridge_dashboard.py on the Python side.
 %
 % Usage:
 %   example_webbridge
@@ -26,7 +26,7 @@
 close all force;
 clear functions;
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 example_webbridge_run();
@@ -99,7 +99,7 @@ function example_webbridge_run()
     fprintf('  Actions: recalculate, resetAlarms, openInMatlab\n');
     fprintf('\n');
     fprintf('  Run the Python dashboard:\n');
-    fprintf('    python examples/example_webbridge_dashboard.py\n');
+    fprintf('    python examples/06-webbridge/example_webbridge_dashboard.py\n');
     fprintf('\n');
     fprintf('  Press Ctrl+C or close the figure to stop.\n');
     fprintf('\n');

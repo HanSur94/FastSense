@@ -1,7 +1,7 @@
 %% SensorDetailPlot — Minimal Quick-Start
 % Simplest possible SensorDetailPlot: one sensor, no events, default options.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% Create a sensor with some data

@@ -1,7 +1,7 @@
 %% FastSense Vibration Analysis — High-frequency data with envelope thresholds
 % Simulates accelerometer data from a rotating machine
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 20e6;

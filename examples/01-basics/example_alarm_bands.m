@@ -1,7 +1,7 @@
 %% FastSense Alarm Bands — Industrial sensor with 4 thresholds
 % Demonstrates warning + alarm thresholds in both directions
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 n = 2e6;

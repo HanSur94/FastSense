@@ -33,7 +33,7 @@
 %     pipeline.start()    % begins 15s timer-driven cycles
 %     pipeline.stop()     % stops the timer
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% ========================================================================

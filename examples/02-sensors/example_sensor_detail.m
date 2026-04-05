@@ -6,7 +6,7 @@
 %   3. Embedding in a FastSenseGrid tile
 
 %% Setup path
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Create sensor with realistic data

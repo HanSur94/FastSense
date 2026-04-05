@@ -3,7 +3,7 @@
 % exceed available RAM. Data is stored in a temporary SQLite database
 % and only the visible slice is loaded into memory on zoom/pan.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Automatic disk offload (default behaviour)

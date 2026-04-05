@@ -1,7 +1,7 @@
 %% FastSense Datetime X-Axis Demo
 % Demonstrates auto-formatted date/time tick labels that adapt to zoom level.
 
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% ~579 days of temperature data at 1-second resolution

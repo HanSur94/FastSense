@@ -18,7 +18,7 @@
 
 close all force;
 clear functions;
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
 %% 1. Build images procedurally (no imread / no file I/O)
