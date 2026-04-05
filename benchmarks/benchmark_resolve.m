@@ -70,14 +70,18 @@ function benchmark_resolve()
             s.X = x; s.Y = y;
             s.addStateChannel(sc1);
             s.addStateChannel(sc2);
-            s.addThresholdRule(struct('machine', 1), 80, ...
-                'Direction', 'upper', 'Label', 'Warn Hi');
-            s.addThresholdRule(struct('machine', 1), 20, ...
-                'Direction', 'lower', 'Label', 'Warn Lo');
-            s.addThresholdRule(struct('machine', 1, 'vacuum', 1), 90, ...
-                'Direction', 'upper', 'Label', 'Alarm Hi');
-            s.addThresholdRule(struct('machine', 1, 'vacuum', 1), 10, ...
-                'Direction', 'lower', 'Label', 'Alarm Lo');
+            tWarnHi = Threshold('warn_hi', 'Name', 'Warn Hi', 'Direction', 'upper');
+            tWarnHi.addCondition(struct('machine', 1), 80);
+            s.addThreshold(tWarnHi);
+            tWarnLo = Threshold('warn_lo', 'Name', 'Warn Lo', 'Direction', 'lower');
+            tWarnLo.addCondition(struct('machine', 1), 20);
+            s.addThreshold(tWarnLo);
+            tAlarmHi = Threshold('alarm_hi', 'Name', 'Alarm Hi', 'Direction', 'upper');
+            tAlarmHi.addCondition(struct('machine', 1, 'vacuum', 1), 90);
+            s.addThreshold(tAlarmHi);
+            tAlarmLo = Threshold('alarm_lo', 'Name', 'Alarm Lo', 'Direction', 'lower');
+            tAlarmLo.addCondition(struct('machine', 1, 'vacuum', 1), 10);
+            s.addThreshold(tAlarmLo);
 
             tic;
             s.resolve();

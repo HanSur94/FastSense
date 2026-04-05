@@ -95,8 +95,9 @@ function benchmark_memory()
         s.X = linspace(0, 100, n);
         s.Y = 40 + 20 * sin(2 * pi * s.X / 30);
         s.addStateChannel(sc);
-        s.addThresholdRule(struct('machine', 1), 55, ...
-            'Direction', 'upper', 'Label', 'HH');
+        tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+        tHH.addCondition(struct('machine', 1), 55);
+        s.addThreshold(tHH);
         tic; s.resolve(); tMem = toc;
 
         % Disk resolve — MEX path (clear cache to force recompute)
@@ -105,8 +106,9 @@ function benchmark_memory()
         s2.X = linspace(0, 100, n);
         s2.Y = 40 + 20 * sin(2 * pi * s2.X / 30);
         s2.addStateChannel(sc);
-        s2.addThresholdRule(struct('machine', 1), 55, ...
-            'Direction', 'upper', 'Label', 'HH');
+        tHH2 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+        tHH2.addCondition(struct('machine', 1), 55);
+        s2.addThreshold(tHH2);
         s2.toDisk();  % pre-computes + caches
         s2.DataStore.clearResolved();  % clear cache to force disk scan
         tic; s2.resolve(); tDiskMex = toc;
@@ -117,8 +119,9 @@ function benchmark_memory()
         s3.X = linspace(0, 100, n);
         s3.Y = 40 + 20 * sin(2 * pi * s3.X / 30);
         s3.addStateChannel(sc);
-        s3.addThresholdRule(struct('machine', 1), 55, ...
-            'Direction', 'upper', 'Label', 'HH');
+        tHH3 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+        tHH3.addCondition(struct('machine', 1), 55);
+        s3.addThreshold(tHH3);
         s3.toDisk();  % pre-computes + caches
         tic; s3.resolve(); tCached = toc;
         s3.DataStore.cleanup();

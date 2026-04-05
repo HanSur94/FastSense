@@ -201,10 +201,18 @@ function jit_warmup()
         sw.addStateChannel(sc1);
         sw.addStateChannel(sc2);
 
-        sw.addThresholdRule(struct('s1', 1), 65, 'Direction', 'upper');
-        sw.addThresholdRule(struct('s1', 2), 35, 'Direction', 'lower');
-        sw.addThresholdRule(struct('s1', 1, 's2', 'B'), 55, 'Direction', 'upper');
-        sw.addThresholdRule(struct('s1', 0, 's2', 'A'), 45, 'Direction', 'lower');
+        tUpper1 = Threshold('upper_1', 'Direction', 'upper');
+        tUpper1.addCondition(struct('s1', 1), 65);
+        sw.addThreshold(tUpper1);
+        tLower1 = Threshold('lower_1', 'Direction', 'lower');
+        tLower1.addCondition(struct('s1', 2), 35);
+        sw.addThreshold(tLower1);
+        tUpper2 = Threshold('upper_2', 'Direction', 'upper');
+        tUpper2.addCondition(struct('s1', 1, 's2', 'B'), 55);
+        sw.addThreshold(tUpper2);
+        tLower2 = Threshold('lower_2', 'Direction', 'lower');
+        tLower2.addCondition(struct('s1', 0, 's2', 'A'), 45);
+        sw.addThreshold(tLower2);
         sw.resolve();
 
         % --- FastSense downsample + render setup (hidden figure) ---
