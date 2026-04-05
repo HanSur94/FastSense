@@ -293,6 +293,7 @@ obj = FastSenseWidget(varargin)
 | XLabel | `''` | X-axis label (auto-set from Sensor if empty) |
 | YLabel | `''` | Y-axis label (auto-set from Sensor if empty) |
 | YLimits | `[]` | Fixed Y-axis range [min max]; empty = auto-scale |
+| ShowThresholdLabels | `false` | show inline name labels on threshold lines |
 
 ### Methods
 

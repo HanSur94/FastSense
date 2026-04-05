@@ -45,6 +45,7 @@ FASTSENSE Construct a FastSense instance.
 | XScale | `'linear'` | 'linear' or 'log' — X axis scale |
 | YScale | `'linear'` | 'linear' or 'log' — Y axis scale |
 | ViolationsVisible | `true` | global toggle for violation markers |
+| ShowThresholdLabels | `false` | show inline name labels on threshold lines |
 | MinPointsForDownsample | `5000` | below this, plot raw data |
 | DownsampleFactor | `2` | points per pixel (min + max) |
 | PyramidReduction | `100` | reduction factor per pyramid level |
