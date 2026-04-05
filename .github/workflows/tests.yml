@@ -149,11 +149,24 @@ jobs:
       - name: Install Octave
         shell: pwsh
         run: |
-          choco install octave.portable --yes --version=9.2.0 --no-progress
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::Chocolatey Octave 9.2.0 failed (likely ftp.gnu.org outage). Trying latest version..."
-            choco install octave.portable --yes --no-progress --force
-            if ($LASTEXITCODE -ne 0) { exit 1 }
+          $ErrorActionPreference = 'SilentlyContinue'
+          choco install octave.portable --yes --version=9.2.0 --no-progress 2>$null
+          $octExe = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\octave.portable\tools" -Recurse -Filter "octave-cli.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($octExe) {
+            Write-Host "Octave installed via Chocolatey at: $($octExe.FullName)"
+          } else {
+            Write-Host "::warning::Chocolatey install failed (ftp.gnu.org may be down). Downloading Octave directly from ftpmirror..."
+            $url = "https://ftpmirror.gnu.org/octave/windows/octave-9.2.0-w64.zip"
+            $zip = "$env:TEMP\octave.zip"
+            $dest = "C:\octave"
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            Expand-Archive -Path $zip -DestinationPath $dest -Force
+            $octExe = Get-ChildItem -Path $dest -Recurse -Filter "octave-cli.exe" | Select-Object -First 1
+            if (-not $octExe) {
+              Write-Error "Failed to find octave-cli.exe after direct download"
+              exit 1
+            }
+            Write-Host "Octave installed via direct download at: $($octExe.FullName)"
           }
         timeout-minutes: 15
 
