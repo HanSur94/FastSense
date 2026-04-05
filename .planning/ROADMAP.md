@@ -71,3 +71,12 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
+
+### Phase 999.3: Graph Data Export (.mat / .csv) (BACKLOG)
+
+**Goal:** Enable exporting any graph's underlying data as .mat or .csv files, so users can easily extract plotted data for further analysis in MATLAB or external tools.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
