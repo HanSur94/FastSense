@@ -158,16 +158,25 @@ classdef StatusWidget < DashboardWidget
             status = obj.StaticStatus;
 
             if isempty(status) && ~isempty(obj.Threshold)
-                val = obj.resolveCurrentValue_();
-                if ~isempty(val)
-                    status = 'ok';
-                    t = obj.Threshold;
-                    tVals = t.allValues();
-                    for v = 1:numel(tVals)
-                        if (t.IsUpper && val > tVals(v)) || ...
-                                (~t.IsUpper && val < tVals(v))
-                            status = 'violation';
-                            break;
+                t = obj.Threshold;
+                if isa(t, 'CompositeThreshold')
+                    cStatus = t.computeStatus();
+                    if strcmp(cStatus, 'alarm')
+                        status = 'violation';
+                    else
+                        status = 'ok';
+                    end
+                else
+                    val = obj.resolveCurrentValue_();
+                    if ~isempty(val)
+                        status = 'ok';
+                        tVals = t.allValues();
+                        for v = 1:numel(tVals)
+                            if (t.IsUpper && val > tVals(v)) || ...
+                                    (~t.IsUpper && val < tVals(v))
+                                status = 'violation';
+                                break;
+                            end
                         end
                     end
                 end
@@ -274,10 +283,16 @@ classdef StatusWidget < DashboardWidget
 
         function [status, color] = deriveStatusFromThreshold(obj, val, theme)
             %DERIVESTATUSFROMTHRESHOLD Check single Threshold against scalar val.
+            t = obj.Threshold;
+            % CompositeThreshold: delegate to computeStatus, ignore val (per D-04)
+            if isa(t, 'CompositeThreshold')
+                status = t.computeStatus();
+                color = obj.statusToColor(status, theme);
+                return;
+            end
             status = 'ok';
             color = theme.StatusOkColor;
 
-            t = obj.Threshold;
             tVals = t.allValues();
             if isempty(tVals), return; end
 

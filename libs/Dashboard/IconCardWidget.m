@@ -305,6 +305,12 @@ classdef IconCardWidget < DashboardWidget
         %DERIVASTATEFROMTHRESHOLD Derive state string from a Threshold object.
             state = 'ok';
             if isempty(obj.Threshold), state = 'inactive'; return; end
+            % CompositeThreshold: delegate to computeStatus, no val needed (per D-04)
+            if isa(obj.Threshold, 'CompositeThreshold')
+                cStatus = obj.Threshold.computeStatus();
+                if strcmp(cStatus, 'ok'), state = 'active'; else, state = 'alarm'; end
+                return;
+            end
             val = obj.CurrentValue;
             if isempty(val), state = 'inactive'; return; end
             tVals = obj.Threshold.allValues();

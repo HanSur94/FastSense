@@ -58,9 +58,13 @@ classdef GaugeWidget < DashboardWidget
             end
             % Threshold-based range derivation (per Pattern 4 from RESEARCH)
             if isempty(obj.Range) && ~isempty(obj.Threshold)
-                tVals = obj.Threshold.allValues();
-                if ~isempty(tVals)
-                    obj.Range = [min(tVals), max(tVals)];
+                if isa(obj.Threshold, 'CompositeThreshold')
+                    % Composites have no numeric range; skip range derivation
+                else
+                    tVals = obj.Threshold.allValues();
+                    if ~isempty(tVals)
+                        obj.Range = [min(tVals), max(tVals)];
+                    end
                 end
             end
             if isempty(obj.Range)
@@ -237,24 +241,34 @@ classdef GaugeWidget < DashboardWidget
 
         function color = getValueColor(obj, frac, theme)
             if ~isempty(obj.Threshold)
-                val = obj.CurrentValue;
-                color = theme.StatusOkColor;
                 t = obj.Threshold;
-                tVals = t.allValues();
-                worstDist = -inf;
-                for v = 1:numel(tVals)
-                    violated = (t.IsUpper && val > tVals(v)) || ...
-                               (~t.IsUpper && val < tVals(v));
-                    if violated
-                        dist = abs(val - tVals(v));
-                        if dist > worstDist
-                            worstDist = dist;
-                            if ~isempty(t.Color)
-                                color = t.Color;
-                            elseif t.IsUpper
-                                color = theme.StatusAlarmColor;
-                            else
-                                color = theme.StatusWarnColor;
+                if isa(t, 'CompositeThreshold')
+                    % CompositeThreshold: derive color from computeStatus (per D-04)
+                    cStatus = t.computeStatus();
+                    switch cStatus
+                        case 'ok',    color = theme.StatusOkColor;
+                        case 'alarm', color = theme.StatusAlarmColor;
+                        otherwise,    color = theme.StatusWarnColor;
+                    end
+                else
+                    val = obj.CurrentValue;
+                    color = theme.StatusOkColor;
+                    tVals = t.allValues();
+                    worstDist = -inf;
+                    for v = 1:numel(tVals)
+                        violated = (t.IsUpper && val > tVals(v)) || ...
+                                   (~t.IsUpper && val < tVals(v));
+                        if violated
+                            dist = abs(val - tVals(v));
+                            if dist > worstDist
+                                worstDist = dist;
+                                if ~isempty(t.Color)
+                                    color = t.Color;
+                                elseif t.IsUpper
+                                    color = theme.StatusAlarmColor;
+                                else
+                                    color = theme.StatusWarnColor;
+                                end
                             end
                         end
                     end
