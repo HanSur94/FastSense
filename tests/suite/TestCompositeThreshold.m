@@ -233,5 +233,102 @@ classdef TestCompositeThreshold < matlab.unittest.TestCase
             testCase.verifyClass(c.getChildren(), 'cell', 'getChildren returns cell array');
         end
 
+        % --- Serialization tests ---
+
+        function testToStructBasic(testCase)
+            c = CompositeThreshold('sys_a', 'AggregateMode', 'or');
+            c.Name = 'System A';
+            s = c.toStruct();
+            testCase.verifyEqual(s.type, 'composite', 'type must be composite');
+            testCase.verifyEqual(s.key, 'sys_a', 'key must match');
+            testCase.verifyEqual(s.aggregateMode, 'or', 'aggregateMode must match');
+        end
+
+        function testToStructChildren(testCase)
+            t1 = Threshold('child_a');
+            t1.addCondition(struct(), 50);
+            t2 = Threshold('child_b');
+            t2.addCondition(struct(), 80);
+            c = CompositeThreshold('parent');
+            c.addChild(t1, 'Value', 30);
+            c.addChild(t2, 'Value', 60);
+            s = c.toStruct();
+            testCase.verifyEqual(numel(s.children), 2, 'children array should have 2 entries');
+            testCase.verifyEqual(s.children{1}.key, 'child_a', 'first child key');
+            testCase.verifyEqual(s.children{2}.key, 'child_b', 'second child key');
+        end
+
+        function testToStructChildValue(testCase)
+            t1 = Threshold('cv_child');
+            t1.addCondition(struct(), 50);
+            c = CompositeThreshold('cv_parent');
+            c.addChild(t1, 'Value', 42);
+            s = c.toStruct();
+            testCase.verifyEqual(s.children{1}.value, 42, 'static value should appear in child struct');
+        end
+
+        function testFromStructRoundTrip(testCase)
+            t1 = Threshold('rt_child1');
+            t1.addCondition(struct(), 50);
+            ThresholdRegistry.register('rt_child1', t1);
+            c = CompositeThreshold('rt_parent', 'AggregateMode', 'or');
+            c.addChild(t1, 'Value', 30);
+            s = c.toStruct();
+            c2 = CompositeThreshold.fromStruct(s);
+            testCase.verifyEqual(c2.AggregateMode, 'or', 'AggregateMode preserved in round-trip');
+            testCase.verifyEqual(numel(c2.getChildren()), 1, 'child count preserved in round-trip');
+        end
+
+        function testFromStructResolvesChildKeys(testCase)
+            t = Threshold('resolve_child');
+            t.addCondition(struct(), 50);
+            ThresholdRegistry.register('resolve_child', t);
+            s.type = 'composite';
+            s.key = 'resolve_parent';
+            s.aggregateMode = 'and';
+            child.key = 'resolve_child';
+            s.children = {child};
+            c = CompositeThreshold.fromStruct(s);
+            ch = c.getChildren();
+            testCase.verifyEqual(numel(ch), 1, 'fromStruct should resolve child key from registry');
+            testCase.verifyTrue(ch{1}.threshold == t, 'resolved child should be same handle');
+        end
+
+        function testFromStructMissingChildKeyWarns(testCase)
+            s.type = 'composite';
+            s.key = 'warn_parent';
+            s.aggregateMode = 'and';
+            child.key = 'totally_missing_key_xyz999';
+            s.children = {child};
+            c = [];
+            testCase.verifyWarning(@() assignIfWarn(), 'CompositeThreshold:loadChildFailed');
+            function assignIfWarn()
+                c = CompositeThreshold.fromStruct(s); %#ok<NASGU>
+            end
+        end
+
+        function testNestedCompositeRoundTrip(testCase)
+            % Build nested composite: outer -> inner -> leaf
+            leaf = Threshold('nested_leaf');
+            leaf.addCondition(struct(), 100);
+            ThresholdRegistry.register('nested_leaf', leaf);
+
+            inner = CompositeThreshold('nested_inner', 'AggregateMode', 'and');
+            inner.addChild(leaf, 'Value', 50);
+            ThresholdRegistry.register('nested_inner', inner);
+
+            outer = CompositeThreshold('nested_outer', 'AggregateMode', 'or');
+            outer.addChild(inner);
+
+            % Round-trip outer
+            s = outer.toStruct();
+            outer2 = CompositeThreshold.fromStruct(s);
+            testCase.verifyEqual(outer2.AggregateMode, 'or', 'outer AggregateMode preserved');
+            testCase.verifyEqual(numel(outer2.getChildren()), 1, 'outer child count preserved');
+            innerChild = outer2.getChildren();
+            testCase.verifyTrue(isa(innerChild{1}.threshold, 'CompositeThreshold'), ...
+                'child of nested outer is a CompositeThreshold');
+        end
+
     end
 end
