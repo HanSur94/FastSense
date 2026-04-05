@@ -80,7 +80,16 @@ classdef ChipBarWidget < DashboardWidget
             try disableDefaultInteractivity(obj.hAx); catch, end
             hold(obj.hAx, 'on');
 
-            r = 0.20;
+            % Compute aspect ratio correction so circles don't stretch
+            % Axes spans [0, nChips] x [0, 1] but panel is wider than tall,
+            % so x-radius must be shrunk relative to y-radius.
+            pxW = pxPos(3);
+            ry = 0.22;  % radius in y-axis units
+            if pxW > 0 && pxH > 0
+                rx = ry * (pxH / pxW) * nChips;  % scale x-radius by panel aspect
+            else
+                rx = ry;
+            end
             theta = linspace(0, 2*pi, 60);
             chipFontSz = max(6, min(9, round(pxH * 0.18)));
 
@@ -93,8 +102,8 @@ classdef ChipBarWidget < DashboardWidget
                 chipColor = obj.resolveChipColor(chip, theme);
 
                 obj.hChipCircles{i} = fill(obj.hAx, ...
-                    xc + r * cos(theta), ...
-                    0.60 + r * sin(theta), ...
+                    xc + rx * cos(theta), ...
+                    0.60 + ry * sin(theta), ...
                     chipColor, 'EdgeColor', 'none', 'HitTest', 'off');
 
                 if isfield(chip, 'label')
