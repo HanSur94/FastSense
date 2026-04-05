@@ -35,12 +35,15 @@ sTemp.Y = 70 + 4*sin(2*pi*t/3600) + randn(1, N)*0.8;
 sTemp.Y(end) = 76;  % near warning — interesting gauge position
 
 % State-independent thresholds (empty condition struct)
-sTemp.addThresholdRule(struct(), 78, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
-sTemp.addThresholdRule(struct(), 85, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiWarn = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarn.addCondition(struct(), 78);
+sTemp.addThreshold(tHiWarn);
+
+tHiAlarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarm.addCondition(struct(), 85);
+sTemp.addThreshold(tHiAlarm);
 sTemp.resolve();
 
 %% 2. Build dashboard with 6 gauges (4 styles + 2 data sources)

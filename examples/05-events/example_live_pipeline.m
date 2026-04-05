@@ -53,37 +53,75 @@ tempSensor = Sensor('temperature', 'Name', 'Chamber Temperature');
 tempStateCh = StateChannel('mode');
 tempSensor.addStateChannel(tempStateCh);
 
-% Idle mode thresholds (default operating)
-tempSensor.addThresholdRule(struct('mode', 'idle'), 120, 'Direction', 'upper', 'Label', 'H Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-tempSensor.addThresholdRule(struct('mode', 'idle'), 150, 'Direction', 'upper', 'Label', 'HH Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
-tempSensor.addThresholdRule(struct('mode', 'idle'), 50,  'Direction', 'lower', 'Label', 'L Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-tempSensor.addThresholdRule(struct('mode', 'idle'), 30,  'Direction', 'lower', 'Label', 'LL Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
+% H Warning (upper): idle=120, heating=140, cooling=100
+tTempHWarn = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper', ...
+    'Color', warnColor, 'LineStyle', warnStyle);
+tTempHWarn.addCondition(struct('mode', 'idle'),    120);
+tTempHWarn.addCondition(struct('mode', 'heating'), 140);
+tTempHWarn.addCondition(struct('mode', 'cooling'), 100);
+tempSensor.addThreshold(tTempHWarn);
 
-% Heating mode: higher upper limits (more tolerant of heat)
-tempSensor.addThresholdRule(struct('mode', 'heating'), 140, 'Direction', 'upper', 'Label', 'H Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-tempSensor.addThresholdRule(struct('mode', 'heating'), 170, 'Direction', 'upper', 'Label', 'HH Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
-tempSensor.addThresholdRule(struct('mode', 'heating'), 40,  'Direction', 'lower', 'Label', 'L Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-tempSensor.addThresholdRule(struct('mode', 'heating'), 20,  'Direction', 'lower', 'Label', 'LL Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
+% HH Alarm (upper): idle=150, heating=170, cooling=130
+tTempHHAlarm = Threshold('hh_alarm', 'Name', 'HH Alarm', 'Direction', 'upper', ...
+    'Color', alarmColor, 'LineStyle', alarmStyle);
+tTempHHAlarm.addCondition(struct('mode', 'idle'),    150);
+tTempHHAlarm.addCondition(struct('mode', 'heating'), 170);
+tTempHHAlarm.addCondition(struct('mode', 'cooling'), 130);
+tempSensor.addThreshold(tTempHHAlarm);
 
-% Cooling mode: lower upper limits (tighter when cooling)
-tempSensor.addThresholdRule(struct('mode', 'cooling'), 100, 'Direction', 'upper', 'Label', 'H Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-tempSensor.addThresholdRule(struct('mode', 'cooling'), 130, 'Direction', 'upper', 'Label', 'HH Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
-tempSensor.addThresholdRule(struct('mode', 'cooling'), 60,  'Direction', 'lower', 'Label', 'L Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-tempSensor.addThresholdRule(struct('mode', 'cooling'), 40,  'Direction', 'lower', 'Label', 'LL Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
+% L Warning (lower): idle=50, heating=40, cooling=60
+tTempLWarn = Threshold('l_warning', 'Name', 'L Warning', 'Direction', 'lower', ...
+    'Color', warnColor, 'LineStyle', warnStyle);
+tTempLWarn.addCondition(struct('mode', 'idle'),    50);
+tTempLWarn.addCondition(struct('mode', 'heating'), 40);
+tTempLWarn.addCondition(struct('mode', 'cooling'), 60);
+tempSensor.addThreshold(tTempLWarn);
+
+% LL Alarm (lower): idle=30, heating=20, cooling=40
+tTempLLAlarm = Threshold('ll_alarm', 'Name', 'LL Alarm', 'Direction', 'lower', ...
+    'Color', alarmColor, 'LineStyle', alarmStyle);
+tTempLLAlarm.addCondition(struct('mode', 'idle'),    30);
+tTempLLAlarm.addCondition(struct('mode', 'heating'), 20);
+tTempLLAlarm.addCondition(struct('mode', 'cooling'), 40);
+tempSensor.addThreshold(tTempLLAlarm);
 
 % --- Pressure: unconditional thresholds with warning/alarm colors ---
 presSensor = Sensor('pressure', 'Name', 'Chamber Pressure');
-presSensor.addThresholdRule(struct(), 5.0, 'Direction', 'upper', 'Label', 'H Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-presSensor.addThresholdRule(struct(), 6.5, 'Direction', 'upper', 'Label', 'HH Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
-presSensor.addThresholdRule(struct(), 1.5, 'Direction', 'lower', 'Label', 'L Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-presSensor.addThresholdRule(struct(), 0.8, 'Direction', 'lower', 'Label', 'LL Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
+tPresHWarn = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper', ...
+    'Color', warnColor, 'LineStyle', warnStyle);
+tPresHWarn.addCondition(struct(), 5.0);
+presSensor.addThreshold(tPresHWarn);
+tPresHHAlarm = Threshold('hh_alarm', 'Name', 'HH Alarm', 'Direction', 'upper', ...
+    'Color', alarmColor, 'LineStyle', alarmStyle);
+tPresHHAlarm.addCondition(struct(), 6.5);
+presSensor.addThreshold(tPresHHAlarm);
+tPresLWarn = Threshold('l_warning', 'Name', 'L Warning', 'Direction', 'lower', ...
+    'Color', warnColor, 'LineStyle', warnStyle);
+tPresLWarn.addCondition(struct(), 1.5);
+presSensor.addThreshold(tPresLWarn);
+tPresLLAlarm = Threshold('ll_alarm', 'Name', 'LL Alarm', 'Direction', 'lower', ...
+    'Color', alarmColor, 'LineStyle', alarmStyle);
+tPresLLAlarm.addCondition(struct(), 0.8);
+presSensor.addThreshold(tPresLLAlarm);
 
 % --- Vibration: unconditional thresholds with warning/alarm colors ---
 vibSensor = Sensor('vibration', 'Name', 'Motor Vibration');
-vibSensor.addThresholdRule(struct(), 8.0,  'Direction', 'upper', 'Label', 'H Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-vibSensor.addThresholdRule(struct(), 12.0, 'Direction', 'upper', 'Label', 'HH Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
-vibSensor.addThresholdRule(struct(), 2.0,  'Direction', 'lower', 'Label', 'L Warning',  'Color', warnColor,  'LineStyle', warnStyle);
-vibSensor.addThresholdRule(struct(), 1.0,  'Direction', 'lower', 'Label', 'LL Alarm',   'Color', alarmColor, 'LineStyle', alarmStyle);
+tVibHWarn = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper', ...
+    'Color', warnColor, 'LineStyle', warnStyle);
+tVibHWarn.addCondition(struct(), 8.0);
+vibSensor.addThreshold(tVibHWarn);
+tVibHHAlarm = Threshold('hh_alarm', 'Name', 'HH Alarm', 'Direction', 'upper', ...
+    'Color', alarmColor, 'LineStyle', alarmStyle);
+tVibHHAlarm.addCondition(struct(), 12.0);
+vibSensor.addThreshold(tVibHHAlarm);
+tVibLWarn = Threshold('l_warning', 'Name', 'L Warning', 'Direction', 'lower', ...
+    'Color', warnColor, 'LineStyle', warnStyle);
+tVibLWarn.addCondition(struct(), 2.0);
+vibSensor.addThreshold(tVibLWarn);
+tVibLLAlarm = Threshold('ll_alarm', 'Name', 'LL Alarm', 'Direction', 'lower', ...
+    'Color', alarmColor, 'LineStyle', alarmStyle);
+tVibLLAlarm.addCondition(struct(), 1.0);
+vibSensor.addThreshold(tVibLLAlarm);
 
 sensors = containers.Map();
 sensors('temperature') = tempSensor;

@@ -29,20 +29,26 @@ t = linspace(0, 3600, N);
 % Sensor 1 — ok (no violation)
 sA = Sensor('S-001', 'Name', 'Reactor A', 'Units', 'bar');
 sA.X = t; sA.Y = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05;
-sA.addThresholdRule(struct(), 12, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiAlarmA = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmA.addCondition(struct(), 12);
+sA.addThreshold(tHiAlarmA);
 sA.resolve();
 
 % Sensor 2 — alarm (last value above threshold)
 sB = Sensor('S-002', 'Name', 'Reactor B', 'Units', 'bar');
 sB.X = t; sB.Y = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05;
 sB.Y(end-100:end) = 14 + randn(1,101)*0.1;   % push tail into alarm
-sB.addThresholdRule(struct(), 12, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiAlarmB = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmB.addCondition(struct(), 12);
+sB.addThreshold(tHiAlarmB);
 sB.resolve();
 
 % Sensor 3 — ok
 sC = Sensor('S-003', 'Name', 'Cooler', 'Units', [char(176) 'C']);
 sC.X = t; sC.Y = 38 + 2*sin(2*pi*t/1200) + randn(1,N)*0.3;
-sC.addThresholdRule(struct(), 60, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiAlarmC = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmC.addCondition(struct(), 60);
+sC.addThreshold(tHiAlarmC);
 sC.resolve();
 
 %% 2. Build Dashboard

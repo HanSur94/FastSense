@@ -38,21 +38,25 @@ sTemp.Units = [char(176) 'F'];
 sTemp.X = t;
 sTemp.Y = 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.2;
 sTemp.Y(end) = 79;  % near warning level
-sTemp.addThresholdRule(struct(), 78, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
-sTemp.addThresholdRule(struct(), 85, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnTemp.addCondition(struct(), 78);
+sTemp.addThreshold(tHiWarnTemp);
+
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmTemp.addCondition(struct(), 85);
+sTemp.addThreshold(tHiAlarmTemp);
 sTemp.resolve();
 
 sPress = Sensor('P-201', 'Name', 'Pressure');
 sPress.Units = 'psi';
 sPress.X = t;
 sPress.Y = 55 + 8*sin(2*pi*t/7200) + randn(1,N)*1.5;
-sPress.addThresholdRule(struct(), 68, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnPress.addCondition(struct(), 68);
+sPress.addThreshold(tHiWarnPress);
 sPress.resolve();
 
 sFlow = Sensor('F-301', 'Name', 'Flow Rate');

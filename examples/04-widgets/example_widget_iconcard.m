@@ -31,14 +31,18 @@ sPump = Sensor('M-101', 'Name', 'Pump Speed', 'Units', 'RPM');
 sPump.X = t;
 sPump.Y = 2800 + 150*sin(2*pi*t/600) + randn(1,N)*20;
 sPump.Y(end-200:end) = 3250 + randn(1,201)*10;   % push tail into alarm
-sPump.addThresholdRule(struct(), 3100, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiAlarmPump = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmPump.addCondition(struct(), 3100);
+sPump.addThreshold(tHiAlarmPump);
 sPump.resolve();
 
 % Coolant temp — last value within normal range => ok (green)
 sCool = Sensor('T-202', 'Name', 'Coolant Temp', 'Units', [char(176) 'C']);
 sCool.X = t;
 sCool.Y = 45 + 5*sin(2*pi*t/900) + randn(1,N)*0.5;
-sCool.addThresholdRule(struct(), 70, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiAlarmCool = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmCool.addCondition(struct(), 70);
+sCool.addThreshold(tHiAlarmCool);
 sCool.resolve();
 
 %% 2. Build Dashboard

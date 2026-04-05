@@ -276,52 +276,54 @@ function s = make_sensor(id, name, N, nominal, amp, period, noise, stateChannels
 end
 
 function add_4_thresholds(s, scM, warnHi, warnLo, alarmHi, alarmLo)
-%ADD_4_THRESHOLDS Add Warn HH/LL + Alarm HH/LL threshold rules.
-%   If scM is provided, adds rules for each machine state so that
+%ADD_4_THRESHOLDS Add Warn HH/LL + Alarm HH/LL thresholds.
+%   If scM is provided, adds conditions for each machine state so that
 %   resolve() produces continuous step-function threshold lines:
 %     machine=0 (idle):      relaxed limits (+10% offset)
 %     machine=1 (running):   nominal limits
 %     machine=2 (evacuated): tighter limits (-10% offset)
 %   If scM is empty, adds unconditional flat thresholds.
 %
-%   Rules sharing the same Label+Direction are merged by resolve() into
-%   a single continuous threshold line — no NaN gaps.
+%   Thresholds sharing the same Label+Direction collect multiple conditions;
+%   resolve() merges them into a single continuous threshold line — no NaN gaps.
+
+    tWarnHH  = Threshold('warn_hh',  'Name', 'Warn HH',  'Direction', 'upper', ...
+        'Color', [0.95 0.65 0.1], 'LineStyle', '--');
+    tWarnLL  = Threshold('warn_ll',  'Name', 'Warn LL',  'Direction', 'lower', ...
+        'Color', [0.95 0.65 0.1], 'LineStyle', '--');
+    tAlarmHH = Threshold('alarm_hh', 'Name', 'Alarm HH', 'Direction', 'upper', ...
+        'Color', [0.9 0.15 0.1], 'LineStyle', '-');
+    tAlarmLL = Threshold('alarm_ll', 'Name', 'Alarm LL', 'Direction', 'lower', ...
+        'Color', [0.9 0.15 0.1], 'LineStyle', '-');
 
     if isempty(scM)
-        add_rule_set(s, struct(), warnHi, warnLo, alarmHi, alarmLo);
-        return;
-    end
-
-    warnRange  = warnHi - warnLo;
-    alarmRange = alarmHi - alarmLo;
-
-    % Get unique state values from the state channel
-    states = unique(scM.Y);
-
-    for i = 1:numel(states)
-        state = states(i);
-        switch state
-            case 0; f =  0.10;   % idle — relaxed
-            case 1; f =  0;      % running — nominal
-            case 2; f = -0.10;   % evacuated — tighter
-            otherwise; f = 0;
+        tWarnHH.addCondition(struct(),  warnHi);
+        tWarnLL.addCondition(struct(),  warnLo);
+        tAlarmHH.addCondition(struct(), alarmHi);
+        tAlarmLL.addCondition(struct(), alarmLo);
+    else
+        warnRange  = warnHi - warnLo;
+        alarmRange = alarmHi - alarmLo;
+        states = unique(scM.Y);
+        for i = 1:numel(states)
+            state = states(i);
+            switch state
+                case 0; f =  0.10;   % idle — relaxed
+                case 1; f =  0;      % running — nominal
+                case 2; f = -0.10;   % evacuated — tighter
+                otherwise; f = 0;
+            end
+            tWarnHH.addCondition(struct('machine', state),  warnHi  + f*warnRange);
+            tWarnLL.addCondition(struct('machine', state),  warnLo  - f*warnRange);
+            tAlarmHH.addCondition(struct('machine', state), alarmHi + f*alarmRange);
+            tAlarmLL.addCondition(struct('machine', state), alarmLo - f*alarmRange);
         end
-        add_rule_set(s, struct('machine', state), ...
-            warnHi  + f*warnRange,  warnLo  - f*warnRange, ...
-            alarmHi + f*alarmRange, alarmLo - f*alarmRange);
     end
-end
 
-function add_rule_set(s, cond, warnHi, warnLo, alarmHi, alarmLo)
-%ADD_RULE_SET Add one set of 4 threshold rules for a single condition.
-    s.addThresholdRule(cond, warnHi, 'Direction', 'upper', ...
-        'Label', 'Warn HH', 'Color', [0.95 0.65 0.1], 'LineStyle', '--');
-    s.addThresholdRule(cond, warnLo, 'Direction', 'lower', ...
-        'Label', 'Warn LL', 'Color', [0.95 0.65 0.1], 'LineStyle', '--');
-    s.addThresholdRule(cond, alarmHi, 'Direction', 'upper', ...
-        'Label', 'Alarm HH', 'Color', [0.9 0.15 0.1], 'LineStyle', '-');
-    s.addThresholdRule(cond, alarmLo, 'Direction', 'lower', ...
-        'Label', 'Alarm LL', 'Color', [0.9 0.15 0.1], 'LineStyle', '-');
+    s.addThreshold(tWarnHH);
+    s.addThreshold(tWarnLL);
+    s.addThreshold(tAlarmHH);
+    s.addThreshold(tAlarmLL);
 end
 
 function inject_event(s, idxStart, idxEnd, magnitude)

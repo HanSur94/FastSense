@@ -30,9 +30,10 @@ sTemp = Sensor('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'F'];
 sTemp.X = t;
 sTemp.Y = 72 + 6*sin(2*pi*t/7200) + randn(1,N)*1.5;
-sTemp.addThresholdRule(struct(), 82, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnTemp.addCondition(struct(), 82);
+sTemp.addThreshold(tHiWarnTemp);
 sTemp.resolve();
 
 sPress = Sensor('P-201', 'Name', 'Pressure');
@@ -40,9 +41,10 @@ sPress.Units = 'psi';
 sPress.X = t;
 % Deliberately correlated with temperature
 sPress.Y = 40 + 0.8*(sTemp.Y - 72) + randn(1,N)*2;
-sPress.addThresholdRule(struct(), 46, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnPress.addCondition(struct(), 46);
+sPress.addThreshold(tHiWarnPress);
 sPress.resolve();
 
 % Flow Rate — weaker correlation with temperature
@@ -50,9 +52,10 @@ sFlow = Sensor('F-301', 'Name', 'Flow Rate');
 sFlow.Units = 'L/min';
 sFlow.X = t;
 sFlow.Y = max(0, 100 + 0.4*(sTemp.Y - 72) + randn(1,N)*10);
-sFlow.addThresholdRule(struct(), 130, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmFlow.addCondition(struct(), 130);
+sFlow.addThreshold(tHiAlarmFlow);
 sFlow.resolve();
 
 % Vibration — used as color sensor (highlights operating regime)

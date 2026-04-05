@@ -40,16 +40,24 @@ function example_event_detection_live()
     % --- 2. Create Sensor objects ---
     sTemp = Sensor('temperature', 'Name', 'Temperature');
     sTemp.X = t; sTemp.Y = temp;
-    sTemp.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'temp warning');
-    sTemp.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'temp critical');
+    tTempWarn = Threshold('temp_warning', 'Name', 'temp warning', 'Direction', 'upper');
+    tTempWarn.addCondition(struct(), 85);
+    sTemp.addThreshold(tTempWarn);
+    tTempCrit = Threshold('temp_critical', 'Name', 'temp critical', 'Direction', 'upper');
+    tTempCrit.addCondition(struct(), 95);
+    sTemp.addThreshold(tTempCrit);
 
     sPres = Sensor('pressure', 'Name', 'Pressure');
     sPres.X = t; sPres.Y = pressure;
-    sPres.addThresholdRule(struct(), 4, 'Direction', 'lower', 'Label', 'pressure low');
+    tPresLow = Threshold('pressure_low', 'Name', 'pressure low', 'Direction', 'lower');
+    tPresLow.addCondition(struct(), 4);
+    sPres.addThreshold(tPresLow);
 
     sVib = Sensor('vibration', 'Name', 'Vibration');
     sVib.X = t; sVib.Y = vibration;
-    sVib.addThresholdRule(struct(), 5, 'Direction', 'upper', 'Label', 'vibration high');
+    tVibHigh = Threshold('vibration_high', 'Name', 'vibration high', 'Direction', 'upper');
+    tVibHigh.addCondition(struct(), 5);
+    sVib.addThreshold(tVibHigh);
 
     % --- 3. Configure event detection ---
     cfg = EventConfig();

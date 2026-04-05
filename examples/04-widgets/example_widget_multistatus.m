@@ -38,10 +38,14 @@ sTemp = Sensor('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F']);
 sTemp.X = t;
 sTemp.Y = 72 + 1.5*randn(1,N);
 sTemp.Y(end-50:end) = 74;
-sTemp.addThresholdRule(struct(), 80, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sTemp.addThresholdRule(struct(), 90, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnTemp.addCondition(struct(), 80);
+sTemp.addThreshold(tHiWarnTemp);
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmTemp.addCondition(struct(), 90);
+sTemp.addThreshold(tHiAlarmTemp);
 sTemp.resolve();
 
 % Flow Rate — ok (tail = 115, lo warn @ 90, hi alarm @ 160)
@@ -49,10 +53,14 @@ sFlow = Sensor('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
 sFlow.X = t;
 sFlow.Y = 120 + 3*randn(1,N);
 sFlow.Y(end-50:end) = 115;
-sFlow.addThresholdRule(struct(), 90,  'Direction', 'lower', 'Label', 'Lo Warn', ...
+tLoWarnFlow = Threshold('lo_warn', 'Name', 'Lo Warn', 'Direction', 'lower', ...
     'Color', [0.2 0.6 1], 'LineStyle', '--');
-sFlow.addThresholdRule(struct(), 160, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tLoWarnFlow.addCondition(struct(), 90);
+sFlow.addThreshold(tLoWarnFlow);
+tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmFlow.addCondition(struct(), 160);
+sFlow.addThreshold(tHiAlarmFlow);
 sFlow.resolve();
 
 % Tank Level — ok (tail = 52, lo warn @ 15, hi warn @ 85, hi alarm @ 95)
@@ -60,12 +68,18 @@ sLevel = Sensor('L-102', 'Name', 'Tank Level', 'Units', '%');
 sLevel.X = t;
 sLevel.Y = 50 + 5*randn(1,N);
 sLevel.Y(end-50:end) = 52;
-sLevel.addThresholdRule(struct(), 15, 'Direction', 'lower', 'Label', 'Lo Warn', ...
+tLoWarnLevel = Threshold('lo_warn', 'Name', 'Lo Warn', 'Direction', 'lower', ...
     'Color', [0.2 0.6 1], 'LineStyle', '--');
-sLevel.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tLoWarnLevel.addCondition(struct(), 15);
+sLevel.addThreshold(tLoWarnLevel);
+tHiWarnLevel = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sLevel.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnLevel.addCondition(struct(), 85);
+sLevel.addThreshold(tHiWarnLevel);
+tHiAlarmLevel = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmLevel.addCondition(struct(), 95);
+sLevel.addThreshold(tHiAlarmLevel);
 sLevel.resolve();
 
 % --- Yellow (warning) sensors: tail above warn but below alarm ---
@@ -75,10 +89,14 @@ sPress = Sensor('P-201', 'Name', 'Pressure', 'Units', 'psi');
 sPress.X = t;
 sPress.Y = 45 + 3*randn(1,N);
 sPress.Y(end-50:end) = 67;
-sPress.addThresholdRule(struct(), 65, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sPress.addThresholdRule(struct(), 75, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnPress.addCondition(struct(), 65);
+sPress.addThreshold(tHiWarnPress);
+tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmPress.addCondition(struct(), 75);
+sPress.addThreshold(tHiAlarmPress);
 sPress.resolve();
 
 % Humidity — warning (tail = 82, warn @ 80, alarm @ 95)
@@ -86,10 +104,14 @@ sHumid = Sensor('H-601', 'Name', 'Humidity', 'Units', '%RH');
 sHumid.X = t;
 sHumid.Y = 55 + 4*randn(1,N);
 sHumid.Y(end-50:end) = 82;
-sHumid.addThresholdRule(struct(), 80, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tHiWarnHumid = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sHumid.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnHumid.addCondition(struct(), 80);
+sHumid.addThreshold(tHiWarnHumid);
+tHiAlarmHumid = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmHumid.addCondition(struct(), 95);
+sHumid.addThreshold(tHiAlarmHumid);
 sHumid.resolve();
 
 % --- Red (alarm) sensors: tail above alarm threshold ---
@@ -99,10 +121,14 @@ sCurrent = Sensor('I-701', 'Name', 'Motor Current', 'Units', 'A');
 sCurrent.X = t;
 sCurrent.Y = 8.5 + 0.5*randn(1,N);
 sCurrent.Y(end-50:end) = 16;
-sCurrent.addThresholdRule(struct(), 12, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tHiWarnCurrent = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sCurrent.addThresholdRule(struct(), 15, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnCurrent.addCondition(struct(), 12);
+sCurrent.addThreshold(tHiWarnCurrent);
+tHiAlarmCurrent = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmCurrent.addCondition(struct(), 15);
+sCurrent.addThreshold(tHiAlarmCurrent);
 sCurrent.resolve();
 
 % Vibration RMS — alarm (tail = 4.5, warn @ 3, alarm @ 4)
@@ -110,10 +136,14 @@ sVib = Sensor('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s');
 sVib.X = t;
 sVib.Y = max(0.1, 1.2 + 0.2*randn(1,N));
 sVib.Y(end-50:end) = 4.5;
-sVib.addThresholdRule(struct(), 3, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tHiWarnVib = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sVib.addThresholdRule(struct(), 4, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnVib.addCondition(struct(), 3);
+sVib.addThreshold(tHiWarnVib);
+tHiAlarmVib = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmVib.addCondition(struct(), 4);
+sVib.addThreshold(tHiAlarmVib);
 sVib.resolve();
 
 % CO Level — alarm (tail = 28, warn @ 15, alarm @ 25)
@@ -121,10 +151,14 @@ sCO = Sensor('GAS-1', 'Name', 'CO Level', 'Units', 'ppm');
 sCO.X = t;
 sCO.Y = 5 + 2*randn(1,N);
 sCO.Y(end-50:end) = 28;
-sCO.addThresholdRule(struct(), 15, 'Direction', 'upper', 'Label', 'Hi Warn', ...
+tHiWarnCO = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
     'Color', [1 0.8 0], 'LineStyle', '--');
-sCO.addThresholdRule(struct(), 25, 'Direction', 'upper', 'Label', 'Hi Alarm', ...
+tHiWarnCO.addCondition(struct(), 15);
+sCO.addThreshold(tHiWarnCO);
+tHiAlarmCO = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
     'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmCO.addCondition(struct(), 25);
+sCO.addThreshold(tHiAlarmCO);
 sCO.resolve();
 
 allSensors = {sTemp, sFlow, sLevel, sPress, sHumid, sCurrent, sVib, sCO};
