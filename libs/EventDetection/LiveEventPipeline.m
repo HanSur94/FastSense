@@ -174,9 +174,12 @@ classdef LiveEventPipeline < handle
 
             thVal = NaN;
             thDir = 'upper';
-            if ~isempty(sensor.ThresholdRules)
-                thVal = sensor.ThresholdRules{1}.Value;
-                thDir = sensor.ThresholdRules{1}.Direction;
+            if ~isempty(sensor.Thresholds)
+                vals = sensor.Thresholds{1}.allValues();
+                if ~isempty(vals)
+                    thVal = vals(1);
+                end
+                thDir = sensor.Thresholds{1}.Direction;
             end
 
             sd = struct('X', st.fullX, 'Y', st.fullY, ...
@@ -186,7 +189,7 @@ classdef LiveEventPipeline < handle
         function updateStoreSensorData(obj)
             % Build sensorData struct array from detector state for EventViewer
             sensorKeys = obj.Sensors.keys();
-            sd = struct('name', {}, 't', {}, 'y', {}, 'thresholdRules', {});
+            sd = struct('name', {}, 't', {}, 'y', {}, 'thresholds', {});
             for i = 1:numel(sensorKeys)
                 key = sensorKeys{i};
                 st = obj.detector_.getSensorState(key);
@@ -194,18 +197,9 @@ classdef LiveEventPipeline < handle
                     sd(end+1).name = key; %#ok<AGROW>
                     sd(end).t = st.fullX;
                     sd(end).y = st.fullY;
-                    % Store threshold rules for reconstruction in EventViewer
+                    % Store threshold handles for reconstruction in EventViewer
                     sensor = obj.Sensors(key);
-                    rules = {};
-                    for j = 1:numel(sensor.ThresholdRules)
-                        r = sensor.ThresholdRules{j};
-                        rules{j} = struct('Value', r.Value, ...
-                            'Direction', r.Direction, ...
-                            'Label', r.Label, ...
-                            'Color', r.Color, ...
-                            'LineStyle', r.LineStyle); %#ok<AGROW>
-                    end
-                    sd(end).thresholdRules = rules;
+                    sd(end).thresholds = sensor.Thresholds;
                 end
             end
             obj.EventStore.SensorData = sd;
