@@ -149,36 +149,39 @@ jobs:
       - name: Install Octave
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'SilentlyContinue'
+          # Try Chocolatey first
           choco install octave.portable --yes --version=9.2.0 --no-progress 2>$null
           $octExe = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\octave.portable\tools" -Recurse -Filter "octave-cli.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($octExe) {
             Write-Host "Octave installed via Chocolatey at: $($octExe.FullName)"
-          } else {
-            Write-Host "::warning::Chocolatey install failed (ftp.gnu.org may be down). Downloading Octave directly from ftpmirror..."
-            $url = "https://ftpmirror.gnu.org/octave/windows/octave-9.2.0-w64.zip"
-            $zip = "$env:TEMP\octave.zip"
-            $dest = "C:\octave"
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-            Expand-Archive -Path $zip -DestinationPath $dest -Force
-            $octExe = Get-ChildItem -Path $dest -Recurse -Filter "octave-cli.exe" | Select-Object -First 1
-            if (-not $octExe) {
-              Write-Error "Failed to find octave-cli.exe after direct download"
-              exit 1
-            }
-            Write-Host "Octave installed via direct download at: $($octExe.FullName)"
+            echo "OCTAVE_EXE=$($octExe.FullName)" >> $env:GITHUB_ENV
+            exit 0
           }
+          # Fallback: direct download from mirror
+          Write-Host "::warning::Chocolatey install failed (ftp.gnu.org may be down). Downloading from ftpmirror..."
+          $url = "https://ftpmirror.gnu.org/octave/windows/octave-9.2.0-w64.zip"
+          $zip = "$env:TEMP\octave.zip"
+          $dest = "C:\octave"
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          $octExe = Get-ChildItem -Path $dest -Recurse -Filter "octave-cli.exe" | Select-Object -First 1
+          if (-not $octExe) {
+            Write-Error "Failed to find octave-cli.exe after direct download"
+            exit 1
+          }
+          Write-Host "Octave installed via direct download at: $($octExe.FullName)"
+          echo "OCTAVE_EXE=$($octExe.FullName)" >> $env:GITHUB_ENV
         timeout-minutes: 15
 
       - name: Compile MEX files
         shell: pwsh
         run: |
-          $octExe = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\octave.portable\tools" -Recurse -Filter "octave-cli.exe" | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $octExe) {
-            Write-Error "octave-cli.exe not found under chocolatey octave.portable"
+          $octExe = $env:OCTAVE_EXE
+          if (-not $octExe -or -not (Test-Path $octExe)) {
+            Write-Error "OCTAVE_EXE not set or not found: $octExe"
             exit 1
           }
-          Write-Host "Found Octave at: $octExe"
+          Write-Host "Using Octave at: $octExe"
           & $octExe --version
           & $octExe --no-window-system --eval "install(); fprintf('All MEX files compiled successfully on %s\n', computer());"
 
