@@ -201,9 +201,10 @@ None yet.
 | 260405-plc | Change DashboardToolbar Edit button to open source file in MATLAB editor | 2026-04-05 | 5188b04 | [260405-plc-change-the-edit-button-of-dashboardengin](./quick/260405-plc-change-the-edit-button-of-dashboardengin/) |
 | 260405-qa7 | Add dashboard performance benchmarks to CI | 2026-04-05 | 298984d | [260405-qa7-add-dashboard-performance-benchmarks-to-](./quick/260405-qa7-add-dashboard-performance-benchmarks-to-/) |
 | 260405-tff | Integrate new Threshold system into all example scripts | 2026-04-05 | dec46eb | [260405-tff-integrate-new-threshold-system-into-all-](./quick/260405-tff-integrate-new-threshold-system-into-all-/) |
+| 260405-wol | Migrate remaining addThresholdRule calls in install.m, benchmarks, docs, ThresholdRule.m | 2026-04-05 | 9736ef9 | [260405-wol-migrate-remaining-addthresholdrule-calls](./quick/260405-wol-migrate-remaining-addthresholdrule-calls/) |
 
 ## Session Continuity
 
-Last session: 2026-04-05T19:32:43.822Z
-Stopped at: Completed quick/260405-tff-PLAN.md
+Last session: 2026-04-05T21:37:00Z
+Stopped at: Completed quick/260405-wol-PLAN.md
 Resume file: None
