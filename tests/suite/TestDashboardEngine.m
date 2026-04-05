@@ -136,7 +136,9 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             s = Sensor('T-401', 'Name', 'Temperature');
             s.X = 1:100;
             s.Y = rand(1,100);
-            s.addThresholdRule(struct(), 80, 'Direction', 'upper', 'Label', 'Hi');
+            t_hi = Threshold('hi', 'Name', 'Hi', 'Direction', 'upper');
+            t_hi.addCondition(struct(), 80);
+            s.addThreshold(t_hi);
             s.resolve();
 
             d = DashboardEngine('Sensor Test');

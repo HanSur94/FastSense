@@ -280,7 +280,9 @@ classdef TestExternalSensorRegistry < matlab.unittest.TestCase
             % Build registry
             reg = ExternalSensorRegistry('IntegrationTest');
             s = Sensor('temp', 'Name', 'Temperature', 'Units', 'degC');
-            s.addThresholdRule(struct(), 60, 'Direction', 'upper', 'Label', 'Warning');
+            t_warning = Threshold('warning', 'Name', 'Warning', 'Direction', 'upper');
+            t_warning.addCondition(struct(), 60);
+            s.addThreshold(t_warning);
             reg.register('temp', s);
             reg.wireMatFile(matPath, {'temp', 'XVar', 'time', 'YVar', 'temp'});
 

@@ -65,7 +65,9 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             s = Sensor('T-401', 'Name', 'Temperature');
             s.X = 1:100;
             s.Y = rand(1,100);
-            s.addThresholdRule(struct(), 80, 'Direction', 'upper', 'Label', 'Hi Alarm');
+            t_hi_alarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+            t_hi_alarm.addCondition(struct(), 80);
+            s.addThreshold(t_hi_alarm);
             s.resolve();
 
             w = FastSenseWidget('Sensor', s);
