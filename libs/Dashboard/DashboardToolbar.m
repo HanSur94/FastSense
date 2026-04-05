@@ -19,7 +19,6 @@ classdef DashboardToolbar < handle
         hLastUpdate  = []
         hInfoBtn     = []
         Engine       = []
-        Builder      = []
     end
 
     methods
@@ -160,18 +159,16 @@ classdef DashboardToolbar < handle
         end
 
         function onEdit(obj)
-            if isempty(obj.Builder)
-                obj.Builder = DashboardBuilder(obj.Engine);
+            fp = obj.Engine.FilePath;
+            if isempty(fp)
+                warndlg('No source file associated with this dashboard. Save first or load from a file.', 'Edit');
+                return;
             end
-            if obj.Builder.IsActive
-                obj.Builder.exitEditMode();
-                set(obj.hEditBtn, 'String', 'Edit');
-                set(obj.hLiveBtn, 'Enable', 'on');
-            else
-                obj.Builder.enterEditMode();
-                set(obj.hEditBtn, 'String', 'Done');
-                set(obj.hLiveBtn, 'Enable', 'off');
+            if ~exist(fp, 'file')
+                warndlg(sprintf('Source file not found: %s', fp), 'Edit');
+                return;
             end
+            edit(fp);
         end
 
         function contentArea = getContentArea(obj)
