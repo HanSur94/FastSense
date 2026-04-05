@@ -66,8 +66,7 @@ classdef MultiStatusWidget < DashboardWidget
                 cx = (col + 0.5) / cols;
                 cy = 1 - (row + 0.5) / rows;
 
-                sensor = obj.Sensors{i};
-                color = obj.deriveColor(sensor, okColor);
+                item = obj.Sensors{i};
 
                 % Draw indicator — aspect-ratio-corrected so circles stay round
                 ry = 0.3 / max(cols, rows);
@@ -76,23 +75,43 @@ classdef MultiStatusWidget < DashboardWidget
                 else
                     rx = ry;
                 end
-                if strcmp(obj.IconStyle, 'square')
-                    rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
-                        'FaceColor', color, 'EdgeColor', 'none');
-                else
-                    theta = linspace(0, 2*pi, 30);
-                    fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
-                        color, 'EdgeColor', 'none');
-                end
 
-                % Label
-                if obj.ShowLabels && ~isempty(sensor)
-                    name = sensor.Name;
-                    if isempty(name), name = sensor.Key; end
-                    text(obj.hAxes, cx, cy - ry - 0.02, name, ...
-                        'HorizontalAlignment', 'center', ...
-                        'FontSize', 8, ...
-                        'Color', theme.AxisColor);
+                if isstruct(item)
+                    % Threshold-binding struct item
+                    color = obj.deriveColorFromThreshold(item, okColor, theme);
+                    if strcmp(obj.IconStyle, 'square')
+                        rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
+                            'FaceColor', color, 'EdgeColor', 'none');
+                    else
+                        theta = linspace(0, 2*pi, 30);
+                        fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
+                            color, 'EdgeColor', 'none');
+                    end
+                    if obj.ShowLabels && isfield(item, 'label')
+                        text(obj.hAxes, cx, cy - ry - 0.02, item.label, ...
+                            'HorizontalAlignment', 'center', ...
+                            'FontSize', 8, ...
+                            'Color', theme.AxisColor);
+                    end
+                else
+                    % Sensor object item
+                    color = obj.deriveColor(item, okColor);
+                    if strcmp(obj.IconStyle, 'square')
+                        rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
+                            'FaceColor', color, 'EdgeColor', 'none');
+                    else
+                        theta = linspace(0, 2*pi, 30);
+                        fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
+                            color, 'EdgeColor', 'none');
+                    end
+                    if obj.ShowLabels && ~isempty(item)
+                        name = item.Name;
+                        if isempty(name), name = item.Key; end
+                        text(obj.hAxes, cx, cy - ry - 0.02, name, ...
+                            'HorizontalAlignment', 'center', ...
+                            'FontSize', 8, ...
+                            'Color', theme.AxisColor);
+                    end
                 end
             end
             hold(obj.hAxes, 'off');
@@ -118,6 +137,11 @@ classdef MultiStatusWidget < DashboardWidget
                     nOk = 0;
                     for k = 1:n
                         s = obj.Sensors{k};
+                        % Threshold-binding struct items count as ok (no live data yet)
+                        if isstruct(s)
+                            nOk = nOk + 1;
+                            continue;
+                        end
                         if isempty(s) || isempty(s.Y) || isempty(s.ThresholdRules)
                             nOk = nOk + 1;
                             continue;
@@ -159,16 +183,67 @@ classdef MultiStatusWidget < DashboardWidget
             s.columns = obj.Columns;
             s.showLabels = obj.ShowLabels;
             s.iconStyle = obj.IconStyle;
-            % Serialize sensor keys
-            keys = cell(1, numel(obj.Sensors));
+            % Serialize items (mixed Sensor + threshold-binding structs)
+            items = cell(1, numel(obj.Sensors));
             for i = 1:numel(obj.Sensors)
-                keys{i} = obj.Sensors{i}.Key;
+                item = obj.Sensors{i};
+                if isstruct(item)
+                    entry = struct('type', 'threshold');
+                    if isfield(item, 'label'), entry.label = item.label; end
+                    if isfield(item, 'threshold') && ~isempty(item.threshold)
+                        t = item.threshold;
+                        if ischar(t) || isstring(t)
+                            entry.key = t;
+                        elseif isprop(t, 'Key')
+                            entry.key = t.Key;
+                        end
+                    end
+                    if isfield(item, 'value'), entry.value = item.value; end
+                    items{i} = entry;
+                else
+                    items{i} = struct('type', 'sensor', 'key', item.Key);
+                end
             end
-            s.sensors = keys;
+            s.items = items;
         end
     end
 
     methods (Access = private)
+        function color = deriveColorFromThreshold(~, item, defaultColor, theme)
+        %DERIVECOLORFROMTHRESHOLD Derive color from a threshold-binding struct item.
+            color = defaultColor;
+            if ~isfield(item, 'threshold') || isempty(item.threshold), return; end
+            t = item.threshold;
+            % Resolve string key if needed
+            if ischar(t) || isstring(t)
+                try
+                    t = ThresholdRegistry.get(t);
+                catch
+                    return;
+                end
+            end
+            % Get value
+            val = [];
+            if isfield(item, 'valueFcn') && ~isempty(item.valueFcn)
+                try val = item.valueFcn(); catch, return; end
+            elseif isfield(item, 'value')
+                val = item.value;
+            end
+            if isempty(val), return; end
+            % Check violation
+            tVals = t.allValues();
+            for v = 1:numel(tVals)
+                if (t.IsUpper && val >= tVals(v)) || (~t.IsUpper && val <= tVals(v))
+                    if ~isempty(t.Color)
+                        color = t.Color;
+                    else
+                        color = theme.StatusAlarmColor;
+                    end
+                    return;
+                end
+            end
+        end
+
         function color = deriveColor(~, sensor, defaultColor)
             color = defaultColor;
             if isempty(sensor) || isempty(sensor.Y)
@@ -202,7 +277,47 @@ classdef MultiStatusWidget < DashboardWidget
             if isfield(s, 'columns'), obj.Columns = s.columns; end
             if isfield(s, 'showLabels'), obj.ShowLabels = s.showLabels; end
             if isfield(s, 'iconStyle'), obj.IconStyle = s.iconStyle; end
-            % Sensor resolution happens via resolver in configToWidgets
+            % Restore items (mixed sensor + threshold-binding structs)
+            if isfield(s, 'items')
+                rawItems = s.items;
+                if isstruct(rawItems)
+                    nC = numel(rawItems);
+                    tmp = cell(1, nC);
+                    for i = 1:nC
+                        tmp{i} = rawItems(i);
+                    end
+                    rawItems = tmp;
+                end
+                nIt = numel(rawItems);
+                entries = cell(1, nIt);
+                for i = 1:nIt
+                    it = rawItems{i};
+                    if isstruct(it) && isfield(it, 'type')
+                        switch it.type
+                            case 'threshold'
+                                entry = struct('label', '');
+                                if isfield(it, 'label'), entry.label = it.label; end
+                                if isfield(it, 'key') && exist('ThresholdRegistry', 'class')
+                                    try
+                                        entry.threshold = ThresholdRegistry.get(it.key);
+                                    catch
+                                    end
+                                end
+                                if isfield(it, 'value'), entry.value = it.value; end
+                                entries{i} = entry;
+                            case 'sensor'
+                                if isfield(it, 'key') && exist('SensorRegistry', 'class')
+                                    try
+                                        entries{i} = SensorRegistry.get(it.key);
+                                    catch
+                                    end
+                                end
+                        end
+                    end
+                end
+                obj.Sensors = entries;
+            end
+            % Sensor resolution via resolver in configToWidgets (legacy s.sensors field)
         end
     end
 end

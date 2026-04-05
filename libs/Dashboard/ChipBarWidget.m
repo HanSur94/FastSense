@@ -164,6 +164,17 @@ classdef ChipBarWidget < DashboardWidget
                 if isfield(chip, 'iconColor') && isnumeric(chip.iconColor)
                     entry.iconColor = chip.iconColor;
                 end
+                if isfield(chip, 'threshold') && ~isempty(chip.threshold)
+                    t = chip.threshold;
+                    if ischar(t) || isstring(t)
+                        entry.threshold = t;
+                    elseif isprop(t, 'Key')
+                        entry.threshold = t.Key;
+                    end
+                end
+                if isfield(chip, 'value')
+                    entry.value = chip.value;
+                end
                 % Note: statusFcn and sensor cannot be serialized as function handles
                 s.chips{i} = entry;
             end
@@ -192,6 +203,22 @@ classdef ChipBarWidget < DashboardWidget
                     chips = chipCell;
                 end
                 obj.Chips = chips;
+                % Resolve threshold keys in chips
+                for i = 1:numel(obj.Chips)
+                    chip = obj.Chips{i};
+                    if isstruct(chip) && isfield(chip, 'threshold') && ...
+                            (ischar(chip.threshold) || isstring(chip.threshold))
+                        if exist('ThresholdRegistry', 'class')
+                            try
+                                chip.threshold = ThresholdRegistry.get(chip.threshold);
+                                obj.Chips{i} = chip;
+                            catch
+                                warning('ChipBarWidget:thresholdNotFound', ...
+                                    'Threshold key ''%s'' not found.', chip.threshold);
+                            end
+                        end
+                    end
+                end
             end
         end
     end
@@ -215,7 +242,27 @@ classdef ChipBarWidget < DashboardWidget
 
             % Resolve state string
             state = 'inactive';
-            if isfield(chip, 'statusFcn') && ~isempty(chip.statusFcn)
+            if isfield(chip, 'threshold') && ~isempty(chip.threshold)
+                % Threshold-based chip color
+                t = chip.threshold;
+                if ischar(t) || isstring(t)
+                    try t = ThresholdRegistry.get(t); catch, chipColor = [0.5 0.5 0.5]; return; end
+                end
+                val = [];
+                if isfield(chip, 'valueFcn') && ~isempty(chip.valueFcn)
+                    try val = chip.valueFcn(); catch, end
+                elseif isfield(chip, 'value')
+                    val = chip.value;
+                end
+                if isempty(val), chipColor = [0.5 0.5 0.5]; return; end
+                tVals = t.allValues();
+                state = 'ok';
+                for v = 1:numel(tVals)
+                    if (t.IsUpper && val > tVals(v)) || (~t.IsUpper && val < tVals(v))
+                        state = 'alarm'; break;
+                    end
+                end
+            elseif isfield(chip, 'statusFcn') && ~isempty(chip.statusFcn)
                 try
                     state = chip.statusFcn();
                 catch
