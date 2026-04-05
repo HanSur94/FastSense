@@ -159,5 +159,91 @@ classdef TestDashboardSerializer < matlab.unittest.TestCase
                 'loadJSON must return multi-widget list as cell array');
             testCase.verifyLength(loaded2.widgets, 2);
         end
+
+        function testFromStructIconCard(testCase)
+            ws = struct();
+            ws.type = 'iconcard';
+            ws.title = 'IC';
+            ws.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 2);
+            w = DashboardSerializer.createWidgetFromStruct(ws);
+            testCase.verifyTrue(strcmp(w.getType(), 'iconcard'), ...
+                'createWidgetFromStruct should return iconcard type');
+            testCase.verifyTrue(strcmp(w.Title, 'IC'), ...
+                'Title should be IC');
+        end
+
+        function testFromStructChipBar(testCase)
+            ws = struct();
+            ws.type = 'chipbar';
+            ws.title = 'CB';
+            ws.position = struct('col', 1, 'row', 1, 'width', 12, 'height', 1);
+            ws.chips = {};
+            w = DashboardSerializer.createWidgetFromStruct(ws);
+            testCase.verifyTrue(strcmp(w.getType(), 'chipbar'), ...
+                'createWidgetFromStruct should return chipbar type');
+            testCase.verifyTrue(strcmp(w.Title, 'CB'), ...
+                'Title should be CB');
+        end
+
+        function testFromStructSparkline(testCase)
+            ws = struct();
+            ws.type = 'sparkline';
+            ws.title = 'SL';
+            ws.position = struct('col', 1, 'row', 1, 'width', 6, 'height', 3);
+            w = DashboardSerializer.createWidgetFromStruct(ws);
+            testCase.verifyTrue(strcmp(w.getType(), 'sparkline'), ...
+                'createWidgetFromStruct should return sparkline type');
+            testCase.verifyTrue(strcmp(w.Title, 'SL'), ...
+                'Title should be SL');
+        end
+
+        function testJsonRoundTripIconCard(testCase)
+            d = DashboardEngine();
+            d.addWidget('iconcard', 'Title', 'IC', 'StaticValue', 42, ...
+                'StaticState', 'ok', 'Position', [1 1 6 2]);
+            config = DashboardSerializer.widgetsToConfig('RT', 'light', 5, d.Widgets);
+            filepath = fullfile(testCase.TempDir, 'iconcard_rt.json');
+            DashboardSerializer.saveJSON(config, filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
+            widgets = DashboardSerializer.configToWidgets(loaded);
+            testCase.verifyEqual(numel(widgets), 1, 'Should load 1 widget');
+            testCase.verifyTrue(strcmp(widgets{1}.getType(), 'iconcard'), ...
+                'Loaded widget should be iconcard type');
+            testCase.verifyTrue(strcmp(widgets{1}.Title, 'IC'), ...
+                'Title should round-trip correctly');
+        end
+
+        function testJsonRoundTripChipBar(testCase)
+            d = DashboardEngine();
+            d.addWidget('chipbar', 'Title', 'CB', 'Position', [1 1 12 1]);
+            config = DashboardSerializer.widgetsToConfig('RT', 'light', 5, d.Widgets);
+            filepath = fullfile(testCase.TempDir, 'chipbar_rt.json');
+            DashboardSerializer.saveJSON(config, filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
+            widgets = DashboardSerializer.configToWidgets(loaded);
+            testCase.verifyEqual(numel(widgets), 1, 'Should load 1 widget');
+            testCase.verifyTrue(strcmp(widgets{1}.getType(), 'chipbar'), ...
+                'Loaded widget should be chipbar type');
+            testCase.verifyTrue(strcmp(widgets{1}.Title, 'CB'), ...
+                'Title should round-trip correctly');
+        end
+
+        function testJsonRoundTripSparkline(testCase)
+            d = DashboardEngine();
+            d.addWidget('sparkline', 'Title', 'SL', 'Units', 'degC', ...
+                'StaticValue', 23, 'Position', [1 1 6 3]);
+            config = DashboardSerializer.widgetsToConfig('RT', 'light', 5, d.Widgets);
+            filepath = fullfile(testCase.TempDir, 'sparkline_rt.json');
+            DashboardSerializer.saveJSON(config, filepath);
+            loaded = DashboardSerializer.loadJSON(filepath);
+            widgets = DashboardSerializer.configToWidgets(loaded);
+            testCase.verifyEqual(numel(widgets), 1, 'Should load 1 widget');
+            testCase.verifyTrue(strcmp(widgets{1}.getType(), 'sparkline'), ...
+                'Loaded widget should be sparkline type');
+            testCase.verifyTrue(strcmp(widgets{1}.Title, 'SL'), ...
+                'Title should round-trip correctly');
+            testCase.verifyTrue(strcmp(widgets{1}.Units, 'degC'), ...
+                'Units should round-trip correctly');
+        end
     end
 end

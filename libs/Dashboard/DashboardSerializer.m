@@ -114,6 +114,15 @@ classdef DashboardSerializer
                         end
                     case 'divider'
                         lines{end+1} = sprintf('    d.addWidget(''divider'', ''Position'', %s);', pos);
+                    case 'iconcard'
+                        lines{end+1} = sprintf('    d.addWidget(''iconcard'', ''Title'', ''%s'', ...', ws.title);
+                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
+                    case 'chipbar'
+                        lines{end+1} = sprintf('    d.addWidget(''chipbar'', ''Title'', ''%s'', ...', ws.title);
+                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
+                    case 'sparkline'
+                        lines{end+1} = sprintf('    d.addWidget(''sparkline'', ''Title'', ''%s'', ...', ws.title);
+                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
                     otherwise
                         lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
                 end
@@ -328,6 +337,12 @@ classdef DashboardSerializer
                     w = MultiStatusWidget.fromStruct(ws);
                 case 'divider'
                     w = DividerWidget.fromStruct(ws);
+                case 'iconcard'
+                    w = IconCardWidget.fromStruct(ws);
+                case 'chipbar'
+                    w = ChipBarWidget.fromStruct(ws);
+                case 'sparkline'
+                    w = SparklineCardWidget.fromStruct(ws);
                 case 'mock'
                     % MockDashboardWidget used in tests — load via fromStruct if available
                     try
@@ -506,6 +521,21 @@ classdef DashboardSerializer
                     varName = sprintf('c%d', groupCount);
                     groupCount = groupCount + 1;
                     childLines{end+1} = sprintf('    %s = DividerWidget(''Position'', %s);', varName, cpos);
+                case 'iconcard'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = IconCardWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'chipbar'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = ChipBarWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
+                case 'sparkline'
+                    varName = sprintf('c%d', groupCount);
+                    groupCount = groupCount + 1;
+                    childLines{end+1} = sprintf('    %s = SparklineCardWidget(''Title'', ''%s'', ''Position'', %s);', ...
+                        varName, ctitle, cpos);
                 case 'group'
                     % Nested GroupWidget (max depth 2 per codebase constraint)
                     varName = sprintf('g%d', groupCount);
@@ -668,6 +698,33 @@ classdef DashboardSerializer
                     wLines{end+1} = sprintf('%sd.addWidget(''multistatus'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
                 case 'divider'
                     wLines{end+1} = sprintf('%sd.addWidget(''divider'', ''Position'', %s);', indent, pos);
+                case 'iconcard'
+                    line = sprintf('%sd.addWidget(''iconcard'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'units') && ~isempty(ws.units)
+                        line = [line, sprintf(', ...\n%s    ''Units'', ''%s''', indent, ws.units)];
+                    end
+                    if isfield(ws, 'source') && isfield(ws.source, 'type')
+                        if strcmp(ws.source.type, 'static')
+                            line = [line, sprintf(', ...\n%s    ''StaticValue'', %g', indent, ws.source.value)];
+                        end
+                    end
+                    if isfield(ws, 'staticState') && ~isempty(ws.staticState)
+                        line = [line, sprintf(', ...\n%s    ''StaticState'', ''%s''', indent, ws.staticState)];
+                    end
+                    wLines{end+1} = [line, ');'];
+                case 'chipbar'
+                    wLines{end+1} = sprintf('%sd.addWidget(''chipbar'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                case 'sparkline'
+                    line = sprintf('%sd.addWidget(''sparkline'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);
+                    if isfield(ws, 'units') && ~isempty(ws.units)
+                        line = [line, sprintf(', ...\n%s    ''Units'', ''%s''', indent, ws.units)];
+                    end
+                    if isfield(ws, 'source') && isfield(ws.source, 'type')
+                        if strcmp(ws.source.type, 'static')
+                            line = [line, sprintf(', ...\n%s    ''StaticValue'', %g', indent, ws.source.value)];
+                        end
+                    end
+                    wLines{end+1} = [line, ');'];
                 otherwise
                     if isfield(ws, 'title')
                         wLines{end+1} = sprintf('%sd.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.type, ws.title, pos);

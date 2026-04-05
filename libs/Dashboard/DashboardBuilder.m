@@ -257,6 +257,9 @@ classdef DashboardBuilder < handle
                 case 'table',    defW = 8; defH = 2;
                 case 'rawaxes',  defW = 8; defH = 2;
                 case 'timeline', defW = 24; defH = 2;
+                case 'iconcard', defW = 6; defH = 2;
+                case 'chipbar',  defW = 12; defH = 1;
+                case 'sparkline', defW = 6; defH = 3;
                 otherwise,       defW = 8; defH = 2;
             end
 
@@ -308,9 +311,11 @@ classdef DashboardBuilder < handle
                 'HorizontalAlignment', 'center');
 
             types  = {'fastsense','number','status','text', ...
-                      'gauge','table','rawaxes','timeline'};
+                      'gauge','table','rawaxes','timeline', ...
+                      'iconcard','chipbar','sparkline'};
             labels = {'Plot','Number','Status','Text', ...
-                      'Gauge','Table','Axes','Events'};
+                      'Gauge','Table','Axes','Events', ...
+                      'Icon Card','Chip Bar','Sparkline'};
 
             btnH = 0.04;
             btnGap = 0.006;
