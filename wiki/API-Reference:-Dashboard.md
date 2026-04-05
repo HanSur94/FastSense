@@ -330,7 +330,9 @@ obj = FastSenseWidget(varargin)
 #### `refresh(obj)`
 
 Re-render sensor-bound widgets so updated data + violations show.
-Preserves current zoom state (xlim) across the rebuild.
+Uses incremental updateData() path when sensor identity is unchanged
+(PERF2-01); falls back to full teardown/rebuild on first render,
+sensor swap, or error.  Zoom state (xlim) is preserved in both paths.
 
 #### `update(obj)`
 
@@ -347,6 +349,9 @@ If xlim changed by user zoom/pan (not by setTimeRange),
 detach this widget from global time.
 
 #### `[tMin, tMax] = getTimeRange(obj)`
+
+Return cached min/max in O(1). Cache is kept up to date by
+updateTimeRangeCache() which is called from render/refresh/update.
 
 #### `t = getType(~)`
 

@@ -238,6 +238,12 @@ OPENLOUPE Open a standalone enlarged copy of this tile.
   by [+30, -30] pixels from the source figure, and receives
   its own FastSenseToolbar.
 
+#### `exportData(obj, filepath, format)`
+
+EXPORTDATA Export raw line and threshold data as CSV or MAT.
+  EXPORTDATA(obj, filepath, format) writes all raw line and
+  threshold data from the plot to the file at filepath.
+
 #### `n = lineNumPoints(obj, i)`
 
 LINENUMPOINTS Return total point count for line i.
@@ -396,6 +402,7 @@ Adds a uitoolbar with data cursor, crosshair, grid/legend toggles,
     Legend        — toggle legend visibility
     Autoscale Y  — fit Y-axis to visible data range
     Export PNG   — save figure as PNG with file dialog
+    Export Data  — save raw data as CSV or MAT with file dialog
     Refresh      — manual one-shot data reload
     Live Mode    — toggle automatic file polling
     Metadata     — show/hide metadata in data cursor tooltips
@@ -430,6 +437,12 @@ AUTOSCALEY Fit Y-axis limits to visible data on all axes.
 EXPORTPNG Save figure as PNG image at 150 DPI.
   tb.exportPNG()          — opens file dialog
   tb.exportPNG(filepath)  — saves directly to path
+
+#### `exportData(obj, filepath)`
+
+EXPORTDATA Export raw plot data as CSV or MAT file.
+  tb.exportData()          — opens file dialog
+  tb.exportData(filepath)  — saves directly (format from extension)
 
 #### `setCrosshair(obj, on)`
 
