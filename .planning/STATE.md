@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed quick/260405-tff-PLAN.md
-last_updated: "2026-04-05T19:32:43.827Z"
+status: executing
+stopped_at: Completed 1002-01-PLAN.md
+last_updated: "2026-04-05T22:33:53.247Z"
 last_activity: 2026-04-05
 progress:
-  total_phases: 5
+  total_phases: 7
   completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 17
+  completed_plans: 16
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1001 — first-class-threshold-entities
+**Current focus:** Phase 1002 — direct-widget-threshold-binding
 
 ## Current Position
 
-Phase: 1001
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 1002 (direct-widget-threshold-binding) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-05
 
 Progress: [░░░░░░░░░░] 0%
@@ -96,6 +96,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1001 P03 | 10min | 2 tasks | 13 files |
 | Phase 1001 P05 | 10min | 2 tasks | 10 files |
 | Phase 1001 P06 | 8min | 2 tasks | 5 files |
+| Phase 1002 P01 | 8min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,9 @@ Recent decisions affecting current work:
 - [Phase 1001]: loadModuleMetadata uses getConditionFields() on each Threshold for state channel discovery
 - [Phase 1001]: Threshold key derived from lowercased label with spaces replaced by underscores; no-label calls use upper_N key format
 - [Phase 1001]: All 5 EventDetection test files migrated: 34 addThresholdRule calls replaced with Threshold+addCondition+addThreshold pattern
+- [Phase 1002]: Threshold path checked before Sensor path in refresh() — precedence by property primacy; mutual exclusivity enforced in constructor
+- [Phase 1002]: GaugeWidget uses existing StaticValue/ValueFcn as value source for Threshold path — no separate Value property added
+- [Phase 1002]: ThresholdRegistry.clear() added as Rule 2 deviation to support test isolation
 
 ### Roadmap Evolution
 
@@ -179,6 +183,8 @@ Recent decisions affecting current work:
 - Phase 1 added: Dashboard Performance Optimization — faster creation, instantiation, and interactivity
 - Phase 1000 added: Dashboard Engine Performance Optimization Phase 2 — 6 bottlenecks: incremental FastSenseWidget refresh, debounced slider broadcast, lazy page realization, cached time ranges, batched page switch, debounced resize
 - Phase 1001 added: First-Class Threshold Entities — make thresholds independent reusable entities (like sensors) with ThresholdRegistry, TrendMiner-style shared thresholds across multiple sensors
+- Phase 1002 added: Direct Widget-Threshold Binding — widgets reference Thresholds directly without Sensor
+- Phase 1003 added: Composite Thresholds — hierarchical status aggregation via CompositeThreshold class
 
 ### Pending Todos
 
@@ -205,6 +211,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T21:37:00Z
-Stopped at: Completed quick/260405-wol-PLAN.md
+Last session: 2026-04-05T22:33:53.242Z
+Stopped at: Completed 1002-01-PLAN.md
 Resume file: None

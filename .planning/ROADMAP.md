@@ -114,10 +114,10 @@ Plans:
 **Goal:** Add Threshold + Value/ValueFcn properties to StatusWidget, GaugeWidget, IconCardWidget, MultiStatusWidget, and ChipBarWidget so they can display threshold-driven status without requiring a Sensor object. Purely additive — existing Sensor-bound behavior unchanged.
 **Requirements**: [THRBIND-01: StatusWidget + GaugeWidget threshold binding, THRBIND-02: IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding, THRBIND-03: Serialization round-trip for threshold-bound widgets, THRBIND-04: Backward compatibility, THRBIND-05: ValueFcn live tick support]
 **Depends on:** Phase 1001
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 1002-01-PLAN.md — StatusWidget + GaugeWidget threshold binding + serialization + tests
+- [x] 1002-01-PLAN.md — StatusWidget + GaugeWidget threshold binding + serialization + tests
 - [ ] 1002-02-PLAN.md — IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding + serialization + tests
 
 ### Phase 1003: Composite Thresholds — CompositeThreshold class that aggregates child Threshold objects for hierarchical status. Component A is green only if children A.A and A.B are both green. Enables system health trees and nested status monitoring.
