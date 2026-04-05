@@ -85,9 +85,10 @@ classdef TestChipBarWidget < matlab.unittest.TestCase
         end
 
         function testChipColorUpdate(testCase)
-            state = {'ok'};
+            % Use containers.Map (handle class) so statusFcn closure sees mutation
+            stateMap = containers.Map({'s'}, {'ok'});
             w = ChipBarWidget();
-            w.Chips = { struct('label', 'Sensor1', 'statusFcn', @() state{1}) };
+            w.Chips = { struct('label', 'Sensor1', 'statusFcn', @() stateMap('s')) };
 
             fig = figure('Visible', 'off');
             cleanup = onCleanup(@() close(fig));
@@ -101,7 +102,7 @@ classdef TestChipBarWidget < matlab.unittest.TestCase
             testCase.verifyEqual(c, okColor, 'AbsTol', 1e-9);
 
             % Change state to alarm and refresh
-            state{1} = 'alarm';
+            stateMap('s') = 'alarm';
             w.refresh();
             alarmColor = theme.StatusAlarmColor;
             c2 = get(w.hChipCircles{1}, 'FaceColor');
