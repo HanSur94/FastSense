@@ -164,6 +164,57 @@ classdef DashboardToolbar < handle
             end
         end
 
+        function onImage(obj)
+        %ONIMAGE Open save dialog and export dashboard figure as PNG/JPEG.
+        %   Pops a uiputfile with PNG+JPEG filters, defaults to the
+        %   sanitized dashboard name plus timestamp. On cancel, returns
+        %   silently. On engine error, surfaces message via warndlg.
+            defName = obj.defaultImageFilename();
+            [file, path, idx] = uiputfile( ...
+                {'*.png', 'PNG image (*.png)'; ...
+                 '*.jpg', 'JPEG image (*.jpg)'}, ...
+                'Save Dashboard Image', ...
+                defName);
+            obj.dispatchImageExport(file, path, idx);
+        end
+
+        function dispatchImageExport(obj, file, path, idx)
+        %DISPATCHIMAGEEXPORT Post-dialog dispatcher — testable without uiputfile.
+        %   file  — filename string, or 0 on user-cancel
+        %   path  — directory path from uiputfile
+        %   idx   — filter index (1=PNG, 2=JPEG). Defaults to PNG.
+            if isequal(file, 0) || isempty(file)
+                return;  % user cancelled — silent no-op (IMG-07)
+            end
+            if nargin < 4 || isempty(idx) || idx == 1
+                fmt = 'png';
+            else
+                fmt = 'jpeg';
+            end
+            try
+                obj.Engine.exportImage(fullfile(path, file), fmt);
+            catch ME
+                warndlg(ME.message, 'Image Export');
+            end
+        end
+
+        function fname = defaultImageFilename(obj)
+        %DEFAULTIMAGEFILENAME Build sanitized default filename for the dialog.
+        %   Pattern: {sanitized Engine.Name}_{yyyymmdd_HHMMSS}.png
+        %   Sanitization: replace [/\:*?"<>|] and whitespace with '_'.
+        %   NOTE: datestr format 'yyyymmdd_HHMMSS' (lowercase mm=month here,
+        %   HHMMSS=seconds). This differs from datetime/ISO notation —
+        %   see libs/EventDetection/generateEventSnapshot.m:28 for the
+        %   in-codebase precedent.
+            rawName = obj.Engine.Name;
+            if isempty(rawName)
+                rawName = 'Dashboard';
+            end
+            safeName = regexprep(rawName, '[/\\:*?"<>|\s]', '_');
+            stamp = datestr(now, 'yyyymmdd_HHMMSS');
+            fname = sprintf('%s_%s.png', safeName, stamp);
+        end
+
         function onInfo(obj)
             obj.Engine.showInfo();
         end
