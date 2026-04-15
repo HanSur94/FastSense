@@ -128,9 +128,9 @@ Plans:
 **Goal:** Add an image export button to the dashboard toolbar that captures the entire dashboard layout as a single image (PNG/JPEG), enabling users to share or document their dashboard state with one click.
 **Requirements**: [IMG-01: Image button present (label/tooltip/order), IMG-02: PNG export via Engine.exportImage, IMG-03: JPEG export via Engine.exportImage, IMG-04: Filename sanitization regex, IMG-05: Unknown format error ID, IMG-06: Write-failure error ID, IMG-07: uiputfile cancel no-op, IMG-08: Multi-page active-page capture, IMG-09: Live mode no-pause]
 **Depends on:** Phase 1003
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 1004-01-PLAN.md — DashboardEngine.exportImage delegate + RED/GREEN test scaffold (IMG-02..IMG-06)
+- [x] 1004-01-PLAN.md — DashboardEngine.exportImage delegate + RED/GREEN test scaffold (IMG-02..IMG-06)
 - [ ] 1004-02-PLAN.md — DashboardToolbar Image button + onImage/dispatch/defaultFilename (IMG-01, IMG-07)
 - [ ] 1004-03-PLAN.md — MATLAB suite extension + Octave parallel tests (IMG-01, IMG-07, IMG-08, IMG-09)
