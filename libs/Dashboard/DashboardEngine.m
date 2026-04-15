@@ -370,6 +370,64 @@ classdef DashboardEngine < handle
             end
         end
 
+        function exportImage(obj, filepath, format)
+        %EXPORTIMAGE Save the rendered dashboard figure as PNG or JPEG at 150 DPI.
+        %   d.exportImage('out.png')           % format inferred from extension
+        %   d.exportImage('out.png', 'png')
+        %   d.exportImage('out.jpg', 'jpeg')
+        %
+        %   Requires render() to have been called (raises
+        %   DashboardEngine:notRendered otherwise). Captures the entire figure
+        %   via print(); on Octave the print() builtin does NOT include
+        %   uicontrols (documented limitation), so the toolbar, page-bar and
+        %   time-panel buttons will not appear in the exported image on Octave.
+        %   MATLAB captures uicontrols normally.
+        %
+        %   Multi-page dashboards capture the active page only because
+        %   non-active pages use Visible='off'.
+        %
+        %   Inputs:
+        %     filepath - destination path. Parent directory must exist.
+        %     format   - 'png' or 'jpeg' (alias 'jpg'). Optional; inferred
+        %                from file extension if omitted (defaults to 'png').
+        %
+        %   Errors:
+        %     DashboardEngine:notRendered       - render() has not been called
+        %     DashboardEngine:unknownImageFormat - format is not png/jpeg/jpg
+        %     DashboardEngine:imageWriteFailed  - print() raised any error
+
+            if nargin < 3 || isempty(format)
+                [~, ~, ext] = fileparts(filepath);
+                if strcmpi(ext, '.jpg') || strcmpi(ext, '.jpeg')
+                    format = 'jpeg';
+                else
+                    format = 'png';
+                end
+            end
+
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                error('DashboardEngine:notRendered', ...
+                    'exportImage requires render() to have been called first.');
+            end
+
+            switch lower(format)
+                case 'png'
+                    devFlag = '-dpng';
+                case {'jpeg', 'jpg'}
+                    devFlag = '-djpeg';
+                otherwise
+                    error('DashboardEngine:unknownImageFormat', ...
+                        'Unknown image format ''%s''. Use ''png'' or ''jpeg''.', format);
+            end
+
+            try
+                print(obj.hFigure, devFlag, '-r150', filepath);
+            catch ME
+                error('DashboardEngine:imageWriteFailed', ...
+                    'Failed to write image ''%s'': %s', filepath, ME.message);
+            end
+        end
+
         function preview(obj, varargin)
         %PREVIEW Print ASCII representation of the dashboard to console.
         %   d.preview()              % default 120 chars wide
