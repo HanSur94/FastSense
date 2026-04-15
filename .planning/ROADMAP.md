@@ -83,7 +83,7 @@ Plans:
 Plans:
 - [x] 1000-01-PLAN.md — Incremental FastSenseWidget refresh + cached time ranges
 - [x] 1000-02-PLAN.md — Debounced slider broadcast + resize without dirty marking
-- [ ] 1000-03-PLAN.md — Lazy page panel realization + batched switchPage realize
+- [x] 1000-03-PLAN.md — Lazy page panel realization + batched switchPage realize
 
 ### Phase 1001: First-Class Threshold Entities
 
@@ -109,7 +109,7 @@ Plans:
 
 Plans:
 - [x] 1002-01-PLAN.md — StatusWidget + GaugeWidget threshold binding + serialization + tests
-- [ ] 1002-02-PLAN.md — IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding + serialization + tests
+- [x] 1002-02-PLAN.md — IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding + serialization + tests
 
 ### Phase 1003: Composite Thresholds — CompositeThreshold class that aggregates child Threshold objects for hierarchical status. Component A is green only if children A.A and A.B are both green. Enables system health trees and nested status monitoring.
 
