@@ -63,15 +63,6 @@ Plans:
 - [ ] 999.1-03-PLAN.md — SparklineCardWidget implementation
 - [x] 999.1-04-PLAN.md — Infrastructure wiring (Engine, Serializer, DetachedMirror, Builder)
 
-### Phase 999.2: Dashboard Image Export Button (BACKLOG)
-
-**Goal:** Add an image export button to the dashboard toolbar that captures the entire dashboard layout as a single image (PNG/JPEG), enabling users to share or document their dashboard state with one click.
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
-
 ### Phase 999.3: Graph Data Export (.mat / .csv) (BACKLOG)
 
 **Goal:** Enable exporting any graph's underlying data as .mat or .csv files, so users can easily extract plotted data for further analysis in MATLAB or external tools.
@@ -131,3 +122,13 @@ Plans:
 - [x] 1003-01-PLAN.md — CompositeThreshold class + TDD test suite (AND/OR/MAJORITY, addChild, computeStatus, nesting)
 - [x] 1003-02-PLAN.md — Widget isa-guards (StatusWidget, GaugeWidget, IconCardWidget) + MultiStatusWidget composite expansion
 - [x] 1003-03-PLAN.md — CompositeThreshold toStruct/fromStruct serialization + round-trip tests
+
+### Phase 1004: Dashboard Image Export Button
+
+**Goal:** Add an image export button to the dashboard toolbar that captures the entire dashboard layout as a single image (PNG/JPEG), enabling users to share or document their dashboard state with one click.
+**Requirements**: TBD
+**Depends on:** Phase 1003
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:discuss-phase 1004 to scope requirements, then /gsd:plan-phase 1004 to break down)
