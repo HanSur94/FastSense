@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1009-01-PLAN.md
-last_updated: "2026-04-16T21:15:40.256Z"
+stopped_at: Completed 1009-02-PLAN.md
+last_updated: "2026-04-16T21:34:56.109Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
   completed_phases: 11
   total_plans: 39
-  completed_plans: 36
+  completed_plans: 37
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1009 (Consumer migration) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -106,6 +106,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1008 P02 | 9min | 2 tasks | 5 files |
 | Phase 1008 P03 | 12min | 2 tasks | 6 files |
 | Phase 1009-consumer-migration P01 | 8min | 4 tasks | 8 files |
+| Phase 1009 P02 | 14min | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,9 @@ Recent decisions affecting current work:
 - [Phase 1008]: Plan 03: Pitfall 1 preserved via testPitfall1NoIsaInFastSenseAddTag — regex-based grep over FastSense.m asserts zero  branches. Permanent regression safeguard that carries into Phase 1009 consumer migration.
 - [Phase 1008]: Plan 03: File-touch landed at exactly 8/8 cap; legacy zero-churn 0 lines across all 8 pre-existing SensorThreshold classes. Pre-existing test_to_step_function::testAllNaN failure (unrelated to Phase 1008) deferred via deferred-items.md — MIGRATE-02 strangler-fig discipline prohibits Phase 1008 from touching unrelated files.
 - [Phase 1009-consumer-migration]: Plan 01: Tag precedence over Sensor; thresholds on Tag-bound SensorDetailPlot deferred to Phase 1010; shared fixture factory at tests/suite/makePhase1009Fixtures.m reused by Plans 02/03
+- [Phase 1009]: Base-class Tag property lands in Plan 02 (RESEARCH Q#1 rec); FastSenseWidget local Tag removed — net neutral
+- [Phase 1009]: EventTimelineWidget FilterTagKey uses MONITOR-05 carrier pattern — zero Event schema change (Pitfall X); Phase 1010 owns TagKeys
+- [Phase 1009]: DashboardEngine.onLiveTick uses unconditional markDirty for Tag widgets (Sensor parity; RESEARCH Q#2 Option A)
 
 ### Roadmap Evolution
 
@@ -244,6 +248,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T21:15:34.843Z
-Stopped at: Completed 1009-01-PLAN.md
+Last session: 2026-04-16T21:34:56.105Z
+Stopped at: Completed 1009-02-PLAN.md
 Resume file: None
