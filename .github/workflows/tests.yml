@@ -66,7 +66,7 @@ jobs:
 
       - name: Compile MEX files (MATLAB)
         if: steps.cache-mex-matlab.outputs.cache-hit != 'true'
-        uses: matlab-actions/run-command@v2
+        uses: matlab-actions/run-command@v3
         with:
           command: "install();"
 
@@ -264,7 +264,7 @@ jobs:
       - name: MATLAB which-mksqlite check
         if: always()
         continue-on-error: true
-        uses: matlab-actions/run-command@v2
+        uses: matlab-actions/run-command@v3
         with:
           command: |
             addpath('.');
@@ -279,7 +279,7 @@ jobs:
             end
 
       - name: Run tests with coverage
-        uses: matlab-actions/run-command@v2
+        uses: matlab-actions/run-command@v3
         with:
           command: "addpath('scripts'); run_tests_with_coverage();"
 

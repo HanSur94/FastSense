@@ -164,7 +164,7 @@ jobs:
           cache: true
 
       - name: Run MATLAB-only examples
-        uses: matlab-actions/run-command@v2
+        uses: matlab-actions/run-command@v3
         with:
           command: |
             install();
