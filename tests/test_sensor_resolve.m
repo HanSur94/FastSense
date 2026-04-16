@@ -3,7 +3,7 @@ function test_sensor_resolve()
 
     add_sensor_path();
 
-    % testResolveSingleRule — one state channel, one threshold rule
+    % testResolveSingleRule — one state channel, one threshold
     s = Sensor('pressure');
     s.X = 1:20;
     s.Y = [5 5 5 5 15 15 15 15 5 5 5 5 15 15 15 15 5 5 5 5];
@@ -14,7 +14,9 @@ function test_sensor_resolve()
     s.addStateChannel(sc);
 
     % Threshold of 10 only applies when machine == 1 (timestamps 10-20)
-    s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
+    t = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+    t.addCondition(struct('machine', 1), 10);
+    s.addThreshold(t);
 
     s.resolve();
 
@@ -38,8 +40,12 @@ function test_sensor_resolve()
     sc.Y = [0 1];
     s.addStateChannel(sc);
 
-    s.addThresholdRule(struct('mode', 0), 50, 'Direction', 'upper', 'Label', 'Normal HH');
-    s.addThresholdRule(struct('mode', 1), 40, 'Direction', 'upper', 'Label', 'Strict HH');
+    t1 = Threshold('normal_hh', 'Name', 'Normal HH', 'Direction', 'upper');
+    t1.addCondition(struct('mode', 0), 50);
+    t2 = Threshold('strict_hh', 'Name', 'Strict HH', 'Direction', 'upper');
+    t2.addCondition(struct('mode', 1), 40);
+    s.addThreshold(t1);
+    s.addThreshold(t2);
 
     s.resolve();
 
@@ -57,8 +63,9 @@ function test_sensor_resolve()
     s.addStateChannel(sc1);
     s.addStateChannel(sc2);
 
-    s.addThresholdRule(struct('machine', 1, 'zone', 1), 40, ...
-        'Direction', 'upper', 'Label', 'Combo alarm');
+    tc = Threshold('combo', 'Name', 'Combo alarm', 'Direction', 'upper');
+    tc.addCondition(struct('machine', 1, 'zone', 1), 40);
+    s.addThreshold(tc);
 
     s.resolve();
     assert(numel(s.ResolvedThresholds) == 1, 'testMultiState: threshold count');
@@ -75,7 +82,9 @@ function test_sensor_resolve()
     s = Sensor('pressure');
     s.X = 1:10;
     s.Y = [1 2 3 4 5 6 7 8 9 10];
-    s.addThresholdRule(struct(), 5, 'Direction', 'upper', 'Label', 'Static');
+    ts = Threshold('static', 'Name', 'Static', 'Direction', 'upper');
+    ts.addCondition(struct(), 5);
+    s.addThreshold(ts);
     s.resolve();
     assert(numel(s.ResolvedThresholds) == 1, 'testNoState: threshold count');
     viol = s.ResolvedViolations(1);
@@ -88,8 +97,12 @@ function test_sensor_resolve()
     sc = StateChannel('machine');
     sc.X = [1 10]; sc.Y = [0 1];
     s.addStateChannel(sc);
-    s.addThresholdRule(struct('machine', 0), 50, 'Direction', 'upper');
-    s.addThresholdRule(struct('machine', 1), 80, 'Direction', 'upper');
+    tm0 = Threshold('m0_hh', 'Direction', 'upper');
+    tm0.addCondition(struct('machine', 0), 50);
+    tm1 = Threshold('m1_hh', 'Direction', 'upper');
+    tm1.addCondition(struct('machine', 1), 80);
+    s.addThreshold(tm0);
+    s.addThreshold(tm1);
     active = s.getThresholdsAt(5);
     assert(numel(active) == 1 && active(1).Value == 50, 'testGetThresholdsAt: state 0');
     active = s.getThresholdsAt(15);

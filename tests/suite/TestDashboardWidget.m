@@ -8,9 +8,23 @@ classdef TestDashboardWidget < matlab.unittest.TestCase
 
     methods (Test)
         function testIsAbstract(testCase)
-            testCase.verifyError(@() DashboardWidget(), ...
-                'MATLAB:class:abstract', ...
-                'DashboardWidget should be abstract');
+            % Conceptually abstract: every subclass MUST override render(),
+            % refresh(), and getType(). The class itself can be constructed
+            % (Octave 11+ rejects `methods (Abstract)` outside @-folders, so
+            % we declare concrete error-throwing stubs instead). Calling any
+            % of the conceptually-abstract methods on a raw DashboardWidget
+            % must raise DashboardWidget:notImplemented.
+            w = DashboardWidget();
+            testCase.verifyClass(w, 'DashboardWidget');
+            testCase.verifyError(@() w.render([]), ...
+                'DashboardWidget:notImplemented', ...
+                'render() must throw notImplemented on raw DashboardWidget');
+            testCase.verifyError(@() w.refresh(), ...
+                'DashboardWidget:notImplemented', ...
+                'refresh() must throw notImplemented on raw DashboardWidget');
+            testCase.verifyError(@() w.getType(), ...
+                'DashboardWidget:notImplemented', ...
+                'getType() must throw notImplemented on raw DashboardWidget');
         end
 
         function testToStructFromStructRoundTrip(testCase)

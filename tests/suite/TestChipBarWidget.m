@@ -108,5 +108,56 @@ classdef TestChipBarWidget < matlab.unittest.TestCase
             c2 = get(w.hChipCircles{1}, 'FaceColor');
             testCase.verifyEqual(c2, alarmColor, 'AbsTol', 1e-9);
         end
+
+        function testChipThreshold(testCase)
+            % chip struct with threshold + value fields resolves alarm color
+            t = Threshold('cbw_thr_test', 'Direction', 'upper');
+            t.addCondition(struct(), 50);
+            chip = struct('label', 'Pump', 'threshold', t, 'value', 75);
+            w = ChipBarWidget();
+            w.Chips = {chip};
+            fig = figure('Visible', 'off');
+            cleanup = onCleanup(@() close(fig));
+            hp = uipanel(fig, 'Position', [0 0 1 1]);
+            theme = DashboardTheme('dark');
+            w.ParentTheme = theme;
+            w.render(hp);
+            % value 75 > threshold 50 -> alarm
+            c = get(w.hChipCircles{1}, 'FaceColor');
+            testCase.verifyEqual(c, theme.StatusAlarmColor, 'AbsTol', 0.01);
+        end
+
+        function testChipThresholdWithValueFcn(testCase)
+            % chip with threshold + valueFcn resolves dynamically
+            t = Threshold('cbw_valfcn_test', 'Direction', 'upper');
+            t.addCondition(struct(), 50);
+            val = 30;  % below threshold -> ok
+            chip = struct('label', 'Tank', 'threshold', t, 'valueFcn', @() val);
+            w = ChipBarWidget();
+            w.Chips = {chip};
+            fig = figure('Visible', 'off');
+            cleanup = onCleanup(@() close(fig));
+            hp = uipanel(fig, 'Position', [0 0 1 1]);
+            theme = DashboardTheme('dark');
+            w.ParentTheme = theme;
+            w.render(hp);
+            % value 30 < threshold 50 -> ok
+            c = get(w.hChipCircles{1}, 'FaceColor');
+            testCase.verifyEqual(c, theme.StatusOkColor, 'AbsTol', 0.01);
+        end
+
+        function testChipThresholdSerialize(testCase)
+            % toStruct emits chip threshold key; fromStruct restores
+            t = Threshold('cbw_ser_test', 'Direction', 'upper');
+            t.addCondition(struct(), 50);
+            ThresholdRegistry.register('cbw_ser_test', t);
+            cleanup = onCleanup(@() ThresholdRegistry.unregister('cbw_ser_test'));
+            chip = struct('label', 'Fan', 'threshold', t, 'value', 40);
+            w = ChipBarWidget('Title', 'Health');
+            w.Chips = {chip};
+            s = w.toStruct();
+            testCase.verifyEqual(s.chips{1}.threshold, 'cbw_ser_test');
+            testCase.verifyEqual(s.chips{1}.value, 40);
+        end
     end
 end

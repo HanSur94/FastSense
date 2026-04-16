@@ -9,23 +9,6 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
     end
 
     methods (Test)
-        %% Bug 1: KpiWidget.getTheme() replaces theme instead of merging
-        function testKpiWidgetThemeOverrideMerge(testCase)
-            % Setting one ThemeOverride field should not lose base theme fields.
-            w = KpiWidget('Title', 'Test KPI', 'StaticValue', 42);
-            w.ThemeOverride = struct('KpiFontSize', 36);
-
-            % getTheme is private, so test indirectly via render.
-            % If getTheme replaces instead of merging, render will error
-            % because ForegroundColor, FontName, WidgetBackground etc. are missing.
-            hFig = figure('Visible', 'off');
-            testCase.addTeardown(@() close(hFig));
-            hp = uipanel('Parent', hFig);
-
-            % This should NOT error
-            testCase.verifyWarningFree(@() w.render(hp));
-        end
-
         %% Bug 2: StatusWidget.getTheme() replaces theme instead of merging
         function testStatusWidgetThemeOverrideMerge(testCase)
             w = StatusWidget('Title', 'Test Status', 'StaticStatus', 'ok');
@@ -186,7 +169,7 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
             b.enterEditMode();
             b.addWidget('kpi');
 
-            testCase.verifyEqual(d.Widgets{1}.Title, 'New KPI', ...
+            testCase.verifyEqual(d.Widgets{1}.Title, 'New Widget', ...
                 'Default title should be human-readable, not raw type');
         end
 

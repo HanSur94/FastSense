@@ -45,8 +45,9 @@ classdef TestSensorTodisk < matlab.unittest.TestCase
             sc.X = [0, 25, 50, 75];
             sc.Y = [0, 1, 2, 1];
             s2.addStateChannel(sc);
-            s2.addThresholdRule(struct('machine', 1), 55, ...
-                'Direction', 'upper', 'Label', 'HH (running)');
+            t_hh_running = Threshold('hh_running', 'Name', 'HH (running)', 'Direction', 'upper');
+            t_hh_running.addCondition(struct('machine', 1), 55);
+            s2.addThreshold(t_hh_running);
 
             s2.resolve();
             nThMem = numel(s2.ResolvedThresholds);
@@ -73,8 +74,9 @@ classdef TestSensorTodisk < matlab.unittest.TestCase
             sc.X = [0, 25, 50, 75];
             sc.Y = [0, 1, 2, 1];
             s2.addStateChannel(sc);
-            s2.addThresholdRule(struct('machine', 1), 55, ...
-                'Direction', 'upper', 'Label', 'HH (running)');
+            t_hh_running = Threshold('hh_running', 'Name', 'HH (running)', 'Direction', 'upper');
+            t_hh_running.addCondition(struct('machine', 1), 55);
+            s2.addThreshold(t_hh_running);
 
             s2.toDisk();
             testCase.addTeardown(@() s2.DataStore.cleanup());

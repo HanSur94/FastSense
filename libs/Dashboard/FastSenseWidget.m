@@ -7,7 +7,7 @@ classdef FastSenseWidget < DashboardWidget
 %     Inline:    w = FastSenseWidget('XData', x, 'YData', y)
 %     File:      w = FastSenseWidget('File', 'path.mat', 'XVar', 'x', 'YVar', 'y')
 %
-%   When bound to a Sensor, ThresholdRules apply automatically.
+%   When bound to a Sensor, Thresholds apply automatically.
 
     properties (Access = public)
         DataStoreObj = []

@@ -46,22 +46,30 @@ for k = 1:N
 end
 sTemp.Y = baseTemp + 4*sin(2*pi*t/3600) + randn(1,N)*1.5;
 sTemp.addStateChannel(scMode);
-sTemp.addThresholdRule(struct('machine', 1), 80, ...
-    'Direction', 'upper', 'Label', 'Hi Warn');
-sTemp.addThresholdRule(struct('machine', 1), 86, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm');
-sTemp.addThresholdRule(struct('machine', 0), 72, ...
-    'Direction', 'upper', 'Label', 'Idle Hi');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarnTemp.addCondition(struct('machine', 1), 80);
+sTemp.addThreshold(tHiWarnTemp);
+
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmTemp.addCondition(struct('machine', 1), 86);
+sTemp.addThreshold(tHiAlarmTemp);
+
+tIdleHiTemp = Threshold('idle_hi', 'Name', 'Idle Hi', 'Direction', 'upper');
+tIdleHiTemp.addCondition(struct('machine', 0), 72);
+sTemp.addThreshold(tIdleHiTemp);
 sTemp.resolve();
 
 % Pressure sensor — simple unconditional thresholds
 sPress = Sensor('P-201', 'Name', 'Pressure', 'Units', 'psi');
 sPress.X = t;
 sPress.Y = 50 + 15*sin(2*pi*t/7200) + randn(1,N)*2;
-sPress.addThresholdRule(struct(), 62, ...
-    'Direction', 'upper', 'Label', 'Hi Warn');
-sPress.addThresholdRule(struct(), 68, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarnPress.addCondition(struct(), 62);
+sPress.addThreshold(tHiWarnPress);
+
+tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmPress.addCondition(struct(), 68);
+sPress.addThreshold(tHiAlarmPress);
 sPress.resolve();
 
 %% 2. Inline data — synthetic vibration signal (no Sensor)

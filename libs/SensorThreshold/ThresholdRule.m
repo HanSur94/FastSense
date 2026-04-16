@@ -71,7 +71,7 @@ classdef ThresholdRule
             %   Output:
             %     obj — ThresholdRule object
             %
-            %   See also ThresholdRule.matchesState, Sensor.addThresholdRule.
+            %   See also ThresholdRule.matchesState, Sensor.addThreshold.
 
             % Validate condition type
             if ~isstruct(condition)

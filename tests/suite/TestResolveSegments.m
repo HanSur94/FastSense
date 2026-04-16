@@ -20,8 +20,9 @@ classdef TestResolveSegments < matlab.unittest.TestCase
             s.addStateChannel(sc2);
 
             % Rule active when machine==1 AND vacuum==1 (segment [30,50) only)
-            s.addThresholdRule(struct('machine', 1, 'vacuum', 1), 40, ...
-                'Direction', 'upper', 'Label', 'Combo');
+            t = Threshold('combo', 'Name', 'Combo', 'Direction', 'upper');
+            t.addCondition(struct('machine', 1, 'vacuum', 1), 40);
+            s.addThreshold(t);
 
             s.resolve();
 
@@ -42,9 +43,13 @@ classdef TestResolveSegments < matlab.unittest.TestCase
             sc.X = [1 50]; sc.Y = [0 1];
             s.addStateChannel(sc);
 
-            % Two rules, same condition — should be batched internally
-            s.addThresholdRule(struct('mode', 1), 80, 'Direction', 'upper', 'Label', 'Warn');
-            s.addThresholdRule(struct('mode', 1), 90, 'Direction', 'upper', 'Label', 'Alarm');
+            % Two thresholds, same condition — should be batched internally
+            t1 = Threshold('warn', 'Name', 'Warn', 'Direction', 'upper');
+            t1.addCondition(struct('mode', 1), 80);
+            t2 = Threshold('alarm', 'Name', 'Alarm', 'Direction', 'upper');
+            t2.addCondition(struct('mode', 1), 90);
+            s.addThreshold(t1);
+            s.addThreshold(t2);
 
             s.resolve();
 
@@ -61,7 +66,9 @@ classdef TestResolveSegments < matlab.unittest.TestCase
             s = Sensor('pressure');
             s.X = 1:10;
             s.Y = [1 2 3 4 5 6 7 8 9 10];
-            s.addThresholdRule(struct(), 5, 'Direction', 'upper', 'Label', 'Static');
+            t = Threshold('static', 'Name', 'Static', 'Direction', 'upper');
+            t.addCondition(struct(), 5);
+            s.addThreshold(t);
             s.resolve();
             viol = s.ResolvedViolations(1);
             testCase.verifyEqual(viol.X, [6 7 8 9 10], 'static: violation X');
@@ -72,7 +79,9 @@ classdef TestResolveSegments < matlab.unittest.TestCase
             s = Sensor('pressure');
             s.X = 1:10;
             s.Y = [10 9 8 7 6 5 4 3 2 1];
-            s.addThresholdRule(struct(), 5, 'Direction', 'lower', 'Label', 'LL');
+            t = Threshold('ll', 'Name', 'LL', 'Direction', 'lower');
+            t.addCondition(struct(), 5);
+            s.addThreshold(t);
             s.resolve();
             viol = s.ResolvedViolations(1);
             testCase.verifyEqual(viol.X, [7 8 9 10], 'lower: violation X');

@@ -72,7 +72,7 @@ classdef TestEventTimelineWidget < matlab.unittest.TestCase
                           'label',     {'Pump-101', 'Valve-202', 'Pump-101'}, ...
                           'color',     {[1 0 0], [0 1 0], [0 0 1]});
             w = EventTimelineWidget('Title', 'Filtered', ...
-                'Events', evts, 'FilterSensors', {{'Pump-101'}});
+                'Events', evts, 'FilterSensors', {'Pump-101'});
             % getTimeRange calls resolveEvents which applies the filter
             [tMin, tMax] = w.getTimeRange();
             testCase.verifyEqual(tMin, 10, ...
@@ -88,7 +88,7 @@ classdef TestEventTimelineWidget < matlab.unittest.TestCase
                           'color',     {[1 0 0], [0 1 0]});
             w = EventTimelineWidget('Title', 'Serialise', ...
                 'Events', evts, 'Position', [1 1 24 3], ...
-                'FilterSensors', {{'Sensor-A'}}, 'ColorSource', 'theme');
+                'FilterSensors', {'Sensor-A'}, 'ColorSource', 'theme');
             s = w.toStruct();
             testCase.verifyEqual(s.type, 'timeline');
             testCase.verifyEqual(s.title, 'Serialise');
@@ -106,7 +106,7 @@ classdef TestEventTimelineWidget < matlab.unittest.TestCase
                           'color',     {[1 0 0], [0 0 1]});
             w = EventTimelineWidget('Title', 'Round Trip', ...
                 'Events', evts, 'Position', [2 3 20 4], ...
-                'FilterSensors', {{'S1'}}, 'ColorSource', 'theme');
+                'FilterSensors', {'S1'}, 'ColorSource', 'theme');
             s = w.toStruct();
             w2 = EventTimelineWidget.fromStruct(s);
             testCase.verifyEqual(w2.Title, 'Round Trip');

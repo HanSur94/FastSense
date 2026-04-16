@@ -20,6 +20,8 @@ classdef TestMksqliteEdgeCases < matlab.unittest.TestCase
 
     methods (TestMethodSetup)
         function setupDatabase(testCase)
+            testCase.assumeTrue(exist('mksqlite', 'file') == 3, ...
+                'mksqlite MEX not available; skipping under CI');
             testCase.dbPath = [tempname, '.db'];
             testCase.db = mksqlite('open', testCase.dbPath);
             mksqlite(testCase.db, 'typedBLOBs', 2);

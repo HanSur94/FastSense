@@ -156,9 +156,15 @@ sc.X = [0 30 60 80];
 sc.Y = [0 1 2 1];
 s.addStateChannel(sc);
 
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.addThresholdRule(struct('machine', 2), 55, 'Direction', 'upper', 'Label', 'Boost HI');
-s.addThresholdRule(struct('machine', 1), 30, 'Direction', 'lower', 'Label', 'Run LO');
+tRunHI = Threshold('run_hi', 'Name', 'Run HI', 'Direction', 'upper');
+tRunHI.addCondition(struct('machine', 1), 70);
+s.addThreshold(tRunHI);
+tBoostHI = Threshold('boost_hi', 'Name', 'Boost HI', 'Direction', 'upper');
+tBoostHI.addCondition(struct('machine', 2), 55);
+s.addThreshold(tBoostHI);
+tRunLO = Threshold('run_lo', 'Name', 'Run LO', 'Direction', 'lower');
+tRunLO.addCondition(struct('machine', 1), 30);
+s.addThreshold(tRunLO);
 s.resolve();
 
 fp = FastSense('Theme', 'dark');

@@ -45,9 +45,10 @@ sFlow = Sensor('F-301', 'Name', 'Flow Rate');
 sFlow.Units = 'L/min';
 sFlow.X = t;
 sFlow.Y = max(0, 120 + 20*sin(2*pi*t/3600) + randn(1,N)*5);
-sFlow.addThresholdRule(struct(), 140, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarm.addCondition(struct(), 140);
+sFlow.addThreshold(tHiAlarm);
 sFlow.resolve();
 
 %% 2. Build dashboard

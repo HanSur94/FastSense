@@ -18,7 +18,7 @@ classdef TestNotificationService < matlab.unittest.TestCase
 
         function testAddRule(testCase)
             ns = NotificationService();
-            r = NotificationRule('SensorKey', 'temp', 'Recipients', {{'a@b.com'}});
+            r = NotificationRule('SensorKey', 'temp', 'Recipients', {'a@b.com'});
             ns.addRule(r);
             testCase.verifyEqual(numel(ns.Rules), 1, 'one_rule');
         end
@@ -26,12 +26,12 @@ classdef TestNotificationService < matlab.unittest.TestCase
         function testRuleMatchingPriority(testCase)
             ns = NotificationService();
             % Default rule
-            ns.setDefaultRule(NotificationRule('Recipients', {{'default@b.com'}}));
+            ns.setDefaultRule(NotificationRule('Recipients', {'default@b.com'}));
             % Sensor rule
-            ns.addRule(NotificationRule('SensorKey', 'temp', 'Recipients', {{'sensor@b.com'}}));
+            ns.addRule(NotificationRule('SensorKey', 'temp', 'Recipients', {'sensor@b.com'}));
             % Sensor+threshold rule
             ns.addRule(NotificationRule('SensorKey', 'temp', 'ThresholdLabel', 'HH', ...
-                'Recipients', {{'exact@b.com'}}));
+                'Recipients', {'exact@b.com'}));
 
             ev = Event(now, now+0.01, 'temp', 'HH', 100, 'upper');
             rule = ns.findBestRule(ev);
@@ -48,7 +48,7 @@ classdef TestNotificationService < matlab.unittest.TestCase
 
         function testNotifyDryRun(testCase)
             ns = NotificationService('DryRun', true);
-            ns.setDefaultRule(NotificationRule('Recipients', {{'test@b.com'}}, 'IncludeSnapshot', false));
+            ns.setDefaultRule(NotificationRule('Recipients', {'test@b.com'}, 'IncludeSnapshot', false));
             ev = Event(now, now+0.01, 'temp', 'HH', 100, 'upper');
             ev = ev.setStats(105, 10, 90, 105, 98, 99, 3);
             sd = struct('X', linspace(now-1,now,100), 'Y', 80*ones(1,100), ...
@@ -67,7 +67,7 @@ classdef TestNotificationService < matlab.unittest.TestCase
 
         function testDisabled(testCase)
             ns = NotificationService('Enabled', false, 'DryRun', true);
-            ns.setDefaultRule(NotificationRule('Recipients', {{'x@y.com'}}, 'IncludeSnapshot', false));
+            ns.setDefaultRule(NotificationRule('Recipients', {'x@y.com'}, 'IncludeSnapshot', false));
             ev = Event(now, now+0.01, 'x', 'Y', 1, 'upper');
             ev = ev.setStats(2, 1, 1, 2, 1.5, 1.6, 0.5);
             sd = struct('X', [now], 'Y', [2], 'thresholdValue', 1, 'thresholdDirection', 'upper');
@@ -77,7 +77,7 @@ classdef TestNotificationService < matlab.unittest.TestCase
 
         function testSnapshotGeneration(testCase)
             ns = NotificationService('DryRun', true, 'SnapshotDir', tempname);
-            ns.setDefaultRule(NotificationRule('Recipients', {{'x@y.com'}}, 'IncludeSnapshot', true));
+            ns.setDefaultRule(NotificationRule('Recipients', {'x@y.com'}, 'IncludeSnapshot', true));
             ev = Event(now-1/24, now-0.5/24, 'temp', 'HH', 100, 'upper');
             ev = ev.setStats(115, 50, 90, 115, 105, 106, 5);
             rng(42);

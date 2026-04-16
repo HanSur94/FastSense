@@ -100,23 +100,23 @@ classdef ExternalSensorRegistry < handle
                 return;
             end
             fprintf('\n  [%s]\n', obj.Name);
-            fprintf('  %-20s %-25s %6s  %-20s %-20s %7s %6s %8s\n', ...
-                'Key', 'Name', 'ID', 'Source', 'MatFile', '#States', '#Rules', '#Points');
-            fprintf('  %s\n', repmat('-', 1, 118));
+            fprintf('  %-20s %-25s %6s  %-20s %-20s %7s %11s %8s\n', ...
+                'Key', 'Name', 'ID', 'Source', 'MatFile', '#States', '#Thresholds', '#Points');
+            fprintf('  %s\n', repmat('-', 1, 122));
             for i = 1:nSensors
                 s = obj.catalog_(ks{i});
                 name = s.Name; if isempty(name); name = ''; end
                 idStr = ''; if ~isempty(s.ID); idStr = num2str(s.ID); end
-                nStates = numel(s.StateChannels);
-                nRules  = numel(s.ThresholdRules);
-                nPts    = numel(s.X);
-                fprintf('  %-20s %-25s %6s  %-20s %-20s %7d %6d %8d\n', ...
+                nStates  = numel(s.StateChannels);
+                nThresh  = numel(s.Thresholds);
+                nPts     = numel(s.X);
+                fprintf('  %-20s %-25s %6s  %-20s %-20s %7d %11d %8d\n', ...
                     ExternalSensorRegistry.truncStr(ks{i}, 20), ...
                     ExternalSensorRegistry.truncStr(name, 25), ...
                     idStr, ...
                     ExternalSensorRegistry.truncStr(s.Source, 20), ...
                     ExternalSensorRegistry.truncStr(s.MatFile, 20), ...
-                    nStates, nRules, nPts);
+                    nStates, nThresh, nPts);
             end
             fprintf('\n  %d sensor(s) total.\n\n', nSensors);
         end
@@ -170,7 +170,7 @@ classdef ExternalSensorRegistry < handle
             ks = sort(obj.catalog_.keys());
             nSensors = numel(ks);
 
-            colNames = {'Key', 'Name', 'ID', 'Source', 'MatFile', '#States', '#Rules', '#Points'};
+            colNames = {'Key', 'Name', 'ID', 'Source', 'MatFile', '#States', '#Thresholds', '#Points'};
             data = cell(nSensors, numel(colNames));
             for i = 1:nSensors
                 s = obj.catalog_(ks{i});
@@ -180,7 +180,7 @@ classdef ExternalSensorRegistry < handle
                 data{i,4} = s.Source;
                 data{i,5} = s.MatFile;
                 data{i,6} = numel(s.StateChannels);
-                data{i,7} = numel(s.ThresholdRules);
+                data{i,7} = numel(s.Thresholds);
                 data{i,8} = numel(s.X);
             end
 
@@ -198,7 +198,7 @@ classdef ExternalSensorRegistry < handle
                 'FontSize', 14, 'FontWeight', 'bold', ...
                 'HorizontalAlignment', 'left');
 
-            colWidths = {140, 180, 50, 140, 140, 55, 50, 60};
+            colWidths = {140, 180, 50, 140, 140, 55, 80, 60};
             uitable('Parent', hFig, ...
                 'Data', data, 'ColumnName', colNames, ...
                 'ColumnWidth', colWidths, ...

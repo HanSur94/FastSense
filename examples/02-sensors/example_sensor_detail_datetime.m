@@ -31,12 +31,15 @@ sc.X = [tNum(1) tNum(end)];
 sc.Y = [1 1];
 s.addStateChannel(sc);
 
-s.addThresholdRule(struct('mode', 1), 5.2, ...
-    'Direction', 'upper', 'Label', 'H Warning', ...
-    'Color', [1 0.75 0], 'LineStyle', '--');
-s.addThresholdRule(struct('mode', 1), 5.8, ...
-    'Direction', 'upper', 'Label', 'HH Alarm', ...
-    'Color', [1 0 0], 'LineStyle', '-');
+tHWarning = Threshold('h_warning', 'Name', 'H Warning', ...
+    'Direction', 'upper', 'Color', [1 0.75 0], 'LineStyle', '--');
+tHWarning.addCondition(struct('mode', 1), 5.2);
+s.addThreshold(tHWarning);
+
+tHhAlarm = Threshold('hh_alarm', 'Name', 'HH Alarm', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhAlarm.addCondition(struct('mode', 1), 5.8);
+s.addThreshold(tHhAlarm);
 
 s.resolve();
 

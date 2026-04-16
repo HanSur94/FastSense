@@ -140,8 +140,9 @@ function s = createSensorWithThreshold()
     sc.X = [0 100];
     sc.Y = [1 1];
     s.addStateChannel(sc);
-    s.addThresholdRule(struct('mode', 1), 65, ...
-        'Direction', 'upper', 'Label', 'H Warning');
+    t_h_warning = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper');
+    t_h_warning.addCondition(struct('mode', 1), 65);
+    s.addThreshold(t_h_warning);
     s.resolve();
 end
 

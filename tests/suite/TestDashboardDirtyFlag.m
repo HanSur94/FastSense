@@ -68,7 +68,10 @@ classdef TestDashboardDirtyFlag < matlab.unittest.TestCase
             end
         end
 
-        function testResizeMarksDirty(testCase)
+        function testResizeRepositionsPanels(testCase)
+            % Phase 1006 E10: onResize no longer marks widgets dirty (Phase 1000-02 decision:
+            % repositionPanels no longer calls markDirty — position change alone does not
+            % require data refresh). Test updated to verify repositioning behaviour instead.
             d = DashboardEngine('ResizeTest');
             d.addWidget('fastsense', 'Title', 'P1', ...
                 'Position', [1 1 24 3], 'XData', 1:10, 'YData', rand(1,10));
@@ -80,9 +83,16 @@ classdef TestDashboardDirtyFlag < matlab.unittest.TestCase
                 d.Widgets{i}.Dirty = false;
             end
 
-            % Trigger resize callback
-            d.onResize();
-            testCase.verifyTrue(d.Widgets{1}.Dirty);
+            % Trigger resize callback — should reposition panels without error
+            testCase.verifyWarningFree(@() d.onResize());
+
+            % Panel handle must remain valid after repositioning
+            testCase.verifyTrue(ishandle(d.Widgets{1}.hPanel), ...
+                'Widget panel handle must remain valid after resize');
+
+            % Dirty flag should NOT be set (repositionPanels is data-neutral)
+            testCase.verifyFalse(d.Widgets{1}.Dirty, ...
+                'onResize should not mark widgets dirty — data did not change');
         end
     end
 end

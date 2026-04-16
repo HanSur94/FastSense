@@ -29,15 +29,20 @@ sc.Y = [1 1];
 s.addStateChannel(sc);
 
 % Add threshold rules
-s.addThresholdRule(struct('mode', 1), 62, ...
-    'Direction', 'upper', 'Label', 'H Warning', ...
-    'Color', [1 0.75 0], 'LineStyle', '--');
-s.addThresholdRule(struct('mode', 1), 70, ...
-    'Direction', 'upper', 'Label', 'HH Alarm', ...
-    'Color', [1 0 0], 'LineStyle', '-');
-s.addThresholdRule(struct('mode', 1), 38, ...
-    'Direction', 'lower', 'Label', 'L Warning', ...
-    'Color', [0.3 0.6 1], 'LineStyle', '--');
+tHWarning = Threshold('h_warning', 'Name', 'H Warning', ...
+    'Direction', 'upper', 'Color', [1 0.75 0], 'LineStyle', '--');
+tHWarning.addCondition(struct('mode', 1), 62);
+s.addThreshold(tHWarning);
+
+tHhAlarm = Threshold('hh_alarm', 'Name', 'HH Alarm', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhAlarm.addCondition(struct('mode', 1), 70);
+s.addThreshold(tHhAlarm);
+
+tLWarning = Threshold('l_warning', 'Name', 'L Warning', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1], 'LineStyle', '--');
+tLWarning.addCondition(struct('mode', 1), 38);
+s.addThreshold(tLWarning);
 
 s.resolve();
 

@@ -20,13 +20,14 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
         end
 
         function reg = makeRegistryWithRule(key, conditionStruct, value)
-            %MAKEREGISTRYWITHRULE Create a registry with one sensor + rule.
+            %MAKEREGISTRYWITHRULE Create a registry with one sensor + threshold.
             reg = ExternalSensorRegistry('Test');
             s = Sensor(key);
             s.X = linspace(datenum(2024,1,1), datenum(2024,1,2), 100);
             s.Y = randn(1, 100);
-            s.addThresholdRule(conditionStruct, value, ...
-                'Direction', 'upper', 'Label', 'test');
+            t = Threshold([key '_thr'], 'Name', 'test', 'Direction', 'upper');
+            t.addCondition(conditionStruct, value);
+            s.addThreshold(t);
             reg.register(key, s);
         end
     end
@@ -69,12 +70,14 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
         function testMultipleSensorsGetIndependentHandles(testCase)
             reg = ExternalSensorRegistry('Test');
             s1 = Sensor('temp'); s1.X = [1 2]; s1.Y = [3 4];
-            s1.addThresholdRule(struct('machine', 1), 50, ...
-                'Direction', 'upper', 'Label', 'test');
+            t1 = Threshold('temp_thr', 'Name', 'test', 'Direction', 'upper');
+            t1.addCondition(struct('machine', 1), 50);
+            s1.addThreshold(t1);
             reg.register('temp', s1);
             s2 = Sensor('press'); s2.X = [1 2]; s2.Y = [5 6];
-            s2.addThresholdRule(struct('machine', 1), 100, ...
-                'Direction', 'upper', 'Label', 'test');
+            t2 = Threshold('press_thr', 'Name', 'test', 'Direction', 'upper');
+            t2.addCondition(struct('machine', 1), 100);
+            s2.addThreshold(t2);
             reg.register('press', s2);
 
             t = TestLoadModuleMetadata.makeMetadataTable({'machine'}, 100);
@@ -119,8 +122,9 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
             s = Sensor('temp');
             s.X = linspace(datenum(2024,1,1), datenum(2024,1,2), 100);
             s.Y = randn(1, 100);
-            s.addThresholdRule(struct('machine', 1, 'recipe', 2), 50, ...
-                'Direction', 'upper', 'Label', 'test');
+            t = Threshold('temp_thr', 'Name', 'test', 'Direction', 'upper');
+            t.addCondition(struct('machine', 1, 'recipe', 2), 50);
+            s.addThreshold(t);
             reg.register('temp', s);
 
             t = TestLoadModuleMetadata.makeMetadataTable( ...
@@ -209,8 +213,9 @@ classdef TestLoadModuleMetadata < matlab.unittest.TestCase
         function testUnconditionalRuleNoStateChannel(testCase)
             reg = ExternalSensorRegistry('Test');
             s = Sensor('temp'); s.X = [1 2 3]; s.Y = [4 5 6];
-            s.addThresholdRule(struct(), 50, ...
-                'Direction', 'upper', 'Label', 'always');
+            t = Threshold('temp_thr', 'Name', 'always', 'Direction', 'upper');
+            t.addCondition(struct(), 50);
+            s.addThreshold(t);
             reg.register('temp', s);
 
             t = TestLoadModuleMetadata.makeMetadataTable({'machine'}, 100);

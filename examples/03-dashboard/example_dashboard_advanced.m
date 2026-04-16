@@ -62,15 +62,20 @@ sTemp.Units = [char(176) 'F'];
 sTemp.X = t;
 sTemp.Y = temp;
 sTemp.addStateChannel(scMode);
-sTemp.addThresholdRule(struct('machine', 1), 78, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
-sTemp.addThresholdRule(struct('machine', 1), 85, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
-sTemp.addThresholdRule(struct('machine', 0), 72, ...
-    'Direction', 'upper', 'Label', 'Idle Hi', ...
-    'Color', [0.9 0.6 0.1], 'LineStyle', ':');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnTemp.addCondition(struct('machine', 1), 78);
+sTemp.addThreshold(tHiWarnTemp);
+
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmTemp.addCondition(struct('machine', 1), 85);
+sTemp.addThreshold(tHiAlarmTemp);
+
+tIdleHiTemp = Threshold('idle_hi', 'Name', 'Idle Hi', ...
+    'Direction', 'upper', 'Color', [0.9 0.6 0.1], 'LineStyle', ':');
+tIdleHiTemp.addCondition(struct('machine', 0), 72);
+sTemp.addThreshold(tIdleHiTemp);
 sTemp.resolve();
 
 % --- Pressure sensor P-201 ---
@@ -91,15 +96,20 @@ sPress.Units = 'psi';
 sPress.X = t;
 sPress.Y = pressure;
 sPress.addStateChannel(scMode);
-sPress.addThresholdRule(struct('machine', 1), 65, ...
-    'Direction', 'upper', 'Label', 'Hi Warn', ...
-    'Color', [1 0.8 0], 'LineStyle', '--');
-sPress.addThresholdRule(struct('machine', 1), 70, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
-sPress.addThresholdRule(struct('machine', 1), 40, ...
-    'Direction', 'lower', 'Label', 'Lo Warn', ...
-    'Color', [0.2 0.6 1], 'LineStyle', '--');
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
+    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
+tHiWarnPress.addCondition(struct('machine', 1), 65);
+sPress.addThreshold(tHiWarnPress);
+
+tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmPress.addCondition(struct('machine', 1), 70);
+sPress.addThreshold(tHiAlarmPress);
+
+tLoWarnPress = Threshold('lo_warn', 'Name', 'Lo Warn', ...
+    'Direction', 'lower', 'Color', [0.2 0.6 1], 'LineStyle', '--');
+tLoWarnPress.addCondition(struct('machine', 1), 40);
+sPress.addThreshold(tLoWarnPress);
 sPress.resolve();
 
 % --- Flow sensor F-301 ---
@@ -120,12 +130,15 @@ sFlow.Units = 'L/min';
 sFlow.X = t;
 sFlow.Y = flow;
 sFlow.addStateChannel(scMode);
-sFlow.addThresholdRule(struct('machine', 1), 140, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm', ...
-    'Color', [1 0.2 0.2], 'LineStyle', '-');
-sFlow.addThresholdRule(struct('machine', 1), 90, ...
-    'Direction', 'lower', 'Label', 'Lo Warn', ...
-    'Color', [0.2 0.6 1], 'LineStyle', '--');
+tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
+tHiAlarmFlow.addCondition(struct('machine', 1), 140);
+sFlow.addThreshold(tHiAlarmFlow);
+
+tLoWarnFlow = Threshold('lo_warn', 'Name', 'Lo Warn', ...
+    'Direction', 'lower', 'Color', [0.2 0.6 1], 'LineStyle', '--');
+tLoWarnFlow.addCondition(struct('machine', 1), 90);
+sFlow.addThreshold(tLoWarnFlow);
 sFlow.resolve();
 
 %% ========== Build alarm log ==========

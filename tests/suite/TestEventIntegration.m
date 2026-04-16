@@ -16,8 +16,9 @@ classdef TestEventIntegration < matlab.unittest.TestCase
             sc.X = [1 11]; sc.Y = [1 1];
             s.addStateChannel(sc);
 
-            s.addThresholdRule(struct('machine', 1), 10, ...
-                'Direction', 'upper', 'Label', 'vibration warning');
+            t_vibwarn = Threshold('vibration_warning', 'Name', 'vibration warning', 'Direction', 'upper');
+            t_vibwarn.addCondition(struct('machine', 1), 10);
+            s.addThreshold(t_vibwarn);
             s.resolve();
 
             events = detectEventsFromSensor(s);
@@ -37,8 +38,9 @@ classdef TestEventIntegration < matlab.unittest.TestCase
             sc.X = [1 11]; sc.Y = [1 1];
             s.addStateChannel(sc);
 
-            s.addThresholdRule(struct('machine', 1), 10, ...
-                'Direction', 'upper', 'Label', 'vibration warning');
+            t_vibwarn = Threshold('vibration_warning', 'Name', 'vibration warning', 'Direction', 'upper');
+            t_vibwarn.addCondition(struct('machine', 1), 10);
+            s.addThreshold(t_vibwarn);
             s.resolve();
 
             events = detectEventsFromSensor(s);
@@ -56,8 +58,9 @@ classdef TestEventIntegration < matlab.unittest.TestCase
             sc.X = [1 11]; sc.Y = [1 1];
             s.addStateChannel(sc);
 
-            s.addThresholdRule(struct('machine', 1), 10, ...
-                'Direction', 'upper', 'Label', 'vibration warning');
+            t_vibwarn = Threshold('vibration_warning', 'Name', 'vibration warning', 'Direction', 'upper');
+            t_vibwarn.addCondition(struct('machine', 1), 10);
+            s.addThreshold(t_vibwarn);
             s.resolve();
 
             det = EventDetector('MinDuration', 3);
@@ -75,8 +78,9 @@ classdef TestEventIntegration < matlab.unittest.TestCase
             sc.X = [1 11]; sc.Y = [1 1];
             s.addStateChannel(sc);
 
-            s.addThresholdRule(struct('machine', 1), 10, ...
-                'Direction', 'upper', 'Label', 'vibration warning');
+            t_vibwarn = Threshold('vibration_warning', 'Name', 'vibration warning', 'Direction', 'upper');
+            t_vibwarn.addCondition(struct('machine', 1), 10);
+            s.addThreshold(t_vibwarn);
             s.resolve();
 
             callCount = 0;

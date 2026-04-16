@@ -10,7 +10,7 @@ classdef TestNotificationRule < matlab.unittest.TestCase
     methods (Test)
         function testConstructor(testCase)
             r = NotificationRule('SensorKey', 'temp', 'ThresholdLabel', 'HH', ...
-                'Recipients', {{'a@b.com'}}, 'Subject', 'Alert: {sensor}');
+                'Recipients', {'a@b.com'}, 'Subject', 'Alert: {sensor}');
             testCase.verifyEqual(r.SensorKey, 'temp', 'sensor');
             testCase.verifyEqual(r.ThresholdLabel, 'HH', 'label');
             testCase.verifyEqual(r.Recipients{1}, 'a@b.com', 'recipient');

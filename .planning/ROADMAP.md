@@ -63,15 +63,6 @@ Plans:
 - [ ] 999.1-03-PLAN.md — SparklineCardWidget implementation
 - [x] 999.1-04-PLAN.md — Infrastructure wiring (Engine, Serializer, DetachedMirror, Builder)
 
-### Phase 999.2: Dashboard Image Export Button (BACKLOG)
-
-**Goal:** Add an image export button to the dashboard toolbar that captures the entire dashboard layout as a single image (PNG/JPEG), enabling users to share or document their dashboard state with one click.
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
-
 ### Phase 999.3: Graph Data Export (.mat / .csv) (BACKLOG)
 
 **Goal:** Enable exporting any graph's underlying data as .mat or .csv files, so users can easily extract plotted data for further analysis in MATLAB or external tools.
@@ -87,9 +78,82 @@ Plans:
 **Goal:** Fix 6 identified performance bottlenecks in DashboardEngine: (1) FastSenseWidget.refresh() full teardown → incremental update reusing axes/FastSense, (2) broadcastTimeRange synchronous slider → debounced/coalesced updates, (3) All-page panel creation at startup → lazy page realization on first switchPage(), (4) getTimeRange full-array scan per widget per tick → cached min/max with incremental update, (5) switchPage synchronous realize → batched with drawnow, (6) Resize marks all dirty → debounced resize without dirty marking. Goal: 10-50x faster live ticks, 2-5x faster startup, smooth slider interactivity.
 **Requirements**: [PERF2-01: Incremental FastSenseWidget refresh, PERF2-02: Debounced time slider broadcast, PERF2-03: Lazy page panel realization, PERF2-04: Cached widget time ranges, PERF2-05: Batched switchPage realize, PERF2-06: Debounced resize without dirty]
 **Depends on:** None
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 1000-01-PLAN.md — Incremental FastSenseWidget refresh + cached time ranges
 - [x] 1000-02-PLAN.md — Debounced slider broadcast + resize without dirty marking
-- [ ] 1000-03-PLAN.md — Lazy page panel realization + batched switchPage realize
+- [x] 1000-03-PLAN.md — Lazy page panel realization + batched switchPage realize
+
+### Phase 1001: First-Class Threshold Entities
+
+**Goal:** Make thresholds independent, reusable entities with ThresholdRegistry and shared-reference semantics (TrendMiner-style). Breaking change: replace ThresholdRules/addThresholdRule with Threshold handle class + addThreshold across all libraries.
+**Requirements**: [THR-01: Threshold handle class, THR-02: ThresholdRegistry singleton, THR-03: Sensor integration (addThreshold/removeThreshold), THR-04: Resolve adaptation, THR-05: Downstream consumer migration, THR-06: Test migration]
+**Depends on:** Phase 1000
+**Plans:** 6/6 plans complete
+
+Plans:
+- [x] 1001-01-PLAN.md — Threshold handle class + ThresholdRegistry singleton + tests
+- [x] 1001-02-PLAN.md — Sensor.m refactor (Thresholds property, addThreshold, resolve adaptation) + sensor test migration
+- [x] 1001-03-PLAN.md — Dashboard widgets, SensorRegistry display, loadModuleMetadata migration + widget tests
+- [x] 1001-04-PLAN.md — EventDetection migration (IncrementalEventDetector, LiveEventPipeline, EventViewer) + EventDetection tests
+- [x] 1001-05-PLAN.md — Gap closure: migrate 10 core sensor + consumer widget test files from addThresholdRule
+- [x] 1001-06-PLAN.md — Gap closure: migrate 5 EventDetection test files from addThresholdRule
+
+### Phase 1002: Direct Widget-Threshold Binding — StatusWidget, GaugeWidget, and other widgets can reference Threshold objects directly without requiring a Sensor. Enables standalone threshold-driven status indicators.
+
+**Goal:** Add Threshold + Value/ValueFcn properties to StatusWidget, GaugeWidget, IconCardWidget, MultiStatusWidget, and ChipBarWidget so they can display threshold-driven status without requiring a Sensor object. Purely additive — existing Sensor-bound behavior unchanged.
+**Requirements**: [THRBIND-01: StatusWidget + GaugeWidget threshold binding, THRBIND-02: IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding, THRBIND-03: Serialization round-trip for threshold-bound widgets, THRBIND-04: Backward compatibility, THRBIND-05: ValueFcn live tick support]
+**Depends on:** Phase 1001
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 1002-01-PLAN.md — StatusWidget + GaugeWidget threshold binding + serialization + tests
+- [x] 1002-02-PLAN.md — IconCardWidget + MultiStatusWidget + ChipBarWidget threshold binding + serialization + tests
+
+### Phase 1003: Composite Thresholds — CompositeThreshold class that aggregates child Threshold objects for hierarchical status. Component A is green only if children A.A and A.B are both green. Enables system health trees and nested status monitoring.
+
+**Goal:** Create CompositeThreshold class that aggregates child Threshold objects with AND/OR/MAJORITY logic for hierarchical system health monitoring. Wire into all dashboard widgets (StatusWidget, GaugeWidget, IconCardWidget, MultiStatusWidget) with isa-guards and auto-expansion. Add serialization for save/load persistence.
+**Requirements**: [COMP-01: CompositeThreshold inherits Threshold, COMP-02: AND/OR/MAJORITY aggregation, COMP-03: Nested composites, COMP-04: computeStatus method, COMP-05: addChild dual-input, COMP-06: Per-child ValueFcn/Value, COMP-07: Shared handle references, COMP-08: MultiStatusWidget expansion, COMP-09: ThresholdRegistry + serialization]
+**Depends on:** Phase 1002
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 1003-01-PLAN.md — CompositeThreshold class + TDD test suite (AND/OR/MAJORITY, addChild, computeStatus, nesting)
+- [x] 1003-02-PLAN.md — Widget isa-guards (StatusWidget, GaugeWidget, IconCardWidget) + MultiStatusWidget composite expansion
+- [x] 1003-03-PLAN.md — CompositeThreshold toStruct/fromStruct serialization + round-trip tests
+
+### Phase 1004: Dashboard Image Export Button
+
+**Goal:** Add an image export button to the dashboard toolbar that captures the entire dashboard layout as a single image (PNG/JPEG), enabling users to share or document their dashboard state with one click.
+**Requirements**: [IMG-01: Image button present (label/tooltip/order), IMG-02: PNG export via Engine.exportImage, IMG-03: JPEG export via Engine.exportImage, IMG-04: Filename sanitization regex, IMG-05: Unknown format error ID, IMG-06: Write-failure error ID, IMG-07: uiputfile cancel no-op, IMG-08: Multi-page active-page capture, IMG-09: Live mode no-pause]
+**Depends on:** Phase 1003
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 1004-01-PLAN.md — DashboardEngine.exportImage delegate + RED/GREEN test scaffold (IMG-02..IMG-06)
+- [x] 1004-02-PLAN.md — DashboardToolbar Image button + onImage/dispatch/defaultFilename (IMG-01, IMG-07)
+- [x] 1004-03-PLAN.md — MATLAB suite extension + Octave parallel tests (IMG-01, IMG-07, IMG-08, IMG-09)
+
+### Phase 1005: Expand CI coverage: MATLAB + Octave tests on macOS and Windows, MATLAB benchmark
+
+**Goal:** Expand CI test coverage so the actual test suites (not just MEX build) run on macOS and Windows for both MATLAB and Octave, and run the performance benchmark under MATLAB too. Today Linux has full coverage; macOS/Windows only verify MEX compiles via `mex-build-macos` / `mex-build-windows`. This phase closes that gap.
+**Requirements**: [COV-01: MATLAB tests on macOS ARM64, COV-02: MATLAB tests on Windows, COV-03: Octave tests on macOS ARM64, COV-04: Octave tests on Windows, COV-05: MATLAB benchmark job, COV-06: Reusable workflow extraction (conditional)]
+**Depends on:** Phase 1004 (complete) + quick tasks 260416-j6e / jfo / jnp / k23 (all complete — provide the DRY'd reusable-workflow foundation and Octave 11.1.0 base)
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 1005 to break down)
+
+### Phase 1006: Fix 137 MATLAB test failures surfaced by MATLAB-on-every-push CI enablement (7 categories from R2025b drift)
+
+**Goal:** Fix the 137 MATLAB test failures surfaced when quick task 260416-j6e enabled MATLAB tests on every push/PR and removed `continue-on-error: true`. Pre-existing failures, now honest CI signal. Root-cause categorization in [.planning/debug/matlab-tests-failures-investigation.md](.planning/debug/matlab-tests-failures-investigation.md): 6 test-level categories + 1 infrastructure decision. Fixing A + B + F alone recovers ~95 tests (62%); A+B+C+D+E = ~92%.
+**Requirements**: [MATLABFIX-A: mksqlite.mexa64 availability (~50 tests), MATLABFIX-B: testCase.TestData → properties migration (~41 tests), MATLABFIX-C: test-friend private access for 4 methods (~12 tests), MATLABFIX-D: R2025b API changes — table/OnOffSwitchState/jsondecode/fread (~18 tests), MATLABFIX-E: stale test expectations — KpiWidget/kpi-type rename/warning IDs/etc. (~21 tests), MATLABFIX-F: headless image export CI (4 tests), MATLABFIX-G: MATLAB version pinning policy (infrastructure decision — may reshape B/C/D)]
+**Depends on:** Phase 1004 (complete) + quick tasks 260416-j6e / jfo / jnp / k23 (all complete — provide the CI foundation that surfaced these failures) + debug session `octave-cleanup-crash-investigation.md` (unrelated, already resolved) + debug session `matlab-tests-failures-investigation.md` (source of this phase's scope). **NOT** dependent on Phase 1005 (parallel work).
+**Plans:** 4/4 plans executed
+
+Plans:
+- [x] 1006-01-PLAN.md — Pin MATLAB CI to R2020b in tests.yml + examples.yml (MATLABFIX-G; wave 1; reshapes scope of A/E/F)
+- [x] 1006-02-PLAN.md — mksqlite diagnostic-first + fix branch (A/B/C) for TestMksqliteEdgeCases + TestMksqliteTypes (MATLABFIX-A; wave 2)
+- [x] 1006-03-PLAN.md — Stale test expectations E1-E9 cluster + E10 grid-snap diagnostic+fix (MATLABFIX-E; wave 2)
+- [x] 1006-04-PLAN.md — DashboardEngine.exportImage → exportgraphics() for headless MATLAB CI (MATLABFIX-F; wave 2)

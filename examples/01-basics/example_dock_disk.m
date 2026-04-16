@@ -51,17 +51,24 @@ s1a = Sensor('egt_a', 'Name', 'EGT Channel A');
 s1a.X = tdn; s1a.Y = 580 + 40*sin(2*pi*sec/3600) + 15*randn(1,n);
 s1a.Y(round(n*0.35):round(n*0.36)) = s1a.Y(round(n*0.35):round(n*0.36)) + 80;
 s1a.addStateChannel(scTurbine);
-s1a.addThresholdRule(struct('turbine', 1), 640, 'Direction', 'upper', ...
-    'Label', 'H Alarm (Run)', 'Color', [1 0.75 0]);
-s1a.addThresholdRule(struct('turbine', 2), 620, 'Direction', 'upper', ...
-    'Label', 'H Alarm (HiLoad)', 'Color', [1 0 0]);
+tHAlarmRun = Threshold('h_alarm_run', 'Name', 'H Alarm (Run)', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tHAlarmRun.addCondition(struct('turbine', 1), 640);
+s1a.addThreshold(tHAlarmRun);
+
+tHAlarmHiLoad = Threshold('h_alarm_hiload', 'Name', 'H Alarm (HiLoad)', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tHAlarmHiLoad.addCondition(struct('turbine', 2), 620);
+s1a.addThreshold(tHAlarmHiLoad);
 s1a.toDisk();
 
 s1b = Sensor('egt_b', 'Name', 'EGT Channel B');
 s1b.X = tdn; s1b.Y = 575 + 38*sin(2*pi*sec/3600 + 0.3) + 12*randn(1,n);
 s1b.addStateChannel(scTurbine);
-s1b.addThresholdRule(struct('turbine', 1), 640, 'Direction', 'upper', ...
-    'Label', 'H Alarm', 'Color', [1 0.75 0]);
+tHAlarmS1b = Threshold('h_alarm', 'Name', 'H Alarm', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tHAlarmS1b.addCondition(struct('turbine', 1), 640);
+s1b.addThreshold(tHAlarmS1b);
 s1b.toDisk();
 
 fp = fig1.tile(1);
@@ -79,19 +86,29 @@ s2a = Sensor('vib_de', 'Name', 'DE Bearing');
 s2a.X = tdn; s2a.Y = 2.1 + 0.8*sin(2*pi*sec/1800) + 0.3*randn(1,n);
 s2a.Y(round(n*0.6):round(n*0.62)) = s2a.Y(round(n*0.6):round(n*0.62)) + 3.5;
 s2a.addStateChannel(scTurbine);
-s2a.addThresholdRule(struct('turbine', 1), 4.0, 'Direction', 'upper', ...
-    'Label', 'Warn (Run)', 'Color', [1 0.75 0]);
-s2a.addThresholdRule(struct('turbine', 2), 3.5, 'Direction', 'upper', ...
-    'Label', 'Warn (HiLoad)', 'Color', [1 0.4 0]);
-s2a.addThresholdRule(struct('turbine', 1), 6.0, 'Direction', 'upper', ...
-    'Label', 'Trip (Run)', 'Color', [1 0 0]);
+tWarnRun = Threshold('warn_run', 'Name', 'Warn (Run)', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tWarnRun.addCondition(struct('turbine', 1), 4.0);
+s2a.addThreshold(tWarnRun);
+
+tWarnHiLoad = Threshold('warn_hiload', 'Name', 'Warn (HiLoad)', ...
+    'Direction', 'upper', 'Color', [1 0.4 0]);
+tWarnHiLoad.addCondition(struct('turbine', 2), 3.5);
+s2a.addThreshold(tWarnHiLoad);
+
+tTripRun = Threshold('trip_run', 'Name', 'Trip (Run)', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tTripRun.addCondition(struct('turbine', 1), 6.0);
+s2a.addThreshold(tTripRun);
 s2a.toDisk();
 
 s2b = Sensor('vib_nde', 'Name', 'NDE Bearing');
 s2b.X = tdn; s2b.Y = 1.8 + 0.6*sin(2*pi*sec/1800 + 1) + 0.25*randn(1,n);
 s2b.addStateChannel(scTurbine);
-s2b.addThresholdRule(struct('turbine', 1), 4.0, 'Direction', 'upper', ...
-    'Label', 'Warn', 'Color', [1 0.75 0]);
+tWarnS2b = Threshold('warn', 'Name', 'Warn', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tWarnS2b.addCondition(struct('turbine', 1), 4.0);
+s2b.addThreshold(tWarnS2b);
 s2b.toDisk();
 
 fp = fig1.tile(2);
@@ -108,24 +125,33 @@ sec = (tdn - tdn0) * 86400;
 s3a = Sensor('oil_temp', 'Name', 'Oil Temperature');
 s3a.X = tdn; s3a.Y = 62 + 8*sin(2*pi*sec/7200) + 2*randn(1,n);
 s3a.addStateChannel(scTurbine);
-s3a.addThresholdRule(struct('turbine', 1), 75, 'Direction', 'upper', ...
-    'Label', 'High Temp', 'Color', [1 0.5 0]);
-s3a.addThresholdRule(struct('turbine', 0), 40, 'Direction', 'lower', ...
-    'Label', 'Cold Start', 'Color', [0.3 0.6 1]);
+tHighTemp = Threshold('high_temp', 'Name', 'High Temp', ...
+    'Direction', 'upper', 'Color', [1 0.5 0]);
+tHighTemp.addCondition(struct('turbine', 1), 75);
+s3a.addThreshold(tHighTemp);
+
+tColdStart = Threshold('cold_start', 'Name', 'Cold Start', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tColdStart.addCondition(struct('turbine', 0), 40);
+s3a.addThreshold(tColdStart);
 s3a.toDisk();
 
 s3b = Sensor('oil_press', 'Name', 'Oil Pressure');
 s3b.X = tdn; s3b.Y = 3.8 + 0.5*sin(2*pi*sec/5400) + 0.15*randn(1,n);
 s3b.addStateChannel(scTurbine);
-s3b.addThresholdRule(struct('turbine', 1), 3.0, 'Direction', 'lower', ...
-    'Label', 'Low Press', 'Color', [1 0 0]);
+tLowPress = Threshold('low_press', 'Name', 'Low Press', ...
+    'Direction', 'lower', 'Color', [1 0 0]);
+tLowPress.addCondition(struct('turbine', 1), 3.0);
+s3b.addThreshold(tLowPress);
 s3b.toDisk();
 
 s3c = Sensor('oil_flow', 'Name', 'Oil Flow');
 s3c.X = tdn; s3c.Y = 45 + 5*sin(2*pi*sec/3600) + 2*randn(1,n);
 s3c.addStateChannel(scTurbine);
-s3c.addThresholdRule(struct('turbine', 1), 38, 'Direction', 'lower', ...
-    'Label', 'Low Flow', 'Color', [1 0.75 0]);
+tLowFlow = Threshold('low_flow', 'Name', 'Low Flow', ...
+    'Direction', 'lower', 'Color', [1 0.75 0]);
+tLowFlow.addCondition(struct('turbine', 1), 38);
+s3c.addThreshold(tLowFlow);
 s3c.toDisk();
 
 fp = fig1.tile(3);
@@ -143,12 +169,20 @@ sec = (tdn - tdn0) * 86400;
 s4a = Sensor('rpm', 'Name', 'Shaft Speed');
 s4a.X = tdn; s4a.Y = 3000 + 50*sin(2*pi*sec/14400) + 15*randn(1,n);
 s4a.addStateChannel(scTurbine);
-s4a.addThresholdRule(struct('turbine', 1), 3100, 'Direction', 'upper', ...
-    'Label', 'Overspeed Warn', 'Color', [1 0.75 0]);
-s4a.addThresholdRule(struct('turbine', 1), 3150, 'Direction', 'upper', ...
-    'Label', 'Overspeed Trip', 'Color', [1 0 0]);
-s4a.addThresholdRule(struct('turbine', 0), 2800, 'Direction', 'lower', ...
-    'Label', 'Underspeed', 'Color', [0.3 0.6 1]);
+tOverspeedWarn = Threshold('overspeed_warn', 'Name', 'Overspeed Warn', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tOverspeedWarn.addCondition(struct('turbine', 1), 3100);
+s4a.addThreshold(tOverspeedWarn);
+
+tOverspeedTrip = Threshold('overspeed_trip', 'Name', 'Overspeed Trip', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tOverspeedTrip.addCondition(struct('turbine', 1), 3150);
+s4a.addThreshold(tOverspeedTrip);
+
+tUnderspeed = Threshold('underspeed', 'Name', 'Underspeed', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tUnderspeed.addCondition(struct('turbine', 0), 2800);
+s4a.addThreshold(tUnderspeed);
 s4a.toDisk();
 
 fp = fig1.tile(4);
@@ -178,19 +212,29 @@ s5a = Sensor('rx_temp', 'Name', 'Reactor Core');
 s5a.X = tdn; s5a.Y = 180 + 30*sin(2*pi*sec/7200) + 5*randn(1,n);
 s5a.Y(round(n*0.25):round(n*0.27)) = s5a.Y(round(n*0.25):round(n*0.27)) + 40;
 s5a.addStateChannel(scReactor);
-s5a.addThresholdRule(struct('phase', 1), 220, 'Direction', 'upper', ...
-    'Label', 'Heat HH', 'Color', [1 0 0]);
-s5a.addThresholdRule(struct('phase', 2), 200, 'Direction', 'upper', ...
-    'Label', 'React HH', 'Color', [1 0.4 0]);
-s5a.addThresholdRule(struct('phase', 3), 100, 'Direction', 'lower', ...
-    'Label', 'Cool LL', 'Color', [0.3 0.6 1]);
+tHeatHh = Threshold('heat_hh', 'Name', 'Heat HH', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tHeatHh.addCondition(struct('phase', 1), 220);
+s5a.addThreshold(tHeatHh);
+
+tReactHh = Threshold('react_hh', 'Name', 'React HH', ...
+    'Direction', 'upper', 'Color', [1 0.4 0]);
+tReactHh.addCondition(struct('phase', 2), 200);
+s5a.addThreshold(tReactHh);
+
+tCoolLl = Threshold('cool_ll', 'Name', 'Cool LL', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tCoolLl.addCondition(struct('phase', 3), 100);
+s5a.addThreshold(tCoolLl);
 s5a.toDisk();
 
 s5b = Sensor('rx_jacket', 'Name', 'Jacket Temp');
 s5b.X = tdn; s5b.Y = 170 + 25*sin(2*pi*sec/7200 + 0.5) + 4*randn(1,n);
 s5b.addStateChannel(scReactor);
-s5b.addThresholdRule(struct('phase', 2), 210, 'Direction', 'upper', ...
-    'Label', 'Jacket HH', 'Color', [1 0.5 0]);
+tJacketHh = Threshold('jacket_hh', 'Name', 'Jacket HH', ...
+    'Direction', 'upper', 'Color', [1 0.5 0]);
+tJacketHh.addCondition(struct('phase', 2), 210);
+s5b.addThreshold(tJacketHh);
 s5b.toDisk();
 
 fp = fig2.tile(1);
@@ -207,17 +251,24 @@ sec = (tdn - tdn0) * 86400;
 s6a = Sensor('rx_press', 'Name', 'Vessel Pressure');
 s6a.X = tdn; s6a.Y = 12 + 3*sin(2*pi*sec/5400) + 0.8*randn(1,n);
 s6a.addStateChannel(scReactor);
-s6a.addThresholdRule(struct('phase', 2), 16, 'Direction', 'upper', ...
-    'Label', 'React HH', 'Color', [1 0 0]);
-s6a.addThresholdRule(struct('phase', 1), 14, 'Direction', 'upper', ...
-    'Label', 'Heat H', 'Color', [1 0.75 0]);
+tReactHhPress = Threshold('react_hh', 'Name', 'React HH', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tReactHhPress.addCondition(struct('phase', 2), 16);
+s6a.addThreshold(tReactHhPress);
+
+tHeatH = Threshold('heat_h', 'Name', 'Heat H', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tHeatH.addCondition(struct('phase', 1), 14);
+s6a.addThreshold(tHeatH);
 s6a.toDisk();
 
 s6b = Sensor('rx_dp', 'Name', 'Delta-P');
 s6b.X = tdn; s6b.Y = 0.8 + 0.3*sin(2*pi*sec/3600) + 0.1*randn(1,n);
 s6b.addStateChannel(scReactor);
-s6b.addThresholdRule(struct('phase', 2), 1.5, 'Direction', 'upper', ...
-    'Label', 'dP High', 'Color', [1 0.5 0]);
+tDpHigh = Threshold('dp_high', 'Name', 'dP High', ...
+    'Direction', 'upper', 'Color', [1 0.5 0]);
+tDpHigh.addCondition(struct('phase', 2), 1.5);
+s6b.addThreshold(tDpHigh);
 s6b.toDisk();
 
 fp = fig2.tile(2);
@@ -234,17 +285,24 @@ sec = (tdn - tdn0) * 86400;
 s7a = Sensor('ph', 'Name', 'pH');
 s7a.X = tdn; s7a.Y = 7.0 + 0.8*sin(2*pi*sec/10800) + 0.15*randn(1,n);
 s7a.addStateChannel(scReactor);
-s7a.addThresholdRule(struct('phase', 2), 8.0, 'Direction', 'upper', ...
-    'Label', 'pH High', 'Color', [1 0.4 0]);
-s7a.addThresholdRule(struct('phase', 2), 6.0, 'Direction', 'lower', ...
-    'Label', 'pH Low', 'Color', [0.3 0.6 1]);
+tPhHigh = Threshold('ph_high', 'Name', 'pH High', ...
+    'Direction', 'upper', 'Color', [1 0.4 0]);
+tPhHigh.addCondition(struct('phase', 2), 8.0);
+s7a.addThreshold(tPhHigh);
+
+tPhLow = Threshold('ph_low', 'Name', 'pH Low', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tPhLow.addCondition(struct('phase', 2), 6.0);
+s7a.addThreshold(tPhLow);
 s7a.toDisk();
 
 s7b = Sensor('cond', 'Name', 'Conductivity');
 s7b.X = tdn; s7b.Y = 450 + 80*sin(2*pi*sec/5400) + 20*randn(1,n);
 s7b.addStateChannel(scReactor);
-s7b.addThresholdRule(struct('phase', 1), 600, 'Direction', 'upper', ...
-    'Label', 'Cond High', 'Color', [1 0.75 0]);
+tCondHigh = Threshold('cond_high', 'Name', 'Cond High', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tCondHigh.addCondition(struct('phase', 1), 600);
+s7b.addThreshold(tCondHigh);
 s7b.toDisk();
 
 fp = fig2.tile(3);
@@ -261,17 +319,24 @@ sec = (tdn - tdn0) * 86400;
 s8a = Sensor('agit_rpm', 'Name', 'Agitator RPM');
 s8a.X = tdn; s8a.Y = 120 + 15*sin(2*pi*sec/3600) + 5*randn(1,n);
 s8a.addStateChannel(scReactor);
-s8a.addThresholdRule(struct('phase', 2), 145, 'Direction', 'upper', ...
-    'Label', 'RPM High', 'Color', [1 0.5 0]);
-s8a.addThresholdRule(struct('phase', 0), 80, 'Direction', 'lower', ...
-    'Label', 'RPM Low', 'Color', [0.3 0.6 1]);
+tRpmHigh = Threshold('rpm_high', 'Name', 'RPM High', ...
+    'Direction', 'upper', 'Color', [1 0.5 0]);
+tRpmHigh.addCondition(struct('phase', 2), 145);
+s8a.addThreshold(tRpmHigh);
+
+tRpmLow = Threshold('rpm_low', 'Name', 'RPM Low', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tRpmLow.addCondition(struct('phase', 0), 80);
+s8a.addThreshold(tRpmLow);
 s8a.toDisk();
 
 s8b = Sensor('agit_torque', 'Name', 'Agitator Torque');
 s8b.X = tdn; s8b.Y = 85 + 20*sin(2*pi*sec/5400) + 8*randn(1,n);
 s8b.addStateChannel(scReactor);
-s8b.addThresholdRule(struct('phase', 2), 120, 'Direction', 'upper', ...
-    'Label', 'Torque HH', 'Color', [1 0 0]);
+tTorqueHh = Threshold('torque_hh', 'Name', 'Torque HH', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tTorqueHh.addCondition(struct('phase', 2), 120);
+s8b.addThreshold(tTorqueHh);
 s8b.toDisk();
 
 fp = fig2.tile(4);
@@ -301,27 +366,39 @@ sec = (tdn - tdn0) * 86400;
 s9a = Sensor('suct_press', 'Name', 'Suction Pressure');
 s9a.X = tdn; s9a.Y = 2.5 + 0.4*sin(2*pi*sec/3600) + 0.1*randn(1,n);
 s9a.addStateChannel(scComp);
-s9a.addThresholdRule(struct('stage', 1), 1.8, 'Direction', 'lower', ...
-    'Label', 'Suct Low (S1)', 'Color', [0.3 0.6 1]);
-s9a.addThresholdRule(struct('stage', 2), 2.0, 'Direction', 'lower', ...
-    'Label', 'Suct Low (S2)', 'Color', [0 0.4 1]);
+tSuctLowS1 = Threshold('suct_low_s1', 'Name', 'Suct Low (S1)', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tSuctLowS1.addCondition(struct('stage', 1), 1.8);
+s9a.addThreshold(tSuctLowS1);
+
+tSuctLowS2 = Threshold('suct_low_s2', 'Name', 'Suct Low (S2)', ...
+    'Direction', 'lower', 'Color', [0 0.4 1]);
+tSuctLowS2.addCondition(struct('stage', 2), 2.0);
+s9a.addThreshold(tSuctLowS2);
 s9a.toDisk();
 
 s9b = Sensor('disc_press', 'Name', 'Discharge Pressure');
 s9b.X = tdn; s9b.Y = 14 + 2*sin(2*pi*sec/2700) + 0.5*randn(1,n);
 s9b.Y(round(n*0.55):round(n*0.56)) = s9b.Y(round(n*0.55):round(n*0.56)) + 5;
 s9b.addStateChannel(scComp);
-s9b.addThresholdRule(struct('stage', 1), 17, 'Direction', 'upper', ...
-    'Label', 'Disc High (S1)', 'Color', [1 0.75 0]);
-s9b.addThresholdRule(struct('stage', 2), 19, 'Direction', 'upper', ...
-    'Label', 'Disc High (S2)', 'Color', [1 0.4 0]);
+tDiscHighS1 = Threshold('disc_high_s1', 'Name', 'Disc High (S1)', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tDiscHighS1.addCondition(struct('stage', 1), 17);
+s9b.addThreshold(tDiscHighS1);
+
+tDiscHighS2 = Threshold('disc_high_s2', 'Name', 'Disc High (S2)', ...
+    'Direction', 'upper', 'Color', [1 0.4 0]);
+tDiscHighS2.addCondition(struct('stage', 2), 19);
+s9b.addThreshold(tDiscHighS2);
 s9b.toDisk();
 
 s9c = Sensor('comp_ratio', 'Name', 'Compression Ratio');
 s9c.X = tdn; s9c.Y = 5.5 + 0.8*sin(2*pi*sec/5400) + 0.2*randn(1,n);
 s9c.addStateChannel(scComp);
-s9c.addThresholdRule(struct('stage', 2), 7.0, 'Direction', 'upper', ...
-    'Label', 'Ratio High', 'Color', [1 0 0]);
+tRatioHigh = Threshold('ratio_high', 'Name', 'Ratio High', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tRatioHigh.addCondition(struct('stage', 2), 7.0);
+s9c.addThreshold(tRatioHigh);
 s9c.toDisk();
 
 fp = fig3.tile(1);
@@ -339,17 +416,24 @@ sec = (tdn - tdn0) * 86400;
 s10a = Sensor('disc_temp', 'Name', 'Discharge Temp');
 s10a.X = tdn; s10a.Y = 140 + 20*sin(2*pi*sec/5400) + 5*randn(1,n);
 s10a.addStateChannel(scComp);
-s10a.addThresholdRule(struct('stage', 1), 170, 'Direction', 'upper', ...
-    'Label', 'Temp HH (S1)', 'Color', [1 0 0]);
-s10a.addThresholdRule(struct('stage', 2), 165, 'Direction', 'upper', ...
-    'Label', 'Temp HH (S2)', 'Color', [1 0.3 0]);
+tTempHhS1 = Threshold('temp_hh_s1', 'Name', 'Temp HH (S1)', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tTempHhS1.addCondition(struct('stage', 1), 170);
+s10a.addThreshold(tTempHhS1);
+
+tTempHhS2 = Threshold('temp_hh_s2', 'Name', 'Temp HH (S2)', ...
+    'Direction', 'upper', 'Color', [1 0.3 0]);
+tTempHhS2.addCondition(struct('stage', 2), 165);
+s10a.addThreshold(tTempHhS2);
 s10a.toDisk();
 
 s10b = Sensor('intercool', 'Name', 'Intercooler Out');
 s10b.X = tdn; s10b.Y = 45 + 8*sin(2*pi*sec/3600) + 2*randn(1,n);
 s10b.addStateChannel(scComp);
-s10b.addThresholdRule(struct('stage', 2), 60, 'Direction', 'upper', ...
-    'Label', 'IC High', 'Color', [1 0.75 0]);
+tIcHigh = Threshold('ic_high', 'Name', 'IC High', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tIcHigh.addCondition(struct('stage', 2), 60);
+s10b.addThreshold(tIcHigh);
 s10b.toDisk();
 
 fp = fig3.tile(2);
@@ -367,12 +451,20 @@ s11a = Sensor('surge_margin', 'Name', 'Surge Margin');
 s11a.X = tdn; s11a.Y = 25 + 8*sin(2*pi*sec/1800) + 3*randn(1,n);
 s11a.Y(round(n*0.4):round(n*0.41)) = s11a.Y(round(n*0.4):round(n*0.41)) - 20;
 s11a.addStateChannel(scComp);
-s11a.addThresholdRule(struct('stage', 1), 10, 'Direction', 'lower', ...
-    'Label', 'Surge Warn (S1)', 'Color', [1 0.75 0]);
-s11a.addThresholdRule(struct('stage', 2), 12, 'Direction', 'lower', ...
-    'Label', 'Surge Warn (S2)', 'Color', [1 0.4 0]);
-s11a.addThresholdRule(struct('stage', 1), 5, 'Direction', 'lower', ...
-    'Label', 'Surge Trip', 'Color', [1 0 0]);
+tSurgeWarnS1 = Threshold('surge_warn_s1', 'Name', 'Surge Warn (S1)', ...
+    'Direction', 'lower', 'Color', [1 0.75 0]);
+tSurgeWarnS1.addCondition(struct('stage', 1), 10);
+s11a.addThreshold(tSurgeWarnS1);
+
+tSurgeWarnS2 = Threshold('surge_warn_s2', 'Name', 'Surge Warn (S2)', ...
+    'Direction', 'lower', 'Color', [1 0.4 0]);
+tSurgeWarnS2.addCondition(struct('stage', 2), 12);
+s11a.addThreshold(tSurgeWarnS2);
+
+tSurgeTrip = Threshold('surge_trip', 'Name', 'Surge Trip', ...
+    'Direction', 'lower', 'Color', [1 0 0]);
+tSurgeTrip.addCondition(struct('stage', 1), 5);
+s11a.addThreshold(tSurgeTrip);
 s11a.toDisk();
 
 fp = fig3.tile(3);
@@ -405,10 +497,17 @@ for p = 1:3
     sV.X = tdn;
     sV.Y = 400 + 8*sin(2*pi*sec/1200 + phaseShifts(p)) + 3*randn(1,n);
     sV.addStateChannel(scGen);
-    sV.addThresholdRule(struct('gen', 1), 415, 'Direction', 'upper', ...
-        'Label', sprintf('%s Over-V', phases{p}), 'Color', [1 0.75 0]);
-    sV.addThresholdRule(struct('gen', 1), 385, 'Direction', 'lower', ...
-        'Label', sprintf('%s Under-V', phases{p}), 'Color', [0.3 0.6 1]);
+    tOverV = Threshold(sprintf('%s_over_v', lower(phases{p})), ...
+        'Name', sprintf('%s Over-V', phases{p}), ...
+        'Direction', 'upper', 'Color', [1 0.75 0]);
+    tOverV.addCondition(struct('gen', 1), 415);
+    sV.addThreshold(tOverV);
+
+    tUnderV = Threshold(sprintf('%s_under_v', lower(phases{p})), ...
+        'Name', sprintf('%s Under-V', phases{p}), ...
+        'Direction', 'lower', 'Color', [0.3 0.6 1]);
+    tUnderV.addCondition(struct('gen', 1), 385);
+    sV.addThreshold(tUnderV);
     sV.toDisk();
     fp = fig4.tile(1);
     fp.addSensor(sV, 'ShowThresholds', true);
@@ -424,19 +523,29 @@ sec = (tdn - tdn0) * 86400;
 s13a = Sensor('freq', 'Name', 'Grid Frequency');
 s13a.X = tdn; s13a.Y = 50 + 0.03*sin(2*pi*sec/600) + 0.008*randn(1,n);
 s13a.addStateChannel(scGen);
-s13a.addThresholdRule(struct('gen', 1), 50.1, 'Direction', 'upper', ...
-    'Label', 'Over-Freq', 'Color', [1 0.75 0]);
-s13a.addThresholdRule(struct('gen', 1), 49.9, 'Direction', 'lower', ...
-    'Label', 'Under-Freq', 'Color', [0.3 0.6 1]);
-s13a.addThresholdRule(struct('gen', 2), 50.15, 'Direction', 'upper', ...
-    'Label', 'Over-Freq (Peak)', 'Color', [1 0 0]);
+tOverFreq = Threshold('over_freq', 'Name', 'Over-Freq', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tOverFreq.addCondition(struct('gen', 1), 50.1);
+s13a.addThreshold(tOverFreq);
+
+tUnderFreq = Threshold('under_freq', 'Name', 'Under-Freq', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tUnderFreq.addCondition(struct('gen', 1), 49.9);
+s13a.addThreshold(tUnderFreq);
+
+tOverFreqPeak = Threshold('over_freq_peak', 'Name', 'Over-Freq (Peak)', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tOverFreqPeak.addCondition(struct('gen', 2), 50.15);
+s13a.addThreshold(tOverFreqPeak);
 s13a.toDisk();
 
 s13b = Sensor('pf', 'Name', 'Power Factor');
 s13b.X = tdn; s13b.Y = 0.95 + 0.03*sin(2*pi*sec/3600) + 0.005*randn(1,n);
 s13b.addStateChannel(scGen);
-s13b.addThresholdRule(struct('gen', 1), 0.90, 'Direction', 'lower', ...
-    'Label', 'PF Low', 'Color', [1 0.4 0]);
+tPfLow = Threshold('pf_low', 'Name', 'PF Low', ...
+    'Direction', 'lower', 'Color', [1 0.4 0]);
+tPfLow.addCondition(struct('gen', 1), 0.90);
+s13b.addThreshold(tPfLow);
 s13b.toDisk();
 
 fp = fig4.tile(2);
@@ -453,12 +562,20 @@ sec = (tdn - tdn0) * 86400;
 s14 = Sensor('mw', 'Name', 'Active Power');
 s14.X = tdn; s14.Y = 180 + 40*sin(2*pi*sec/7200) + 10*randn(1,n);
 s14.addStateChannel(scGen);
-s14.addThresholdRule(struct('gen', 1), 230, 'Direction', 'upper', ...
-    'Label', 'Overload (Base)', 'Color', [1 0.75 0]);
-s14.addThresholdRule(struct('gen', 2), 250, 'Direction', 'upper', ...
-    'Label', 'Overload (Peak)', 'Color', [1 0 0]);
-s14.addThresholdRule(struct('gen', 1), 120, 'Direction', 'lower', ...
-    'Label', 'Underload', 'Color', [0.3 0.6 1]);
+tOverloadBase = Threshold('overload_base', 'Name', 'Overload (Base)', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tOverloadBase.addCondition(struct('gen', 1), 230);
+s14.addThreshold(tOverloadBase);
+
+tOverloadPeak = Threshold('overload_peak', 'Name', 'Overload (Peak)', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tOverloadPeak.addCondition(struct('gen', 2), 250);
+s14.addThreshold(tOverloadPeak);
+
+tUnderload = Threshold('underload', 'Name', 'Underload', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tUnderload.addCondition(struct('gen', 1), 120);
+s14.addThreshold(tUnderload);
 s14.toDisk();
 
 fp = fig4.tile(3);
@@ -474,17 +591,24 @@ sec = (tdn - tdn0) * 86400;
 s15a = Sensor('stator_temp', 'Name', 'Stator Winding');
 s15a.X = tdn; s15a.Y = 95 + 15*sin(2*pi*sec/7200) + 3*randn(1,n);
 s15a.addStateChannel(scGen);
-s15a.addThresholdRule(struct('gen', 1), 120, 'Direction', 'upper', ...
-    'Label', 'Stator H', 'Color', [1 0.75 0]);
-s15a.addThresholdRule(struct('gen', 2), 115, 'Direction', 'upper', ...
-    'Label', 'Stator H (Peak)', 'Color', [1 0.4 0]);
+tStatorH = Threshold('stator_h', 'Name', 'Stator H', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tStatorH.addCondition(struct('gen', 1), 120);
+s15a.addThreshold(tStatorH);
+
+tStatorHPeak = Threshold('stator_h_peak', 'Name', 'Stator H (Peak)', ...
+    'Direction', 'upper', 'Color', [1 0.4 0]);
+tStatorHPeak.addCondition(struct('gen', 2), 115);
+s15a.addThreshold(tStatorHPeak);
 s15a.toDisk();
 
 s15b = Sensor('rotor_temp', 'Name', 'Rotor');
 s15b.X = tdn; s15b.Y = 85 + 12*sin(2*pi*sec/7200 + 0.3) + 3*randn(1,n);
 s15b.addStateChannel(scGen);
-s15b.addThresholdRule(struct('gen', 1), 110, 'Direction', 'upper', ...
-    'Label', 'Rotor H', 'Color', [1 0.75 0]);
+tRotorH = Threshold('rotor_h', 'Name', 'Rotor H', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tRotorH.addCondition(struct('gen', 1), 110);
+s15b.addThreshold(tRotorH);
 s15b.toDisk();
 
 fp = fig4.tile(4);
@@ -514,19 +638,29 @@ sec = (tdn - tdn0) * 86400;
 s16a = Sensor('co2', 'Name', 'CO₂');
 s16a.X = tdn; s16a.Y = 450 + 150*sin(2*pi*sec/14400) + 30*randn(1,n);
 s16a.addStateChannel(scHvac);
-s16a.addThresholdRule(struct('hvac', 1), 800, 'Direction', 'upper', ...
-    'Label', 'CO2 High', 'Color', [1 0.75 0]);
-s16a.addThresholdRule(struct('hvac', 2), 600, 'Direction', 'upper', ...
-    'Label', 'CO2 High (Boost)', 'Color', [1 0.4 0]);
-s16a.addThresholdRule(struct('hvac', 1), 1000, 'Direction', 'upper', ...
-    'Label', 'CO2 Alarm', 'Color', [1 0 0]);
+tCo2High = Threshold('co2_high', 'Name', 'CO2 High', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tCo2High.addCondition(struct('hvac', 1), 800);
+s16a.addThreshold(tCo2High);
+
+tCo2HighBoost = Threshold('co2_high_boost', 'Name', 'CO2 High (Boost)', ...
+    'Direction', 'upper', 'Color', [1 0.4 0]);
+tCo2HighBoost.addCondition(struct('hvac', 2), 600);
+s16a.addThreshold(tCo2HighBoost);
+
+tCo2Alarm = Threshold('co2_alarm', 'Name', 'CO2 Alarm', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tCo2Alarm.addCondition(struct('hvac', 1), 1000);
+s16a.addThreshold(tCo2Alarm);
 s16a.toDisk();
 
 s16b = Sensor('pm25', 'Name', 'PM2.5');
 s16b.X = tdn; s16b.Y = 8 + 5*sin(2*pi*sec/10800) + 2*randn(1,n);
 s16b.addStateChannel(scHvac);
-s16b.addThresholdRule(struct('hvac', 1), 15, 'Direction', 'upper', ...
-    'Label', 'PM2.5 High', 'Color', [1 0.75 0]);
+tPm25High = Threshold('pm25_high', 'Name', 'PM2.5 High', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tPm25High.addCondition(struct('hvac', 1), 15);
+s16b.addThreshold(tPm25High);
 s16b.toDisk();
 
 fp = fig5.tile(1);
@@ -543,19 +677,29 @@ sec = (tdn - tdn0) * 86400;
 s17a = Sensor('room_temp', 'Name', 'Room Temp');
 s17a.X = tdn; s17a.Y = 22 + 3*sin(2*pi*sec/14400) + 0.5*randn(1,n);
 s17a.addStateChannel(scHvac);
-s17a.addThresholdRule(struct('hvac', 1), 26, 'Direction', 'upper', ...
-    'Label', 'Temp High', 'Color', [1 0.5 0]);
-s17a.addThresholdRule(struct('hvac', 1), 18, 'Direction', 'lower', ...
-    'Label', 'Temp Low', 'Color', [0.3 0.6 1]);
+tTempHighHvac = Threshold('temp_high', 'Name', 'Temp High', ...
+    'Direction', 'upper', 'Color', [1 0.5 0]);
+tTempHighHvac.addCondition(struct('hvac', 1), 26);
+s17a.addThreshold(tTempHighHvac);
+
+tTempLowHvac = Threshold('temp_low', 'Name', 'Temp Low', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tTempLowHvac.addCondition(struct('hvac', 1), 18);
+s17a.addThreshold(tTempLowHvac);
 s17a.toDisk();
 
 s17b = Sensor('rh', 'Name', 'Rel. Humidity');
 s17b.X = tdn; s17b.Y = 45 + 12*sin(2*pi*sec/10800) + 3*randn(1,n);
 s17b.addStateChannel(scHvac);
-s17b.addThresholdRule(struct('hvac', 1), 65, 'Direction', 'upper', ...
-    'Label', 'RH High', 'Color', [1 0.75 0]);
-s17b.addThresholdRule(struct('hvac', 1), 30, 'Direction', 'lower', ...
-    'Label', 'RH Low', 'Color', [0.3 0.6 1]);
+tRhHigh = Threshold('rh_high', 'Name', 'RH High', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tRhHigh.addCondition(struct('hvac', 1), 65);
+s17b.addThreshold(tRhHigh);
+
+tRhLow = Threshold('rh_low', 'Name', 'RH Low', ...
+    'Direction', 'lower', 'Color', [0.3 0.6 1]);
+tRhLow.addCondition(struct('hvac', 1), 30);
+s17b.addThreshold(tRhLow);
 s17b.toDisk();
 
 fp = fig5.tile(2);
@@ -573,12 +717,20 @@ s18 = Sensor('noise', 'Name', 'Noise Level');
 s18.X = tdn; s18.Y = 55 + 10*sin(2*pi*sec/7200) + 4*randn(1,n);
 s18.Y(round(n*0.5):round(n*0.52)) = s18.Y(round(n*0.5):round(n*0.52)) + 25;
 s18.addStateChannel(scHvac);
-s18.addThresholdRule(struct('hvac', 1), 75, 'Direction', 'upper', ...
-    'Label', 'Noise Warn', 'Color', [1 0.75 0]);
-s18.addThresholdRule(struct('hvac', 1), 85, 'Direction', 'upper', ...
-    'Label', 'Noise Alarm', 'Color', [1 0 0]);
-s18.addThresholdRule(struct('hvac', 0), 65, 'Direction', 'upper', ...
-    'Label', 'Night Limit', 'Color', [0.6 0.3 1]);
+tNoiseWarn = Threshold('noise_warn', 'Name', 'Noise Warn', ...
+    'Direction', 'upper', 'Color', [1 0.75 0]);
+tNoiseWarn.addCondition(struct('hvac', 1), 75);
+s18.addThreshold(tNoiseWarn);
+
+tNoiseAlarm = Threshold('noise_alarm', 'Name', 'Noise Alarm', ...
+    'Direction', 'upper', 'Color', [1 0 0]);
+tNoiseAlarm.addCondition(struct('hvac', 1), 85);
+s18.addThreshold(tNoiseAlarm);
+
+tNightLimit = Threshold('night_limit', 'Name', 'Night Limit', ...
+    'Direction', 'upper', 'Color', [0.6 0.3 1]);
+tNightLimit.addCondition(struct('hvac', 0), 65);
+s18.addThreshold(tNightLimit);
 s18.toDisk();
 
 fp = fig5.tile(3);

@@ -112,30 +112,34 @@ function benchmark_resolve_stress()
 
     % Rule 1: Upper alarm when running (machine==1), any zone
     %   → Active in ~25% of timeline, single-condition
-    s.addThresholdRule(struct('machine', 1), 75, ...
-        'Direction', 'upper', 'Label', 'HH (running)', ...
-        'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+    tHHRunning = Threshold('hh_running', 'Name', 'HH (running)', ...
+        'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+    tHHRunning.addCondition(struct('machine', 1), 75);
+    s.addThreshold(tHHRunning);
 
     % Rule 2: Lower alarm when evacuated (machine==2), any zone
     %   → Active in ~25% of timeline, single-condition
-    s.addThresholdRule(struct('machine', 2), 25, ...
-        'Direction', 'lower', 'Label', 'LL (evacuated)', ...
-        'Color', [0.1 0.1 0.9], 'LineStyle', '--');
+    tLLEvacuated = Threshold('ll_evacuated', 'Name', 'LL (evacuated)', ...
+        'Direction', 'lower', 'Color', [0.1 0.1 0.9], 'LineStyle', '--');
+    tLLEvacuated.addCondition(struct('machine', 2), 25);
+    s.addThreshold(tLLEvacuated);
 
     % Rule 3: Upper alarm when running AND zone B (two conditions)
     %   → Active in ~8% of timeline (intersection), stricter limit
-    s.addThresholdRule(struct('machine', 1, 'zone', 'B'), 65, ...
-        'Direction', 'upper', 'Label', 'HH (running+B)', ...
-        'Color', [0.8 0.0 0.8], 'LineStyle', ':');
+    tHHRunningB = Threshold('hh_running_b', 'Name', 'HH (running+B)', ...
+        'Direction', 'upper', 'Color', [0.8 0.0 0.8], 'LineStyle', ':');
+    tHHRunningB.addCondition(struct('machine', 1, 'zone', 'B'), 65);
+    s.addThreshold(tHHRunningB);
 
     % Rule 4: Lower alarm when idle AND zone C (two conditions)
     %   → Active in ~8% of timeline (intersection)
-    s.addThresholdRule(struct('machine', 0, 'zone', 'C'), 30, ...
-        'Direction', 'lower', 'Label', 'LL (idle+C)', ...
-        'Color', [0.0 0.5 0.8], 'LineStyle', ':');
+    tLLIdleC = Threshold('ll_idle_c', 'Name', 'LL (idle+C)', ...
+        'Direction', 'lower', 'Color', [0.0 0.5 0.8], 'LineStyle', ':');
+    tLLIdleC.addCondition(struct('machine', 0, 'zone', 'C'), 30);
+    s.addThreshold(tLLIdleC);
 
     fprintf('  Rules: %d (%d upper, %d lower)\n', ...
-        numel(s.ThresholdRules), 2, 2);
+        numel(s.Thresholds), 2, 2);
 
     % ------------------------------------------------------------------
     % 4. MEX availability check
@@ -170,10 +174,18 @@ function benchmark_resolve_stress()
     scw1 = StateChannel('machine'); scw1.X = [0 1 2]; scw1.Y = [0 1 2];
     scw2 = StateChannel('zone');    scw2.X = [0 1];   scw2.Y = {'A','B'};
     sw.addStateChannel(scw1); sw.addStateChannel(scw2);
-    sw.addThresholdRule(struct('machine', 1), 55, 'Direction', 'upper');
-    sw.addThresholdRule(struct('machine', 2), 35, 'Direction', 'lower');
-    sw.addThresholdRule(struct('machine', 1, 'zone', 'B'), 50, 'Direction', 'upper');
-    sw.addThresholdRule(struct('machine', 0, 'zone', 'A'), 40, 'Direction', 'lower');
+    twU1 = Threshold('upper_1', 'Direction', 'upper');
+    twU1.addCondition(struct('machine', 1), 55);
+    sw.addThreshold(twU1);
+    twL1 = Threshold('lower_1', 'Direction', 'lower');
+    twL1.addCondition(struct('machine', 2), 35);
+    sw.addThreshold(twL1);
+    twU2 = Threshold('upper_2', 'Direction', 'upper');
+    twU2.addCondition(struct('machine', 1, 'zone', 'B'), 50);
+    sw.addThreshold(twU2);
+    twL2 = Threshold('lower_2', 'Direction', 'lower');
+    twL2.addCondition(struct('machine', 0, 'zone', 'A'), 40);
+    sw.addThreshold(twL2);
     sw.resolve();
     clear sw scw1 scw2;
     fprintf('%.3f s\n', toc(tWarm));
@@ -191,14 +203,18 @@ function benchmark_resolve_stress()
         sr.X = x; sr.Y = y;
         sr.addStateChannel(scMachine);
         sr.addStateChannel(scZone);
-        sr.addThresholdRule(struct('machine', 1), 75, ...
-            'Direction', 'upper', 'Label', 'HH (running)');
-        sr.addThresholdRule(struct('machine', 2), 25, ...
-            'Direction', 'lower', 'Label', 'LL (evacuated)');
-        sr.addThresholdRule(struct('machine', 1, 'zone', 'B'), 65, ...
-            'Direction', 'upper', 'Label', 'HH (running+B)');
-        sr.addThresholdRule(struct('machine', 0, 'zone', 'C'), 30, ...
-            'Direction', 'lower', 'Label', 'LL (idle+C)');
+        trHH = Threshold('hh_running', 'Name', 'HH (running)', 'Direction', 'upper');
+        trHH.addCondition(struct('machine', 1), 75);
+        sr.addThreshold(trHH);
+        trLL = Threshold('ll_evacuated', 'Name', 'LL (evacuated)', 'Direction', 'lower');
+        trLL.addCondition(struct('machine', 2), 25);
+        sr.addThreshold(trLL);
+        trHHB = Threshold('hh_running_b', 'Name', 'HH (running+B)', 'Direction', 'upper');
+        trHHB.addCondition(struct('machine', 1, 'zone', 'B'), 65);
+        sr.addThreshold(trHHB);
+        trLLC = Threshold('ll_idle_c', 'Name', 'LL (idle+C)', 'Direction', 'lower');
+        trLLC.addCondition(struct('machine', 0, 'zone', 'C'), 30);
+        sr.addThreshold(trLLC);
 
         tic;
         sr.resolve();
@@ -219,7 +235,7 @@ function benchmark_resolve_stress()
     fprintf('  Data points:        %s\n', format_size(N));
     fprintf('  State transitions:  %d (machine) + %d (zone)\n', ...
         numel(machineX), numel(zoneX));
-    fprintf('  Threshold rules:    %d\n', numel(s.ThresholdRules));
+    fprintf('  Threshold rules:    %d\n', numel(s.Thresholds));
     fprintf('  Resolved lines:     %d\n', numel(s.ResolvedThresholds));
 
     totalViol = 0;

@@ -21,7 +21,9 @@ function test_event_config()
     s = Sensor('temp', 'Name', 'Temperature');
     s.X = 1:10;
     s.Y = [5 5 12 14 11 13 5 5 5 5];
-    s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s.addThreshold(t_warn);
     cfg.addSensor(s);
     assert(numel(cfg.Sensors) == 1, 'addSensor: count');
     assert(numel(cfg.SensorData) == 1, 'addSensor: data count');
@@ -50,7 +52,9 @@ function test_event_config()
     s = Sensor('temp', 'Name', 'Temperature');
     s.X = 1:10;
     s.Y = [5 5 12 14 11 13 5 5 5 5];
-    s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s.addThreshold(t_warn);
     cfg.addSensor(s);
     events = cfg.runDetection();
     assert(numel(events) >= 1, 'runDetection: found events');
@@ -61,8 +65,12 @@ function test_event_config()
     s = Sensor('temp', 'Name', 'Temperature');
     s.X = 1:10;
     s.Y = [5 5 86 96 88 87 5 5 5 5];
-    s.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'warn');
-    s.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'critical');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 85);
+    s.addThreshold(t_warn);
+    t_critical = Threshold('critical', 'Name', 'critical', 'Direction', 'upper');
+    t_critical.addCondition(struct(), 95);
+    s.addThreshold(t_critical);
     cfg.addSensor(s);
     events = cfg.runDetection();
     % The warning event should be escalated to critical because peak=96 > 95
@@ -77,8 +85,12 @@ function test_event_config()
     s2 = Sensor('temp', 'Name', 'Temperature');
     s2.X = 1:10;
     s2.Y = [5 5 86 96 88 87 5 5 5 5];
-    s2.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'warn');
-    s2.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'critical');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 85);
+    s2.addThreshold(t_warn);
+    t_critical = Threshold('critical', 'Name', 'critical', 'Direction', 'upper');
+    t_critical.addCondition(struct(), 95);
+    s2.addThreshold(t_critical);
     cfg2.addSensor(s2);
     events2 = cfg2.runDetection();
     warnEvents2 = events2(arrayfun(@(e) strcmp(e.ThresholdLabel, 'warn'), events2));
@@ -89,8 +101,12 @@ function test_event_config()
     s3 = Sensor('pres', 'Name', 'Pressure');
     s3.X = 1:10;
     s3.Y = [6 6 3.5 1.5 3.8 3.9 6 6 6 6];
-    s3.addThresholdRule(struct(), 4, 'Direction', 'lower', 'Label', 'low');
-    s3.addThresholdRule(struct(), 2, 'Direction', 'lower', 'Label', 'critical low');
+    t_low = Threshold('low', 'Name', 'low', 'Direction', 'lower');
+    t_low.addCondition(struct(), 4);
+    s3.addThreshold(t_low);
+    t_crit_low = Threshold('critical_low', 'Name', 'critical low', 'Direction', 'lower');
+    t_crit_low.addCondition(struct(), 2);
+    s3.addThreshold(t_crit_low);
     cfg3.addSensor(s3);
     events3 = cfg3.runDetection();
     critLow = events3(arrayfun(@(e) strcmp(e.ThresholdLabel, 'critical low'), events3));
@@ -106,7 +122,9 @@ function test_event_config()
     s = Sensor('temp', 'Name', 'Temperature');
     s.X = 1:10;
     s.Y = [5 5 12 14 11 13 5 5 5 5];
-    s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
+    t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+    t_warn.addCondition(struct(), 10);
+    s.addThreshold(t_warn);
     cfg.setColor('warn', [1 0 0]);
     cfg.addSensor(s);
     events = cfg.runDetection();

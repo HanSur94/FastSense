@@ -370,6 +370,118 @@ classdef DashboardEngine < handle
             end
         end
 
+        function exportImage(obj, filepath, format)
+        %EXPORTIMAGE Save the rendered dashboard figure as PNG or JPEG at 150 DPI.
+        %   d.exportImage('out.png')           % format inferred from extension
+        %   d.exportImage('out.png', 'png')
+        %   d.exportImage('out.jpg', 'jpeg')
+        %
+        %   Requires render() to have been called (raises
+        %   DashboardEngine:notRendered otherwise). Captures the entire figure
+        %   via print(); on Octave the print() builtin does NOT include
+        %   uicontrols (documented limitation), so the toolbar, page-bar and
+        %   time-panel buttons will not appear in the exported image on Octave.
+        %   MATLAB captures uicontrols normally.
+        %
+        %   Multi-page dashboards capture the active page only because
+        %   non-active pages use Visible='off'.
+        %
+        %   Inputs:
+        %     filepath - destination path. Parent directory must exist.
+        %     format   - 'png' or 'jpeg' (alias 'jpg'). Optional; inferred
+        %                from file extension if omitted (defaults to 'png').
+        %
+        %   Errors:
+        %     DashboardEngine:notRendered       - render() has not been called
+        %     DashboardEngine:unknownImageFormat - format is not png/jpeg/jpg
+        %     DashboardEngine:imageWriteFailed  - export backend raised any error
+
+            if nargin < 3 || isempty(format)
+                [~, ~, ext] = fileparts(filepath);
+                if strcmpi(ext, '.jpg') || strcmpi(ext, '.jpeg')
+                    format = 'jpeg';
+                else
+                    format = 'png';
+                end
+            end
+
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                error('DashboardEngine:notRendered', ...
+                    'exportImage requires render() to have been called first.');
+            end
+
+            switch lower(format)
+                case 'png'
+                    devFlag = '-dpng';
+                case {'jpeg', 'jpg'}
+                    devFlag = '-djpeg';
+                otherwise
+                    error('DashboardEngine:unknownImageFormat', ...
+                        'Unknown image format ''%s''. Use ''png'' or ''jpeg''.', format);
+            end
+
+            % Choose backend per platform/version (Phase 1006 MATLABFIX-F):
+            %   * MATLAB R2024a+       : exportapp() — print() in R2025b refuses
+            %     figures containing UI components and instructs the user to use
+            %     exportapp. exportapp handles uipanels/uicontrols correctly.
+            %     Resolution is implicit (figure pixel size + screen DPI).
+            %   * MATLAB R2020a-R2023b : exportgraphics() — explicitly supports
+            %     -nodisplay CI (unlike print). ContentType 'image' + Resolution
+            %     150 match the legacy -r150 print path for visual parity.
+            %     Available since R2020a, predates our R2020b pin target.
+            %   * All Octave           : print() + stub axes (existing behaviour
+            %     preserved). Octave's print() requires at least one axes object
+            %     DIRECTLY under the figure (it does not recurse into uipanels),
+            %     so we insert a hidden 1px stub axes when none exists and remove
+            %     it after the call. Octave CI uses xvfb-run (unchanged).
+            % Detection: exist() returns non-zero for both exportapp (P-file in
+            % MATLAB R2024a+) and exportgraphics (M-file in MATLAB R2020a+).
+            isOctave          = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            useExportApp      = ~isOctave && exist('exportapp') ~= 0;       %#ok<EXIST>
+            useExportGraphics = ~isOctave && exist('exportgraphics') ~= 0;  %#ok<EXIST>
+
+            stubAxes = [];
+            try
+                if useExportApp
+                    % exportapp signature is exportapp(fig, filename) only
+                    % (introduced R2024a). Resolution is implicit. Trade-off:
+                    % we lose explicit 150 DPI on R2024a+ but gain working
+                    % export of UI-component figures.
+                    exportapp(obj.hFigure, filepath);
+                elseif useExportGraphics
+                    % MATLAB R2020a-R2023b headless path. exportgraphics
+                    % explicitly supports -nodisplay mode (unlike print).
+                    % ContentType='image' forces raster output (PNG/JPEG).
+                    % Resolution=150 matches the -r150 used by the legacy
+                    % print() path for visual parity.
+                    exportgraphics(obj.hFigure, filepath, ...
+                        'ContentType', 'image', 'Resolution', 150);
+                else
+                    % Octave path — preserves stub-axes behaviour (Octave's
+                    % print() does not recurse into uipanels).
+                    topLevelChildren = get(obj.hFigure, 'children');
+                    hasTopAxes = false;
+                    for k = 1:numel(topLevelChildren)
+                        if strcmp(get(topLevelChildren(k), 'type'), 'axes')
+                            hasTopAxes = true;
+                            break;
+                        end
+                    end
+                    if ~hasTopAxes
+                        stubAxes = axes('Parent', obj.hFigure, ...
+                            'Units', 'pixels', 'Position', [0 0 1 1], ...
+                            'Visible', 'off', 'HitTest', 'off');
+                    end
+                    print(obj.hFigure, devFlag, '-r150', filepath);
+                end
+                if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+            catch ME
+                if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                error('DashboardEngine:imageWriteFailed', ...
+                    'Failed to write image ''%s'': %s', filepath, ME.message);
+            end
+        end
+
         function preview(obj, varargin)
         %PREVIEW Print ASCII representation of the dashboard to console.
         %   d.preview()              % default 120 chars wide

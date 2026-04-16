@@ -1,9 +1,9 @@
 classdef Sensor < handle
-    %SENSOR Represents a sensor with data, state channels, and threshold rules.
+    %SENSOR Represents a sensor with data, state channels, and threshold entities.
     %   Sensor is the central class of the SensorThreshold library.  It
     %   bundles raw time-series data (X, Y) with a set of StateChannels
-    %   (discrete system states) and ThresholdRules (condition-dependent
-    %   limit values).  The resolve() method evaluates all rules against
+    %   (discrete system states) and Threshold objects (condition-dependent
+    %   limit values).  The resolve() method evaluates all thresholds against
     %   the state channels to produce pre-computed threshold time series,
     %   violation indices, and state-band regions that can be rendered by
     %   a plotting layer such as FastSense.
@@ -11,7 +11,7 @@ classdef Sensor < handle
     %   Typical workflow:
     %     1. Create a Sensor and set X/Y data (or call load()).
     %     2. Attach one or more StateChannels via addStateChannel().
-    %     3. Define threshold rules via addThresholdRule().
+    %     3. Attach threshold entities via addThreshold().
     %     4. Call resolve() to pre-compute thresholds and violations.
     %     5. Read ResolvedThresholds / ResolvedViolations for rendering.
     %
@@ -25,7 +25,7 @@ classdef Sensor < handle
     %     X                  — 1xN datenum time stamps
     %     Y                  — 1xN (or MxN) sensor values
     %     StateChannels      — cell array of attached StateChannel objects
-    %     ThresholdRules     — cell array of attached ThresholdRule objects
+    %     Thresholds         — cell array of attached Threshold handle references
     %     ResolvedThresholds — struct array of precomputed threshold lines
     %     ResolvedViolations — struct array of precomputed violation points
     %     ResolvedStateBands — struct of precomputed state region bands
@@ -34,10 +34,11 @@ classdef Sensor < handle
     %     Sensor           — Constructor with key and name-value options
     %     load             — Load data from a .mat file (MatFile + KeyName)
     %     addStateChannel  — Attach a StateChannel to this sensor
-    %     addThresholdRule — Add a conditional threshold rule
+    %     addThreshold     — Attach a Threshold entity (object or registry key)
+    %     removeThreshold  — Detach a Threshold entity by key
     %     resolve          — Precompute thresholds, violations, state bands
-    %     getThresholdsAt  — Evaluate active rules at a single time point
-    %     countViolations  — Count total violation points across all rules
+    %     getThresholdsAt  — Evaluate active thresholds at a single time point
+    %     countViolations  — Count total violation points across all thresholds
     %     currentStatus    — Derive 'ok'/'warning'/'alarm' from latest value
     %
     %   Example:
@@ -45,13 +46,14 @@ classdef Sensor < handle
     %     sc = StateChannel('machine');
     %     sc.X = [0, 10, 20];  sc.Y = [0, 1, 0];
     %     s.addStateChannel(sc);
-    %     s.addThresholdRule(struct('machine', 1), 50, ...
-    %         'Direction', 'upper', 'Label', 'Pressure HH');
+    %     t = Threshold('press_hh', 'Name', 'Pressure HH', 'Direction', 'upper');
+    %     t.addCondition(struct('machine', 1), 50);
+    %     s.addThreshold(t);
     %     s.X = linspace(0, 30, 1000);
     %     s.Y = randn(1, 1000) * 20 + 40;
     %     s.resolve();
     %
-    %   See also StateChannel, ThresholdRule, SensorRegistry.
+    %   See also StateChannel, Threshold, ThresholdRegistry, SensorRegistry.
 
     properties
         Key           % char: unique string identifier for this sensor
@@ -65,7 +67,7 @@ classdef Sensor < handle
         Units         % char: measurement unit (e.g., 'degC', 'bar', 'rpm')
         DataStore     % FastSenseDataStore: disk-backed storage (set by toDisk)
         StateChannels % cell array of StateChannel objects
-        ThresholdRules % cell array of ThresholdRule objects
+        Thresholds    % cell array of Threshold handle references
         ResolvedThresholds  % struct array: precomputed threshold step-function lines
         ResolvedViolations  % struct array: precomputed violation (X,Y) points
         ResolvedStateBands  % struct: precomputed state region bands for shading
@@ -92,7 +94,7 @@ classdef Sensor < handle
             %     obj — Sensor object
             %
             %   See also Sensor.load, Sensor.addStateChannel,
-            %            Sensor.addThresholdRule, Sensor.resolve.
+            %            Sensor.addThreshold, Sensor.resolve.
 
             % Initialize all properties to safe defaults
             obj.Key = key;
@@ -106,7 +108,7 @@ classdef Sensor < handle
             obj.Units = '';
             obj.DataStore = [];
             obj.StateChannels = {};
-            obj.ThresholdRules = {};
+            obj.Thresholds = {};
             obj.ResolvedThresholds = struct();
             obj.ResolvedViolations = struct();
             obj.ResolvedStateBands = struct();
@@ -176,7 +178,7 @@ classdef Sensor < handle
             %   Input:
             %     sc — StateChannel object with populated X and Y
             %
-            %   See also Sensor.addThresholdRule, Sensor.resolve.
+            %   See also Sensor.addThreshold, Sensor.resolve.
 
             obj.StateChannels{end+1} = sc;
             % Invalidate pre-computed resolve cache if data is on disk
@@ -185,30 +187,63 @@ classdef Sensor < handle
             end
         end
 
-        function addThresholdRule(obj, condition, value, varargin)
-            %ADDTHRESHOLDRULE Add a dynamic threshold rule to this sensor.
-            %   s.addThresholdRule(condition, value, Name, Value, ...)
-            %   creates a new ThresholdRule and appends it to the sensor's
-            %   ThresholdRules list.  All additional name-value arguments
-            %   are forwarded to the ThresholdRule constructor.
+        function addThreshold(obj, thresholdOrKey)
+            %ADDTHRESHOLD Attach a Threshold entity to this sensor.
+            %   s.addThreshold(t) appends the given Threshold handle to the
+            %   sensor's Thresholds list.
             %
-            %   Inputs:
-            %     condition — struct defining required state values
-            %     value     — numeric threshold value
-            %     varargin  — name-value pairs forwarded to ThresholdRule
-            %                 (e.g., 'Direction', 'upper', 'Label', 'HH')
+            %   s.addThreshold(key) auto-resolves via ThresholdRegistry.get(key)
+            %   before appending.
             %
-            %   Example:
-            %     s.addThresholdRule(struct('machine', 1), 50, ...
-            %         'Direction', 'upper', 'Label', 'Pressure HH');
+            %   Duplicate thresholds (same Key) are silently skipped with a
+            %   warning.
             %
-            %   See also ThresholdRule, Sensor.resolve.
+            %   Input:
+            %     thresholdOrKey — Threshold object, or char/string key for
+            %                      ThresholdRegistry lookup
+            %
+            %   See also ThresholdRegistry, Threshold, Sensor.removeThreshold.
 
-            rule = ThresholdRule(condition, value, varargin{:});
-            obj.ThresholdRules{end+1} = rule;
-            % Invalidate pre-computed resolve cache if data is on disk
+            if ischar(thresholdOrKey) || isstring(thresholdOrKey)
+                t = ThresholdRegistry.get(thresholdOrKey);
+            else
+                t = thresholdOrKey;
+            end
+
+            % Duplicate rejection by Key (per D-13)
+            for i = 1:numel(obj.Thresholds)
+                if strcmp(obj.Thresholds{i}.Key, t.Key)
+                    warning('Sensor:duplicateThreshold', ...
+                        'Threshold ''%s'' already attached, skipping.', t.Key);
+                    return;
+                end
+            end
+
+            obj.Thresholds{end+1} = t;
             if obj.isOnDisk()
                 obj.DataStore.clearResolved();
+            end
+        end
+
+        function removeThreshold(obj, key)
+            %REMOVETHRESHOLD Detach a Threshold entity by key.
+            %   s.removeThreshold(key) removes the first Threshold whose Key
+            %   matches the given char from the sensor's Thresholds list.
+            %   No error is raised if the key is not found.
+            %
+            %   Input:
+            %     key — char, unique key of the Threshold to remove
+            %
+            %   See also Sensor.addThreshold.
+
+            for i = 1:numel(obj.Thresholds)
+                if strcmp(obj.Thresholds{i}.Key, key)
+                    obj.Thresholds(i) = [];
+                    if obj.isOnDisk()
+                        obj.DataStore.clearResolved();
+                    end
+                    return;
+                end
             end
         end
 
@@ -246,7 +281,7 @@ classdef Sensor < handle
             % Pre-compute resolve() while X/Y are still in memory (fastest
             % path).  Results are stored in the SQLite database so that
             % subsequent resolve() calls are instant.
-            if ~isempty(obj.ThresholdRules)
+            if ~isempty(obj.Thresholds)
                 obj.resolve();
                 obj.DataStore.storeResolved( ...
                     obj.ResolvedThresholds, obj.ResolvedViolations);
@@ -279,7 +314,7 @@ classdef Sensor < handle
 
         function resolve(obj)
             %RESOLVE Precompute threshold time series, violations, and state bands.
-            %   s.resolve() evaluates all ThresholdRules against the
+            %   s.resolve() evaluates all Threshold conditions against the
             %   attached StateChannels and the sensor's own X/Y data.
             %   Results are stored in the ResolvedThresholds,
             %   ResolvedViolations, and ResolvedStateBands properties.
@@ -288,9 +323,10 @@ classdef Sensor < handle
             %     1. Collect all state-change timestamps from every
             %        StateChannel to define segment boundaries.
             %     2. Evaluate the composite state struct at each boundary.
-            %     3. Group ThresholdRules that share the same condition
-            %        (via conditionKey) so that condition matching is done
-            %        once per unique condition rather than once per rule.
+            %     3. Flatten Thresholds -> conditions_ to build allRules.
+            %        Group rules that share the same condition (via
+            %        conditionKey) so condition matching is done once per
+            %        unique condition rather than once per rule.
             %     4. For each condition group, identify the active
             %        segments (where the condition is satisfied) and map
             %        them to index ranges in sensorX.
@@ -306,7 +342,15 @@ classdef Sensor < handle
             %   See also Sensor.getThresholdsAt, compute_violations_batch,
             %            mergeResolvedByLabel, buildThresholdEntry.
 
-            nRules = numel(obj.ThresholdRules);
+            % Flatten Threshold.conditions_ into a single allRules array
+            allRules = {};
+            for i = 1:numel(obj.Thresholds)
+                t = obj.Thresholds{i};
+                for j = 1:numel(t.conditions_)
+                    allRules{end+1} = t.conditions_{j}; %#ok<AGROW>
+                end
+            end
+            nRules = numel(allRules);
 
             % Early exit when no rules are defined
             if nRules == 0
@@ -395,7 +439,7 @@ classdef Sensor < handle
             % -------------------------------------------------------
             condKeys = cell(1, nRules);
             for r = 1:nRules
-                condKeys{r} = obj.ThresholdRules{r}.CachedConditionKey;
+                condKeys{r} = allRules{r}.CachedConditionKey;
             end
 
             [uniqueKeys, ~, groupIdx] = unique(condKeys);
@@ -409,7 +453,7 @@ classdef Sensor < handle
 
             for g = 1:nGroups
                 ruleIndices = find(groupIdx == g);
-                refRule = obj.ThresholdRules{ruleIndices(1)};
+                refRule = allRules{ruleIndices(1)};
 
                 segActive = false(1, nSegs);
                 for s = 1:nSegs
@@ -422,7 +466,7 @@ classdef Sensor < handle
                 if nActive == 0
                     for ri = 1:numel(ruleIndices)
                         r = ruleIndices(ri);
-                        rule = obj.ThresholdRules{r};
+                        rule = allRules{r};
                         th = buildThresholdEntry(segBounds, NaN(1, nSegs), rule);
                         viol = struct('X', [], 'Y', [], 'Direction', rule.Direction, 'Label', rule.Label);
                         [resolvedTh, resolvedViol] = appendResults(resolvedTh, resolvedViol, th, viol);
@@ -469,7 +513,7 @@ classdef Sensor < handle
                 thresholdValues = zeros(1, nBatchRules);
                 directions = false(1, nBatchRules);
                 for ri = 1:nBatchRules
-                    rule = obj.ThresholdRules{ruleIndices(ri)};
+                    rule = allRules{ruleIndices(ri)};
                     thresholdValues(ri) = rule.Value;
                     directions(ri) = rule.IsUpper;
                 end
@@ -488,7 +532,7 @@ classdef Sensor < handle
                 % Build output structs for each rule in the group
                 for ri = 1:nBatchRules
                     r = ruleIndices(ri);
-                    rule = obj.ThresholdRules{r};
+                    rule = allRules{r};
 
                     thY = NaN(1, nSegs);
                     thY(segActive) = rule.Value;
@@ -516,12 +560,12 @@ classdef Sensor < handle
         end
 
         function active = getThresholdsAt(obj, t)
-            %GETTHRESHOLDSAT Evaluate all rules at a single time point.
+            %GETTHRESHOLDSAT Evaluate all thresholds at a single time point.
             %   active = s.getThresholdsAt(t) builds the composite state
             %   struct at time t (by querying each StateChannel), then
-            %   tests every ThresholdRule against that state.  Returns a
-            %   struct array of all rules whose conditions are satisfied,
-            %   with fields Value, Direction, and Label.
+            %   tests every condition in every Threshold against that state.
+            %   Returns a struct array of all conditions whose conditions are
+            %   satisfied, with fields Value, Direction, and Label.
             %
             %   This is a lightweight single-point query useful for
             %   tooltips, crosshair readouts, and debugging.  For bulk
@@ -547,25 +591,28 @@ classdef Sensor < handle
                 st.(sc.Key) = sc.valueAt(t);
             end
 
-            % Test each rule against the current state
-            for r = 1:numel(obj.ThresholdRules)
-                rule = obj.ThresholdRules{r};
-                if rule.matchesState(st)
-                    entry.Value = rule.Value;
-                    entry.Direction = rule.Direction;
-                    entry.Label = rule.Label;
-                    % Grow the struct array (first entry seeds the array)
-                    if isempty(active)
-                        active = entry;
-                    else
-                        active(end+1) = entry;
+            % Flatten Thresholds -> conditions_ and test each rule
+            for i = 1:numel(obj.Thresholds)
+                thresh = obj.Thresholds{i};
+                for j = 1:numel(thresh.conditions_)
+                    rule = thresh.conditions_{j};
+                    if rule.matchesState(st)
+                        entry.Value = rule.Value;
+                        entry.Direction = rule.Direction;
+                        entry.Label = rule.Label;
+                        % Grow the struct array (first entry seeds the array)
+                        if isempty(active)
+                            active = entry;
+                        else
+                            active(end+1) = entry; %#ok<AGROW>
+                        end
                     end
                 end
             end
         end
 
         function n = countViolations(obj)
-            %COUNTVIOLATIONS Count total violation points across all rules.
+            %COUNTVIOLATIONS Count total violation points across all thresholds.
             %   n = s.countViolations() returns the total number of
             %   violation data points summed over all ResolvedViolations.
             %   Call resolve() first.
@@ -587,14 +634,14 @@ classdef Sensor < handle
         function st = currentStatus(obj)
             %CURRENTSTATUS Derive 'ok'/'warning'/'alarm' from latest value.
             %   st = s.currentStatus() evaluates the sensor's latest Y
-            %   value against all threshold rules active at the latest X
-            %   time. Returns 'ok' if no thresholds are violated,
-            %   'warning' if a warning-level rule is violated, or 'alarm'
-            %   if an alarm-level rule is violated.
+            %   value against all threshold conditions active at the latest
+            %   X time. Returns 'ok' if no thresholds are violated,
+            %   'warning' if a warning-level threshold is violated, or
+            %   'alarm' if an alarm-level threshold is violated.
             %
-            %   Severity is determined by the threshold rule's Color and
-            %   Label: rules containing 'Alarm' in the Label are treated
-            %   as alarm severity; all other violated rules are warnings.
+            %   Severity is determined by the threshold's Name: thresholds
+            %   containing 'Alarm' in the Name are treated as alarm
+            %   severity; all other violated thresholds are warnings.
             %
             %   Output:
             %     st — char: 'ok', 'warning', or 'alarm'
@@ -602,7 +649,7 @@ classdef Sensor < handle
             %   See also Sensor.getThresholdsAt, Sensor.resolve.
 
             st = 'ok';
-            if isempty(obj.Y) || isempty(obj.ThresholdRules)
+            if isempty(obj.Y) || isempty(obj.Thresholds)
                 return;
             end
 

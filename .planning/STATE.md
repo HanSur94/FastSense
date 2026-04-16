@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 1000-03-PLAN.md (lazy page realization + batched switchPage)
-last_updated: "2026-04-05T16:49:34.600Z"
-last_activity: 2026-04-05
+stopped_at: Completed Phase 1006 wave 2 (1006-02 mksqlite + 1006-03 E1-E10 + 1006-04 exportgraphics)
+last_updated: "2026-04-16T13:57:23.787Z"
+last_activity: 2026-04-16
 progress:
-  total_phases: 4
-  completed_phases: 2
-  total_plans: 9
-  completed_plans: 8
+  total_phases: 9
+  completed_phases: 7
+  total_plans: 27
+  completed_plans: 27
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1000 — dashboard-engine-performance-optimization-phase-2
+**Current focus:** Phase 1006 — fix-137-matlab-test-failures
 
 ## Current Position
 
-Phase: 1000
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-05
+Phase: 1006 (fix-137-matlab-test-failures) — EXECUTING
+Plan: 4 of 4
+Status: Ready to execute
+Last activity: 2026-04-16
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -82,14 +82,21 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-dashboard-performance-optimization P01 | 3 | 2 tasks | 2 files |
 | Phase 01-dashboard-performance-optimization P03 | 10min | 2 tasks | 1 files |
 | Phase 999.1-mushroom-cards-for-dashboard-engine P04 | 5min | 2 tasks | 8 files |
-<<<<<<< HEAD
 | Phase 999.3 P01 | 3min | 2 tasks | 2 files |
 | Phase 999.3-graph-data-export-mat-csv P02 | 2min | 2 tasks | 2 files |
 | Phase 1000 P01 | 4min | 2 tasks | 2 files |
 | Phase 1000 P02 | 2 | 2 tasks | 2 files |
-=======
 | Phase 1000 P03 | 5min | 2 tasks | 2 files |
->>>>>>> worktree-agent-a9506b74
+| Phase 1002 P02 | 25 | 2 tasks | 6 files |
+| Phase 1003 P01 | 3min | 1 tasks | 3 files |
+| Phase 1003 P03 | 10min | 1 tasks | 3 files |
+| Phase 1004 P01 | 5min | 2 tasks | 2 files |
+| Phase 1004 P02 | 8min | 2 tasks | 1 files |
+| Phase 1004 P03 | 2min | 2 tasks | 2 files |
+| Phase 1006 P01 | 5 | 3 tasks | 2 files |
+| Phase 1006 P02 | 10min | 2 tasks | 4 files |
+| Phase 1006 P03 | 35min | 3 tasks | 10 files |
+| Phase 1006 P04 | 8 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -146,7 +153,7 @@ Recent decisions affecting current work:
 - [Phase 01-dashboard-performance-optimization]: repositionPanels() falls back to rerenderWidgets() if any panel handle is missing — safe degradation at first render
 - [Phase 01-dashboard-performance-optimization]: render() pre-allocates all page panels at startup with non-active pages hidden so switchPage is pure visibility toggle
 - [Phase 999.1-mushroom-cards-for-dashboard-engine]: Wave 1 widget files copied from main repo to worktree for plan 04; DetachedMirror restoreLiveRefs handles ValueFcn generically via isprop so no per-type clone code needed beyond fromStruct dispatch
-<<<<<<< HEAD
+
 - [Phase 999.3]: No render() required before exportData() — buildExportStruct_ accesses raw Lines/Thresholds directly
 - [Phase 999.3]: testExportCSVDatetime guarded with ~exist('OCTAVE_VERSION') since datetime is MATLAB-only
 - [Phase 999.3]: exportData dual-API mirrors exportPNG: no-arg opens dialog, with-arg saves directly (extension determines format)
@@ -155,15 +162,33 @@ Recent decisions affecting current work:
 - [Phase 1000-02]: repositionPanels no longer calls markDirty — position change alone does not require data refresh
 - [Phase 1000]: Sensor identity comparison uses MATLAB handle == operator; on sensor swap LastSensorRef mismatch triggers full teardown
 - [Phase 1000]: CachedXMax always set to x(n) on each tick; CachedXMin only initialised once when inf to avoid overwriting on incremental append
-=======
+
 - [Phase 1000-03]: allocatePanels for non-active pages so Realized stays false at startup; realizeBatch(5) in switchPage reuses batch infrastructure
->>>>>>> worktree-agent-a9506b74
+
+- [Phase 1002]: IconCardWidget Threshold resolver in own varargin constructor; mutual exclusivity post-loop
+- [Phase 1002]: MultiStatusWidget toStruct emits s.items typed array for mixed Sensor/threshold entries
+- [Phase 1002]: ChipBarWidget threshold block before statusFcn in resolveChipColor so threshold takes priority
+- [Phase 1003]: CompositeThreshold extends Threshold directly so isa check works; AND/OR/MAJORITY via AggregateMode property; evaluateLeaf_ uses IsUpper; addChild uses warning not error for unknown key
+- [Phase 1003]: toStruct children as cell of structs with key+optional value; fromStruct resolves via ThresholdRegistry with warn-and-skip for missing keys; isequal() for Octave-safe handle identity
+- [Phase 1004]: exportImage uses datestr 'yyyymmdd_HHMMSS' not ISO 'yyyyMMdd_HHmmss'; format inferred from extension if omitted; notRendered check uses isempty + ishandle guard
+- [Phase 1004]: Image button inserted between Export and Save in right-to-left DashboardToolbar layout; dispatchImageExport extracted for testable cancel no-op; datestr format 'yyyymmdd_HHMMSS' confirmed over ISO notation
+- [Phase 1004]: testCancelNoOp uses dispatchImageExport(0,'',1) directly to bypass uiputfile without mocking
+- [Phase 1004]: Octave suite skips IMG-01 (button verification): Octave print() excludes uicontrols by default per RISK-1
+- [Phase 1006]: D-01 implemented: pinned all setup-matlab@v3 call-sites to release: R2020b in tests.yml (x2) and examples.yml (x1)
+- [Phase 1006]: MEX cache key scoped to r2020b (mex-matlab-linux-r2020b-) to prevent ABI-stale binary reuse on future pin bumps
+- [Phase 1006-02]: Branch C selected for mksqlite fix: assumeTrue(exist('mksqlite','file')==3) guard in TestMethodSetup; tests filter rather than fail when mksqlite absent
+- [Phase 1006-02]: build_mex:mksqliteCompileFailed warning ID added to silent catch so compile failures surface in CI step summaries
+- [Phase 1006-03]: E10: dead-code mock infrastructure in DashboardBuilder fixed by wiring getMousePosition() into onDragStart/onResizeStart/computeSnappedGrid (3 sites)
+- [Phase 1006-03]: E5: testToolbarEditToggle replaced with testToolbarEditButton — onEdit() now opens source file in MATLAB editor instead of toggling button text (quick task 260405-plc)
+- [Phase 1006-04]: exportImage uses three-branch dispatch: exportapp (R2024a+), exportgraphics (R2020a-R2023b headless-safe), print+stub-axes (Octave unchanged)
 
 ### Roadmap Evolution
 
 - Phase 8 added: Widget improvements — DividerWidget, CollapsibleWidget, Y-axis limits
 - Phase 1 added: Dashboard Performance Optimization — faster creation, instantiation, and interactivity
 - Phase 1000 added: Dashboard Engine Performance Optimization Phase 2 — 6 bottlenecks: incremental FastSenseWidget refresh, debounced slider broadcast, lazy page realization, cached time ranges, batched page switch, debounced resize
+- Phase 1005 added: Expand CI coverage — MATLAB + Octave tests on macOS and Windows, MATLAB benchmark (COV-01 through COV-06). Builds on quick tasks 260416-j6e/jfo/jnp/k23.
+- Phase 1006 added: Fix 137 MATLAB test failures surfaced by CI improvements (7 categories from R2025b drift). Scope driven by debug investigation at `.planning/debug/matlab-tests-failures-investigation.md`. MATLABFIX-G (version pinning) should be discussed before planning A-F because G1 (pin R2020b) eliminates ~71 tests worth of work.
 
 ### Pending Todos
 
@@ -184,14 +209,14 @@ None yet.
 | 260405-oqu | Create 4 dedicated widget example scripts (iconcard, chipbar, sparkline, divider) | 2026-04-05 | 1f53bca | [260405-oqu-create-5-dedicated-widget-example-script](./quick/260405-oqu-create-5-dedicated-widget-example-script/) |
 | 260405-ovf | Update README based on research of 12 highly-starred open-source projects | 2026-04-05 | 144fbb2 | [260405-ovf-update-project-readme-based-on-research-](./quick/260405-ovf-update-project-readme-based-on-research-/) |
 | 260405-plc | Change DashboardToolbar Edit button to open source file in MATLAB editor | 2026-04-05 | 5188b04 | [260405-plc-change-the-edit-button-of-dashboardengin](./quick/260405-plc-change-the-edit-button-of-dashboardengin/) |
+| 260416-hau | Fix Octave 11 abstract methods incompat in DashboardWidget.m (+ 2 related Octave gaps) | 2026-04-16 | dbd109e | [260416-hau-fix-octave-11-abstract-methods-incompat-](./quick/260416-hau-fix-octave-11-abstract-methods-incompat-/) |
+| 260416-j6e | Enable MATLAB CI on every push/PR: upgrade setup-matlab v2->v3 with cache, add build-mex-matlab job, remove schedule gate, keep Octave | 2026-04-16 | 97c1576 | [260416-j6e-enable-matlab-ci-on-every-push-pr-upgrad](./quick/260416-j6e-enable-matlab-ci-on-every-push-pr-upgrad/) |
+| 260416-jfo | CI quick wins bundle: concurrency groups + per-job timeouts, MATLAB examples on push, step summaries, Dependabot (Octave Codecov deferred) | 2026-04-16 | 5e0efea | [260416-jfo-ci-quick-wins-bundle-concurrency-groups-](./quick/260416-jfo-ci-quick-wins-bundle-concurrency-groups-/) |
+| 260416-jnp | DRY refactor: extract duplicated Octave build-mex job into reusable workflow (_build-mex-octave.yml) with artifact-name input | 2026-04-16 | 5ab68e0 | [260416-jnp-dry-refactor-extract-duplicated-octave-b](./quick/260416-jnp-dry-refactor-extract-duplicated-octave-b/) |
+| 260416-k23 | Upgrade Octave CI containers 8.4.0 → 11.1.0 and drop break_closure_cycles workaround (upstream bug #67749 fixed in 11.1.0) | 2026-04-16 | c371b6f | [260416-k23-upgrade-octave-ci-containers-8-4-0-to-11](./quick/260416-k23-upgrade-octave-ci-containers-8-4-0-to-11/) |
 
 ## Session Continuity
 
-<<<<<<< HEAD
-Last session: 2026-04-05T16:45:41.557Z
-Stopped at: Completed 1000-01-PLAN.md
-=======
-Last session: 2026-04-05T16:49:34.597Z
-Stopped at: Completed 1000-03-PLAN.md (lazy page realization + batched switchPage)
->>>>>>> worktree-agent-a9506b74
+Last session: 2026-04-16T13:57:23.781Z
+Stopped at: Completed Phase 1006 wave 2 (1006-02 mksqlite + 1006-03 E1-E10 + 1006-04 exportgraphics)
 Resume file: None

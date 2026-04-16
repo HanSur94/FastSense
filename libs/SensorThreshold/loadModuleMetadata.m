@@ -3,18 +3,17 @@ function registry = loadModuleMetadata(registry, metadataTable)
 %   registry = loadModuleMetadata(registry, metadataTable) reads discrete
 %   state signals from a MATLAB table, compresses them from dense to
 %   sparse transitions, and attaches StateChannel objects to each sensor
-%   in the registry whose ThresholdRules reference matching state column
-%   names.
+%   in the registry whose Thresholds reference matching state column names.
 %
 %   metadataTable must be a MATLAB table with a 'Date' column (datetime)
 %   and one or more state columns. The Date column is converted to
 %   datenum for StateChannel timestamps. State columns can be numeric
 %   or cell arrays of char.
 %
-%   ThresholdRules must be attached to sensors before calling this
-%   function. Sensors with no rules are skipped. Rules with empty
-%   conditions (unconditional) contribute no state keys. State keys not
-%   found in the table columns are skipped silently.
+%   Thresholds must be attached to sensors before calling this function.
+%   Sensors with no thresholds are skipped. Thresholds with no condition
+%   fields (unconditional) contribute no state keys. State keys not found
+%   in the table columns are skipped silently.
 %
 %   Each sensor receives its own StateChannel instance (no shared
 %   handles). Compressed data is cached so each column is processed once.
@@ -22,7 +21,7 @@ function registry = loadModuleMetadata(registry, metadataTable)
 %   Returns the registry (handle) for chaining convenience. Sensors are
 %   modified in-place via handle semantics.
 %
-%   See also loadModuleData, StateChannel, ThresholdRule, Sensor.
+%   See also loadModuleData, StateChannel, Threshold, Sensor.
 
     narginchk(2, 2);
 
@@ -58,17 +57,16 @@ function registry = loadModuleMetadata(registry, metadataTable)
     for i = 1:numel(allKeys)
         s = registry.get(allKeys{i});
 
-        % Skip sensors with no threshold rules
-        if isempty(s.ThresholdRules)
+        % Skip sensors with no thresholds
+        if isempty(s.Thresholds)
             continue;
         end
 
-        % Collect unique state keys from all rule conditions
+        % Collect unique state keys from all threshold conditions
         neededKeys = {};
-        for r = 1:numel(s.ThresholdRules)
-            rule = s.ThresholdRules{r};
-            condFields = fieldnames(rule.Condition);
-            neededKeys = [neededKeys; condFields]; %#ok<AGROW>
+        for r = 1:numel(s.Thresholds)
+            condFields = s.Thresholds{r}.getConditionFields();
+            neededKeys = [neededKeys; condFields(:)]; %#ok<AGROW>
         end
         neededKeys = unique(neededKeys);
 

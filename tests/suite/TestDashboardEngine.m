@@ -129,14 +129,16 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             pause(0.5);
 
             % Timer must still be running (restarted inside ErrorFcn).
-            testCase.verifyTrue(isrunning(d.LiveTimer));
+            testCase.verifyTrue(strcmp(d.LiveTimer.Running, 'on'));
         end
 
         function testAddWidgetWithSensor(testCase)
             s = Sensor('T-401', 'Name', 'Temperature');
             s.X = 1:100;
             s.Y = rand(1,100);
-            s.addThresholdRule(struct(), 80, 'Direction', 'upper', 'Label', 'Hi');
+            t_hi = Threshold('hi', 'Name', 'Hi', 'Direction', 'upper');
+            t_hi.addCondition(struct(), 80);
+            s.addThreshold(t_hi);
             s.resolve();
 
             d = DashboardEngine('Sensor Test');
@@ -191,7 +193,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         end
 
         function testAddCollapsible(testCase)
-            d = DashboardEngine('Name', 'Test');
+            d = DashboardEngine('Test');
             w = d.addCollapsible('Sensors', {});
             testCase.verifyEqual(w.Mode, 'collapsible');
             testCase.verifyEqual(w.Label, 'Sensors');
@@ -199,7 +201,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         end
 
         function testAddCollapsibleWithChildren(testCase)
-            d = DashboardEngine('Name', 'Test');
+            d = DashboardEngine('Test');
             c1 = TextWidget('Title', 'A');
             c2 = TextWidget('Title', 'B');
             w = d.addCollapsible('Group', {c1, c2});
@@ -207,7 +209,7 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         end
 
         function testAddCollapsibleForwardsOptions(testCase)
-            d = DashboardEngine('Name', 'Test');
+            d = DashboardEngine('Test');
             w = d.addCollapsible('G', {}, 'Collapsed', true);
             testCase.verifyTrue(w.Collapsed);
         end

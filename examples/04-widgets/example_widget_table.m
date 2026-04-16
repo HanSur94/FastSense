@@ -27,10 +27,13 @@ temp = 70 + 6*sin(2*pi*t/3600) + randn(1, N)*1.5;
 sTemp = Sensor('T-401', 'Name', 'Temperature');
 sTemp.X = t;
 sTemp.Y = temp;
-sTemp.addThresholdRule(struct(), 78, ...
-    'Direction', 'upper', 'Label', 'Hi Warn');
-sTemp.addThresholdRule(struct(), 82, ...
-    'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiWarn = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarn.addCondition(struct(), 78);
+sTemp.addThreshold(tHiWarn);
+
+tHiAlarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarm.addCondition(struct(), 82);
+sTemp.addThreshold(tHiAlarm);
 sTemp.resolve();
 
 %% 2. Build a static alarm log from resolved violations

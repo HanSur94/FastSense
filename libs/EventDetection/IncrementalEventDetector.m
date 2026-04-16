@@ -61,12 +61,9 @@ classdef IncrementalEventDetector < handle
             tmpSensor.X = sliceX;
             tmpSensor.Y = sliceY;
 
-            % Copy threshold rules from the source sensor
-            for i = 1:numel(sensor.ThresholdRules)
-                rule = sensor.ThresholdRules{i};
-                tmpSensor.addThresholdRule(rule.Condition, rule.Value, ...
-                    'Direction', rule.Direction, 'Label', rule.Label, ...
-                    'Color', rule.Color, 'LineStyle', rule.LineStyle);
+            % Copy threshold handles from the source sensor
+            for i = 1:numel(sensor.Thresholds)
+                tmpSensor.addThreshold(sensor.Thresholds{i});
             end
 
             % Copy state channels — use accumulated state data (sliced)
@@ -234,17 +231,21 @@ classdef IncrementalEventDetector < handle
         function events = escalate(~, events, sensor)
             for i = 1:numel(events)
                 ev = events(i);
-                for j = 1:numel(sensor.ThresholdRules)
-                    rule = sensor.ThresholdRules{j};
-                    if ~strcmp(rule.Direction, ev.Direction)
+                for j = 1:numel(sensor.Thresholds)
+                    t = sensor.Thresholds{j};
+                    if ~strcmp(t.Direction, ev.Direction)
                         continue;
                     end
-                    if strcmp(ev.Direction, 'upper') && rule.Value > ev.ThresholdValue && ...
-                       ~isempty(ev.PeakValue) && ev.PeakValue > rule.Value
-                        ev.escalateTo(rule.Label, rule.Value);
-                    elseif strcmp(ev.Direction, 'lower') && rule.Value < ev.ThresholdValue && ...
-                       ~isempty(ev.PeakValue) && ev.PeakValue < rule.Value
-                        ev.escalateTo(rule.Label, rule.Value);
+                    tVals = t.allValues();
+                    for k = 1:numel(tVals)
+                        tVal = tVals(k);
+                        if strcmp(ev.Direction, 'upper') && tVal > ev.ThresholdValue && ...
+                           ~isempty(ev.PeakValue) && ev.PeakValue > tVal
+                            ev.escalateTo(t.Name, tVal);
+                        elseif strcmp(ev.Direction, 'lower') && tVal < ev.ThresholdValue && ...
+                           ~isempty(ev.PeakValue) && ev.PeakValue < tVal
+                            ev.escalateTo(t.Name, tVal);
+                        end
                     end
                 end
             end

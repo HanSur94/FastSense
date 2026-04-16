@@ -37,20 +37,67 @@ classdef TestSensor < matlab.unittest.TestCase
             testCase.verifyEqual(s.StateChannels{1}.Key, 'machine_state', 'testAddStateChannel: key');
         end
 
-        function testAddThresholdRule(testCase)
+        function testAddThreshold(testCase)
             s = Sensor('pressure');
-            s.addThresholdRule(struct('machine', 1), 50, 'Direction', 'upper', 'Label', 'HH');
-            testCase.verifyEqual(numel(s.ThresholdRules), 1, 'testAddThresholdRule: count');
-            testCase.verifyEqual(s.ThresholdRules{1}.Value, 50, 'testAddThresholdRule: value');
-            testCase.verifyEqual(s.ThresholdRules{1}.Label, 'HH', 'testAddThresholdRule: label');
+            t = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+            t.addCondition(struct('machine', 1), 50);
+            s.addThreshold(t);
+            testCase.verifyEqual(numel(s.Thresholds), 1, 'testAddThreshold: count');
+            testCase.verifyEqual(s.Thresholds{1}.Key, 'hh', 'testAddThreshold: key');
+            testCase.verifyEqual(s.Thresholds{1}.conditions_{1}.Value, 50, 'testAddThreshold: value');
+            testCase.verifyEqual(s.Thresholds{1}.Name, 'HH', 'testAddThreshold: name');
         end
 
-        function testAddMultipleRules(testCase)
+        function testAddThresholdMultiple(testCase)
             s = Sensor('pressure');
-            s.addThresholdRule(struct('m', 1), 50, 'Direction', 'upper');
-            s.addThresholdRule(struct('m', 2), 80, 'Direction', 'upper');
-            s.addThresholdRule(struct('m', 1), 10, 'Direction', 'lower');
-            testCase.verifyEqual(numel(s.ThresholdRules), 3, 'testMultipleRules: count');
+            t1 = Threshold('hh', 'Direction', 'upper');
+            t1.addCondition(struct('m', 1), 50);
+            t2 = Threshold('h', 'Direction', 'upper');
+            t2.addCondition(struct('m', 2), 80);
+            t3 = Threshold('ll', 'Direction', 'lower');
+            t3.addCondition(struct('m', 1), 10);
+            s.addThreshold(t1);
+            s.addThreshold(t2);
+            s.addThreshold(t3);
+            testCase.verifyEqual(numel(s.Thresholds), 3, 'testMultipleThresholds: count');
+        end
+
+        function testAddThresholdDuplicate(testCase)
+            s = Sensor('pressure');
+            t = Threshold('hh', 'Direction', 'upper');
+            t.addCondition(struct(), 50);
+            s.addThreshold(t);
+            % Adding the same threshold again should warn and not grow the list
+            testCase.verifyWarning(@() s.addThreshold(t), 'Sensor:duplicateThreshold', ...
+                'testDuplicate: warning ID');
+            testCase.verifyEqual(numel(s.Thresholds), 1, 'testDuplicate: count unchanged');
+        end
+
+        function testRemoveThreshold(testCase)
+            s = Sensor('pressure');
+            t1 = Threshold('hh', 'Direction', 'upper');
+            t1.addCondition(struct(), 50);
+            t2 = Threshold('ll', 'Direction', 'lower');
+            t2.addCondition(struct(), 10);
+            s.addThreshold(t1);
+            s.addThreshold(t2);
+            testCase.verifyEqual(numel(s.Thresholds), 2, 'testRemove: before');
+            s.removeThreshold('hh');
+            testCase.verifyEqual(numel(s.Thresholds), 1, 'testRemove: after');
+            testCase.verifyEqual(s.Thresholds{1}.Key, 'll', 'testRemove: remaining key');
+        end
+
+        function testAddThresholdByKey(testCase)
+            % Register a threshold first, then attach by string key
+            t = Threshold('press_hh_test', 'Direction', 'upper');
+            t.addCondition(struct(), 75);
+            ThresholdRegistry.register('press_hh_test', t);
+            s = Sensor('pressure');
+            s.addThreshold('press_hh_test');
+            testCase.verifyEqual(numel(s.Thresholds), 1, 'testByKey: count');
+            testCase.verifyEqual(s.Thresholds{1}.Key, 'press_hh_test', 'testByKey: key');
+            % Clean up registry
+            ThresholdRegistry.unregister('press_hh_test');
         end
 
         function testUnitsProperty(testCase)

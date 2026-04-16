@@ -28,7 +28,9 @@ classdef TestAddSensor < matlab.unittest.TestCase
             sc = StateChannel('machine');
             sc.X = [1 50]; sc.Y = [0 1];
             s.addStateChannel(sc);
-            s.addThresholdRule(struct('machine', 1), 10, 'Direction', 'upper', 'Label', 'HH');
+            t_hh = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+            t_hh.addCondition(struct('machine', 1), 10);
+            s.addThreshold(t_hh);
             s.resolve();
 
             fp = FastSense();
@@ -43,7 +45,9 @@ classdef TestAddSensor < matlab.unittest.TestCase
             s = Sensor('temp', 'Name', 'Temperature');
             s.X = 1:50;
             s.Y = rand(1, 50);
-            s.addThresholdRule(struct(), 5, 'Direction', 'upper');
+            t_upper = Threshold('upper_5', 'Direction', 'upper');
+            t_upper.addCondition(struct(), 5);
+            s.addThreshold(t_upper);
             s.resolve();
 
             fp = FastSense();

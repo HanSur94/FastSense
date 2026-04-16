@@ -4,12 +4,19 @@ classdef StatusWidget < DashboardWidget
 %   Sensor-first:
 %     w = StatusWidget('Sensor', sensorObj);
 %
+%   Threshold-bound (no Sensor required):
+%     w = StatusWidget('Title', 'Temp', 'Threshold', t, 'Value', 85);
+%     w = StatusWidget('Title', 'Temp', 'Threshold', 'temp_hi', 'ValueFcn', @getTemp);
+%
 %   Legacy (still supported):
 %     w = StatusWidget('Title', 'Pump 1', 'StatusFcn', @() 'ok');
 
     properties (Access = public)
         StatusFcn    = []       % function_handle returning 'ok'/'warning'/'alarm' (legacy)
         StaticStatus = ''       % fixed status string (legacy)
+        Threshold    = []       % Threshold object or registry key string (per D-01)
+        Value        = []       % Scalar numeric value for threshold comparison (per D-03)
+        ValueFcn     = []       % Function handle returning scalar value (per D-03, D-09)
     end
 
     properties (SetAccess = private)
@@ -25,6 +32,20 @@ classdef StatusWidget < DashboardWidget
             obj = obj@DashboardWidget(varargin{:});
             if isequal(obj.Position, [1 1 6 2])
                 obj.Position = [1 1 4 1]; % default compact size
+            end
+            % Resolve Threshold key string to object (per D-07)
+            if ischar(obj.Threshold) || isstring(obj.Threshold)
+                try
+                    obj.Threshold = ThresholdRegistry.get(obj.Threshold);
+                catch
+                    warning('StatusWidget:thresholdNotFound', ...
+                        'ThresholdRegistry key ''%s'' not found.', obj.Threshold);
+                    obj.Threshold = [];
+                end
+            end
+            % Mutual exclusivity: Threshold wins (per D-08)
+            if ~isempty(obj.Threshold) && ~isempty(obj.Sensor)
+                obj.Sensor = [];
             end
         end
 
@@ -78,7 +99,11 @@ classdef StatusWidget < DashboardWidget
         function refresh(obj)
             theme = obj.getTheme();
 
-            if ~isempty(obj.Sensor)
+            if ~isempty(obj.Threshold)
+                val = obj.resolveCurrentValue_();
+                if isempty(val), return; end
+                [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromThreshold(val, theme);
+            elseif ~isempty(obj.Sensor)
                 if isempty(obj.Sensor.Y), return; end
                 [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromSensor(theme);
             elseif ~isempty(obj.StatusFcn)
@@ -98,7 +123,14 @@ classdef StatusWidget < DashboardWidget
 
             % Update label
             if ~isempty(obj.hLabelText) && ishandle(obj.hLabelText)
-                if ~isempty(obj.Sensor)
+                if ~isempty(obj.Threshold)
+                    val = obj.resolveCurrentValue_();
+                    if ~isempty(val)
+                        lbl = sprintf('%s: %.1f', obj.Title, val);
+                    else
+                        lbl = sprintf('%s: %s', obj.Title, upper(obj.CurrentStatus));
+                    end
+                elseif ~isempty(obj.Sensor)
                     val = obj.Sensor.Y(end);
                     units = '';
                     if ~isempty(obj.Sensor.Units)
@@ -124,17 +156,45 @@ classdef StatusWidget < DashboardWidget
 
             dot = char(9679);
             status = obj.StaticStatus;
-            if isempty(status) && ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
-                status = 'ok';
-                if ~isempty(obj.Sensor.ThresholdRules)
-                    val = obj.Sensor.Y(end);
-                    for k = 1:numel(obj.Sensor.ThresholdRules)
-                        rule = obj.Sensor.ThresholdRules{k};
-                        if (rule.IsUpper && val > rule.Value) || ...
-                                (~rule.IsUpper && val < rule.Value)
-                            status = 'violation';
-                            break;
+
+            if isempty(status) && ~isempty(obj.Threshold)
+                t = obj.Threshold;
+                if isa(t, 'CompositeThreshold')
+                    cStatus = t.computeStatus();
+                    if strcmp(cStatus, 'alarm')
+                        status = 'violation';
+                    else
+                        status = 'ok';
+                    end
+                else
+                    val = obj.resolveCurrentValue_();
+                    if ~isempty(val)
+                        status = 'ok';
+                        tVals = t.allValues();
+                        for v = 1:numel(tVals)
+                            if (t.IsUpper && val > tVals(v)) || ...
+                                    (~t.IsUpper && val < tVals(v))
+                                status = 'violation';
+                                break;
+                            end
                         end
+                    end
+                end
+            elseif isempty(status) && ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
+                status = 'ok';
+                if ~isempty(obj.Sensor.Thresholds)
+                    val = obj.Sensor.Y(end);
+                    for k = 1:numel(obj.Sensor.Thresholds)
+                        t = obj.Sensor.Thresholds{k};
+                        tVals = t.allValues();
+                        for v = 1:numel(tVals)
+                            if (t.IsUpper && val > tVals(v)) || ...
+                                    (~t.IsUpper && val < tVals(v))
+                                status = 'violation';
+                                break;
+                            end
+                        end
+                        if strcmp(status, 'violation'), break; end
                     end
                 end
             end
@@ -158,7 +218,12 @@ classdef StatusWidget < DashboardWidget
 
         function s = toStruct(obj)
             s = toStruct@DashboardWidget(obj);
-            if isempty(obj.Sensor)
+            if ~isempty(obj.Threshold) && ~isempty(obj.Threshold.Key)
+                s.source = struct('type', 'threshold', 'key', obj.Threshold.Key);
+                if ~isempty(obj.Value)
+                    s.value = obj.Value;
+                end
+            elseif isempty(obj.Sensor)
                 if ~isempty(obj.StatusFcn)
                     s.source = struct('type', 'callback', ...
                         'function', func2str(obj.StatusFcn));
@@ -182,49 +247,117 @@ classdef StatusWidget < DashboardWidget
                         if exist('SensorRegistry', 'class')
                             obj.Sensor = SensorRegistry.get(s.source.name);
                         end
+                    case 'threshold'
+                        if exist('ThresholdRegistry', 'class')
+                            try
+                                obj.Threshold = ThresholdRegistry.get(s.source.key);
+                            catch
+                                warning('StatusWidget:thresholdNotFound', ...
+                                    'Could not resolve threshold key ''%s'' on load.', s.source.key);
+                            end
+                        end
                     case 'callback'
                         obj.StatusFcn = str2func(s.source.function);
                     case 'static'
                         obj.StaticStatus = s.source.value;
                 end
             end
+            if isfield(s, 'value'), obj.Value = s.value; end
         end
     end
 
     methods (Access = private)
+        function val = resolveCurrentValue_(obj)
+            %RESOLVECURRENTVALUE_ Return the current scalar value from ValueFcn or Value.
+            val = [];
+            if ~isempty(obj.ValueFcn)
+                try
+                    val = obj.ValueFcn();
+                catch
+                    return;
+                end
+            elseif ~isempty(obj.Value)
+                val = obj.Value;
+            end
+        end
+
+        function [status, color] = deriveStatusFromThreshold(obj, val, theme)
+            %DERIVESTATUSFROMTHRESHOLD Check single Threshold against scalar val.
+            t = obj.Threshold;
+            % CompositeThreshold: delegate to computeStatus, ignore val (per D-04)
+            if isa(t, 'CompositeThreshold')
+                status = t.computeStatus();
+                color = obj.statusToColor(status, theme);
+                return;
+            end
+            status = 'ok';
+            color = theme.StatusOkColor;
+
+            tVals = t.allValues();
+            if isempty(tVals), return; end
+
+            worstDist = -inf;
+            for v = 1:numel(tVals)
+                isViolated = false;
+                if t.IsUpper && val > tVals(v)
+                    isViolated = true;
+                elseif ~t.IsUpper && val < tVals(v)
+                    isViolated = true;
+                end
+
+                if isViolated
+                    dist = abs(val - tVals(v));
+                    if dist > worstDist
+                        worstDist = dist;
+                        status = 'violation';
+                        if ~isempty(t.Color)
+                            color = t.Color;
+                        elseif t.IsUpper
+                            color = theme.StatusAlarmColor;
+                        else
+                            color = theme.StatusWarnColor;
+                        end
+                    end
+                end
+            end
+        end
+
         function [status, color] = deriveStatusFromSensor(obj, theme)
             status = 'ok';
             color = theme.StatusOkColor;
 
             if isempty(obj.Sensor.Y), return; end
 
-            if isempty(obj.Sensor.ThresholdRules)
+            if isempty(obj.Sensor.Thresholds)
                 return;
             end
 
             latestY = obj.Sensor.Y(end);
             worstDist = -inf;
 
-            for i = 1:numel(obj.Sensor.ThresholdRules)
-                rule = obj.Sensor.ThresholdRules{i};
-                isViolated = false;
-                if rule.IsUpper && latestY > rule.Value
-                    isViolated = true;
-                elseif ~rule.IsUpper && latestY < rule.Value
-                    isViolated = true;
-                end
+            for i = 1:numel(obj.Sensor.Thresholds)
+                t = obj.Sensor.Thresholds{i};
+                tVals = t.allValues();
+                for v = 1:numel(tVals)
+                    isViolated = false;
+                    if t.IsUpper && latestY > tVals(v)
+                        isViolated = true;
+                    elseif ~t.IsUpper && latestY < tVals(v)
+                        isViolated = true;
+                    end
 
-                if isViolated
-                    dist = abs(latestY - rule.Value);
-                    if dist > worstDist
-                        worstDist = dist;
-                        status = 'violation';
-                        if ~isempty(rule.Color)
-                            color = rule.Color;
-                        elseif rule.IsUpper
-                            color = theme.StatusAlarmColor;
-                        else
-                            color = theme.StatusWarnColor;
+                    if isViolated
+                        dist = abs(latestY - tVals(v));
+                        if dist > worstDist
+                            worstDist = dist;
+                            status = 'violation';
+                            if ~isempty(t.Color)
+                                color = t.Color;
+                            elseif t.IsUpper
+                                color = theme.StatusAlarmColor;
+                            else
+                                color = theme.StatusWarnColor;
+                            end
                         end
                     end
                 end

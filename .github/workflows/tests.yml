@@ -9,9 +9,14 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: MATLAB Lint
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -31,41 +36,69 @@ jobs:
   build-mex:
     name: Build MEX (Linux)
     if: github.event_name != 'schedule'
+    uses: ./.github/workflows/_build-mex-octave.yml
+    with:
+      artifact-name: mex-linux
+
+  build-mex-matlab:
+    name: Build MEX (MATLAB Linux)
+    timeout-minutes: 30
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    container: gnuoctave/octave:8.4.0
     steps:
       - uses: actions/checkout@v6
 
-      - name: Cache MEX binaries
-        id: cache-mex
+      - name: Setup MATLAB
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2020b
+          cache: true
+
+      - name: Cache MATLAB MEX binaries
+        id: cache-mex-matlab
         uses: actions/cache@v5
         with:
           path: |
-            libs/FastSense/private/*.mex
-            libs/SensorThreshold/private/*.mex
-            libs/FastSense/mksqlite.mex
-          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
+            libs/FastSense/private/*.mexa64
+            libs/SensorThreshold/private/*.mexa64
+            libs/FastSense/mksqlite.mexa64
+          key: mex-matlab-linux-r2020b-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
 
-      - name: Compile MEX files
-        if: steps.cache-mex.outputs.cache-hit != 'true'
-        run: octave --eval "install();"
+      - name: Compile MEX files (MATLAB)
+        if: steps.cache-mex-matlab.outputs.cache-hit != 'true'
+        uses: matlab-actions/run-command@v2
+        with:
+          command: "install();"
 
-      - name: Upload MEX artifacts
+      - name: Diagnose mksqlite build output
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "=== build-mex-matlab: post-compile mksqlite diagnostic ==="
+          echo "--- libs/FastSense/mksqlite.* ---"
+          ls -la libs/FastSense/mksqlite.* 2>&1 || echo "(no mksqlite files in libs/FastSense/)"
+          echo "--- libs/FastSense/private/*.mexa64 ---"
+          ls -la libs/FastSense/private/*.mexa64 2>&1 || echo "(no mexa64 in private)"
+          echo "--- mksqlite source ---"
+          ls -la libs/FastSense/mksqlite.c 2>&1 || echo "(no mksqlite.c)"
+
+      - name: Upload MATLAB MEX artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: mex-linux
+          name: mex-matlab-linux
           path: |
-            libs/FastSense/private/*.mex
-            libs/SensorThreshold/private/*.mex
-            libs/FastSense/mksqlite.mex
+            libs/FastSense/private/*.mexa64
+            libs/SensorThreshold/private/*.mexa64
+            libs/FastSense/mksqlite.mexa64
           retention-days: 1
 
   octave:
     name: Octave Tests
+    timeout-minutes: 45
     needs: build-mex
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    container: gnuoctave/octave:8.4.0
+    container: gnuoctave/octave:11.1.0
     env:
       FASTSENSE_SKIP_BUILD: "1"
       FASTSENSE_RESULTS_FILE: /tmp/test-results.txt
@@ -79,33 +112,39 @@ jobs:
 
       - name: Run tests
         run: |
-          # Octave 8.x has a known crash during handle class cleanup
-          # (break_closure_cycles: invalid object). Run tests and capture
-          # the results file before any potential crash.
+          # Writes /tmp/test-results.txt for the downstream "Write test summary" step.
+          # Octave 11.1.0 fixed the break_closure_cycles GC crash (upstream bug #67749)
+          # that plagued 8.x-10.x, so the old `|| true` workaround dance is gone.
           xvfb-run octave --eval "
             cd('tests');
             r = run_all_tests();
             fid = fopen('/tmp/test-results.txt', 'w');
             fprintf(fid, '%d %d\n', r.passed, r.failed);
             fclose(fid);
-            if r.failed > 0; exit(1); end
-          " || true
-          # Check results even if Octave crashed during cleanup
+            exit(double(r.failed > 0));
+          "
+
+      - name: Write test summary
+        if: always()
+        shell: bash
+        run: |
           if [ -f /tmp/test-results.txt ]; then
-            read passed failed < /tmp/test-results.txt
-            echo "Results: $passed passed, $failed failed"
-            if [ "$failed" -gt 0 ]; then
-              echo "::error::$failed test(s) failed"
-              exit 1
-            fi
-            echo "All $passed tests passed (Octave may have crashed during cleanup — known bug)"
+            read PASSED FAILED < /tmp/test-results.txt
+            {
+              echo "### Octave Tests"
+              echo ""
+              echo "- Passed: ${PASSED:-0}"
+              echo "- Failed: ${FAILED:-0}"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::error::Octave crashed before completing tests"
-            exit 1
+            echo "### Octave Tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "_Results file not produced (test job likely crashed before completion)._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   mex-build-macos:
     name: MEX Build (macOS ${{ matrix.os == 'macos-latest' && 'ARM64' || 'x64' }})
+    timeout-minutes: 20
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -126,6 +165,7 @@ jobs:
 
   mex-build-windows:
     name: MEX Build (Windows ${{ matrix.os == 'windows-latest' && 'latest' || '2022' }})
+    timeout-minutes: 30
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -193,19 +233,65 @@ jobs:
 
   matlab:
     name: MATLAB Tests
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: build-mex-matlab
+    timeout-minutes: 45
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    continue-on-error: true
+    env:
+      FASTSENSE_SKIP_BUILD: "1"
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup MATLAB
-        uses: matlab-actions/setup-matlab@v2
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2020b
+          cache: true
+
+      - name: Download MATLAB MEX binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: mex-matlab-linux
+
+      - name: Diagnose mksqlite availability for tests
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "=== matlab job: pre-test mksqlite diagnostic ==="
+          echo "--- files on disk after artifact download ---"
+          ls -la libs/FastSense/mksqlite.* 2>&1 || echo "(no mksqlite files on disk)"
+
+      - name: MATLAB which-mksqlite check
+        if: always()
+        continue-on-error: true
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            addpath('.');
+            install();
+            fprintf('which mksqlite: %s\n', which('mksqlite'));
+            fprintf('exist mksqlite: %d (expect 3 if MEX loadable)\n', exist('mksqlite'));
+            try
+                mksqlite('version');
+                fprintf('mksqlite call: OK\n');
+            catch e
+                fprintf('mksqlite call FAILED: %s\n', e.message);
+            end
 
       - name: Run tests with coverage
         uses: matlab-actions/run-command@v2
         with:
           command: "addpath('scripts'); run_tests_with_coverage();"
+
+      - name: Write MATLAB test summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### MATLAB Tests"
+            echo ""
+            echo "MATLAB test run completed — see job log for details."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage to Codecov
         if: always()

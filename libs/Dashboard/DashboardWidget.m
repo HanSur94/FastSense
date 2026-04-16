@@ -141,9 +141,29 @@ classdef DashboardWidget < handle
         end
     end
 
-    methods (Abstract)
-        render(obj, parentPanel)
-        refresh(obj)
-        t = getType(obj)
+    % NOTE: Conceptually abstract -- every subclass MUST override these methods.
+    % We declare concrete error-throwing stubs instead of `methods (Abstract)`
+    % because Octave 11.1.0 has a parser regression that rejects abstract
+    % method signatures outside of @-class folders ("external methods are
+    % only allowed in @-folders"). MATLAB and Octave 7-10 accept the
+    % abstract form; the workaround below is universally compatible.
+    % Trade-off: subclass that forgets to override now errors at first call
+    % instead of at construction. All current subclasses implement these
+    % methods so runtime behavior is preserved for valid usage.
+    methods
+        function render(~, ~)
+            error('DashboardWidget:notImplemented', ...
+                'render(obj, parentPanel) must be overridden by subclass.');
+        end
+
+        function refresh(~)
+            error('DashboardWidget:notImplemented', ...
+                'refresh(obj) must be overridden by subclass.');
+        end
+
+        function t = getType(~) %#ok<STOUT>
+            error('DashboardWidget:notImplemented', ...
+                'getType(obj) must be overridden by subclass.');
+        end
     end
 end

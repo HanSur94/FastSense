@@ -9,43 +9,23 @@ on:
     - cron: '0 7 * * 1'   # Weekly Monday 07:00 UTC — MATLAB examples
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-mex:
     name: Build MEX
-    runs-on: ubuntu-latest
-    container: gnuoctave/octave:8.4.0
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Cache MEX binaries
-        id: cache-mex
-        uses: actions/cache@v5
-        with:
-          path: |
-            libs/FastSense/private/*.mex
-            libs/SensorThreshold/private/*.mex
-            libs/FastSense/mksqlite.mex
-          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
-
-      - name: Compile MEX files
-        if: steps.cache-mex.outputs.cache-hit != 'true'
-        run: octave --eval "install();"
-
-      - name: Upload MEX artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: mex-linux-examples
-          path: |
-            libs/FastSense/private/*.mex
-            libs/SensorThreshold/private/*.mex
-            libs/FastSense/mksqlite.mex
-          retention-days: 1
+    uses: ./.github/workflows/_build-mex-octave.yml
+    with:
+      artifact-name: mex-linux-examples
 
   smoke-test:
     name: Example Smoke Tests
+    timeout-minutes: 45
     needs: build-mex
     runs-on: ubuntu-latest
-    container: gnuoctave/octave:8.4.0
+    container: gnuoctave/octave:11.1.0
     env:
       FASTSENSE_SKIP_BUILD: "1"
     steps:
@@ -148,6 +128,22 @@ jobs:
 
           echo ""
           echo "=== ${PASSED}/${TOTAL} examples passed ==="
+
+          # --- GitHub Step Summary ---
+          if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+            {
+              echo "### Octave Example Smoke Tests"
+              echo ""
+              echo "- ${PASSED:-0}/${TOTAL:-0} passed"
+              if [ -n "$FAIL_LIST" ]; then
+                echo ""
+                echo "**Failures:**"
+                echo ""
+                printf "%b" "$FAIL_LIST" | sed 's/^/- /'
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [ "$FAILED" -gt 0 ]; then
             echo ""
             printf "Failed:%b\n" "$FAIL_LIST"
@@ -156,13 +152,16 @@ jobs:
 
   matlab-examples:
     name: MATLAB Example Smoke Tests
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup MATLAB
-        uses: matlab-actions/setup-matlab@v2
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2020b
+          cache: true
 
       - name: Run MATLAB-only examples
         uses: matlab-actions/run-command@v2
@@ -222,6 +221,29 @@ jobs:
             end
 
             fprintf('\n=== %d/%d examples passed ===\n', passed, numel(examples));
+
+            nTotal = numel(examples);
+            nPassed = passed;
+            try
+              summaryFile = getenv('GITHUB_STEP_SUMMARY');
+              if ~isempty(summaryFile)
+                fid = fopen(summaryFile, 'a');
+                if fid > 0
+                  fprintf(fid, '### MATLAB Examples\n\n');
+                  fprintf(fid, '- %d/%d passed\n', nPassed, nTotal);
+                  if nTotal - nPassed > 0 && ~isempty(failList)
+                    fprintf(fid, '\n**Failures:**\n\n');
+                    for k = 1:numel(failList)
+                      fprintf(fid, '- %s\n', failList{k});
+                    end
+                  end
+                  fclose(fid);
+                end
+              end
+            catch
+              % never fail the job because of a step-summary write
+            end
+
             if failed > 0
                 fprintf('\nFailed:\n');
                 for i = 1:numel(failList)

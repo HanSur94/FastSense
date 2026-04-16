@@ -12,8 +12,9 @@ function test_event_integration()
     sc.X = [1 11]; sc.Y = [1 1];
     s.addStateChannel(sc);
 
-    s.addThresholdRule(struct('machine', 1), 10, ...
-        'Direction', 'upper', 'Label', 'vibration warning');
+    t_vibwarn = Threshold('vibration_warning', 'Name', 'vibration warning', 'Direction', 'upper');
+    t_vibwarn.addCondition(struct('machine', 1), 10);
+    s.addThreshold(t_vibwarn);
     s.resolve();
 
     % Detect with default detector

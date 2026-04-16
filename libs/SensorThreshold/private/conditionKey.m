@@ -3,7 +3,7 @@ function key = conditionKey(condStruct)
 %   key = CONDITIONKEY(condStruct) serializes a condition struct into a
 %   canonical string so that two structs with the same fields and values
 %   always produce the same key, regardless of field ordering.  This is
-%   used by Sensor.resolve() to group ThresholdRules that share
+%   used by Sensor.resolve() to group conditions that share
 %   identical conditions and can therefore share the same active-segment
 %   computation.
 %

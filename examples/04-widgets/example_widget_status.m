@@ -28,8 +28,13 @@ sTemp = Sensor('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
 sTemp.X = t;
 sTemp.Y = 70 + 4*sin(2*pi*t/600) + randn(1,N)*0.5;
 sTemp.Y(end-200:end) = 92 + randn(1,201)*0.3;        % push tail into alarm
-sTemp.addThresholdRule(struct(), 80, 'Direction', 'upper', 'Label', 'Hi Warn');
-sTemp.addThresholdRule(struct(), 90, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarnTemp.addCondition(struct(), 80);
+sTemp.addThreshold(tHiWarnTemp);
+
+tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmTemp.addCondition(struct(), 90);
+sTemp.addThreshold(tHiAlarmTemp);
 sTemp.resolve();
 
 % Pressure — last value between Hi Warn and Hi Alarm => yellow/warning
@@ -37,16 +42,26 @@ sPress = Sensor('P-201', 'Name', 'Pressure', 'Units', 'bar');
 sPress.X = t;
 sPress.Y = 48 + 3*sin(2*pi*t/900) + randn(1,N)*0.8;
 sPress.Y(end-100:end) = 67 + randn(1,101)*0.4;       % push tail into warning
-sPress.addThresholdRule(struct(), 65, 'Direction', 'upper', 'Label', 'Hi Warn');
-sPress.addThresholdRule(struct(), 75, 'Direction', 'upper', 'Label', 'Hi Alarm');
+tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
+tHiWarnPress.addCondition(struct(), 65);
+sPress.addThreshold(tHiWarnPress);
+
+tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmPress.addCondition(struct(), 75);
+sPress.addThreshold(tHiAlarmPress);
 sPress.resolve();
 
 % Flow — last value well within limits => green/ok
 sFlow = Sensor('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
 sFlow.X = t;
 sFlow.Y = 120 + 5*sin(2*pi*t/1200) + randn(1,N)*1.0;
-sFlow.addThresholdRule(struct(), 140, 'Direction', 'upper', 'Label', 'Hi Alarm');
-sFlow.addThresholdRule(struct(), 90,  'Direction', 'lower', 'Label', 'Lo Alarm');
+tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
+tHiAlarmFlow.addCondition(struct(), 140);
+sFlow.addThreshold(tHiAlarmFlow);
+
+tLoAlarmFlow = Threshold('lo_alarm', 'Name', 'Lo Alarm', 'Direction', 'lower');
+tLoAlarmFlow.addCondition(struct(), 90);
+sFlow.addThreshold(tLoAlarmFlow);
 sFlow.resolve();
 
 %% 2. Build dashboard

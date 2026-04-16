@@ -31,15 +31,20 @@ sc.X = [0 20 40 60];
 sc.Y = [0  1  2  1];
 s.addStateChannel(sc);
 
-s.addThresholdRule(struct('machine', 0), 75, ...
-    'Direction', 'upper', 'Label', 'HH (idle)', ...
-    'Color', [0.9 0.4 0.1], 'LineStyle', '--');
-s.addThresholdRule(struct('machine', 1), 62, ...
-    'Direction', 'upper', 'Label', 'HH (running)', ...
-    'Color', [0.9 0.1 0.1], 'LineStyle', '--');
-s.addThresholdRule(struct('machine', 2), 52, ...
-    'Direction', 'upper', 'Label', 'HH (evacuated)', ...
-    'Color', [1 0 0], 'LineStyle', '-');
+tHhIdle = Threshold('hh_idle', 'Name', 'HH (idle)', ...
+    'Direction', 'upper', 'Color', [0.9 0.4 0.1], 'LineStyle', '--');
+tHhIdle.addCondition(struct('machine', 0), 75);
+s.addThreshold(tHhIdle);
+
+tHhRunning = Threshold('hh_running', 'Name', 'HH (running)', ...
+    'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '--');
+tHhRunning.addCondition(struct('machine', 1), 62);
+s.addThreshold(tHhRunning);
+
+tHhEvacuated = Threshold('hh_evacuated', 'Name', 'HH (evacuated)', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuated.addCondition(struct('machine', 2), 52);
+s.addThreshold(tHhEvacuated);
 
 s.resolve();
 
@@ -55,8 +60,13 @@ customSensor = Sensor('my_custom_ph', 'Name', 'pH Sensor', 'ID', 999);
 customSensor.Units = 'pH';
 customSensor.X = linspace(0, 60, 5000);
 customSensor.Y = 7.0 + 0.5*sin(2*pi*customSensor.X/15) + 0.1*randn(1, numel(customSensor.X));
-customSensor.addThresholdRule(struct(), 7.8, 'Direction', 'upper', 'Label', 'High pH');
-customSensor.addThresholdRule(struct(), 6.2, 'Direction', 'lower', 'Label', 'Low pH');
+tHighPh = Threshold('high_ph', 'Name', 'High pH', 'Direction', 'upper');
+tHighPh.addCondition(struct(), 7.8);
+customSensor.addThreshold(tHighPh);
+
+tLowPh = Threshold('low_ph', 'Name', 'Low pH', 'Direction', 'lower');
+tLowPh.addCondition(struct(), 6.2);
+customSensor.addThreshold(tLowPh);
 customSensor.resolve();
 
 SensorRegistry.register('my_custom_ph', customSensor);

@@ -12,8 +12,10 @@ classdef TestDetectEventsFromSensor < matlab.unittest.TestCase
             s.X = [1 2 3 4 5 6 7 8 9 10];
             s.Y = [5 5 12 14 11 13 5 5 5 5];
 
-            % Add a threshold rule (no state channels = always active)
-            s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn high');
+            % Add a threshold (no state channels = always active)
+            tw = Threshold('warn_high', 'Name', 'warn high', 'Direction', 'upper');
+            tw.addCondition(struct(), 10);
+            s.addThreshold(tw);
             s.resolve();
 
             events = detectEventsFromSensor(s);
@@ -28,7 +30,9 @@ classdef TestDetectEventsFromSensor < matlab.unittest.TestCase
             s.X = [1 2 3 4 5 6 7 8 9 10];
             s.Y = [5 5 12 14 11 13 5 5 5 5];
 
-            s.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn high');
+            tw = Threshold('warn_high', 'Name', 'warn high', 'Direction', 'upper');
+            tw.addCondition(struct(), 10);
+            s.addThreshold(tw);
             s.resolve();
 
             det = EventDetector('MinDuration', 5);
@@ -41,8 +45,12 @@ classdef TestDetectEventsFromSensor < matlab.unittest.TestCase
             s2 = Sensor('temp', 'Name', 'Temperature');
             s2.X = [1 2 3 4 5 6 7 8 9 10];
             s2.Y = [5 5 12 14 11 13 5 5 5 5];
-            s2.addThresholdRule(struct(), 10, 'Direction', 'upper', 'Label', 'warn');
-            s2.addThresholdRule(struct(), 13, 'Direction', 'upper', 'Label', 'critical');
+            tw = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
+            tw.addCondition(struct(), 10);
+            s2.addThreshold(tw);
+            tc = Threshold('critical', 'Name', 'critical', 'Direction', 'upper');
+            tc.addCondition(struct(), 13);
+            s2.addThreshold(tc);
             s2.resolve();
 
             events = detectEventsFromSensor(s2);

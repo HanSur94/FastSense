@@ -214,6 +214,8 @@ function build_mex()
         fprintf('FAILED\n');
         fprintf('  Error: %s\n', e.message);
         fprintf('  (DataStore will use binary file fallback)\n');
+        warning('build_mex:mksqliteCompileFailed', ...
+            'mksqlite failed to compile: %s', e.message);
         n_fail = n_fail + 1;
     end
     end

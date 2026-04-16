@@ -37,15 +37,20 @@ sc.X = [0 50 100 150];
 sc.Y = [0 1 2 1];  % idle -> running -> evacuated -> running
 s.addStateChannel(sc);
 
-s.addThresholdRule(struct('machine', 0), 65, ...
-    'Direction', 'upper', 'Label', 'HH (idle)', ...
-    'Color', [0.8 0 0], 'LineStyle', '--');
-s.addThresholdRule(struct('machine', 1), 58, ...
-    'Direction', 'upper', 'Label', 'HH (running)', ...
-    'Color', [1 0.3 0], 'LineStyle', '--');
-s.addThresholdRule(struct('machine', 2), 52, ...
-    'Direction', 'upper', 'Label', 'HH (evacuated)', ...
-    'Color', [1 0 0], 'LineStyle', '-');
+tHhIdle = Threshold('hh_idle', 'Name', 'HH (idle)', ...
+    'Direction', 'upper', 'Color', [0.8 0 0], 'LineStyle', '--');
+tHhIdle.addCondition(struct('machine', 0), 65);
+s.addThreshold(tHhIdle);
+
+tHhRunning = Threshold('hh_running', 'Name', 'HH (running)', ...
+    'Direction', 'upper', 'Color', [1 0.3 0], 'LineStyle', '--');
+tHhRunning.addCondition(struct('machine', 1), 58);
+s.addThreshold(tHhRunning);
+
+tHhEvacuated = Threshold('hh_evacuated', 'Name', 'HH (evacuated)', ...
+    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
+tHhEvacuated.addCondition(struct('machine', 2), 52);
+s.addThreshold(tHhEvacuated);
 
 tic;
 s.resolve();
@@ -138,8 +143,9 @@ for i = 1:4
     si = Sensor(lower(names{i}), 'Name', names{i});
     si.X = linspace(0, 200, nPts);
     si.Y = 30 + 10*i + 15*sin(2*pi*si.X/(20+10*i)) + 4*randn(1, nPts);
-    si.addThresholdRule(struct(), 30 + 10*i + 12, ...
-        'Direction', 'upper', 'Label', 'HH');
+    tHh = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+    tHh.addCondition(struct(), 30 + 10*i + 12);
+    si.addThreshold(tHh);
     si.toDisk();
     si.resolve();
     sensors{i} = si;

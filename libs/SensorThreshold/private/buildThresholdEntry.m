@@ -14,7 +14,8 @@ function th = buildThresholdEntry(segBounds, thY, rule)
 %     segBounds — 1xS double, segment boundary timestamps
 %     thY       — 1xS double, threshold value at each boundary (NaN
 %                 where the rule's condition is not satisfied)
-%     rule      — ThresholdRule object providing metadata
+%     rule      — ThresholdRule object providing metadata; typically an
+%                 internal condition from Threshold.conditions_
 %
 %   Output:
 %     th — scalar struct with fields:

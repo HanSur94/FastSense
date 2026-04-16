@@ -55,29 +55,45 @@ function example_event_viewer_from_file()
     % --- Create Sensor objects ---
     sTemp = Sensor('temperature', 'Name', 'Temperature');
     sTemp.X = t; sTemp.Y = temp;
-    sTemp.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'temp warning');
-    sTemp.addThresholdRule(struct(), 95, 'Direction', 'upper', 'Label', 'temp critical');
+    tTempWarn = Threshold('temp_warning', 'Name', 'temp warning', 'Direction', 'upper');
+    tTempWarn.addCondition(struct(), 85);
+    sTemp.addThreshold(tTempWarn);
+    tTempCrit = Threshold('temp_critical', 'Name', 'temp critical', 'Direction', 'upper');
+    tTempCrit.addCondition(struct(), 95);
+    sTemp.addThreshold(tTempCrit);
 
     sPres = Sensor('pressure', 'Name', 'Pressure');
     sPres.X = t; sPres.Y = pressure;
-    sPres.addThresholdRule(struct(), 4, 'Direction', 'lower', 'Label', 'pressure low');
+    tPresLow = Threshold('pressure_low', 'Name', 'pressure low', 'Direction', 'lower');
+    tPresLow.addCondition(struct(), 4);
+    sPres.addThreshold(tPresLow);
 
     sVib = Sensor('vibration', 'Name', 'Vibration');
     sVib.X = t; sVib.Y = vibration;
-    sVib.addThresholdRule(struct(), 5, 'Direction', 'upper', 'Label', 'vibration high');
+    tVibHigh = Threshold('vibration_high', 'Name', 'vibration high', 'Direction', 'upper');
+    tVibHigh.addCondition(struct(), 5);
+    sVib.addThreshold(tVibHigh);
 
     sFlow = Sensor('flow', 'Name', 'Flow Rate');
     sFlow.X = t; sFlow.Y = flow;
-    sFlow.addThresholdRule(struct(), 90, 'Direction', 'lower', 'Label', 'flow low');
+    tFlowLow = Threshold('flow_low', 'Name', 'flow low', 'Direction', 'lower');
+    tFlowLow.addCondition(struct(), 90);
+    sFlow.addThreshold(tFlowLow);
 
     sHum = Sensor('humidity', 'Name', 'Humidity');
     sHum.X = t; sHum.Y = humidity;
-    sHum.addThresholdRule(struct(), 60, 'Direction', 'upper', 'Label', 'humidity high');
+    tHumHigh = Threshold('humidity_high', 'Name', 'humidity high', 'Direction', 'upper');
+    tHumHigh.addCondition(struct(), 60);
+    sHum.addThreshold(tHumHigh);
 
     sCur = Sensor('current', 'Name', 'Current');
     sCur.X = t; sCur.Y = current;
-    sCur.addThresholdRule(struct(), 22, 'Direction', 'upper', 'Label', 'current warning');
-    sCur.addThresholdRule(struct(), 28, 'Direction', 'upper', 'Label', 'current overload');
+    tCurWarn = Threshold('current_warning', 'Name', 'current warning', 'Direction', 'upper');
+    tCurWarn.addCondition(struct(), 22);
+    sCur.addThreshold(tCurWarn);
+    tCurOverload = Threshold('current_overload', 'Name', 'current overload', 'Direction', 'upper');
+    tCurOverload.addCondition(struct(), 28);
+    sCur.addThreshold(tCurOverload);
 
     sensors = {sTemp, sPres, sVib, sFlow, sHum, sCur};
 

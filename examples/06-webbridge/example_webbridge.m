@@ -43,30 +43,34 @@ function example_webbridge_run()
     sTemp.Units = [char(176) 'C'];
     sTemp.X = tSeed;
     sTemp.Y = 22 + 3*sin(2*pi*tSeed/30) + randn(1, nSeed)*0.3;
-    sTemp.addThresholdRule(struct(), 28, ...
-        'Direction', 'upper', 'Label', 'Hi Warn', ...
+    tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
         'Color', [1 0.8 0], 'LineStyle', '--');
-    sTemp.addThresholdRule(struct(), 32, ...
-        'Direction', 'upper', 'Label', 'Hi Alarm', ...
+    tHiWarnTemp.addCondition(struct(), 28);
+    sTemp.addThreshold(tHiWarnTemp);
+    tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
         'Color', [1 0.2 0.2], 'LineStyle', '-');
+    tHiAlarmTemp.addCondition(struct(), 32);
+    sTemp.addThreshold(tHiAlarmTemp);
 
     % Pressure sensor
     sPress = Sensor('pressure', 'Name', 'Pressure');
     sPress.Units = 'bar';
     sPress.X = tSeed;
     sPress.Y = 4.5 + 0.5*sin(2*pi*tSeed/20) + randn(1, nSeed)*0.1;
-    sPress.addThresholdRule(struct(), 5.5, ...
-        'Direction', 'upper', 'Label', 'Max', ...
+    tMaxPress = Threshold('max', 'Name', 'Max', 'Direction', 'upper', ...
         'Color', [1 0.2 0.2], 'LineStyle', '-');
+    tMaxPress.addCondition(struct(), 5.5);
+    sPress.addThreshold(tMaxPress);
 
     % Vibration sensor
     sVib = Sensor('vibration', 'Name', 'Vibration');
     sVib.Units = 'mm/s';
     sVib.X = tSeed;
     sVib.Y = 2.0 + 0.8*randn(1, nSeed) + 0.5*sin(2*pi*tSeed/15);
-    sVib.addThresholdRule(struct(), 4.0, ...
-        'Direction', 'upper', 'Label', 'Alert', ...
+    tAlertVib = Threshold('alert', 'Name', 'Alert', 'Direction', 'upper', ...
         'Color', [1 0.5 0], 'LineStyle', '--');
+    tAlertVib.addCondition(struct(), 4.0);
+    sVib.addThreshold(tAlertVib);
 
     %% ========== Build Dashboard ==========
     engine = DashboardEngine('Sensor Monitor');

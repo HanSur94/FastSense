@@ -30,21 +30,63 @@ function test_sensor()
     assert(numel(s.StateChannels) == 1, 'testAddStateChannel: count');
     assert(strcmp(s.StateChannels{1}.Key, 'machine_state'), 'testAddStateChannel: key');
 
-    % testAddThresholdRule
+    % testAddThreshold — attach Threshold object
     s = Sensor('pressure');
-    s.addThresholdRule(struct('machine', 1), 50, 'Direction', 'upper', 'Label', 'HH');
-    assert(numel(s.ThresholdRules) == 1, 'testAddThresholdRule: count');
-    assert(s.ThresholdRules{1}.Value == 50, 'testAddThresholdRule: value');
-    assert(strcmp(s.ThresholdRules{1}.Label, 'HH'), 'testAddThresholdRule: label');
+    t = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
+    t.addCondition(struct('machine', 1), 50);
+    s.addThreshold(t);
+    assert(numel(s.Thresholds) == 1, 'testAddThreshold: count');
+    assert(strcmp(s.Thresholds{1}.Key, 'hh'), 'testAddThreshold: key');
+    assert(s.Thresholds{1}.conditions_{1}.Value == 50, 'testAddThreshold: value');
+    assert(strcmp(s.Thresholds{1}.Name, 'HH'), 'testAddThreshold: name');
 
-    % testAddMultipleRules
+    % testAddThresholdMultiple
     s = Sensor('pressure');
-    s.addThresholdRule(struct('m', 1), 50, 'Direction', 'upper');
-    s.addThresholdRule(struct('m', 2), 80, 'Direction', 'upper');
-    s.addThresholdRule(struct('m', 1), 10, 'Direction', 'lower');
-    assert(numel(s.ThresholdRules) == 3, 'testMultipleRules: count');
+    t1 = Threshold('hh', 'Direction', 'upper');
+    t1.addCondition(struct('m', 1), 50);
+    t2 = Threshold('h', 'Direction', 'upper');
+    t2.addCondition(struct('m', 2), 80);
+    t3 = Threshold('ll', 'Direction', 'lower');
+    t3.addCondition(struct('m', 1), 10);
+    s.addThreshold(t1);
+    s.addThreshold(t2);
+    s.addThreshold(t3);
+    assert(numel(s.Thresholds) == 3, 'testMultipleThresholds: count');
 
-    fprintf('    All 5 sensor tests passed.\n');
+    % testAddThresholdDuplicate — warns and does not add
+    s = Sensor('pressure');
+    td = Threshold('dup', 'Direction', 'upper');
+    td.addCondition(struct(), 50);
+    s.addThreshold(td);
+    warning('off', 'Sensor:duplicateThreshold');
+    s.addThreshold(td);
+    warning('on', 'Sensor:duplicateThreshold');
+    assert(numel(s.Thresholds) == 1, 'testDuplicate: count unchanged');
+
+    % testRemoveThreshold
+    s = Sensor('pressure');
+    tr1 = Threshold('hh', 'Direction', 'upper');
+    tr1.addCondition(struct(), 50);
+    tr2 = Threshold('ll', 'Direction', 'lower');
+    tr2.addCondition(struct(), 10);
+    s.addThreshold(tr1);
+    s.addThreshold(tr2);
+    assert(numel(s.Thresholds) == 2, 'testRemove: before');
+    s.removeThreshold('hh');
+    assert(numel(s.Thresholds) == 1, 'testRemove: after');
+    assert(strcmp(s.Thresholds{1}.Key, 'll'), 'testRemove: remaining key');
+
+    % testAddThresholdByKey — registry lookup
+    tk = Threshold('press_hh_octave', 'Direction', 'upper');
+    tk.addCondition(struct(), 75);
+    ThresholdRegistry.register('press_hh_octave', tk);
+    s = Sensor('pressure');
+    s.addThreshold('press_hh_octave');
+    assert(numel(s.Thresholds) == 1, 'testByKey: count');
+    assert(strcmp(s.Thresholds{1}.Key, 'press_hh_octave'), 'testByKey: key');
+    ThresholdRegistry.unregister('press_hh_octave');
+
+    fprintf('    All 8 sensor tests passed.\n');
 end
 
 function add_sensor_path()

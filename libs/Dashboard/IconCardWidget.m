@@ -29,6 +29,7 @@ classdef IconCardWidget < DashboardWidget
         Units          = ''       % Display units string
         Format         = '%.1f'   % sprintf format for numeric value
         SecondaryLabel = ''       % Subtitle text below primary value
+        Threshold      = []       % Threshold object or registry key string (per D-01)
     end
 
     properties (SetAccess = private)
@@ -53,6 +54,20 @@ classdef IconCardWidget < DashboardWidget
             end
             if isequal(obj.Position, [1 1 6 2])
                 obj.Position = [1 1 6 2];
+            end
+            % Resolve Threshold key string to object (per D-07)
+            if ischar(obj.Threshold) || isstring(obj.Threshold)
+                try
+                    obj.Threshold = ThresholdRegistry.get(obj.Threshold);
+                catch
+                    warning('IconCardWidget:thresholdNotFound', ...
+                        'ThresholdRegistry key ''%s'' not found.', obj.Threshold);
+                    obj.Threshold = [];
+                end
+            end
+            % Mutual exclusivity: Threshold wins (per D-08)
+            if ~isempty(obj.Threshold) && ~isempty(obj.Sensor)
+                obj.Sensor = [];
             end
         end
 
@@ -126,8 +141,21 @@ classdef IconCardWidget < DashboardWidget
                 return;
             end
 
-            % Resolve value via three-path binding: Sensor -> ValueFcn -> StaticValue
-            if ~isempty(obj.Sensor)
+            % Resolve value: Threshold mode uses ValueFcn or StaticValue; Sensor path unchanged
+            if ~isempty(obj.Threshold)
+                % Threshold mode: value from ValueFcn or StaticValue (no Sensor)
+                if ~isempty(obj.ValueFcn)
+                    result = obj.ValueFcn();
+                    if isstruct(result)
+                        obj.CurrentValue = result.value;
+                        if isfield(result, 'unit'), obj.Units = result.unit; end
+                    else
+                        obj.CurrentValue = result;
+                    end
+                elseif ~isempty(obj.StaticValue)
+                    obj.CurrentValue = obj.StaticValue;
+                end
+            elseif ~isempty(obj.Sensor)
                 if isempty(obj.Sensor.Y), return; end
                 obj.CurrentValue = obj.Sensor.Y(end);
                 if isempty(obj.Units) && ~isempty(obj.Sensor.Units)
@@ -148,6 +176,8 @@ classdef IconCardWidget < DashboardWidget
             % Resolve state
             if ~isempty(obj.StaticState)
                 obj.CurrentState = obj.StaticState;
+            elseif ~isempty(obj.Threshold)
+                obj.CurrentState = obj.deriveStateFromThreshold();
             elseif ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
                 obj.CurrentState = obj.deriveStateFromSensor();
             else
@@ -205,8 +235,13 @@ classdef IconCardWidget < DashboardWidget
             if ~isempty(obj.StaticState)
                 s.staticState = obj.StaticState;
             end
-            % Source routing (if Sensor already set by base toStruct, skip static/callback)
-            if isempty(obj.Sensor)
+            % Source routing: Threshold > Sensor > ValueFcn > StaticValue
+            if ~isempty(obj.Threshold) && ~isempty(obj.Threshold.Key)
+                s.source = struct('type', 'threshold', 'key', obj.Threshold.Key);
+                if ~isempty(obj.StaticValue)
+                    s.value = obj.StaticValue;
+                end
+            elseif isempty(obj.Sensor)
                 if ~isempty(obj.ValueFcn)
                     s.source = struct('type', 'callback', 'function', func2str(obj.ValueFcn));
                 elseif ~isempty(obj.StaticValue)
@@ -239,8 +274,18 @@ classdef IconCardWidget < DashboardWidget
                         obj.ValueFcn = str2func(s.source.function);
                     case 'static'
                         obj.StaticValue = s.source.value;
+                    case 'threshold'
+                        if exist('ThresholdRegistry', 'class')
+                            try
+                                obj.Threshold = ThresholdRegistry.get(s.source.key);
+                            catch
+                                warning('IconCardWidget:thresholdNotFound', ...
+                                    'Could not resolve threshold key ''%s'' on load.', s.source.key);
+                            end
+                        end
                 end
             end
+            if isfield(s, 'value'), obj.StaticValue = s.value; end
         end
     end
 
@@ -256,6 +301,28 @@ classdef IconCardWidget < DashboardWidget
             end
         end
 
+        function state = deriveStateFromThreshold(obj)
+        %DERIVASTATEFROMTHRESHOLD Derive state string from a Threshold object.
+            state = 'ok';
+            if isempty(obj.Threshold), state = 'inactive'; return; end
+            % CompositeThreshold: delegate to computeStatus, no val needed (per D-04)
+            if isa(obj.Threshold, 'CompositeThreshold')
+                cStatus = obj.Threshold.computeStatus();
+                if strcmp(cStatus, 'ok'), state = 'active'; else, state = 'alarm'; end
+                return;
+            end
+            val = obj.CurrentValue;
+            if isempty(val), state = 'inactive'; return; end
+            tVals = obj.Threshold.allValues();
+            for v = 1:numel(tVals)
+                if (obj.Threshold.IsUpper && val > tVals(v)) || ...
+                        (~obj.Threshold.IsUpper && val < tVals(v))
+                    state = 'alarm';
+                    return;
+                end
+            end
+        end
+
         function state = deriveStateFromSensor(obj)
         %DERIVASTATEFROMSENSOR Derive state string from sensor threshold rules.
             state = 'ok';
@@ -263,16 +330,19 @@ classdef IconCardWidget < DashboardWidget
                 state = 'inactive';
                 return;
             end
-            if isempty(obj.Sensor.ThresholdRules)
+            if isempty(obj.Sensor.Thresholds)
                 return;
             end
             latestY = obj.Sensor.Y(end);
-            for i = 1:numel(obj.Sensor.ThresholdRules)
-                rule = obj.Sensor.ThresholdRules{i};
-                if (rule.IsUpper && latestY > rule.Value) || ...
-                        (~rule.IsUpper && latestY < rule.Value)
-                    state = 'alarm';
-                    return;
+            for i = 1:numel(obj.Sensor.Thresholds)
+                t = obj.Sensor.Thresholds{i};
+                tVals = t.allValues();
+                for v = 1:numel(tVals)
+                    if (t.IsUpper && latestY > tVals(v)) || ...
+                            (~t.IsUpper && latestY < tVals(v))
+                        state = 'alarm';
+                        return;
+                    end
                 end
             end
         end
