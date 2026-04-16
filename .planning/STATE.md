@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1007-01-PLAN.md
-last_updated: "2026-04-16T18:39:18.629Z"
+stopped_at: Completed 1007-02-PLAN.md
+last_updated: "2026-04-16T18:57:58.574Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
   completed_phases: 9
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 31
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1007 (MonitorTag streaming + persistence) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -100,6 +100,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1006-monitortag-lazy-in-memory P02 | 4min | 2 tasks | 3 files |
 | Phase 1006 P03 | 7m | 3 tasks | 5 files |
 | Phase 1007 P01 | 9m 24s | 2 tasks | 3 files |
+| Phase 1007-monitortag-streaming-persistence P02 | 13m 5s | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -195,6 +196,7 @@ Recent decisions affecting current work:
 - [Phase 1007]: Chose cache_ struct for 3 state fields (lastStateFlag_, lastHystState_, ongoingRunStart_) — single source of truth vs duplicate properties-block
 - [Phase 1007]: Prior-state snapshot before mutation in appendData — reads boundary state into local vars BEFORE fireEventsInTail_ to prevent ordering bugs
 - [Phase 1007]: Scenario 2 double-event contract documented — Plan 02 recompute_ closes open-at-end runs; Plan 03 appendData emits continuation event when falling edge arrives in tail
+- [Phase 1007-monitortag-streaming-persistence]: Plan 02 (MONITOR-09): constructor-time Persist+DataStore pairing validation with MonitorTag:persistDataStoreRequired; quad-signature staleness with eps(x)*10 tolerance; persistIfEnabled_ single call site routed from getXY wrapper and appendData tail (not recompute_); defensive ensureMonitorsTable_ helper for pre-Phase-1007 DataStores
 
 ### Roadmap Evolution
 
@@ -228,6 +230,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T18:39:18.624Z
-Stopped at: Completed 1007-01-PLAN.md
+Last session: 2026-04-16T18:57:58.569Z
+Stopped at: Completed 1007-02-PLAN.md
 Resume file: None

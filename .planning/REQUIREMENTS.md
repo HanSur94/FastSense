@@ -47,7 +47,7 @@
 - [x] **MONITOR-06**: MonitorTag `MinDuration` / debounce — events fire only when violation persists at least `MinDuration` seconds (suppresses sub-threshold-duration chatter). ISA-18.2 alarm-suppression standard.
 - [x] **MONITOR-07**: MonitorTag hysteresis / deadband — `MonitorTag` accepts separate alarm-on threshold (or condition) and alarm-off threshold; prevents chattering at boundary. ISA-18.2 standard practice; most simple historians lack this.
 - [x] **MONITOR-08**: MonitorTag streaming — `appendData(newX, newY)` extends the cached output incrementally without full recompute. Wraps existing `IncrementalEventDetector` pattern. Used by `LiveEventPipeline` live-tick path.
-- [ ] **MONITOR-09**: MonitorTag opt-in disk persistence — when `MonitorTag.Persist = true`, derived `(X, Y)` is cached to `FastSenseDataStore` via new `storeMonitor(key, X, Y)`/`loadMonitor(key)` API. Default off; Pitfalls §2 cache-invalidation pain limited to opt-in users.
+- [x] **MONITOR-09**: MonitorTag opt-in disk persistence — when `MonitorTag.Persist = true`, derived `(X, Y)` is cached to `FastSenseDataStore` via new `storeMonitor(key, X, Y)`/`loadMonitor(key)` API. Default off; Pitfalls §2 cache-invalidation pain limited to opt-in users.
 - [x] **MONITOR-10**: MonitorTag rejects per-sample side-effect callbacks. Only event-level callbacks (`OnEventStart`/`OnEventEnd`) supported. Prevents PI-AF-style unpredictable-side-effects pitfall.
 
 ### COMPOSITE — CompositeTag
