@@ -16,6 +16,7 @@ classdef EventTimelineWidget < DashboardWidget
         Events    = []      % struct array of events (legacy)
         EventFcn  = []      % function_handle returning events (legacy)
         FilterSensors = {}   % Cell array of Sensor names to filter
+        FilterTagKey  = ''   % Tag-key filter (MONITOR-05 carrier: SensorName OR ThresholdLabel match)
         ColorSource = 'event' % 'event' or 'theme'
     end
 
@@ -192,6 +193,9 @@ classdef EventTimelineWidget < DashboardWidget
             s = toStruct@DashboardWidget(obj);
             s.filterSensors = obj.FilterSensors;
             s.colorSource = obj.ColorSource;
+            if ~isempty(obj.FilterTagKey)
+                s.filterTagKey = obj.FilterTagKey;
+            end
             if ~isempty(obj.EventStoreObj)
                 s.source = struct('type', 'eventstore', ...
                     'path', obj.EventStoreObj.FilePath);
@@ -216,6 +220,9 @@ classdef EventTimelineWidget < DashboardWidget
             if isfield(s, 'filterSensors')
                 obj.FilterSensors = s.filterSensors;
             end
+            if isfield(s, 'filterTagKey')
+                obj.FilterTagKey = s.filterTagKey;
+            end
             if isfield(s, 'colorSource')
                 obj.ColorSource = s.colorSource;
             end
@@ -234,10 +241,19 @@ classdef EventTimelineWidget < DashboardWidget
     methods (Access = private)
         function evts = resolveEvents(obj)
         %RESOLVEEVENTS Get events from the best available source.
-        %   Priority: EventStoreObj > EventFcn > Events (static/Event objects)
+        %   Priority: EventStoreObj > EventFcn > Events (static/Event objects).
+        %   When FilterTagKey is set AND an EventStore is bound, events are
+        %   pulled via EventStore.getEventsForTag(tagKey) using the
+        %   MONITOR-05 carrier pattern (SensorName OR ThresholdLabel match).
+        %   Phase 1010 (EVENT-01) may migrate to Event.TagKeys.
             evts = [];
             if ~isempty(obj.EventStoreObj)
-                evts = obj.eventStoreToStructs();
+                if ~isempty(obj.FilterTagKey)
+                    raw = obj.EventStoreObj.getEventsForTag(obj.FilterTagKey);
+                    evts = obj.eventObjectsToStructs(raw);
+                else
+                    evts = obj.eventStoreToStructs();
+                end
             elseif ~isempty(obj.EventFcn)
                 evts = obj.EventFcn();
             elseif ~isempty(obj.Events)

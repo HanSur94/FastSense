@@ -79,8 +79,15 @@ classdef MultiStatusWidget < DashboardWidget
                 end
 
                 if isstruct(item)
-                    % Threshold-binding struct item
-                    color = obj.deriveColorFromThreshold(item, okColor, theme);
+                    % Tag-first dispatch (v2.0 Tag API) — falls through to legacy
+                    % threshold path when .tag is absent (Pitfall 5 preserved).
+                    if isfield(item, 'tag') && ~isempty(item.tag)
+                        color = obj.deriveColorFromTag_(item, okColor, theme);
+                    elseif isfield(item, 'threshold')
+                        color = obj.deriveColorFromThreshold(item, okColor, theme);
+                    else
+                        color = okColor;
+                    end
                     if strcmp(obj.IconStyle, 'square')
                         rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
                             'FaceColor', color, 'EdgeColor', 'none');
@@ -193,7 +200,17 @@ classdef MultiStatusWidget < DashboardWidget
             items = cell(1, numel(obj.Sensors));
             for i = 1:numel(obj.Sensors)
                 item = obj.Sensors{i};
-                if isstruct(item)
+                if isstruct(item) && isfield(item, 'tag') && ~isempty(item.tag)
+                    entry = struct('type', 'tag');
+                    if isfield(item, 'label'), entry.label = item.label; end
+                    t = item.tag;
+                    if ischar(t) || isstring(t)
+                        entry.key = char(t);
+                    elseif isa(t, 'Tag')
+                        entry.key = t.Key;
+                    end
+                    items{i} = entry;
+                elseif isstruct(item)
                     entry = struct('type', 'threshold');
                     if isfield(item, 'label'), entry.label = item.label; end
                     if isfield(item, 'threshold') && ~isempty(item.threshold)
@@ -216,12 +233,42 @@ classdef MultiStatusWidget < DashboardWidget
 
     methods (Access = private)
         function expandedItems = expandSensors_(obj)
-        %EXPANDSENSORS_ Expand CompositeThreshold items into child + summary entries.
+        %EXPANDSENSORS_ Expand CompositeThreshold/CompositeTag items into children + summary.
         %   Non-composite items pass through unchanged.
+        %
+        %   Documented Pitfall 1 exception: `isa(item.tag, 'CompositeTag')`
+        %   below is a SHAPE-recursion check parallel to the existing
+        %   CompositeThreshold branch — it asks "is this an aggregator that
+        %   needs child expansion?", not "dispatch based on kind". Value
+        %   dispatch always goes through polymorphic valueAt/getXY.
             expandedItems = {};
             for i = 1:numel(obj.Sensors)
                 item = obj.Sensors{i};
-                if isstruct(item) && isfield(item, 'threshold') && ...
+                if isstruct(item) && isfield(item, 'tag') && ~isempty(item.tag) && ...
+                        isa(item.tag, 'CompositeTag')
+                    ct = item.tag;
+                    for c = 1:ct.getChildCount()
+                        childTag = ct.getChildAt(c);
+                        childItem = struct('tag', childTag);
+                        if ~isempty(childTag.Name)
+                            childItem.label = childTag.Name;
+                        else
+                            childItem.label = childTag.Key;
+                        end
+                        expandedItems{end+1} = childItem; %#ok<AGROW>
+                    end
+                    summaryLabel = '';
+                    if isfield(item, 'label') && ~isempty(item.label)
+                        summaryLabel = item.label;
+                    elseif ~isempty(ct.Name)
+                        summaryLabel = ct.Name;
+                    else
+                        summaryLabel = ct.Key;
+                    end
+                    expandedItems{end+1} = struct('tag', ct, ...
+                        'label', summaryLabel, ...
+                        'isCompositeSummary', true); %#ok<AGROW>
+                elseif isstruct(item) && isfield(item, 'threshold') && ...
                         isa(item.threshold, 'CompositeThreshold')
                     ct = item.threshold;
                     children = ct.getChildren();
@@ -253,6 +300,32 @@ classdef MultiStatusWidget < DashboardWidget
                 else
                     expandedItems{end+1} = item; %#ok<AGROW>
                 end
+            end
+        end
+
+        function color = deriveColorFromTag_(~, item, defaultColor, theme)
+        %DERIVECOLORFROMTAG_ Derive color from a Tag-bound item (v2.0 Tag API).
+        %   item.tag may be a Tag handle OR a string key resolved via
+        %   TagRegistry. CompositeTag goes through valueAt(now) fast path
+        %   (COMPOSITE-06); monitor-kind output maps 0->default, 1->alarm.
+        %   Dispatch is polymorphic — no isa-on-subclass-name switches
+        %   (Pitfall 1 invariant).
+            color = defaultColor;
+            t = item.tag;
+            if ischar(t) || isstring(t)
+                try t = TagRegistry.get(char(t)); catch, return; end
+            end
+            if ~isa(t, 'Tag'), return; end
+            try
+                v = t.valueAt(now);
+            catch
+                return;
+            end
+            if isempty(v) || any(isnan(v)), return; end
+            if v >= 0.5
+                color = theme.StatusAlarmColor;
+            else
+                color = defaultColor;
             end
         end
 
@@ -354,6 +427,18 @@ classdef MultiStatusWidget < DashboardWidget
                     it = rawItems{i};
                     if isstruct(it) && isfield(it, 'type')
                         switch it.type
+                            case 'tag'
+                                entry = struct('label', '');
+                                if isfield(it, 'label'), entry.label = it.label; end
+                                if isfield(it, 'key') && exist('TagRegistry', 'class')
+                                    try
+                                        entry.tag = TagRegistry.get(it.key);
+                                    catch
+                                        warning('MultiStatusWidget:tagNotFound', ...
+                                            'Could not resolve Tag key ''%s'' on load.', it.key);
+                                    end
+                                end
+                                entries{i} = entry;
                             case 'threshold'
                                 entry = struct('label', '');
                                 if isfield(it, 'label'), entry.label = it.label; end

@@ -65,6 +65,18 @@ classdef IconCardWidget < DashboardWidget
                     obj.Threshold = [];
                 end
             end
+            % Tag validation + precedence Tag > Threshold > Sensor (v2.0 Tag API).
+            % Tag wins via a constructor mutex parallel to the Threshold > Sensor
+            % mutex below. Dispatch remains polymorphic — no isa on subclass
+            % kinds (Pitfall 1).
+            if ~isempty(obj.Tag) && ~isa(obj.Tag, 'Tag')
+                error('IconCardWidget:invalidTag', ...
+                    'Tag must be a Tag subclass; got %s.', class(obj.Tag));
+            end
+            if ~isempty(obj.Tag)
+                obj.Threshold = [];
+                obj.Sensor    = [];
+            end
             % Mutual exclusivity: Threshold wins (per D-08)
             if ~isempty(obj.Threshold) && ~isempty(obj.Sensor)
                 obj.Sensor = [];
@@ -141,8 +153,22 @@ classdef IconCardWidget < DashboardWidget
                 return;
             end
 
-            % Resolve value: Threshold mode uses ValueFcn or StaticValue; Sensor path unchanged
-            if ~isempty(obj.Threshold)
+            % Resolve value with Tag > Threshold > Sensor > ValueFcn > StaticValue
+            % precedence. Tag branch uses polymorphic valueAt(now) on any Tag
+            % subclass (Pitfall 1); legacy branches below preserved byte-for-byte.
+            if ~isempty(obj.Tag)
+                try
+                    v = obj.Tag.valueAt(now);
+                    if ~isempty(v) && ~any(isnan(v))
+                        obj.CurrentValue = v;
+                    end
+                    if isempty(obj.Units) && isprop(obj.Tag, 'Units') && ~isempty(obj.Tag.Units)
+                        obj.Units = obj.Tag.Units;
+                    end
+                catch
+                    % fall through — state branch handles inactive below
+                end
+            elseif ~isempty(obj.Threshold)
                 % Threshold mode: value from ValueFcn or StaticValue (no Sensor)
                 if ~isempty(obj.ValueFcn)
                     result = obj.ValueFcn();
@@ -173,9 +199,11 @@ classdef IconCardWidget < DashboardWidget
                 obj.CurrentValue = obj.StaticValue;
             end
 
-            % Resolve state
+            % Resolve state with Tag > StaticState > Threshold > Sensor precedence.
             if ~isempty(obj.StaticState)
                 obj.CurrentState = obj.StaticState;
+            elseif ~isempty(obj.Tag)
+                obj.CurrentState = obj.deriveStateFromTag_();
             elseif ~isempty(obj.Threshold)
                 obj.CurrentState = obj.deriveStateFromThreshold();
             elseif ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
@@ -235,8 +263,12 @@ classdef IconCardWidget < DashboardWidget
             if ~isempty(obj.StaticState)
                 s.staticState = obj.StaticState;
             end
-            % Source routing: Threshold > Sensor > ValueFcn > StaticValue
-            if ~isempty(obj.Threshold) && ~isempty(obj.Threshold.Key)
+            % Source routing: Tag > Threshold > Sensor > ValueFcn > StaticValue.
+            % Tag branch is already written by toStruct@DashboardWidget (base class,
+            % Plan 1009-02) — do not overwrite it below. Legacy branches unchanged.
+            if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
+                % s.source already set by base-class toStruct; pass through.
+            elseif ~isempty(obj.Threshold) && ~isempty(obj.Threshold.Key)
                 s.source = struct('type', 'threshold', 'key', obj.Threshold.Key);
                 if ~isempty(obj.StaticValue)
                     s.value = obj.StaticValue;
@@ -266,6 +298,15 @@ classdef IconCardWidget < DashboardWidget
             if isfield(s, 'staticState'), obj.StaticState = s.staticState; end
             if isfield(s, 'source')
                 switch s.source.type
+                    case 'tag'
+                        if exist('TagRegistry', 'class')
+                            try
+                                obj.Tag = TagRegistry.get(s.source.key);
+                            catch
+                                warning('IconCardWidget:tagNotFound', ...
+                                    'Could not resolve Tag key ''%s'' on load.', s.source.key);
+                            end
+                        end
                     case 'sensor'
                         if exist('SensorRegistry', 'class')
                             obj.Sensor = SensorRegistry.get(s.source.name);
@@ -298,6 +339,26 @@ classdef IconCardWidget < DashboardWidget
                 case 'alarm',    color = theme.StatusAlarmColor;
                 case 'info',     color = theme.InfoColor;
                 otherwise,       color = [0.5 0.5 0.5];
+            end
+        end
+
+        function state = deriveStateFromTag_(obj)
+        %DERIVESTATEFROMTAG_ Derive state string from Tag valueAt(now).
+        %   Returns 'alarm' when v >= 0.5, 'ok' when v < 0.5, 'inactive'
+        %   otherwise. Polymorphic on any Tag subclass — no isa switches
+        %   (Pitfall 1 invariant).
+            state = 'inactive';
+            if isempty(obj.Tag), return; end
+            try
+                v = obj.Tag.valueAt(now);
+            catch
+                return;
+            end
+            if isempty(v) || any(isnan(v)), return; end
+            if v >= 0.5
+                state = 'alarm';
+            else
+                state = 'ok';
             end
         end
 
