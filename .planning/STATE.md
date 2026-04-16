@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 1006 context gathered (G=pin R2020b, A=investigate-first, F=library exportgraphics, scope=single phase)
-last_updated: "2026-04-16T13:18:06.507Z"
-last_activity: 2026-04-16 - Added Phase 1006 (Fix 137 MATLAB test failures surfaced by CI enablement; 7 categories with R2025b drift root cause)
+status: executing
+stopped_at: Completed 1006-01-PLAN.md (pin MATLAB CI to R2020b)
+last_updated: "2026-04-16T13:44:45.373Z"
+last_activity: 2026-04-16
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 23
-  completed_plans: 23
+  total_plans: 27
+  completed_plans: 24
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1004 — Dashboard Image Export Button
+**Current focus:** Phase 1006 — fix-137-matlab-test-failures
 
 ## Current Position
 
-Phase: 1004
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-16 - Added Phase 1006 (Fix 137 MATLAB test failures surfaced by CI enablement; 7 categories with R2025b drift root cause)
+Phase: 1006 (fix-137-matlab-test-failures) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-16
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -96,6 +96,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1004 P01 | 5min | 2 tasks | 2 files |
 | Phase 1004 P02 | 8min | 2 tasks | 1 files |
 | Phase 1004 P03 | 2min | 2 tasks | 2 files |
+| Phase 1006 P01 | 5 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,8 @@ Recent decisions affecting current work:
 - [Phase 1004]: Image button inserted between Export and Save in right-to-left DashboardToolbar layout; dispatchImageExport extracted for testable cancel no-op; datestr format 'yyyymmdd_HHMMSS' confirmed over ISO notation
 - [Phase 1004]: testCancelNoOp uses dispatchImageExport(0,'',1) directly to bypass uiputfile without mocking
 - [Phase 1004]: Octave suite skips IMG-01 (button verification): Octave print() excludes uicontrols by default per RISK-1
+- [Phase 1006]: D-01 implemented: pinned all setup-matlab@v3 call-sites to release: R2020b in tests.yml (x2) and examples.yml (x1)
+- [Phase 1006]: MEX cache key scoped to r2020b (mex-matlab-linux-r2020b-) to prevent ABI-stale binary reuse on future pin bumps
 
 ### Roadmap Evolution
 
@@ -216,10 +219,10 @@ None yet.
 ## Session Continuity
 
 <<<<<<< HEAD
-Last session: 2026-04-16T13:18:06.500Z
-Stopped at: Phase 1006 context gathered (G=pin R2020b, A=investigate-first, F=library exportgraphics, scope=single phase)
+Last session: 2026-04-16T13:44:45.368Z
+Stopped at: Completed 1006-01-PLAN.md (pin MATLAB CI to R2020b)
 =======
 Last session: 2026-04-05T16:49:34.597Z
 Stopped at: Completed 1000-03-PLAN.md (lazy page realization + batched switchPage)
 >>>>>>> worktree-agent-a9506b74
-Resume file: .planning/phases/1006-fix-137-matlab-test-failures-surfaced-by-matlab-on-every-push-ci-enablement-7-categories-from-r2025b-drift/1006-CONTEXT.md
+Resume file: None

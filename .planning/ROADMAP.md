@@ -150,10 +150,10 @@ Plans:
 **Goal:** Fix the 137 MATLAB test failures surfaced when quick task 260416-j6e enabled MATLAB tests on every push/PR and removed `continue-on-error: true`. Pre-existing failures, now honest CI signal. Root-cause categorization in [.planning/debug/matlab-tests-failures-investigation.md](.planning/debug/matlab-tests-failures-investigation.md): 6 test-level categories + 1 infrastructure decision. Fixing A + B + F alone recovers ~95 tests (62%); A+B+C+D+E = ~92%.
 **Requirements**: [MATLABFIX-A: mksqlite.mexa64 availability (~50 tests), MATLABFIX-B: testCase.TestData → properties migration (~41 tests), MATLABFIX-C: test-friend private access for 4 methods (~12 tests), MATLABFIX-D: R2025b API changes — table/OnOffSwitchState/jsondecode/fread (~18 tests), MATLABFIX-E: stale test expectations — KpiWidget/kpi-type rename/warning IDs/etc. (~21 tests), MATLABFIX-F: headless image export CI (4 tests), MATLABFIX-G: MATLAB version pinning policy (infrastructure decision — may reshape B/C/D)]
 **Depends on:** Phase 1004 (complete) + quick tasks 260416-j6e / jfo / jnp / k23 (all complete — provide the CI foundation that surfaced these failures) + debug session `octave-cleanup-crash-investigation.md` (unrelated, already resolved) + debug session `matlab-tests-failures-investigation.md` (source of this phase's scope). **NOT** dependent on Phase 1005 (parallel work).
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
-- [ ] 1006-01-PLAN.md — Pin MATLAB CI to R2020b in tests.yml + examples.yml (MATLABFIX-G; wave 1; reshapes scope of A/E/F)
+- [x] 1006-01-PLAN.md — Pin MATLAB CI to R2020b in tests.yml + examples.yml (MATLABFIX-G; wave 1; reshapes scope of A/E/F)
 - [ ] 1006-02-PLAN.md — mksqlite diagnostic-first + fix branch (A/B/C) for TestMksqliteEdgeCases + TestMksqliteTypes (MATLABFIX-A; wave 2)
 - [ ] 1006-03-PLAN.md — Stale test expectations E1-E9 cluster + E10 grid-snap diagnostic+fix (MATLABFIX-E; wave 2)
 - [ ] 1006-04-PLAN.md — DashboardEngine.exportImage → exportgraphics() for headless MATLAB CI (MATLABFIX-F; wave 2)
