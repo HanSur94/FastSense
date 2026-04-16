@@ -12,7 +12,7 @@ jobs:
   test:
     name: Gate Tests
     runs-on: ubuntu-latest
-    container: gnuoctave/octave:8.4.0
+    container: gnuoctave/octave:11.1.0
     steps:
       - uses: actions/checkout@v6
 

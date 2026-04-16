@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 45
     needs: build-mex
     runs-on: ubuntu-latest
-    container: gnuoctave/octave:8.4.0
+    container: gnuoctave/octave:11.1.0
     env:
       FASTSENSE_SKIP_BUILD: "1"
     steps:
