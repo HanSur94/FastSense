@@ -56,8 +56,8 @@
 - [x] **COMPOSITE-02**: Built-in aggregation modes: `'and'`, `'or'`, `'majority'`, `'count'`, `'worst'` (max), `'severity'` (weighted average), `'user_fn'` (function handle escape hatch).
 - [x] **COMPOSITE-03**: Children added via `addChild(tagOrKey, opts)` accepting either a Tag handle or a string key (resolved via TagRegistry). Optional `'Weight'` per-child for SEVERITY mode.
 - [x] **COMPOSITE-04**: Cycle detection on `addChild` — rejects self-reference (existing `CompositeThreshold` behavior) AND deeper cycles via DFS (A → B → A) with `CompositeTag:cycleDetected` error.
-- [ ] **COMPOSITE-05**: `CompositeTag.getXY()` produces aggregated time series via union-of-timestamps grid + `valueAt` per child per grid point. **Implementation: merge-sort over child sample streams** — NOT N×M dense `union(X_i)` materialization (Pitfalls §3 memory-blowup avoidance).
-- [ ] **COMPOSITE-06**: `CompositeTag.valueAt(t)` returns aggregated value at a single instant via `valueAt(t)` on each child + apply aggregator. Fast path for current-state widgets (StatusWidget, GaugeWidget) without full-series materialization.
+- [x] **COMPOSITE-05**: `CompositeTag.getXY()` produces aggregated time series via union-of-timestamps grid + `valueAt` per child per grid point. **Implementation: merge-sort over child sample streams** — NOT N×M dense `union(X_i)` materialization (Pitfalls §3 memory-blowup avoidance).
+- [x] **COMPOSITE-06**: `CompositeTag.valueAt(t)` returns aggregated value at a single instant via `valueAt(t)` on each child + apply aggregator. Fast path for current-state widgets (StatusWidget, GaugeWidget) without full-series materialization.
 - [x] **COMPOSITE-07**: CompositeTag children must be `MonitorTag` or `CompositeTag` (rejected at `addChild` if `SensorTag` or `StateTag` — those have no inherent ok/alarm semantics).
 
 ### META — Tag Metadata + Search

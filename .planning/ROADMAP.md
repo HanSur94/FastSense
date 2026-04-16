@@ -174,7 +174,7 @@ Plans:
 
 Plans:
 - [x] 1008-01-PLAN.md — CompositeTag class core + addChild with cycle detection + truth-table aggregator + basic unit tests (COMPOSITE-01..04, 07)
-- [ ] 1008-02-PLAN.md — Merge-sort getXY + ALIGN tests (NaN truth tables + pre-history drop) + 3-deep round-trip (COMPOSITE-05, 06, ALIGN-01..04)
+- [x] 1008-02-PLAN.md — Merge-sort getXY + ALIGN tests (NaN truth tables + pre-history drop) + 3-deep round-trip (COMPOSITE-05, 06, ALIGN-01..04)
 - [ ] 1008-03-PLAN.md — FastSense/TagRegistry integration + Pitfall 3 bench + phase audit (COMPOSITE-01, 05)
 
 ### Phase 1009: Consumer migration (one widget at a time)
@@ -240,7 +240,7 @@ Plans:
 | 1005. SensorTag + StateTag | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1006. MonitorTag (lazy, in-memory) | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1007. MonitorTag streaming + persistence | v2.0 | 3/3 | Complete    | 2026-04-16 |
-| 1008. CompositeTag | v2.0 | 1/3 | In Progress|  |
+| 1008. CompositeTag | v2.0 | 2/3 | In Progress|  |
 | 1009. Consumer migration | v2.0 | 0/? | Not started | — |
 | 1010. Event ↔ Tag binding + overlay | v2.0 | 0/? | Not started | — |
 | 1011. Cleanup + delete legacy | v2.0 | 0/? | Not started | — |
@@ -251,7 +251,7 @@ Plans:
 
 **Goal:** Add Home Assistant-style Mushroom Card widgets to the dashboard engine — minimal, icon-driven cards with clean visual design for sensor status, controls, and quick glance data. Three new widget classes: IconCardWidget, ChipBarWidget, SparklineCardWidget, plus theme additions and full serializer/builder/detach integration.
 **Requirements:** [MUSH-01: DashboardTheme InfoColor, MUSH-02: IconCardWidget, MUSH-03: ChipBarWidget, MUSH-04: SparklineCardWidget, MUSH-05: DashboardEngine type registration, MUSH-06: DashboardSerializer integration, MUSH-07: DetachedMirror + DashboardBuilder integration]
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1008-01-PLAN.md (CompositeTag class core)
-last_updated: "2026-04-16T19:53:04.836Z"
+stopped_at: Completed 1008-02-PLAN.md
+last_updated: "2026-04-16T20:06:29.215Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
   completed_phases: 10
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1008 (CompositeTag) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -103,6 +103,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1007-monitortag-streaming-persistence P02 | 13m 5s | 2 tasks | 9 files |
 | Phase 1007-monitortag-streaming-persistence P03 | 6m 1s | 2 tasks | 2 files |
 | Phase 1008-compositetag P01 | 5min | 2 tasks | 3 files |
+| Phase 1008 P02 | 9min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,8 @@ Recent decisions affecting current work:
 - [Phase 1007-monitortag-streaming-persistence]: Success Criterion #4 (LiveEventPipeline uses appendData) DEFERRED to Phase 1009 per RESEARCH §4 — Phase 1007 ships appendData as proven READY API (7-scenario tests + Pitfall 9 bench 10.9-12.6x); LEP rewire belongs to Phase 1009 consumer migration
 - [Phase 1008-compositetag]: CompositeTag cycle DFS uses strcmp(Key) — never isequal/== on handles (Octave SIGILL avoidance per RESEARCH §7)
 - [Phase 1008-compositetag]: Test-probe API: public read-only getters (getChildCount/Keys/Weights/isDirty) + static aggregateForTesting wrapper, no direct children_ exposure
+- [Phase 1008]: Plan 02: Vectorized sort-based k-way merge chosen over pointer-loop (RESEARCH §5 ~150ms gate vs ~640ms fail at 8x100k); same-timestamp coalesce via sortedX(k+1)==sortedX(k) lookahead.
+- [Phase 1008]: Plan 02: Test-only local two-pass loader (helperLoadStructsLocal_) enables 3-deep round-trip testing without Plan 03 TagRegistry.instantiateByKind 'composite' case dependency; Plan 03 VALIDATION re-runs via real loader.
 
 ### Roadmap Evolution
 
@@ -235,6 +238,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T19:53:04.830Z
-Stopped at: Completed 1008-01-PLAN.md (CompositeTag class core)
+Last session: 2026-04-16T20:06:20.757Z
+Stopped at: Completed 1008-02-PLAN.md
 Resume file: None
