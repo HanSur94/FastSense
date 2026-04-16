@@ -17,6 +17,13 @@ classdef TestMksqliteTypes < matlab.unittest.TestCase
         end
     end
 
+    methods (TestMethodSetup)
+        function skipIfNoMksqlite(testCase)
+            testCase.assumeTrue(exist('mksqlite', 'file') == 3, ...
+                'mksqlite MEX not available; skipping under CI');
+        end
+    end
+
     methods (Test)
         %% Part 1: mksqlite typed BLOB round-trips
 
