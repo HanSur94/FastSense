@@ -1,0 +1,43 @@
+name: Reusable — Build Octave MEX (Linux)
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Name for the uploaded MEX artifact (must be unique per caller workflow)
+        type: string
+        required: false
+        default: mex-linux
+
+jobs:
+  build-mex:
+    name: Build MEX (Linux)
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    container: gnuoctave/octave:8.4.0
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Cache MEX binaries
+        id: cache-mex
+        uses: actions/cache@v5
+        with:
+          path: |
+            libs/FastSense/private/*.mex
+            libs/SensorThreshold/private/*.mex
+            libs/FastSense/mksqlite.mex
+          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
+
+      - name: Compile MEX files
+        if: steps.cache-mex.outputs.cache-hit != 'true'
+        run: octave --eval "install();"
+
+      - name: Upload MEX artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: |
+            libs/FastSense/private/*.mex
+            libs/SensorThreshold/private/*.mex
+            libs/FastSense/mksqlite.mex
+          retention-days: 1
