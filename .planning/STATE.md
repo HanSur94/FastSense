@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 Phase: 1004
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-04-16 - Completed quick task 260416-hau: Fix Octave 11 abstract methods incompat in DashboardWidget.m (+ 2 related Octave gaps)
+Last activity: 2026-04-16 - Completed quick task 260416-j6e: Enable MATLAB CI on every push/PR (setup-matlab@v3 + cache, build-mex-matlab job, Octave kept)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -206,6 +206,7 @@ None yet.
 | 260405-ovf | Update README based on research of 12 highly-starred open-source projects | 2026-04-05 | 144fbb2 | [260405-ovf-update-project-readme-based-on-research-](./quick/260405-ovf-update-project-readme-based-on-research-/) |
 | 260405-plc | Change DashboardToolbar Edit button to open source file in MATLAB editor | 2026-04-05 | 5188b04 | [260405-plc-change-the-edit-button-of-dashboardengin](./quick/260405-plc-change-the-edit-button-of-dashboardengin/) |
 | 260416-hau | Fix Octave 11 abstract methods incompat in DashboardWidget.m (+ 2 related Octave gaps) | 2026-04-16 | dbd109e | [260416-hau-fix-octave-11-abstract-methods-incompat-](./quick/260416-hau-fix-octave-11-abstract-methods-incompat-/) |
+| 260416-j6e | Enable MATLAB CI on every push/PR: upgrade setup-matlab v2->v3 with cache, add build-mex-matlab job, remove schedule gate, keep Octave | 2026-04-16 | 97c1576 | [260416-j6e-enable-matlab-ci-on-every-push-pr-upgrad](./quick/260416-j6e-enable-matlab-ci-on-every-push-pr-upgrad/) |
 
 ## Session Continuity
 
