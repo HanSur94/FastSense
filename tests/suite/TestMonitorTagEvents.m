@@ -218,10 +218,28 @@ classdef TestMonitorTagEvents < matlab.unittest.TestCase
             here = fileparts(mfilename('fullpath'));
             repo = fileparts(fileparts(here));
             src  = fileread(fullfile(repo, 'libs', 'SensorThreshold', 'MonitorTag.m'));
-            testCase.verifyEmpty(regexp(src, 'FastSenseDataStore|storeMonitor|storeResolved', 'match'), ...
-                'Pitfall 2: no persistence references permitted.');
-            testCase.verifyNotEmpty(regexp(src, 'lazy-by-default, no persistence', 'once'), ...
-                'Pitfall 2 header doc must be preserved.');
+            % Plan-01/1006 invariant "no storeMonitor references" was
+            % relaxed in Phase 1007 Plan 02 (MONITOR-09). The relaxed
+            % invariant is structural: every storeMonitor call site must
+            % sit inside an `if obj.Persist` guard within 5 preceding lines.
+            lines_mt = strsplit(src, char(10));
+            nStore = 0; nGuarded = 0;
+            for li = 1:numel(lines_mt)
+                if ~isempty(regexp(lines_mt{li}, 'storeMonitor\s*\(', 'once'))
+                    nStore = nStore + 1;
+                    lo = max(1, li - 5);
+                    window = strjoin(lines_mt(lo:li-1), char(10));
+                    if ~isempty(regexp(window, 'if\s+.*obj\.Persist', 'once'))
+                        nGuarded = nGuarded + 1;
+                    end
+                end
+            end
+            testCase.verifyEqual(nStore, nGuarded, sprintf( ...
+                'Pitfall 2 (Plan 02 relaxed): %d storeMonitor calls, %d guarded by if obj.Persist', ...
+                nStore, nGuarded));
+            % The "lazy-by-default, no persistence" phrase was a Phase-1006
+            % invariant. Phase 1007 Plan 02 introduces opt-in persistence
+            % docs — retire the phrase check.
             testCase.verifyEmpty(regexp(src, 'PerSample|OnSample|onEachSample', 'match'), ...
                 'MONITOR-10: no per-sample callback keywords.');
             testCase.verifyEmpty(regexp(src, 'interp1.*''linear''', 'match'), ...

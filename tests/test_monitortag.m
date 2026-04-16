@@ -200,10 +200,28 @@ function test_monitortag()
 
     % --- Grep gates on MonitorTag.m source ---
     src = fileread(monitortag_source_path_());
-    assert(isempty(regexp(src, 'FastSenseDataStore|storeMonitor|storeResolved', 'match')), ...
-        'Pitfall 2: MonitorTag.m contains forbidden persistence reference');
-    assert(~isempty(regexp(src, 'lazy-by-default, no persistence', 'once')), ...
-        'Pitfall 2: MonitorTag.m class header missing "lazy-by-default, no persistence"');
+    % Plan-01/1006 invariant "no storeMonitor references" was relaxed in
+    % Phase 1007 Plan 02 (MONITOR-09). The relaxed invariant is structural:
+    % every storeMonitor call site in MonitorTag.m must sit inside an
+    % `if obj.Persist` guard within 5 preceding lines.
+    lines_mt = strsplit(src, char(10));
+    nStore = 0; nGuarded = 0;
+    for li = 1:numel(lines_mt)
+        if ~isempty(regexp(lines_mt{li}, 'storeMonitor\s*\(', 'once'))
+            nStore = nStore + 1;
+            lo = max(1, li - 5);
+            window = strjoin(lines_mt(lo:li-1), char(10));
+            if ~isempty(regexp(window, 'if\s+.*obj\.Persist', 'once'))
+                nGuarded = nGuarded + 1;
+            end
+        end
+    end
+    assert(nStore == nGuarded, sprintf( ...
+        'Pitfall 2 (Plan 02 relaxed): %d storeMonitor calls, %d guarded', ...
+        nStore, nGuarded));
+    % The "lazy-by-default, no persistence" header phrase was a Phase-1006
+    % invariant. Phase 1007 Plan 02 introduces explicit opt-in persistence
+    % documentation — retire the phrase check.
     assert(isempty(regexp(src, 'PerSample|OnSample|onEachSample', 'match')), ...
         'MONITOR-10: MonitorTag.m contains a per-sample callback keyword');
     assert(isempty(regexp(src, 'interp1.*''linear''', 'match')), ...

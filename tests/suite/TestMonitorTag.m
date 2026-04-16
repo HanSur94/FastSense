@@ -289,21 +289,42 @@ classdef TestMonitorTag < matlab.unittest.TestCase
 
         % ---- Grep gates ----
 
-        function testPitfall2NoFastSenseDataStore(testCase)
+        function testPitfall2StoreMonitorIsGuarded(testCase)
+            % Plan-01/1006 invariant "no storeMonitor references" was
+            % relaxed in Phase 1007 Plan 02 (MONITOR-09). The relaxed
+            % invariant is structural: every storeMonitor call site in
+            % MonitorTag.m must sit inside an `if obj.Persist` guard
+            % within 5 preceding lines.
             here = fileparts(mfilename('fullpath'));
             repo = fileparts(fileparts(here));
             src  = fileread(fullfile(repo, 'libs', 'SensorThreshold', 'MonitorTag.m'));
-            matches = regexp(src, 'FastSenseDataStore|storeMonitor|storeResolved', 'match');
-            testCase.verifyEmpty(matches, ...
-                'Pitfall 2: MonitorTag.m must not reference FastSenseDataStore/storeMonitor/storeResolved.');
+            lines = strsplit(src, char(10));
+            nStore = 0; nGuarded = 0;
+            for li = 1:numel(lines)
+                if ~isempty(regexp(lines{li}, 'storeMonitor\s*\(', 'once'))
+                    nStore = nStore + 1;
+                    lo = max(1, li - 5);
+                    window = strjoin(lines(lo:li-1), char(10));
+                    if ~isempty(regexp(window, 'if\s+.*obj\.Persist', 'once'))
+                        nGuarded = nGuarded + 1;
+                    end
+                end
+            end
+            testCase.verifyEqual(nStore, nGuarded, sprintf( ...
+                'Pitfall 2 (Plan 02 relaxed): %d storeMonitor calls, %d guarded by if obj.Persist', ...
+                nStore, nGuarded));
         end
 
-        function testPitfall2ClassHeaderDocumentsLazy(testCase)
+        function testPitfall2ClassHeaderDocumentsPersistOptIn(testCase)
+            % Phase 1006 header required "lazy-by-default, no persistence".
+            % Phase 1007 Plan 02 replaced it with opt-in persistence docs.
+            % Relaxed invariant: the header must document the Persist
+            % property as opt-in / default-off.
             here = fileparts(mfilename('fullpath'));
             repo = fileparts(fileparts(here));
             src  = fileread(fullfile(repo, 'libs', 'SensorThreshold', 'MonitorTag.m'));
-            testCase.verifyNotEmpty(regexp(src, 'lazy-by-default, no persistence', 'once'), ...
-                'Pitfall 2: MonitorTag.m class header must contain "lazy-by-default, no persistence".');
+            testCase.verifyNotEmpty(regexp(src, 'Persist\s*=\s*false|opt-in', 'once'), ...
+                'Phase 1007 header must document opt-in Persist default.');
         end
 
         function testMONITOR10NoPerSampleCallbacks(testCase)

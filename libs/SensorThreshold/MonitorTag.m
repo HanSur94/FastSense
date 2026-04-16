@@ -39,6 +39,17 @@ classdef MonitorTag < Tag
     %     EventStore           — EventStore handle; [] disables event emission
     %     OnEventStart         — function_handle @(event); [] disables
     %     OnEventEnd           — function_handle @(event); [] disables
+    %     Persist              — logical; when true, derived (X, Y) is
+    %                            cached to DataStore via storeMonitor on
+    %                            every recompute_()/appendData() and loaded
+    %                            on first getXY() (staleness-checked via
+    %                            quad-signature). Default false — the opt-in
+    %                            default enforces Pitfall 2 cache-invalidation
+    %                            discipline: consumers that do not opt in
+    %                            pay zero disk cost.
+    %     DataStore            — FastSenseDataStore handle; required when
+    %                            Persist=true. Provides storeMonitor /
+    %                            loadMonitor / clearMonitor back-end.
     %
     %   Methods (Tag contract):
     %     getXY                — lazy-memoized 0/1 vector on parent's grid
@@ -59,12 +70,19 @@ classdef MonitorTag < Tag
     %                             the cache is dirty/empty (cold start).
     %
     %   Error IDs:
-    %     MonitorTag:invalidParent     — parentTag not a Tag
-    %     MonitorTag:invalidCondition  — conditionFn not a function_handle
-    %     MonitorTag:unknownOption     — unknown NV key or dangling key
-    %     MonitorTag:dataMismatch      — fromStruct missing required fields
-    %     MonitorTag:unresolvedParent  — Pass-2 parent key not in registry
-    %     MonitorTag:invalidData       — appendData numeric/length mismatch
+    %     MonitorTag:invalidParent            — parentTag not a Tag
+    %     MonitorTag:invalidCondition         — conditionFn not a function_handle
+    %     MonitorTag:unknownOption            — unknown NV key or dangling key
+    %     MonitorTag:dataMismatch             — fromStruct missing required fields
+    %     MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
+    %     MonitorTag:invalidData              — appendData numeric/length mismatch
+    %     MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
+    %
+    %   Persistence (Phase 1007 MONITOR-09):
+    %     Opt-in via Persist=true + DataStore. Staleness detection uses a
+    %     quad-signature (parent_key, num_points, parent_xmin, parent_xmax)
+    %     stamped at write. Default-off preserves Pitfall 2 cache-invalidation
+    %     safety — consumers that do not opt in pay zero disk cost.
     %
     %   Example:
     %     st = SensorTag('press_a', 'X', 1:100, 'Y', sin((1:100)/10)*30 + 40);
@@ -83,6 +101,8 @@ classdef MonitorTag < Tag
         EventStore          = [] % EventStore handle; [] disables event emission
         OnEventStart        = [] % function_handle @(event); [] disables callback
         OnEventEnd          = [] % function_handle @(event); [] disables callback
+        Persist             = false  % MONITOR-09 opt-in (Pitfall 2 default-off)
+        DataStore           = []     % FastSenseDataStore handle; required when Persist=true
     end
 
     properties (Access = private)
@@ -152,10 +172,23 @@ classdef MonitorTag < Tag
                         obj.OnEventStart = monArgs{i+1};
                     case 'OnEventEnd'
                         obj.OnEventEnd = monArgs{i+1};
+                    case 'Persist'
+                        obj.Persist = logical(monArgs{i+1});
+                    case 'DataStore'
+                        obj.DataStore = monArgs{i+1};
                     otherwise
                         error('MonitorTag:unknownOption', ...
                             'Unknown option ''%s''.', monArgs{i});
                 end
+            end
+
+            % MONITOR-09 Persist-pairing validation: Persist=true requires
+            % a DataStore handle, otherwise storeMonitor/loadMonitor have
+            % nowhere to go. Fail fast at construction rather than at first
+            % getXY for a clearer error path.
+            if obj.Persist && isempty(obj.DataStore)
+                error('MonitorTag:persistDataStoreRequired', ...
+                    'Persist=true requires a DataStore handle.');
             end
 
             % Register for parent-driven invalidation (MONITOR-04).
@@ -168,8 +201,15 @@ classdef MonitorTag < Tag
 
         function [x, y] = getXY(obj)
             %GETXY Return lazy-memoized 0/1 vector aligned to parent's grid.
+            %   When Persist=true + DataStore bound, first attempts a disk
+            %   load via tryLoadFromDisk_ (quad-signature staleness check).
+            %   On miss or stale cache, falls through to recompute_() and
+            %   then persistIfEnabled_() writes the fresh row.
             if obj.dirty_ || ~isfield(obj.cache_, 'x')
-                obj.recompute_();
+                if ~obj.tryLoadFromDisk_()
+                    obj.recompute_();
+                    obj.persistIfEnabled_();
+                end
             end
             x = obj.cache_.x;
             y = obj.cache_.y;
@@ -358,6 +398,9 @@ classdef MonitorTag < Tag
             if ~isempty(raw_new)
                 obj.cache_.lastStateFlag_ = double(raw_new(end));
             end
+            % MONITOR-09: persist extended cache (single call site routes
+            % through persistIfEnabled_; Pitfall 2 gate lives inside it).
+            obj.persistIfEnabled_();
         end
 
         % ---- Property setters that invalidate (Pitfall 9) ----
@@ -580,6 +623,76 @@ classdef MonitorTag < Tag
             end
         end
 
+        % ---- MONITOR-09 persistence helpers (Phase 1007 Plan 02) ----
+
+        function tf = tryLoadFromDisk_(obj)
+            %TRYLOADFROMDISK_ Populate cache_ from DataStore row if fresh.
+            %   Returns true on hit + not stale; false on miss / stale / opt-out.
+            %   Quad-signature staleness is compared against the parent's
+            %   current grid (parent_key + num_points + parent_xmin/xmax).
+            %   On a fresh hit, cache_ is rebuilt with lastStateFlag_ seeded
+            %   from Y(end); lastHystState_ mirrors it; ongoingRunStart_ is
+            %   NaN (safe default — cold-reload cannot reconstruct the
+            %   open-run start without re-evaluating ConditionFn).
+            tf = false;
+            if ~obj.Persist || isempty(obj.DataStore); return; end
+            [X, Y, meta] = obj.DataStore.loadMonitor(char(obj.Key));
+            if isempty(X); return; end
+            if obj.cacheIsStale_(meta); return; end
+            lastFlag = 0;
+            if ~isempty(Y), lastFlag = double(Y(end)); end
+            obj.cache_ = struct( ...
+                'x',               X(:).', ...
+                'y',               Y(:).', ...
+                'computedAt',      meta.computed_at, ...
+                'lastStateFlag_',  lastFlag, ...
+                'lastHystState_',  logical(lastFlag), ...
+                'ongoingRunStart_', NaN);
+            obj.dirty_ = false;
+            tf = true;
+        end
+
+        function tf = cacheIsStale_(obj, meta)
+            %CACHEISSTALE_ Quad-signature parent mutation detector.
+            %   Compares meta.{parent_key, num_points, parent_xmin,
+            %   parent_xmax} against the parent's current grid. O(1);
+            %   Octave-portable; eps(x)*10 tolerance on xmin/xmax absorbs
+            %   FP drift through SQLite double round-trip (see RESEARCH
+            %   Open Question #3).
+            tf = true;
+            if isempty(obj.Parent); return; end
+            [px, ~] = obj.Parent.getXY();
+            if isempty(px); return; end
+            if ~strcmp(char(meta.parent_key), char(obj.Parent.Key)); return; end
+            if double(meta.num_points) ~= numel(px); return; end
+            tol_lo = eps(px(1))   * 10;
+            tol_hi = eps(px(end)) * 10;
+            if abs(meta.parent_xmin - px(1))   > tol_lo; return; end
+            if abs(meta.parent_xmax - px(end)) > tol_hi; return; end
+            tf = false;
+        end
+
+        function persistIfEnabled_(obj)
+            %PERSISTIFENABLED_ Single call site that writes cache_ to DataStore.
+            %   Pitfall 2 structural gate: the ONLY storeMonitor call in
+            %   MonitorTag.m lives directly under an `if obj.Persist` block
+            %   within 5 lines. With Persist=false a bound DataStore sees
+            %   zero SQLite writes.
+            if isempty(obj.DataStore); return; end
+            if isempty(fieldnames(obj.cache_)) || ~isfield(obj.cache_, 'x') ...
+                    || isempty(obj.cache_.x)
+                return;
+            end
+            if isempty(obj.Parent); return; end
+            [px, ~] = obj.Parent.getXY();
+            if isempty(px); return; end
+            if obj.Persist
+                obj.DataStore.storeMonitor(char(obj.Key), ...
+                    obj.cache_.x, obj.cache_.y, ...
+                    char(obj.Parent.Key), numel(px), px(1), px(end));
+            end
+        end
+
         function fireEventsOnRisingEdges_(obj, px, bin)
             %FIREEVENTSONRISINGEDGES_ Emit Events on 0-to-1 transitions after debounce+hysteresis.
             %
@@ -677,7 +790,8 @@ classdef MonitorTag < Tag
             tagKeys = {'Name', 'Units', 'Description', 'Labels', ...
                        'Metadata', 'Criticality', 'SourceRef'};
             monKeys = {'AlarmOffConditionFn', 'MinDuration', ...
-                       'EventStore', 'OnEventStart', 'OnEventEnd'};
+                       'EventStore', 'OnEventStart', 'OnEventEnd', ...
+                       'Persist', 'DataStore'};
             tagArgs = {};
             monArgs = {};
             for i = 1:2:numel(args)

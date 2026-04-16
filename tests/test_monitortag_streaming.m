@@ -131,8 +131,26 @@ function test_monitortag_streaming()
     matches = regexp(src, 'lastStateFlag_|ongoingRunStart_|lastHystState_', 'match');
     assert(numel(matches) >= 6, ...
         'Grep gate 2: 3 cache-state fields must appear >= 6 times (declared + recompute_ + appendData)');
-    assert(isempty(regexp(src, 'FastSenseDataStore|storeMonitor|storeResolved', 'match')), ...
-        'Pitfall 2: Plan 01 must NOT introduce persistence references');
+    % Plan-01 Pitfall 2 invariant was "no storeMonitor references". Plan 02
+    % (MONITOR-09) introduces the Persist opt-in that REQUIRES a
+    % storeMonitor call site. The relaxed invariant: every storeMonitor
+    % call must sit inside an `if obj.Persist` guard (structural check
+    % identical to tests/test_monitortag_persistence.m:run_pitfall_2_structural_).
+    lines = strsplit(src, char(10));
+    nStore = 0; nGuarded = 0;
+    for li = 1:numel(lines)
+        if ~isempty(regexp(lines{li}, 'storeMonitor\s*\(', 'once'))
+            nStore = nStore + 1;
+            lo = max(1, li - 5);
+            window = strjoin(lines(lo:li-1), char(10));
+            if ~isempty(regexp(window, 'if\s+.*obj\.Persist', 'once'))
+                nGuarded = nGuarded + 1;
+            end
+        end
+    end
+    assert(nStore == nGuarded, ...
+        sprintf('Pitfall 2 (Plan 02 relaxed): %d storeMonitor calls, %d guarded by if obj.Persist', ...
+        nStore, nGuarded));
 
     fprintf('    All 7 streaming tests passed.\n');
 end

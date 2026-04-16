@@ -240,12 +240,29 @@ classdef TestMonitorTagStreaming < matlab.unittest.TestCase
                 'MONITOR-08: 3 cache-state fields must be declared + written in recompute_ + appendData (>= 6 references)');
         end
 
-        function testNoPersistenceReferencesStillHolds(testCase)
+        function testPersistenceCallsAreGuarded(testCase)
+            % Plan-01 invariant "no storeMonitor references" was relaxed in
+            % Plan 02 (MONITOR-09). The relaxed invariant: every
+            % storeMonitor call site must sit inside an `if obj.Persist`
+            % guard within 5 preceding lines (Pitfall 2 structural gate).
             here = fileparts(mfilename('fullpath'));
             repo = fileparts(fileparts(here));
             src  = fileread(fullfile(repo, 'libs', 'SensorThreshold', 'MonitorTag.m'));
-            testCase.verifyEmpty(regexp(src, 'FastSenseDataStore|storeMonitor|storeResolved', 'match'), ...
-                'Pitfall 2: Plan 01 must NOT introduce persistence references (that is Plan 02)');
+            lines = strsplit(src, char(10));
+            nStore = 0; nGuarded = 0;
+            for li = 1:numel(lines)
+                if ~isempty(regexp(lines{li}, 'storeMonitor\s*\(', 'once'))
+                    nStore = nStore + 1;
+                    lo = max(1, li - 5);
+                    window = strjoin(lines(lo:li-1), char(10));
+                    if ~isempty(regexp(window, 'if\s+.*obj\.Persist', 'once'))
+                        nGuarded = nGuarded + 1;
+                    end
+                end
+            end
+            testCase.verifyEqual(nStore, nGuarded, sprintf( ...
+                'Pitfall 2 (Plan 02 relaxed): %d storeMonitor calls, %d guarded by if obj.Persist', ...
+                nStore, nGuarded));
         end
 
     end
