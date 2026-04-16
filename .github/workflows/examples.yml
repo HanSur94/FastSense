@@ -163,13 +163,14 @@ jobs:
   matlab-examples:
     name: MATLAB Example Smoke Tests
     timeout-minutes: 60
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup MATLAB
-        uses: matlab-actions/setup-matlab@v2
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          cache: true
 
       - name: Run MATLAB-only examples
         uses: matlab-actions/run-command@v2
