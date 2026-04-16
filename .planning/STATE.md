@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 1006-01-PLAN.md (pin MATLAB CI to R2020b)
-last_updated: "2026-04-16T13:44:45.373Z"
+stopped_at: Completed 1006-04-PLAN.md (exportgraphics headless image export fix)
+last_updated: "2026-04-16T13:50:40.400Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 27
-  completed_plans: 24
+  completed_plans: 26
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 1006 (fix-137-matlab-test-failures) — EXECUTING
-Plan: 2 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -97,6 +97,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1004 P02 | 8min | 2 tasks | 1 files |
 | Phase 1004 P03 | 2min | 2 tasks | 2 files |
 | Phase 1006 P01 | 5 | 3 tasks | 2 files |
+| Phase 1006 P02 | 10min | 2 tasks | 4 files |
+| Phase 1006 P04 | 8 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -182,6 +184,9 @@ Recent decisions affecting current work:
 - [Phase 1004]: Octave suite skips IMG-01 (button verification): Octave print() excludes uicontrols by default per RISK-1
 - [Phase 1006]: D-01 implemented: pinned all setup-matlab@v3 call-sites to release: R2020b in tests.yml (x2) and examples.yml (x1)
 - [Phase 1006]: MEX cache key scoped to r2020b (mex-matlab-linux-r2020b-) to prevent ABI-stale binary reuse on future pin bumps
+- [Phase 1006-02]: Branch C selected for mksqlite fix: assumeTrue(exist('mksqlite','file')==3) guard in TestMethodSetup; tests filter rather than fail when mksqlite absent
+- [Phase 1006-02]: build_mex:mksqliteCompileFailed warning ID added to silent catch so compile failures surface in CI step summaries
+- [Phase 1006]: exportImage uses three-branch dispatch: exportapp (R2024a+), exportgraphics (R2020a-R2023b headless-safe), print+stub-axes (Octave unchanged)
 
 ### Roadmap Evolution
 
@@ -218,11 +223,6 @@ None yet.
 
 ## Session Continuity
 
-<<<<<<< HEAD
-Last session: 2026-04-16T13:44:45.368Z
-Stopped at: Completed 1006-01-PLAN.md (pin MATLAB CI to R2020b)
-=======
-Last session: 2026-04-05T16:49:34.597Z
-Stopped at: Completed 1000-03-PLAN.md (lazy page realization + batched switchPage)
->>>>>>> worktree-agent-a9506b74
+Last session: 2026-04-16T13:50:40.394Z
+Stopped at: Completed 1006-04-PLAN.md (exportgraphics headless image export fix)
 Resume file: None
