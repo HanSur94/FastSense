@@ -51,6 +51,7 @@ jobs:
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v3
         with:
+          release: R2020b
           cache: true
 
       - name: Cache MATLAB MEX binaries
@@ -61,7 +62,7 @@ jobs:
             libs/FastSense/private/*.mexa64
             libs/SensorThreshold/private/*.mexa64
             libs/FastSense/mksqlite.mexa64
-          key: mex-matlab-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
+          key: mex-matlab-linux-r2020b-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
 
       - name: Compile MEX files (MATLAB)
         if: steps.cache-mex-matlab.outputs.cache-hit != 'true'
@@ -232,6 +233,7 @@ jobs:
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v3
         with:
+          release: R2020b
           cache: true
 
       - name: Download MATLAB MEX binaries
