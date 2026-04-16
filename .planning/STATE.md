@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: verifying
-stopped_at: Completed 1005-03-PLAN.md — FastSense.addTag polymorphic dispatcher + TagRegistry sensor/state kind extension; 13 files / 15 Pitfall 5 budget (13.3% margin); zero-copy Pitfall 9 proven via -0.6% wrapper-overhead growth at 1000x N; legacy byte-for-byte unchanged; 7 Octave suites GREEN; Phase 1005 complete (3/3 plans)
-last_updated: "2026-04-16T14:43:14.622Z"
+status: executing
+stopped_at: Completed 1006-01-PLAN.md — MonitorTag core + SensorTag/StateTag additive listener hook; 5 files; 9 Octave suites GREEN; legacy byte-for-byte unchanged; observer pattern first introduced in repo with recursive cascade proven
+last_updated: "2026-04-16T17:34:04.488Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
   completed_phases: 8
-  total_plans: 26
-  completed_plans: 26
+  total_plans: 29
+  completed_plans: 27
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1005 — SensorTag + StateTag (data carriers)
+**Current focus:** Phase 1006 — MonitorTag (lazy, in-memory)
 
 ## Current Position
 
-Phase: 1006
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 1006 (MonitorTag (lazy, in-memory)) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-16
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -96,6 +96,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1005-sensortag-statetag-data-carriers P01 | 4min | 2 tasks | 3 files |
 | Phase 1005 P02 | 8min | 2 tasks | 3 files |
 | Phase 1005-sensortag-statetag-data-carriers P03 | 9min | 3 tasks | 7 files |
+| Phase 1006 P01 | 8min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,9 @@ Recent decisions affecting current work:
 - [Phase 1005-03]: StateTag rendered as inline 2N-1 interleaved staircase via addLine (RESEARCH §8 Route A); cellstr Y deferred with FastSense:stateTagCellstrNotSupported; empty StateTag is silent no-op
 - [Phase 1005-03]: Pitfall 9 benchmark reinterpreted as wrapper-overhead-growth gate (Rule 1 deviation) — Octave method dispatch ~14us makes direct field-access comparison unfair; zero-copy proven via -0.6% wrapper-overhead growth across 1000x N scale
 - [Phase 1005-03]: FastSense.m diff is additive-only: addTag + addStateTagAsStaircase_ inserted between addFill (line 941) and render (line 943); legacy addLine/addSensor/addBand bodies byte-for-byte unchanged (Pitfall 5)
+- [Phase 1006]: MonitorTag.invalidate() cascades to its own listeners — required for recursive MonitorTag chains (m2 wraps m1 wraps SensorTag). Plan's canonical skeleton had invalidate as a leaf op; extended with notifyListeners_ call.
+- [Phase 1006]: recomputeCount_ exposed as SetAccess=private (not fully private) — Octave enforces private strictly and blocks test probes; SetAccess keeps it read-only externally while allowing assertions.
+- [Phase 1006]: Tests use m.Parent.Key for handle identity (not isequal) — Octave isequal recurses through listener cycle causing SIGILL; Key equality + listener-wiring observation is equivalent and Octave-safe.
 
 ### Roadmap Evolution
 
@@ -212,6 +216,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T14:37:12.926Z
-Stopped at: Completed 1005-03-PLAN.md — FastSense.addTag polymorphic dispatcher + TagRegistry sensor/state kind extension; 13 files / 15 Pitfall 5 budget (13.3% margin); zero-copy Pitfall 9 proven via -0.6% wrapper-overhead growth at 1000x N; legacy byte-for-byte unchanged; 7 Octave suites GREEN; Phase 1005 complete (3/3 plans)
+Last session: 2026-04-16T17:34:04.483Z
+Stopped at: Completed 1006-01-PLAN.md — MonitorTag core + SensorTag/StateTag additive listener hook; 5 files; 9 Octave suites GREEN; legacy byte-for-byte unchanged; observer pattern first introduced in repo with recursive cascade proven
 Resume file: None

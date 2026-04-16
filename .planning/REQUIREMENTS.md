@@ -39,16 +39,16 @@
 
 ### MONITOR — MonitorTag
 
-- [ ] **MONITOR-01**: `MonitorTag` constructed as `MonitorTag(key, parentTag, conditionFn)` produces a binary 0/1 time series via `getXY()`. Output represents condition activation over time (0=inactive/ok, 1=active/violation).
-- [ ] **MONITOR-02**: `MonitorTag` IS a `Tag` (`isa(m, 'Tag')` returns true). Plottable via `FastSense.addTag(m)`. Registerable in `TagRegistry`. Can be the parent of another MonitorTag (recursive monitoring) or a child of a CompositeTag.
-- [ ] **MONITOR-03**: MonitorTag uses **lazy evaluation with memoization** — `getXY()` computes derived series on first read, caches result, returns cache on subsequent reads until `invalidate()` clears the cache. Per Pitfalls §2: lazy-by-default; eager full-history computation explicitly forbidden.
-- [ ] **MONITOR-04**: Parent-driven invalidation — when parent SensorTag's `updateData()` runs OR a referenced StateTag's `updateData()` runs, all dependent MonitorTags receive `invalidate()`. Condition add/remove on MonitorTag also marks `dirty_ = true`.
+- [x] **MONITOR-01**: `MonitorTag` constructed as `MonitorTag(key, parentTag, conditionFn)` produces a binary 0/1 time series via `getXY()`. Output represents condition activation over time (0=inactive/ok, 1=active/violation).
+- [x] **MONITOR-02**: `MonitorTag` IS a `Tag` (`isa(m, 'Tag')` returns true). Plottable via `FastSense.addTag(m)`. Registerable in `TagRegistry`. Can be the parent of another MonitorTag (recursive monitoring) or a child of a CompositeTag.
+- [x] **MONITOR-03**: MonitorTag uses **lazy evaluation with memoization** — `getXY()` computes derived series on first read, caches result, returns cache on subsequent reads until `invalidate()` clears the cache. Per Pitfalls §2: lazy-by-default; eager full-history computation explicitly forbidden.
+- [x] **MONITOR-04**: Parent-driven invalidation — when parent SensorTag's `updateData()` runs OR a referenced StateTag's `updateData()` runs, all dependent MonitorTags receive `invalidate()`. Condition add/remove on MonitorTag also marks `dirty_ = true`.
 - [ ] **MONITOR-05**: MonitorTag emits Events via integrated `EventDetector` — when the binary signal transitions 0→1, a new Event is created and pushed to the bound `EventStore` with `TagKeys = {monitor.Key, monitor.Parent.Key}`.
 - [ ] **MONITOR-06**: MonitorTag `MinDuration` / debounce — events fire only when violation persists at least `MinDuration` seconds (suppresses sub-threshold-duration chatter). ISA-18.2 alarm-suppression standard.
 - [ ] **MONITOR-07**: MonitorTag hysteresis / deadband — `MonitorTag` accepts separate alarm-on threshold (or condition) and alarm-off threshold; prevents chattering at boundary. ISA-18.2 standard practice; most simple historians lack this.
 - [ ] **MONITOR-08**: MonitorTag streaming — `appendData(newX, newY)` extends the cached output incrementally without full recompute. Wraps existing `IncrementalEventDetector` pattern. Used by `LiveEventPipeline` live-tick path.
 - [ ] **MONITOR-09**: MonitorTag opt-in disk persistence — when `MonitorTag.Persist = true`, derived `(X, Y)` is cached to `FastSenseDataStore` via new `storeMonitor(key, X, Y)`/`loadMonitor(key)` API. Default off; Pitfalls §2 cache-invalidation pain limited to opt-in users.
-- [ ] **MONITOR-10**: MonitorTag rejects per-sample side-effect callbacks. Only event-level callbacks (`OnEventStart`/`OnEventEnd`) supported. Prevents PI-AF-style unpredictable-side-effects pitfall.
+- [x] **MONITOR-10**: MonitorTag rejects per-sample side-effect callbacks. Only event-level callbacks (`OnEventStart`/`OnEventEnd`) supported. Prevents PI-AF-style unpredictable-side-effects pitfall.
 
 ### COMPOSITE — CompositeTag
 
@@ -79,10 +79,10 @@
 
 ### ALIGN — Time Alignment
 
-- [ ] **ALIGN-01**: Zero-order-hold (LOCF / step) is the only legal alignment in CompositeTag aggregation. Linear interpolation between samples is explicitly **forbidden** (wrong semantics for state signals; out-of-scope for sensor signals).
-- [ ] **ALIGN-02**: Union-of-timestamps grid for CompositeTag aggregation — evaluate at every unique timestamp from any child, not on a fixed regular grid. Preserves event-edges; no sampling artifacts.
-- [ ] **ALIGN-03**: Aggregation drops grid points before `max(child.X(1))` — no false alarms from "child not yet started" condition. Standard industrial pattern.
-- [ ] **ALIGN-04**: NaN handling in aggregation — `AND` with NaN → NaN; `OR` with NaN → other operand; `MAX/WORST` with NaN → ignore; `COUNT` ignores NaN. IEEE 754 conventions; documented in CompositeTag class header.
+- [x] **ALIGN-01**: Zero-order-hold (LOCF / step) is the only legal alignment in CompositeTag aggregation. Linear interpolation between samples is explicitly **forbidden** (wrong semantics for state signals; out-of-scope for sensor signals).
+- [x] **ALIGN-02**: Union-of-timestamps grid for CompositeTag aggregation — evaluate at every unique timestamp from any child, not on a fixed regular grid. Preserves event-edges; no sampling artifacts.
+- [x] **ALIGN-03**: Aggregation drops grid points before `max(child.X(1))` — no false alarms from "child not yet started" condition. Standard industrial pattern.
+- [x] **ALIGN-04**: NaN handling in aggregation — `AND` with NaN → NaN; `OR` with NaN → other operand; `MAX/WORST` with NaN → ignore; `COUNT` ignores NaN. IEEE 754 conventions; documented in CompositeTag class header.
 
 ### MIGRATE — Migration & Cleanup
 

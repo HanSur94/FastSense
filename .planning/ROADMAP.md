@@ -127,7 +127,12 @@ Plans:
   - **Pitfall 9:** Live-tick benchmark with one MonitorTag observed against legacy `Sensor.resolve` baseline → ≤10% regression at 12-widget tick
   - **MONITOR-10 explicit:** No per-sample callback APIs exposed (only `OnEventStart` / `OnEventEnd`)
   - **ALIGN-01 explicit:** No call to `interp1` with `'linear'` anywhere in `MonitorTag` aggregation code
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 1006-01-PLAN.md — MonitorTag core (lazy memoize + parent observer hook on SensorTag/StateTag) + core tests (MONITOR-01, MONITOR-02, MONITOR-03, MONITOR-04, MONITOR-10, ALIGN-01, ALIGN-02, ALIGN-03, ALIGN-04)
+- [ ] 1006-02-PLAN.md — MinDuration debounce + hysteresis + Event emission via SensorName/ThresholdLabel carriers (MONITOR-05, MONITOR-06, MONITOR-07)
+- [ ] 1006-03-PLAN.md — FastSense.addTag 'monitor' case + TagRegistry round-trip + Pitfall 9 benchmark + phase-exit audit (MONITOR-02)
 **UI hint**: yes
 
 ### Phase 1007: MonitorTag streaming + persistence
@@ -223,7 +228,7 @@ Plans:
 | 1000-1003 | v1.0 First-Class Thresholds | 14/14 | Complete | 2026-04-15 |
 | 1004. Tag Foundation + Golden Test | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1005. SensorTag + StateTag | v2.0 | 3/3 | Complete    | 2026-04-16 |
-| 1006. MonitorTag (lazy, in-memory) | v2.0 | 0/? | Not started | — |
+| 1006. MonitorTag (lazy, in-memory) | v2.0 | 1/3 | In Progress|  |
 | 1007. MonitorTag streaming + persistence | v2.0 | 0/? | Not started | — |
 | 1008. CompositeTag | v2.0 | 0/? | Not started | — |
 | 1009. Consumer migration | v2.0 | 0/? | Not started | — |
@@ -236,7 +241,7 @@ Plans:
 
 **Goal:** Add Home Assistant-style Mushroom Card widgets to the dashboard engine — minimal, icon-driven cards with clean visual design for sensor status, controls, and quick glance data. Three new widget classes: IconCardWidget, ChipBarWidget, SparklineCardWidget, plus theme additions and full serializer/builder/detach integration.
 **Requirements:** [MUSH-01: DashboardTheme InfoColor, MUSH-02: IconCardWidget, MUSH-03: ChipBarWidget, MUSH-04: SparklineCardWidget, MUSH-05: DashboardEngine type registration, MUSH-06: DashboardSerializer integration, MUSH-07: DetachedMirror + DashboardBuilder integration]
-**Plans:** 3/3 plans complete
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation
