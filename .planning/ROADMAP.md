@@ -170,7 +170,12 @@ Plans:
   - **Pitfall 6 (semantics drift):** Truth tables for every `AggregateMode × {0, 1, NaN}` combination documented in the class header; `'majority'` rejects multi-state inputs at `addChild` time, not at `getXY` time
   - **Pitfall 8:** 3-deep composite-of-composite-of-composite round-trip test green
   - **ALIGN-04 explicit:** Test verifies AND-with-NaN → NaN, OR-with-NaN → other operand, MAX/WORST-with-NaN → ignore, COUNT ignores NaN
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 1008-01-PLAN.md — CompositeTag class core + addChild with cycle detection + truth-table aggregator + basic unit tests (COMPOSITE-01..04, 07)
+- [ ] 1008-02-PLAN.md — Merge-sort getXY + ALIGN tests (NaN truth tables + pre-history drop) + 3-deep round-trip (COMPOSITE-05, 06, ALIGN-01..04)
+- [ ] 1008-03-PLAN.md — FastSense/TagRegistry integration + Pitfall 3 bench + phase audit (COMPOSITE-01, 05)
 
 ### Phase 1009: Consumer migration (one widget at a time)
 **Goal**: Migrate every existing consumer of `Sensor` / `Threshold` / `StateChannel` / `CompositeThreshold` to the new Tag API — one widget per commit, each with green CI — so the legacy hierarchy can be deleted in Phase 1011 with zero references remaining.
@@ -235,7 +240,7 @@ Plans:
 | 1005. SensorTag + StateTag | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1006. MonitorTag (lazy, in-memory) | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1007. MonitorTag streaming + persistence | v2.0 | 3/3 | Complete    | 2026-04-16 |
-| 1008. CompositeTag | v2.0 | 0/? | Not started | — |
+| 1008. CompositeTag | v2.0 | 0/3 | Not started | — |
 | 1009. Consumer migration | v2.0 | 0/? | Not started | — |
 | 1010. Event ↔ Tag binding + overlay | v2.0 | 0/? | Not started | — |
 | 1011. Cleanup + delete legacy | v2.0 | 0/? | Not started | — |
