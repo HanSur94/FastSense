@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 1006-04-PLAN.md (exportgraphics headless image export fix)
-last_updated: "2026-04-16T13:50:40.400Z"
+stopped_at: Completed Phase 1006 wave 2 (1006-02 mksqlite + 1006-03 E1-E10 + 1006-04 exportgraphics)
+last_updated: "2026-04-16T13:57:23.787Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 27
-  completed_plans: 26
+  completed_plans: 27
   percent: 0
 ---
 
@@ -82,14 +82,11 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-dashboard-performance-optimization P01 | 3 | 2 tasks | 2 files |
 | Phase 01-dashboard-performance-optimization P03 | 10min | 2 tasks | 1 files |
 | Phase 999.1-mushroom-cards-for-dashboard-engine P04 | 5min | 2 tasks | 8 files |
-<<<<<<< HEAD
 | Phase 999.3 P01 | 3min | 2 tasks | 2 files |
 | Phase 999.3-graph-data-export-mat-csv P02 | 2min | 2 tasks | 2 files |
 | Phase 1000 P01 | 4min | 2 tasks | 2 files |
 | Phase 1000 P02 | 2 | 2 tasks | 2 files |
-=======
 | Phase 1000 P03 | 5min | 2 tasks | 2 files |
->>>>>>> worktree-agent-a9506b74
 | Phase 1002 P02 | 25 | 2 tasks | 6 files |
 | Phase 1003 P01 | 3min | 1 tasks | 3 files |
 | Phase 1003 P03 | 10min | 1 tasks | 3 files |
@@ -98,6 +95,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1004 P03 | 2min | 2 tasks | 2 files |
 | Phase 1006 P01 | 5 | 3 tasks | 2 files |
 | Phase 1006 P02 | 10min | 2 tasks | 4 files |
+| Phase 1006 P03 | 35min | 3 tasks | 10 files |
 | Phase 1006 P04 | 8 | 2 tasks | 1 files |
 
 ## Accumulated Context
@@ -156,8 +154,6 @@ Recent decisions affecting current work:
 - [Phase 01-dashboard-performance-optimization]: render() pre-allocates all page panels at startup with non-active pages hidden so switchPage is pure visibility toggle
 - [Phase 999.1-mushroom-cards-for-dashboard-engine]: Wave 1 widget files copied from main repo to worktree for plan 04; DetachedMirror restoreLiveRefs handles ValueFcn generically via isprop so no per-type clone code needed beyond fromStruct dispatch
 
-<<<<<<< HEAD
-
 - [Phase 999.3]: No render() required before exportData() — buildExportStruct_ accesses raw Lines/Thresholds directly
 - [Phase 999.3]: testExportCSVDatetime guarded with ~exist('OCTAVE_VERSION') since datetime is MATLAB-only
 - [Phase 999.3]: exportData dual-API mirrors exportPNG: no-arg opens dialog, with-arg saves directly (extension determines format)
@@ -167,11 +163,7 @@ Recent decisions affecting current work:
 - [Phase 1000]: Sensor identity comparison uses MATLAB handle == operator; on sensor swap LastSensorRef mismatch triggers full teardown
 - [Phase 1000]: CachedXMax always set to x(n) on each tick; CachedXMin only initialised once when inf to avoid overwriting on incremental append
 
-=======
-
 - [Phase 1000-03]: allocatePanels for non-active pages so Realized stays false at startup; realizeBatch(5) in switchPage reuses batch infrastructure
-
->>>>>>> worktree-agent-a9506b74
 
 - [Phase 1002]: IconCardWidget Threshold resolver in own varargin constructor; mutual exclusivity post-loop
 - [Phase 1002]: MultiStatusWidget toStruct emits s.items typed array for mixed Sensor/threshold entries
@@ -186,7 +178,9 @@ Recent decisions affecting current work:
 - [Phase 1006]: MEX cache key scoped to r2020b (mex-matlab-linux-r2020b-) to prevent ABI-stale binary reuse on future pin bumps
 - [Phase 1006-02]: Branch C selected for mksqlite fix: assumeTrue(exist('mksqlite','file')==3) guard in TestMethodSetup; tests filter rather than fail when mksqlite absent
 - [Phase 1006-02]: build_mex:mksqliteCompileFailed warning ID added to silent catch so compile failures surface in CI step summaries
-- [Phase 1006]: exportImage uses three-branch dispatch: exportapp (R2024a+), exportgraphics (R2020a-R2023b headless-safe), print+stub-axes (Octave unchanged)
+- [Phase 1006-03]: E10: dead-code mock infrastructure in DashboardBuilder fixed by wiring getMousePosition() into onDragStart/onResizeStart/computeSnappedGrid (3 sites)
+- [Phase 1006-03]: E5: testToolbarEditToggle replaced with testToolbarEditButton — onEdit() now opens source file in MATLAB editor instead of toggling button text (quick task 260405-plc)
+- [Phase 1006-04]: exportImage uses three-branch dispatch: exportapp (R2024a+), exportgraphics (R2020a-R2023b headless-safe), print+stub-axes (Octave unchanged)
 
 ### Roadmap Evolution
 
@@ -223,6 +217,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T13:50:40.394Z
-Stopped at: Completed 1006-04-PLAN.md (exportgraphics headless image export fix)
+Last session: 2026-04-16T13:57:23.781Z
+Stopped at: Completed Phase 1006 wave 2 (1006-02 mksqlite + 1006-03 E1-E10 + 1006-04 exportgraphics)
 Resume file: None
