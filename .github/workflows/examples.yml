@@ -160,6 +160,7 @@ jobs:
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v3
         with:
+          release: R2020b
           cache: true
 
       - name: Run MATLAB-only examples
