@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: verifying
-stopped_at: "Completed 1004-03-PLAN.md — golden integration test dual-style + phase-wide budget verification report shipped; all 5 pitfall gates PASS; Phase 1004 ready for /gsd:verify-work"
-last_updated: "2026-04-16T13:47:28.657Z"
+status: executing
+stopped_at: Completed 1005-01-PLAN.md — SensorTag composition wrapper (253 SLOC) + 19-method TestSensorTag + Octave flat mirror; all 4 Octave suites GREEN; Pitfall 5 legacy-untouched gate PASS (Sensor.m/StateChannel.m byte-for-byte unchanged via git hash-object); Plan 1005-02 (StateTag) running in parallel
+last_updated: "2026-04-16T14:22:07.224Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
   completed_phases: 7
-  total_plans: 23
-  completed_plans: 23
+  total_plans: 26
+  completed_plans: 24
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1004 — Tag Foundation + Golden Test
+**Current focus:** Phase 1005 — SensorTag + StateTag (data carriers)
 
 ## Current Position
 
-Phase: 1005
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 1005 (SensorTag + StateTag (data carriers)) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-16
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -93,6 +93,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1004-tag-foundation-golden-test P01 | 4min | 2 tasks | 4 files |
 | Phase 1004-tag-foundation-golden-test P02 | 6min | 2 tasks | 4 files |
 | Phase 1004-tag-foundation-golden-test P03 | 3min | 2 tasks | 3 files |
+| Phase 1005-sensortag-statetag-data-carriers P01 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,7 @@ Recent decisions affecting current work:
 - [Phase 1004-tag-foundation-golden-test]: instantiateByKind dispatch table lives on TagRegistry (not Tag base) so Phase 1005+ extends kinds by adding switch cases rather than touching the abstract base class
 - [Phase 1004-tag-foundation-golden-test]: Golden integration test dual-style (TestGoldenIntegration.m + test_golden_integration.m) exercises full legacy Sensor+StateChannel+Threshold+CompositeThreshold+EventDetector+FastSense path with DO NOT REWRITE grep-enforced header; fixture mirrors test_event_integration.m Y pattern so assertion values (events at t=4 peak 16 and t=13 peak 22) are known-good
 - [Phase 1004-tag-foundation-golden-test]: Phase-wide budget verification committed as 1004-BUDGET-VERIFICATION.md with 16 PASS verdicts across 6 gates (Pitfalls 1/5/7/8/11 + Success Criterion 4); 10/20 files touched (50% margin); zero edits across 15-file forbidden-path grep
+- [Phase 1005-sensortag-statetag-data-carriers]: SensorTag is classdef < Tag composing a private Sensor_ delegate (HAS-A, not IS-A); getXY/getTimeRange/valueAt implemented directly, load/toDisk/toMemory/isOnDisk forward to inner Sensor; toStruct omits X/Y by design (runtime data); fromStruct uses compact fieldOr_ helper
 
 ### Roadmap Evolution
 
@@ -201,6 +203,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T13:38:20.116Z
-Stopped at: Completed 1004-03-PLAN.md — golden integration test dual-style + phase-wide budget verification report shipped; all 5 pitfall gates PASS; Phase 1004 ready for /gsd:verify-work
+Last session: 2026-04-16T14:22:07.219Z
+Stopped at: Completed 1005-01-PLAN.md — SensorTag composition wrapper (253 SLOC) + 19-method TestSensorTag + Octave flat mirror; all 4 Octave suites GREEN; Pitfall 5 legacy-untouched gate PASS (Sensor.m/StateChannel.m byte-for-byte unchanged via git hash-object); Plan 1005-02 (StateTag) running in parallel
 Resume file: None
