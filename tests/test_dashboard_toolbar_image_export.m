@@ -21,9 +21,14 @@ function test_dashboard_toolbar_image_export()
     nFailed = 0;
 
     % testExportImagePNG (IMG-02)
+    %   Uses NumberWidget (uicontrol-only, no axes) to exercise the
+    %   exportImage stub-axes fallback path. Octave's print() refuses to
+    %   print a figure without a top-level axes object; the engine adds a
+    %   hidden 1px stub axes to satisfy this. MATLAB recurses into uipanels
+    %   for axes discovery so the stub is harmless there.
     try
         d = DashboardEngine('OctTest');
-        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
         d.render();
         set(d.hFigure, 'Visible', 'off');
         tmp = [tempname, '.png'];
@@ -43,7 +48,7 @@ function test_dashboard_toolbar_image_export()
     % testExportImageJPEG (IMG-03)
     try
         d = DashboardEngine('OctJpeg');
-        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
         d.render();
         set(d.hFigure, 'Visible', 'off');
         tmp = [tempname, '.jpg'];
@@ -69,7 +74,7 @@ function test_dashboard_toolbar_image_export()
 
         % Also verify the defaultImageFilename helper end-to-end
         d = DashboardEngine('My Dash/Board: v1');
-        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
         d.render();
         set(d.hFigure, 'Visible', 'off');
         fn = d.Toolbar.defaultImageFilename();
@@ -85,7 +90,7 @@ function test_dashboard_toolbar_image_export()
     % testCancelNoOp (IMG-07)
     try
         d = DashboardEngine('OctCancel');
-        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
         d.render();
         set(d.hFigure, 'Visible', 'off');
         % Bypass uiputfile: dispatchImageExport with file==0 must not throw

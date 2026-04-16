@@ -12,7 +12,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
     methods (Test)
         function testExportImagePNG(testCase)
             d = DashboardEngine('Test');
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -31,7 +31,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
 
         function testExportImageJPEG(testCase)
             d = DashboardEngine('Test');
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -57,7 +57,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
 
         function testUnknownFormatError(testCase)
             d = DashboardEngine('X');
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -69,7 +69,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
 
         function testWriteFailureErrors(testCase)
             d = DashboardEngine('X');
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -82,7 +82,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
         function testButtonPresent(testCase)
             %TESTBUTTONPRESENT IMG-01: Image button label, tooltip, order.
             d = DashboardEngine('TestDash');
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 42);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 42);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -109,7 +109,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
         function testCancelNoOp(testCase)
             %TESTCANCELNOOP IMG-07: user cancels uiputfile (file==0).
             d = DashboardEngine('CancelTest');
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -125,10 +125,10 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
             %TESTMULTIPAGEACTIVEONLY IMG-08: switchPage(2) + exportImage writes file.
             d = DashboardEngine('MultiPage');
             d.addPage('Page1');
-            d.addWidget('number', 'Title', 'P1', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'P1', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.addPage('Page2');
             d.switchPage(2);
-            d.addWidget('number', 'Title', 'P2', 'Position', [1 1 6 2], 'Value', 2);
+            d.addWidget('number', 'Title', 'P2', 'Position', [1 1 6 2], 'StaticValue', 2);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
@@ -149,7 +149,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
             %TESTLIVEMODENOPAUSE IMG-09: exportImage does not stop live timer.
             d = DashboardEngine('LiveTest');
             d.LiveInterval = 0.5;
-            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'Value', 1);
+            d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() d.stopLive());
