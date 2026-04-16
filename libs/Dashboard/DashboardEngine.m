@@ -822,11 +822,13 @@ classdef DashboardEngine < handle
             % Update global time range from pre-fetched list
             obj.updateLiveTimeRangeFrom(ws);
 
-            % Single pass: mark sensor-bound dirty, then refresh if dirty+realized+visible
+            % Single pass: mark sensor-bound or Tag-bound widgets dirty, then refresh
+            % if dirty+realized+visible. Base-class Tag property ensures all widgets
+            % expose w.Tag (Plan 1009-02); no isprop guard needed.
             % (PostSet listeners on Sensor.X/Y do not fire reliably in Octave for indexed assignment)
             for i = 1:numel(ws)
                 w = ws{i};
-                if ~isempty(w.Sensor)
+                if ~isempty(w.Sensor) || ~isempty(w.Tag)
                     w.markDirty();
                 end
                 if w.Dirty && w.Realized && obj.Layout.isWidgetVisible(w.Position)

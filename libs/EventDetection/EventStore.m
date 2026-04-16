@@ -37,6 +37,42 @@ classdef EventStore < handle
             events = obj.events_;
         end
 
+        function events = getEventsForTag(obj, tagKey)
+        %GETEVENTSFORTAG Return events whose SensorName or ThresholdLabel equals tagKey.
+        %   Implements EventTimelineWidget tag-key filter using the
+        %   MONITOR-05 carrier pattern (Event.SensorName = parent.Key,
+        %   Event.ThresholdLabel = monitor.Key). Phase 1010 (EVENT-01)
+        %   migrates to Event.TagKeys — until then, this filter reads the
+        %   two carrier fields so no Event schema change is required.
+        %
+        %   Errors:
+        %     EventStore:invalidTagKey — tagKey not char / string
+            events = [];
+            if isempty(obj.events_), return; end
+            if ~ischar(tagKey) && ~isstring(tagKey)
+                error('EventStore:invalidTagKey', ...
+                    'tagKey must be char or string; got %s.', class(tagKey));
+            end
+            tagKey = char(tagKey);
+            keep = false(1, numel(obj.events_));
+            for i = 1:numel(obj.events_)
+                ev = obj.events_(i);
+                sn = '';
+                tl = '';
+                % events_ can hold Event objects (isprop) or plain structs
+                % (isfield); check both so either carrier survives.
+                if isa(ev, 'Event')
+                    sn = ev.SensorName;
+                    tl = ev.ThresholdLabel;
+                elseif isstruct(ev)
+                    if isfield(ev, 'SensorName'), sn = ev.SensorName; end
+                    if isfield(ev, 'ThresholdLabel'), tl = ev.ThresholdLabel; end
+                end
+                keep(i) = strcmp(sn, tagKey) || strcmp(tl, tagKey);
+            end
+            events = obj.events_(keep);
+        end
+
         function save(obj)
             if isempty(obj.FilePath); return; end
 

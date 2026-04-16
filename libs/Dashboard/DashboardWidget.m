@@ -14,7 +14,8 @@ classdef DashboardWidget < handle
         ThemeOverride = struct()   % Per-widget theme overrides (merged on top of dashboard theme)
         UseGlobalTime = true       % false when user manually zooms this widget
         Description = ''           % Optional tooltip text shown via info icon hover
-        Sensor      = []           % Sensor object for data binding (primary source)
+        Sensor      = []           % Sensor object for data binding (legacy; precedence Tag > Sensor)
+        Tag         = []           % v2.0 Tag API — any Tag subclass (precedence over Sensor)
         ParentTheme = []           % Theme inherited from DashboardEngine
         Dirty       = true         % true when widget needs refresh (data changed)
     end
@@ -36,8 +37,14 @@ classdef DashboardWidget < handle
             for k = 1:2:numel(varargin)
                 obj.(varargin{k}) = varargin{k+1};
             end
-            % Title cascade: if empty and Sensor bound, use Sensor.Name
-            if isempty(obj.Title) && ~isempty(obj.Sensor)
+            % Title cascade with Tag > Sensor precedence.
+            if isempty(obj.Title) && ~isempty(obj.Tag)
+                if ~isempty(obj.Tag.Name)
+                    obj.Title = obj.Tag.Name;
+                else
+                    obj.Title = obj.Tag.Key;
+                end
+            elseif isempty(obj.Title) && ~isempty(obj.Sensor)
                 if ~isempty(obj.Sensor.Name)
                     obj.Title = obj.Sensor.Name;
                 else
@@ -61,7 +68,10 @@ classdef DashboardWidget < handle
             if ~isempty(fieldnames(obj.ThemeOverride))
                 s.themeOverride = obj.ThemeOverride;
             end
-            if ~isempty(obj.Sensor)
+            % Source precedence: Tag > Sensor (Tag is the v2.0 API).
+            if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
+                s.source = struct('type', 'tag', 'key', obj.Tag.Key);
+            elseif ~isempty(obj.Sensor)
                 s.source = struct('type', 'sensor', 'name', obj.Sensor.Key);
             end
         end

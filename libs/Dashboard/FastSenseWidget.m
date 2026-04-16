@@ -21,8 +21,8 @@ classdef FastSenseWidget < DashboardWidget
         YLabel       = ''    % Y-axis label (auto-set from Sensor if empty)
         YLimits             = []    % Fixed Y-axis range [min max]; empty = auto-scale
         ShowThresholdLabels = false % show inline name labels on threshold lines
-        Tag          = []           % v2.0 Tag API — any Tag subclass (SensorTag/MonitorTag/CompositeTag)
     end
+    %   (Tag property now lives on the DashboardWidget base class — Plan 1009-02.)
 
     properties (SetAccess = private)
         FastSenseObj  = []
