@@ -86,10 +86,14 @@ function test_tag()
     assert(strcmp(t.Metadata.asset, 'pump-3'), 'test_tag: metadata assign asset');
     assert(strcmp(t.Metadata.vendor, 'Acme'), 'test_tag: metadata assign vendor');
 
-    % testAbstractGetXYThrows (call base directly via super ref)
+    % Abstract method stubs — call on a raw Tag instance.
+    % Tag is abstract-by-convention (not declared Abstract), so it is
+    % instantiable; calling any of the six stubs on it raises notImplemented.
+
+    % testAbstractGetXYThrows
     ok = false;
     try
-        getXY@Tag(MockTag('k'));
+        [xx, yy] = Tag('k').getXY(); %#ok<NASGU>
     catch me
         ok = ~isempty(strfind(me.identifier, 'Tag:notImplemented'));
     end
@@ -98,11 +102,38 @@ function test_tag()
     % testAbstractValueAtThrows
     ok = false;
     try
-        valueAt@Tag(MockTag('k'), 0);
+        vv = Tag('k').valueAt(0); %#ok<NASGU>
     catch me
         ok = ~isempty(strfind(me.identifier, 'Tag:notImplemented'));
     end
     assert(ok, 'test_tag: abstract valueAt throws');
+
+    % testAbstractGetTimeRangeThrows
+    ok = false;
+    try
+        [a, b] = Tag('k').getTimeRange(); %#ok<NASGU>
+    catch me
+        ok = ~isempty(strfind(me.identifier, 'Tag:notImplemented'));
+    end
+    assert(ok, 'test_tag: abstract getTimeRange throws');
+
+    % testAbstractGetKindThrows
+    ok = false;
+    try
+        kk = Tag('k').getKind(); %#ok<NASGU>
+    catch me
+        ok = ~isempty(strfind(me.identifier, 'Tag:notImplemented'));
+    end
+    assert(ok, 'test_tag: abstract getKind throws');
+
+    % testAbstractToStructThrows
+    ok = false;
+    try
+        ss = Tag('k').toStruct(); %#ok<NASGU>
+    catch me
+        ok = ~isempty(strfind(me.identifier, 'Tag:notImplemented'));
+    end
+    assert(ok, 'test_tag: abstract toStruct throws');
 
     % testAbstractFromStructThrows
     ok = false;
@@ -126,7 +157,7 @@ function test_tag()
     assert(count == 6, ...
         sprintf('test_tag: expected 6 abstract stubs, got %d', count));
 
-    fprintf('    All 14 test_tag tests passed.\n');
+    fprintf('    All 18 test_tag tests passed.\n');
 end
 
 function add_tag_path()

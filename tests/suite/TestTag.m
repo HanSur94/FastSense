@@ -116,28 +116,30 @@ classdef TestTag < matlab.unittest.TestCase
         end
 
         function testAbstractGetXYThrows(testCase)
-            t = MockTag('k');
-            testCase.verifyError(@() getXY@Tag(t), 'Tag:notImplemented');
+            % Tag is abstract-by-convention (NOT declared Abstract), so the
+            % base class is instantiable; calling any stub raises notImplemented.
+            t = Tag('k');
+            testCase.verifyError(@() t.getXY(), 'Tag:notImplemented');
         end
 
         function testAbstractValueAtThrows(testCase)
-            t = MockTag('k');
-            testCase.verifyError(@() valueAt@Tag(t, 0), 'Tag:notImplemented');
+            t = Tag('k');
+            testCase.verifyError(@() t.valueAt(0), 'Tag:notImplemented');
         end
 
         function testAbstractGetTimeRangeThrows(testCase)
-            t = MockTag('k');
-            testCase.verifyError(@() getTimeRange@Tag(t), 'Tag:notImplemented');
+            t = Tag('k');
+            testCase.verifyError(@() t.getTimeRange(), 'Tag:notImplemented');
         end
 
         function testAbstractGetKindThrows(testCase)
-            t = MockTag('k');
-            testCase.verifyError(@() getKind@Tag(t), 'Tag:notImplemented');
+            t = Tag('k');
+            testCase.verifyError(@() t.getKind(), 'Tag:notImplemented');
         end
 
         function testAbstractToStructThrows(testCase)
-            t = MockTag('k');
-            testCase.verifyError(@() toStruct@Tag(t), 'Tag:notImplemented');
+            t = Tag('k');
+            testCase.verifyError(@() t.toStruct(), 'Tag:notImplemented');
         end
 
         function testAbstractFromStructThrows(testCase)
