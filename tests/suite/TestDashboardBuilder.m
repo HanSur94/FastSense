@@ -181,18 +181,16 @@ classdef TestDashboardBuilder < matlab.unittest.TestCase
             [stepW_c] = layout.canvasStepSizes();
             stepW_fig = stepW_c * vpW;
 
-            % Drag widget 1 column to the right
+            % Drag widget 1 column to the right; panel snaps on mouseUp (ghost during drag)
             b.onDragStart(1);
             set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
-            b.onMouseMove();
+            b.onMouseMove();  % moves ghost only — not the actual panel
+            b.onMouseUp();    % snaps widget panel to grid position
 
             actual = get(d.Widgets{1}.hPanel, 'Position');
             expected = layout.computePosition([2 1 3 1]);
             testCase.verifyEqual(actual, expected, 'AbsTol', 1e-10, ...
                 'Drag must snap to exact grid position');
-
-            set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
-            b.onMouseUp();
         end
 
         function testResizeSnapsToGrid(testCase)
@@ -213,18 +211,16 @@ classdef TestDashboardBuilder < matlab.unittest.TestCase
             [stepW_c] = layout.canvasStepSizes();
             stepW_fig = stepW_c * vpW;
 
-            % Resize widget 1 column wider
+            % Resize widget 1 column wider; panel snaps on mouseUp (ghost during resize)
             b.onResizeStart(1);
             set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
-            b.onMouseMove();
+            b.onMouseMove();  % moves ghost only — not the actual panel
+            b.onMouseUp();    % snaps widget panel to grid position
 
             actual = get(d.Widgets{1}.hPanel, 'Position');
             expected = layout.computePosition([1 1 4 1]);
             testCase.verifyEqual(actual, expected, 'AbsTol', 1e-10, ...
                 'Resize must snap to exact grid position');
-
-            set(d.hFigure, 'CurrentPoint', b.DragStart + [stepW_fig 0]);
-            b.onMouseUp();
         end
 
         function testFindNextSlotPlacesBelowExisting(testCase)

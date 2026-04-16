@@ -659,8 +659,7 @@ classdef DashboardBuilder < handle
             [obj.CachedStepW, obj.CachedStepH] = ...
                 obj.Engine.Layout.canvasStepSizes();
 
-            hFig = obj.Engine.hFigure;
-            obj.DragStart = get(hFig, 'CurrentPoint');
+            obj.DragStart = obj.getMousePosition();  % Phase 1006 E10: use mock-aware getter
             obj.selectWidget(widgetIdx);
 
             % Create lightweight ghost rectangle instead of moving heavy panel
@@ -677,8 +676,7 @@ classdef DashboardBuilder < handle
             [obj.CachedStepW, obj.CachedStepH] = ...
                 obj.Engine.Layout.canvasStepSizes();
 
-            hFig = obj.Engine.hFigure;
-            obj.DragStart = get(hFig, 'CurrentPoint');
+            obj.DragStart = obj.getMousePosition();  % Phase 1006 E10: use mock-aware getter
             obj.selectWidget(widgetIdx);
 
             obj.createGhost(obj.DragOrigNorm);
@@ -763,8 +761,7 @@ classdef DashboardBuilder < handle
     methods (Access = private)
         function newGrid = computeSnappedGrid(obj)
         %COMPUTESNAPPEDGRID Shared snap-to-grid logic for drag and resize.
-            hFig = obj.Engine.hFigure;
-            cp = get(hFig, 'CurrentPoint');
+            cp = obj.getMousePosition();  % Phase 1006 E10: use mock-aware getter
             dx_fig = cp(1) - obj.DragStart(1);
             dy_fig = cp(2) - obj.DragStart(2);
 

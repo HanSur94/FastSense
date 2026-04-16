@@ -24,6 +24,18 @@ No library regression. Tests need to be updated.
 
 ---
 
+## Refined Classification
+
+After deeper analysis, E10 has a mixed classification:
+- Tests 1, 2: TEST-DRIFT (panel moved only on mouseUp, not mouseMove after ghost optimization)
+- Tests 3, 4, 5: LIBRARY-BUG (dead-code mock infrastructure — getMousePosition() defined but never called)
+- Test 6: TEST-DRIFT (markDirty intentionally removed from resize path in Phase 1000-02)
+
+Task 3 applies:
+- Library fix for tests 3,4,5: wire `getMousePosition()` into `computeSnappedGrid` and `onDragStart`/`onResizeStart`
+- Test fix for tests 1,2: move assertion after `onMouseUp()`
+- Test fix for test 6: update `testResizeMarksDirty` assertion
+
 ## Root Cause Analysis
 
 ### Cause A — Ghost preview (tests 1, 2)

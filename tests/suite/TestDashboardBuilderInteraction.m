@@ -45,16 +45,17 @@ classdef TestDashboardBuilderInteraction < matlab.unittest.TestCase
         end
 
         function [stepW, stepH] = gridStepSize(testCase)
+            % Delegate to library canvasStepSizes() and convert to figure coords.
+            % Matches figureToCanvasDelta inverse: dx_fig = dx_c * vpW, dy_fig = dy_c * ca(4)*cr
+            % Phase 1006 E10: replaced manual inline math to stay drift-proof.
             layout = testCase.Engine.Layout;
             ca = layout.ContentArea;
-            totalW = ca(3) - layout.Padding(1) - layout.Padding(3);
-            totalH = ca(4) - layout.Padding(2) - layout.Padding(4);
-            cols = layout.Columns;
-            rows = max(layout.TotalRows, 1);
-            cellW = (totalW - (cols - 1) * layout.GapH) / cols;
-            cellH = (totalH - (rows - 1) * layout.GapV) / rows;
-            stepW = cellW + layout.GapH;
-            stepH = cellH + layout.GapV;
+            cr = layout.canvasRatio();
+            vpW = ca(3);
+            if cr > 1, vpW = vpW - layout.ScrollbarWidth; end
+            [stepW_c, stepH_c] = layout.canvasStepSizes();
+            stepW = stepW_c * vpW;
+            stepH = stepH_c * ca(4) * cr;
         end
 
         function startDrag(testCase, widgetIdx)
