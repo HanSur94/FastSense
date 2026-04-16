@@ -351,9 +351,11 @@ classdef TagRegistry
                     tag = StateTag.fromStruct(s);
                 case 'monitor'
                     tag = MonitorTag.fromStruct(s);
+                case 'composite'
+                    tag = CompositeTag.fromStruct(s);
                 otherwise
                     error('TagRegistry:unknownKind', ...
-                        'Unknown tag kind ''%s''. Valid kinds (Phase 1006): mock, sensor, state, monitor.', ...
+                        'Unknown tag kind ''%s''. Valid kinds (Phase 1008): mock, sensor, state, monitor, composite.', ...
                         kind);
             end
         end

@@ -390,9 +390,48 @@ function test_compositetag()
     assert(isempty(regexp(ttagSrc, 'CompositeTag', 'once')), ...
         'I28: TestTagRegistry.m must not reference CompositeTag (file-budget).');
 
+    %% J. Plan 03 production-path integration
+
+    % J29: 3-deep round-trip via REAL TagRegistry.loadFromStructs
+    TagRegistry.clear();
+    s1p = SensorTag('ps1','X',1:10,'Y',1:10);
+    s2p = SensorTag('ps2','X',1:10,'Y',1:10);
+    s3p = SensorTag('ps3','X',1:10,'Y',1:10);
+    s4p = SensorTag('ps4','X',1:10,'Y',1:10);
+    m1p = MonitorTag('pm1', s1p, @(x,y) y > 5);
+    m2p = MonitorTag('pm2', s2p, @(x,y) y > 5);
+    m3p = MonitorTag('pm3', s3p, @(x,y) y > 5);
+    m4p = MonitorTag('pm4', s4p, @(x,y) y > 5);
+    midLp = CompositeTag('pmid_L', 'or');  midLp.addChild(m1p); midLp.addChild(m2p);
+    midRp = CompositeTag('pmid_R', 'majority'); midRp.addChild(m3p); midRp.addChild(m4p);
+    topP = CompositeTag('ptop', 'and');  topP.addChild(midLp); topP.addChild(midRp);
+    structsProd = {s1p.toStruct(), s2p.toStruct(), s3p.toStruct(), s4p.toStruct(), ...
+                   m1p.toStruct(), m2p.toStruct(), m3p.toStruct(), m4p.toStruct(), ...
+                   midLp.toStruct(), midRp.toStruct(), topP.toStruct()};
+    TagRegistry.clear();
+    TagRegistry.loadFromStructs(structsProd);   % PRODUCTION PATH
+    loadedTopP = TagRegistry.get('ptop');
+    assert(strcmp(loadedTopP.getKind(), 'composite'), 'J29: kind');
+    assert(strcmp(loadedTopP.AggregateMode, 'and'), 'J29: mode');
+    topKeysP = loadedTopP.getChildKeys();
+    assert(strcmp(topKeysP{1}, 'pmid_L'), 'J29: child[1]');
+    assert(strcmp(topKeysP{2}, 'pmid_R'), 'J29: child[2]');
+    leafKeyP = loadedTopP.getChildAt(1).getChildAt(1).Key;
+    assert(strcmp(leafKeyP, 'pm1'), ...
+        sprintf('J29: 3-deep descent via production loader: expected pm1 got %s', leafKeyP));
     TagRegistry.clear();
 
-    fprintf('    All 28 CompositeTag tests passed.\n');
+    % J30: Pitfall 1 — FastSense.addTag has no subclass isa checks
+    fsSrc = fileread(fullfile(repo, 'libs', 'FastSense', 'FastSense.m'));
+    tok = regexp(fsSrc, ...
+        'isa\s*\(\s*tag\s*,\s*''(SensorTag|StateTag|MonitorTag|CompositeTag)''', ...
+        'tokens');
+    assert(isempty(tok), ...
+        'J30: Pitfall 1 — FastSense.addTag must dispatch by getKind(), NOT isa(tag, subclass).');
+
+    TagRegistry.clear();
+
+    fprintf('    All 30 CompositeTag tests passed.\n');
 end
 
 function add_compositetag_paths_()

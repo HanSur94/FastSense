@@ -437,6 +437,63 @@ classdef TestCompositeTag < matlab.unittest.TestCase
                 'TestTagRegistry.m must not reference CompositeTag (file-budget).');
         end
 
+        % ---- J. Plan 03 production-path integration (Pitfall 8 end-to-end) ----
+
+        function testRoundTrip3DeepViaProductionTagRegistry(testCase)
+            %TESTROUNDTRIP3DEEPVIAPRODUCTIONTAGREGISTRY Plan 03 integration gate.
+            %   Same 11-tag fixture as testRoundTrip3DeepComposite, but loaded
+            %   via the REAL TagRegistry.loadFromStructs path (exercises the
+            %   Plan 03 instantiateByKind 'composite' case, not the local
+            %   helper). Order-insensitivity verified via forward order.
+            TagRegistry.clear();
+            s1 = SensorTag('s1','X',1:10,'Y',1:10);
+            s2 = SensorTag('s2','X',1:10,'Y',1:10);
+            s3 = SensorTag('s3','X',1:10,'Y',1:10);
+            s4 = SensorTag('s4','X',1:10,'Y',1:10);
+            m1 = MonitorTag('m1', s1, @(x, y) y > 5);
+            m2 = MonitorTag('m2', s2, @(x, y) y > 5);
+            m3 = MonitorTag('m3', s3, @(x, y) y > 5);
+            m4 = MonitorTag('m4', s4, @(x, y) y > 5);
+            mid_L = CompositeTag('mid_L', 'or');
+            mid_L.addChild(m1); mid_L.addChild(m2);
+            mid_R = CompositeTag('mid_R', 'majority');
+            mid_R.addChild(m3); mid_R.addChild(m4);
+            top = CompositeTag('top', 'and');
+            top.addChild(mid_L); top.addChild(mid_R);
+
+            structs = {s1.toStruct(), s2.toStruct(), s3.toStruct(), s4.toStruct(), ...
+                       m1.toStruct(), m2.toStruct(), m3.toStruct(), m4.toStruct(), ...
+                       mid_L.toStruct(), mid_R.toStruct(), top.toStruct()};
+            TagRegistry.clear();
+            TagRegistry.loadFromStructs(structs);   % PRODUCTION PATH
+
+            loadedTop = TagRegistry.get('top');
+            testCase.verifyEqual(loadedTop.getKind(), 'composite');
+            testCase.verifyEqual(loadedTop.AggregateMode, 'and');
+            testCase.verifyEqual(loadedTop.getChildKeys(), {'mid_L', 'mid_R'});
+            % 3-deep descent via Key equality (never isequal on handles).
+            testCase.verifyEqual(loadedTop.getChildAt(1).getChildAt(1).Key, 'm1');
+            testCase.verifyEqual(loadedTop.getChildAt(2).getChildAt(2).Key, 'm4');
+            TagRegistry.clear();
+        end
+
+        function testPitfall1NoIsaInFastSenseAddTag(testCase)
+            %TESTPITFALL1NOISAINFASTSENSEADDTAG Pitfall 1 grep gate.
+            %   FastSense.addTag must dispatch by tag.getKind(), NOT by
+            %   isa(tag, 'SensorTag'|'StateTag'|'MonitorTag'|'CompositeTag').
+            %   (The invalidTag guard at the top uses isa(tag, 'Tag') for the
+            %   base class — that is permitted. The prohibition is on
+            %   SUBCLASS-specific isa branching inside the kind dispatch.)
+            here = fileparts(mfilename('fullpath'));
+            repo = fileparts(fileparts(here));
+            src = fileread(fullfile(repo, 'libs', 'FastSense', 'FastSense.m'));
+            matches = regexp(src, ...
+                'isa\s*\(\s*tag\s*,\s*''(SensorTag|StateTag|MonitorTag|CompositeTag)''', ...
+                'tokens');
+            testCase.verifyEmpty(matches, ...
+                'Pitfall 1: FastSense.addTag must dispatch by getKind(), NOT isa(tag, subclass).');
+        end
+
     end
 
     methods (Static, Access = private)

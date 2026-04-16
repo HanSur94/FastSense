@@ -944,6 +944,8 @@ classdef FastSense < handle
             %ADDTAG Polymorphic dispatch — route a Tag to the correct render path.
             %   fp.ADDTAG(sensorTag)     — routes to addLine via tag.getXY
             %   fp.ADDTAG(stateTag)      — routes to a staircase line (numeric Y)
+            %   fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
+            %   fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
             %
             %   Dispatches by tag.getKind() — NO isa() subtype checks (Pitfall 1).
             %   Must be called BEFORE render() (enforced by IsRendered guard).
@@ -971,6 +973,9 @@ classdef FastSense < handle
                 case 'state'
                     obj.addStateTagAsStaircase_(tag, varargin{:});
                 case 'monitor'
+                    [x, y] = tag.getXY();
+                    obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
+                case 'composite'
                     [x, y] = tag.getXY();
                     obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
                 otherwise
