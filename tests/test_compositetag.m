@@ -281,12 +281,162 @@ function test_compositetag()
         end
     end
 
-    fprintf('    All 22 CompositeTag tests passed.\n');
+    %% H. Serialization round-trip (Plan 02 -- COMPOSITE-05 via toStruct)
+
+    TagRegistry.clear();
+
+    % H23: testToStructMinimalComposite
+    cH = CompositeTag('cH', 'or');
+    sH = cH.toStruct();
+    assert(strcmp(sH.kind, 'composite'),       'H23: kind == composite');
+    assert(strcmp(sH.key,  'cH'),              'H23: key preserved');
+    assert(strcmp(sH.aggregatemode, 'or'),     'H23: aggregatemode');
+    assert(abs(sH.threshold - 0.5) < 1e-12,    'H23: default threshold');
+    assert(isfield(sH, 'childkeys'),           'H23: childkeys field present');
+    assert(isfield(sH, 'childweights'),        'H23: childweights field present');
+    ckH = sH.childkeys;
+    if iscell(ckH) && numel(ckH) == 1 && iscell(ckH{1}), ckH = ckH{1}; end
+    assert(numel(ckH) == 0,                    'H23: empty childkeys');
+    assert(numel(sH.childweights) == 0,        'H23: empty childweights');
+
+    % H24: testFromStructEmptyChildren
+    cH2 = CompositeTag('cH2', 'majority', 'Name', 'agg', 'Criticality', 'high');
+    sH2 = cH2.toStruct();
+    cH2b = CompositeTag.fromStruct(sH2);
+    assert(strcmp(cH2b.Key, 'cH2'),             'H24: Key');
+    assert(strcmp(cH2b.AggregateMode, 'majority'), 'H24: AggregateMode');
+    assert(strcmp(cH2b.Name, 'agg'),            'H24: Name');
+    assert(strcmp(cH2b.Criticality, 'high'),    'H24: Criticality');
+    assert(cH2b.getChildCount() == 0,           'H24: no children');
+
+    % H25: testRoundTripCompositeWith2Children
+    TagRegistry.clear();
+    sR1 = SensorTag('sR1', 'X', 1:10, 'Y', 1:10);
+    sR2 = SensorTag('sR2', 'X', 1:10, 'Y', 1:10);
+    mR1 = MonitorTag('mR1', sR1, @(x, y) y > 5);
+    mR2 = MonitorTag('mR2', sR2, @(x, y) y > 5);
+    cR  = CompositeTag('cR', 'or');
+    cR.addChild(mR1);
+    cR.addChild(mR2);
+    structs2 = { ...
+        sR1.toStruct(), sR2.toStruct(), ...
+        mR1.toStruct(), mR2.toStruct(), ...
+        cR.toStruct()};
+    helperLoadStructsLocal_compositetag_(structs2);
+    loadedCR = TagRegistry.get('cR');
+    assert(strcmp(loadedCR.getKind(), 'composite'), 'H25: kind');
+    assert(strcmp(loadedCR.AggregateMode, 'or'),    'H25: mode');
+    keysCR = loadedCR.getChildKeys();
+    assert(numel(keysCR) == 2,               'H25: child count');
+    assert(strcmp(keysCR{1}, 'mR1'),         'H25: child[1]');
+    assert(strcmp(keysCR{2}, 'mR2'),         'H25: child[2]');
+
+    % H26: testRoundTrip3DeepComposite -- Pitfall 8 (forward order)
+    TagRegistry.clear();
+    s3_1 = SensorTag('s3_1', 'X', 1:10, 'Y', 1:10);
+    s3_2 = SensorTag('s3_2', 'X', 1:10, 'Y', 1:10);
+    s3_3 = SensorTag('s3_3', 'X', 1:10, 'Y', 1:10);
+    s3_4 = SensorTag('s3_4', 'X', 1:10, 'Y', 1:10);
+    m3_1 = MonitorTag('m3_1', s3_1, @(x, y) y > 5);
+    m3_2 = MonitorTag('m3_2', s3_2, @(x, y) y > 5);
+    m3_3 = MonitorTag('m3_3', s3_3, @(x, y) y > 5);
+    m3_4 = MonitorTag('m3_4', s3_4, @(x, y) y > 5);
+    mid_L = CompositeTag('mid_L', 'or');
+    mid_L.addChild(m3_1);
+    mid_L.addChild(m3_2);
+    mid_R = CompositeTag('mid_R', 'majority');
+    mid_R.addChild(m3_3);
+    mid_R.addChild(m3_4);
+    topC = CompositeTag('topC', 'and');
+    topC.addChild(mid_L);
+    topC.addChild(mid_R);
+    structs3 = { ...
+        s3_1.toStruct(), s3_2.toStruct(), s3_3.toStruct(), s3_4.toStruct(), ...
+        m3_1.toStruct(), m3_2.toStruct(), m3_3.toStruct(), m3_4.toStruct(), ...
+        mid_L.toStruct(), mid_R.toStruct(), topC.toStruct()};
+    helperLoadStructsLocal_compositetag_(structs3);
+    loadedTop = TagRegistry.get('topC');
+    assert(strcmp(loadedTop.getKind(), 'composite'), 'H26: kind');
+    assert(strcmp(loadedTop.AggregateMode, 'and'),   'H26: mode');
+    topKeys = loadedTop.getChildKeys();
+    assert(numel(topKeys) == 2,                      'H26: top child count');
+    assert(strcmp(topKeys{1}, 'mid_L'),              'H26: top child[1]');
+    assert(strcmp(topKeys{2}, 'mid_R'),              'H26: top child[2]');
+    loadedMidL = loadedTop.getChildAt(1);
+    assert(strcmp(loadedMidL.Key, 'mid_L'),          'H26: mid_L by descent');
+    midLKeys = loadedMidL.getChildKeys();
+    assert(strcmp(midLKeys{1}, 'm3_1'),              'H26: mid_L child[1]');
+    % 3-deep descent -- Pitfall 8 proof.
+    leafKey = loadedTop.getChildAt(1).getChildAt(1).Key;
+    assert(strcmp(leafKey, 'm3_1'), ...
+        sprintf('H26: 3-deep descent, expected m3_1 got %s', leafKey));
+
+    % H27: testRoundTrip3DeepReverseOrder (Pitfall 8 order-insensitive)
+    TagRegistry.clear();
+    structs3rev = fliplr(structs3);
+    helperLoadStructsLocal_compositetag_(structs3rev);
+    loadedTopRev = TagRegistry.get('topC');
+    topKeysRev = loadedTopRev.getChildKeys();
+    assert(strcmp(topKeysRev{1}, 'mid_L'),   'H27: reverse order child[1]');
+    assert(strcmp(topKeysRev{2}, 'mid_R'),   'H27: reverse order child[2]');
+    leafKeyRev = loadedTopRev.getChildAt(1).getChildAt(1).Key;
+    assert(strcmp(leafKeyRev, 'm3_1'), ...
+        sprintf('H27: reverse 3-deep, expected m3_1 got %s', leafKeyRev));
+
+    %% I. File-budget discipline watermark
+
+    % I28: TestTagRegistry.m must not reference CompositeTag.
+    ttagSrc = fileread(fullfile(repo, 'tests', 'suite', 'TestTagRegistry.m'));
+    assert(isempty(regexp(ttagSrc, 'CompositeTag', 'once')), ...
+        'I28: TestTagRegistry.m must not reference CompositeTag (file-budget).');
+
+    TagRegistry.clear();
+
+    fprintf('    All 28 CompositeTag tests passed.\n');
 end
 
 function add_compositetag_paths_()
     here = fileparts(mfilename('fullpath'));
     repo = fileparts(here);
     addpath(repo);
+    addpath(fullfile(here, 'suite'));
     install();
+end
+
+function helperLoadStructsLocal_compositetag_(structs)
+    %HELPERLOADSTRUCTSLOCAL_COMPOSITETAG_ Local two-pass loader (Plan 02 workaround).
+    %   Plan 03 wires 'composite' into TagRegistry.instantiateByKind. Until
+    %   then, dispatch kinds inline here so the 3-deep round-trip is
+    %   testable in Plan 02.
+    TagRegistry.clear();
+    map = containers.Map();
+    % Pass 1
+    for i = 1:numel(structs)
+        s = structs{i};
+        switch lower(s.kind)
+            case 'sensor'
+                tag = SensorTag.fromStruct(s);
+            case 'state'
+                tag = StateTag.fromStruct(s);
+            case 'monitor'
+                tag = MonitorTag.fromStruct(s);
+            case 'composite'
+                tag = CompositeTag.fromStruct(s);
+            case 'mock'
+                tag = MockTag.fromStruct(s);
+            otherwise
+                error('test_compositetag:helperUnknownKind', ...
+                    'Unknown kind ''%s'' in local loader.', s.kind);
+        end
+        TagRegistry.register(tag.Key, tag);
+        map(tag.Key) = tag;
+    end
+    % Pass 2
+    keys = map.keys();
+    for i = 1:numel(keys)
+        tag = map(keys{i});
+        if ismethod(tag, 'resolveRefs')
+            tag.resolveRefs(map);
+        end
+    end
 end

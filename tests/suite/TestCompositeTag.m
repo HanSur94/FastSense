@@ -288,5 +288,198 @@ classdef TestCompositeTag < matlab.unittest.TestCase
             end
         end
 
+        % ---- H. Serialization round-trip (Plan 02 — COMPOSITE-05 via toStruct) ----
+
+        function testToStructMinimalComposite(testCase)
+            %TESTTOSTRUCTMINIMALCOMPOSITE Plan 02: toStruct shape with no children.
+            c = CompositeTag('c', 'or');
+            s = c.toStruct();
+            testCase.verifyEqual(s.kind, 'composite');
+            testCase.verifyEqual(s.key, 'c');
+            testCase.verifyEqual(s.aggregatemode, 'or');
+            testCase.verifyEqual(s.threshold, 0.5, 'AbsTol', 1e-12);
+            testCase.verifyTrue(isfield(s, 'childkeys'), ...
+                'toStruct must carry childkeys field');
+            testCase.verifyTrue(isfield(s, 'childweights'), ...
+                'toStruct must carry childweights field');
+            % Empty children -> empty lists.
+            ck = s.childkeys;
+            if iscell(ck) && numel(ck) == 1 && iscell(ck{1})
+                ck = ck{1};   % unwrap defensive double-wrap
+            end
+            testCase.verifyEqual(numel(ck), 0, 'No children -> empty childkeys');
+            testCase.verifyEqual(numel(s.childweights), 0, ...
+                'No children -> empty childweights');
+        end
+
+        function testFromStructEmptyChildren(testCase)
+            %TESTFROMSTRUCTEMPTYCHILDREN Plan 02: fromStruct reconstructs empty composite.
+            c = CompositeTag('c', 'majority', ...
+                'Name', 'agg', 'Criticality', 'high');
+            s = c.toStruct();
+            c2 = CompositeTag.fromStruct(s);
+            testCase.verifyEqual(c2.Key, 'c');
+            testCase.verifyEqual(c2.AggregateMode, 'majority');
+            testCase.verifyEqual(c2.Name, 'agg');
+            testCase.verifyEqual(c2.Criticality, 'high');
+            testCase.verifyEqual(c2.getChildCount(), 0);
+        end
+
+        function testRoundTripCompositeWith2Children(testCase)
+            %TESTROUNDTRIPCOMPOSITEWITH2CHILDREN Plan 02: local two-pass loader wires children.
+            s1 = SensorTag('s1', 'X', 1:10, 'Y', 1:10);
+            s2 = SensorTag('s2', 'X', 1:10, 'Y', 1:10);
+            m1 = MonitorTag('m1', s1, @(x, y) y > 5);
+            m2 = MonitorTag('m2', s2, @(x, y) y > 5);
+            c  = CompositeTag('c', 'or');
+            c.addChild(m1);
+            c.addChild(m2);
+            structs = { ...
+                s1.toStruct(), s2.toStruct(), ...
+                m1.toStruct(), m2.toStruct(), ...
+                c.toStruct()};
+            TestCompositeTag.helperLoadStructsLocal_(structs);
+            loadedC = TagRegistry.get('c');
+            testCase.verifyEqual(loadedC.getKind(), 'composite');
+            testCase.verifyEqual(loadedC.AggregateMode, 'or');
+            keys = loadedC.getChildKeys();
+            testCase.verifyEqual(keys, {'m1', 'm2'}, ...
+                'Loaded composite must carry both children in original order.');
+        end
+
+        function testRoundTrip3DeepComposite(testCase)
+            %TESTROUNDTRIP3DEEPCOMPOSITE Plan 02: 3-deep composite-of-composite-of-composite.
+            %   Pitfall 8 gate. Uses local two-pass loader (Plan 02 bypasses
+            %   TagRegistry.instantiateByKind which gains 'composite' case in
+            %   Plan 03). Plan 03 VALIDATION will re-run via the real
+            %   TagRegistry.loadFromStructs.
+            s1 = SensorTag('s1', 'X', 1:10, 'Y', 1:10);
+            s2 = SensorTag('s2', 'X', 1:10, 'Y', 1:10);
+            s3 = SensorTag('s3', 'X', 1:10, 'Y', 1:10);
+            s4 = SensorTag('s4', 'X', 1:10, 'Y', 1:10);
+            m1 = MonitorTag('m1', s1, @(x, y) y > 5);
+            m2 = MonitorTag('m2', s2, @(x, y) y > 5);
+            m3 = MonitorTag('m3', s3, @(x, y) y > 5);
+            m4 = MonitorTag('m4', s4, @(x, y) y > 5);
+            mid_L = CompositeTag('mid_L', 'or');
+            mid_L.addChild(m1);
+            mid_L.addChild(m2);
+            mid_R = CompositeTag('mid_R', 'majority');
+            mid_R.addChild(m3);
+            mid_R.addChild(m4);
+            top = CompositeTag('top', 'and');
+            top.addChild(mid_L);
+            top.addChild(mid_R);
+
+            structs = { ...
+                s1.toStruct(), s2.toStruct(), s3.toStruct(), s4.toStruct(), ...
+                m1.toStruct(), m2.toStruct(), m3.toStruct(), m4.toStruct(), ...
+                mid_L.toStruct(), mid_R.toStruct(), top.toStruct()};
+            TestCompositeTag.helperLoadStructsLocal_(structs);
+
+            loadedTop = TagRegistry.get('top');
+            testCase.verifyEqual(loadedTop.getKind(), 'composite');
+            testCase.verifyEqual(loadedTop.AggregateMode, 'and');
+            testCase.verifyEqual(loadedTop.getChildKeys(), {'mid_L', 'mid_R'}, ...
+                '3-deep: top children by Key.');
+            % Descend one level — mid_L's children
+            loadedMidL = loadedTop.getChildAt(1);
+            testCase.verifyEqual(loadedMidL.Key, 'mid_L');
+            testCase.verifyEqual(loadedMidL.AggregateMode, 'or');
+            testCase.verifyEqual(loadedMidL.getChildKeys(), {'m1', 'm2'});
+            % 3-deep descent — Pitfall 8 proof.
+            testCase.verifyEqual(loadedTop.getChildAt(1).getChildAt(1).Key, 'm1', ...
+                '3-deep descent: top -> mid_L -> m1.');
+            testCase.verifyEqual(loadedTop.getChildAt(2).getChildAt(2).Key, 'm4', ...
+                '3-deep descent: top -> mid_R -> m4.');
+        end
+
+        function testRoundTrip3DeepReverseOrder(testCase)
+            %TESTROUNDTRIP3DEEPREVERSEORDER Pitfall 8: order-insensitive two-phase loader.
+            s1 = SensorTag('s1', 'X', 1:10, 'Y', 1:10);
+            s2 = SensorTag('s2', 'X', 1:10, 'Y', 1:10);
+            s3 = SensorTag('s3', 'X', 1:10, 'Y', 1:10);
+            s4 = SensorTag('s4', 'X', 1:10, 'Y', 1:10);
+            m1 = MonitorTag('m1', s1, @(x, y) y > 5);
+            m2 = MonitorTag('m2', s2, @(x, y) y > 5);
+            m3 = MonitorTag('m3', s3, @(x, y) y > 5);
+            m4 = MonitorTag('m4', s4, @(x, y) y > 5);
+            mid_L = CompositeTag('mid_L', 'or');
+            mid_L.addChild(m1); mid_L.addChild(m2);
+            mid_R = CompositeTag('mid_R', 'majority');
+            mid_R.addChild(m3); mid_R.addChild(m4);
+            top = CompositeTag('top', 'and');
+            top.addChild(mid_L); top.addChild(mid_R);
+
+            structs = { ...
+                s1.toStruct(), s2.toStruct(), s3.toStruct(), s4.toStruct(), ...
+                m1.toStruct(), m2.toStruct(), m3.toStruct(), m4.toStruct(), ...
+                mid_L.toStruct(), mid_R.toStruct(), top.toStruct()};
+            % Reverse order — top struct first, monitors last.
+            structsReversed = fliplr(structs);
+            TestCompositeTag.helperLoadStructsLocal_(structsReversed);
+
+            loadedTop = TagRegistry.get('top');
+            testCase.verifyEqual(loadedTop.getChildKeys(), {'mid_L', 'mid_R'}, ...
+                'Reverse order: two-phase loader remains order-insensitive (Pitfall 8).');
+            testCase.verifyEqual(loadedTop.getChildAt(1).getChildAt(1).Key, 'm1');
+        end
+
+        % ---- I. File-budget discipline watermark ----
+
+        function testFileBudgetWatermark(testCase)
+            %TESTFILEBUDGETWATERMARK Pitfall 8 file-count discipline.
+            %   3-deep round-trip test lives in TestCompositeTag.m, NOT in
+            %   TestTagRegistry.m. Asserts TestTagRegistry.m stays clean.
+            here = fileparts(mfilename('fullpath'));
+            src = fileread(fullfile(here, 'TestTagRegistry.m'));
+            testCase.verifyTrue(isempty(regexp(src, 'CompositeTag', 'once')), ...
+                'TestTagRegistry.m must not reference CompositeTag (file-budget).');
+        end
+
+    end
+
+    methods (Static, Access = private)
+
+        function helperLoadStructsLocal_(structs)
+            %HELPERLOADSTRUCTSLOCAL_ Local two-pass loader (Plan 02 workaround).
+            %   Plan 02 ships CompositeTag.fromStruct + resolveRefs but does
+            %   NOT edit TagRegistry.instantiateByKind (that is Plan 03).
+            %   This helper dispatches kinds inline so the 3-deep round-trip
+            %   tests are runnable in Plan 02. Plan 03's VALIDATION re-runs
+            %   the 3-deep scenario through the real TagRegistry.loadFromStructs.
+            TagRegistry.clear();
+            map = containers.Map();
+            % Pass 1 — instantiate + register.
+            for i = 1:numel(structs)
+                s = structs{i};
+                switch lower(s.kind)
+                    case 'sensor'
+                        tag = SensorTag.fromStruct(s);
+                    case 'state'
+                        tag = StateTag.fromStruct(s);
+                    case 'monitor'
+                        tag = MonitorTag.fromStruct(s);
+                    case 'composite'
+                        tag = CompositeTag.fromStruct(s);
+                    case 'mock'
+                        tag = MockTag.fromStruct(s);
+                    otherwise
+                        error('TestCompositeTag:helperUnknownKind', ...
+                            'Unknown kind ''%s'' in local loader.', s.kind);
+                end
+                TagRegistry.register(tag.Key, tag);
+                map(tag.Key) = tag;
+            end
+            % Pass 2 — resolve refs.
+            keys = map.keys();
+            for i = 1:numel(keys)
+                tag = map(keys{i});
+                if ismethod(tag, 'resolveRefs')
+                    tag.resolveRefs(map);
+                end
+            end
+        end
+
     end
 end
