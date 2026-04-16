@@ -103,7 +103,12 @@ Plans:
   - **Pitfall 1:** No `isa(t, 'SensorTag')` switches inside `FastSense.addTag` — dispatch by `tag.getKind()` only
   - **Pitfall 5:** Phase touches ≤15 files; legacy `Sensor.m`/`StateChannel.m` not edited
   - **Pitfall 9 (MEX wrapping cost):** `SensorTag.getXY()` returns references not copies; benchmark vs. legacy `Sensor.getXY` ≤5% regression
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 1005-01-PLAN.md — SensorTag composition wrapper + tests (TAG-08)
+- [ ] 1005-02-PLAN.md — StateTag with ZOH valueAt + tests (TAG-09)
+- [ ] 1005-03-PLAN.md — FastSense.addTag dispatcher + TagRegistry sensor/state kinds + Pitfall 9 benchmark (TAG-10)
 
 ### Phase 1006: MonitorTag (lazy, in-memory)
 **Goal**: Replace the side-effect violation pipeline buried inside `Sensor.resolve()` with a first-class `MonitorTag` derived signal that is lazy by default, parent-driven invalidated, and supports debounce + hysteresis — without any disk persistence.
@@ -217,7 +222,7 @@ Plans:
 | 01. Performance Optimization | v1.0 Performance | 3/3 | Complete | 2026-04-04 |
 | 1000-1003 | v1.0 First-Class Thresholds | 14/14 | Complete | 2026-04-15 |
 | 1004. Tag Foundation + Golden Test | v2.0 | 3/3 | Complete    | 2026-04-16 |
-| 1005. SensorTag + StateTag | v2.0 | 0/? | Not started | — |
+| 1005. SensorTag + StateTag | v2.0 | 0/3 | Planned | — |
 | 1006. MonitorTag (lazy, in-memory) | v2.0 | 0/? | Not started | — |
 | 1007. MonitorTag streaming + persistence | v2.0 | 0/? | Not started | — |
 | 1008. CompositeTag | v2.0 | 0/? | Not started | — |
