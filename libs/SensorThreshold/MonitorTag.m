@@ -12,8 +12,9 @@ classdef MonitorTag < Tag
     %
     %   MONITOR-05 note: Phase 1006 (later plans) uses the existing Event
     %   carrier fields SensorName = Parent.Key and ThresholdLabel = obj.Key.
-    %   Phase 1010 (EVENT-01) will migrate to Event.TagKeys. Do NOT write
-    %   TagKeys in this class — the field does not exist on Event yet.
+    %   Phase 1010 (EVENT-01) will migrate to a per-Tag keys field on Event.
+    %   Do NOT write a TagKeys field in this class — it does not exist on
+    %   Event yet (the carrier pattern uses SensorName + ThresholdLabel).
     %
     %   MONITOR-10: Only event-level callbacks (OnEventStart, OnEventEnd)
     %   are supported. Per-sample callbacks are a documented anti-pattern
@@ -295,9 +296,14 @@ classdef MonitorTag < Tag
 
         function recompute_(obj)
             %RECOMPUTE_ Evaluate ConditionFn on parent's grid and cache.
-            %   Plan 01 stops at raw condition evaluation. Plan 02 will
-            %   insert hysteresis + MinDuration debounce + event emission
-            %   between the raw evaluation and the cache write.
+            %   Four-stage pipeline (Plan 02):
+            %     1. Raw condition evaluation (logical, parent-aligned)
+            %     2. Hysteresis FSM (only when AlarmOffConditionFn is set)
+            %     3. MinDuration debounce (no-op when MinDuration == 0)
+            %     4. Event emission on rising edges of the debounced signal
+            %   The cached (x, y) reflects the final debounced+hysteresed
+            %   binary vector — consumers reading getXY see the same signal
+            %   that drove event emission.
             obj.recomputeCount_ = obj.recomputeCount_ + 1;
             [px, py] = obj.Parent.getXY();
             if isempty(px)
@@ -305,14 +311,106 @@ classdef MonitorTag < Tag
                 obj.dirty_ = false;
                 return;
             end
+            % Stage 1: raw condition evaluation
             raw = logical(obj.ConditionFn(px, py));
-            % Plan 02 inserts hysteresis + MinDuration + event emission here.
-            % Plan 01 stops at raw -> cache.
+            % Stage 2: hysteresis (only when AlarmOffConditionFn is non-empty)
+            if ~isempty(obj.AlarmOffConditionFn)
+                raw = obj.applyHysteresis_(px, py, raw);
+            end
+            % Stage 3: MinDuration debounce (no-op when MinDuration == 0)
+            if obj.MinDuration > 0
+                raw = obj.applyDebounce_(px, raw);
+            end
+            % Stage 4: event emission on rising edges
+            obj.fireEventsOnRisingEdges_(px, raw);
             obj.cache_ = struct( ...
                 'x',          px(:).', ...
                 'y',          double(raw(:).'), ...
                 'computedAt', now);
             obj.dirty_ = false;
+        end
+
+        function bin = applyHysteresis_(obj, px, py, rawOn)
+            %APPLYHYSTERESIS_ Two-state FSM — stay ON until AlarmOffConditionFn triggers.
+            %   State OFF: flip to ON when ConditionFn(x, y) is true
+            %   State ON : flip to OFF when AlarmOffConditionFn(x, y) is true
+            %   Single pass over the parent grid (O(N)).
+            N = numel(rawOn);
+            rawOff = logical(obj.AlarmOffConditionFn(px, py));
+            bin = false(1, N);
+            state = false;
+            for i = 1:N
+                if state
+                    if rawOff(i), state = false; end
+                else
+                    if rawOn(i),  state = true;  end
+                end
+                bin(i) = state;
+            end
+        end
+
+        function bin = applyDebounce_(obj, px, bin)
+            %APPLYDEBOUNCE_ Zero out contiguous runs of 1s shorter than MinDuration.
+            %   Durations are in native parent-X units (same convention as
+            %   EventDetector.MinDuration). Uses strict less-than, matching
+            %   EventDetector.m:52 convention.
+            [sI, eI] = obj.findRuns_(bin);
+            for k = 1:numel(sI)
+                if px(eI(k)) - px(sI(k)) < obj.MinDuration
+                    bin(sI(k):eI(k)) = false;
+                end
+            end
+        end
+
+        function [startIdx, endIdx] = findRuns_(~, bin)
+            %FINDRUNS_ Return indices of every contiguous run of 1s.
+            %   Inline port of libs/EventDetection/private/groupViolations.m
+            %   (across-library private helpers are not callable; 4-line
+            %   algorithm copied).
+            if ~any(bin)
+                startIdx = [];
+                endIdx   = [];
+                return;
+            end
+            d = diff([0, bin(:).', 0]);
+            startIdx = find(d == 1);
+            endIdx   = find(d == -1) - 1;
+        end
+
+        function fireEventsOnRisingEdges_(obj, px, bin)
+            %FIREEVENTSONRISINGEDGES_ Emit Events on 0-to-1 transitions after debounce+hysteresis.
+            %
+            %   MONITOR-05 CARRIER PATTERN (Phase 1006 pre-Phase-1010):
+            %     A per-Tag keys field on Event does NOT exist yet. Use the
+            %     existing Event.m constructor with SensorName = obj.Parent.Key
+            %     and ThresholdLabel = obj.Key as carriers. Phase 1010
+            %     (EVENT-01) will migrate to a keys array at that time.
+            %
+            %   MONITOR-10: Event-level callbacks only — OnEventStart fires
+            %   at the rising edge, OnEventEnd fires at the falling edge.
+            %   No per-sample callbacks are exposed.
+            %
+            %   Persistence policy: NEVER calls EventStore.save (Pitfall 2).
+            %   Only EventStore.append — consumers choose when to persist.
+            if isempty(bin), return; end
+            if isempty(obj.EventStore) && isempty(obj.OnEventStart) && isempty(obj.OnEventEnd)
+                return;
+            end
+            [sI, eI] = obj.findRuns_(bin);
+            for k = 1:numel(sI)
+                startT = px(sI(k));
+                endT   = px(eI(k));
+                ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                if ~isempty(obj.EventStore)
+                    obj.EventStore.append(ev);
+                end
+                if ~isempty(obj.OnEventStart)
+                    obj.OnEventStart(ev);
+                end
+                if ~isempty(obj.OnEventEnd)
+                    obj.OnEventEnd(ev);
+                end
+            end
         end
     end
 
