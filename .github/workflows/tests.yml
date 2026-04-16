@@ -9,9 +9,14 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: MATLAB Lint
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -30,6 +35,7 @@ jobs:
 
   build-mex:
     name: Build MEX (Linux)
+    timeout-minutes: 20
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
@@ -62,6 +68,7 @@ jobs:
 
   build-mex-matlab:
     name: Build MEX (MATLAB Linux)
+    timeout-minutes: 30
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
@@ -100,6 +107,7 @@ jobs:
 
   octave:
     name: Octave Tests
+    timeout-minutes: 45
     needs: build-mex
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
@@ -144,6 +152,7 @@ jobs:
 
   mex-build-macos:
     name: MEX Build (macOS ${{ matrix.os == 'macos-latest' && 'ARM64' || 'x64' }})
+    timeout-minutes: 20
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -164,6 +173,7 @@ jobs:
 
   mex-build-windows:
     name: MEX Build (Windows ${{ matrix.os == 'windows-latest' && 'latest' || '2022' }})
+    timeout-minutes: 30
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -232,6 +242,7 @@ jobs:
   matlab:
     name: MATLAB Tests
     needs: build-mex-matlab
+    timeout-minutes: 45
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     env:

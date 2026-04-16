@@ -10,9 +10,14 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-mex:
     name: Build MEX
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
     steps:
@@ -44,6 +49,7 @@ jobs:
 
   benchmark:
     name: Performance Benchmark
+    timeout-minutes: 60
     needs: build-mex
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0

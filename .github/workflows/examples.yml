@@ -9,9 +9,14 @@ on:
     - cron: '0 7 * * 1'   # Weekly Monday 07:00 UTC — MATLAB examples
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-mex:
     name: Build MEX
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
     steps:
@@ -43,6 +48,7 @@ jobs:
 
   smoke-test:
     name: Example Smoke Tests
+    timeout-minutes: 45
     needs: build-mex
     runs-on: ubuntu-latest
     container: gnuoctave/octave:8.4.0
@@ -156,6 +162,7 @@ jobs:
 
   matlab-examples:
     name: MATLAB Example Smoke Tests
+    timeout-minutes: 60
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
