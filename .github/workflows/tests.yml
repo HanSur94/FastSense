@@ -70,6 +70,18 @@ jobs:
         with:
           command: "install();"
 
+      - name: Diagnose mksqlite build output
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "=== build-mex-matlab: post-compile mksqlite diagnostic ==="
+          echo "--- libs/FastSense/mksqlite.* ---"
+          ls -la libs/FastSense/mksqlite.* 2>&1 || echo "(no mksqlite files in libs/FastSense/)"
+          echo "--- libs/FastSense/private/*.mexa64 ---"
+          ls -la libs/FastSense/private/*.mexa64 2>&1 || echo "(no mexa64 in private)"
+          echo "--- mksqlite source ---"
+          ls -la libs/FastSense/mksqlite.c 2>&1 || echo "(no mksqlite.c)"
+
       - name: Upload MATLAB MEX artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -240,6 +252,31 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: mex-matlab-linux
+
+      - name: Diagnose mksqlite availability for tests
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "=== matlab job: pre-test mksqlite diagnostic ==="
+          echo "--- files on disk after artifact download ---"
+          ls -la libs/FastSense/mksqlite.* 2>&1 || echo "(no mksqlite files on disk)"
+
+      - name: MATLAB which-mksqlite check
+        if: always()
+        continue-on-error: true
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            addpath('.');
+            install();
+            fprintf('which mksqlite: %s\n', which('mksqlite'));
+            fprintf('exist mksqlite: %d (expect 3 if MEX loadable)\n', exist('mksqlite'));
+            try
+                mksqlite('version');
+                fprintf('mksqlite call: OK\n');
+            catch e
+                fprintf('mksqlite call FAILED: %s\n', e.message);
+            end
 
       - name: Run tests with coverage
         uses: matlab-actions/run-command@v2
