@@ -35,7 +35,7 @@
 - [x] **TAG-07**: Every Tag subclass implements `toStruct()` and static `fromStruct(s)` for JSON round-trip. `TagRegistry.loadFromStructs` round-trip works for any composition depth (composite of composites).
 - [x] **TAG-08**: `SensorTag` subclass — raw `(X, Y)` data, `load(matFile)`, `toDisk(store)/toMemory()/isOnDisk()`, DataStore property. Feature-equivalent to existing `Sensor` class for raw signal handling.
 - [x] **TAG-09**: `StateTag` subclass — zero-order-hold `valueAt(t)` lookup over discrete state transitions; X (timestamps) + Y (numeric or cell-array states). Feature-equivalent to existing `StateChannel` class.
-- [ ] **TAG-10**: User can call `FastSense.addTag(tag)` polymorphically. Internal dispatch routes by `tag.getKind()` to existing line-rendering (sensor/monitor) or band-rendering (state) code paths.
+- [x] **TAG-10**: User can call `FastSense.addTag(tag)` polymorphically. Internal dispatch routes by `tag.getKind()` to existing line-rendering (sensor/monitor) or band-rendering (state) code paths.
 
 ### MONITOR — MonitorTag
 

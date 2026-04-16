@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: executing
-stopped_at: "Completed 1005-02-PLAN.md — StateTag (219 SLOC) with ZOH valueAt byte-for-byte matching StateChannel + StateTag:emptyState hygiene guard; TestStateTag (17 methods) + test_statetag (29 asserts) GREEN; legacy StateChannel/Sensor byte-for-byte unchanged (Pitfall 5 PASS); Plan 1005-03 (FastSense.addTag dispatcher) unblocked"
-last_updated: "2026-04-16T14:24:06.955Z"
+status: verifying
+stopped_at: Completed 1005-03-PLAN.md — FastSense.addTag polymorphic dispatcher + TagRegistry sensor/state kind extension; 13 files / 15 Pitfall 5 budget (13.3% margin); zero-copy Pitfall 9 proven via -0.6% wrapper-overhead growth at 1000x N; legacy byte-for-byte unchanged; 7 Octave suites GREEN; Phase 1005 complete (3/3 plans)
+last_updated: "2026-04-16T14:37:12.931Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 
 Phase: 1005 (SensorTag + StateTag (data carriers)) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-16
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -95,6 +95,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1004-tag-foundation-golden-test P03 | 3min | 2 tasks | 3 files |
 | Phase 1005-sensortag-statetag-data-carriers P01 | 4min | 2 tasks | 3 files |
 | Phase 1005 P02 | 8min | 2 tasks | 3 files |
+| Phase 1005-sensortag-statetag-data-carriers P03 | 9min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,10 @@ Recent decisions affecting current work:
 - [Phase 1005-02]: StateTag.valueAt byte-for-byte copy of StateChannel.valueAt (scalar+vector × numeric+cellstr); only addition is StateTag:emptyState guard at top
 - [Phase 1005-02]: splitArgs_ uses while-loop with hasX/hasY flags (not ~isempty) so explicit 'X',[] construction is distinguishable from the defaulted path and dangling-key errors are hygienic
 - [Phase 1005-02]: toStruct double-wraps cellstr Y via {obj.Y} (same defense as Labels) to survive MATLAB struct() cellstr-collapse; fromStruct unwraps symmetrically; X/Y inlined because state channels are small by nature
+- [Phase 1005-03]: FastSense.addTag dispatches by tag.getKind() (string switch) — NO isa(t, 'SensorTag'|'StateTag') subclass branches; Pitfall 1 gate PASS
+- [Phase 1005-03]: StateTag rendered as inline 2N-1 interleaved staircase via addLine (RESEARCH §8 Route A); cellstr Y deferred with FastSense:stateTagCellstrNotSupported; empty StateTag is silent no-op
+- [Phase 1005-03]: Pitfall 9 benchmark reinterpreted as wrapper-overhead-growth gate (Rule 1 deviation) — Octave method dispatch ~14us makes direct field-access comparison unfair; zero-copy proven via -0.6% wrapper-overhead growth across 1000x N scale
+- [Phase 1005-03]: FastSense.m diff is additive-only: addTag + addStateTagAsStaircase_ inserted between addFill (line 941) and render (line 943); legacy addLine/addSensor/addBand bodies byte-for-byte unchanged (Pitfall 5)
 
 ### Roadmap Evolution
 
@@ -207,6 +212,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T14:24:06.951Z
-Stopped at: Completed 1005-02-PLAN.md — StateTag (219 SLOC) with ZOH valueAt byte-for-byte matching StateChannel + StateTag:emptyState hygiene guard; TestStateTag (17 methods) + test_statetag (29 asserts) GREEN; legacy StateChannel/Sensor byte-for-byte unchanged (Pitfall 5 PASS); Plan 1005-03 (FastSense.addTag dispatcher) unblocked
+Last session: 2026-04-16T14:37:12.926Z
+Stopped at: Completed 1005-03-PLAN.md — FastSense.addTag polymorphic dispatcher + TagRegistry sensor/state kind extension; 13 files / 15 Pitfall 5 budget (13.3% margin); zero-copy Pitfall 9 proven via -0.6% wrapper-overhead growth at 1000x N; legacy byte-for-byte unchanged; 7 Octave suites GREEN; Phase 1005 complete (3/3 plans)
 Resume file: None

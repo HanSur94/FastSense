@@ -56,7 +56,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 ### v2.0 Tag-Based Domain Model — Phases 1004-1011 (active)
 
 - [x] **Phase 1004: Tag Foundation + Golden Test** — abstract `Tag` base, `TagRegistry` (two-phase loader), META properties, plus untouchable golden integration test guarding the rewrite (completed 2026-04-16)
-- [ ] **Phase 1005: SensorTag + StateTag (data carriers)** — port `Sensor`/`StateChannel` to Tag subclasses; add `FastSense.addTag()` alongside legacy `addSensor()`
+- [x] **Phase 1005: SensorTag + StateTag (data carriers)** — port `Sensor`/`StateChannel` to Tag subclasses; add `FastSense.addTag()` alongside legacy `addSensor()` (completed 2026-04-16)
 - [ ] **Phase 1006: MonitorTag (lazy, in-memory)** — derived 0/1 time series with debounce, hysteresis, parent-driven invalidation, ZOH alignment; no disk persistence
 - [ ] **Phase 1007: MonitorTag streaming + persistence** — `appendData` incremental tail computation and opt-in `FastSenseDataStore` storeMonitor/loadMonitor
 - [ ] **Phase 1008: CompositeTag** — AND/OR/MAJORITY/COUNT/WORST/SEVERITY/USER_FN aggregation with cycle detection and merge-sort streaming
@@ -108,7 +108,7 @@ Plans:
 Plans:
 - [x] 1005-01-PLAN.md — SensorTag composition wrapper + tests (TAG-08)
 - [x] 1005-02-PLAN.md — StateTag with ZOH valueAt + tests (TAG-09)
-- [ ] 1005-03-PLAN.md — FastSense.addTag dispatcher + TagRegistry sensor/state kinds + Pitfall 9 benchmark (TAG-10)
+- [x] 1005-03-PLAN.md — FastSense.addTag dispatcher + TagRegistry sensor/state kinds + Pitfall 9 benchmark (TAG-10)
 
 ### Phase 1006: MonitorTag (lazy, in-memory)
 **Goal**: Replace the side-effect violation pipeline buried inside `Sensor.resolve()` with a first-class `MonitorTag` derived signal that is lazy by default, parent-driven invalidated, and supports debounce + hysteresis — without any disk persistence.
@@ -222,7 +222,7 @@ Plans:
 | 01. Performance Optimization | v1.0 Performance | 3/3 | Complete | 2026-04-04 |
 | 1000-1003 | v1.0 First-Class Thresholds | 14/14 | Complete | 2026-04-15 |
 | 1004. Tag Foundation + Golden Test | v2.0 | 3/3 | Complete    | 2026-04-16 |
-| 1005. SensorTag + StateTag | v2.0 | 2/3 | In Progress|  |
+| 1005. SensorTag + StateTag | v2.0 | 3/3 | Complete   | 2026-04-16 |
 | 1006. MonitorTag (lazy, in-memory) | v2.0 | 0/? | Not started | — |
 | 1007. MonitorTag streaming + persistence | v2.0 | 0/? | Not started | — |
 | 1008. CompositeTag | v2.0 | 0/? | Not started | — |
@@ -236,7 +236,7 @@ Plans:
 
 **Goal:** Add Home Assistant-style Mushroom Card widgets to the dashboard engine — minimal, icon-driven cards with clean visual design for sensor status, controls, and quick glance data. Three new widget classes: IconCardWidget, ChipBarWidget, SparklineCardWidget, plus theme additions and full serializer/builder/detach integration.
 **Requirements:** [MUSH-01: DashboardTheme InfoColor, MUSH-02: IconCardWidget, MUSH-03: ChipBarWidget, MUSH-04: SparklineCardWidget, MUSH-05: DashboardEngine type registration, MUSH-06: DashboardSerializer integration, MUSH-07: DetachedMirror + DashboardBuilder integration]
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation
