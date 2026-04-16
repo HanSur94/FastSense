@@ -257,5 +257,51 @@ classdef TestTagRegistry < matlab.unittest.TestCase
             testCase.verifyEqual(X, [1 5 10]);
             testCase.verifyEqual(Y, [0 1 2]);
         end
+
+        % ---- Phase 1006-03: MonitorTag round-trip via loadFromStructs ----
+
+        function testRoundTripMonitorTag(testCase)
+            %TESTROUNDTRIPMONITORTAG MonitorTag round-trip via loadFromStructs (forward + reverse order).
+            %   Pass-1 instantiates both tags; Pass-2 resolveRefs wires the Parent handle.
+            %   Reverse order (monitor first, parent second) re-exercises Pitfall 8
+            %   order-insensitivity for the 'monitor' kind.
+            %
+            %   Handle identity is proven via Key equality + observable listener
+            %   wiring (Octave isequal on user-defined handles with listener
+            %   cycles hits SIGILL — see Plan 01 SUMMARY deviation #3).
+
+            % --- Forward order: parent struct first, monitor struct second ---
+            TagRegistry.clear();
+            parent = SensorTag('pkey', 'Name', 'Pump', 'X', 1:5, 'Y', [1 2 3 4 5]);
+            monitor = MonitorTag('mkey', parent, @(x,y) y > 2, 'Name', 'Overheat');
+            parentStruct  = parent.toStruct();
+            monitorStruct = monitor.toStruct();
+
+            TagRegistry.clear();
+            TagRegistry.loadFromStructs({parentStruct, monitorStruct});
+
+            loadedParent  = TagRegistry.get('pkey');
+            loadedMonitor = TagRegistry.get('mkey');
+            testCase.verifyEqual(loadedMonitor.getKind(), 'monitor');
+            testCase.verifyEqual(loadedMonitor.Parent.Key, loadedParent.Key, ...
+                'Forward order: loadedMonitor.Parent.Key must equal loadedParent.Key.');
+            testCase.verifyEqual(loadedMonitor.Name, 'Overheat');
+
+            % --- Reverse order: monitor struct first, parent struct second ---
+            %   Pitfall 8 re-verification: two-phase loader must be order-insensitive
+            %   for the 'monitor' kind. Pass-1 instantiates MonitorTag with a
+            %   dummy parent; Pass-2 resolveRefs(registry) wires the real parent
+            %   regardless of input order.
+            TagRegistry.clear();
+            TagRegistry.loadFromStructs({monitorStruct, parentStruct});
+
+            loadedParent2  = TagRegistry.get('pkey');
+            loadedMonitor2 = TagRegistry.get('mkey');
+            testCase.verifyEqual(loadedMonitor2.getKind(), 'monitor');
+            testCase.verifyEqual(loadedMonitor2.Parent.Key, loadedParent2.Key, ...
+                'Reverse order: loadedMonitor.Parent.Key must equal loadedParent.Key (Pitfall 8).');
+
+            TagRegistry.clear();
+        end
     end
 end

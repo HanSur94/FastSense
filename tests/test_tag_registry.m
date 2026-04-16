@@ -122,7 +122,37 @@ function test_tag_registry()
     assert(isequal(Yr, [0 1 2]), 'test_tag_registry: StateTag roundtrip Y');
     TagRegistry.clear();
 
-    fprintf('    All 13 test_tag_registry tests passed.\n');
+    % --- Phase 1006-03: MonitorTag round-trip via loadFromStructs (MONITOR-02) ---
+    % Forward + reverse order; Pitfall 8 order-insensitivity re-verified for the
+    % 'monitor' kind. Pass-1 builds both tags; Pass-2 resolveRefs wires Parent.
+    % Handle identity is asserted via Key equality (Octave-safe; Plan 01
+    % SUMMARY deviation #3 documents why == / isequal on handles with listener
+    % cycles hits SIGILL).
+    TagRegistry.clear();
+    parent_m  = SensorTag('pkey_m', 'Name', 'Pump', 'X', 1:5, 'Y', [1 2 3 4 5]);
+    monitor_m = MonitorTag('mkey_m', parent_m, @(x,y) y > 2, 'Name', 'Overheat');
+    parentStruct_m  = parent_m.toStruct();
+    monitorStruct_m = monitor_m.toStruct();
+
+    % Forward order
+    TagRegistry.clear();
+    TagRegistry.loadFromStructs({parentStruct_m, monitorStruct_m});
+    lp = TagRegistry.get('pkey_m');
+    lm = TagRegistry.get('mkey_m');
+    assert(strcmp(lm.getKind(), 'monitor'), 'test_tag_registry: MonitorTag forward kind');
+    assert(strcmp(lm.Parent.Key, lp.Key), 'test_tag_registry: MonitorTag forward Parent.Key');
+    assert(strcmp(lm.Name, 'Overheat'), 'test_tag_registry: MonitorTag forward Name');
+
+    % Reverse order (Pitfall 8 re-verification)
+    TagRegistry.clear();
+    TagRegistry.loadFromStructs({monitorStruct_m, parentStruct_m});
+    lp2 = TagRegistry.get('pkey_m');
+    lm2 = TagRegistry.get('mkey_m');
+    assert(strcmp(lm2.getKind(), 'monitor'), 'test_tag_registry: MonitorTag reverse kind (Pitfall 8)');
+    assert(strcmp(lm2.Parent.Key, lp2.Key), 'test_tag_registry: MonitorTag reverse Parent.Key (Pitfall 8)');
+    TagRegistry.clear();
+
+    fprintf('    All 14 test_tag_registry tests passed.\n');
 end
 
 function add_tag_registry_path()
