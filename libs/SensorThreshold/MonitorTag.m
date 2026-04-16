@@ -51,6 +51,12 @@ classdef MonitorTag < Tag
     %
     %   Methods (additional):
     %     invalidate           — clear cache + mark dirty
+    %     appendData(newX,newY) — Phase 1007 (MONITOR-08) streaming tail.
+    %                             Extends cache incrementally; preserves
+    %                             hysteresis FSM state and MinDuration
+    %                             bookkeeping across the append boundary.
+    %                             Falls back to full recompute_() when
+    %                             the cache is dirty/empty (cold start).
     %
     %   Error IDs:
     %     MonitorTag:invalidParent     — parentTag not a Tag
@@ -58,6 +64,7 @@ classdef MonitorTag < Tag
     %     MonitorTag:unknownOption     — unknown NV key or dangling key
     %     MonitorTag:dataMismatch      — fromStruct missing required fields
     %     MonitorTag:unresolvedParent  — Pass-2 parent key not in registry
+    %     MonitorTag:invalidData       — appendData numeric/length mismatch
     %
     %   Example:
     %     st = SensorTag('press_a', 'X', 1:100, 'Y', sin((1:100)/10)*30 + 40);
@@ -79,7 +86,12 @@ classdef MonitorTag < Tag
     end
 
     properties (Access = private)
-        cache_          = struct() % {x, y, computedAt}; empty until first compute
+        % cache_ fields (Phase 1007 adds the three streaming-state fields):
+        %   x, y, computedAt   — Plan 02 baseline
+        %   lastStateFlag_     — last bin value (0/1); used by fireEventsInTail_
+        %   lastHystState_     — hysteresis FSM carry-in for appendData (logical)
+        %   ongoingRunStart_   — X-native start of open run at cache end (NaN if none)
+        cache_          = struct() % empty until first compute
         dirty_          = true     % true when cache needs rebuilding
         ParentKey_      = ''       % set in Pass-1 fromStruct; consumed by resolveRefs
         listeners_      = {}       % cell of listeners notified on invalidate()
@@ -265,6 +277,89 @@ classdef MonitorTag < Tag
             obj.listeners_{end+1} = m;
         end
 
+        function appendData(obj, newX, newY)
+            %APPENDDATA Extend cached (X, Y) with new tail samples — no full recompute.
+            %   Preserves hysteresis FSM state and MinDuration bookkeeping
+            %   across the append boundary (MONITOR-08). Events fire only
+            %   for runs that COMPLETE (reach a falling edge) inside newX:
+            %   a run still open at the tail end is carried as state for
+            %   the next appendData call; a run that was already open at
+            %   the cache end and closes inside newX fires ONE event with
+            %   StartTime = the original (carried) start.
+            %
+            %   If the cache is dirty or empty (no prior getXY), falls
+            %   back to a full recompute_() over the parent's current
+            %   grid (parent.updateData is expected to have already
+            %   absorbed newX/newY into the parent before this call — we
+            %   do not duplicate-append on the cold path).
+            %
+            %   Errors:
+            %     MonitorTag:invalidData — newX/newY not numeric or not
+            %                              the same length.
+            if ~isnumeric(newX) || ~isnumeric(newY) || numel(newX) ~= numel(newY)
+                error('MonitorTag:invalidData', ...
+                    'appendData requires numeric newX and newY of equal length.');
+            end
+            if isempty(newX), return; end
+            if obj.dirty_ || isempty(fieldnames(obj.cache_)) ...
+                    || ~isfield(obj.cache_, 'x') || isempty(obj.cache_.x)
+                % Cold start — full recompute over whatever the parent holds.
+                obj.recompute_();
+                return;
+            end
+
+            newX = newX(:).';
+            newY = newY(:).';
+
+            % Snapshot prior boundary-state BEFORE mutation (read by fire + merge).
+            priorLastFlag     = obj.cache_.lastStateFlag_;
+            priorHystState    = obj.cache_.lastHystState_;
+            priorOngoingStart = obj.cache_.ongoingRunStart_;
+
+            % Stage 1: raw condition evaluation on tail only
+            raw_new = logical(obj.ConditionFn(newX, newY));
+
+            % Stage 2: hysteresis FSM with carry-in
+            finalHyst = priorHystState;
+            if ~isempty(obj.AlarmOffConditionFn)
+                [raw_new, finalHyst] = obj.applyHysteresis_( ...
+                    newX, newY, raw_new, priorHystState);
+            end
+
+            % Stage 3: MinDuration debounce with carry-in ongoingRunStart
+            newOngoing = priorOngoingStart;
+            if obj.MinDuration > 0
+                [raw_new, newOngoing] = obj.applyDebounce_( ...
+                    newX, raw_new, priorOngoingStart);
+            elseif ~isempty(raw_new) && raw_new(end)
+                % No debounce — still track the open-run start forward.
+                [sI, eI] = obj.findRuns_(raw_new);
+                if ~isempty(eI) && eI(end) == numel(raw_new)
+                    if sI(end) == 1 && ~isnan(priorOngoingStart)
+                        newOngoing = priorOngoingStart;
+                    else
+                        newOngoing = newX(sI(end));
+                    end
+                end
+            elseif ~isempty(raw_new) && ~raw_new(end)
+                % Tail ends OFF -> no open run carried.
+                newOngoing = NaN;
+            end
+
+            % Stage 4: emit events for runs that CLOSE inside newX.
+            obj.fireEventsInTail_(newX, raw_new, priorLastFlag, priorOngoingStart);
+
+            % Extend cache and write new boundary-state fields.
+            obj.cache_.x = [obj.cache_.x, newX];
+            obj.cache_.y = [obj.cache_.y, double(raw_new)];
+            obj.cache_.computedAt       = now;
+            obj.cache_.lastHystState_   = finalHyst;
+            obj.cache_.ongoingRunStart_ = newOngoing;
+            if ~isempty(raw_new)
+                obj.cache_.lastStateFlag_ = double(raw_new(end));
+            end
+        end
+
         % ---- Property setters that invalidate (Pitfall 9) ----
 
         function set.ConditionFn(obj, v)
@@ -304,41 +399,74 @@ classdef MonitorTag < Tag
             %   The cached (x, y) reflects the final debounced+hysteresed
             %   binary vector — consumers reading getXY see the same signal
             %   that drove event emission.
+            %
+            %   Phase 1007 (MONITOR-08): writes three additional cache_
+            %   fields (lastHystState_, ongoingRunStart_, lastStateFlag_)
+            %   so that a subsequent appendData() call can continue the
+            %   pipeline at the boundary without recomputing the prefix.
             obj.recomputeCount_ = obj.recomputeCount_ + 1;
             [px, py] = obj.Parent.getXY();
             if isempty(px)
-                obj.cache_ = struct('x', [], 'y', [], 'computedAt', now);
+                obj.cache_ = struct( ...
+                    'x',               [], ...
+                    'y',               [], ...
+                    'computedAt',      now, ...
+                    'lastStateFlag_',  0, ...
+                    'lastHystState_',  false, ...
+                    'ongoingRunStart_', NaN);
                 obj.dirty_ = false;
                 return;
             end
             % Stage 1: raw condition evaluation
             raw = logical(obj.ConditionFn(px, py));
             % Stage 2: hysteresis (only when AlarmOffConditionFn is non-empty)
+            finalHyst = false;
             if ~isempty(obj.AlarmOffConditionFn)
-                raw = obj.applyHysteresis_(px, py, raw);
+                [raw, finalHyst] = obj.applyHysteresis_(px, py, raw, false);
             end
             % Stage 3: MinDuration debounce (no-op when MinDuration == 0)
+            newOngoing = NaN;
             if obj.MinDuration > 0
-                raw = obj.applyDebounce_(px, raw);
+                [raw, newOngoing] = obj.applyDebounce_(px, raw, NaN);
+            elseif ~isempty(raw) && raw(end)
+                % No debounce active, but an open run at cache end still
+                % needs its X-native start tracked for a future appendData
+                % call to merge correctly.
+                [sI, eI] = obj.findRuns_(raw);
+                if ~isempty(eI) && eI(end) == numel(raw)
+                    newOngoing = px(sI(end));
+                end
             end
             % Stage 4: event emission on rising edges
             obj.fireEventsOnRisingEdges_(px, raw);
+            % Write cache + boundary-state fields (read by appendData).
+            lastFlag = 0;
+            if ~isempty(raw), lastFlag = double(raw(end)); end
             obj.cache_ = struct( ...
-                'x',          px(:).', ...
-                'y',          double(raw(:).'), ...
-                'computedAt', now);
+                'x',               px(:).', ...
+                'y',               double(raw(:).'), ...
+                'computedAt',      now, ...
+                'lastStateFlag_',  lastFlag, ...
+                'lastHystState_',  finalHyst, ...
+                'ongoingRunStart_', newOngoing);
             obj.dirty_ = false;
         end
 
-        function bin = applyHysteresis_(obj, px, py, rawOn)
+        function [bin, finalState] = applyHysteresis_(obj, px, py, rawOn, initialState)
             %APPLYHYSTERESIS_ Two-state FSM — stay ON until AlarmOffConditionFn triggers.
             %   State OFF: flip to ON when ConditionFn(x, y) is true
             %   State ON : flip to OFF when AlarmOffConditionFn(x, y) is true
             %   Single pass over the parent grid (O(N)).
+            %
+            %   Phase 1007 (MONITOR-08): accepts `initialState` so a
+            %   streaming appendData call can continue the FSM across the
+            %   chunk boundary; returns `finalState` (the end-of-chunk FSM
+            %   state) so the caller can persist it for the next append.
+            if nargin < 5, initialState = false; end
             N = numel(rawOn);
             rawOff = logical(obj.AlarmOffConditionFn(px, py));
             bin = false(1, N);
-            state = false;
+            state = initialState;
             for i = 1:N
                 if state
                     if rawOff(i), state = false; end
@@ -347,17 +475,46 @@ classdef MonitorTag < Tag
                 end
                 bin(i) = state;
             end
+            finalState = state;
         end
 
-        function bin = applyDebounce_(obj, px, bin)
+        function [bin, ongoingRunStart] = applyDebounce_(obj, px, bin, carryStartX)
             %APPLYDEBOUNCE_ Zero out contiguous runs of 1s shorter than MinDuration.
             %   Durations are in native parent-X units (same convention as
             %   EventDetector.MinDuration). Uses strict less-than, matching
             %   EventDetector.m:52 convention.
+            %
+            %   Phase 1007 (MONITOR-08): accepts `carryStartX` — the
+            %   X-native start timestamp of an open run that crosses into
+            %   this chunk from a prior appendData/recompute boundary
+            %   (NaN when none). When the first run in `bin` starts at
+            %   index 1 AND a carry is present, the effective duration is
+            %   measured from `carryStartX` instead of px(1). Returns the
+            %   new `ongoingRunStart` — NaN if the (possibly-mutated) bin
+            %   ends OFF; otherwise the X-native start of the final run.
+            if nargin < 4, carryStartX = NaN; end
             [sI, eI] = obj.findRuns_(bin);
             for k = 1:numel(sI)
-                if px(eI(k)) - px(sI(k)) < obj.MinDuration
+                if k == 1 && ~isnan(carryStartX) && sI(k) == 1 && bin(1)
+                    effectiveStart = carryStartX;
+                else
+                    effectiveStart = px(sI(k));
+                end
+                if px(eI(k)) - effectiveStart < obj.MinDuration
                     bin(sI(k):eI(k)) = false;
+                end
+            end
+            % Determine new ongoingRunStart: if bin ends with a 1-run,
+            % carry its effective start forward.
+            ongoingRunStart = NaN;
+            if ~isempty(bin) && bin(end)
+                [sI2, eI2] = obj.findRuns_(bin);
+                if ~isempty(sI2) && eI2(end) == numel(bin)
+                    if sI2(end) == 1 && ~isnan(carryStartX)
+                        ongoingRunStart = carryStartX;
+                    else
+                        ongoingRunStart = px(sI2(end));
+                    end
                 end
             end
         end
@@ -375,6 +532,52 @@ classdef MonitorTag < Tag
             d = diff([0, bin(:).', 0]);
             startIdx = find(d == 1);
             endIdx   = find(d == -1) - 1;
+        end
+
+        function fireEventsInTail_(obj, newX, bin_new, priorLastFlag, priorOngoingStart)
+            %FIREEVENTSINTAIL_ Emit events ONLY for runs that close inside newX.
+            %
+            %   Phase 1007 (MONITOR-08) streaming-event emission.
+            %   If priorLastFlag == 1 AND bin_new(1) == 1 the first run in
+            %   the tail is a continuation of the open run; use
+            %   priorOngoingStart as its effective StartTime. Runs still
+            %   open at the tail end are NOT emitted — they carry forward
+            %   as state for the next appendData call.
+            %
+            %   MONITOR-05 carrier pattern unchanged from Plan 02:
+            %     SensorName     = obj.Parent.Key
+            %     ThresholdLabel = obj.Key
+            %   (Phase 1010 will migrate to a per-Tag keys array on Event.)
+            if isempty(bin_new), return; end
+            if isempty(obj.EventStore) ...
+                    && isempty(obj.OnEventStart) ...
+                    && isempty(obj.OnEventEnd)
+                return;
+            end
+            [sI, eI] = obj.findRuns_(bin_new);
+            for k = 1:numel(sI)
+                if eI(k) == numel(bin_new)
+                    % Run still open at tail end — don't emit yet.
+                    continue;
+                end
+                if k == 1 && priorLastFlag == 1 && sI(k) == 1 ...
+                        && ~isnan(priorOngoingStart)
+                    startT = priorOngoingStart;
+                else
+                    startT = newX(sI(k));
+                end
+                endT = newX(eI(k));
+                ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                if ~isempty(obj.EventStore)
+                    obj.EventStore.append(ev);
+                end
+                if ~isempty(obj.OnEventStart)
+                    obj.OnEventStart(ev);
+                end
+                if ~isempty(obj.OnEventEnd)
+                    obj.OnEventEnd(ev);
+                end
+            end
         end
 
         function fireEventsOnRisingEdges_(obj, px, bin)
