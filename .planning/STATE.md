@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1004-01-PLAN.md — Tag abstract base class shipped; Pitfall 1 gate (exactly 6 stubs) verified; MockTag scaffold ready for Plan 02 TagRegistry
-last_updated: "2026-04-16T13:18:51.969Z"
+stopped_at: Completed 1004-02-PLAN.md — TagRegistry singleton shipped; Pitfall 7 duplicate-key hard error + Pitfall 8 two-phase loader with unresolvedRef wrap both locked; META-02 findByLabel live; Plan 03 golden integration test next
+last_updated: "2026-04-16T13:29:49.700Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 15
   completed_phases: 6
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1004 (Tag Foundation + Golden Test) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -91,6 +91,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1003 P01 | 3min | 1 tasks | 3 files |
 | Phase 1003 P03 | 10min | 1 tasks | 3 files |
 | Phase 1004-tag-foundation-golden-test P01 | 4min | 2 tasks | 4 files |
+| Phase 1004-tag-foundation-golden-test P02 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,9 @@ Recent decisions affecting current work:
 - [Phase 1002]: ChipBarWidget threshold block before statusFcn in resolveChipColor so threshold takes priority
 - [Phase 1003]: CompositeThreshold extends Threshold directly so isa check works; AND/OR/MAJORITY via AggregateMode property; toStruct children as cell of structs with key+optional value; fromStruct resolves via ThresholdRegistry with warn-and-skip for missing keys; isequal() for Octave-safe handle identity
 - [Phase 1004]: Tag base uses throw-from-base (error 'Tag:notImplemented') rather than methods (Abstract); exactly 6 stubs enforced by runtime grep test; test abstract stubs by instantiating Tag('k') directly (portable MATLAB+Octave); Criticality setter validates ischar before strcmp; Name defaults to Key in constructor; MockTag.toStruct wraps Labels to survive struct() cellstr collapse
+- [Phase 1004-tag-foundation-golden-test]: TagRegistry hard-errors on duplicate key (Pitfall 7) — departure from ThresholdRegistry's silent-overwrite
+- [Phase 1004-tag-foundation-golden-test]: Two-phase loadFromStructs (Pass 1 instantiate+register, Pass 2 resolveRefs in try/catch) is the canonical Tag-family serialization pattern; wraps any resolveRefs failure as TagRegistry:unresolvedRef (Pitfall 8)
+- [Phase 1004-tag-foundation-golden-test]: instantiateByKind dispatch table lives on TagRegistry (not Tag base) so Phase 1005+ extends kinds by adding switch cases rather than touching the abstract base class
 
 ### Roadmap Evolution
 
@@ -194,6 +198,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T13:18:51.964Z
-Stopped at: Completed 1004-01-PLAN.md — Tag abstract base class shipped; Pitfall 1 gate (exactly 6 stubs) verified; MockTag scaffold ready for Plan 02 TagRegistry
+Last session: 2026-04-16T13:29:42.823Z
+Stopped at: Completed 1004-02-PLAN.md — TagRegistry singleton shipped; Pitfall 7 duplicate-key hard error + Pitfall 8 two-phase loader with unresolvedRef wrap both locked; META-02 findByLabel live; Plan 03 golden integration test next
 Resume file: None

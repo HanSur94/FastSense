@@ -28,11 +28,11 @@
 
 - [x] **TAG-01**: Define `Tag` abstract base class (`< handle`) with throw-from-base contract for `getXY()`, `valueAt(t)`, `getTimeRange()`, `getKind()`, `toStruct()`, and static `fromStruct(s)` — proven Octave-safe pattern from `DashboardWidget`/`DataSource`. Maximum 6 abstract methods (Pitfall 1 budget).
 - [x] **TAG-02**: Tag root exposes universal properties: `Key` (unique string), `Name` (display), `Units`, `Description`, `Labels` (cell of strings), `Metadata` (open struct), `Criticality` (`low|medium|high|safety` enum), `SourceRef` (optional provenance string).
-- [ ] **TAG-03**: `TagRegistry` singleton with `register(key, tag)`, `get(key)`, `unregister(key)`, `clear()`. Throws `TagRegistry:duplicateKey` on collision (hard error, matches existing ThresholdRegistry behavior).
-- [ ] **TAG-04**: `TagRegistry` query API: `find(predicate)`, `findByLabel(label)`, `findByKind(kind)` — enables label-driven dashboards and tag-discovery widgets.
-- [ ] **TAG-05**: `TagRegistry` introspection: `list()`, `printTable()`, `viewer()` (Octave-safe uitable). Carry-forward from existing `SensorRegistry`/`ThresholdRegistry`.
-- [ ] **TAG-06**: `TagRegistry.loadFromStructs(structs)` performs **two-phase deserialization** — Pass 1 instantiates all tags with empty children; Pass 2 resolves cross-references. Eliminates the documented `CompositeThreshold.fromStruct` ordering trap.
-- [ ] **TAG-07**: Every Tag subclass implements `toStruct()` and static `fromStruct(s)` for JSON round-trip. `TagRegistry.loadFromStructs` round-trip works for any composition depth (composite of composites).
+- [x] **TAG-03**: `TagRegistry` singleton with `register(key, tag)`, `get(key)`, `unregister(key)`, `clear()`. Throws `TagRegistry:duplicateKey` on collision (hard error, matches existing ThresholdRegistry behavior).
+- [x] **TAG-04**: `TagRegistry` query API: `find(predicate)`, `findByLabel(label)`, `findByKind(kind)` — enables label-driven dashboards and tag-discovery widgets.
+- [x] **TAG-05**: `TagRegistry` introspection: `list()`, `printTable()`, `viewer()` (Octave-safe uitable). Carry-forward from existing `SensorRegistry`/`ThresholdRegistry`.
+- [x] **TAG-06**: `TagRegistry.loadFromStructs(structs)` performs **two-phase deserialization** — Pass 1 instantiates all tags with empty children; Pass 2 resolves cross-references. Eliminates the documented `CompositeThreshold.fromStruct` ordering trap.
+- [x] **TAG-07**: Every Tag subclass implements `toStruct()` and static `fromStruct(s)` for JSON round-trip. `TagRegistry.loadFromStructs` round-trip works for any composition depth (composite of composites).
 - [ ] **TAG-08**: `SensorTag` subclass — raw `(X, Y)` data, `load(matFile)`, `toDisk(store)/toMemory()/isOnDisk()`, DataStore property. Feature-equivalent to existing `Sensor` class for raw signal handling.
 - [ ] **TAG-09**: `StateTag` subclass — zero-order-hold `valueAt(t)` lookup over discrete state transitions; X (timestamps) + Y (numeric or cell-array states). Feature-equivalent to existing `StateChannel` class.
 - [ ] **TAG-10**: User can call `FastSense.addTag(tag)` polymorphically. Internal dispatch routes by `tag.getKind()` to existing line-rendering (sensor/monitor) or band-rendering (state) code paths.
@@ -63,7 +63,7 @@
 ### META — Tag Metadata + Search
 
 - [x] **META-01**: `Tag.Labels` (cell of strings) — flat cross-cutting classification (`{'pressure', 'pump-3', 'critical'}`). Renamed from existing `Threshold.Tags` to avoid name collision with the Tag class itself.
-- [ ] **META-02**: `TagRegistry.findByLabel(label)` returns all tags carrying the given label. Direct port of existing `ThresholdRegistry.findByTag` pattern.
+- [x] **META-02**: `TagRegistry.findByLabel(label)` returns all tags carrying the given label. Direct port of existing `ThresholdRegistry.findByTag` pattern.
 - [x] **META-03**: `Tag.Metadata` (struct) — open key-value bag for asset id, source file, vendor, etc. Future-proofs for the deferred Asset hierarchy milestone (D); usable today via stringly-typed `Metadata.asset = 'pump-3'`.
 - [x] **META-04**: `Tag.Criticality` enum (`'low'|'medium'|'high'|'safety'`) drives default colors in StatusWidget/IconCardWidget/MultiStatusWidget and event-marker color in FastSense (severity → theme color).
 
