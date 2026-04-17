@@ -148,8 +148,11 @@ function test_monitortag_events()
 
     % --- Grep gates on MonitorTag.m ---
     src = fileread(monitortag_events_source_path_());
-    assert(isempty(regexp(src, '\.TagKeys', 'match')), ...
-        'Pitfall 5: Event.TagKeys must not appear in MonitorTag.m pre-Phase-1010');
+    % Phase 1010 (EVENT-01) migrated MonitorTag to use Event.TagKeys +
+    % EventBinding.attach. The pre-Phase-1010 grep gate that banned
+    % '.TagKeys' is now inverted: TagKeys MUST appear (emission contract).
+    assert(~isempty(regexp(src, '\.TagKeys', 'match')), ...
+        'Phase 1010: Event.TagKeys must appear in MonitorTag.m (EVENT-01)');
     % Plan-01/1006 invariant "no storeMonitor references" was relaxed in
     % Phase 1007 Plan 02 (MONITOR-09). The relaxed invariant is structural:
     % every storeMonitor call site in MonitorTag.m must sit inside an

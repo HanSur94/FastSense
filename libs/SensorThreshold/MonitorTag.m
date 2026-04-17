@@ -613,6 +613,10 @@ classdef MonitorTag < Tag
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
                 if ~isempty(obj.EventStore)
                     obj.EventStore.append(ev);
+                    % Phase 1010 (EVENT-01): TagKeys + EventBinding after append (Id assigned)
+                    ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
+                    EventBinding.attach(ev.Id, char(obj.Key));
+                    EventBinding.attach(ev.Id, char(obj.Parent.Key));
                 end
                 if ~isempty(obj.OnEventStart)
                     obj.OnEventStart(ev);
@@ -719,6 +723,10 @@ classdef MonitorTag < Tag
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
                 if ~isempty(obj.EventStore)
                     obj.EventStore.append(ev);
+                    % Phase 1010 (EVENT-01): TagKeys + EventBinding after append (Id assigned)
+                    ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
+                    EventBinding.attach(ev.Id, char(obj.Key));
+                    EventBinding.attach(ev.Id, char(obj.Parent.Key));
                 end
                 if ~isempty(obj.OnEventStart)
                     obj.OnEventStart(ev);
