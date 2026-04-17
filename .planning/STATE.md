@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: verifying
-stopped_at: Completed 1010-03-PLAN.md
-last_updated: "2026-04-17T08:50:38.073Z"
+status: executing
+stopped_at: Completed 1011-02-PLAN.md
+last_updated: "2026-04-17T09:10:41.647Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 15
   completed_phases: 13
-  total_plans: 42
-  completed_plans: 42
+  total_plans: 47
+  completed_plans: 43
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1010 — Event ↔ Tag binding + FastSense overlay
+**Current focus:** Phase 1011 — Cleanup — delete legacy
 
 ## Current Position
 
-Phase: 1011
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 1011 (Cleanup — delete legacy) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-04-17
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -112,6 +112,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1010 P01 | 9m 16s | 2 tasks | 7 files |
 | Phase 1010 P02 | 543 | 2 tasks | 5 files |
 | Phase 1010 P03 | 333 | 1 tasks | 1 files |
+| Phase 1011 P02 | 58 | 1 tasks | 37 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,7 @@ Recent decisions affecting current work:
 - [Phase 1010]: Event.Id uses sequential counter in EventStore.append; EventBinding singleton with forward+reverse index; carrier fallback preserved for backward compat
 - [Phase 1010]: Tag base gains EventStore property; MonitorTag inherits (no duplicate); renderEventLayer_ uses Parent NV pair for Octave compat
 - [Phase 1010]: 0-event bench median 0.117s proves renderEventLayer_ early-out is near-zero-cost; all 5 Pitfall gates PASS; 11 source files under 12-file cap
+- [Phase 1011]: TestAddThreshold KEPT (tests FastSense.addThreshold surviving API); run_all_tests.m unchanged (auto-discovery)
 
 ### Roadmap Evolution
 
@@ -258,6 +260,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T08:46:28.215Z
-Stopped at: Completed 1010-03-PLAN.md
+Last session: 2026-04-17T09:10:41.643Z
+Stopped at: Completed 1011-02-PLAN.md
 Resume file: None

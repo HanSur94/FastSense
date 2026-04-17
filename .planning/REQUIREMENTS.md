@@ -88,7 +88,7 @@
 
 - [x] **MIGRATE-01**: Phase 0 deliverable — write a **golden integration test** against the current `Sensor`/`Threshold` API that exercises a representative dashboard (sensor + threshold + composite + event detection). This test stays green through every v2.0 phase as a regression guard. Migrated to new API in Phase 7 only.
 - [x] **MIGRATE-02**: **Strangler-fig sequencing** enforced — `Tag` introduced as a parallel hierarchy in Phase 1 (≤20-file budget). `Sensor`, `Threshold`, `StateChannel`, `CompositeThreshold` untouched through Phase 6. Legacy classes deleted ONLY in Phase 7 cleanup.
-- [ ] **MIGRATE-03**: Phase 7 deletes legacy classes: `Sensor.m`, `Threshold.m`, `ThresholdRule.m`, `CompositeThreshold.m`, `StateChannel.m`, `SensorRegistry.m`, `ThresholdRegistry.m`, `ExternalSensorRegistry.m`. Test suite migrated phase-by-phase; full `tests/run_all_tests.m` green at every phase boundary; new tests for Tag/MonitorTag/CompositeTag/Event-Tag-binding added per phase.
+- [x] **MIGRATE-03**: Phase 7 deletes legacy classes: `Sensor.m`, `Threshold.m`, `ThresholdRule.m`, `CompositeThreshold.m`, `StateChannel.m`, `SensorRegistry.m`, `ThresholdRegistry.m`, `ExternalSensorRegistry.m`. Test suite migrated phase-by-phase; full `tests/run_all_tests.m` green at every phase boundary; new tests for Tag/MonitorTag/CompositeTag/Event-Tag-binding added per phase.
 
 ---
 
