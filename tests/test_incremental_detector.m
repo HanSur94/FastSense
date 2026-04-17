@@ -22,7 +22,7 @@ end
 
 function test_first_batch_detects_events()
     det = IncrementalEventDetector('MinDuration', 0);
-    sensor = makeSensor('temp', 100, 'upper');
+    sensor = makeTag('temp', 100, 'upper');
     t = linspace(now-1, now, 100);
     y = 80 * ones(1,100); y(40:60) = 120;  % violation from 40 to 60
     newEvents = det.process('temp', sensor, t, y, [], {});
@@ -33,7 +33,7 @@ end
 
 function test_incremental_new_events_only()
     det = IncrementalEventDetector('MinDuration', 0);
-    sensor = makeSensor('temp', 100, 'upper');
+    sensor = makeTag('temp', 100, 'upper');
     t1 = linspace(now-1, now-0.5, 50);
     y1 = 80 * ones(1,50); y1(20:30) = 120;
     ev1 = det.process('temp', sensor, t1, y1, [], {});
@@ -48,7 +48,7 @@ end
 
 function test_open_event_carries_over()
     det = IncrementalEventDetector('MinDuration', 0);
-    sensor = makeSensor('temp', 100, 'upper');
+    sensor = makeTag('temp', 100, 'upper');
     % Batch 1: violation starts but doesn't end
     t1 = linspace(now-1, now-0.5, 50);
     y1 = 80 * ones(1,50); y1(40:50) = 120;  % violation continues at end
@@ -61,7 +61,7 @@ end
 
 function test_open_event_finalizes()
     det = IncrementalEventDetector('MinDuration', 0);
-    sensor = makeSensor('temp', 100, 'upper');
+    sensor = makeTag('temp', 100, 'upper');
     % Batch 1: violation at end
     t1 = linspace(now-1, now-0.5, 50);
     y1 = 80*ones(1,50); y1(40:50) = 120;
@@ -79,7 +79,7 @@ end
 
 function test_no_data_no_events()
     det = IncrementalEventDetector('MinDuration', 0);
-    sensor = makeSensor('temp', 100, 'upper');
+    sensor = makeTag('temp', 100, 'upper');
     ev = det.process('temp', sensor, [], [], [], {});
     assert(isempty(ev), 'no_events_empty_data');
     fprintf('  PASS: test_no_data_no_events\n');
@@ -91,7 +91,7 @@ function test_severity_escalation()
         return;
     end
     det = IncrementalEventDetector('MinDuration', 0, 'EscalateSeverity', true);
-    sensor = Sensor('temp');
+    sensor = SensorTag('temp');
     tH = Threshold('h', 'Name', 'H', 'Direction', 'upper');
     tH.addCondition(struct(), 100);
     sensor.addThreshold(tH);
@@ -109,8 +109,8 @@ end
 
 function test_multiple_sensors()
     det = IncrementalEventDetector('MinDuration', 0);
-    s1 = makeSensor('temp', 100, 'upper');
-    s2 = makeSensor('pres', 50, 'upper');
+    s1 = makeTag('temp', 100, 'upper');
+    s2 = makeTag('pres', 50, 'upper');
     t = linspace(now-1, now, 100);
     y1 = 80*ones(1,100); y1(30:40) = 120;
     y2 = 30*ones(1,100); y2(60:70) = 60;
@@ -123,7 +123,7 @@ end
 
 function test_slice_detection_consistency()
     det = IncrementalEventDetector('MinDuration', 0);
-    sensor = makeSensor('temp', 100, 'upper');
+    sensor = makeTag('temp', 100, 'upper');
     % Batch 1: large history with one event
     t1 = linspace(now-10, now-5, 500);
     y1 = 80*ones(1,500); y1(100:150) = 120;
@@ -140,8 +140,8 @@ function test_slice_detection_consistency()
     fprintf('  PASS: test_slice_detection_consistency\n');
 end
 
-function sensor = makeSensor(key, threshVal, dir)
-    sensor = Sensor(key);
+function sensor = makeTag(key, threshVal, dir)
+    sensor = SensorTag(key);
     t = Threshold('h', 'Name', 'H', 'Direction', dir);
     t.addCondition(struct(), threshVal);
     sensor.addThreshold(t);

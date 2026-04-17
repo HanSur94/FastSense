@@ -108,7 +108,7 @@ classdef TestSensorTag < matlab.unittest.TestCase
 
         % ---- Core Tag contract ----
 
-        function testGetKindIsSensor(testCase)
+        function testGetKindIsSensorKind(testCase)
             t = SensorTag('s');
             testCase.verifyEqual(t.getKind(), 'sensor');
         end

@@ -139,9 +139,8 @@ classdef TestMultiStatusWidgetTag < matlab.unittest.TestCase
 
         function testLegacySensorItemStillWorks(testCase)
             % Raw Sensor handle item unchanged.
-            s = Sensor('mst_legacy_s', 'Name', 'L');
-            s.X = 1:10;
-            s.Y = (1:10) * 1.0;
+            s = SensorTag('mst_legacy_s', 'Name', 'L');
+            s.updateData(1:10, (1:10) * 1.0);
 
             w = MultiStatusWidget('Title', 'S');
             w.Sensors = {s};

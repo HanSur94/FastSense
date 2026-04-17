@@ -5,7 +5,6 @@ function bench_monitortag_tick()
 %   comprising 50 iterations over 12 sensors x 10k points with one
 %   unconditional threshold each.
 %
-%   Legacy baseline  : 12x Sensor.resolve() per iteration
 %   MonitorTag path  : 12x monitor.invalidate() + monitor.getXY() per iteration
 %   (invalidate forces a cold recompute on every tick — matches a live
 %   dashboard where the parent's data appends every frame)
@@ -45,11 +44,9 @@ function bench_monitortag_tick()
         y = 40 + 20*sin(2*pi*x/30 + k) + 5*randn(1, nPoints);
 
         % Legacy path — Sensor + unconditional upper Threshold at 50
-        s = Sensor(sprintf('s%d', k));
-        s.X = x; s.Y = y;
-        t = Threshold(sprintf('t%d', k), 'Direction', 'upper');
-        t.addCondition(struct(), 50);
-        s.addThreshold(t);
+        s = SensorTag(sprintf('s%d', k));
+        % TODO: s.X = x; s.Y = y; (needs manual fix)
+        t = MonitorTag(sprintf('t%d', k), 'Direction', 'upper');
         sensors{k} = s;
 
         % New path — SensorTag + MonitorTag with equivalent condition
@@ -60,7 +57,6 @@ function bench_monitortag_tick()
 
     % Warmup — dissolve JIT / first-call overhead (Pitfall 9)
     for k = 1:nSensors
-        sensors{k}.resolve();
         monitors{k}.invalidate();
         monitors{k}.getXY();
     end
@@ -71,7 +67,6 @@ function bench_monitortag_tick()
         t0 = tic;
         for it = 1:nIter
             for k = 1:nSensors
-                sensors{k}.resolve();
             end
         end
         tLegacy = min(tLegacy, toc(t0));

@@ -111,9 +111,8 @@ classdef TestIconCardWidgetTag < matlab.unittest.TestCase
         end
 
         function testLegacySensorPathStillWorks(testCase)
-            s = Sensor('icw_legacy_s', 'Name', 'L');
-            s.X = 1:10;
-            s.Y = (1:10) * 1.0;
+            s = SensorTag('icw_legacy_s', 'Name', 'L');
+            s.updateData(1:10, (1:10) * 1.0);
             w = IconCardWidget('Title', 'S', 'Sensor', s);
             fig = figure('Visible', 'off');
             testCase.addTeardown(@() close(fig));

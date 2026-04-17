@@ -14,19 +14,16 @@ function test_status_widget()
     nFailed = 0;
 
     % --- Test 1: no threshold, status is ok ---
-    s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
-    s.X = [1 2 3];
-    s.Y = [70 71 72];
+    s = SensorTag('T-401', 'Name', 'Temperature', 'Units', 'degC');
+    s.updateData([1 2 3], [70 71 72]);
     w = StatusWidget('Sensor', s);
     assert(strcmp(w.Title, 'Temperature'), 'Title should default to Sensor.Name');
     nPassed = nPassed + 1;
 
     % --- Test 2: upper threshold violated ---
-    s2 = Sensor('T-402', 'Name', 'TempHi');
-    s2.X = [1 2 3];
-    s2.Y = [70 71 85];
+    s2 = SensorTag('T-402', 'Name', 'TempHi');
+    s2.updateData([1 2 3], [70 71 85]);
     t2 = Threshold('T402_hi', 'Name', 'Hi Alarm', ...
-        'Direction', 'upper', 'Color', [0.9 0.2 0.2]);
     t2.addCondition(struct(), 80);
     s2.addThreshold(t2);
     w2 = StatusWidget('Sensor', s2);
@@ -38,9 +35,8 @@ function test_status_widget()
     nPassed = nPassed + 1;
 
     % --- Test 3: upper threshold NOT violated ---
-    s3 = Sensor('T-403', 'Name', 'TempSafe');
-    s3.X = [1 2 3];
-    s3.Y = [70 71 75];
+    s3 = SensorTag('T-403', 'Name', 'TempSafe');
+    s3.updateData([1 2 3], [70 71 75]);
     t3 = Threshold('T403_hi', 'Name', 'Hi', 'Direction', 'upper');
     t3.addCondition(struct(), 80);
     s3.addThreshold(t3);
@@ -51,9 +47,8 @@ function test_status_widget()
     nPassed = nPassed + 1;
 
     % --- Test 4: lower threshold violated ---
-    s4 = Sensor('P-100', 'Name', 'Pressure');
-    s4.X = [1 2 3];
-    s4.Y = [20 15 5];
+    s4 = SensorTag('P-100', 'Name', 'Pressure');
+    s4.updateData([1 2 3], [20 15 5]);
     t4 = Threshold('P100_lo', 'Name', 'Lo Warn', 'Direction', 'lower');
     t4.addCondition(struct(), 10);
     s4.addThreshold(t4);

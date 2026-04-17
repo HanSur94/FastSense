@@ -142,8 +142,8 @@ classdef TestIconCardWidget < matlab.unittest.TestCase
         function testThresholdKeyResolution(testCase)
             t = Threshold('test_key_res', 'Direction', 'upper');
             t.addCondition(struct(), 50);
-            ThresholdRegistry.register('test_key_res', t);
-            cleanup = onCleanup(@() ThresholdRegistry.unregister('test_key_res'));
+            TagRegistry.register('test_key_res', t);
+            cleanup = onCleanup(@() TagRegistry.unregister('test_key_res'));
             w = IconCardWidget('Title', 'T', 'Threshold', 'test_key_res');
             testCase.verifyEqual(w.Threshold.Key, 'test_key_res');
         end
@@ -152,9 +152,9 @@ classdef TestIconCardWidget < matlab.unittest.TestCase
             % Setting Threshold should clear Sensor
             t = Threshold('test_mutex', 'Direction', 'upper');
             t.addCondition(struct(), 50);
-            ThresholdRegistry.register('test_mutex', t);
-            cleanup = onCleanup(@() ThresholdRegistry.unregister('test_mutex'));
-            sensor = Sensor('test_mutex_sensor', 'Name', 'Test Sensor');
+            TagRegistry.register('test_mutex', t);
+            cleanup = onCleanup(@() TagRegistry.unregister('test_mutex'));
+            sensor = SensorTag('test_mutex_sensor', 'Name', 'Test Sensor');
             w = IconCardWidget('Title', 'T', 'Sensor', sensor);
             testCase.verifyEqual(w.Sensor, sensor);
             % Now set Threshold — Sensor should be cleared
@@ -197,8 +197,8 @@ classdef TestIconCardWidget < matlab.unittest.TestCase
         function testSerializeThresholdRoundTrip(testCase)
             t = Threshold('test_serial_thr', 'Direction', 'upper');
             t.addCondition(struct(), 50);
-            ThresholdRegistry.register('test_serial_thr', t);
-            cleanup = onCleanup(@() ThresholdRegistry.unregister('test_serial_thr'));
+            TagRegistry.register('test_serial_thr', t);
+            cleanup = onCleanup(@() TagRegistry.unregister('test_serial_thr'));
             w = IconCardWidget('Title', 'SerTest', 'StaticValue', 42, 'Threshold', t);
             w.Position = [1 1 6 2];
             s = w.toStruct();

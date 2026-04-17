@@ -11,7 +11,7 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
     methods (Test)
         function testFirstBatchDetectsEvents(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            sensor = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
+            sensor = TestIncrementalDetector.makeTag('temp', 100, 'upper');
             t = linspace(now-1, now, 100);
             y = 80 * ones(1,100); y(40:60) = 120;
             newEvents = det.process('temp', sensor, t, y, [], {});
@@ -21,7 +21,7 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
 
         function testIncrementalNewEventsOnly(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            sensor = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
+            sensor = TestIncrementalDetector.makeTag('temp', 100, 'upper');
             t1 = linspace(now-1, now-0.5, 50);
             y1 = 80 * ones(1,50); y1(20:30) = 120;
             det.process('temp', sensor, t1, y1, [], {});
@@ -34,7 +34,7 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
 
         function testOpenEventCarriesOver(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            sensor = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
+            sensor = TestIncrementalDetector.makeTag('temp', 100, 'upper');
             t1 = linspace(now-1, now-0.5, 50);
             y1 = 80 * ones(1,50); y1(40:50) = 120;
             ev1 = det.process('temp', sensor, t1, y1, [], {});
@@ -44,7 +44,7 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
 
         function testOpenEventFinalizes(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            sensor = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
+            sensor = TestIncrementalDetector.makeTag('temp', 100, 'upper');
             t1 = linspace(now-1, now-0.5, 50);
             y1 = 80*ones(1,50); y1(40:50) = 120;
             det.process('temp', sensor, t1, y1, [], {});
@@ -58,14 +58,14 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
 
         function testNoDataNoEvents(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            sensor = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
+            sensor = TestIncrementalDetector.makeTag('temp', 100, 'upper');
             ev = det.process('temp', sensor, [], [], [], {});
             testCase.verifyEmpty(ev, 'no_events_empty_data');
         end
 
         function testSeverityEscalation(testCase)
             det = IncrementalEventDetector('MinDuration', 0, 'EscalateSeverity', true);
-            sensor = Sensor('temp');
+            sensor = SensorTag('temp');
             tH = Threshold('h', 'Name', 'H', 'Direction', 'upper');
             tH.addCondition(struct(), 100);
             sensor.addThreshold(tH);
@@ -81,8 +81,8 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
 
         function testMultipleSensors(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            s1 = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
-            s2 = TestIncrementalDetector.makeSensor('pres', 50, 'upper');
+            s1 = TestIncrementalDetector.makeTag('temp', 100, 'upper');
+            s2 = TestIncrementalDetector.makeTag('pres', 50, 'upper');
             t = linspace(now-1, now, 100);
             y1 = 80*ones(1,100); y1(30:40) = 120;
             y2 = 30*ones(1,100); y2(60:70) = 60;
@@ -94,7 +94,7 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
 
         function testSliceDetectionConsistency(testCase)
             det = IncrementalEventDetector('MinDuration', 0);
-            sensor = TestIncrementalDetector.makeSensor('temp', 100, 'upper');
+            sensor = TestIncrementalDetector.makeTag('temp', 100, 'upper');
             t1 = linspace(now-10, now-5, 500);
             y1 = 80*ones(1,500); y1(100:150) = 120;
             ev1 = det.process('temp', sensor, t1, y1, [], {});
@@ -109,8 +109,8 @@ classdef TestIncrementalDetector < matlab.unittest.TestCase
     end
 
     methods (Static, Access = private)
-        function sensor = makeSensor(key, threshVal, dir)
-            sensor = Sensor(key);
+        function sensor = makeTag(key, threshVal, dir)
+            sensor = SensorTag(key);
             t = Threshold('h', 'Name', 'H', 'Direction', dir);
             t.addCondition(struct(), threshVal);
             sensor.addThreshold(t);

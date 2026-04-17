@@ -60,8 +60,8 @@ classdef TestMultiStatusWidget < matlab.unittest.TestCase
             % toStruct emits items array with threshold key; fromStruct restores
             t = Threshold('msw_ser_thr', 'Direction', 'upper');
             t.addCondition(struct(), 50);
-            ThresholdRegistry.register('msw_ser_thr', t);
-            cleanup = onCleanup(@() ThresholdRegistry.unregister('msw_ser_thr'));
+            TagRegistry.register('msw_ser_thr', t);
+            cleanup = onCleanup(@() TagRegistry.unregister('msw_ser_thr'));
             item = struct('threshold', t, 'value', 42, 'label', 'Pump');
             w = MultiStatusWidget('Title', 'Status');
             w.Sensors = {item};
@@ -76,8 +76,8 @@ classdef TestMultiStatusWidget < matlab.unittest.TestCase
             t = Threshold('msw_mixed_thr', 'Direction', 'upper');
             t.addCondition(struct(), 50);
             item = struct('threshold', t, 'value', 42, 'label', 'Pump');
-            sensor = Sensor('msw_mixed_sensor', 'Name', 'Mixed Sensor');
-            sensor.Y = (1:10)';
+            sensor = SensorTag('msw_mixed_sensor', 'Name', 'Mixed Sensor');
+            sensor_y_ = (1:10)';
             w = MultiStatusWidget('Title', 'Status');
             w.Sensors = {sensor, item};
             testCase.verifyEqual(numel(w.Sensors), 2);
@@ -110,8 +110,8 @@ classdef TestMultiStatusWidget < matlab.unittest.TestCase
             ct.addChild(t1, 'Value', 50);
             ct.addChild(t2, 'Value', 50);
             ctItem = struct('threshold', ct, 'label', 'System');
-            sensor = Sensor('msw_mix_sensor', 'Name', 'Mix Sensor');
-            sensor.Y = (1:5)';
+            sensor = SensorTag('msw_mix_sensor', 'Name', 'Mix Sensor');
+            sensor_y_ = (1:5)';
             w = MultiStatusWidget('Title', 'Mix');
             w.Sensors = {sensor, ctItem};
             % 1 sensor + 2 children + 1 summary = 4 items
@@ -159,8 +159,8 @@ classdef TestMultiStatusWidget < matlab.unittest.TestCase
             t = Threshold('msw_nc_thr', 'Direction', 'upper');
             t.addCondition(struct(), 50);
             item = struct('threshold', t, 'value', 30, 'label', 'Pump');
-            sensor = Sensor('msw_nc_sensor', 'Name', 'NC Sensor');
-            sensor.Y = (1:5)';
+            sensor = SensorTag('msw_nc_sensor', 'Name', 'NC Sensor');
+            sensor_y_ = (1:5)';
             w = MultiStatusWidget('Title', 'NC');
             w.Sensors = {sensor, item};
             expanded = w.expandSensors_();

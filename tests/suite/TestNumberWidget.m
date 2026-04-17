@@ -18,10 +18,9 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             testCase.verifyEmpty(w.Sensor);
         end
 
-        function testConstructionWithSensor(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
-            s.X = [1 2 3];
-            s.Y = [70 71 72];
+        function testConstructionWithTag(testCase)
+            s = SensorTag('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.updateData([1 2 3], [70 71 72]);
             w = NumberWidget('Sensor', s);
             testCase.verifyEqual(w.Title, 'Temperature', ...
                 'Title should auto-derive from Sensor.Name');
@@ -75,10 +74,9 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             testCase.verifyEqual(w.CurrentValue, 42);
         end
 
-        function testRefreshWithSensor(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
-            s.X = [1 2 3 4 5];
-            s.Y = [70 71 72 73 74];
+        function testRefreshWithTag(testCase)
+            s = SensorTag('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.updateData([1 2 3 4 5], [70 71 72 73 74]);
             w = NumberWidget('Sensor', s);
             hFig = figure('Visible', 'off');
             testCase.addTeardown(@() close(hFig));
@@ -91,9 +89,8 @@ classdef TestNumberWidget < matlab.unittest.TestCase
 
         function testComputeTrend(testCase)
             % Rising data -> 'up'
-            s1 = Sensor('rising', 'Name', 'Rising');
-            s1.X = 1:20;
-            s1.Y = linspace(10, 30, 20);
+            s1 = SensorTag('rising', 'Name', 'Rising');
+            s1.updateData(1:20, linspace(10, 30, 20));
             w1 = NumberWidget('Sensor', s1);
             hFig = figure('Visible', 'off');
             testCase.addTeardown(@() close(hFig));
@@ -102,20 +99,19 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             testCase.verifyEqual(w1.CurrentTrend, 'up');
 
             % Falling data -> 'down'
-            s2 = Sensor('falling', 'Name', 'Falling');
-            s2.X = 1:20;
-            s2.Y = linspace(30, 10, 20);
+            s2 = SensorTag('falling', 'Name', 'Falling');
+            s2.updateData(1:20, linspace(30, 10, 20));
             w2 = NumberWidget('Sensor', s2);
             hp2 = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
             w2.render(hp2);
             testCase.verifyEqual(w2.CurrentTrend, 'down');
 
             % Flat data -> 'flat'
-            s3 = Sensor('flat', 'Name', 'Flat');
-            s3.X = 1:20;
-            s3.Y = 50 * ones(1, 20);
-            % Need some range for threshold calc; add tiny variance at edges
-            s3.Y(1) = 49; s3.Y(end) = 51;
+            s3 = SensorTag('flat', 'Name', 'Flat');
+            s3_x_ = 1:20;
+            s3_y_ = 50 * ones(1, 20);
+            s3_y_(1) = 49; s3_y_(end) = 51;
+            s3.updateData(s3_x_, s3_y_);
             w3 = NumberWidget('Sensor', s3);
             hp3 = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
             w3.render(hp3);
@@ -138,10 +134,9 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             testCase.verifyEqual(s.source.type, 'callback');
         end
 
-        function testToStructWithSensor(testCase)
-            s = Sensor('P-201', 'Name', 'Pressure', 'Units', 'bar');
-            s.X = [1 2 3];
-            s.Y = [40 50 60];
+        function testToStructWithTag(testCase)
+            s = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar');
+            s.updateData([1 2 3], [40 50 60]);
             w = NumberWidget('Sensor', s);
             st = w.toStruct();
             testCase.verifyEqual(st.type, 'number');

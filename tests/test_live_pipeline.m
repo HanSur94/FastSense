@@ -22,7 +22,7 @@ end
 
 function [pipeline, storeFile] = makePipeline()
     % Create registry sensors
-    s1 = Sensor('temp');
+    s1 = SensorTag('temp');
     tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
     tHH.addCondition(struct(), 100);
     s1.addThreshold(tHH);
@@ -119,11 +119,11 @@ end
 
 function test_sensor_failure_skipped()
     % Add a sensor with a broken data source
-    s1 = Sensor('temp');
+    s1 = SensorTag('temp');
     tHH1 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
     tHH1.addCondition(struct(), 100);
     s1.addThreshold(tHH1);
-    s2 = Sensor('broken');
+    s2 = SensorTag('broken');
     tH2 = Threshold('h', 'Name', 'H', 'Direction', 'upper');
     tH2.addCondition(struct(), 50);
     s2.addThreshold(tH2);

@@ -109,7 +109,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
         function testLegacySensorPathUnchanged(testCase)
             % Legacy constructor shape (no 'Monitors' NV pair) must still
             % yield a functional pipeline — byte-for-byte preservation.
-            s = Sensor('s1');
+            s = SensorTag('s1');
             thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             thr.addCondition(struct(), 10);
             s.addThreshold(thr);
@@ -131,7 +131,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
         function testMonitorsNVPairOptional(testCase)
             % Constructor without 'Monitors' NV pair must succeed; the new
             % MonitorTargets property defaults to an empty containers.Map.
-            s = Sensor('s1');
+            s = SensorTag('s1');
             thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             thr.addCondition(struct(), 10);
             s.addThreshold(thr);
@@ -161,7 +161,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
             monitor.EventStore = store;
 
             % Sensor side: legacy
-            s2 = Sensor('s2');
+            s2 = SensorTag('s2');
             thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             thr.addCondition(struct(), 10);
             s2.addThreshold(thr);

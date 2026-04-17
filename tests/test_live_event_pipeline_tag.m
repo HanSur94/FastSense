@@ -93,7 +93,7 @@ function test_append_data_order_with_parent()
 end
 
 function test_legacy_sensor_path_unchanged()
-    s = Sensor('s1');
+    s = SensorTag('s1');
     thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     thr.addCondition(struct(), 10);
     s.addThreshold(thr);
@@ -110,7 +110,7 @@ function test_legacy_sensor_path_unchanged()
 end
 
 function test_monitors_nv_pair_optional()
-    s = Sensor('s1');
+    s = SensorTag('s1');
     thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     thr.addCondition(struct(), 10);
     s.addThreshold(thr);
@@ -136,7 +136,7 @@ function test_mixed_sensors_and_monitors()
     store = EventStore(makePhase1009Fixtures.makeEventStoreTmp());
     monitor.EventStore = store;
 
-    s2 = Sensor('s2');
+    s2 = SensorTag('s2');
     thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     thr.addCondition(struct(), 10);
     s2.addThreshold(thr);

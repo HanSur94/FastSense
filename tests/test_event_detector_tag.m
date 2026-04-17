@@ -97,16 +97,5 @@ function test_pitfall1_no_subclass_isa_in_detect()
     end
 end
 
-function test_legacy_callers_still_work()
-    s = Sensor('temp');
-    s.X = [1 2 3 4 5 6 7 8 9 10];
-    s.Y = [12 13 5 5 5 14 15 5 5 5];
-    thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
-    thr.addCondition(struct(), 10);
-    s.addThreshold(thr);
-    s.resolve();
-
-    det = EventDetector();
-    events = detectEventsFromSensor(s, det);
-    assert(numel(events) == 2, 'bridge helper preserved');
-end
+% Legacy test_legacy_callers_still_work removed — legacy bridge helper
+% bridge helper deleted in Phase 1011 cleanup.

@@ -27,7 +27,6 @@ function test_add_threshold()
     fp = FastSense();
     fp.addThreshold(3.0, 'Direction', 'lower', ...
         'ShowViolations', true, 'Color', [1 0 0], ...
-        'LineStyle', ':', 'Label', 'LowerBound');
     t = fp.Thresholds(1);
     assert(t.ShowViolations == true, 'testCustomOptions: ShowViolations');
     assert(isequal(t.Color, [1 0 0]), 'testCustomOptions: Color');

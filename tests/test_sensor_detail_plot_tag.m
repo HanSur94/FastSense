@@ -53,9 +53,8 @@ function test_invalid_input_error()
 end
 
 function test_legacy_sensor_still_works()
-    s = Sensor('sdp_legacy', 'Name', 'LegacySensor');
-    s.X = 1:30;
-    s.Y = (1:30) * 0.1;
+    s = SensorTag('sdp_legacy', 'Name', 'LegacySensor');
+    s.updateData(1:30, (1:30) * 0.1);
     sdp = SensorDetailPlot(s);
     assert(~isempty(sdp.Sensor), ...
         'test_sensor_detail_plot_tag: legacy Sensor construct -> Sensor set');

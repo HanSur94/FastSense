@@ -89,10 +89,9 @@ function test_fastsense_addtag()
 
     % --- Strangler-fig parity: addSensor + addTag on same fp ---
     fp = FastSense();
-    legacy = Sensor('legacy', 'Name', 'Legacy');
-    legacy.X = 1:50;
-    legacy.Y = cos(legacy.X * 0.2);
-    fp.addSensor(legacy, 'ShowThresholds', false);
+    legacy = SensorTag('legacy', 'Name', 'Legacy');
+    legacy.updateData(1:50, cos(legacy.X * 0.2));
+    fp.addTag(legacy, 'ShowThresholds', false);
     st = SensorTag('modern', 'Name', 'Modern', 'X', 1:30, 'Y', sin(1:30));
     fp.addTag(st);
     assert(numel(fp.Lines) == 2, 'test_fastsense_addtag: mix addSensor + addTag');

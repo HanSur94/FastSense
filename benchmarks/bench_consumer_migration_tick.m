@@ -106,9 +106,9 @@ function result = bench_consumer_migration_tick()
                 xd = linspace(0, 100, nPoints);
                 yd = sin(xd / 10.0) * 10 + 20;
 
-                s = Sensor(sprintf('fb_legacy_%d_%d', run, i));
-                s.X = xd;
-                s.Y = yd;
+                s = SensorTag(sprintf('fb_legacy_%d_%d', run, i));
+                s.updateData(xd, yd);
+                [s_x_, s_y_] = s.getXY();
                 sensors{i} = s;
 
                 key = sprintf('fb_tag_%d_%d', run, i);
@@ -229,9 +229,8 @@ function [engine, sensors] = buildLegacyDashboard_(n)
     sensors = cell(1, n);
     engine = DashboardEngine('LegacyBench');
     for i = 1:n
-        s = Sensor(sprintf('legacy_%d', i));
-        s.X = 1:100;
-        s.Y = sin((1:100) / 10.0) * 10 + 20;
+        s = SensorTag(sprintf('legacy_%d', i));
+        s.updateData(1:100, sin((1:100) / 10.0) * 10 + 20);
         sensors{i} = s;
         w = FastSenseWidget('Title', sprintf('legacy-%d', i), 'Sensor', s, ...
             'Position', [1 i 6 1]);
@@ -262,9 +261,8 @@ function appendLegacy_(sensors, k) %#ok<INUSD>
     %APPENDLEGACY_ Append 10 samples to each legacy Sensor.
     for i = 1:numel(sensors)
         s = sensors{i};
-        nx = numel(s.X);
-        s.X = [s.X (nx + 1):(nx + 10)];
-        s.Y = [s.Y sin(((nx + 1):(nx + 10)) / 10.0) * 10 + 20];
+        nx = numel(s_x_);
+        s.updateData([s.X (nx + 1):(nx + 10)], [s.Y sin(((nx + 1):(nx + 10)) / 10.0) * 10 + 20]);
     end
 end
 

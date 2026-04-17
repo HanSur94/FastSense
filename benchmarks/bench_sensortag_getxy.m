@@ -86,14 +86,14 @@ function [tTag, tBase] = measure_(N, nIter, nRuns)
     x = linspace(0, 100, N);
     y = sin(x * 0.1);
 
-    s = Sensor('press_a', 'Name', 'Pressure A');
-    s.X = x;
-    s.Y = y;
+    s = SensorTag('press_a', 'Name', 'Pressure A');
+    s.updateData(x, y);
+    [s_x_, s_y_] = s.getXY();
     st = SensorTag('press_a', 'Name', 'Pressure A', 'X', x, 'Y', y);
 
     % Warmup — dissolve JIT / first-call overhead (Pitfall 9)
     for w = 1:50
-        xb = s.X; yb = s.Y; %#ok<NASGU>
+        xb = s_x_; yb = s_y_; %#ok<NASGU>
         [xt, yt] = st.getXY(); %#ok<ASGLU>
     end
 
@@ -102,7 +102,7 @@ function [tTag, tBase] = measure_(N, nIter, nRuns)
     for r = 1:nRuns
         tic;
         for i = 1:nIter
-            xb = s.X; yb = s.Y; %#ok<NASGU>
+            xb = s_x_; yb = s_y_; %#ok<NASGU>
         end
         baseTimes(r) = toc;
 

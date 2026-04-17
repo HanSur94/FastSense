@@ -53,13 +53,12 @@ classdef TestDashboardDetach < matlab.unittest.TestCase
 
             sensorKey = '__detach_test__';
             try
-                fakeSensor = SensorRegistry.get(sensorKey);
+                fakeSensor = TagRegistry.get(sensorKey);
             catch
-                fakeSensor = Sensor(sensorKey, 'Name', 'Test Sensor');
-                fakeSensor.X = 1:10;
-                fakeSensor.Y = rand(1, 10);
+                fakeSensor = SensorTag(sensorKey, 'Name', 'Test Sensor');
+                fakeSensor.updateData(1:10, rand(1, 10));
                 try
-                    SensorRegistry.register(sensorKey, fakeSensor);
+                    TagRegistry.register(sensorKey, fakeSensor);
                 catch
                 end
             end

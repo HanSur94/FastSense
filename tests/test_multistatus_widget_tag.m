@@ -145,9 +145,8 @@ function test_legacy_threshold_item()
 end
 
 function test_legacy_sensor_item()
-    s = Sensor('mst_f_legacy_s', 'Name', 'L');
-    s.X = 1:10;
-    s.Y = (1:10) * 1.0;
+    s = SensorTag('mst_f_legacy_s', 'Name', 'L');
+    s.updateData(1:10, (1:10) * 1.0);
     w = MultiStatusWidget('Title', 'S');
     w.Sensors = {s};
     fig = figure('Visible', 'off');

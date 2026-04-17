@@ -52,9 +52,8 @@ classdef TestSensorDetailPlotTag < matlab.unittest.TestCase
         end
 
         function testLegacySensorStillWorks(testCase)
-            s = Sensor('sdp_legacy', 'Name', 'LegacySensor');
-            s.X = 1:30;
-            s.Y = (1:30) * 0.1;
+            s = SensorTag('sdp_legacy', 'Name', 'LegacySensor');
+            s.updateData(1:30, (1:30) * 0.1);
             sdp = SensorDetailPlot(s);
             testCase.verifyNotEmpty(sdp.Sensor);
             testCase.verifyEmpty(sdp.TagRef);

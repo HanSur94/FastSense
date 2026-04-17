@@ -9,13 +9,12 @@ classdef TestEventStore < matlab.unittest.TestCase
     methods (Test)
         function testAutoSave(testCase)
             cfg = EventConfig();
-            s = Sensor('temp', 'Name', 'Temperature');
-            s.X = 1:10;
-            s.Y = [5 5 12 14 11 13 5 5 5 5];
+            s = SensorTag('temp', 'Name', 'Temperature');
+            s.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s.addThreshold(t_warn);
-            cfg.addSensor(s);
+            cfg.addTag(s);
             cfg.setColor('warn', [1 0.8 0]);
 
             tmpFile = fullfile(tempdir, 'test_event_store.mat');
@@ -35,13 +34,12 @@ classdef TestEventStore < matlab.unittest.TestCase
 
         function testFromFile(testCase)
             cfg = EventConfig();
-            s = Sensor('temp', 'Name', 'Temperature');
-            s.X = 1:10;
-            s.Y = [5 5 12 14 11 13 5 5 5 5];
+            s = SensorTag('temp', 'Name', 'Temperature');
+            s.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s.addThreshold(t_warn);
-            cfg.addSensor(s);
+            cfg.addTag(s);
             cfg.setColor('warn', [1 0.8 0]);
 
             tmpFile = fullfile(tempdir, 'test_event_store_fromfile.mat');
@@ -57,13 +55,12 @@ classdef TestEventStore < matlab.unittest.TestCase
 
         function testFromFileColors(testCase)
             cfg = EventConfig();
-            s = Sensor('temp', 'Name', 'Temperature');
-            s.X = 1:10;
-            s.Y = [5 5 12 14 11 13 5 5 5 5];
+            s = SensorTag('temp', 'Name', 'Temperature');
+            s.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s.addThreshold(t_warn);
-            cfg.addSensor(s);
+            cfg.addTag(s);
             cfg.setColor('warn', [1 0.8 0]);
 
             tmpFile = fullfile(tempdir, 'test_event_store_colors.mat');
@@ -79,13 +76,12 @@ classdef TestEventStore < matlab.unittest.TestCase
 
         function testNoEventFile(testCase)
             cfg2 = EventConfig();
-            s2 = Sensor('temp', 'Name', 'Temperature');
-            s2.X = 1:10;
-            s2.Y = [5 5 12 14 11 13 5 5 5 5];
+            s2 = SensorTag('temp', 'Name', 'Temperature');
+            s2.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s2.addThreshold(t_warn);
-            cfg2.addSensor(s2);
+            cfg2.addTag(s2);
             tmpFile2 = fullfile(tempdir, 'test_event_store_2.mat');
             if exist(tmpFile2, 'file'); delete(tmpFile2); end
             cfg2.runDetection();
@@ -116,13 +112,12 @@ classdef TestEventStore < matlab.unittest.TestCase
             testCase.addTeardown(@() TestEventStore.cleanupBackups(tmpFile3));
 
             cfg3 = EventConfig();
-            s3 = Sensor('temp', 'Name', 'Temperature');
-            s3.X = 1:10;
-            s3.Y = [5 5 12 14 11 13 5 5 5 5];
+            s3 = SensorTag('temp', 'Name', 'Temperature');
+            s3.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s3.addThreshold(t_warn);
-            cfg3.addSensor(s3);
+            cfg3.addTag(s3);
             cfg3.EventFile = tmpFile3;
             cfg3.MaxBackups = 2;
 
@@ -155,13 +150,12 @@ classdef TestEventStore < matlab.unittest.TestCase
             testCase.addTeardown(@() TestEventStore.cleanupBackups(tmpFile4));
 
             cfg4 = EventConfig();
-            s4 = Sensor('temp', 'Name', 'Temperature');
-            s4.X = 1:10;
-            s4.Y = [5 5 12 14 11 13 5 5 5 5];
+            s4 = SensorTag('temp', 'Name', 'Temperature');
+            s4.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s4.addThreshold(t_warn);
-            cfg4.addSensor(s4);
+            cfg4.addTag(s4);
             cfg4.EventFile = tmpFile4;
             cfg4.MaxBackups = 0;
             cfg4.runDetection();
@@ -173,13 +167,13 @@ classdef TestEventStore < matlab.unittest.TestCase
 
         function testFromFileHasRefreshControls(testCase)
             cfg5 = EventConfig();
-            s5 = Sensor('temp', 'Name', 'Temperature');
-            s5.X = 1:10;
-            s5.Y = [5 5 12 14 11 13 5 5 5 5];
+            s5 = SensorTag('temp', 'Name', 'Temperature');
+            s5.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
+            [s5_x_, s5_y_] = s5.getXY();
             t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             t_warn.addCondition(struct(), 10);
             s5.addThreshold(t_warn);
-            cfg5.addSensor(s5);
+            cfg5.addTag(s5);
             tmpFile5 = fullfile(tempdir, 'test_event_refresh.mat');
             testCase.addTeardown(@() TestEventStore.deleteIfExists(tmpFile5));
             cfg5.EventFile = tmpFile5;
@@ -188,7 +182,7 @@ classdef TestEventStore < matlab.unittest.TestCase
             testCase.addTeardown(@close, viewer5.hFigure);
             testCase.verifyNotEmpty(viewer5.hFigure, 'refresh: figure exists');
             % Verify refresh works by modifying file and calling refreshFromFile
-            s5.Y = [5 5 12 14 11 13 12 15 5 5];
+            s5_y_ = [5 5 12 14 11 13 12 15 5 5];
             cfg5.runDetection();
             oldCount = numel(viewer5.Events);
             viewer5.refreshFromFile();

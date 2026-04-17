@@ -18,18 +18,18 @@ function test_event_config()
 
     % testAddSensor
     cfg = EventConfig();
-    s = Sensor('temp', 'Name', 'Temperature');
-    s.X = 1:10;
-    s.Y = [5 5 12 14 11 13 5 5 5 5];
+    s = SensorTag('temp', 'Name', 'Temperature');
+    s.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
+    [s_x_, s_y_] = s.getXY();
     t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     t_warn.addCondition(struct(), 10);
     s.addThreshold(t_warn);
-    cfg.addSensor(s);
+    cfg.addTag(s);
     assert(numel(cfg.Sensors) == 1, 'addSensor: count');
     assert(numel(cfg.SensorData) == 1, 'addSensor: data count');
     assert(strcmp(cfg.SensorData(1).name, 'Temperature'), 'addSensor: data name');
-    assert(isequal(cfg.SensorData(1).t, s.X), 'addSensor: data t');
-    assert(isequal(cfg.SensorData(1).y, s.Y), 'addSensor: data y');
+    assert(isequal(cfg.SensorData(1).t, s_x_), 'addSensor: data t');
+    assert(isequal(cfg.SensorData(1).y, s_y_), 'addSensor: data y');
 
     % testSetColor
     cfg = EventConfig();
@@ -49,29 +49,27 @@ function test_event_config()
 
     % testRunDetection
     cfg = EventConfig();
-    s = Sensor('temp', 'Name', 'Temperature');
-    s.X = 1:10;
-    s.Y = [5 5 12 14 11 13 5 5 5 5];
+    s = SensorTag('temp', 'Name', 'Temperature');
+    s.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
     t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     t_warn.addCondition(struct(), 10);
     s.addThreshold(t_warn);
-    cfg.addSensor(s);
+    cfg.addTag(s);
     events = cfg.runDetection();
     assert(numel(events) >= 1, 'runDetection: found events');
     assert(strcmp(events(1).SensorName, 'Temperature'), 'runDetection: sensor name');
 
     % testEscalateSeverity
     cfg = EventConfig();
-    s = Sensor('temp', 'Name', 'Temperature');
-    s.X = 1:10;
-    s.Y = [5 5 86 96 88 87 5 5 5 5];
+    s = SensorTag('temp', 'Name', 'Temperature');
+    s.updateData(1:10, [5 5 86 96 88 87 5 5 5 5]);
     t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     t_warn.addCondition(struct(), 85);
     s.addThreshold(t_warn);
     t_critical = Threshold('critical', 'Name', 'critical', 'Direction', 'upper');
     t_critical.addCondition(struct(), 95);
     s.addThreshold(t_critical);
-    cfg.addSensor(s);
+    cfg.addTag(s);
     events = cfg.runDetection();
     % The warning event should be escalated to critical because peak=96 > 95
     warnEvents = events(arrayfun(@(e) strcmp(e.ThresholdLabel, 'warn'), events));
@@ -82,32 +80,30 @@ function test_event_config()
     % testEscalateDisabled
     cfg2 = EventConfig();
     cfg2.EscalateSeverity = false;
-    s2 = Sensor('temp', 'Name', 'Temperature');
-    s2.X = 1:10;
-    s2.Y = [5 5 86 96 88 87 5 5 5 5];
+    s2 = SensorTag('temp', 'Name', 'Temperature');
+    s2.updateData(1:10, [5 5 86 96 88 87 5 5 5 5]);
     t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     t_warn.addCondition(struct(), 85);
     s2.addThreshold(t_warn);
     t_critical = Threshold('critical', 'Name', 'critical', 'Direction', 'upper');
     t_critical.addCondition(struct(), 95);
     s2.addThreshold(t_critical);
-    cfg2.addSensor(s2);
+    cfg2.addTag(s2);
     events2 = cfg2.runDetection();
     warnEvents2 = events2(arrayfun(@(e) strcmp(e.ThresholdLabel, 'warn'), events2));
     assert(numel(warnEvents2) >= 1, 'escalate disabled: warn event preserved');
 
     % testEscalateLowDirection
     cfg3 = EventConfig();
-    s3 = Sensor('pres', 'Name', 'Pressure');
-    s3.X = 1:10;
-    s3.Y = [6 6 3.5 1.5 3.8 3.9 6 6 6 6];
+    s3 = SensorTag('pres', 'Name', 'Pressure');
+    s3.updateData(1:10, [6 6 3.5 1.5 3.8 3.9 6 6 6 6]);
     t_low = Threshold('low', 'Name', 'low', 'Direction', 'lower');
     t_low.addCondition(struct(), 4);
     s3.addThreshold(t_low);
     t_crit_low = Threshold('critical_low', 'Name', 'critical low', 'Direction', 'lower');
     t_crit_low.addCondition(struct(), 2);
     s3.addThreshold(t_crit_low);
-    cfg3.addSensor(s3);
+    cfg3.addTag(s3);
     events3 = cfg3.runDetection();
     critLow = events3(arrayfun(@(e) strcmp(e.ThresholdLabel, 'critical low'), events3));
     assert(numel(critLow) >= 1, 'escalate low: critical low event exists');
@@ -119,14 +115,13 @@ function test_event_config()
     cfg = EventConfig();
     cfg.EventFile = tmpFile;
     cfg.MaxBackups = 0;
-    s = Sensor('temp', 'Name', 'Temperature');
-    s.X = 1:10;
-    s.Y = [5 5 12 14 11 13 5 5 5 5];
+    s = SensorTag('temp', 'Name', 'Temperature');
+    s.updateData(1:10, [5 5 12 14 11 13 5 5 5 5]);
     t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
     t_warn.addCondition(struct(), 10);
     s.addThreshold(t_warn);
     cfg.setColor('warn', [1 0 0]);
-    cfg.addSensor(s);
+    cfg.addTag(s);
     events = cfg.runDetection();
     % File should exist and contain events, sensorData, thresholdColors, timestamp
     assert(exist(tmpFile, 'file') == 2, 'save: file exists');

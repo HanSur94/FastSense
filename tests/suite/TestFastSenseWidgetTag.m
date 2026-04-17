@@ -96,9 +96,8 @@ classdef TestFastSenseWidgetTag < matlab.unittest.TestCase
         end
 
         function testLegacySensorPathStillWorks(testCase)
-            s = Sensor('legacy_s', 'Name', 'LegacyTemp');
-            s.X = 1:50;
-            s.Y = rand(1, 50);
+            s = SensorTag('legacy_s', 'Name', 'LegacyTemp');
+            s.updateData(1:50, rand(1, 50));
 
             hFig = figure('Visible', 'off');
             testCase.addTeardown(@() close(hFig));

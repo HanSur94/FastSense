@@ -132,10 +132,9 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             testCase.verifyTrue(isrunning(d.LiveTimer));
         end
 
-        function testAddWidgetWithSensor(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature');
-            s.X = 1:100;
-            s.Y = rand(1,100);
+        function testAddWidgetWithTag(testCase)
+            s = SensorTag('T-401', 'Name', 'Temperature');
+            s.updateData(1:100, rand(1,100));
             t_hi = Threshold('hi', 'Name', 'Hi', 'Direction', 'upper');
             t_hi.addCondition(struct(), 80);
             s.addThreshold(t_hi);

@@ -63,11 +63,11 @@ classdef TestLivePipeline < matlab.unittest.TestCase
         end
 
         function testSensorFailureSkipped(testCase)
-            s1 = Sensor('temp');
+            s1 = SensorTag('temp');
             tHH1 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
             tHH1.addCondition(struct(), 100);
             s1.addThreshold(tHH1);
-            s2 = Sensor('broken');
+            s2 = SensorTag('broken');
             tH2 = Threshold('h', 'Name', 'H', 'Direction', 'upper');
             tH2.addCondition(struct(), 50);
             s2.addThreshold(tH2);
@@ -89,7 +89,7 @@ classdef TestLivePipeline < matlab.unittest.TestCase
 
     methods (Static, Access = private)
         function [pipeline, storeFile] = makePipeline()
-            s1 = Sensor('temp');
+            s1 = SensorTag('temp');
             tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
             tHH.addCondition(struct(), 100);
             s1.addThreshold(tHH);

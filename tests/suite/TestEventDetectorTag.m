@@ -102,21 +102,8 @@ classdef TestEventDetectorTag < matlab.unittest.TestCase
             end
         end
 
-        function testLegacyCallersStillWork(testCase)
-            % detectEventsFromSensor (the bridge helper) uses the 6-arg form.
-            % After adding the Tag overload, this must still work.
-            s = Sensor('temp');
-            s.X = [1 2 3 4 5 6 7 8 9 10];
-            s.Y = [12 13 5 5 5 14 15 5 5 5];
-            thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
-            thr.addCondition(struct(), 10);
-            s.addThreshold(thr);
-            s.resolve();
-
-            det = EventDetector();
-            events = detectEventsFromSensor(s, det);
-            testCase.verifyEqual(numel(events), 2, 'bridge helper preserved');
-        end
+        % testLegacyCallersStillWork removed — legacy bridge helper
+        % bridge helper deleted in Phase 1011 cleanup.
 
     end
 end
