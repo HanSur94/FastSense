@@ -1,13 +1,13 @@
 classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
     %TESTLIVEEVENTPIPELINETAG End-to-end evidence for Phase 1007 SC#4.
-    %   Phase 1009 Plan 03 — proves the LiveEventPipeline MonitorTag path
+    %   Phase 1009 Plan 03 -- proves the LiveEventPipeline MonitorTag path
     %   wires `MonitorTag.appendData` into `runCycle`, enforces the
     %   Pitfall Y parent-before-child ordering, and preserves the
     %   legacy Sensor-based LEP path byte-for-byte.
     %
     %   Ordering invariant (per MonitorTag.m:333-334 docstring):
-    %     monitor.Parent.updateData(newX, newY)  ← MUST be called FIRST
-    %     monitor.appendData(newX, newY)         ← THEN this
+    %     monitor.Parent.updateData(newX, newY)  <- MUST be called FIRST
+    %     monitor.appendData(newX, newY)         <- THEN this
     %   Wrong order causes cache incoherence (appendData cold-path
     %   recomputes over stale parent data).
     %
@@ -51,7 +51,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
 
             % Carrier invariants (MONITOR-05): SensorName=parent.Key,
             % ThresholdLabel=monitor.Key.  A per-Tag TagKeys field MUST NOT
-            % exist yet — that is reserved for Phase 1010 (Pitfall X).
+            % exist yet -- that is reserved for Phase 1010 (Pitfall X).
             testCase.verifyEqual(evts(1).SensorName, 's1', ...
                 'carrier: SensorName=parent.Key');
             testCase.verifyEqual(evts(1).ThresholdLabel, 'm1', ...
@@ -64,7 +64,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
             % cache is primed, a subsequent runCycle tail-append should
             % take appendData's fast path (which only succeeds when the
             % parent already carries the new samples).  recomputeCount_
-            % must NOT increment during the live tick — if ordering were
+            % must NOT increment during the live tick -- if ordering were
             % wrong, appendData would hit the cold recompute_() path
             % because the cache is cleared via parent-cascade invalidate
             % BEFORE appendData runs.  We detect this by recording the
@@ -96,7 +96,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
                          'be called BEFORE monitor.appendData.'], ...
                         postRecompute - preRecompute));
 
-            % Also verify the cache now contains the appended tail —
+            % Also verify the cache now contains the appended tail --
             % only possible if appendData ran after the parent absorbed
             % the new (X, Y).
             [cx, ~] = monitor.getXY();
@@ -108,7 +108,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
 
         function testLegacySensorPathUnchanged(testCase)
             % Legacy constructor shape (no 'Monitors' NV pair) must still
-            % yield a functional pipeline — byte-for-byte preservation.
+            % yield a functional pipeline -- byte-for-byte preservation.
             s = SensorTag('s1');
             thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
             thr.addCondition(struct(), 10);
@@ -123,7 +123,7 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
             p = LiveEventPipeline(sensors, dsMap, ...
                 'Interval', 60, 'MinDuration', 0);
 
-            % No data armed — runCycle must not error; Status 'stopped'.
+            % No data armed -- runCycle must not error; Status 'stopped'.
             p.runCycle();
             testCase.verifyEqual(p.Status, 'stopped', 'legacy: Status unchanged');
         end
