@@ -226,12 +226,22 @@ function absPath = captureDashboard(target, filepath, varargin)
     stubAxes = [];
     try
         targetIsFigure = ishandle(targetObj) && strcmp(get(targetObj, 'type'), 'figure');
+        targetIsPanel  = ishandle(targetObj) && strcmp(get(targetObj, 'type'), 'uipanel');
         if useExportApp && targetIsFigure
             % MATLAB R2024a+: exportapp handles UI-component figures.
             exportapp(hFig, absPath);
+        elseif useExportApp && targetIsPanel
+            % Widget-only path on MATLAB R2024a+: render the whole figure with
+            % exportapp (robust across axes + uicontrols) and crop to the
+            % panel's pixel bounds. exportgraphics(uipanel, ...) fails on
+            % panels that contain only uicontrols (e.g. NumberWidget), so we
+            % avoid that path entirely when exportapp is available.
+            cropPanelViaExportApp(hFig, targetObj, absPath);
         elseif useExportGraphics
-            % MATLAB R2020a-R2023b, or widget-only path on any MATLAB.
-            % exportgraphics accepts figure OR uipanel as first arg.
+            % MATLAB R2020a-R2023b (no exportapp): exportgraphics handles
+            % figures and axes-bearing panels. Panels containing only
+            % uicontrols will fall to the catch branch below and be handled
+            % via whole-figure fallback.
             exportgraphics(targetObj, absPath, ...
                 'ContentType', 'image', 'Resolution', opts.Resolution);
         else
@@ -258,8 +268,107 @@ function absPath = captureDashboard(target, filepath, varargin)
         if ~isempty(stubAxes) && ishandle(stubAxes)
             delete(stubAxes);
         end
+        % Widget-only fallback: if exportgraphics(panel) failed (typically
+        % "Figure must contain graphics" for uicontrol-only panels) and we
+        % have exportapp, retry via whole-figure + crop.
+        if targetIsPanel && useExportApp
+            try
+                cropPanelViaExportApp(hFig, targetObj, absPath);
+                return;
+            catch ME2
+                error('captureDashboard:writeFailed', ...
+                    'Failed to write image ''%s'': %s (fallback: %s)', ...
+                    absPath, ME.message, ME2.message);
+            end
+        end
         error('captureDashboard:writeFailed', ...
             'Failed to write image ''%s'': %s', absPath, ME.message);
+    end
+end
+
+function cropPanelViaExportApp(hFig, hPanel, absPath)
+%CROPPANELVIAEXPORTAPP Render hFig via exportapp, then crop to hPanel's pixel bounds.
+%   Writes the cropped image to absPath. Assumes exportapp is available.
+%
+%   Implementation notes:
+%     * getpixelposition(hPanel, true) returns the panel's bounds in
+%       figure-relative pixels by walking the parent chain — required
+%       because dashboard widgets are nested uipanels inside a content panel.
+%     * exportapp renders a slightly taller image than get(hFig,'Position')
+%       reports (figure chrome such as the menubar is included in the
+%       exported content). We horizontally scale by width ratio and shift
+%       vertically by the height delta so panel bounds land in the
+%       content area of the exported image.
+
+    % Render full figure to a temp PNG
+    tempPng = [tempname() '.png'];
+    cleanupTmp = onCleanup(@() safeDelete(tempPng));
+    exportapp(hFig, tempPng);
+
+    img = imread(tempPng);  % H x W x 3 uint8
+    imH = size(img, 1); imW = size(img, 2);
+
+    % Figure size in pixels (client area, no OS window chrome)
+    savedFigUnits = get(hFig, 'Units');
+    restoreFigU = onCleanup(@() safeSetUnits(hFig, savedFigUnits));
+    set(hFig, 'Units', 'pixels');
+    figPos = get(hFig, 'Position');
+    figW = figPos(3); figH = figPos(4);
+
+    % Panel bounds in figure-relative pixels (handles nested parents)
+    panelPos = getpixelposition(hPanel, true);  % [x y w h]
+    px = panelPos(1); py = panelPos(2);
+    pw = panelPos(3); ph = panelPos(4);
+
+    % Horizontal scale: exportapp width matches figure width on this system,
+    % but scale defensively in case of HiDPI on other platforms.
+    sx = imW / figW;
+    % Vertical: the exported image may be taller than the figure (extra
+    % chrome rendered at the top). Compute the chrome offset and shift
+    % the panel's top-edge row down by that amount.
+    chromeTop = max(0, imH - figH);
+
+    px = round(px * sx);  pw = round(pw * sx);
+    py = round(py);       ph = round(ph);
+
+    % MATLAB Position origin is bottom-left of the figure client area;
+    % image rows index from top. The figure client spans image rows
+    % (chromeTop + 1) ... imH, so a panel at figure-y = py has its TOP
+    % row at chromeTop + (figH - (py + ph)) + 1.
+    rowTop  = max(1,  chromeTop + (figH - (py + ph)) + 1);
+    rowBot  = min(imH, chromeTop + (figH - py));
+    colLeft = max(1,  px + 1);
+    colRight = min(imW, px + pw);
+
+    if rowBot <= rowTop || colRight <= colLeft
+        error('captureDashboard:writeFailed', ...
+            'Panel crop bounds degenerate (panel %dx%d at [%d %d], img %dx%d, figH=%d).', ...
+            pw, ph, px, py, imW, imH, figH);
+    end
+
+    cropped = img(rowTop:rowBot, colLeft:colRight, :);
+    imwrite(cropped, absPath);
+end
+
+function safeDelete(path)
+%SAFEDELETE Best-effort temp-file cleanup.
+    if ~isempty(path) && exist(path, 'file')
+        try
+            delete(path);
+        catch
+            % Ignore — temp file, will be cleaned by OS eventually
+        end
+    end
+end
+
+function safeSetUnits(h, units)
+%SAFESETUNITS Restore Units, ignoring closed handles.
+    if ~isempty(h) && ishandle(h)
+        try
+            set(h, 'Units', units);
+        catch
+            % Handle may have been closed during capture
+        end
     end
 end
 
