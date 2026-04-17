@@ -63,7 +63,7 @@ fprintf('TagRegistry.unregister(): removed "my_custom_ph".\n');
 
 %% 7. Plot the pressure sensor with FastSense
 fp = FastSense();
-fp.addTag(s, 'ShowThresholds', true);
+fp.addTag(s);
 fp.render();
 title(sprintf('%s (from TagRegistry)', s.Name));
 xlabel('Time [s]');

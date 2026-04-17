@@ -43,7 +43,7 @@ fprintf('  Thresholds: %d, Violations: %d\n', ...
 fprintf('\n=== 3. Plot disk-backed sensor ===\n');
 
 fp = FastSense();
-fp.addTag(s, 'ShowThresholds', true);
+fp.addTag(s);
 tic;
 fp.render();
 fprintf('  Rendered in %.3f s\n', toc);
@@ -123,7 +123,7 @@ end
 
 fpf = FastSenseGrid(2, 2);
 for i = 1:4
-    fpf.tile(i).addTag(sensors{i}, 'ShowThresholds', true);
+    fpf.tile(i).addTag(sensors{i});
 end
 tic;
 fpf.render();

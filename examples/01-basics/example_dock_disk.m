@@ -57,8 +57,8 @@ s1b.updateData(tdn, 575 + 38*sin(2*pi*sec/3600 + 0.3) + 12*randn(1,n));
 s1b.toDisk();
 
 fp = fig1.tile(1);
-fp.addTag(s1a, 'ShowThresholds', true);
-fp.addTag(s1b, 'ShowThresholds', true);
+fp.addTag(s1a);
+fp.addTag(s1b);
 fig1.setTileTitle(1, 'Exhaust Gas Temperature (10M pts)');
 fig1.setTileYLabel(1, 'Temp (°C)');
 
@@ -80,8 +80,8 @@ s2b.updateData(tdn, 1.8 + 0.6*sin(2*pi*sec/1800 + 1) + 0.25*randn(1,n));
 s2b.toDisk();
 
 fp = fig1.tile(2);
-fp.addTag(s2a, 'ShowThresholds', true);
-fp.addTag(s2b, 'ShowThresholds', true);
+fp.addTag(s2a);
+fp.addTag(s2b);
 fig1.setTileTitle(2, 'Bearing Vibration (8M pts)');
 fig1.setTileYLabel(2, 'Velocity (mm/s)');
 
@@ -104,9 +104,9 @@ s3c.updateData(tdn, 45 + 5*sin(2*pi*sec/3600) + 2*randn(1,n));
 s3c.toDisk();
 
 fp = fig1.tile(3);
-fp.addTag(s3a, 'ShowThresholds', true);
-fp.addTag(s3b, 'ShowThresholds', true);
-fp.addTag(s3c, 'ShowThresholds', true);
+fp.addTag(s3a);
+fp.addTag(s3b);
+fp.addTag(s3c);
 fig1.setTileTitle(3, 'Lube Oil System (5M pts)');
 fig1.setTileYLabel(3, 'Mixed Units');
 
@@ -122,7 +122,7 @@ s4a.updateData(tdn, 3000 + 50*sin(2*pi*sec/14400) + 15*randn(1,n));
 s4a.toDisk();
 
 fp = fig1.tile(4);
-fp.addTag(s4a, 'ShowThresholds', true);
+fp.addTag(s4a);
 fig1.setTileTitle(4, 'Shaft Speed (5M pts)');
 fig1.setTileYLabel(4, 'RPM');
 
@@ -155,8 +155,8 @@ s5b.updateData(tdn, 170 + 25*sin(2*pi*sec/7200 + 0.5) + 4*randn(1,n));
 s5b.toDisk();
 
 fp = fig2.tile(1);
-fp.addTag(s5a, 'ShowThresholds', true);
-fp.addTag(s5b, 'ShowThresholds', true);
+fp.addTag(s5a);
+fp.addTag(s5b);
 fig2.setTileTitle(1, 'Reactor Temperature (8M pts)');
 fig2.setTileYLabel(1, 'Temp (°C)');
 
@@ -175,8 +175,8 @@ s6b.updateData(tdn, 0.8 + 0.3*sin(2*pi*sec/3600) + 0.1*randn(1,n));
 s6b.toDisk();
 
 fp = fig2.tile(2);
-fp.addTag(s6a, 'ShowThresholds', true);
-fp.addTag(s6b, 'ShowThresholds', true);
+fp.addTag(s6a);
+fp.addTag(s6b);
 fig2.setTileTitle(2, 'Reactor Pressure (5M pts)');
 fig2.setTileYLabel(2, 'bar / bar');
 
@@ -195,8 +195,8 @@ s7b.updateData(tdn, 450 + 80*sin(2*pi*sec/5400) + 20*randn(1,n));
 s7b.toDisk();
 
 fp = fig2.tile(3);
-fp.addTag(s7a, 'ShowThresholds', true);
-fp.addTag(s7b, 'ShowThresholds', true);
+fp.addTag(s7a);
+fp.addTag(s7b);
 fig2.setTileTitle(3, 'pH & Conductivity (5M pts)');
 fig2.setTileYLabel(3, 'pH / µS/cm');
 
@@ -215,8 +215,8 @@ s8b.updateData(tdn, 85 + 20*sin(2*pi*sec/5400) + 8*randn(1,n));
 s8b.toDisk();
 
 fp = fig2.tile(4);
-fp.addTag(s8a, 'ShowThresholds', true);
-fp.addTag(s8b, 'ShowThresholds', true);
+fp.addTag(s8a);
+fp.addTag(s8b);
 fig2.setTileTitle(4, 'Agitator (4M pts)');
 fig2.setTileYLabel(4, 'RPM / N·m');
 
@@ -253,9 +253,9 @@ s9c.updateData(tdn, 5.5 + 0.8*sin(2*pi*sec/5400) + 0.2*randn(1,n));
 s9c.toDisk();
 
 fp = fig3.tile(1);
-fp.addTag(s9a, 'ShowThresholds', true);
-fp.addTag(s9b, 'ShowThresholds', true);
-fp.addTag(s9c, 'ShowThresholds', true);
+fp.addTag(s9a);
+fp.addTag(s9b);
+fp.addTag(s9c);
 fig3.setTileTitle(1, 'Pressures (8M pts)');
 fig3.setTileYLabel(1, 'bar');
 
@@ -274,8 +274,8 @@ s10b.updateData(tdn, 45 + 8*sin(2*pi*sec/3600) + 2*randn(1,n));
 s10b.toDisk();
 
 fp = fig3.tile(2);
-fp.addTag(s10a, 'ShowThresholds', true);
-fp.addTag(s10b, 'ShowThresholds', true);
+fp.addTag(s10a);
+fp.addTag(s10b);
 fig3.setTileTitle(2, 'Temperatures (5M pts)');
 fig3.setTileYLabel(2, 'Temp (°C)');
 
@@ -293,7 +293,7 @@ s11a.updateData(tdn, s11a_y_);
 s11a.toDisk();
 
 fp = fig3.tile(3);
-fp.addTag(s11a, 'ShowThresholds', true);
+fp.addTag(s11a);
 fig3.setTileTitle(3, 'Surge Margin (5M pts)');
 fig3.setTileYLabel(3, 'Margin (%)');
 
@@ -320,7 +320,7 @@ for p = 1:3
 
     sV.toDisk();
     fp = fig4.tile(1);
-    fp.addTag(sV, 'ShowThresholds', true);
+    fp.addTag(sV);
 end
 fig4.setTileTitle(1, 'Three-Phase Voltage (9M pts)');
 fig4.setTileYLabel(1, 'Voltage (V)');
@@ -341,8 +341,8 @@ s13b.updateData(tdn, 0.95 + 0.03*sin(2*pi*sec/3600) + 0.005*randn(1,n));
 s13b.toDisk();
 
 fp = fig4.tile(2);
-fp.addTag(s13a, 'ShowThresholds', true);
-fp.addTag(s13b, 'ShowThresholds', true);
+fp.addTag(s13a);
+fp.addTag(s13b);
 fig4.setTileTitle(2, 'Frequency & PF (5M pts)');
 fig4.setTileYLabel(2, 'Hz / PF');
 
@@ -358,7 +358,7 @@ s14.updateData(tdn, 180 + 40*sin(2*pi*sec/7200) + 10*randn(1,n));
 s14.toDisk();
 
 fp = fig4.tile(3);
-fp.addTag(s14, 'ShowThresholds', true);
+fp.addTag(s14);
 fig4.setTileTitle(3, 'Active Power (5M pts)');
 fig4.setTileYLabel(3, 'MW');
 
@@ -377,8 +377,8 @@ s15b.updateData(tdn, 85 + 12*sin(2*pi*sec/7200 + 0.3) + 3*randn(1,n));
 s15b.toDisk();
 
 fp = fig4.tile(4);
-fp.addTag(s15a, 'ShowThresholds', true);
-fp.addTag(s15b, 'ShowThresholds', true);
+fp.addTag(s15a);
+fp.addTag(s15b);
 fig4.setTileTitle(4, 'Generator Temps (5M pts)');
 fig4.setTileYLabel(4, 'Temp (°C)');
 
@@ -409,8 +409,8 @@ s16b.updateData(tdn, 8 + 5*sin(2*pi*sec/10800) + 2*randn(1,n));
 s16b.toDisk();
 
 fp = fig5.tile(1);
-fp.addTag(s16a, 'ShowThresholds', true);
-fp.addTag(s16b, 'ShowThresholds', true);
+fp.addTag(s16a);
+fp.addTag(s16b);
 fig5.setTileTitle(1, 'Air Quality (5M pts)');
 fig5.setTileYLabel(1, 'ppm / µg/m³');
 
@@ -430,8 +430,8 @@ s17b.updateData(tdn, 45 + 12*sin(2*pi*sec/10800) + 3*randn(1,n));
 s17b.toDisk();
 
 fp = fig5.tile(2);
-fp.addTag(s17a, 'ShowThresholds', true);
-fp.addTag(s17b, 'ShowThresholds', true);
+fp.addTag(s17a);
+fp.addTag(s17b);
 fig5.setTileTitle(2, 'Temp & Humidity (3M pts)');
 fig5.setTileYLabel(2, '°C / %RH');
 
@@ -449,7 +449,7 @@ s18.updateData(tdn, s18_y_);
 s18.toDisk();
 
 fp = fig5.tile(3);
-fp.addTag(s18, 'ShowThresholds', true);
+fp.addTag(s18);
 fig5.setTileTitle(3, 'Noise Level (3M pts)');
 fig5.setTileYLabel(3, 'dB(A)');
 

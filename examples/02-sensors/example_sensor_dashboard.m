@@ -58,26 +58,26 @@ fig = FastSenseGrid(2, 2, 'Name', 'Sensor Dashboard');
 
 % Tile 1: Pressure
 fp1 = fig.tile(1);
-fp1.addTag(s1, 'ShowThresholds', true);
+fp1.addTag(s1);
 fig.setTileTitle(1, 'Chamber Pressure');
 fig.setTileYLabel(1, 'Pressure [mbar]');
 
 % Tile 2: Temperature
 fp2 = fig.tile(2);
-fp2.addTag(s2, 'ShowThresholds', true);
+fp2.addTag(s2);
 fig.setTileTitle(2, 'Chamber Temperature');
 fig.setTileYLabel(2, 'Temperature [°C]');
 
 % Tile 3: Vibration
 fp3 = fig.tile(3);
-fp3.addTag(s3, 'ShowThresholds', true);
+fp3.addTag(s3);
 fig.setTileTitle(3, 'Motor Vibration');
 fig.setTileXLabel(3, 'Time [s]');
 fig.setTileYLabel(3, 'Acceleration [g]');
 
 % Tile 4: Gas Flow
 fp4 = fig.tile(4);
-fp4.addTag(s4, 'ShowThresholds', true);
+fp4.addTag(s4);
 fig.setTileTitle(4, 'Gas Flow Rate');
 fig.setTileXLabel(4, 'Time [s]');
 fig.setTileYLabel(4, 'Flow [sccm]');
