@@ -31,6 +31,21 @@ classdef SensorTag < Tag
         listeners_ = {}    % cell of handles implementing invalidate(); strong refs
     end
 
+    properties (Access = public)
+        % Compatibility shim for pre-Phase-1011 Sensor.Thresholds API.
+        % Holds a (possibly empty) cell array of threshold-rule-like objects
+        % exposing .IsUpper, .Color, .allValues(). In the v2.0 Tag model
+        % thresholds are expressed as separate MonitorTag alarms; however,
+        % a number of Dashboard widgets (GaugeWidget, StatusWidget,
+        % ChipBarWidget, MultiStatusWidget, IconCardWidget) still probe
+        % this list as a fallback color / range source and guard the path
+        % with `~isempty(sensor.Thresholds)`. Keeping this property empty
+        % by default makes those widgets degrade gracefully instead of
+        % erroring with "Unrecognized method, property, or field 'Thresholds'".
+        % Populate manually only when supplying legacy ThresholdRule objects.
+        Thresholds = {}
+    end
+
     properties (Dependent)
         DataStore   % read-only view of DataStore_
         X           % read-only view of X_ (backward-compat with legacy Sensor.X)

@@ -284,14 +284,25 @@ classdef DashboardSerializer
             for i = 1:numel(config.widgets)
                 ws = config.widgets{i};
                 widgets{i} = DashboardSerializer.createWidgetFromStruct(ws);
-                % Resolve sensor binding using resolver
-                if ~isempty(resolver) && ~isempty(widgets{i}) && ...
-                        isfield(ws, 'source') && strcmp(ws.source.type, 'sensor')
-                    try
-                        widgets{i}.Sensor = resolver(ws.source.name);
-                    catch
-                        warning('DashboardSerializer:sensorNotFound', ...
-                            'Could not resolve sensor: %s', ws.source.name);
+                % Resolve tag/sensor binding using the optional resolver.
+                % Supports both the v2.0 source.type='tag' (with .key) and
+                % the v1.x source.type='sensor' (with .name) shapes so the
+                % SensorResolver hook keeps working across the Phase 1011
+                % migration when the TagRegistry is not populated.
+                if ~isempty(resolver) && ~isempty(widgets{i}) && isfield(ws, 'source')
+                    sKey = '';
+                    if strcmp(ws.source.type, 'tag') && isfield(ws.source, 'key')
+                        sKey = ws.source.key;
+                    elseif strcmp(ws.source.type, 'sensor') && isfield(ws.source, 'name')
+                        sKey = ws.source.name;
+                    end
+                    if ~isempty(sKey)
+                        try
+                            widgets{i}.Sensor = resolver(sKey);
+                        catch
+                            warning('DashboardSerializer:sensorNotFound', ...
+                                'Could not resolve sensor: %s', sKey);
+                        end
                     end
                 end
             end
