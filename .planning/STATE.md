@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1011-01-PLAN.md
-last_updated: "2026-04-17T09:12:37.080Z"
+stopped_at: Completed 1011-03-PLAN.md
+last_updated: "2026-04-17T09:30:31.666Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 15
   completed_phases: 13
   total_plans: 47
-  completed_plans: 44
+  completed_plans: 45
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1011 (Cleanup — delete legacy) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -114,6 +114,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1010 P03 | 333 | 1 tasks | 1 files |
 | Phase 1011 P02 | 58 | 1 tasks | 37 files |
 | Phase 1011 P01 | 3min | 2 tasks | 22 files |
+| Phase 1011 P03 | 15min | 2 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -229,6 +230,8 @@ Recent decisions affecting current work:
 - [Phase 1010]: 0-event bench median 0.117s proves renderEventLayer_ early-out is near-zero-cost; all 5 Pitfall gates PASS; 11 source files under 12-file cap
 - [Phase 1011]: TestAddThreshold KEPT (tests FastSense.addThreshold surviving API); run_all_tests.m unchanged (auto-discovery)
 - [Phase 1011]: Inlined 7 Sensor data properties directly onto SensorTag (no delegate)
+- [Phase 1011]: DashboardWidget maps legacy Sensor NV to Tag for backward compat; all fromStruct methods use TagRegistry.get
+- [Phase 1011]: EventDetector 6-arg legacy path removed; LiveEventPipeline takes MonitorTargets directly
 
 ### Roadmap Evolution
 
@@ -262,6 +265,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T09:12:37.074Z
-Stopped at: Completed 1011-01-PLAN.md
+Last session: 2026-04-17T09:30:31.658Z
+Stopped at: Completed 1011-03-PLAN.md
 Resume file: None
