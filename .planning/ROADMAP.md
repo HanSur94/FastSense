@@ -60,7 +60,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [x] **Phase 1006: MonitorTag (lazy, in-memory)** — derived 0/1 time series with debounce, hysteresis, parent-driven invalidation, ZOH alignment; no disk persistence (completed 2026-04-16)
 - [x] **Phase 1007: MonitorTag streaming + persistence** — `appendData` incremental tail computation and opt-in `FastSenseDataStore` storeMonitor/loadMonitor (completed 2026-04-16)
 - [x] **Phase 1008: CompositeTag** — AND/OR/MAJORITY/COUNT/WORST/SEVERITY/USER_FN aggregation with cycle detection and merge-sort streaming (completed 2026-04-16)
-- [ ] **Phase 1009: Consumer migration (one widget at a time)** — migrate FastSenseWidget, MultiStatusWidget, IconCardWidget, EventTimelineWidget, SensorDetailPlot, DashboardWidget base, EventDetection consumers; each in a separate green-CI commit
+- [x] **Phase 1009: Consumer migration (one widget at a time)** — migrate FastSenseWidget, MultiStatusWidget, IconCardWidget, EventTimelineWidget, SensorDetailPlot, DashboardWidget base, EventDetection consumers; each in a separate green-CI commit (completed 2026-04-17)
 - [ ] **Phase 1010: Event ↔ Tag binding + FastSense overlay** — `Event.TagKeys`, `EventBinding` registry, `EventStore.eventsForTag`, FastSense round-marker overlay (toggleable)
 - [ ] **Phase 1011: Cleanup — collapse parallel hierarchy + delete legacy** — delete 8 legacy classes, rewrite golden test for new API, full suite green
 
@@ -197,7 +197,7 @@ Plans:
 - [x] 1009-01-PLAN.md — FastSense-layer consumers (FastSenseWidget + SensorDetailPlot) Tag migration + shared fixture factory
 - [x] 1009-02-PLAN.md — Dashboard widgets (MultiStatusWidget + IconCardWidget + EventTimelineWidget) + DashboardWidget base Tag property + DashboardEngine tick dispatch + EventStore.getEventsForTag
 - [x] 1009-03-PLAN.md — EventDetection consumers (EventDetector 2-arg overload + LiveEventPipeline MonitorTargets/appendData wire-up — realizes Phase 1007 SC#4)
-- [ ] 1009-04-PLAN.md — Pitfall 9 12-widget live-tick benchmark + phase-exit audit
+- [x] 1009-04-PLAN.md — Pitfall 9 12-widget live-tick benchmark + phase-exit audit
 **UI hint**: yes
 
 ### Phase 1010: Event ↔ Tag binding + FastSense overlay
@@ -247,7 +247,7 @@ Plans:
 | 1006. MonitorTag (lazy, in-memory) | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1007. MonitorTag streaming + persistence | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1008. CompositeTag | v2.0 | 3/3 | Complete    | 2026-04-16 |
-| 1009. Consumer migration | v2.0 | 3/4 | In Progress|  |
+| 1009. Consumer migration | v2.0 | 4/4 | Complete   | 2026-04-17 |
 | 1010. Event ↔ Tag binding + overlay | v2.0 | 0/? | Not started | — |
 | 1011. Cleanup + delete legacy | v2.0 | 0/? | Not started | — |
 
@@ -257,7 +257,7 @@ Plans:
 
 **Goal:** Add Home Assistant-style Mushroom Card widgets to the dashboard engine — minimal, icon-driven cards with clean visual design for sensor status, controls, and quick glance data. Three new widget classes: IconCardWidget, ChipBarWidget, SparklineCardWidget, plus theme additions and full serializer/builder/detach integration.
 **Requirements:** [MUSH-01: DashboardTheme InfoColor, MUSH-02: IconCardWidget, MUSH-03: ChipBarWidget, MUSH-04: SparklineCardWidget, MUSH-05: DashboardEngine type registration, MUSH-06: DashboardSerializer integration, MUSH-07: DetachedMirror + DashboardBuilder integration]
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation
