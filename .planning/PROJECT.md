@@ -41,32 +41,23 @@ Users can organize complex dashboards into navigable sections and pop out any wi
 ### Active
 
 - ✓ Dashboard performance optimization: theme caching, O(1) widget dispatch, single-pass live tick, in-place resize, visibility page switch — v1.0 Performance
-- Tag-based domain model: unified `Tag` foundation, `TagRegistry`, `MonitorTag` derived time-series, `CompositeTag` aggregation — v2.0 Milestone (in progress)
-- Events attached to tags with FastSense overlay rendering — v2.0 Milestone (in progress)
+- ✓ Tag-based domain model: unified `Tag` foundation, `TagRegistry`, `MonitorTag` derived time-series, `CompositeTag` aggregation — v2.0
+- ✓ Events attached to tags with FastSense overlay rendering — v2.0
 
-## Current Milestone: v2.0 — Tag-Based Domain Model
+## Current State
 
-**Goal:** Reboot the SensorThreshold subsystem on a unified `Tag` foundation (Trendminer-flavored). Everything is a Tag — existing `Sensor`/`Threshold`/`StateChannel` rewritten as Tag subclasses; new primitives (`MonitorTag`, `CompositeTag`) deliver derived time-series health signals; events bind to tags and overlay in FastSense.
+**Shipped:** v2.0 Tag-Based Domain Model (2026-04-17)
 
-**Target features (Ambitious tier — A + B + C + E):**
-- **Tag root + retrofit** — `Tag` abstract class, `TagRegistry`. Rewrite `Sensor`/`StateChannel`/`Threshold` as Tag subclasses. Update `FastSense`/`FastSenseWidget`/`EventDetection` consumers.
-- **MonitorTag as time series** — derived 0/1/severity signal from any Tag + condition; plottable in FastSense alongside raw sensors; replaces "violations computed inside `Sensor.resolve()`" pattern.
-- **CompositeTag** — aggregate child tags via AND/OR/MAJORITY/COUNT/SEVERITY; itself a Tag; recursively composable; replaces existing `CompositeThreshold`.
-- **Events attached to tags** — `Event` ↔ Tag binding; FastSense renders attached events as overlay regions/markers on any tag plot.
+The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundation. Legacy `Sensor`/`Threshold`/`StateChannel`/`CompositeThreshold` classes are deleted. All consumers (FastSenseWidget, dashboard widgets, EventDetection, LiveEventPipeline) operate through the Tag API (`addTag`, `getXY`, `valueAt`). Events bind to tags via `EventBinding` registry and render as toggleable round markers in FastSense.
 
-**Vocabulary:** `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `TagRegistry`. FastSense API: `addTag(t)`.
+**Vocabulary:** `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `TagRegistry`, `EventBinding`. FastSense API: `addTag(t)`.
 
-**Deferred to later milestones:**
+**Next milestone candidates:**
 - Asset hierarchy (Asset tree, templates, tag-to-asset binding, browse rollups)
 - Custom event GUI (click-drag region selection in FastSense → label dialog)
 - Calc tags / formula evaluator for arbitrary derived tags
-
-**Key milestone context:**
-- **No users** — codebase has no external consumers; backward compatibility is NOT a constraint
-- **Greenfield rewrite of `libs/SensorThreshold/`** — entire library restructured under Tag root
-- **Render + storage layers untouched** — all MEX kernels, `FastSenseDataStore`, `FastSense` rendering core, `DashboardEngine`, layout/theme/toolbar/serializer stay; consumers' constructors update only
-- **Phases 1-9 (collapsible sections, multi-page nav, detachable widgets) unaffected** — unrelated subsystem
-- **Phase 1001-1003 work (first-class thresholds, `ThresholdRegistry`, `CompositeThreshold`) survives as design lessons** — concepts carry forward to Tag system; code is rewritten
+- Tri-state / continuous severity MonitorTag output
+- WebBridge parity for Tag API features
 
 ### Out of Scope
 
