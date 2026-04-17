@@ -15,16 +15,29 @@ function test_monitortag_persistence()
     add_monitortag_persistence_path();
     TagRegistry.clear();
 
+    % Scenarios 1-2 + grep gates + Pitfall 2 structural check run on every
+    % backend (no SQLite writes are required to verify default-off behavior,
+    % no-op on Persist=false, and the structural guards around storeMonitor).
     run_scenario_default_is_false_();
     run_scenario_persist_false_no_writes_();
-    run_scenario_persist_true_writes_();
-    run_scenario_round_trip_();
-    run_scenario_stale_after_mutation_();
-    run_scenario_low_level_api_();
     run_grep_gates_();
     run_pitfall_2_structural_();
 
-    fprintf('    All 6 persistence tests passed.\n');
+    % Scenarios 3-6 exercise the actual SQLite monitors table round-trip.
+    % They REQUIRE mksqlite — without it FastSenseDataStore falls back to
+    % binary storage where storeMonitor/loadMonitor are intentional no-ops.
+    % Skip cleanly on Octave-without-MEX so CI stays green; MATLAB (which
+    % compiles mksqlite via install()) still exercises the full set.
+    if exist('mksqlite', 'file') == 3
+        run_scenario_persist_true_writes_();
+        run_scenario_round_trip_();
+        run_scenario_stale_after_mutation_();
+        run_scenario_low_level_api_();
+        fprintf('    All 6 persistence tests passed.\n');
+    else
+        fprintf('    SKIPPED scenarios 3-6: mksqlite MEX not available.\n');
+        fprintf('    2 persistence tests + gates passed.\n');
+    end
 end
 
 % --- Scenario 1: default Persist=false ---

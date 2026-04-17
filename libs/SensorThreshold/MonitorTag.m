@@ -341,8 +341,8 @@ classdef MonitorTag < Tag
                     'appendData requires numeric newX and newY of equal length.');
             end
             if isempty(newX), return; end
-            if obj.dirty_ || isempty(fieldnames(obj.cache_)) ...
-                    || ~isfield(obj.cache_, 'x') || isempty(obj.cache_.x)
+            if obj.dirty_ || isempty(fieldnames(obj.cache_)) || ...
+                    ~isfield(obj.cache_, 'x') || isempty(obj.cache_.x)
                 % Cold start — full recompute over whatever the parent holds.
                 obj.recompute_();
                 return;
@@ -592,9 +592,9 @@ classdef MonitorTag < Tag
             %     ThresholdLabel = obj.Key
             %   (Phase 1010 will migrate to a per-Tag keys array on Event.)
             if isempty(bin_new), return; end
-            if isempty(obj.EventStore) ...
-                    && isempty(obj.OnEventStart) ...
-                    && isempty(obj.OnEventEnd)
+            if isempty(obj.EventStore) && ...
+                    isempty(obj.OnEventStart) && ...
+                    isempty(obj.OnEventEnd)
                 return;
             end
             [sI, eI] = obj.findRuns_(bin_new);
@@ -603,8 +603,8 @@ classdef MonitorTag < Tag
                     % Run still open at tail end — don't emit yet.
                     continue;
                 end
-                if k == 1 && priorLastFlag == 1 && sI(k) == 1 ...
-                        && ~isnan(priorOngoingStart)
+                if k == 1 && priorLastFlag == 1 && sI(k) == 1 && ...
+                        ~isnan(priorOngoingStart)
                     startT = priorOngoingStart;
                 else
                     startT = newX(sI(k));
@@ -683,8 +683,8 @@ classdef MonitorTag < Tag
             %   within 5 lines. With Persist=false a bound DataStore sees
             %   zero SQLite writes.
             if isempty(obj.DataStore); return; end
-            if isempty(fieldnames(obj.cache_)) || ~isfield(obj.cache_, 'x') ...
-                    || isempty(obj.cache_.x)
+            if isempty(fieldnames(obj.cache_)) || ~isfield(obj.cache_, 'x') || ...
+                    isempty(obj.cache_.x)
                 return;
             end
             if isempty(obj.Parent); return; end
