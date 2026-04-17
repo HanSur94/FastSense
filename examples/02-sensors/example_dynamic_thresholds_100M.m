@@ -22,7 +22,7 @@ fprintf('  Done in %.1f s\n', toc);
 %% State Channels — shared across all sensors
 % Machine mode: cycles through idle(0) -> ramp(1) -> process(2) -> cool(3)
 % with transitions every ~2500 s
-scMachine = StateTag('machine', 'X', [0, 2500, 5000, 7500], 'Y', [0, 1, 2, 3];  % 0=idle, 1=ramp, 2=process, 3=cool-down);
+scMachine = StateTag('machine', 'X', [0, 2500, 5000, 7500], 'Y', [0, 1, 2, 3]);  % 0=idle, 1=ramp, 2=process, 3=cool-down
 
 % Recipe phase: string-valued, changes mid-run
 scRecipe = StateTag('recipe', 'X', [0, 3000, 6000, 8500], 'Y', {'setup', 'deposition', 'etch', 'purge'});
@@ -116,9 +116,8 @@ for si = 1:nSensors
 
     % Count violations
     nViol = 0;
-    end
     totalViolations = totalViolations + nViol;
-    fprintf('  Thresholds: %d | Violations: %d\n', ...
+    fprintf('  Thresholds: %d | Violations: %d\n', 0, nViol);
 
     sensors{si} = s;
 

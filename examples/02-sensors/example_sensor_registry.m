@@ -29,14 +29,20 @@ sc = StateTag('machine', 'X', [0 20 40 60], 'Y', [0  1  2  1]);
 
 
 %% 3. Retrieve multiple sensors at once
-sensors = TagRegistry.getMultiple({'pressure', 'temperature'});
-fprintf('\nRetrieved %d sensors via getMultiple():\n', numel(sensors));
+keys = {'pressure', 'temperature'};
+sensors = cell(1, numel(keys));
+for i = 1:numel(keys)
+    sensors{i} = TagRegistry.get(keys{i});
+end
+fprintf('\nRetrieved %d sensors via individual get() calls:\n', numel(sensors));
 for i = 1:numel(sensors)
     fprintf('  [%d] key="%s", name="%s"\n', i, sensors{i}.Key, sensors{i}.Name);
 end
 
 %% 4. register / unregister — add and remove custom sensors at runtime
-customSensor = SensorTag('my_custom_ph', 'Name', 'pH Sensor', 'ID', 999, 'Units', 'pH', 'X', linspace(0, 60, 5000), 'Y', 7.0 + 0.5*sin(2*pi*customSensor.X/15) + 0.1*randn(1, numel(customSensor.X)));
+customX = linspace(0, 60, 5000);
+customY = 7.0 + 0.5*sin(2*pi*customX/15) + 0.1*randn(1, numel(customX));
+customSensor = SensorTag('my_custom_ph', 'Name', 'pH Sensor', 'ID', 999, 'Units', 'pH', 'X', customX, 'Y', customY);
 
 
 TagRegistry.register('my_custom_ph', customSensor);

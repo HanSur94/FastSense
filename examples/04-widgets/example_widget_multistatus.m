@@ -100,8 +100,8 @@ d.addWidget('multistatus', 'Title', 'Compact Status (no labels)', ...
     'ShowLabels', false);
 
 % Row 9-14: FastSense context — one ok sensor, one alarm sensor
-d.addWidget('fastsense', 'Position', [1 9 12 6], 'Sensor', sTemp);
-d.addWidget('fastsense', 'Position', [13 9 12 6], 'Sensor', sCurrent);
+d.addWidget('fastsense', 'Position', [1 9 12 6], 'Tag', sTemp);
+d.addWidget('fastsense', 'Position', [13 9 12 6], 'Tag', sCurrent);
 
 %% 3. Render
 d.render();

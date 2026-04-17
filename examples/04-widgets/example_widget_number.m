@@ -3,7 +3,7 @@
 % DashboardEngine dashboard.
 %
 % NumberWidget properties:
-%   SensorObj  — Sensor object (alias: 'Sensor').  Auto-derives value from
+%   SensorObj  — Sensor object (alias: 'Tag').  Auto-derives value from
 %                Y(end), Units from Sensor.Units, and trend arrow from
 %                recent slope.
 %   ValueFcn   — function_handle returning a scalar (displayed as-is) or a
@@ -38,12 +38,12 @@ d.Theme = 'light';
 % --- Sensor-bound: auto value + trend + units ---
 d.addWidget('number', ...
     'Position', [1 1 5 2], ...
-    'Sensor', sTemp);
+    'Tag', sTemp);
 
 % --- Sensor-bound with custom format ---
 d.addWidget('number', ...
     'Position', [6 1 5 2], ...
-    'Sensor', sPress, ...
+    'Tag', sPress, ...
     'Format', '%.0f');
 
 % --- ValueFcn returning a scalar ---
@@ -70,7 +70,7 @@ d.addWidget('number', 'Title', 'Batch Count', ...
 % --- FastSense for visual context ---
 d.addWidget('fastsense', ...
     'Position', [1 3 24 10], ...
-    'Sensor', sTemp);
+    'Tag', sTemp);
 
 %% 3. Render
 d.render();

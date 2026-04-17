@@ -12,7 +12,9 @@ s.updateData(t, 2 + 0.8*sin(2*pi*t/8) + 0.3*randn(1, numel(t)));
 
 % Add a few spikes to trigger violations
 spikes = [1200 2500 3800 4100 4200];
-s.Y(spikes) = s.Y(spikes) + 3;
+[sx, sy] = s.getXY();
+sy(spikes) = sy(spikes) + 3;
+s.updateData(sx, sy);
 
 % --- Static upper threshold (always active) ---
 

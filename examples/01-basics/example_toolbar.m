@@ -43,7 +43,7 @@ x = datenum(2024,1,1) + (0:99999)/86400;  % ~1 day at 1-second resolution
 y = sin((1:100000) * 2*pi/3600) + 0.2*randn(1,100000);
 
 fp3 = FastSense('Theme', 'light');
-fp3.addLine(x, y, 'DisplayName', 'Sensor', 'XType', 'datenum');
+fp3.addLine(x, y, 'DisplayName', 'Tag', 'XType', 'datenum');
 fp3.render();
 title(fp3.hAxes, 'Datetime Axis — zoom to see format change');
 
@@ -60,7 +60,7 @@ fp4 = FastSense('Theme', 'light');
 meta = struct('datenum', [0 25 50 75], ...
     'operator', {{'Alice', 'Bob', 'Alice', 'Charlie'}}, ...
     'shift',    {{'Day', 'Day', 'Night', 'Night'}});
-fp4.addLine(x4, y4, 'DisplayName', 'Sensor', 'Metadata', meta);
+fp4.addLine(x4, y4, 'DisplayName', 'Tag', 'Metadata', meta);
 fp4.render();
 title(fp4.hAxes, 'Metadata — lookupMetadata / setLineMetadata');
 tb4 = FastSenseToolbar(fp4);

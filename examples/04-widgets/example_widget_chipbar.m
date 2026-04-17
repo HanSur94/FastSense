@@ -80,9 +80,9 @@ bar3.Chips = {
 d.addWidget(bar3);
 
 % --- FastSense widgets below for context ---
-d.addWidget('fastsense', 'Position', [1  10 8 8], 'Sensor', sA);
-d.addWidget('fastsense', 'Position', [9  10 8 8], 'Sensor', sB);
-d.addWidget('fastsense', 'Position', [17 10 8 8], 'Sensor', sC);
+d.addWidget('fastsense', 'Position', [1  10 8 8], 'Tag', sA);
+d.addWidget('fastsense', 'Position', [9  10 8 8], 'Tag', sB);
+d.addWidget('fastsense', 'Position', [17 10 8 8], 'Tag', sC);
 
 %% 3. Render
 d.render();

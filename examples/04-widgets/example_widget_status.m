@@ -2,7 +2,7 @@
 % Demonstrates every way to drive a StatusWidget in the DashboardEngine.
 %
 %   Supported properties:
-%     SensorObj (alias 'Sensor') — auto-derives ok/warning/alarm from the
+%     SensorObj (alias 'Tag') — auto-derives ok/warning/alarm from the
 %         sensor's ThresholdRules; displays latest value + Units in the label.
 %     StatusFcn   — function_handle returning 'ok', 'warning', or 'alarm'.
 %     StaticStatus — fixed status string: 'ok', 'warning', or 'alarm'.
@@ -41,9 +41,9 @@ sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', 1
 d = DashboardEngine('Status Widget Demo');
 
 % --- Row 1: status indicators across 24 columns ---
-d.addWidget('status', 'Position', [1  1 5 1], 'Sensor', sTemp);   % alarm
-d.addWidget('status', 'Position', [6  1 5 1], 'Sensor', sPress);  % warning
-d.addWidget('status', 'Position', [11 1 5 1], 'Sensor', sFlow);   % ok
+d.addWidget('status', 'Position', [1  1 5 1], 'Tag', sTemp);   % alarm
+d.addWidget('status', 'Position', [6  1 5 1], 'Tag', sPress);  % warning
+d.addWidget('status', 'Position', [11 1 5 1], 'Tag', sFlow);   % ok
 
 d.addWidget('status', 'Position', [16 1 5 1], ...
     'Title', 'Custom Check', 'StatusFcn', @() 'warning');
@@ -52,9 +52,9 @@ d.addWidget('status', 'Position', [21 1 4 1], ...
     'Title', 'Manual Override', 'StaticStatus', 'ok');
 
 % --- Row 3+: FastSense widgets showing the underlying sensor data ---
-d.addWidget('fastsense', 'Position', [1  3 8 6], 'Sensor', sTemp);
-d.addWidget('fastsense', 'Position', [9  3 8 6], 'Sensor', sPress);
-d.addWidget('fastsense', 'Position', [17 3 8 6], 'Sensor', sFlow);
+d.addWidget('fastsense', 'Position', [1  3 8 6], 'Tag', sTemp);
+d.addWidget('fastsense', 'Position', [9  3 8 6], 'Tag', sPress);
+d.addWidget('fastsense', 'Position', [17 3 8 6], 'Tag', sFlow);
 
 %% 3. Render
 d.render();

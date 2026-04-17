@@ -33,6 +33,8 @@ classdef SensorTag < Tag
 
     properties (Dependent)
         DataStore   % read-only view of DataStore_
+        X           % read-only view of X_ (backward-compat with legacy Sensor.X)
+        Y           % read-only view of Y_ (backward-compat with legacy Sensor.Y)
     end
 
     methods
@@ -71,6 +73,16 @@ classdef SensorTag < Tag
         function ds = get.DataStore(obj)
             %GET.DATASTORE Return the disk-backed DataStore (read-only view).
             ds = obj.DataStore_;
+        end
+
+        function v = get.X(obj)
+            %GET.X Read-only access to timestamps (backward-compat with legacy Sensor.X).
+            v = obj.X_;
+        end
+
+        function v = get.Y(obj)
+            %GET.Y Read-only access to values (backward-compat with legacy Sensor.Y).
+            v = obj.Y_;
         end
 
         % ---- Tag contract ----

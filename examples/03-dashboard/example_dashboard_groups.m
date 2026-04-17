@@ -36,25 +36,25 @@ d = DashboardEngine('GroupWidget Demo', 'Theme', 'light');
 d.addWidget('group', 'Label', 'Motor Overview', 'Mode', 'panel', ...
     'Position', [1 1 12 4]);
 g1 = d.Widgets{end};
-g1.addChild(NumberWidget('Sensor', s_rpm, 'Title', 'RPM'));
-g1.addChild(GaugeWidget('Sensor', s_temp, 'Title', 'Temperature'));
-g1.addChild(StatusWidget('Sensor', s_temp, 'Title', 'Temp Status'));
+g1.addChild(NumberWidget('Tag', s_rpm, 'Title', 'RPM'));
+g1.addChild(GaugeWidget('Tag', s_temp, 'Title', 'Temperature'));
+g1.addChild(StatusWidget('Tag', s_temp, 'Title', 'Temp Status'));
 
 % 2. Collapsible group — can be hidden
 d.addWidget('group', 'Label', 'Pressure Detail', 'Mode', 'collapsible', ...
     'Position', [13 1 12 4]);
 g2 = d.Widgets{end};
-g2.addChild(FastSenseWidget('Sensor', s_pres, 'Title', 'Pressure Over Time'));
+g2.addChild(FastSenseWidget('Tag', s_pres, 'Title', 'Pressure Over Time'));
 
 % 3. Tabbed group — multiple views in one space
 d.addWidget('group', 'Label', 'Analysis', 'Mode', 'tabbed', ...
     'Position', [1 5 24 5]);
 g3 = d.Widgets{end};
-g3.addChild(FastSenseWidget('Sensor', s_rpm, 'Title', 'RPM Trend'), 'Trends');
-g3.addChild(FastSenseWidget('Sensor', s_temp, 'Title', 'Temp Trend'), 'Trends');
-g3.addChild(NumberWidget('Sensor', s_rpm, 'Title', 'Current RPM'), 'Summary');
-g3.addChild(NumberWidget('Sensor', s_temp, 'Title', 'Current Temp'), 'Summary');
-g3.addChild(StatusWidget('Sensor', s_temp, 'Title', 'Status'), 'Summary');
+g3.addChild(FastSenseWidget('Tag', s_rpm, 'Title', 'RPM Trend'), 'Trends');
+g3.addChild(FastSenseWidget('Tag', s_temp, 'Title', 'Temp Trend'), 'Trends');
+g3.addChild(NumberWidget('Tag', s_rpm, 'Title', 'Current RPM'), 'Summary');
+g3.addChild(NumberWidget('Tag', s_temp, 'Title', 'Current Temp'), 'Summary');
+g3.addChild(StatusWidget('Tag', s_temp, 'Title', 'Status'), 'Summary');
 
 %% Render
 d.render();

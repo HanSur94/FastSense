@@ -36,15 +36,15 @@ d = DashboardEngine('DividerWidget Demo');
 d.Theme = 'dark';
 
 % --- Row 1: Section A number widgets ---
-d.addWidget('number', 'Position', [1  1 12 2], 'Sensor', sPressA);
-d.addWidget('number', 'Position', [13 1 12 2], 'Sensor', sTempA);
+d.addWidget('number', 'Position', [1  1 12 2], 'Tag', sPressA);
+d.addWidget('number', 'Position', [13 1 12 2], 'Tag', sTempA);
 
 % --- Row 3: Default divider (Thickness=1, theme WidgetBorderColor) ---
 d.addWidget('divider', 'Position', [1 3 24 1]);
 
 % --- Row 4: Section B number widgets ---
-d.addWidget('number', 'Position', [1  4 12 2], 'Sensor', sPressB);
-d.addWidget('number', 'Position', [13 4 12 2], 'Sensor', sTempB);
+d.addWidget('number', 'Position', [1  4 12 2], 'Tag', sPressB);
+d.addWidget('number', 'Position', [13 4 12 2], 'Tag', sTempB);
 
 % --- Row 6: Thick divider (Thickness=3) with a custom red color ---
 d.addWidget('divider', ...

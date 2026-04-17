@@ -3,7 +3,7 @@
 % DashboardEngine dashboard.
 %
 % Supported properties:
-%   SensorObj      — Sensor object (alias: 'Sensor'); shows last N rows
+%   SensorObj      — Sensor object (alias: 'Tag'); shows last N rows
 %   DataFcn        — function_handle returning a cell array of table data
 %   Data           — static cell array (rows x cols)
 %   ColumnNames    — cell array of column header strings
@@ -63,7 +63,7 @@ d.addWidget('table', 'Title', 'System Status (callback)', ...
 % --- Sensor-bound table (last 8 readings) ---
 d.addWidget('table', 'Title', 'Temperature — Last 8 Readings', ...
     'Position', [1 13 24 6], ...
-    'Sensor', sTemp, ...
+    'Tag', sTemp, ...
     'N', 8);
 
 %% Render
