@@ -95,8 +95,11 @@ alarmLog = {};
 sensors = {sTemp, sPress, sFlow};
 for si = 1:numel(sensors)
     s = sensors{si};
+    if isempty(s.ResolvedViolations)
         continue;
     end
+    for vi = 1:numel(s.ResolvedViolations)
+        v = s.ResolvedViolations(vi);
         if isempty(v.X)
             continue;
         end
@@ -245,6 +248,7 @@ d.addWidget('heatmap', 'Title', 'Temp by Hour & Machine Mode', ...
 % BarChart: alarm counts by sensor tag
 alarmCounts = struct( ...
     'categories', {{'T-401','P-201','F-301'}}, ...
+    'values', [sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations()]);
 d.addWidget('barchart', 'Title', 'Violation Count by Sensor', ...
     'Position', [15 22 10 6], ...
     'DataFcn', @() alarmCounts, ...
@@ -288,6 +292,7 @@ d.render();
 
 fprintf('Dashboard rendered with %d widgets.\n', numel(d.Widgets));
 fprintf('Sensors: T-401 (%d violations), P-201 (%d violations), F-301 (%d violations)\n', ...
+    sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations());
 fprintf('Phase B widgets added: heatmap, barchart, histogram, scatter, image, multistatus.\n');
 fprintf('Click "Edit" to enter GUI builder mode.\n');
 fprintf('Click "Save" to export as JSON, "Export" to generate .m script.\n');

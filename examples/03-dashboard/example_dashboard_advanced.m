@@ -95,8 +95,11 @@ alarmLog = {};
 sensors = {sTemp, sPress, sFlow};
 for si = 1:numel(sensors)
     s = sensors{si};
+    if isempty(s.ResolvedViolations)
         continue;
     end
+    for vi = 1:numel(s.ResolvedViolations)
+        v = s.ResolvedViolations(vi);
         if isempty(v.X)
             continue;
         end

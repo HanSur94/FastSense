@@ -117,6 +117,7 @@ classdef TestStatusWidget < matlab.unittest.TestCase
             s = SensorTag('T-401', 'Name', 'Temperature', 'Units', 'degC');
             s.updateData([1 2 3], [70 71 85]);
             t1 = Threshold('T401_hi', 'Name', 'Hi Alarm', ...
+                'Direction', 'upper', 'Color', [0.9 0.2 0.2]);
             t1.addCondition(struct(), 80);
             s.addThreshold(t1);
 

@@ -38,7 +38,7 @@ fprintf('Tab 1: Turbine Monitoring...\n');
 fig1 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Turbine operates in 3 modes over the shift
-scTurbine = StateTag('turbine', 'X', [tdn0, tdn0 + 1/24, tdn0 + 3/24, tdn0 + 6/24], 'Y', [0, 1, 2, 1];  % 0=startup, 1=running, 2=high-load);
+scTurbine = StateTag('turbine', 'X', [tdn0, tdn0 + 1/24, tdn0 + 3/24, tdn0 + 6/24], 'Y', [0, 1, 2, 1]);  % 0=startup, 1=running, 2=high-load
 
 % --- Tile 1: Exhaust Gas Temperature (3 sensors, 10M pts) ---
 n = 10e6;
@@ -135,7 +135,7 @@ fprintf('Tab 2: Chemical Process...\n');
 fig2 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Reactor modes: batch phases
-scReactor = StateTag('phase', 'X', [tdn0, tdn0+1/24, tdn0+2.5/24, tdn0+5/24, tdn0+6.5/24], 'Y', [0, 1, 2, 3, 1];  % 0=idle, 1=heat, 2=react, 3=cool);
+scReactor = StateTag('phase', 'X', [tdn0, tdn0+1/24, tdn0+2.5/24, tdn0+5/24, tdn0+6.5/24], 'Y', [0, 1, 2, 3, 1]);  % 0=idle, 1=heat, 2=react, 3=cool
 
 % --- Tile 1: Reactor Temperature (2 sensors, 8M pts) ---
 n = 8e6;
@@ -229,7 +229,7 @@ fprintf('Tab 3: Compressor Station...\n');
 fig3 = FastSenseGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Compressor modes
-scComp = StateTag('stage', 'X', [tdn0, tdn0+0.5/24, tdn0+2/24, tdn0+5/24, tdn0+7/24], 'Y', [0, 1, 2, 1, 2];  % 0=off, 1=single-stage, 2=dual-stage);
+scComp = StateTag('stage', 'X', [tdn0, tdn0+0.5/24, tdn0+2/24, tdn0+5/24, tdn0+7/24], 'Y', [0, 1, 2, 1, 2]);  % 0=off, 1=single-stage, 2=dual-stage
 
 % --- Tile 1: Suction/Discharge (3 sensors, 8M pts) ---
 n = 8e6;
@@ -306,7 +306,7 @@ fprintf('Tab 4: Power Generation...\n');
 fig4 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Generator modes
-scGen = StateTag('gen', 'X', [tdn0, tdn0+0.5/24, tdn0+3/24, tdn0+6/24], 'Y', [0, 1, 2, 1];  % 0=sync, 1=base-load, 2=peak);
+scGen = StateTag('gen', 'X', [tdn0, tdn0+0.5/24, tdn0+3/24, tdn0+6/24], 'Y', [0, 1, 2, 1]);  % 0=sync, 1=base-load, 2=peak
 
 % --- Tile 1: Three-Phase Voltage (3 sensors, 9M pts) ---
 n = 3e6;
@@ -391,7 +391,7 @@ fprintf('Tab 5: Environmental...\n');
 fig5 = FastSenseGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % HVAC modes
-scHvac = StateTag('hvac', 'X', [tdn0, tdn0+1/24, tdn0+4/24, tdn0+7/24], 'Y', [0, 1, 2, 1];  % 0=night, 1=normal, 2=boost);
+scHvac = StateTag('hvac', 'X', [tdn0, tdn0+1/24, tdn0+4/24, tdn0+7/24], 'Y', [0, 1, 2, 1]);  % 0=night, 1=normal, 2=boost
 
 % --- Tile 1: Air Quality (2 sensors, 5M pts) ---
 n = 5e6;

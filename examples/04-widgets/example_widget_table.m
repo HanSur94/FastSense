@@ -29,6 +29,8 @@ sTemp = SensorTag('T-401', 'Name', 'Temperature', 'X', t, 'Y', temp);
 
 %% 2. Build a static alarm log from resolved violations
 alarmLog = {};
+for vi = 1:numel(sTemp.ResolvedViolations)
+    v = sTemp.ResolvedViolations(vi);
     if isempty(v.X), continue; end
     nSample = min(5, numel(v.X));
     idx = round(linspace(1, numel(v.X), nSample));

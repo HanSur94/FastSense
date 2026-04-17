@@ -39,7 +39,7 @@ sPress.Y(modeA) = 30 + randn(1, sum(modeA))*3;
 sPress.Y(modeB) = 55 + randn(1, sum(modeB))*4;
 
 % Vibration — log-normal (positively skewed)
-sVib = SensorTag('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s', 'X', t, 'Y', max(0.1, exp(0.5 + 0.4*randn(1,N)));  % log-normal);
+sVib = SensorTag('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s', 'X', t, 'Y', max(0.1, exp(0.5 + 0.4*randn(1,N))));  % log-normal
 
 % Custom DataFcn — batch cycle times (gamma-like)
 cycleTimes = 28 + 15*abs(randn(1, 800)) + 5*randn(1,800);

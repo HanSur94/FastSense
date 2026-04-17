@@ -137,9 +137,11 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
             s = SensorTag('P-201', 'Name', 'Pressure');
             s.updateData([1 2 3], [40 50 60]);
             t1 = Threshold('P201_lo', 'Name', 'Lo', ...
+                'Direction', 'lower', 'Color', [1 0.6 0]);
             t1.addCondition(struct(), 30);
             s.addThreshold(t1);
             t2 = Threshold('P201_hi', 'Name', 'Hi', ...
+                'Direction', 'upper', 'Color', [1 0 0]);
             t2.addCondition(struct(), 80);
             s.addThreshold(t2);
             w = GaugeWidget('Sensor', s);
@@ -228,6 +230,7 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
             %% Value above upper threshold -> alarm color in getValueColor
             theme = DashboardTheme();
             t = Threshold('press_hi', 'Name', 'Hi Alarm', ...
+                'Direction', 'upper');
             t.addCondition(struct(), 80);
 
             % Violation: value 90 > threshold 80

@@ -61,3 +61,4 @@ d.render();
 
 fprintf('Status demo: T-401=alarm, P-201=warning, F-301=ok\n');
 fprintf('Violations: T-401=%d  P-201=%d  F-301=%d\n', ...
+    sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations());

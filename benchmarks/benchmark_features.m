@@ -130,6 +130,7 @@ for c = 1:n_cases
     fp = FastSense();
     fp.addLine(x, y, 'DisplayName', 'Signal');
     fp.addMarker(event_x, event_y, 'Marker', 'v', 'MarkerSize', 10, ...
+        'Color', [0.9 0.2 0.2], 'Label', 'Anomaly');
     fp.render();
     t_marker(c) = toc;
     close(fp.hFigure);

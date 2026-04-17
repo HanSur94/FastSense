@@ -35,6 +35,7 @@ classdef TestAddThreshold < matlab.unittest.TestCase
             fp = FastSense();
             fp.addThreshold(3.0, 'Direction', 'lower', ...
                 'ShowViolations', true, 'Color', [1 0 0], ...
+                'LineStyle', ':', 'Label', 'LowerBound');
             t = fp.Thresholds(1);
             testCase.verifyEqual(t.ShowViolations, true, 'testCustomOptions: ShowViolations');
             testCase.verifyEqual(t.Color, [1 0 0], 'testCustomOptions: Color');

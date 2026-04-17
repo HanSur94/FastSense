@@ -30,12 +30,13 @@ fprintf('  DataStore: %d points on disk\n', s.DataStore.NumPoints);
 
 fprintf('\n=== 2. Disk-backed resolve ===\n');
 
-sc = StateTag('machine', 'X', [0 50 100 150], 'Y', [0 1 2 1];  % idle -> running -> evacuated -> running);
+sc = StateTag('machine', 'X', [0 50 100 150], 'Y', [0 1 2 1]);  % idle -> running -> evacuated -> running
 
 
 tic;
 fprintf('  resolve() on 2M disk-backed points: %.3f s\n', toc);
 fprintf('  Thresholds: %d, Violations: %d\n', ...
+    numel(s.ResolvedThresholds), numel(s.ResolvedViolations));
 
 %% 3. Plot the disk-backed sensor
 % addSensor passes the DataStore directly to FastSense — no copying.
