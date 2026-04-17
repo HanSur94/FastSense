@@ -27,17 +27,11 @@ N = 5000;
 t = linspace(0, 3600, N);  % 1 hour in seconds
 
 % Pump speed — last value above Hi Alarm => alarm (red)
-sPump = SensorTag('M-101', 'Name', 'Pump Speed', 'Units', 'RPM');
-sPump_x_ = t;
-sPump_y_ = 2800 + 150*sin(2*pi*t/600) + randn(1,N)*20;
-sPump_y_(end-200:end) = 3250 + randn(1,201)*10;   % push tail into alarm
-sPump.updateData(sPump_x_, sPump_y_);
-[sPump_x_, sPump_y_] = sPump.getXY();
+sPump = SensorTag('M-101', 'Name', 'Pump Speed', 'Units', 'RPM', 'X', t, 'Y', 2800 + 150*sin(2*pi*t/600) + randn(1,N)*20);
+sPump.Y(end-200:end) = 3250 + randn(1,201)*10;   % push tail into alarm
 
 % Coolant temp — last value within normal range => ok (green)
-sCool = SensorTag('T-202', 'Name', 'Coolant Temp', 'Units', [char(176) 'C']);
-sCool.updateData(t, 45 + 5*sin(2*pi*t/900) + randn(1,N)*0.5);
-[sCool_x_, sCool_y_] = sCool.getXY();
+sCool = SensorTag('T-202', 'Name', 'Coolant Temp', 'Units', [char(176) 'C'], 'X', t, 'Y', 45 + 5*sin(2*pi*t/900) + randn(1,N)*0.5);
 
 %% 2. Build Dashboard
 d = DashboardEngine('IconCardWidget Demo');
@@ -99,8 +93,8 @@ d.addWidget('fastsense', ...
 d.render();
 
 fprintf('Dashboard rendered with %d widgets.\n', numel(d.Widgets));
-fprintf('  Pump Speed  : %.1f RPM  (state: alarm — above 3100 RPM threshold)\n', sPump_y_(end));
-fprintf('  Coolant Temp: %.1f %sC   (state: ok — well below 70 deg threshold)\n', sCool_y_(end), char(176));
+fprintf('  Pump Speed  : %.1f RPM  (state: alarm — above 3100 RPM threshold)\n', sPump.Y(end));
+fprintf('  Coolant Temp: %.1f %sC   (state: ok — well below 70 deg threshold)\n', sCool.Y(end), char(176));
 fprintf('  Batch Count : 147 parts (state: info — explicit StaticState)\n');
 fprintf('  Oil Level   : 82.4 %%    (state: inactive — explicit IconColor override)\n');
 fprintf('  Efficiency  : 94.7 %%    (state: ok — SecondaryLabel="Last 24 h avg")\n');

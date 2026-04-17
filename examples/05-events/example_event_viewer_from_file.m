@@ -12,7 +12,7 @@ function example_event_viewer_from_file()
     projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
     run(fullfile(projectRoot, 'install.m'));
 
-    persistent sensorData;
+    persistent sensors;
 
     eventFile = fullfile(tempdir, 'demo_event_store.mat');
     fprintf('\n=== Event Store Demo (6 sensors) ===\n\n');
@@ -52,23 +52,26 @@ function example_event_viewer_from_file()
     current(t >= 5 & t <= 8) = current(t >= 5 & t <= 8) + 12;
     current(t >= 42 & t <= 46) = current(t >= 42 & t <= 46) + 15;
 
-    % --- Create SensorTag objects ---
-    sTemp = SensorTag('temperature', 'Name', 'Temperature', 'X', t, 'Y', temp);
-    sPres = SensorTag('pressure', 'Name', 'Pressure', 'X', t, 'Y', pressure);
-    sVib = SensorTag('vibration', 'Name', 'Vibration', 'X', t, 'Y', vibration);
-    sFlow = SensorTag('flow', 'Name', 'Flow Rate', 'X', t, 'Y', flow);
-    sHum = SensorTag('humidity', 'Name', 'Humidity', 'X', t, 'Y', humidity);
-    sCur = SensorTag('current', 'Name', 'Current', 'X', t, 'Y', current);
+    % --- Create Sensor objects ---
+    sTemp = SensorTag('temperature', 'Name', 'Temperature');
+    sTemp.updateData(t, temp);
+
+    sPres = SensorTag('pressure', 'Name', 'Pressure');
+    sPres.updateData(t, pressure);
+
+    sVib = SensorTag('vibration', 'Name', 'Vibration');
+    sVib.updateData(t, vibration);
+
+    sFlow = SensorTag('flow', 'Name', 'Flow Rate');
+    sFlow.updateData(t, flow);
+
+    sHum = SensorTag('humidity', 'Name', 'Humidity');
+    sHum.updateData(t, humidity);
+
+    sCur = SensorTag('current', 'Name', 'Current');
+    sCur.updateData(t, current);
 
     sensors = {sTemp, sPres, sVib, sFlow, sHum, sCur};
-
-    % Keep mutable data copies for live update
-    sensorData = struct();
-    yArrays = {temp, pressure, vibration, flow, humidity, current};
-    for i = 1:numel(sensors)
-        sensorData(i).x = t;
-        sensorData(i).y = yArrays{i};
-    end
 
     % --- Configure detection with auto-save ---
     cfg = EventConfig();
@@ -77,7 +80,7 @@ function example_event_viewer_from_file()
     cfg.MaxBackups = 3;
 
     for i = 1:numel(sensors)
-        cfg.addTag(sensors{i});
+        cfg.addSensor(sensors{i});
     end
 
     cfg.setColor('temp warning',     [1.0 0.8 0.0]);
@@ -102,13 +105,11 @@ function example_event_viewer_from_file()
     fprintf('--- Part 3: Running detection again (backup created) ---\n');
     tNew = (N:N+99) * dt;
     for i = 1:numel(sensors)
-        [~, yOld] = sensors{i}.getXY();
-        newY = yOld(end) + randn(1, 100) * 2;
-        sensorData(i).x = [sensorData(i).x, tNew];
-        sensorData(i).y = [sensorData(i).y, newY];
-        sensors{i}.updateData(sensorData(i).x, sensorData(i).y);
-        cfg.SensorData(i).t = sensorData(i).x;
-        cfg.SensorData(i).y = sensorData(i).y;
+        s = sensors{i};
+        newY = s.Y(end) + randn(1, 100) * 2;
+        s.updateData([s.X, tNew], [s.Y, newY]);
+        cfg.SensorData(i).t = s.X;
+        cfg.SensorData(i).y = s.Y;
     end
     events2 = cfg.runDetection();
     fprintf('  Detected %d events, saved (previous version backed up).\n', numel(events2));
@@ -127,7 +128,7 @@ function example_event_viewer_from_file()
     fprintf('  Close the Event Viewer figure to stop.\n\n');
 
     bgTimer = timer('ExecutionMode', 'fixedRate', 'Period', 3.0, ...
-        'TimerFcn', @(~,~) backgroundUpdate(cfg, sensors, sensorData, dt));
+        'TimerFcn', @(~,~) backgroundUpdate(cfg, sensors, dt));
 
     existingDeleteFcn = get(viewer.hFigure, 'DeleteFcn');
     set(viewer.hFigure, 'DeleteFcn', @(src, evt) cleanupAll(src, evt, bgTimer, existingDeleteFcn));
@@ -136,20 +137,21 @@ function example_event_viewer_from_file()
     fprintf('  Background timer started. Close Event Viewer to stop.\n');
 end
 
-function backgroundUpdate(cfg, sensors, sensorData, dt)
+function backgroundUpdate(cfg, sensors, dt)
     try
-        nOld = numel(sensorData(1).x);
+        nOld = numel(sensors{1}.X);
         nNew = 30;
         tNew = (nOld:nOld+nNew-1) * dt;
 
         for i = 1:numel(sensors)
-            baseVal = mean(sensorData(i).y(max(1,end-50):end));
+            s = sensors{i};
+            baseVal = mean(s.Y(max(1,end-50):end));
             newY = baseVal + randn(1, nNew) * 2;
 
             % Random violations per sensor
             if rand() < 0.25
                 vi = randi(nNew); span = min(vi+8, nNew);
-                switch sensors{i}.Key
+                switch s.Key
                     case 'temperature'
                         newY(vi:span) = newY(vi:span) + 25;
                     case 'pressure'
@@ -165,15 +167,13 @@ function backgroundUpdate(cfg, sensors, sensorData, dt)
                 end
             end
 
-            sensorData(i).x = [sensorData(i).x, tNew];
-            sensorData(i).y = [sensorData(i).y, newY];
-            sensors{i}.updateData(sensorData(i).x, sensorData(i).y);
-            cfg.SensorData(i).t = sensorData(i).x;
-            cfg.SensorData(i).y = sensorData(i).y;
+            s.updateData([s.X, tNew], [s.Y, newY]);
+            cfg.SensorData(i).t = s.X;
+            cfg.SensorData(i).y = s.Y;
         end
 
         cfg.runDetection();
-        fprintf('  [BG] Updated at t=%.1f (%d total points)\n', tNew(end), numel(sensorData(1).x));
+        fprintf('  [BG] Updated at t=%.1f (%d total points)\n', tNew(end), numel(sensors{1}.X));
     catch err
         fprintf('  [BG] Error: %s\n', err.message);
     end

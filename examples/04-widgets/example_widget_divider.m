@@ -23,17 +23,13 @@ rng(42);
 N = 500;
 t = linspace(0, 3600, N);
 
-sPressA = SensorTag('PA-01', 'Name', 'Pressure A', 'Units', 'bar');
-sPressA.updateData(t, 8.4 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05);
+sPressA = SensorTag('PA-01', 'Name', 'Pressure A', 'Units', 'bar', 'X', t, 'Y', 8.4 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05);
 
-sTempA = SensorTag('TA-01', 'Name', 'Temp A', 'Units', [char(176) 'C']);
-sTempA.updateData(t, 42 + 3*sin(2*pi*t/900) + randn(1,N)*0.3);
+sTempA = SensorTag('TA-01', 'Name', 'Temp A', 'Units', [char(176) 'C'], 'X', t, 'Y', 42 + 3*sin(2*pi*t/900) + randn(1,N)*0.3);
 
-sPressB = SensorTag('PB-01', 'Name', 'Pressure B', 'Units', 'bar');
-sPressB.updateData(t, 5.1 + 0.2*sin(2*pi*t/1200) + randn(1,N)*0.04);
+sPressB = SensorTag('PB-01', 'Name', 'Pressure B', 'Units', 'bar', 'X', t, 'Y', 5.1 + 0.2*sin(2*pi*t/1200) + randn(1,N)*0.04);
 
-sTempB = SensorTag('TB-01', 'Name', 'Temp B', 'Units', [char(176) 'C']);
-sTempB.updateData(t, 61 + 2*sin(2*pi*t/600) + randn(1,N)*0.2);
+sTempB = SensorTag('TB-01', 'Name', 'Temp B', 'Units', [char(176) 'C'], 'X', t, 'Y', 61 + 2*sin(2*pi*t/600) + randn(1,N)*0.2);
 
 %% 2. Build Dashboard
 d = DashboardEngine('DividerWidget Demo');
@@ -54,10 +50,14 @@ d.addWidget('number', 'Position', [13 4 12 2], 'Sensor', sTempB);
 d.addWidget('divider', ...
     'Position',  [1 6 24 1], ...
     'Thickness', 3, ...
+    'Color',     [0.80 0.20 0.20]);
+
 % --- Row 7: Medium divider (Thickness=2) with a different custom color ---
 d.addWidget('divider', ...
     'Position',  [1 7 24 1], ...
     'Thickness', 2, ...
+    'Color',     [0.20 0.55 0.90]);
+
 % --- Row 8: Thin default divider again to show stacking ---
 d.addWidget('divider', 'Position', [1 8 24 1]);
 

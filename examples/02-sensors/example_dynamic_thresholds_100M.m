@@ -22,14 +22,10 @@ fprintf('  Done in %.1f s\n', toc);
 %% State Channels — shared across all sensors
 % Machine mode: cycles through idle(0) -> ramp(1) -> process(2) -> cool(3)
 % with transitions every ~2500 s
-scMachine = StateTag('machine');
-scMachine.X = [0, 2500, 5000, 7500];
-scMachine.Y = [0, 1, 2, 3];  % 0=idle, 1=ramp, 2=process, 3=cool-down
+scMachine = StateTag('machine', 'X', [0, 2500, 5000, 7500], 'Y', [0, 1, 2, 3];  % 0=idle, 1=ramp, 2=process, 3=cool-down);
 
 % Recipe phase: string-valued, changes mid-run
-scRecipe = StateTag('recipe');
-scRecipe.X = [0, 3000, 6000, 8500];
-scRecipe.Y = {'setup', 'deposition', 'etch', 'purge'};
+scRecipe = StateTag('recipe', 'X', [0, 3000, 6000, 8500], 'Y', {'setup', 'deposition', 'etch', 'purge'});
 
 %% Sensor definitions — 10 industrial process sensors
 sensorDefs = {
@@ -91,8 +87,7 @@ for si = 1:nSensors
     fprintf(' %.1f s\n', toc);
 
     % --- Build sensor ---
-    s = SensorTag(key, 'Name', name, 'ID', si);
-    s.updateData(x, y);
+    s = SensorTag(key, 'Name', name, 'ID', si, 'X', x, 'Y', y);
 
     % --- Compute threshold values from data range ---
     yMin = base - amp;
@@ -101,22 +96,16 @@ for si = 1:nSensors
     sc = thresholdScale(si, :);
 
     % Rule 1: Upper alarm during process (machine==2)
-        'Name', sprintf('HH process (%s)', unit), ...
 
     % Rule 2: Lower alarm during process (machine==2)
-        'Name', sprintf('LL process (%s)', unit), ...
 
     % Rule 3: Upper warning during ramp (machine==1)
-        'Name', sprintf('H ramp (%s)', unit), ...
 
     % Rule 4: Lower warning during cool-down (machine==3)
-        'Name', sprintf('L cool (%s)', unit), ...
 
     % Rule 5: Strict upper during process+deposition (combined condition)
-        'Name', sprintf('HH dep (%s)', unit), ...
 
     % Rule 6: Strict lower during process+etch (combined condition)
-        'Name', sprintf('LL etch (%s)', unit), ...
 
     % --- Resolve ---
     fprintf('  Resolving 6 dynamic thresholds over %dM points...', nPoints/1e6);
@@ -154,7 +143,7 @@ fprintf('========================================\n');
 %% Plot first sensor as demo
 fprintf('\nPlotting first sensor with FastSense...\n');
 fp = FastSense();
-fp.addTag(sensors{1});
+fp.addTag(sensors{1}, 'ShowThresholds', true);
 fp.render();
 title(fp.hAxes, sprintf('%s — 100M pts, 6 Dynamic Thresholds', ...
     sensors{1}.Name));

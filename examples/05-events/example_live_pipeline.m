@@ -53,13 +53,19 @@ tempSensor = SensorTag('temperature', 'Name', 'Chamber Temperature');
 tempStateCh = StateTag('mode');
 
 % H Warning (upper): idle=120, heating=140, cooling=100
+
 % HH Alarm (upper): idle=150, heating=170, cooling=130
+
 % L Warning (lower): idle=50, heating=40, cooling=60
+
 % LL Alarm (lower): idle=30, heating=20, cooling=40
+
 % --- Pressure: unconditional thresholds with warning/alarm colors ---
 presSensor = SensorTag('pressure', 'Name', 'Chamber Pressure');
+
 % --- Vibration: unconditional thresholds with warning/alarm colors ---
 vibSensor = SensorTag('vibration', 'Name', 'Motor Vibration');
+
 sensors = containers.Map();
 sensors('temperature') = tempSensor;
 sensors('pressure')    = presSensor;

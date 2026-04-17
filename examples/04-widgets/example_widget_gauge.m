@@ -28,15 +28,11 @@ rng(42);
 N = 5000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
-sTemp = SensorTag('T-401', 'Name', 'Temperature');
-sTemp.Units = [char(176) 'F'];
-sTemp_x_ = t;
-sTemp_y_ = 70 + 4*sin(2*pi*t/3600) + randn(1, N)*0.8;
-sTemp_y_(end) = 76;  % near warning — interesting gauge position
-sTemp.updateData(sTemp_x_, sTemp_y_);
-[sTemp_x_, sTemp_y_] = sTemp.getXY();
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', 70 + 4*sin(2*pi*t/3600) + randn(1, N)*0.8);
+sTemp.Y(end) = 76;  % near warning — interesting gauge position
 
 % State-independent thresholds (empty condition struct)
+
 
 %% 2. Build dashboard with 6 gauges (4 styles + 2 data sources)
 d = DashboardEngine('Gauge Widget Demo');
@@ -80,4 +76,4 @@ d.render();
 
 fprintf('Dashboard rendered with %d gauge widgets.\n', numel(d.Widgets));
 fprintf('Sensor %s latest value: %.1f %s (Hi Warn @ 78, Hi Alarm @ 85)\n', ...
-    sTemp.Key, sTemp_y_(end), sTemp.Units);
+    sTemp.Key, sTemp.Y(end), sTemp.Units);

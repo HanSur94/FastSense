@@ -21,13 +21,10 @@ idx1 = find(tDatetime >= datetime(2026,3,11,9,15,0), 1);
 idx2 = find(tDatetime >= datetime(2026,3,11,9,18,0), 1);
 data(idx1:idx2) = data(idx1:idx2) + 1.8;
 
-s = SensorTag('line_pressure', 'Name', 'Line Pressure');
-s.updateData(tNum, data);
+s = SensorTag('line_pressure', 'Name', 'Line Pressure', 'X', tNum, 'Y', data);
 
 % State channel and threshold
-sc = StateTag('mode');
-sc.X = [tNum(1) tNum(end)];
-sc.Y = [1 1];
+sc = StateTag('mode', 'X', [tNum(1) tNum(end)], 'Y', [1 1]);
 
 
 %% 2. Create an event for the spike

@@ -20,19 +20,14 @@ N = 101;
 t = linspace(0, 10, N);
 
 % RPM sensor
-s_rpm = SensorTag('rpm_main', 'Name', 'Main RPM');
-s_rpm.Units = 'rpm';
-s_rpm.updateData(t, 100 + 20*sin(t));
+s_rpm = SensorTag('rpm_main', 'Name', 'Main RPM', 'Units', 'rpm', 'X', t, 'Y', 100 + 20*sin(t));
 
 % Bearing temperature sensor with thresholds
-s_temp = SensorTag('temp_bearing', 'Name', 'Bearing Temp');
-s_temp.Units = [char(176) 'C'];
-s_temp.updateData(t, 60 + 5*randn(1, N));
+s_temp = SensorTag('temp_bearing', 'Name', 'Bearing Temp', 'Units', [char(176) 'C'], 'X', t, 'Y', 60 + 5*randn(1, N));
+
 
 % Line pressure sensor
-s_pres = SensorTag('pressure', 'Name', 'Line Pressure');
-s_pres.Units = 'bar';
-s_pres.updateData(t, 2.5 + 0.3*randn(1, N));
+s_pres = SensorTag('pressure', 'Name', 'Line Pressure', 'Units', 'bar', 'X', t, 'Y', 2.5 + 0.3*randn(1, N));
 
 %% Build dashboard
 d = DashboardEngine('GroupWidget Demo', 'Theme', 'light');

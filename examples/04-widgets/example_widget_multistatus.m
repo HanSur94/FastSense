@@ -34,57 +34,41 @@ t = linspace(0, 3600, N);  % 1 hour
 % --- Green (ok) sensors: tail stays within normal range ---
 
 % Temperature — ok (tail = 74, warn @ 80, alarm @ 90)
-sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F']);
-sTemp_x_ = t;
-sTemp_y_ = 72 + 1.5*randn(1,N);
-sTemp_y_(end-50:end) = 74;
-sTemp.updateData(sTemp_x_, sTemp_y_);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', 72 + 1.5*randn(1,N));
+sTemp.Y(end-50:end) = 74;
+
 % Flow Rate — ok (tail = 115, lo warn @ 90, hi alarm @ 160)
-sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
-sFlow_x_ = t;
-sFlow_y_ = 120 + 3*randn(1,N);
-sFlow_y_(end-50:end) = 115;
-sFlow.updateData(sFlow_x_, sFlow_y_);
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', 120 + 3*randn(1,N));
+sFlow.Y(end-50:end) = 115;
+
 % Tank Level — ok (tail = 52, lo warn @ 15, hi warn @ 85, hi alarm @ 95)
-sLevel = SensorTag('L-102', 'Name', 'Tank Level', 'Units', '%');
-sLevel_x_ = t;
-sLevel_y_ = 50 + 5*randn(1,N);
-sLevel_y_(end-50:end) = 52;
-sLevel.updateData(sLevel_x_, sLevel_y_);
+sLevel = SensorTag('L-102', 'Name', 'Tank Level', 'Units', '%', 'X', t, 'Y', 50 + 5*randn(1,N));
+sLevel.Y(end-50:end) = 52;
+
 % --- Yellow (warning) sensors: tail above warn but below alarm ---
 
 % Pressure — warning (tail = 67, warn @ 65, alarm @ 75)
-sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi');
-sPress_x_ = t;
-sPress_y_ = 45 + 3*randn(1,N);
-sPress_y_(end-50:end) = 67;
-sPress.updateData(sPress_x_, sPress_y_);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', 45 + 3*randn(1,N));
+sPress.Y(end-50:end) = 67;
+
 % Humidity — warning (tail = 82, warn @ 80, alarm @ 95)
-sHumid = SensorTag('H-601', 'Name', 'Humidity', 'Units', '%RH');
-sHumid_x_ = t;
-sHumid_y_ = 55 + 4*randn(1,N);
-sHumid_y_(end-50:end) = 82;
-sHumid.updateData(sHumid_x_, sHumid_y_);
+sHumid = SensorTag('H-601', 'Name', 'Humidity', 'Units', '%RH', 'X', t, 'Y', 55 + 4*randn(1,N));
+sHumid.Y(end-50:end) = 82;
+
 % --- Red (alarm) sensors: tail above alarm threshold ---
 
 % Motor Current — alarm (tail = 16, warn @ 12, alarm @ 15)
-sCurrent = SensorTag('I-701', 'Name', 'Motor Current', 'Units', 'A');
-sCurrent_x_ = t;
-sCurrent_y_ = 8.5 + 0.5*randn(1,N);
-sCurrent_y_(end-50:end) = 16;
-sCurrent.updateData(sCurrent_x_, sCurrent_y_);
+sCurrent = SensorTag('I-701', 'Name', 'Motor Current', 'Units', 'A', 'X', t, 'Y', 8.5 + 0.5*randn(1,N));
+sCurrent.Y(end-50:end) = 16;
+
 % Vibration RMS — alarm (tail = 4.5, warn @ 3, alarm @ 4)
-sVib = SensorTag('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s');
-sVib_x_ = t;
-sVib_y_ = max(0.1, 1.2 + 0.2*randn(1,N));
-sVib_y_(end-50:end) = 4.5;
-sVib.updateData(sVib_x_, sVib_y_);
+sVib = SensorTag('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s', 'X', t, 'Y', max(0.1, 1.2 + 0.2*randn(1,N)));
+sVib.Y(end-50:end) = 4.5;
+
 % CO Level — alarm (tail = 28, warn @ 15, alarm @ 25)
-sCO = SensorTag('GAS-1', 'Name', 'CO Level', 'Units', 'ppm');
-sCO_x_ = t;
-sCO_y_ = 5 + 2*randn(1,N);
-sCO_y_(end-50:end) = 28;
-sCO.updateData(sCO_x_, sCO_y_);
+sCO = SensorTag('GAS-1', 'Name', 'CO Level', 'Units', 'ppm', 'X', t, 'Y', 5 + 2*randn(1,N));
+sCO.Y(end-50:end) = 28;
+
 allSensors = {sTemp, sFlow, sLevel, sPress, sHumid, sCurrent, sVib, sCO};
 
 %% 2. Build dashboard

@@ -18,12 +18,6 @@ run(fullfile(projectRoot, 'install.m'));
 wState = warning('off', 'all');
 restoreWarn = onCleanup(@() warning(wState));
 
-s18.updateData(s18_x_, s18_y_);
-s5a.updateData(s5a_x_, s5a_y_);
-s1a.updateData(s1a_x_, s1a_y_);
-s9b.updateData(s9b_x_, s9b_y_);
-s11a.updateData(s11a_x_, s11a_y_);
-s2a.updateData(s2a_x_, s2a_y_);
 fprintf('=== Disk-Backed Dock Dashboard ===\n');
 fprintf('Generating ~100M data points across 5 tabs (all disk-backed)...\n\n');
 tic;
@@ -44,9 +38,7 @@ fprintf('Tab 1: Turbine Monitoring...\n');
 fig1 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Turbine operates in 3 modes over the shift
-scTurbine = StateTag('turbine');
-scTurbine.X = [tdn0, tdn0 + 1/24, tdn0 + 3/24, tdn0 + 6/24];
-scTurbine.Y = [0, 1, 2, 1];  % 0=startup, 1=running, 2=high-load
+scTurbine = StateTag('turbine', 'X', [tdn0, tdn0 + 1/24, tdn0 + 3/24, tdn0 + 6/24], 'Y', [0, 1, 2, 1];  % 0=startup, 1=running, 2=high-load);
 
 % --- Tile 1: Exhaust Gas Temperature (3 sensors, 10M pts) ---
 n = 10e6;
@@ -54,17 +46,19 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s1a = SensorTag('egt_a', 'Name', 'EGT Channel A');
-% TODO: s1a_x_ = tdn; s1a_y_ = 580 + 40*sin(2*pi*sec/3600) + 15*randn(1,n); (needs manual fix)
+s1a_y_ = 580 + 40*sin(2*pi*sec/3600) + 15*randn(1,n);
 s1a_y_(round(n*0.35):round(n*0.36)) = s1a_y_(round(n*0.35):round(n*0.36)) + 80;
+s1a.updateData(tdn, s1a_y_);
+
 s1a.toDisk();
 
 s1b = SensorTag('egt_b', 'Name', 'EGT Channel B');
-% TODO: s1b.X = tdn; s1b.Y = 575 + 38*sin(2*pi*sec/3600 + 0.3) + 12*randn(1,n); (needs manual fix)
+s1b.updateData(tdn, 575 + 38*sin(2*pi*sec/3600 + 0.3) + 12*randn(1,n));
 s1b.toDisk();
 
 fp = fig1.tile(1);
-fp.addTag(s1a);
-fp.addTag(s1b);
+fp.addTag(s1a, 'ShowThresholds', true);
+fp.addTag(s1b, 'ShowThresholds', true);
 fig1.setTileTitle(1, 'Exhaust Gas Temperature (10M pts)');
 fig1.setTileYLabel(1, 'Temp (°C)');
 
@@ -74,17 +68,20 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s2a = SensorTag('vib_de', 'Name', 'DE Bearing');
-% TODO: s2a_x_ = tdn; s2a_y_ = 2.1 + 0.8*sin(2*pi*sec/1800) + 0.3*randn(1,n); (needs manual fix)
+s2a_y_ = 2.1 + 0.8*sin(2*pi*sec/1800) + 0.3*randn(1,n);
 s2a_y_(round(n*0.6):round(n*0.62)) = s2a_y_(round(n*0.6):round(n*0.62)) + 3.5;
+s2a.updateData(tdn, s2a_y_);
+
+
 s2a.toDisk();
 
 s2b = SensorTag('vib_nde', 'Name', 'NDE Bearing');
-% TODO: s2b.X = tdn; s2b.Y = 1.8 + 0.6*sin(2*pi*sec/1800 + 1) + 0.25*randn(1,n); (needs manual fix)
+s2b.updateData(tdn, 1.8 + 0.6*sin(2*pi*sec/1800 + 1) + 0.25*randn(1,n));
 s2b.toDisk();
 
 fp = fig1.tile(2);
-fp.addTag(s2a);
-fp.addTag(s2b);
+fp.addTag(s2a, 'ShowThresholds', true);
+fp.addTag(s2b, 'ShowThresholds', true);
 fig1.setTileTitle(2, 'Bearing Vibration (8M pts)');
 fig1.setTileYLabel(2, 'Velocity (mm/s)');
 
@@ -94,21 +91,22 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s3a = SensorTag('oil_temp', 'Name', 'Oil Temperature');
-% TODO: s3a.X = tdn; s3a.Y = 62 + 8*sin(2*pi*sec/7200) + 2*randn(1,n); (needs manual fix)
+s3a.updateData(tdn, 62 + 8*sin(2*pi*sec/7200) + 2*randn(1,n));
+
 s3a.toDisk();
 
 s3b = SensorTag('oil_press', 'Name', 'Oil Pressure');
-% TODO: s3b.X = tdn; s3b.Y = 3.8 + 0.5*sin(2*pi*sec/5400) + 0.15*randn(1,n); (needs manual fix)
+s3b.updateData(tdn, 3.8 + 0.5*sin(2*pi*sec/5400) + 0.15*randn(1,n));
 s3b.toDisk();
 
 s3c = SensorTag('oil_flow', 'Name', 'Oil Flow');
-% TODO: s3c.X = tdn; s3c.Y = 45 + 5*sin(2*pi*sec/3600) + 2*randn(1,n); (needs manual fix)
+s3c.updateData(tdn, 45 + 5*sin(2*pi*sec/3600) + 2*randn(1,n));
 s3c.toDisk();
 
 fp = fig1.tile(3);
-fp.addTag(s3a);
-fp.addTag(s3b);
-fp.addTag(s3c);
+fp.addTag(s3a, 'ShowThresholds', true);
+fp.addTag(s3b, 'ShowThresholds', true);
+fp.addTag(s3c, 'ShowThresholds', true);
 fig1.setTileTitle(3, 'Lube Oil System (5M pts)');
 fig1.setTileYLabel(3, 'Mixed Units');
 
@@ -118,11 +116,13 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s4a = SensorTag('rpm', 'Name', 'Shaft Speed');
-% TODO: s4a.X = tdn; s4a.Y = 3000 + 50*sin(2*pi*sec/14400) + 15*randn(1,n); (needs manual fix)
+s4a.updateData(tdn, 3000 + 50*sin(2*pi*sec/14400) + 15*randn(1,n));
+
+
 s4a.toDisk();
 
 fp = fig1.tile(4);
-fp.addTag(s4a);
+fp.addTag(s4a, 'ShowThresholds', true);
 fig1.setTileTitle(4, 'Shaft Speed (5M pts)');
 fig1.setTileYLabel(4, 'RPM');
 
@@ -135,9 +135,7 @@ fprintf('Tab 2: Chemical Process...\n');
 fig2 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Reactor modes: batch phases
-scReactor = StateTag('phase');
-scReactor.X = [tdn0, tdn0+1/24, tdn0+2.5/24, tdn0+5/24, tdn0+6.5/24];
-scReactor.Y = [0, 1, 2, 3, 1];  % 0=idle, 1=heat, 2=react, 3=cool
+scReactor = StateTag('phase', 'X', [tdn0, tdn0+1/24, tdn0+2.5/24, tdn0+5/24, tdn0+6.5/24], 'Y', [0, 1, 2, 3, 1];  % 0=idle, 1=heat, 2=react, 3=cool);
 
 % --- Tile 1: Reactor Temperature (2 sensors, 8M pts) ---
 n = 8e6;
@@ -145,17 +143,20 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s5a = SensorTag('rx_temp', 'Name', 'Reactor Core');
-% TODO: s5a_x_ = tdn; s5a_y_ = 180 + 30*sin(2*pi*sec/7200) + 5*randn(1,n); (needs manual fix)
+s5a_y_ = 180 + 30*sin(2*pi*sec/7200) + 5*randn(1,n);
 s5a_y_(round(n*0.25):round(n*0.27)) = s5a_y_(round(n*0.25):round(n*0.27)) + 40;
+s5a.updateData(tdn, s5a_y_);
+
+
 s5a.toDisk();
 
 s5b = SensorTag('rx_jacket', 'Name', 'Jacket Temp');
-% TODO: s5b.X = tdn; s5b.Y = 170 + 25*sin(2*pi*sec/7200 + 0.5) + 4*randn(1,n); (needs manual fix)
+s5b.updateData(tdn, 170 + 25*sin(2*pi*sec/7200 + 0.5) + 4*randn(1,n));
 s5b.toDisk();
 
 fp = fig2.tile(1);
-fp.addTag(s5a);
-fp.addTag(s5b);
+fp.addTag(s5a, 'ShowThresholds', true);
+fp.addTag(s5b, 'ShowThresholds', true);
 fig2.setTileTitle(1, 'Reactor Temperature (8M pts)');
 fig2.setTileYLabel(1, 'Temp (°C)');
 
@@ -165,16 +166,17 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s6a = SensorTag('rx_press', 'Name', 'Vessel Pressure');
-% TODO: s6a.X = tdn; s6a.Y = 12 + 3*sin(2*pi*sec/5400) + 0.8*randn(1,n); (needs manual fix)
+s6a.updateData(tdn, 12 + 3*sin(2*pi*sec/5400) + 0.8*randn(1,n));
+
 s6a.toDisk();
 
 s6b = SensorTag('rx_dp', 'Name', 'Delta-P');
-% TODO: s6b.X = tdn; s6b.Y = 0.8 + 0.3*sin(2*pi*sec/3600) + 0.1*randn(1,n); (needs manual fix)
+s6b.updateData(tdn, 0.8 + 0.3*sin(2*pi*sec/3600) + 0.1*randn(1,n));
 s6b.toDisk();
 
 fp = fig2.tile(2);
-fp.addTag(s6a);
-fp.addTag(s6b);
+fp.addTag(s6a, 'ShowThresholds', true);
+fp.addTag(s6b, 'ShowThresholds', true);
 fig2.setTileTitle(2, 'Reactor Pressure (5M pts)');
 fig2.setTileYLabel(2, 'bar / bar');
 
@@ -184,16 +186,17 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s7a = SensorTag('ph', 'Name', 'pH');
-% TODO: s7a.X = tdn; s7a.Y = 7.0 + 0.8*sin(2*pi*sec/10800) + 0.15*randn(1,n); (needs manual fix)
+s7a.updateData(tdn, 7.0 + 0.8*sin(2*pi*sec/10800) + 0.15*randn(1,n));
+
 s7a.toDisk();
 
 s7b = SensorTag('cond', 'Name', 'Conductivity');
-% TODO: s7b.X = tdn; s7b.Y = 450 + 80*sin(2*pi*sec/5400) + 20*randn(1,n); (needs manual fix)
+s7b.updateData(tdn, 450 + 80*sin(2*pi*sec/5400) + 20*randn(1,n));
 s7b.toDisk();
 
 fp = fig2.tile(3);
-fp.addTag(s7a);
-fp.addTag(s7b);
+fp.addTag(s7a, 'ShowThresholds', true);
+fp.addTag(s7b, 'ShowThresholds', true);
 fig2.setTileTitle(3, 'pH & Conductivity (5M pts)');
 fig2.setTileYLabel(3, 'pH / µS/cm');
 
@@ -203,16 +206,17 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s8a = SensorTag('agit_rpm', 'Name', 'Agitator RPM');
-% TODO: s8a.X = tdn; s8a.Y = 120 + 15*sin(2*pi*sec/3600) + 5*randn(1,n); (needs manual fix)
+s8a.updateData(tdn, 120 + 15*sin(2*pi*sec/3600) + 5*randn(1,n));
+
 s8a.toDisk();
 
 s8b = SensorTag('agit_torque', 'Name', 'Agitator Torque');
-% TODO: s8b.X = tdn; s8b.Y = 85 + 20*sin(2*pi*sec/5400) + 8*randn(1,n); (needs manual fix)
+s8b.updateData(tdn, 85 + 20*sin(2*pi*sec/5400) + 8*randn(1,n));
 s8b.toDisk();
 
 fp = fig2.tile(4);
-fp.addTag(s8a);
-fp.addTag(s8b);
+fp.addTag(s8a, 'ShowThresholds', true);
+fp.addTag(s8b, 'ShowThresholds', true);
 fig2.setTileTitle(4, 'Agitator (4M pts)');
 fig2.setTileYLabel(4, 'RPM / N·m');
 
@@ -225,9 +229,7 @@ fprintf('Tab 3: Compressor Station...\n');
 fig3 = FastSenseGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Compressor modes
-scComp = StateTag('stage');
-scComp.X = [tdn0, tdn0+0.5/24, tdn0+2/24, tdn0+5/24, tdn0+7/24];
-scComp.Y = [0, 1, 2, 1, 2];  % 0=off, 1=single-stage, 2=dual-stage
+scComp = StateTag('stage', 'X', [tdn0, tdn0+0.5/24, tdn0+2/24, tdn0+5/24, tdn0+7/24], 'Y', [0, 1, 2, 1, 2];  % 0=off, 1=single-stage, 2=dual-stage);
 
 % --- Tile 1: Suction/Discharge (3 sensors, 8M pts) ---
 n = 8e6;
@@ -235,22 +237,25 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s9a = SensorTag('suct_press', 'Name', 'Suction Pressure');
-% TODO: s9a.X = tdn; s9a.Y = 2.5 + 0.4*sin(2*pi*sec/3600) + 0.1*randn(1,n); (needs manual fix)
+s9a.updateData(tdn, 2.5 + 0.4*sin(2*pi*sec/3600) + 0.1*randn(1,n));
+
 s9a.toDisk();
 
 s9b = SensorTag('disc_press', 'Name', 'Discharge Pressure');
-% TODO: s9b_x_ = tdn; s9b_y_ = 14 + 2*sin(2*pi*sec/2700) + 0.5*randn(1,n); (needs manual fix)
+s9b_y_ = 14 + 2*sin(2*pi*sec/2700) + 0.5*randn(1,n);
 s9b_y_(round(n*0.55):round(n*0.56)) = s9b_y_(round(n*0.55):round(n*0.56)) + 5;
+s9b.updateData(tdn, s9b_y_);
+
 s9b.toDisk();
 
 s9c = SensorTag('comp_ratio', 'Name', 'Compression Ratio');
-% TODO: s9c.X = tdn; s9c.Y = 5.5 + 0.8*sin(2*pi*sec/5400) + 0.2*randn(1,n); (needs manual fix)
+s9c.updateData(tdn, 5.5 + 0.8*sin(2*pi*sec/5400) + 0.2*randn(1,n));
 s9c.toDisk();
 
 fp = fig3.tile(1);
-fp.addTag(s9a);
-fp.addTag(s9b);
-fp.addTag(s9c);
+fp.addTag(s9a, 'ShowThresholds', true);
+fp.addTag(s9b, 'ShowThresholds', true);
+fp.addTag(s9c, 'ShowThresholds', true);
 fig3.setTileTitle(1, 'Pressures (8M pts)');
 fig3.setTileYLabel(1, 'bar');
 
@@ -260,16 +265,17 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s10a = SensorTag('disc_temp', 'Name', 'Discharge Temp');
-% TODO: s10a.X = tdn; s10a.Y = 140 + 20*sin(2*pi*sec/5400) + 5*randn(1,n); (needs manual fix)
+s10a.updateData(tdn, 140 + 20*sin(2*pi*sec/5400) + 5*randn(1,n));
+
 s10a.toDisk();
 
 s10b = SensorTag('intercool', 'Name', 'Intercooler Out');
-% TODO: s10b.X = tdn; s10b.Y = 45 + 8*sin(2*pi*sec/3600) + 2*randn(1,n); (needs manual fix)
+s10b.updateData(tdn, 45 + 8*sin(2*pi*sec/3600) + 2*randn(1,n));
 s10b.toDisk();
 
 fp = fig3.tile(2);
-fp.addTag(s10a);
-fp.addTag(s10b);
+fp.addTag(s10a, 'ShowThresholds', true);
+fp.addTag(s10b, 'ShowThresholds', true);
 fig3.setTileTitle(2, 'Temperatures (5M pts)');
 fig3.setTileYLabel(2, 'Temp (°C)');
 
@@ -279,12 +285,15 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s11a = SensorTag('surge_margin', 'Name', 'Surge Margin');
-% TODO: s11a_x_ = tdn; s11a_y_ = 25 + 8*sin(2*pi*sec/1800) + 3*randn(1,n); (needs manual fix)
+s11a_y_ = 25 + 8*sin(2*pi*sec/1800) + 3*randn(1,n);
 s11a_y_(round(n*0.4):round(n*0.41)) = s11a_y_(round(n*0.4):round(n*0.41)) - 20;
+s11a.updateData(tdn, s11a_y_);
+
+
 s11a.toDisk();
 
 fp = fig3.tile(3);
-fp.addTag(s11a);
+fp.addTag(s11a, 'ShowThresholds', true);
 fig3.setTileTitle(3, 'Surge Margin (5M pts)');
 fig3.setTileYLabel(3, 'Margin (%)');
 
@@ -297,9 +306,7 @@ fprintf('Tab 4: Power Generation...\n');
 fig4 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % Generator modes
-scGen = StateTag('gen');
-scGen.X = [tdn0, tdn0+0.5/24, tdn0+3/24, tdn0+6/24];
-scGen.Y = [0, 1, 2, 1];  % 0=sync, 1=base-load, 2=peak
+scGen = StateTag('gen', 'X', [tdn0, tdn0+0.5/24, tdn0+3/24, tdn0+6/24], 'Y', [0, 1, 2, 1];  % 0=sync, 1=base-load, 2=peak);
 
 % --- Tile 1: Three-Phase Voltage (3 sensors, 9M pts) ---
 n = 3e6;
@@ -309,14 +316,11 @@ sec = (tdn - tdn0) * 86400;
 phases = {'A', 'B', 'C'};
 phaseShifts = [0, 2*pi/3, 4*pi/3];
 for p = 1:3
-    sV = SensorTag(sprintf('v_phase_%s', phases{p}), 'Name', sprintf('Phase %s', phases{p}));
-    sV.updateData(tdn, 400 + 8*sin(2*pi*sec/1200 + phaseShifts(p)) + 3*randn(1,n));
-        'Name', sprintf('%s Over-V', phases{p}), ...
+    sV = SensorTag(sprintf('v_phase_%s', phases{p}), 'Name', sprintf('Phase %s', phases{p}), 'X', tdn, 'Y', 400 + 8*sin(2*pi*sec/1200 + phaseShifts(p)) + 3*randn(1,n));
 
-        'Name', sprintf('%s Under-V', phases{p}), ...
     sV.toDisk();
     fp = fig4.tile(1);
-    fp.addTag(sV);
+    fp.addTag(sV, 'ShowThresholds', true);
 end
 fig4.setTileTitle(1, 'Three-Phase Voltage (9M pts)');
 fig4.setTileYLabel(1, 'Voltage (V)');
@@ -327,16 +331,18 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s13a = SensorTag('freq', 'Name', 'Grid Frequency');
-% TODO: s13a.X = tdn; s13a.Y = 50 + 0.03*sin(2*pi*sec/600) + 0.008*randn(1,n); (needs manual fix)
+s13a.updateData(tdn, 50 + 0.03*sin(2*pi*sec/600) + 0.008*randn(1,n));
+
+
 s13a.toDisk();
 
 s13b = SensorTag('pf', 'Name', 'Power Factor');
-% TODO: s13b.X = tdn; s13b.Y = 0.95 + 0.03*sin(2*pi*sec/3600) + 0.005*randn(1,n); (needs manual fix)
+s13b.updateData(tdn, 0.95 + 0.03*sin(2*pi*sec/3600) + 0.005*randn(1,n));
 s13b.toDisk();
 
 fp = fig4.tile(2);
-fp.addTag(s13a);
-fp.addTag(s13b);
+fp.addTag(s13a, 'ShowThresholds', true);
+fp.addTag(s13b, 'ShowThresholds', true);
 fig4.setTileTitle(2, 'Frequency & PF (5M pts)');
 fig4.setTileYLabel(2, 'Hz / PF');
 
@@ -346,11 +352,13 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s14 = SensorTag('mw', 'Name', 'Active Power');
-% TODO: s14.X = tdn; s14.Y = 180 + 40*sin(2*pi*sec/7200) + 10*randn(1,n); (needs manual fix)
+s14.updateData(tdn, 180 + 40*sin(2*pi*sec/7200) + 10*randn(1,n));
+
+
 s14.toDisk();
 
 fp = fig4.tile(3);
-fp.addTag(s14);
+fp.addTag(s14, 'ShowThresholds', true);
 fig4.setTileTitle(3, 'Active Power (5M pts)');
 fig4.setTileYLabel(3, 'MW');
 
@@ -360,16 +368,17 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s15a = SensorTag('stator_temp', 'Name', 'Stator Winding');
-% TODO: s15a.X = tdn; s15a.Y = 95 + 15*sin(2*pi*sec/7200) + 3*randn(1,n); (needs manual fix)
+s15a.updateData(tdn, 95 + 15*sin(2*pi*sec/7200) + 3*randn(1,n));
+
 s15a.toDisk();
 
 s15b = SensorTag('rotor_temp', 'Name', 'Rotor');
-% TODO: s15b.X = tdn; s15b.Y = 85 + 12*sin(2*pi*sec/7200 + 0.3) + 3*randn(1,n); (needs manual fix)
+s15b.updateData(tdn, 85 + 12*sin(2*pi*sec/7200 + 0.3) + 3*randn(1,n));
 s15b.toDisk();
 
 fp = fig4.tile(4);
-fp.addTag(s15a);
-fp.addTag(s15b);
+fp.addTag(s15a, 'ShowThresholds', true);
+fp.addTag(s15b, 'ShowThresholds', true);
 fig4.setTileTitle(4, 'Generator Temps (5M pts)');
 fig4.setTileYLabel(4, 'Temp (°C)');
 
@@ -382,9 +391,7 @@ fprintf('Tab 5: Environmental...\n');
 fig5 = FastSenseGrid(1, 3, 'ParentFigure', dock.hFigure, 'Theme', 'dark');
 
 % HVAC modes
-scHvac = StateTag('hvac');
-scHvac.X = [tdn0, tdn0+1/24, tdn0+4/24, tdn0+7/24];
-scHvac.Y = [0, 1, 2, 1];  % 0=night, 1=normal, 2=boost
+scHvac = StateTag('hvac', 'X', [tdn0, tdn0+1/24, tdn0+4/24, tdn0+7/24], 'Y', [0, 1, 2, 1];  % 0=night, 1=normal, 2=boost);
 
 % --- Tile 1: Air Quality (2 sensors, 5M pts) ---
 n = 5e6;
@@ -392,16 +399,18 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s16a = SensorTag('co2', 'Name', 'CO₂');
-% TODO: s16a.X = tdn; s16a.Y = 450 + 150*sin(2*pi*sec/14400) + 30*randn(1,n); (needs manual fix)
+s16a.updateData(tdn, 450 + 150*sin(2*pi*sec/14400) + 30*randn(1,n));
+
+
 s16a.toDisk();
 
 s16b = SensorTag('pm25', 'Name', 'PM2.5');
-% TODO: s16b.X = tdn; s16b.Y = 8 + 5*sin(2*pi*sec/10800) + 2*randn(1,n); (needs manual fix)
+s16b.updateData(tdn, 8 + 5*sin(2*pi*sec/10800) + 2*randn(1,n));
 s16b.toDisk();
 
 fp = fig5.tile(1);
-fp.addTag(s16a);
-fp.addTag(s16b);
+fp.addTag(s16a, 'ShowThresholds', true);
+fp.addTag(s16b, 'ShowThresholds', true);
 fig5.setTileTitle(1, 'Air Quality (5M pts)');
 fig5.setTileYLabel(1, 'ppm / µg/m³');
 
@@ -411,16 +420,18 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s17a = SensorTag('room_temp', 'Name', 'Room Temp');
-% TODO: s17a.X = tdn; s17a.Y = 22 + 3*sin(2*pi*sec/14400) + 0.5*randn(1,n); (needs manual fix)
+s17a.updateData(tdn, 22 + 3*sin(2*pi*sec/14400) + 0.5*randn(1,n));
+
 s17a.toDisk();
 
 s17b = SensorTag('rh', 'Name', 'Rel. Humidity');
-% TODO: s17b.X = tdn; s17b.Y = 45 + 12*sin(2*pi*sec/10800) + 3*randn(1,n); (needs manual fix)
+s17b.updateData(tdn, 45 + 12*sin(2*pi*sec/10800) + 3*randn(1,n));
+
 s17b.toDisk();
 
 fp = fig5.tile(2);
-fp.addTag(s17a);
-fp.addTag(s17b);
+fp.addTag(s17a, 'ShowThresholds', true);
+fp.addTag(s17b, 'ShowThresholds', true);
 fig5.setTileTitle(2, 'Temp & Humidity (3M pts)');
 fig5.setTileYLabel(2, '°C / %RH');
 
@@ -430,12 +441,15 @@ tdn = linspace(tdn0, tdn1, n);
 sec = (tdn - tdn0) * 86400;
 
 s18 = SensorTag('noise', 'Name', 'Noise Level');
-% TODO: s18_x_ = tdn; s18_y_ = 55 + 10*sin(2*pi*sec/7200) + 4*randn(1,n); (needs manual fix)
+s18_y_ = 55 + 10*sin(2*pi*sec/7200) + 4*randn(1,n);
 s18_y_(round(n*0.5):round(n*0.52)) = s18_y_(round(n*0.5):round(n*0.52)) + 25;
+s18.updateData(tdn, s18_y_);
+
+
 s18.toDisk();
 
 fp = fig5.tile(3);
-fp.addTag(s18);
+fp.addTag(s18, 'ShowThresholds', true);
 fig5.setTileTitle(3, 'Noise Level (3M pts)');
 fig5.setTileYLabel(3, 'dB(A)');
 

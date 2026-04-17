@@ -36,22 +36,16 @@ function example_dashboard_live_run()
     tSeed = linspace(-20, 0, nSeed);
 
     % Temperature sensor T-401 (4 thresholds: upper/lower warn + alarm)
-    sTemp = SensorTag('T-401', 'Name', 'Temperature');
-    sTemp.Units = [char(176) 'F'];
-    sTemp.updateData(tSeed, 70 + 2*sin(2*pi*tSeed/10) + randn(1, nSeed)*0.5);
-    [sTemp_x_, sTemp_y_] = sTemp.getXY();
+    sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', tSeed, 'Y', 70 + 2*sin(2*pi*tSeed/10) + randn(1, nSeed)*0.5);
+
 
     % Pressure sensor P-201 (4 thresholds: upper/lower warn + alarm)
-    sPress = SensorTag('P-201', 'Name', 'Pressure');
-    sPress.Units = 'psi';
-    sPress.updateData(tSeed, 50 + 5*sin(2*pi*tSeed/15) + randn(1, nSeed)*1.0);
-    [sPress_x_, sPress_y_] = sPress.getXY();
+    sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', tSeed, 'Y', 50 + 5*sin(2*pi*tSeed/15) + randn(1, nSeed)*1.0);
+
 
     % Flow sensor F-301 (4 thresholds: upper/lower warn + alarm)
-    sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
-    sFlow.Units = 'L/min';
-    sFlow.updateData(tSeed, max(0, 120 + 8*sin(2*pi*tSeed/8) + randn(1, nSeed)*2.0));
-    [sFlow_x_, sFlow_y_] = sFlow.getXY();
+    sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', tSeed, 'Y', max(0, 120 + 8*sin(2*pi*tSeed/8) + randn(1, nSeed)*2.0));
+
 
     %% ========== EventStore for violation events ==========
     store = EventStore(fullfile(tempdir, 'dashboard_live_events.mat'));
@@ -77,9 +71,6 @@ function example_dashboard_live_run()
 
     % --- Row 1-2: Header + KPIs + Status ---
     % DashboardEngine uses a 24-column grid: Position = [col row width height].
-    sPress.updateData(sPress_x_, sPress_y_);
-    sFlow.updateData(sFlow_x_, sFlow_y_);
-    sTemp.updateData(sTemp_x_, sTemp_y_);
     d.addWidget('text', 'Title', 'Live Monitor', ...
         'Position', [1 1 4 2], ...
         'Content', 'Simulated Process', ...
@@ -199,12 +190,12 @@ function example_dashboard_live_run()
         newF = max(0, fB + 8*sin(2*pi*elapsed/8) + randn*3);
 
         % Append to sensors
-        sTemp_x_(end+1) = elapsed;
-        sTemp_y_(end+1) = newT;
-        sPress_x_(end+1) = elapsed;
-        sPress_y_(end+1) = newP;
-        sFlow_x_(end+1) = elapsed;
-        sFlow_y_(end+1) = newF;
+        sTemp.X(end+1)  = elapsed;
+        sTemp.Y(end+1)  = newT;
+        sPress.X(end+1) = elapsed;
+        sPress.Y(end+1) = newP;
+        sFlow.X(end+1)  = elapsed;
+        sFlow.Y(end+1)  = newF;
 
         % Re-resolve thresholds so violation markers update
 
@@ -247,9 +238,9 @@ function example_dashboard_live_run()
 
     %% ==================== Nested: plot callbacks ====================
     function plotHist(ax)
-        if numel(sTemp_y_) < 2, return; end
-        nH = min(numel(sTemp_y_), 600);
-        histogram(ax, sTemp_y_(end-nH+1:end), 30, ...
+        if numel(sTemp.Y) < 2, return; end
+        nH = min(numel(sTemp.Y), 600);
+        histogram(ax, sTemp.Y(end-nH+1:end), 30, ...
             'FaceColor', [0.31 0.80 0.64], 'EdgeColor', 'none');
         xlabel(ax, [char(176) 'F']);
         ylabel(ax, 'Count');

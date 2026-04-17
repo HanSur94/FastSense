@@ -29,13 +29,11 @@ N = 5000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
 % Machine mode state channel (idle=0, running=1)
-scMode = StateTag('machine');
-scMode.X = [0, 7200, 43200, 57600];
-scMode.Y = [0, 1,    0,     1];
+scMode = StateTag('machine', 'X', [0, 7200, 43200, 57600], 'Y', [0, 1,    0,     1]);
 
 % Temperature sensor — state-dependent thresholds
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
-% TODO: sTemp_x_ = t; (needs manual fix)
+sTemp.X = t;
 baseTemp = zeros(1, N);
 for k = 1:N
     if scMode.valueAt(t(k)) == 1
@@ -44,12 +42,11 @@ for k = 1:N
         baseTemp(k) = 66;
     end
 end
-sTemp_y_ = baseTemp + 4*sin(2*pi*t/3600) + randn(1,N)*1.5;
+sTemp.Y = baseTemp + 4*sin(2*pi*t/3600) + randn(1,N)*1.5;
 
 
 % Pressure sensor — simple unconditional thresholds
-sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi');
-sPress.updateData(t, 50 + 15*sin(2*pi*t/7200) + randn(1,N)*2);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', 50 + 15*sin(2*pi*t/7200) + randn(1,N)*2);
 
 
 %% 2. Inline data — synthetic vibration signal (no Sensor)

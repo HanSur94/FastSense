@@ -29,17 +29,13 @@ rng(42);
 N = 500;
 t = linspace(0, 3600, N);
 
-sCpu = SensorTag('CPU-1', 'Name', 'CPU Load', 'Units', '%');
-sCpu.updateData(t, 55 + 20*sin(2*pi*t/900) + randn(1,N)*3);
-[sCpu_x_, sCpu_y_] = sCpu.getXY();
-sCpu_y_ = max(0, min(100, sCpu_y_));
+sCpu = SensorTag('CPU-1', 'Name', 'CPU Load', 'Units', '%', 'X', t, 'Y', max(0, min(100, sCpu.Y)));
+sCpu.Y = 55 + 20*sin(2*pi*t/900) + randn(1,N)*3;
+sCpu.Y = max(0, min(100, sCpu.Y));
 
-sMem = SensorTag('MEM-1', 'Name', 'Memory', 'Units', 'GB');
-sMem.updateData(t, 12 + 4*sin(2*pi*t/1800) + randn(1,N)*0.2);
-[sMem_x_, sMem_y_] = sMem.getXY();
+sMem = SensorTag('MEM-1', 'Name', 'Memory', 'Units', 'GB', 'X', t, 'Y', 12 + 4*sin(2*pi*t/1800) + randn(1,N)*0.2);
 
-sNet = SensorTag('NET-1', 'Name', 'Network I/O', 'Units', 'MB/s');
-sNet.updateData(t, max(0, 85 + 50*randn(1,N)*0.1 + 30*sin(2*pi*t/300)));
+sNet = SensorTag('NET-1', 'Name', 'Network I/O', 'Units', 'MB/s', 'X', t, 'Y', max(0, 85 + 50*randn(1,N)*0.1 + 30*sin(2*pi*t/300)));
 
 %% 2. Build Dashboard
 d = DashboardEngine('SparklineCardWidget Demo');
@@ -89,7 +85,7 @@ d.addWidget('fastsense', 'Position', [17 5 8 8], 'Sensor', sNet);
 d.render();
 
 fprintf('Dashboard rendered with %d widgets.\n', numel(d.Widgets));
-fprintf('  CPU Load   : %.1f %% (sensor-bound, auto sparkline)\n', sCpu_y_(end));
+fprintf('  CPU Load   : %.1f %% (sensor-bound, auto sparkline)\n', sCpu.Y(end));
 fprintf('  Disk I/O   : 47.3 MB/s (ValueFcn + explicit SparkData)\n');
 fprintf('  Queue Depth: %d jobs  (StaticValue + SparkData + custom SparkColor)\n', round(staticSpark(end)));
-fprintf('  Memory     : %.1f GB (Sensor, ShowDelta=false)\n', sMem_y_(end));
+fprintf('  Memory     : %.1f GB (Sensor, ShowDelta=false)\n', sMem.Y(end));

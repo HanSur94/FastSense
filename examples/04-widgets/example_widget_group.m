@@ -33,24 +33,15 @@ rng(42);
 N = 5000;
 t = linspace(0, 86400, N);  % 24 hours
 
-sTemp = SensorTag('T-401', 'Name', 'Temperature');
-sTemp.Units = [char(176) 'F'];
-sTemp_x_ = t;
-sTemp_y_ = 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.2;
-sTemp_y_(end) = 79;  % near warning level
-sTemp.updateData(sTemp_x_, sTemp_y_);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.2);
+sTemp.Y(end) = 79;  % near warning level
 
-sPress = SensorTag('P-201', 'Name', 'Pressure');
-sPress.Units = 'psi';
-sPress.updateData(t, 55 + 8*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
-sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
-sFlow.Units = 'L/min';
-sFlow.updateData(t, max(0, 120 + 10*sin(2*pi*t/1800) + randn(1,N)*4));
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', 55 + 8*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
-sVib = SensorTag('V-501', 'Name', 'Vibration RMS');
-sVib.Units = 'mm/s';
-sVib.updateData(t, max(0.1, 1.5 + 0.4*sin(2*pi*t/5400) + randn(1,N)*0.2));
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', max(0, 120 + 10*sin(2*pi*t/1800) + randn(1,N)*4));
+
+sVib = SensorTag('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s', 'X', t, 'Y', max(0.1, 1.5 + 0.4*sin(2*pi*t/5400) + randn(1,N)*0.2));
 
 %% 2. Build dashboard
 d = DashboardEngine('Group Widget Demo');

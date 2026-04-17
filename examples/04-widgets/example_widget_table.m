@@ -24,8 +24,7 @@ N = 5000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 temp = 70 + 6*sin(2*pi*t/3600) + randn(1, N)*1.5;
 
-sTemp = SensorTag('T-401', 'Name', 'Temperature');
-sTemp.updateData(t, temp);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'X', t, 'Y', temp);
 
 
 %% 2. Build a static alarm log from resolved violations

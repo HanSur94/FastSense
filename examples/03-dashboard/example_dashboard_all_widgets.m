@@ -33,9 +33,7 @@ t = linspace(0, 86400, N);  % 24 hours in seconds
 modeChangeTimes = [0, 3600, 7200, 28800, 36000, 72000, 79200, 82800];
 modeValues      = [0, 1,    1,    2,     1,     0,     1,     1];
 
-scMode = StateTag('machine');
-scMode.X = modeChangeTimes;
-scMode.Y = modeValues;
+scMode = StateTag('machine', 'X', modeChangeTimes, 'Y', modeValues);
 
 % --- Temperature sensor T-401 ---
 % Baseline shifts with machine mode: idle ~68, running ~74, maint ~65
@@ -54,10 +52,9 @@ temp = tempBase + tempNoise;
 overIdx = t >= 36000 & t <= 38000;
 temp(overIdx) = temp(overIdx) + 12;
 
-sTemp = SensorTag('T-401', 'Name', 'Temperature');
-sTemp.Units = [char(176) 'F'];
-sTemp.updateData(t, temp);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', temp);
 % Running mode thresholds
+
 
 % Idle mode threshold (tighter — equipment should be cool)
 
@@ -74,9 +71,8 @@ end
 pressNoise = 8*sin(2*pi*t/7200) + randn(1,N)*2;
 pressure = pressBase + pressNoise;
 
-sPress = SensorTag('P-201', 'Name', 'Pressure');
-sPress.Units = 'psi';
-sPress.updateData(t, pressure);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', pressure);
+
 
 % --- Flow sensor F-301 ---
 flowBase = zeros(1, N);
@@ -91,15 +87,16 @@ end
 flowNoise = 5*sin(2*pi*t/1800) + randn(1,N)*3;
 flow = max(0, flowBase + flowNoise);
 
-sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
-sFlow.Units = 'L/min';
-sFlow.updateData(t, flow);
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', flow);
+
 
 %% ========== Build alarm log from resolved violations ==========
 alarmLog = {};
 sensors = {sTemp, sPress, sFlow};
 for si = 1:numel(sensors)
     s = sensors{si};
+        continue;
+    end
         if isempty(v.X)
             continue;
         end

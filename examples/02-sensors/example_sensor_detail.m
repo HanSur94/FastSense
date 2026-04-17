@@ -18,13 +18,10 @@ data(30000:30200) = data(30000:30200) + 20;  % spike at t~90
 data(70000:70300) = data(70000:70300) + 25;  % bigger spike at t~210
 data(50000:50100) = data(50000:50100) - 18;  % dip at t~150
 
-s = SensorTag('temperature', 'Name', 'Chamber Temperature');
-s.updateData(t, data);
+s = SensorTag('temperature', 'Name', 'Chamber Temperature', 'X', t, 'Y', data);
 
 % Add state channel (constant state for simplicity)
-sc = StateTag('mode');
-sc.X = [0 300];
-sc.Y = [1 1];
+sc = StateTag('mode', 'X', [0 300], 'Y', [1 1]);
 
 % Add threshold rules
 

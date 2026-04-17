@@ -9,22 +9,15 @@
 projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
-s.updateData(s_x_, s_y_);
 fprintf('\n=== FastSense Stress Test: 5 Tabbed Dashboards ===\n');
 totalTic = tic;
 
 % --- Shared state channels (reused across dashboards) ---
-scMachine = StateTag('machine');
-scMachine.X = [0 600 1800 2700 3600];
-scMachine.Y = [0 1 2 1 0];
+scMachine = StateTag('machine', 'X', [0 600 1800 2700 3600], 'Y', [0 1 2 1 0]);
 
-scVacuum = StateTag('vacuum');
-scVacuum.X = [0 900 2400 3200];
-scVacuum.Y = [0 1 0 1];
+scVacuum = StateTag('vacuum', 'X', [0 900 2400 3200], 'Y', [0 1 0 1]);
 
-scZone = StateTag('zone');
-scZone.X = [0 1200 2400];
-scZone.Y = [0 1 2];
+scZone = StateTag('zone', 'X', [0 1200 2400], 'Y', [0 1 2]);
 
 % --- Create dock ---
 dock = FastSenseDock('Theme', 'light', 'Name', 'Stress Test — 26 Sensors, 104 Thresholds', ...
@@ -37,33 +30,27 @@ fig1 = FastSenseGrid(3, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % 1.1: Chamber Pressure — 5M pts
 s = make_sensor('pressure', 'Chamber Pressure', 5e6, 40, 18, 800, 4, {scMachine, scVacuum});
-add_4_thresholds(s, scMachine, 55, 25, 65, 15);
 fig1.tile(1).addTag(s);
 
 % 1.2: Base Pressure — 5M pts
 s = make_sensor('base_pressure', 'Base Pressure', 5e6, 1e-3, 5e-4, 1200, 2e-4, {scMachine});
 inject_event(s, 2e6, 2.1e6, 3e-3);
-add_4_thresholds(s, scMachine, 1.8e-3, 3e-4, 2.5e-3, 1e-4);
 fig1.tile(2).addTag(s);
 
 % 1.3: Gate Valve — 3M pts
 s = make_sensor('gate_valve', 'Gate Valve Position', 3e6, 50, 45, 900, 2, {scMachine});
-add_4_thresholds(s, scMachine, 88, 12, 95, 5);
 fig1.tile(3).addTag(s);
 
 % 1.4: Gas Flow — 5M pts, multi-state
 s = make_sensor('gas_flow', 'Gas Flow', 5e6, 100, 30, 600, 8, {scMachine, scZone});
-add_4_thresholds(s, scMachine, 130, 70, 140, 60);
 fig1.tile(4).addTag(s);
 
 % 1.5: RF Power — 4M pts
 s = make_sensor('rf_power', 'RF Power', 4e6, 200, 80, 700, 15, {scMachine});
-add_4_thresholds(s, scMachine, 280, 120, 310, 90);
 fig1.tile(5).addTag(s);
 
 % 1.6: Substrate Temp — 3M pts
 s = make_sensor('substrate_temp', 'Substrate Temp', 3e6, 350, 40, 1000, 8, {scMachine});
-add_4_thresholds(s, scMachine, 390, 310, 410, 290);
 fig1.tile(6).addTag(s);
 
 dock.addTab(fig1, 'Vacuum Chamber');
@@ -76,34 +63,28 @@ fig2 = FastSenseGrid(2, 3, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 % 2.1: Motor Current A — 5M pts
 s = make_sensor('motor_A', 'Motor Current A', 5e6, 12, 4, 400, 1.5, {scMachine});
 inject_event(s, 1.5e6, 1.55e6, 8);
-add_4_thresholds(s, scMachine, 16, 8, 19, 5);
 fig2.tile(1).addTag(s);
 
 % 2.2: Motor Current B — 5M pts
 s = make_sensor('motor_B', 'Motor Current B', 5e6, 12, 4, 400, 1.5, {scMachine});
-add_4_thresholds(s, scMachine, 16, 8, 19, 5);
 fig2.tile(2).addTag(s);
 
 % 2.3: Motor Current C — 5M pts
 s = make_sensor('motor_C', 'Motor Current C', 5e6, 12, 4, 400, 1.5, {scMachine});
-add_4_thresholds(s, scMachine, 16, 8, 19, 5);
 fig2.tile(3).addTag(s);
 
 % 2.4: Vibration X — 3M pts
 s = make_sensor('vib_x', 'Vibration X', 3e6, 0, 0.3, 500, 0.5, {scMachine});
 inject_burst(s, [500 1200 2600], 40, 3);
-add_4_thresholds(s, scMachine, 1.5, -1.5, 2.5, -2.5);
 fig2.tile(4).addTag(s);
 
 % 2.5: Spindle RPM — 2M pts
 s = make_sensor('rpm', 'Spindle RPM', 2e6, 3000, 500, 900, 80, {scMachine});
-add_4_thresholds(s, scMachine, 3400, 2600, 3700, 2300);
 fig2.tile(5).addTag(s);
 
 % 2.6: Bearing Temp — 3M pts
 s = make_sensor('bearing_temp', 'Bearing Temp', 3e6, 65, 10, 1200, 3, {scMachine});
 inject_event(s, 1.2e6, 1.25e6, 20);
-add_4_thresholds(s, scMachine, 80, 50, 95, 40);
 fig2.tile(6).addTag(s);
 
 dock.addTab(fig2, 'Motor Diagnostics');
@@ -116,23 +97,19 @@ fig3 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 % 3.1: Cleanroom Temp — 5M pts
 s = make_sensor('room_temp', 'Cleanroom Temp', 5e6, 22, 1.5, 1800, 0.3, {scMachine});
 inject_event(s, 3e6, 3.05e6, 3);
-add_4_thresholds(s, scMachine, 23.5, 20.5, 25, 19);
 fig3.tile(1).addTag(s);
 
 % 3.2: Humidity — 5M pts
 s = make_sensor('humidity', 'Humidity', 5e6, 45, 8, 2400, 2, {scMachine});
-add_4_thresholds(s, scMachine, 52, 38, 58, 32);
 fig3.tile(2).addTag(s);
 
 % 3.3: Particle Count — 3M pts
 s = make_sensor('particles', 'Particle Count', 3e6, 200, 80, 600, 40, {scMachine, scVacuum});
 inject_event(s, 1e6, 1.02e6, 500);
-add_4_thresholds(s, scMachine, 300, 80, 400, 50);
 fig3.tile(3).addTag(s);
 
 % 3.4: Differential Pressure — 3M pts
 s = make_sensor('diff_pressure', 'Differential Pressure', 3e6, 12.5, 2, 900, 0.8, {scMachine});
-add_4_thresholds(s, scMachine, 14, 11, 16, 9);
 fig3.tile(4).addTag(s);
 
 dock.addTab(fig3, 'Environmental');
@@ -156,11 +133,10 @@ for gi = 1:6
         gasSizes(gi), gasNominal(gi), gasAmp(gi), gasPeriod(gi), gasNoise(gi), ...
         {scMachine, scVacuum});
     excStart = round(gasSizes(gi) * (0.3 + 0.08*gi));
-    excEnd = min(excStart + round(gasSizes(gi)*0.02), numel(s_y_));
-    s_y_(excStart:excEnd) = s_y_(excStart:excEnd) + gasAlarmOff(gi)*1.2;
-    add_4_thresholds(s, scMachine, ...
-        gasNominal(gi) + gasWarnOff(gi), gasNominal(gi) - gasWarnOff(gi), ...
-        gasNominal(gi) + gasAlarmOff(gi), gasNominal(gi) - gasAlarmOff(gi));
+    [gx, gy] = s.getXY();
+    excEnd = min(excStart + round(gasSizes(gi)*0.02), numel(gy));
+    gy(excStart:excEnd) = gy(excStart:excEnd) + gasAlarmOff(gi)*1.2;
+    s.updateData(gx, gy);
     fig4.tile(gi).addTag(s);
 end
 
@@ -173,24 +149,20 @@ fig5 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure, 'Theme', 'light');
 
 % 5.1: Chiller Supply — 3M pts
 s = make_sensor('chiller_supply', 'Chiller Supply', 3e6, 18, 2, 1200, 0.5, {scMachine});
-add_4_thresholds(s, scMachine, 20, 16, 22, 14);
 fig5.tile(1).addTag(s);
 
 % 5.2: Chiller Return — 3M pts
 s = make_sensor('chiller_return', 'Chiller Return', 3e6, 24, 3, 1200, 0.8, {scMachine});
 inject_event(s, 2e6, 2.05e6, 5);
-add_4_thresholds(s, scMachine, 27, 21, 30, 18);
 fig5.tile(2).addTag(s);
 
 % 5.3: Mains Voltage — 2M pts (no state dependency)
 s = make_sensor('mains_v', 'Mains Voltage', 2e6, 230, 5, 600, 2, {});
 inject_event(s, 8e5, 8.1e5, -15);
-add_4_thresholds(s, [], 237, 223, 242, 218);
 fig5.tile(3).addTag(s);
 
 % 5.4: UPS Load — 2M pts
 s = make_sensor('ups_load', 'UPS Load', 2e6, 60, 15, 1800, 5, {scMachine});
-add_4_thresholds(s, scMachine, 75, 40, 88, 30);
 fig5.tile(4).addTag(s);
 
 dock.addTab(fig5, 'Power & Cooling');
@@ -244,57 +216,28 @@ fprintf('  Toolbar: cursor, crosshair, grid, legend, autoscale, export\n');
 % Helper functions
 % =========================================================================
 
-function s = make_sensor(id, name, N, nominal, amp, period, noise, stateChannels)
-%MAKE_SENSOR Create a Sensor with synthetic data and state channels.
+function s = make_sensor(id, name, N, nominal, amp, period, noise, ~)
+%MAKE_SENSOR Create a SensorTag with synthetic data.
     t = linspace(0, 3600, N);
-    s = SensorTag(id, 'Name', name);
-    s.updateData(t, nominal + amp*sin(2*pi*t/period) + noise*randn(1, N));
-    [s_x_, s_y_] = s.getXY();
-    for i = 1:numel(stateChannels)
-    end
-end
-
-function add_4_thresholds(s, scM, warnHi, warnLo, alarmHi, alarmLo)
-%ADD_4_THRESHOLDS Add Warn HH/LL + Alarm HH/LL thresholds.
-%   If scM is provided, adds conditions for each machine state so that
-%   resolve() produces continuous step-function threshold lines:
-%     machine=0 (idle):      relaxed limits (+10% offset)
-%     machine=1 (running):   nominal limits
-%     machine=2 (evacuated): tighter limits (-10% offset)
-%   If scM is empty, adds unconditional flat thresholds.
-%
-%   Thresholds sharing the same Label+Direction collect multiple conditions;
-%   resolve() merges them into a single continuous threshold line — no NaN gaps.
-    if isempty(scM)
-    else
-        warnRange  = warnHi - warnLo;
-        alarmRange = alarmHi - alarmLo;
-        states = unique(scM.Y);
-        for i = 1:numel(states)
-            state = states(i);
-            switch state
-                case 0; f =  0.10;   % idle — relaxed
-                case 1; f =  0;      % running — nominal
-                case 2; f = -0.10;   % evacuated — tighter
-                otherwise; f = 0;
-            end
-        end
-    end
-
+    s = SensorTag(id, 'Name', name, 'X', t, 'Y', nominal + amp*sin(2*pi*t/period) + noise*randn(1, N));
 end
 
 function inject_event(s, idxStart, idxEnd, magnitude)
 %INJECT_EVENT Add a transient excursion to sensor data.
-    idxEnd = min(idxEnd, numel(s_y_));
-    s_y_(idxStart:idxEnd) = s_y_(idxStart:idxEnd) + magnitude;
+    [x, y] = s.getXY();
+    idxEnd = min(idxEnd, numel(y));
+    y(idxStart:idxEnd) = y(idxStart:idxEnd) + magnitude;
+    s.updateData(x, y);
 end
 
 function inject_burst(s, times, duration, amplitude)
 %INJECT_BURST Add noise bursts at specified times.
-    N = numel(s_y_);
+    [x, y] = s.getXY();
+    N = numel(y);
     for i = 1:numel(times)
         lo = max(1, round(times(i) * N / 3600));
         hi = min(lo + round(duration * N / 3600), N);
-        s_y_(lo:hi) = s_y_(lo:hi) + amplitude * randn(1, hi - lo + 1);
+        y(lo:hi) = y(lo:hi) + amplitude * randn(1, hi - lo + 1);
     end
+    s.updateData(x, y);
 end

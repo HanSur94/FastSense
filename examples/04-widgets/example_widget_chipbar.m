@@ -28,16 +28,17 @@ t = linspace(0, 3600, N);
 
 % Sensor 1 — ok (no violation)
 sA = SensorTag('S-001', 'Name', 'Reactor A', 'Units', 'bar');
-% TODO: sA.X = t; sA.Y = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05; (needs manual fix)
+sA.updateData(t, 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05);
 
 % Sensor 2 — alarm (last value above threshold)
 sB = SensorTag('S-002', 'Name', 'Reactor B', 'Units', 'bar');
-% TODO: sB_x_ = t; sB_y_ = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05; (needs manual fix)
+sB_y_ = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05;
 sB_y_(end-100:end) = 14 + randn(1,101)*0.1;   % push tail into alarm
+sB.updateData(t, sB_y_);
 
 % Sensor 3 — ok
 sC = SensorTag('S-003', 'Name', 'Cooler', 'Units', [char(176) 'C']);
-% TODO: sC.X = t; sC.Y = 38 + 2*sin(2*pi*t/1200) + randn(1,N)*0.3; (needs manual fix)
+sC.updateData(t, 38 + 2*sin(2*pi*t/1200) + randn(1,N)*0.3);
 
 %% 2. Build Dashboard
 d = DashboardEngine('ChipBarWidget Demo');
@@ -55,7 +56,6 @@ bar1.Chips = {
     struct('label', 'Cooler',   'statusFcn', @() 'inactive'),
     struct('label', 'Conveyor', 'statusFcn', @() 'ok'),
 };
-sB.updateData(sB_x_, sB_y_);
 d.addWidget(bar1);
 
 % --- Bar 2: sensor-bound chips (state auto-derived from ThresholdRules) ---

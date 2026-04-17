@@ -41,10 +41,7 @@ weeklyValues = [1820 1975 1843 2010 1965 1750 1410];
 rng(42);
 N = 5000;
 t = linspace(0, 28800, N);  % 8 hours in seconds
-sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
-sFlow.Units = 'L/min';
-sFlow.updateData(t, max(0, 120 + 20*sin(2*pi*t/3600) + randn(1,N)*5));
-[sFlow_x_, sFlow_y_] = sFlow.getXY();
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', max(0, 120 + 20*sin(2*pi*t/3600) + randn(1,N)*5));
 
 %% 2. Build dashboard
 d = DashboardEngine('Bar Chart Widget Demo');
@@ -78,4 +75,4 @@ d.addWidget('barchart', 'Title', 'Flow Distribution (sensor)', ...
 d.render();
 fprintf('Dashboard rendered with %d bar chart widgets.\n', numel(d.Widgets));
 fprintf('Flow sensor %s: latest %.1f %s\n', ...
-    sFlow.Key, sFlow_y_(end), sFlow.Units);
+    sFlow.Key, sFlow.Y(end), sFlow.Units);

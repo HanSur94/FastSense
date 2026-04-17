@@ -18,14 +18,10 @@ rng(7);
 N = 10000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
-sTemp = SensorTag('T-401', 'Name', 'Temperature');
-sTemp.Units = [char(176) 'C'];
-sTemp.updateData(t, 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C'], 'X', t, 'Y', 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8);
 
 
-sPress = SensorTag('P-201', 'Name', 'Pressure');
-sPress.Units = 'bar';
-sPress.updateData(t, 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar', 'X', t, 'Y', 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
 
 %% 2. Generate a process diagram image for the info page

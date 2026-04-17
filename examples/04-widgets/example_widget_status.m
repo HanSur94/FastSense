@@ -24,24 +24,17 @@ N = 5000;
 t = linspace(0, 3600, N);  % 1 hour
 
 % Temperature — last value above Hi Alarm => red/alarm
-sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
-sTemp_x_ = t;
-sTemp_y_ = 70 + 4*sin(2*pi*t/600) + randn(1,N)*0.5;
-sTemp_y_(end-200:end) = 92 + randn(1,201)*0.3;        % push tail into alarm
-sTemp.updateData(sTemp_x_, sTemp_y_);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C'], 'X', t, 'Y', 70 + 4*sin(2*pi*t/600) + randn(1,N)*0.5);
+sTemp.Y(end-200:end) = 92 + randn(1,201)*0.3;        % push tail into alarm
 
 
 % Pressure — last value between Hi Warn and Hi Alarm => yellow/warning
-sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar');
-sPress_x_ = t;
-sPress_y_ = 48 + 3*sin(2*pi*t/900) + randn(1,N)*0.8;
-sPress_y_(end-100:end) = 67 + randn(1,101)*0.4;       % push tail into warning
-sPress.updateData(sPress_x_, sPress_y_);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar', 'X', t, 'Y', 48 + 3*sin(2*pi*t/900) + randn(1,N)*0.8);
+sPress.Y(end-100:end) = 67 + randn(1,101)*0.4;       % push tail into warning
 
 
 % Flow — last value well within limits => green/ok
-sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
-sFlow.updateData(t, 120 + 5*sin(2*pi*t/1200) + randn(1,N)*1.0);
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', 120 + 5*sin(2*pi*t/1200) + randn(1,N)*1.0);
 
 
 %% 2. Build dashboard

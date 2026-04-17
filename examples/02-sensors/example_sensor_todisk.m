@@ -14,16 +14,14 @@ run(fullfile(projectRoot, 'install.m'));
 
 fprintf('=== 1. Basic toDisk workflow ===\n');
 
-s = SensorTag('temperature', 'Name', 'Chamber Temperature', 'ID', 201);
-s.updateData(linspace(0, 200, 2e6), 50 + 8*sin(2*pi*s.X/60) + 3*randn(1, 2e6));
-[s_x_, s_y_] = s.getXY();
+s = SensorTag('temperature', 'Name', 'Chamber Temperature', 'ID', 201, 'X', linspace(0, 200, 2e6), 'Y', 50 + 8*sin(2*pi*s.X/60) + 3*randn(1, 2e6));
 
-fprintf('  Before toDisk: %.1f MB in memory\n', numel(s_x_) * 16 / 1e6);
+fprintf('  Before toDisk: %.1f MB in memory\n', numel(s.X) * 16 / 1e6);
 
 s.toDisk();
 
 fprintf('  After toDisk:  X is empty=%d, Y is empty=%d, isOnDisk=%d\n', ...
-    isempty(s_x_), isempty(s_y_), s.isOnDisk());
+    isempty(s.X), isempty(s.Y), s.isOnDisk());
 fprintf('  DataStore: %d points on disk\n', s.DataStore.NumPoints);
 
 %% 2. resolve() works transparently with disk data
@@ -32,9 +30,8 @@ fprintf('  DataStore: %d points on disk\n', s.DataStore.NumPoints);
 
 fprintf('\n=== 2. Disk-backed resolve ===\n');
 
-sc = StateTag('machine');
-sc.X = [0 50 100 150];
-sc.Y = [0 1 2 1];  % idle -> running -> evacuated -> running
+sc = StateTag('machine', 'X', [0 50 100 150], 'Y', [0 1 2 1];  % idle -> running -> evacuated -> running);
+
 
 tic;
 fprintf('  resolve() on 2M disk-backed points: %.3f s\n', toc);
@@ -46,7 +43,7 @@ fprintf('  Thresholds: %d, Violations: %d\n', ...
 fprintf('\n=== 3. Plot disk-backed sensor ===\n');
 
 fp = FastSense();
-fp.addTag(s);
+fp.addTag(s, 'ShowThresholds', true);
 tic;
 fp.render();
 fprintf('  Rendered in %.3f s\n', toc);
@@ -58,15 +55,13 @@ title(fp.hAxes, 'Disk-backed Sensor — 2M Points with Dynamic Thresholds');
 
 fprintf('\n=== 4. toMemory round-trip ===\n');
 
-s2 = SensorTag('pressure', 'Name', 'Pressure Sensor');
-s2.updateData(linspace(0, 100, 500000), 40 + 20*sin(2*pi*s2.X/30) + 5*randn(1, 500000));
-[s2_x_, s2_y_] = s2.getXY();
+s2 = SensorTag('pressure', 'Name', 'Pressure Sensor', 'X', linspace(0, 100, 500000), 'Y', 40 + 20*sin(2*pi*s2.X/30) + 5*randn(1, 500000));
 
 s2.toDisk();
-fprintf('  On disk: X empty=%d, NumPoints=%d\n', isempty(s2_x_), s2.DataStore.NumPoints);
+fprintf('  On disk: X empty=%d, NumPoints=%d\n', isempty(s2.X), s2.DataStore.NumPoints);
 
 s2.toMemory();
-fprintf('  Back in memory: numel(X)=%d, isOnDisk=%d\n', numel(s2_x_), s2.isOnDisk());
+fprintf('  Back in memory: numel(X)=%d, isOnDisk=%d\n', numel(s2.X), s2.isOnDisk());
 
 %% 5. Large-scale sensor with extra columns
 % Combine toDisk with addColumn to attach metadata (labels, flags,
@@ -121,15 +116,14 @@ names = {'Temperature', 'Pressure', 'Flow Rate', 'Vibration'};
 nPts = 1e6;
 
 for i = 1:4
-    si = SensorTag(lower(names{i}), 'Name', names{i});
-    si.updateData(linspace(0, 200, nPts), 30 + 10*i + 15*sin(2*pi*si.X/(20+10*i)) + 4*randn(1, nPts));
+    si = SensorTag(lower(names{i}), 'Name', names{i}, 'X', linspace(0, 200, nPts), 'Y', 30 + 10*i + 15*sin(2*pi*si.X/(20+10*i)) + 4*randn(1, nPts));
     si.toDisk();
     sensors{i} = si;
 end
 
 fpf = FastSenseGrid(2, 2);
 for i = 1:4
-    fpf.tile(i).addTag(sensors{i});
+    fpf.tile(i).addTag(sensors{i}, 'ShowThresholds', true);
 end
 tic;
 fpf.render();

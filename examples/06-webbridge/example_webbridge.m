@@ -39,17 +39,14 @@ function example_webbridge_run()
     tSeed = linspace(-60, 0, nSeed);
 
     % Temperature sensor
-    sTemp = SensorTag('temperature', 'Name', 'Temperature');
-    sTemp.Units = [char(176) 'C'];
-    sTemp.updateData(tSeed, 22 + 3*sin(2*pi*tSeed/30) + randn(1, nSeed)*0.3);
+    sTemp = SensorTag('temperature', 'Name', 'Temperature', 'Units', [char(176) 'C'], 'X', tSeed, 'Y', 22 + 3*sin(2*pi*tSeed/30) + randn(1, nSeed)*0.3);
+
     % Pressure sensor
-    sPress = SensorTag('pressure', 'Name', 'Pressure');
-    sPress.Units = 'bar';
-    sPress.updateData(tSeed, 4.5 + 0.5*sin(2*pi*tSeed/20) + randn(1, nSeed)*0.1);
+    sPress = SensorTag('pressure', 'Name', 'Pressure', 'Units', 'bar', 'X', tSeed, 'Y', 4.5 + 0.5*sin(2*pi*tSeed/20) + randn(1, nSeed)*0.1);
+
     % Vibration sensor
-    sVib = SensorTag('vibration', 'Name', 'Vibration');
-    sVib.Units = 'mm/s';
-    sVib.updateData(tSeed, 2.0 + 0.8*randn(1, nSeed) + 0.5*sin(2*pi*tSeed/15));
+    sVib = SensorTag('vibration', 'Name', 'Vibration', 'Units', 'mm/s', 'X', tSeed, 'Y', 2.0 + 0.8*randn(1, nSeed) + 0.5*sin(2*pi*tSeed/15));
+
     %% ========== Build Dashboard ==========
     engine = DashboardEngine('Sensor Monitor');
     engine.addWidget('fastsense', ...

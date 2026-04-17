@@ -26,26 +26,20 @@ N = 5000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
 % Temperature — nearly normal distribution
-sTemp = SensorTag('T-401', 'Name', 'Temperature');
-sTemp.Units = [char(176) 'F'];
-sTemp.updateData(t, 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.5);
-[sTemp_x_, sTemp_y_] = sTemp.getXY();
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.5);
+
 
 % Pressure — bimodal (two machine modes)
-sPress = SensorTag('P-201', 'Name', 'Pressure');
-sPress.Units = 'psi';
-% TODO: sPress_x_ = t; (needs manual fix)
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi');
+sPress.X = t;
 modeA = t < 43200;  % first 12 hours: lower pressure
 modeB = t >= 43200; % second 12 hours: higher pressure
-sPress_y_ = zeros(1, N);
-sPress_y_(modeA) = 30 + randn(1, sum(modeA))*3;
-sPress_y_(modeB) = 55 + randn(1, sum(modeB))*4;
+sPress.Y = zeros(1, N);
+sPress.Y(modeA) = 30 + randn(1, sum(modeA))*3;
+sPress.Y(modeB) = 55 + randn(1, sum(modeB))*4;
 
 % Vibration — log-normal (positively skewed)
-sVib = SensorTag('V-501', 'Name', 'Vibration RMS');
-sVib.Units = 'mm/s';
-% TODO: sVib_x_ = t; (needs manual fix)
-sVib_y_ = max(0.1, exp(0.5 + 0.4*randn(1,N)));  % log-normal
+sVib = SensorTag('V-501', 'Name', 'Vibration RMS', 'Units', 'mm/s', 'X', t, 'Y', max(0.1, exp(0.5 + 0.4*randn(1,N)));  % log-normal);
 
 % Custom DataFcn — batch cycle times (gamma-like)
 cycleTimes = 28 + 15*abs(randn(1, 800)) + 5*randn(1,800);
@@ -55,7 +49,6 @@ d = DashboardEngine('Histogram Widget Demo');
 d.Theme = 'light';
 
 % Row 1-6: Temperature — sensor-bound, auto bins, with normal fit
-sPress.updateData(sPress_x_, sPress_y_);
 d.addWidget('histogram', 'Title', 'Temperature Distribution', ...
     'Position', [1 1 12 6], ...
     'Sensor', sTemp, ...
@@ -86,8 +79,8 @@ d.addWidget('histogram', 'Title', 'Batch Cycle Times (red edges)', ...
 d.render();
 fprintf('Dashboard rendered with %d histogram widgets.\n', numel(d.Widgets));
 fprintf('Temperature: mean=%.1f std=%.1f (N=%d)\n', ...
-    mean(sTemp_y_), std(sTemp_y_), numel(sTemp_y_));
+    mean(sTemp.Y), std(sTemp.Y), numel(sTemp.Y));
 fprintf('Pressure:    mean=%.1f std=%.1f (bimodal)\n', ...
-    mean(sPress_y_), std(sPress_y_));
+    mean(sPress.Y), std(sPress.Y));
 fprintf('Vibration:   mean=%.2f std=%.2f (log-normal)\n', ...
-    mean(sVib_y_), std(sVib_y_));
+    mean(sVib.Y), std(sVib.Y));
