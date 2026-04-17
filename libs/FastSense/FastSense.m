@@ -86,6 +86,8 @@ classdef FastSense < handle
         YScale = 'linear'             % 'linear' or 'log' — Y axis scale
         ViolationsVisible = true      % global toggle for violation markers
         ShowThresholdLabels = false  % show inline name labels on threshold lines
+        ShowEventMarkers = true     % toggle event round-marker overlay (EVENT-07)
+        EventStore = []             % EventStore handle for event overlay queries
     end
 
     % ====================== INTERNAL DATA STORAGE ========================
@@ -137,6 +139,8 @@ classdef FastSense < handle
         LiveFileDate   = 0         % last known file modification datenum
         LiveFileBytes  = 0         % last known file size in bytes
         MetadataFileDate  = 0         % last known metadata file datenum
+        Tags_ = {}                    % cell of Tag handles added via addTag (for event overlay)
+        EventMarkerHandles_ = {}      % cell of line handles for cleanup
     end
 
     % ===================== PERFORMANCE TUNING ============================
@@ -982,6 +986,7 @@ classdef FastSense < handle
                     error('FastSense:unsupportedTagKind', ...
                         'Unsupported tag kind ''%s''.', tag.getKind());
             end
+            obj.Tags_{end+1} = tag;
         end
 
         function addStateTagAsStaircase_(obj, tag, varargin)
@@ -1387,6 +1392,9 @@ classdef FastSense < handle
                 set(hM, 'UserData', udM);
                 obj.Markers(i).hLine = hM;
             end
+
+            % --- Render event overlay markers (EVENT-07) ---
+            obj.renderEventLayer_();
 
             % --- Set static axis limits (use downsampled data, not full raw) ---
             if strcmp(obj.YScale, 'log')
@@ -2265,6 +2273,87 @@ classdef FastSense < handle
     % Internal helpers: timer callbacks, view mode, theme, listeners,
     % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
+        function renderEventLayer_(obj)
+            %RENDEREVENTLAYER_ Draw round markers at event timestamps (EVENT-07).
+            %   Separate render layer -- called AFTER line + threshold + marker
+            %   rendering. Single early-out at top if nothing to draw.
+            %   Batches markers by severity for performance (one line() per level).
+            if ~obj.ShowEventMarkers || isempty(obj.Tags_)
+                return;
+            end
+            % Auto-discover EventStore from first Tag that has one
+            es = obj.EventStore;
+            if isempty(es)
+                for i = 1:numel(obj.Tags_)
+                    if isprop(obj.Tags_{i}, 'EventStore') && ~isempty(obj.Tags_{i}.EventStore)
+                        es = obj.Tags_{i}.EventStore;
+                        break;
+                    end
+                end
+            end
+            if isempty(es), return; end
+            % Delete old markers
+            for i = 1:numel(obj.EventMarkerHandles_)
+                if ishandle(obj.EventMarkerHandles_{i})
+                    delete(obj.EventMarkerHandles_{i});
+                end
+            end
+            obj.EventMarkerHandles_ = {};
+            % Collect markers by severity (1=ok, 2=warn, 3=alarm)
+            xBySev = {[], [], []};
+            yBySev = {[], [], []};
+            for i = 1:numel(obj.Tags_)
+                tag = obj.Tags_{i};
+                events = es.getEventsForTag(char(tag.Key));
+                if isempty(events), continue; end
+                for j = 1:numel(events)
+                    ev = events(j);
+                    sev = max(1, min(3, ev.Severity));
+                    yVal = tag.valueAt(ev.StartTime);
+                    if isnan(yVal), continue; end
+                    xBySev{sev}(end+1) = ev.StartTime;
+                    yBySev{sev}(end+1) = yVal;
+                end
+            end
+            % Draw one line() per severity level
+            for s = 1:3
+                if ~isempty(xBySev{s})
+                    c = obj.severityToColor_(s);
+                    h = line(xBySev{s}, yBySev{s}, ...
+                        'Parent', obj.hAxes, ...
+                        'Marker', 'o', 'MarkerSize', 8, ...
+                        'MarkerFaceColor', c, 'MarkerEdgeColor', c, ...
+                        'LineStyle', 'none', 'HandleVisibility', 'off');
+                    obj.EventMarkerHandles_{end+1} = h;
+                end
+            end
+        end
+
+        function c = severityToColor_(obj, severity)
+            %SEVERITYTOCOLOR_ Map severity level to RGB color.
+            %   Uses DashboardTheme status colors if available in obj.Theme;
+            %   falls back to hardcoded defaults (RESEARCH Critical Finding 5).
+            if severity >= 3
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusAlarmColor')
+                    c = obj.Theme.StatusAlarmColor;
+                else
+                    c = [0.91 0.27 0.38];
+                end
+            elseif severity >= 2
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusWarnColor')
+                    c = obj.Theme.StatusWarnColor;
+                else
+                    c = [0.91 0.63 0.27];
+                end
+            else
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusOkColor')
+                    c = obj.Theme.StatusOkColor;
+                else
+                    c = [0.31 0.80 0.64];
+                end
+            end
+        end
+
         function S = buildExportStruct_(obj)
             %BUILDEXPORTSTRUCT_ Build the export data structure from Lines and Thresholds.
             %   S = BUILDEXPORTSTRUCT_(obj) returns a struct with fields:
