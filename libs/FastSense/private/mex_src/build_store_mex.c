@@ -236,6 +236,20 @@ void mexFunction(int nlhs, mxArray *plhs[],
         "  label TEXT NOT NULL"
         ")", NULL, NULL, NULL);
 
+    /* MONITOR-09: MonitorTag.Persist=true cache.
+       KEEP IN SYNC with FastSenseDataStore.initSqlite MATLAB fallback. */
+    sqlite3_exec(db,
+        "CREATE TABLE monitors ("
+        "  key         TEXT PRIMARY KEY,"
+        "  x_blob      BLOB NOT NULL,"
+        "  y_blob      BLOB NOT NULL,"
+        "  parent_key  TEXT NOT NULL,"
+        "  num_points  INTEGER NOT NULL,"
+        "  parent_xmin REAL NOT NULL,"
+        "  parent_xmax REAL NOT NULL,"
+        "  computed_at REAL NOT NULL"
+        ")", NULL, NULL, NULL);
+
     /* ---- Prepare INSERT statement ---- */
     rc = sqlite3_prepare_v2(db,
         "INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

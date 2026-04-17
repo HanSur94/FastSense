@@ -29,13 +29,13 @@ N = 5000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
 % Machine mode state channel (idle=0, running=1)
-scMode = StateChannel('machine');
+scMode = StateTag('machine');
 scMode.X = [0, 7200, 43200, 57600];
 scMode.Y = [0, 1,    0,     1];
 
 % Temperature sensor — state-dependent thresholds
-sTemp = Sensor('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
-sTemp.X = t;
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
+% TODO: sTemp_x_ = t; (needs manual fix)
 baseTemp = zeros(1, N);
 for k = 1:N
     if scMode.valueAt(t(k)) == 1
@@ -44,33 +44,13 @@ for k = 1:N
         baseTemp(k) = 66;
     end
 end
-sTemp.Y = baseTemp + 4*sin(2*pi*t/3600) + randn(1,N)*1.5;
-sTemp.addStateChannel(scMode);
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnTemp.addCondition(struct('machine', 1), 80);
-sTemp.addThreshold(tHiWarnTemp);
+sTemp_y_ = baseTemp + 4*sin(2*pi*t/3600) + randn(1,N)*1.5;
 
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmTemp.addCondition(struct('machine', 1), 86);
-sTemp.addThreshold(tHiAlarmTemp);
-
-tIdleHiTemp = Threshold('idle_hi', 'Name', 'Idle Hi', 'Direction', 'upper');
-tIdleHiTemp.addCondition(struct('machine', 0), 72);
-sTemp.addThreshold(tIdleHiTemp);
-sTemp.resolve();
 
 % Pressure sensor — simple unconditional thresholds
-sPress = Sensor('P-201', 'Name', 'Pressure', 'Units', 'psi');
-sPress.X = t;
-sPress.Y = 50 + 15*sin(2*pi*t/7200) + randn(1,N)*2;
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnPress.addCondition(struct(), 62);
-sPress.addThreshold(tHiWarnPress);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi');
+sPress.updateData(t, 50 + 15*sin(2*pi*t/7200) + randn(1,N)*2);
 
-tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmPress.addCondition(struct(), 68);
-sPress.addThreshold(tHiAlarmPress);
-sPress.resolve();
 
 %% 2. Inline data — synthetic vibration signal (no Sensor)
 x = linspace(0, 10, N);
@@ -112,5 +92,3 @@ d.addWidget('fastsense', ...
 d.render();
 
 fprintf('Dashboard rendered with %d FastSenseWidgets.\n', numel(d.Widgets));
-fprintf('Temperature violations: %d\n', sTemp.countViolations());
-fprintf('Pressure violations:    %d\n', sPress.countViolations());

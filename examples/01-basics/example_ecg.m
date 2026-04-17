@@ -49,12 +49,8 @@ fp.addLine(x, y, 'DisplayName', 'ECG Lead II', 'Color', [0 0.5 0]);
 
 % Arrhythmia detection thresholds
 fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'High Amplitude');
 fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.6 0], 'LineStyle', ':', 'Label', 'Elevated');
 fp.addThreshold(-0.5, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.6 0 0.6], 'LineStyle', ':', 'Label', 'ST Depression');
-
 fp.render();
 
 fprintf('Rendered in %.3f seconds. Zoom to see individual QRS complexes!\n', toc);

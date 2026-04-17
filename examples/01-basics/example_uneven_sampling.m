@@ -41,9 +41,7 @@ tic;
 fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Event-Driven Sensor', 'Color', [0.2 0.5 0.7]);
 fp.addThreshold(4.0, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'High');
 fp.addThreshold(-4.0, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'Low');
 fp.render();
 
 fprintf('Rendered in %.3f seconds. Zoom into dense bursts to see detail!\n', toc);

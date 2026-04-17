@@ -24,22 +24,12 @@ N = 5000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 temp = 70 + 6*sin(2*pi*t/3600) + randn(1, N)*1.5;
 
-sTemp = Sensor('T-401', 'Name', 'Temperature');
-sTemp.X = t;
-sTemp.Y = temp;
-tHiWarn = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarn.addCondition(struct(), 78);
-sTemp.addThreshold(tHiWarn);
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
+sTemp.updateData(t, temp);
 
-tHiAlarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarm.addCondition(struct(), 82);
-sTemp.addThreshold(tHiAlarm);
-sTemp.resolve();
 
 %% 2. Build a static alarm log from resolved violations
 alarmLog = {};
-for vi = 1:numel(sTemp.ResolvedViolations)
-    v = sTemp.ResolvedViolations(vi);
     if isempty(v.X), continue; end
     nSample = min(5, numel(v.X));
     idx = round(linspace(1, numel(v.X), nSample));

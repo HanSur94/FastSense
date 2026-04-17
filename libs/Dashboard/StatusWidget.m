@@ -33,13 +33,13 @@ classdef StatusWidget < DashboardWidget
             if isequal(obj.Position, [1 1 6 2])
                 obj.Position = [1 1 4 1]; % default compact size
             end
-            % Resolve Threshold key string to object (per D-07)
+            % Resolve Threshold key string to Tag object via TagRegistry.
             if ischar(obj.Threshold) || isstring(obj.Threshold)
                 try
-                    obj.Threshold = ThresholdRegistry.get(obj.Threshold);
+                    obj.Threshold = TagRegistry.get(obj.Threshold);
                 catch
                     warning('StatusWidget:thresholdNotFound', ...
-                        'ThresholdRegistry key ''%s'' not found.', obj.Threshold);
+                        'TagRegistry key ''%s'' not found.', obj.Threshold);
                     obj.Threshold = [];
                 end
             end
@@ -244,13 +244,15 @@ classdef StatusWidget < DashboardWidget
             if isfield(s, 'source')
                 switch s.source.type
                     case 'sensor'
-                        if exist('SensorRegistry', 'class')
-                            obj.Sensor = SensorRegistry.get(s.source.name);
+                        if exist('TagRegistry', 'class')
+                            try
+                                obj.Tag = TagRegistry.get(s.source.name);
+                            catch, end
                         end
                     case 'threshold'
-                        if exist('ThresholdRegistry', 'class')
+                        if exist('TagRegistry', 'class')
                             try
-                                obj.Threshold = ThresholdRegistry.get(s.source.key);
+                                obj.Tag = TagRegistry.get(s.source.key);
                             catch
                                 warning('StatusWidget:thresholdNotFound', ...
                                     'Could not resolve threshold key ''%s'' on load.', s.source.key);

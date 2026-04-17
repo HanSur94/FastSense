@@ -36,10 +36,7 @@ x2 = linspace(0, 3600, n2);
 y2 = 45 + 8*sin(x2*2*pi/900) + 3*randn(1,n2);
 fp2.addLine(x2, y2, 'DisplayName', 'Flow Rate');
 fp2.addThreshold(55, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.4 0.4], 'Label', 'High');
 fp2.addThreshold(35, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.4 0.4 1], 'Label', 'Low');
-
 % =========================================================================
 % Tile 3: Reactor Pressure — 2M points, shaded confidence envelope
 % =========================================================================
@@ -121,8 +118,6 @@ fp8.addThreshold(27, 'Direction', 'upper', 'ShowViolations', true);
 recovery_x = gaps(:,2)' + 50;
 recovery_y = interp1(x8(~isnan(y8)), y8(~isnan(y8)), recovery_x);
 fp8.addMarker(recovery_x, recovery_y, 'Marker', '^', 'MarkerSize', 8, ...
-    'Color', [0.2 0.9 0.4]);
-
 % =========================================================================
 % Tile 9: Power Spectrum — 3M points, two overlaid signals + shaded diff
 % =========================================================================

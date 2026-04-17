@@ -27,29 +27,17 @@ N = 3000;
 t = linspace(0, 3600, N);
 
 % Sensor 1 — ok (no violation)
-sA = Sensor('S-001', 'Name', 'Reactor A', 'Units', 'bar');
-sA.X = t; sA.Y = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05;
-tHiAlarmA = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmA.addCondition(struct(), 12);
-sA.addThreshold(tHiAlarmA);
-sA.resolve();
+sA = SensorTag('S-001', 'Name', 'Reactor A', 'Units', 'bar');
+% TODO: sA.X = t; sA.Y = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05; (needs manual fix)
 
 % Sensor 2 — alarm (last value above threshold)
-sB = Sensor('S-002', 'Name', 'Reactor B', 'Units', 'bar');
-sB.X = t; sB.Y = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05;
-sB.Y(end-100:end) = 14 + randn(1,101)*0.1;   % push tail into alarm
-tHiAlarmB = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmB.addCondition(struct(), 12);
-sB.addThreshold(tHiAlarmB);
-sB.resolve();
+sB = SensorTag('S-002', 'Name', 'Reactor B', 'Units', 'bar');
+% TODO: sB_x_ = t; sB_y_ = 8 + 0.3*sin(2*pi*t/600) + randn(1,N)*0.05; (needs manual fix)
+sB_y_(end-100:end) = 14 + randn(1,101)*0.1;   % push tail into alarm
 
 % Sensor 3 — ok
-sC = Sensor('S-003', 'Name', 'Cooler', 'Units', [char(176) 'C']);
-sC.X = t; sC.Y = 38 + 2*sin(2*pi*t/1200) + randn(1,N)*0.3;
-tHiAlarmC = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmC.addCondition(struct(), 60);
-sC.addThreshold(tHiAlarmC);
-sC.resolve();
+sC = SensorTag('S-003', 'Name', 'Cooler', 'Units', [char(176) 'C']);
+% TODO: sC.X = t; sC.Y = 38 + 2*sin(2*pi*t/1200) + randn(1,N)*0.3; (needs manual fix)
 
 %% 2. Build Dashboard
 d = DashboardEngine('ChipBarWidget Demo');
@@ -67,6 +55,7 @@ bar1.Chips = {
     struct('label', 'Cooler',   'statusFcn', @() 'inactive'),
     struct('label', 'Conveyor', 'statusFcn', @() 'ok'),
 };
+sB.updateData(sB_x_, sB_y_);
 d.addWidget(bar1);
 
 % --- Bar 2: sensor-bound chips (state auto-derived from ThresholdRules) ---

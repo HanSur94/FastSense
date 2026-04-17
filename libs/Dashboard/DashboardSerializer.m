@@ -39,7 +39,7 @@ classdef DashboardSerializer
                                 case 'sensor'
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('        ''Sensor'', SensorRegistry.get(''%s''));', ws.source.name);
+                                    lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.name);
                                 case 'file'
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
@@ -599,7 +599,7 @@ classdef DashboardSerializer
                             case 'sensor'
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
-                                wLines{end+1} = sprintf('%s    ''Sensor'', SensorRegistry.get(''%s''));', indent, ws.source.name);
+                                wLines{end+1} = sprintf('%s    ''Tag'', TagRegistry.get(''%s''));', indent, ws.source.name);
                             case 'file'
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);

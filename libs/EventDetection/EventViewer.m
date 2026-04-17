@@ -620,9 +620,10 @@ classdef EventViewer < handle
             % Collect all events for this sensor
             sensorEvents = obj.Events(arrayfun(@(e) strcmp(e.SensorName, ev.SensorName), obj.Events));
 
-            % Build Sensor object with datetime X for axis formatting
-            sensor = obj.buildSensor(sd);
-            sensor.X = datetime(sd.t, 'ConvertFrom', 'datenum');
+            % Build sensor data with datetime X for axis formatting
+            sd = obj.buildSensorData(sd);
+            sensorX = datetime(sd.t, 'ConvertFrom', 'datenum');
+            sensorY = sd.y;
 
             % Y range for shaded event regions (data + thresholds + padding)
             yLo = min(sd.y); yHi = max(sd.y);
@@ -650,14 +651,14 @@ classdef EventViewer < handle
 
             % --- Tile 1: event detail (zoomed) ---
             fp1 = dashboard.tile(1);
-            fp1.addSensor(sensor, 'ShowThresholds', true);
+            fp1.addLine(sensorX, sensorY, 'DisplayName', sd.name);
             evEnd = max(ev.EndTime, ev.StartTime + minWidth);
             fp1.addShaded([ev.StartTime, evEnd], [yLo, yLo], [yHi, yHi], ...
                 'FaceColor', evColor, 'FaceAlpha', 0.20);
 
             % --- Tile 2: full timeline with all events ---
             fp2 = dashboard.tile(2);
-            fp2.addSensor(sensor, 'ShowThresholds', true);
+            fp2.addLine(sensorX, sensorY, 'DisplayName', sd.name);
             for i = 1:numel(sensorEvents)
                 e = sensorEvents(i);
                 eEnd = max(e.EndTime, e.StartTime + minWidth);
@@ -718,17 +719,12 @@ classdef EventViewer < handle
             end
         end
 
-        function sensor = buildSensor(~, sd)
-            %BUILDSENSOR Create a resolved Sensor from sensor data struct.
-            sensor = Sensor(sd.name, 'Name', sd.name);
-            sensor.X = sd.t;
-            sensor.Y = sd.y;
-            if isfield(sd, 'thresholds') && ~isempty(sd.thresholds)
-                for i = 1:numel(sd.thresholds)
-                    sensor.addThreshold(sd.thresholds{i});
-                end
-            end
-            sensor.resolve();
+        function sd = buildSensorData(~, sd)
+            %BUILDSENSORDATA Validate sensor data struct fields.
+            %   Returns the struct with guaranteed .name, .t, .y fields.
+            if ~isfield(sd, 'name'), sd.name = 'unknown'; end
+            if ~isfield(sd, 't'), sd.t = []; end
+            if ~isfield(sd, 'y'), sd.y = []; end
         end
 
         function scrollTableToRow(obj, row)

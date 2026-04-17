@@ -1,296 +1,221 @@
-# Technology Stack
+# Stack Research — v2.0 Tag-Based Domain Model
 
-**Project:** FastSense Advanced Dashboard (nested layouts, tooltips, detachable widgets)
-**Researched:** 2026-04-01
-**Scope:** Subsequent milestone — adding advanced UI patterns to existing dashboard engine
-
----
-
-## Context: What the Codebase Already Uses
-
-The existing Dashboard engine is built entirely on MATLAB's traditional `figure`/`uipanel`/`uicontrol` API — not the App Designer (`uifigure`) API. Specifically:
-
-- `figure(...)` — top-level window
-- `uipanel(...)` — widget containers and layout areas
-- `uicontrol(...)` — buttons, sliders, text labels, togglebuttons
-- `axes(...)` — plot areas inside `uipanel`
-- MATLAB `timer` — live refresh loop
-- Normalized `Units` throughout — all positions as `[x y w h]` in `[0..1]`
-
-**All new features must stay within this `figure`/`uicontrol` surface.** Mixing in `uifigure` (App Designer) would break the entire graphics hierarchy: `uifigure` and `figure` cannot share children, so widgets rendered inside one cannot be moved into the other. This is a hard constraint.
+**Domain:** Pure-MATLAB sensor-data dashboard engine — adding a Trendminer-style unified `Tag` root that retrofits Sensor / Threshold / StateChannel and adds MonitorTag (derived 0/1/severity time-series) and CompositeTag (aggregated tag) primitives, with events bound to tags.
+**Researched:** 2026-04-16
+**Confidence:** HIGH (verified against existing codebase patterns in `libs/SensorThreshold/`, `libs/Dashboard/DashboardWidget.m`, `libs/EventDetection/DataSource.m`, `libs/FastSense/FastSenseDataStore.m`, plus Octave classdef compatibility docs)
 
 ---
 
-## Recommended APIs and Patterns for Each Feature
+## Summary
 
-### 1. Tabbed Layout Sections
+**The existing pure-MATLAB toolchain is sufficient for v2.0. No new dependencies are required, and none should be added.** Every capability the milestone needs (abstract base contracts, key→object registry, derived time-series persistence, batched violation kernels, event-binding maps) already exists in the codebase. The right move is to *reuse* the proven primitives:
 
-**Chosen approach:** Custom tab buttons via `uicontrol` + per-tab `uipanel` visibility toggling
+- `methods (Abstract)` for the `Tag` root (already in production via `DashboardWidget`)
+- `containers.Map` for `TagRegistry` (already in production via `SensorRegistry` and `ThresholdRegistry`)
+- `FastSenseDataStore` for `MonitorTag` derived-series persistence (chunked SQLite, already used by `Sensor.toDisk()`)
+- Existing MEX kernels (`compute_violations_batch`, `binary_search_mex`, `to_step_function_mex`) for MonitorTag derivation
+- Throw-on-base-method pattern (already in `DataSource.fetchNew`) as the Octave-safe fallback when `Abstract` quirks bite
 
-**What to use:**
-- `uicontrol('Style', 'pushbutton', ...)` — one button per tab in a thin header bar
-- One `uipanel` per tab for content, same `Position`, toggled with `'Visible', 'on'/'off'`
-- Active tab button distinguished by `BackgroundColor`
-
-**Why this approach and not `uitabgroup`/`uitab`:**
-- `uitabgroup` is a `uifigure`-only component in modern MATLAB. In traditional `figure` contexts, `uitabgroup` exists but its visual integration with custom themes is poor — it renders with system-native styling that ignores `BackgroundColor`/`ForegroundColor` on many platforms and cannot be styled to match the dashboard's dark/light themes.
-- The codebase already implements this exact pattern in `GroupWidget.renderTabbedChildren()`. The custom button approach gives full theming control and works identically in MATLAB R2020b+ and GNU Octave 7+. **The pattern is already proven** — no new API needed.
-- `uitab`/`uitabgroup` also have Octave compatibility gaps; `uicontrol` pushbuttons are universally supported.
-
-**Confidence:** HIGH — verified by reading existing `GroupWidget.m` implementation.
+**Anti-additions:** do NOT introduce `dictionary` (R2022b), do NOT pull in `matlab.mixin.Heterogeneous`, do NOT add a tag-graph database, do NOT add JSON-schema validators, do NOT spin up new MEX kernels for v2.0. Each is justified below.
 
 ---
 
-### 2. Collapsible Sections
+## Recommended Stack
 
-**Chosen approach:** Toggle button in header + `Visible` toggle on content `uipanel` + grid reflow
+### Core Technologies (all pre-existing — KEPT, not added)
 
-**What to use:**
-- `uicontrol('Style', 'pushbutton', ...)` in the header bar as the collapse toggle
-- Set `hChildPanel.Visible = 'off'` to hide content; `'on'` to restore
-- When collapsing: record `ExpandedHeight`, set `Position(4) = 1` (minimum grid height)
-- When expanding: restore `Position(4)` from `ExpandedHeight`
-- After state change: call `DashboardLayout.reflow(hFigure, widgets, theme)` to re-pack the grid
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| MATLAB `classdef` (handle classes) | R2020b+ | `Tag` abstract root + concrete subclasses (`SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`) | Identity semantics required for shared tag references across sensors/widgets/events; matches `Threshold`/`Sensor` pattern |
+| `methods (Abstract)` block | R2008a / Octave 4.0+ (partial) | Declare contract methods on `Tag` root: `valueAt(t)`, `getRange(xMin, xMax)`, `getKey()` | Already in production: `DashboardWidget` declares `render`, `refresh`, `getType` as Abstract and works on Octave |
+| `containers.Map` | All MATLAB / Octave 4.0+ | `TagRegistry` (single map, char→Tag handle) replacing `SensorRegistry` + `ThresholdRegistry` | Drop-in: identical API to existing registries; consolidating to one map removes parallel-singleton drift |
+| `FastSenseDataStore` (SQLite via mksqlite) | Bundled | Persist `MonitorTag` derived (X, Y) signals identically to `SensorTag` raw data | Already chunk-indexed, WAL-mode, pyramid-cached; `toDisk()` round-trips work today; reuse means MonitorTag plots/zooms at SensorTag speed |
+| `compute_violations_batch` (MEX + MATLAB fallback) | Bundled | MonitorTag derivation: condition + value-vs-threshold → 0/1/severity samples | Already produces `(X, Y)` violation pairs in batched groups; MonitorTag is structurally identical (one rule, full data range) |
+| `binary_search_mex` | Bundled | Map event time-ranges to tag-data index ranges for overlay rendering | Already used in `Sensor.resolve()` segment lookup; same API works for event-band index math |
+| `to_step_function_mex` | Bundled | MonitorTag step-function plotting (state stays at value until next change) | Existing kernel converts `(X, Y)` to step function; MonitorTag's 0/1 signal is a step function by nature |
+| `methods (Static)` registries | All MATLAB / Octave 4.0+ | `TagRegistry.get/register/unregister/list/findByTag` | Already in production via `ThresholdRegistry`; same API surface |
 
-**Critical gap identified in existing code:** `GroupWidget.collapse()` and `expand()` already set `Position(4)` and toggle `hChildPanel.Visible`, but they contain a `TODO` comment: `% TODO: call DashboardLayout.reflow() — requires engine-level wiring`. This wiring is the remaining work. The GroupWidget needs a reference to the DashboardEngine (or a callback to it) so collapse/expand can trigger `reflow()`.
+### Supporting Libraries / Patterns (all pre-existing)
 
-**Implementation pattern:**
-```
-% In GroupWidget, add property:
-EngineRef = []    % weak reference to owning DashboardEngine
+| Library | Purpose | When to Use in v2.0 |
+|---------|---------|---------------------|
+| `properties (Dependent)` | `Tag.Label` alias on `Name`, `Tag.IsUpper` on `Direction` | For backward-compat aliases inside Tag subclasses; partial Octave support already works for `Threshold.Label` |
+| `properties (SetAccess = private)` | Cached fields like `CachedConditionKey`, `IsUpper`, derived `(X, Y)` for MonitorTag | Existing pattern from `ThresholdRule`; preserves invariants |
+| `persistent` variable singleton | `TagRegistry.catalog()` cache | Existing pattern from both registries; survives across calls without globals |
+| Throw-on-base-method (`error('Class:abstract', ...)`) | Defensive fallback for any abstract methods Octave fails to enforce | Existing pattern in `DataSource.fetchNew`; redundant with `methods (Abstract)` but cheap insurance |
+| MATLAB timer (already wrapped by `DashboardEngine`) | Live MonitorTag refresh on the same tick as the dashboard | No new timer — MonitorTag derivation runs inside the existing `onLiveTick` single pass |
+| `jsonencode` / `jsondecode` | Tag → struct → JSON round-trip for serialization | Already used by `DashboardSerializer` and `CompositeThreshold.toStruct/fromStruct`; same shape works for Tags |
 
-% In collapse()/expand(), after toggling Visible:
-if ~isempty(obj.EngineRef)
-    theme = DashboardTheme(obj.EngineRef.Theme);
-    obj.EngineRef.Layout.reflow(obj.EngineRef.hFigure, ...
-        obj.EngineRef.Widgets, theme);
-end
-```
+### Development Tools (no change)
 
-**Why not CSS-style animation:** MATLAB has no built-in animation for panel resize. Instant resize (no tween) is appropriate and consistent with the rest of the UI.
-
-**Confidence:** HIGH — pattern is already 80% implemented; gap is well-defined.
-
----
-
-### 3. Multi-Page Navigation
-
-**Chosen approach:** Top-level page concept in `DashboardEngine` with per-page widget sets and a page-selector control in the toolbar
-
-**What to use:**
-- Add `Pages` property to `DashboardEngine` — cell array of structs, each with `name` and `widgets` cell array
-- Add `ActivePage` index/name property
-- Page selector: `uicontrol('Style', 'popupmenu', ...)` or a row of `pushbutton` controls in `DashboardToolbar`
-- On page switch: hide all current widget panels (`set(w.hPanel, 'Visible', 'off')`), show the new page's panels
-- Lazy realization: unrealized widgets on inactive pages are not rendered until page is first shown
-
-**Why `popupmenu` for page selector:**
-- Compact, scales to many pages without consuming toolbar width
-- Single `uicontrol` call, no layout arithmetic
-- Works in MATLAB R2020b+ and Octave
-
-**Alternative (pushbuttons per page):** Better for 2-4 pages, matches the tab button aesthetic already used in `GroupWidget`. Use this when page count <= 5; fall back to `popupmenu` for more.
-
-**Serialization:** `DashboardSerializer` needs a `pages` key alongside `widgets` in the JSON schema. Backward compatibility: if `pages` key is absent, all widgets go to a single default page (current behavior preserved).
-
-**Confidence:** MEDIUM — pattern is straightforward but multi-page serialization is new territory; the existing `DashboardSerializer` JSON schema will need careful extension.
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| MISS_HIT (`mh_style`, `mh_lint`, `mh_metric`) | Style + complexity gate | No config changes; new `Tag*` classes follow existing PascalCase |
+| `tests/run_all_tests.m` | Test runner | New `TestTag*.m` suites slot into the existing discovery |
+| `install.m` | Path setup + MEX build | Unchanged — no new MEX, no new external deps to wire |
 
 ---
 
-### 4. Per-Widget Info Tooltips
+## Dependencies — Kept / Added / Not Added
 
-**Two sub-features with different APIs:**
+### KEPT (no change)
 
-#### 4a. Hover tooltip (passive)
+| Dependency | Reason |
+|------------|--------|
+| MATLAB R2020b+ / Octave 7+ | Project invariant; nothing in v2.0 needs newer features |
+| Bundled `mksqlite` + SQLite3 amalgamation | MonitorTag persistence reuses `FastSenseDataStore` |
+| All eight existing MEX kernels (`lttb`, `minmax`, `compute_violations`, `binary_search`, `violation_cull`, `to_step_function`, `build_store`, `resolve_disk`) | MonitorTag derivation = scoped `compute_violations` over the full range; event-overlay index math = `binary_search`; step-plot = `to_step_function` |
+| MATLAB built-ins: `containers.Map`, `classdef`, `properties (Dependent)`, `methods (Abstract)`, `methods (Static)`, `persistent`, `jsonencode`/`jsondecode`, MATLAB `timer` | All exercised in production today |
 
-**What to use:** `uicontrol` `TooltipString` property
+### ADDED
 
-```matlab
-uicontrol(hPanel, 'Style', 'pushbutton', 'String', 'i', ...
-    'TooltipString', widget.Description, ...
-    'Units', 'normalized', 'Position', [0.90 0.85 0.08 0.13], ...
-    'FontSize', 7, 'FontWeight', 'bold')
-```
+**None.** The v2.0 milestone does not require any new MATLAB toolboxes, MEX kernels, Python packages, or third-party libraries.
 
-- Set on the info icon `uicontrol` inside each widget's `hPanel`
-- `TooltipString` is a native MATLAB property on all `uicontrol` objects — no additional machinery required
-- Tooltip appears automatically on hover after a system-defined delay; no `ButtonDownFcn` needed
+If anything is "added," it is purely *new MATLAB classes inside `libs/SensorThreshold/`* (the `Tag` hierarchy) — these are first-party source code, not dependencies.
 
-**Why `TooltipString` and not a custom overlay:**
-- Zero implementation cost — it's a single property set
-- Works in MATLAB R2020b+ and Octave 7+
-- Native OS tooltip styling; no z-order issues, no need to manage a floating panel
+### NOT ADDED (anti-dependencies — rationale matters for the roadmap)
 
-**Confidence:** HIGH — `TooltipString` is a documented, stable `uicontrol` property. Already used in the existing codebase: `DashboardToolbar.m` line 104 sets `'TooltipString', 'Reset all widgets to global time range'` on the Sync button.
-
-#### 4b. Click-to-expand description (richer text)
-
-For widgets where `Description` contains longer text or the user wants persistent display:
-
-**What to use:** A small modal `figure` window (not `uifigure`) opened via a button callback
-
-```matlab
-function showTooltipPopup(widget)
-    f = figure('Name', [widget.Title, ' — Info'], ...
-        'NumberTitle', 'off', 'MenuBar', 'none', ...
-        'ToolBar', 'none', 'Resize', 'on', ...
-        'Units', 'normalized', ...
-        'OuterPosition', [0.3 0.4 0.4 0.2]);
-    uicontrol(f, 'Style', 'text', ...
-        'Units', 'normalized', 'Position', [0.02 0.05 0.96 0.90], ...
-        'String', widget.Description, ...
-        'HorizontalAlignment', 'left', ...
-        'FontSize', 10);
-end
-```
-
-**Recommended default:** Use `TooltipString` only (4a). The click-to-expand popup is optional and should only be added if user testing shows `TooltipString` truncates descriptions too aggressively (MATLAB truncates at ~500 chars).
-
-**Confidence:** HIGH — both mechanisms are established MATLAB patterns.
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| MATLAB `dictionary` (R2022b+) | Project targets R2020b minimum; Octave has **no native `dictionary`** as of 11.1.0 (Feb 2026); only an external `datatypes` package provides one. Switching breaks the Octave invariant. | Stay on `containers.Map`. Existing perf is fine — registries are O(few-hundred) entries and lookups happen at config time, not in hot loops. |
+| `matlab.mixin.Heterogeneous` | The Octave wiki explicitly does not implement heterogeneous classdef arrays. Using it for `Tag[]` arrays would silently break Octave. | Use `cell` arrays of `Tag` handles (current pattern: `Sensor.Thresholds = {}`). One indirection, fully compatible. |
+| `matlab.mixin.Copyable` | Octave classdef mixin support is incomplete. Tags are *handles* by design (shared reference is the whole point of a registry); deep-copy is not a Tag-system requirement. | If a clone is ever needed, use the existing `toStruct` → `fromStruct` round-trip pattern (already used by `DashboardEngine` for widget detach mirrors). |
+| `matlab.mixin.SetGet` | Same Octave compatibility risk. Adds no value here — public properties + `set.X` validators (already used in `CompositeThreshold.set.AggregateMode`) cover all needed validation. | Keep using `set.PropertyName` validator methods directly on the class. |
+| `Sealed = true` class attribute | Octave classdef wiki confirms partial classdef-attribute support; behavior on `Sealed` is undocumented for the target Octave versions. The Tag hierarchy explicitly *needs* subclassing, so `Sealed` would be wrong anyway. | Don't seal. Document the contract in class header comments (existing convention). |
+| Enumeration classes (`enumeration` block) | Octave parses `enumeration` blocks but does nothing with them. Using one for `AggregateMode` ('and'/'or'/'majority'/'count'/'severity') or `Direction` ('upper'/'lower') would silently no-op on Octave. | Use the existing `properties (Constant)` + `set.X` validator pattern (see `ThresholdRule.DIRECTIONS` and `CompositeThreshold.set.AggregateMode`). |
+| `events`/`listeners` for tag-change notification | Octave wiki: events/listeners is "parsed but nothing done with it." Using listeners to invalidate caches when a child Tag changes will break on Octave. | Cache invalidation via explicit method calls (existing pattern: `Sensor.addThreshold` calls `obj.DataStore.clearResolved()` directly). The tag-update graph is shallow — the explicit pattern stays readable. |
+| `validateattributes` / `arguments` blocks | `arguments` block is R2019b but Octave support is patchy. Existing codebase uses manual `switch varargin{i}` parsing everywhere. | Continue manual name-value parsing. Mirror the constructor pattern from `Sensor`/`Threshold`/`CompositeThreshold` exactly. |
+| New MEX kernel for tag aggregation (CompositeTag AND/OR/MAJORITY) | The aggregation operation is *one logical pass over already-resolved child tags*. For typical N (a few dozen children at the leaf, hundreds at the root), MATLAB-vectorized `all`/`any`/`sum` is sub-millisecond. The mex-simd-opportunities-RESEARCH.md ranking already evaluated similar candidates and ranked aggregations LOW priority. | Pure MATLAB: `all(states == 1)` for AND, `any(...)` for OR, `sum(...)/n > 0.5` for MAJORITY. Add a MEX kernel later only if profiling on a real dashboard shows it dominant. |
+| Tag-graph database (Neo4j, in-process graph lib) | The Tag DAG is small (≤ low thousands of nodes), in-memory, and traversed via direct handle references. A graph database would be overkill and would smash the "no external deps" invariant. | `containers.Map` + handle-class parent/child references. Walk via simple recursion (already done in `CompositeThreshold.computeStatus`). |
+| JSON-schema validation library (e.g., MATLAB JSON Schema FX submission) | Tag schemas are stable, defined in code, and serialized/deserialized only by code we own. Round-trip tests are sufficient. | Existing `toStruct`/`fromStruct` pattern; defensive `isfield` checks (already done in `CompositeThreshold.fromStruct`). |
+| New persistence backend (Parquet, HDF5, MAT v7.3) for MonitorTag | `FastSenseDataStore` already handles the same data shape (1-D time series of doubles), already chunks for OOM safety, already has WAL for live use, already has pyramid downsampling. Switching backends loses years of tuning. | Reuse `FastSenseDataStore` for MonitorTag derived signals — same constructor signature `(x, y)`. |
+| Python event bus for tag-change propagation | Pulls in async + IPC complexity; v2.0 is single-process MATLAB. WebBridge stays scoped to read-only browser visualization. | Keep change propagation synchronous in MATLAB. The `DashboardEngine.onLiveTick` already coordinates per-tick updates. |
 
 ---
 
-### 5. Detachable Live-Mirrored Widgets
+## Integration Points (How v2.0 Hooks Into Existing Stack)
 
-**Chosen approach:** Clone widget into a new `figure` window; hook into the `DashboardEngine.LiveTimer` via a second per-widget timer or a shared timer list
+### MEX kernel reuse
 
-**What to use:**
+| Existing Kernel | v2.0 Use Case |
+|-----------------|---------------|
+| `compute_violations_batch` (MEX + MATLAB fallback in `libs/SensorThreshold/private/`) | **MonitorTag derivation core.** A MonitorTag is `(parentTag, condition, threshold)`. Derivation = run `compute_violations_batch` over the parent's full data, with one rule, then convert "violation indices" into a 0/1 (or severity) `Y` series. The kernel already returns `(violX, violY)` pairs; MonitorTag wraps that in a `(allX, derivedY)` series. |
+| `compute_violations_disk` (MATLAB wrapper around the kernel) | MonitorTag over a disk-backed parent SensorTag. Already memory-safe (segment-by-segment). |
+| `binary_search_mex` | Event ↔ tag binding: given an event with `(tStart, tEnd)`, find tag-data index range for overlay. Already the way `Sensor.resolve` does segment lookup. |
+| `to_step_function_mex` | MonitorTag plot: 0/1 signal renders as a step function. Already the kernel used by `Sensor.resolve` for state-band rendering. |
+| `lttb_core_mex`, `minmax_core_mex` | Downsampling MonitorTag plots in FastSense. No change — FastSense calls these on whatever `(X, Y)` the tag exposes via `getRange`. |
+| `violation_cull_mex` | If MonitorTag is added as an overlay on a SensorTag plot, this kernel culls dense overlay markers. Already used by FastSense. |
+| `resolve_disk_mex`, `build_store_mex` | MonitorTag persistence to `FastSenseDataStore` round-trip. Same path as `Sensor.toDisk()`. |
 
-#### 5a. Creating the detached window
+**Net new MEX kernels for v2.0: zero.** The tag system is a refactor + composition layer over already-MEX-accelerated primitives.
 
-```matlab
-function hDetached = detach(widget, engine)
-    hDetached = figure('Name', ['[Detached] ', widget.Title], ...
-        'NumberTitle', 'off', ...
-        'Units', 'normalized', ...
-        'OuterPosition', [0.1 0.1 0.5 0.5], ...
-        'CloseRequestFcn', @(~,~) onDetachClose(widget));
+### `FastSenseDataStore` reuse for MonitorTag
 
-    % Create a full-window uipanel as render target
-    hp = uipanel(hDetached, 'Units', 'normalized', ...
-        'Position', [0 0 1 1], 'BorderType', 'none');
+`FastSenseDataStore(x, y)` is already used by `Sensor.toDisk()`. MonitorTag derived series have identical shape: 1-D `X` (datenum) + 1-D `Y` (double). The constructor signature works as-is. The pyramid + WAL + chunk-overlap-query infrastructure transfers verbatim.
 
-    % Deep-clone the widget
-    wClone = widget.cloneForDetach();
-    wClone.render(hp);
+**Edge cases to confirm during phase implementation:**
+- MonitorTag's `Y` is binary {0,1} or low-cardinality {0,1,2}; the existing pyramid (designed for sensor-noise data) still works but is slightly wasteful. Acceptable — MonitorTag series are smaller than parent sensor series, so the wasted bytes are negligible.
+- `addColumn`/`getColumn` API can store a "severity" column alongside the 0/1 signal if the milestone wants it.
 
-    % Register clone with engine for live updates
-    engine.registerDetachedWidget(wClone, hDetached);
-end
-```
+### `containers.Map` for `TagRegistry`
 
-#### 5b. Live mirroring strategy — shared timer (recommended)
+Direct port of the existing `ThresholdRegistry` (which is itself a port of `SensorRegistry`). Combined: one `TagRegistry` replaces both. Same `catalog()` persistent-variable singleton, same `get`/`register`/`unregister`/`list`/`printTable`/`viewer` API. Add `findByType(cls)` and `findByTag(tagName)` (last word "tag" here means the Trendminer-style label, not the `Tag` object — minor naming overlap to flag for the roadmap).
 
-**Do not create a separate timer per detached widget.** MATLAB timers are expensive system objects; excessive timers degrade overall performance and the command-line timer list becomes cluttered.
+### Abstract-class contract for `Tag` root
 
-**Instead:** Extend `DashboardEngine.onLiveTick()` to also refresh a `DetachedWidgets` list:
+Use the **same dual-pattern** as the existing codebase:
+1. Declare contract methods in `methods (Abstract)` block (works on MATLAB; partial on Octave per wiki bug #51377).
+2. Provide a concrete base implementation that **throws** `error('Tag:abstract', 'getRange must be implemented by subclass')` — defensive fallback for Octave's partial enforcement. (This is exactly how `DataSource.fetchNew` is structured.)
 
-```matlab
-% DashboardEngine additions:
-DetachedWidgets = {}    % cell array of {widget, hFigure} pairs
-
-function registerDetachedWidget(obj, widget, hFig)
-    obj.DetachedWidgets{end+1} = {widget, hFig};
-end
-
-% In onLiveTick(), after the main refresh loop:
-for i = 1:numel(obj.DetachedWidgets)
-    entry = obj.DetachedWidgets{i};
-    w = entry{1};
-    hf = entry{2};
-    if ishandle(hf)
-        w.refresh();
-    else
-        % Figure was closed — prune entry
-        obj.DetachedWidgets(i) = [];
-    end
-end
-```
-
-This piggybacks on the existing timer; detached widgets get the same `LiveInterval` refresh as the dashboard. Overhead is proportional to the number of detached widgets, which in practice is 1-3.
-
-#### 5c. Widget cloning
-
-Each `DashboardWidget` subclass needs a `cloneForDetach()` method. The base class should provide a default implementation using `toStruct()` + `fromStruct()` (the serialization round-trip is already implemented). Custom widgets with non-serializable state (e.g., `FastSenseWidget` with a live `FastSenseObj`) need to override `cloneForDetach()` to re-bind to the same data source rather than deep-copying the MATLAB graphics handle.
-
-```matlab
-% Base class default (works for stateless widgets):
-function w = cloneForDetach(obj)
-    s = obj.toStruct();
-    w = DashboardSerializer.createWidgetFromStruct(s);
-end
-
-% FastSenseWidget override (rebind, don't copy graphics):
-function w = cloneForDetach(obj)
-    w = FastSenseWidget('Sensor', obj.Sensor, ...
-        'Title', obj.Title, 'Position', [1 1 24 6]);
-end
-```
-
-**Why `figure` not `uifigure` for detached window:** Same constraint as above — widgets are rendered into traditional `figure`/`uipanel` hierarchies. A `uifigure` cannot host `uipanel`/`axes` children created with `figure`-API calls.
-
-**Confidence:** HIGH for the timer-sharing approach. MEDIUM for `cloneForDetach()` — the `toStruct()`/`fromStruct()` round-trip works for most widgets but `FastSenseWidget` and `RawAxesWidget` have non-serializable state that requires explicit overrides.
+Since the codebase already ships `DashboardWidget` with `methods (Abstract)` and runs on Octave 7+/9+ in CI, this pattern is **proven**, not speculative. The throw-fallback adds belt to the suspenders.
 
 ---
 
-## What NOT to Use
+## Octave Compatibility Risks (Identified, with Mitigations)
 
-| Component | Reason to Avoid |
-|-----------|-----------------|
-| `uitabgroup` / `uitab` | `uifigure`-only in modern MATLAB; cannot be themed to match dashboard colors; Octave support gaps. Custom button tabs already exist and work. |
-| `uifigure` | Incompatible graphics hierarchy — cannot host children created via `figure` API. Would require rewriting the entire dashboard. |
-| `uipanel` `Title` property for collapsible headers | The Title renders as a labeled border frame, not a clickable header bar. Cannot be used as a button. |
-| `uilabel` / `uibutton` (App Designer components) | Only work inside `uifigure`. Any `ui*` component from R2016b+ App Designer is `uifigure`-only. |
-| Separate `timer` per detached widget | Creates O(n) timers; MATLAB timer overhead is significant; adds cleanup complexity on figure close. |
-| `msgbox` / `helpdlg` for tooltips | Modal, blocking — destroys live dashboard UX. `TooltipString` is non-blocking and sufficient. |
-| `javaframe` hacks for custom tooltips | Removed in MATLAB R2023b+; never supported in Octave. |
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| `methods (Abstract)` not enforced on Octave for some attribute combinations (Octave bug #51377) | LOW (existing `DashboardWidget` works) | Subclass forgets to implement → silent NOOP at runtime | Pair Abstract block with concrete throw-stub in `Tag` base — established pattern in `DataSource.fetchNew` |
+| Heterogeneous arrays of mixed Tag subclasses via `[t1, t2, t3]` | HIGH on Octave (no `matlab.mixin.Heterogeneous`) | Concatenation falls back to comma-list or errors | **Mandate cell arrays everywhere.** Existing pattern: `Sensor.Thresholds = {}`, `CompositeThreshold.children_ = {}`. Never use `[]` to collect Tag objects. |
+| `properties (Dependent)` partial support | LOW (already works for `Threshold.Label`) | Some attribute combos fail | Keep dependent properties simple — single `get.X` returning a plain value. Avoid `Dependent + Constant` and similar exotic combinations. |
+| `events`/listeners parsed-but-ignored | HIGH if used | Tag-change cascade silently breaks | Banned outright (see anti-dependencies above). Use explicit method calls for invalidation. |
+| `enumeration` blocks parsed-but-ignored | HIGH if used | `AggregateMode` validation silently passes any string | Banned. Use `set.AggregateMode` validator (already pattern in `CompositeThreshold`). |
+| `dictionary` type unavailable on Octave | CERTAIN | Code that uses it errors at parse time | Banned. Stay on `containers.Map`. |
+| `arguments` blocks patchy on Octave | MEDIUM | Constructor arg validation diverges between MATLAB and Octave | Stick with manual name-value parsing (existing pattern in every constructor). |
+| Handle identity check via `==` on Octave | LOW (works for `handle` subclasses) | Self-reference detection fails | Use `isequal(t, obj)` — already done in `CompositeThreshold.addChild` self-reference guard with the comment "isequal is used for Octave handle-identity safety". |
 
----
-
-## Alternatives Considered
-
-| Feature | Recommended | Alternative | Why Not |
-|---------|-------------|-------------|---------|
-| Tabs | Custom `uicontrol` pushbuttons (existing) | `uitabgroup` | `uifigure`-only styling; Octave gaps |
-| Tooltip | `uicontrol` `TooltipString` | Custom floating `uipanel` overlay | Z-order management in figure is fragile; `TooltipString` is native and free |
-| Detach window | New `figure()` | `uifigure()` | Incompatible with existing graphics hierarchy |
-| Live mirror | Extend `DashboardEngine.onLiveTick()` | Per-widget `timer` | Timer proliferation; cleanup complexity |
-| Page navigation | `popupmenu` in toolbar | New toolbar row | Toolbar row consumes permanent vertical space; popupmenu is compact |
-| Collapse reflow | `DashboardLayout.reflow()` callback | Partial re-layout | `reflow()` already exists; partial layout would diverge from existing position-tracking logic |
+**Bottom line:** the Octave invariant is preserved by following the patterns already in the codebase. The risk vector is *deviating* from those patterns, not the new milestone scope itself.
 
 ---
 
-## Version Compatibility Notes
+## Native MATLAB Features for the Tag Root Contract — Recommendations
 
-| API | MATLAB min | Octave min | Notes |
-|-----|------------|------------|-------|
-| `uipanel` + `uicontrol` | R2006a | 4.0 | Core API; stable |
-| `uicontrol` `TooltipString` | R2006a | 4.0 | Stable; may truncate long strings |
-| `timer` (ExecutionMode fixedRate) | R2008a | 4.0 | Already used in `LiveEventPipeline` |
-| `figure` `WindowScrollWheelFcn` | R2007a | 5.0 | Already used in `DashboardLayout` |
-| `ishandle()` | All | All | Used throughout for validity checks |
-| `uitabgroup` / `uitab` (native `figure`) | R2014b | 5.0 partial | **Do not use** — theming broken |
+For the `Tag` abstract root contract, use these (all proven in the codebase or low-risk on Octave):
 
-The existing codebase targets MATLAB R2020b+ and Octave 7+. All recommended APIs above are available in both environments at these versions.
+| Feature | Use For | Justification |
+|---------|---------|---------------|
+| `classdef Tag < handle` | Root class | Identity semantics required (registry shares references); `handle` works on Octave |
+| `methods (Abstract)` block | Required interface methods (`valueAt`, `getRange`, `getKey`, `getDisplayName`) | Pattern proven in `DashboardWidget`; pair with throw-stubs for Octave belt-and-braces |
+| `methods (Static)` `fromStruct` | Deserialization (subclasses override) | Existing pattern in `CompositeThreshold.fromStruct` |
+| `properties (SetAccess = private)` | Cached fields (e.g., `CachedConditionKey`, `IsUpper`, derived series cache) | Existing pattern in `ThresholdRule` and `Threshold` |
+| `properties (Dependent)` | Backward-compat aliases (`Label` → `Name`) | Already proven in `Threshold.Label` |
+| `properties (Constant)` for enumerated string sets | `Tag.VALID_AGGREGATE_MODES`, `Tag.VALID_DIRECTIONS` | Existing pattern in `ThresholdRule.DIRECTIONS` |
+| `set.PropertyName` validators | Validate enumerated assignments at set time | Existing pattern in `CompositeThreshold.set.AggregateMode` |
+| `properties (Access = private)` with trailing underscore | Internal state (`children_`, `conditions_`) | Existing convention across the codebase |
+
+Avoid (per anti-deps): `matlab.mixin.*`, `Sealed`, `enumeration`, `events`, `arguments` blocks.
 
 ---
 
-## Implementation Priority Mapping
+## Stack Patterns by Variant
 
-| Feature | API Complexity | Existing Foundation | Work Remaining |
-|---------|---------------|--------------------|-----------------------|
-| Info tooltips | Very low | `TooltipString` already used in toolbar | Add `TooltipString` to info icon in widget header |
-| Collapsible reflow | Low | `collapse()`/`expand()` exist; `reflow()` exists | Wire `EngineRef` callback into `GroupWidget` |
-| Tabbed sections | Low | `renderTabbedChildren()` fully implemented | Polish/bug-fix only; no new API needed |
-| Detachable widgets | Medium | `figure`, `uipanel`, `timer` all used | Add `cloneForDetach()`, `registerDetachedWidget()`, detach button in widget header |
-| Multi-page nav | Medium | `DashboardEngine` widget list already per-engine | Add `Pages` struct, page selector control, serialization extension |
+**If MATLAB R2020b only (target floor):**
+- All listed primitives available. No further work.
+
+**If targeting Octave 7+/9+/11+ (also a project invariant):**
+- Use cell arrays for any Tag collection (never `[Tag1; Tag2]`).
+- Pair every `methods (Abstract)` with a throw-stub.
+- Use `isequal(a, b)` for handle identity, never `a == b`.
+- Use manual name-value parsing in constructors.
+- Use `properties (Constant)` + `set.X` validator for enumerations, never `enumeration` blocks.
+
+**If a future MonitorTag has very high sample count (>10M derived samples):**
+- Same path as `Sensor.toDisk()` — call `monitor.toDisk()` to push to `FastSenseDataStore`.
+- All FastSense rendering already handles disk-backed signals via `getRange`.
+
+**If CompositeTag depth > ~50 levels:**
+- Recursion in `computeStatus` could approach MATLAB's recursion limit. **Mitigation, only if observed:** convert recursion to iterative DFS with an explicit work-list. Not a v2.0 problem unless usage shows it.
+
+---
+
+## Version Compatibility (Targets)
+
+| Component | Required | Confirmed on |
+|-----------|----------|--------------|
+| MATLAB | R2020b+ | Existing project floor; CI matrix |
+| GNU Octave | 7+ | Project invariant; CI Windows uses Octave 9.2.0 |
+| `containers.Map` | All listed versions | Existing `SensorRegistry`/`ThresholdRegistry` work today |
+| `methods (Abstract)` | All listed versions (Octave: partial — pair with throw-stub) | Existing `DashboardWidget` works on the CI matrix |
+| `properties (Dependent)` | All listed versions (Octave: partial) | Existing `Threshold.Label` works |
+| `mksqlite` (bundled) | All listed versions | Existing `FastSenseDataStore` works |
 
 ---
 
 ## Sources
 
-- Codebase analysis: `/Users/hannessuhr/FastPlot/libs/Dashboard/` (DashboardEngine.m, DashboardWidget.m, GroupWidget.m, DashboardLayout.m, DashboardToolbar.m) — HIGH confidence, read directly
-- MATLAB `uicontrol` `TooltipString` usage: confirmed in `DashboardToolbar.m` line 104 — HIGH confidence
-- `uitabgroup` theming limitations in traditional `figure`: training data — MEDIUM confidence (flag for validation if Octave + styled tabs are ever needed)
-- Timer per-widget anti-pattern: inferred from existing `LiveEventPipeline` single-timer design — HIGH confidence (consistent with MATLAB best practices)
-- `uifigure` / `figure` hierarchy incompatibility: MATLAB fundamental constraint (handle graphics vs. web-based graphics systems) — HIGH confidence
+- `/Users/hannessuhr/FastPlot/.claude/worktrees/reverent-bohr/CLAUDE.md` — project tech stack, conventions, and Octave/MATLAB invariant (HIGH confidence — first-party)
+- `/Users/hannessuhr/FastPlot/.claude/worktrees/reverent-bohr/.planning/PROJECT.md` — milestone scope, "no users / no backward compat" constraint, deferred features (HIGH)
+- `libs/SensorThreshold/Sensor.m`, `Threshold.m`, `CompositeThreshold.m`, `ThresholdRegistry.m`, `SensorRegistry.m`, `ThresholdRule.m` — current registry, validator, dependent-property, set-validator, and persistent-singleton patterns (HIGH — direct source inspection)
+- `libs/Dashboard/DashboardWidget.m` — proof that `methods (Abstract)` works on the project's Octave matrix (HIGH — direct source inspection)
+- `libs/EventDetection/DataSource.m` — proof of throw-on-base-method pattern as Octave-safe abstract fallback (HIGH — direct source inspection)
+- `libs/FastSense/FastSenseDataStore.m` — confirmation that the SQLite-backed store handles arbitrary `(x, y)` signals (used today by `Sensor.toDisk`) and is reusable for MonitorTag (HIGH — direct source inspection)
+- `.planning/research/mex-simd-opportunities-RESEARCH.md` — prior research that already evaluated MEX-kernel candidates and ranked aggregation operations LOW priority; informs the "no new MEX kernel" decision (HIGH — first-party prior research)
+- [Octave Classdef wiki](https://wiki.octave.org/Classdef) — authoritative status of `Abstract` (partial, bug #51377), `enumeration` (parsed-no-op), `events` (parsed-no-op), heterogeneous arrays (not implemented) (HIGH — verified via WebFetch 2026-04-16)
+- [GNU Octave 11.1.0 release notes / built-in data types](https://docs.octave.org/latest/Built_002din-Data-Types.html) — confirms no native `dictionary` in core Octave 11 as of Feb 2026; only the external `datatypes` package provides one (HIGH — verified via WebSearch 2026-04-16)
+- [MATLAB `dictionary` docs](https://www.mathworks.com/help/matlab/ref/dictionary.html) — confirms `dictionary` is R2022b+, above the R2020b project floor (HIGH — Mathworks official)
+- [MathWorks `matlab.mixin.Heterogeneous`](https://www.mathworks.com/help/matlab/ref/matlab.mixin.heterogeneous-class.html) — MATLAB-only feature; cross-referenced with Octave wiki to confirm no Octave equivalent (HIGH)
+
+---
+
+*Stack research for: v2.0 Tag-Based Domain Model on existing pure-MATLAB FastSense codebase*
+*Researched: 2026-04-16*

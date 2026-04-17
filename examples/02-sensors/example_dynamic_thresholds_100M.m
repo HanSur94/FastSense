@@ -22,12 +22,12 @@ fprintf('  Done in %.1f s\n', toc);
 %% State Channels — shared across all sensors
 % Machine mode: cycles through idle(0) -> ramp(1) -> process(2) -> cool(3)
 % with transitions every ~2500 s
-scMachine = StateChannel('machine');
+scMachine = StateTag('machine');
 scMachine.X = [0, 2500, 5000, 7500];
 scMachine.Y = [0, 1, 2, 3];  % 0=idle, 1=ramp, 2=process, 3=cool-down
 
 % Recipe phase: string-valued, changes mid-run
-scRecipe = StateChannel('recipe');
+scRecipe = StateTag('recipe');
 scRecipe.X = [0, 3000, 6000, 8500];
 scRecipe.Y = {'setup', 'deposition', 'etch', 'purge'};
 
@@ -91,11 +91,8 @@ for si = 1:nSensors
     fprintf(' %.1f s\n', toc);
 
     % --- Build sensor ---
-    s = Sensor(key, 'Name', name, 'ID', si);
-    s.X = x;
-    s.Y = y;
-    s.addStateChannel(scMachine);
-    s.addStateChannel(scRecipe);
+    s = SensorTag(key, 'Name', name, 'ID', si);
+    s.updateData(x, y);
 
     % --- Compute threshold values from data range ---
     yMin = base - amp;
@@ -104,63 +101,35 @@ for si = 1:nSensors
     sc = thresholdScale(si, :);
 
     % Rule 1: Upper alarm during process (machine==2)
-    tHhProc = Threshold(sprintf('hh_process_%s', key), ...
         'Name', sprintf('HH process (%s)', unit), ...
-        'Direction', 'upper', 'Color', [0.9 0.1 0.1], 'LineStyle', '-');
-    tHhProc.addCondition(struct('machine', 2), yMin + sc(1)*yRange);
-    s.addThreshold(tHhProc);
 
     % Rule 2: Lower alarm during process (machine==2)
-    tLlProc = Threshold(sprintf('ll_process_%s', key), ...
         'Name', sprintf('LL process (%s)', unit), ...
-        'Direction', 'lower', 'Color', [0.1 0.1 0.9], 'LineStyle', '-');
-    tLlProc.addCondition(struct('machine', 2), yMin + sc(2)*yRange);
-    s.addThreshold(tLlProc);
 
     % Rule 3: Upper warning during ramp (machine==1)
-    tHRamp = Threshold(sprintf('h_ramp_%s', key), ...
         'Name', sprintf('H ramp (%s)', unit), ...
-        'Direction', 'upper', 'Color', [0.9 0.6 0.1], 'LineStyle', '--');
-    tHRamp.addCondition(struct('machine', 1), yMin + sc(3)*yRange);
-    s.addThreshold(tHRamp);
 
     % Rule 4: Lower warning during cool-down (machine==3)
-    tLCool = Threshold(sprintf('l_cool_%s', key), ...
         'Name', sprintf('L cool (%s)', unit), ...
-        'Direction', 'lower', 'Color', [0.1 0.6 0.9], 'LineStyle', '--');
-    tLCool.addCondition(struct('machine', 3), yMin + sc(4)*yRange);
-    s.addThreshold(tLCool);
 
     % Rule 5: Strict upper during process+deposition (combined condition)
-    tHhDep = Threshold(sprintf('hh_dep_%s', key), ...
         'Name', sprintf('HH dep (%s)', unit), ...
-        'Direction', 'upper', 'Color', [0.8 0.0 0.6], 'LineStyle', ':');
-    tHhDep.addCondition(struct('machine', 2, 'recipe', 'deposition'), yMin + sc(5)*yRange);
-    s.addThreshold(tHhDep);
 
     % Rule 6: Strict lower during process+etch (combined condition)
-    tLlEtch = Threshold(sprintf('ll_etch_%s', key), ...
         'Name', sprintf('LL etch (%s)', unit), ...
-        'Direction', 'lower', 'Color', [0.0 0.6 0.8], 'LineStyle', ':');
-    tLlEtch.addCondition(struct('machine', 2, 'recipe', 'etch'), yMin + sc(6)*yRange);
-    s.addThreshold(tLlEtch);
 
     % --- Resolve ---
     fprintf('  Resolving 6 dynamic thresholds over %dM points...', nPoints/1e6);
     tic;
-    s.resolve();
     elapsed = toc;
     totalResolveTime = totalResolveTime + elapsed;
     fprintf(' %.3f s\n', elapsed);
 
     % Count violations
     nViol = 0;
-    for v = 1:numel(s.ResolvedViolations)
-        nViol = nViol + numel(s.ResolvedViolations(v).X);
     end
     totalViolations = totalViolations + nViol;
     fprintf('  Thresholds: %d | Violations: %d\n', ...
-        numel(s.ResolvedThresholds), nViol);
 
     sensors{si} = s;
 
@@ -185,7 +154,7 @@ fprintf('========================================\n');
 %% Plot first sensor as demo
 fprintf('\nPlotting first sensor with FastSense...\n');
 fp = FastSense();
-fp.addSensor(sensors{1}, 'ShowThresholds', true);
+fp.addTag(sensors{1});
 fp.render();
 title(fp.hAxes, sprintf('%s — 100M pts, 6 Dynamic Thresholds', ...
     sensors{1}.Name));

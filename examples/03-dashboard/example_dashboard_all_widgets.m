@@ -33,7 +33,7 @@ t = linspace(0, 86400, N);  % 24 hours in seconds
 modeChangeTimes = [0, 3600, 7200, 28800, 36000, 72000, 79200, 82800];
 modeValues      = [0, 1,    1,    2,     1,     0,     1,     1];
 
-scMode = StateChannel('machine');
+scMode = StateTag('machine');
 scMode.X = modeChangeTimes;
 scMode.Y = modeValues;
 
@@ -54,28 +54,12 @@ temp = tempBase + tempNoise;
 overIdx = t >= 36000 & t <= 38000;
 temp(overIdx) = temp(overIdx) + 12;
 
-sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'F'];
-sTemp.X = t;
-sTemp.Y = temp;
-sTemp.addStateChannel(scMode);
+sTemp.updateData(t, temp);
 % Running mode thresholds
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnTemp.addCondition(struct('machine', 1), 78);
-sTemp.addThreshold(tHiWarnTemp);
-
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmTemp.addCondition(struct('machine', 1), 85);
-sTemp.addThreshold(tHiAlarmTemp);
 
 % Idle mode threshold (tighter — equipment should be cool)
-tIdleHiTemp = Threshold('idle_hi', 'Name', 'Idle Hi', ...
-    'Direction', 'upper', 'Color', [0.9 0.6 0.1], 'LineStyle', ':');
-tIdleHiTemp.addCondition(struct('machine', 0), 72);
-sTemp.addThreshold(tIdleHiTemp);
-sTemp.resolve();
 
 % --- Pressure sensor P-201 ---
 pressBase = zeros(1, N);
@@ -90,26 +74,9 @@ end
 pressNoise = 8*sin(2*pi*t/7200) + randn(1,N)*2;
 pressure = pressBase + pressNoise;
 
-sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress = SensorTag('P-201', 'Name', 'Pressure');
 sPress.Units = 'psi';
-sPress.X = t;
-sPress.Y = pressure;
-sPress.addStateChannel(scMode);
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnPress.addCondition(struct('machine', 1), 65);
-sPress.addThreshold(tHiWarnPress);
-
-tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmPress.addCondition(struct('machine', 1), 70);
-sPress.addThreshold(tHiAlarmPress);
-
-tLoWarnPress = Threshold('lo_warn', 'Name', 'Lo Warn', ...
-    'Direction', 'lower', 'Color', [0.2 0.6 1], 'LineStyle', '--');
-tLoWarnPress.addCondition(struct('machine', 1), 40);
-sPress.addThreshold(tLoWarnPress);
-sPress.resolve();
+sPress.updateData(t, pressure);
 
 % --- Flow sensor F-301 ---
 flowBase = zeros(1, N);
@@ -124,32 +91,15 @@ end
 flowNoise = 5*sin(2*pi*t/1800) + randn(1,N)*3;
 flow = max(0, flowBase + flowNoise);
 
-sFlow = Sensor('F-301', 'Name', 'Flow Rate');
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
 sFlow.Units = 'L/min';
-sFlow.X = t;
-sFlow.Y = flow;
-sFlow.addStateChannel(scMode);
-tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmFlow.addCondition(struct('machine', 1), 140);
-sFlow.addThreshold(tHiAlarmFlow);
-
-tLoWarnFlow = Threshold('lo_warn', 'Name', 'Lo Warn', ...
-    'Direction', 'lower', 'Color', [0.2 0.6 1], 'LineStyle', '--');
-tLoWarnFlow.addCondition(struct('machine', 1), 90);
-sFlow.addThreshold(tLoWarnFlow);
-sFlow.resolve();
+sFlow.updateData(t, flow);
 
 %% ========== Build alarm log from resolved violations ==========
 alarmLog = {};
 sensors = {sTemp, sPress, sFlow};
 for si = 1:numel(sensors)
     s = sensors{si};
-    if isempty(s.ResolvedViolations)
-        continue;
-    end
-    for vi = 1:numel(s.ResolvedViolations)
-        v = s.ResolvedViolations(vi);
         if isempty(v.X)
             continue;
         end
@@ -298,7 +248,6 @@ d.addWidget('heatmap', 'Title', 'Temp by Hour & Machine Mode', ...
 % BarChart: alarm counts by sensor tag
 alarmCounts = struct( ...
     'categories', {{'T-401','P-201','F-301'}}, ...
-    'values', [sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations()]);
 d.addWidget('barchart', 'Title', 'Violation Count by Sensor', ...
     'Position', [15 22 10 6], ...
     'DataFcn', @() alarmCounts, ...
@@ -342,7 +291,6 @@ d.render();
 
 fprintf('Dashboard rendered with %d widgets.\n', numel(d.Widgets));
 fprintf('Sensors: T-401 (%d violations), P-201 (%d violations), F-301 (%d violations)\n', ...
-    sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations());
 fprintf('Phase B widgets added: heatmap, barchart, histogram, scatter, image, multistatus.\n');
 fprintf('Click "Edit" to enter GUI builder mode.\n');
 fprintf('Click "Save" to export as JSON, "Export" to generate .m script.\n');

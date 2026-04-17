@@ -26,44 +26,27 @@ N = 3000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
 % Temperature and Pressure — positively correlated (higher temp = higher press)
-sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'F'];
-sTemp.X = t;
-sTemp.Y = 72 + 6*sin(2*pi*t/7200) + randn(1,N)*1.5;
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnTemp.addCondition(struct(), 82);
-sTemp.addThreshold(tHiWarnTemp);
-sTemp.resolve();
+sTemp.updateData(t, 72 + 6*sin(2*pi*t/7200) + randn(1,N)*1.5);
+[sTemp_x_, sTemp_y_] = sTemp.getXY();
 
-sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress = SensorTag('P-201', 'Name', 'Pressure');
 sPress.Units = 'psi';
-sPress.X = t;
+% TODO: sPress_x_ = t; (needs manual fix)
 % Deliberately correlated with temperature
-sPress.Y = 40 + 0.8*(sTemp.Y - 72) + randn(1,N)*2;
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnPress.addCondition(struct(), 46);
-sPress.addThreshold(tHiWarnPress);
-sPress.resolve();
+sPress_y_ = 40 + 0.8*(sTemp_y_ - 72) + randn(1,N)*2;
 
 % Flow Rate — weaker correlation with temperature
-sFlow = Sensor('F-301', 'Name', 'Flow Rate');
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
 sFlow.Units = 'L/min';
-sFlow.X = t;
-sFlow.Y = max(0, 100 + 0.4*(sTemp.Y - 72) + randn(1,N)*10);
-tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmFlow.addCondition(struct(), 130);
-sFlow.addThreshold(tHiAlarmFlow);
-sFlow.resolve();
+sFlow.updateData(t, max(0, 100 + 0.4*(sTemp.Y - 72) + randn(1,N)*10));
+[sFlow_x_, sFlow_y_] = sFlow.getXY();
 
 % Vibration — used as color sensor (highlights operating regime)
-sVib = Sensor('V-501', 'Name', 'Vibration RMS');
+sVib = SensorTag('V-501', 'Name', 'Vibration RMS');
 sVib.Units = 'mm/s';
-sVib.X = t;
-sVib.Y = max(0.1, 1.2 + 0.06*(sPress.Y - 40) + randn(1,N)*0.3);
-sVib.resolve();
+sVib.updateData(t, max(0.1, 1.2 + 0.06*(sPress.Y - 40) + randn(1,N)*0.3));
 
 %% 2. Build dashboard
 d = DashboardEngine('Scatter Widget Demo');
@@ -105,7 +88,7 @@ d.addWidget('scatter', 'Title', 'Flow vs Vibration', ...
 d.render();
 fprintf('Dashboard rendered with %d scatter widgets.\n', numel(d.Widgets));
 % Pearson correlation (toolbox-free)
-r_tp = corrcoef(sTemp.Y(:), sPress.Y(:)); r_tp = r_tp(1,2);
-r_tf = corrcoef(sTemp.Y(:), sFlow.Y(:));  r_tf = r_tf(1,2);
-r_pf = corrcoef(sPress.Y(:), sFlow.Y(:)); r_pf = r_pf(1,2);
+r_tp = corrcoef(sTemp_y_(:), sPress_y_(:)); r_tp = r_tp(1,2);
+r_tf = corrcoef(sTemp_y_(:), sFlow_y_(:));  r_tf = r_tf(1,2);
+r_pf = corrcoef(sPress_y_(:), sFlow_y_(:)); r_pf = r_pf(1,2);
 fprintf('Correlation T-P: %.2f  T-F: %.2f  P-F: %.2f\n', r_tp, r_tf, r_pf);

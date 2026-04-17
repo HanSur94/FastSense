@@ -150,8 +150,8 @@ classdef TestChipBarWidget < matlab.unittest.TestCase
             % toStruct emits chip threshold key; fromStruct restores
             t = Threshold('cbw_ser_test', 'Direction', 'upper');
             t.addCondition(struct(), 50);
-            ThresholdRegistry.register('cbw_ser_test', t);
-            cleanup = onCleanup(@() ThresholdRegistry.unregister('cbw_ser_test'));
+            TagRegistry.register('cbw_ser_test', t);
+            cleanup = onCleanup(@() TagRegistry.unregister('cbw_ser_test'));
             chip = struct('label', 'Fan', 'threshold', t, 'value', 40);
             w = ChipBarWidget('Title', 'Health');
             w.Chips = {chip};

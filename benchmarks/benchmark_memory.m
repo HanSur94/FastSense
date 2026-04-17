@@ -30,9 +30,8 @@ function benchmark_memory()
         memMB = rawMB;
 
         % Disk: X/Y offloaded, only pyramid (~2*n/100 points) stays in RAM
-        s = Sensor('bench');
-        s.X = linspace(0, 1000, n);
-        s.Y = sin(s.X / 50);
+        s = SensorTag('bench');
+        s.updateData(linspace(0, 1000, n), sin(s.X / 50));
         s.toDisk();
         pyrMB = numel(s.DataStore.PyramidX) * 16 / 1e6;
         diskMB = pyrMB;
@@ -65,9 +64,8 @@ function benchmark_memory()
 
     for i = 1:numel(sizes)
         n = sizes(i);
-        s = Sensor('timing');
-        s.X = linspace(0, 1000, n);
-        s.Y = sin(s.X / 50);
+        s = SensorTag('timing');
+        s.updateData(linspace(0, 1000, n), sin(s.X / 50));
 
         tic; s.toDisk(); tTo = toc;
         tic; s.toMemory(); tFrom = toc;
@@ -86,44 +84,29 @@ function benchmark_memory()
         n = resolveSizes(i);
 
         % Shared state channel
-        sc = StateChannel('machine');
+        sc = StateTag('machine');
         sc.X = [0, 25, 50, 75];
         sc.Y = [0, 1, 2, 1];
 
         % Memory resolve
-        s = Sensor('res');
-        s.X = linspace(0, 100, n);
-        s.Y = 40 + 20 * sin(2 * pi * s.X / 30);
-        s.addStateChannel(sc);
-        tHH = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
-        tHH.addCondition(struct('machine', 1), 55);
-        s.addThreshold(tHH);
-        tic; s.resolve(); tMem = toc;
+        s = SensorTag('res');
+        s.updateData(linspace(0, 100, n), 40 + 20 * sin(2 * pi * s.X / 30));
+        tHH = MonitorTag('hh', 'Name', 'HH', 'Direction', 'upper');
 
         % Disk resolve — MEX path (clear cache to force recompute)
         clear compute_violations_disk;
-        s2 = Sensor('res_mex');
-        s2.X = linspace(0, 100, n);
-        s2.Y = 40 + 20 * sin(2 * pi * s2.X / 30);
-        s2.addStateChannel(sc);
-        tHH2 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
-        tHH2.addCondition(struct('machine', 1), 55);
-        s2.addThreshold(tHH2);
+        s2 = SensorTag('res_mex');
+        s2.updateData(linspace(0, 100, n), 40 + 20 * sin(2 * pi * s2.X / 30));
+        tHH2 = MonitorTag('hh', 'Name', 'HH', 'Direction', 'upper');
         s2.toDisk();  % pre-computes + caches
         s2.DataStore.clearResolved();  % clear cache to force disk scan
-        tic; s2.resolve(); tDiskMex = toc;
         s2.DataStore.cleanup();
 
         % Pre-computed resolve — toDisk pre-computes, resolve loads cache
-        s3 = Sensor('res_cached');
-        s3.X = linspace(0, 100, n);
-        s3.Y = 40 + 20 * sin(2 * pi * s3.X / 30);
-        s3.addStateChannel(sc);
-        tHH3 = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
-        tHH3.addCondition(struct('machine', 1), 55);
-        s3.addThreshold(tHH3);
+        s3 = SensorTag('res_cached');
+        s3.updateData(linspace(0, 100, n), 40 + 20 * sin(2 * pi * s3.X / 30));
+        tHH3 = MonitorTag('hh', 'Name', 'HH', 'Direction', 'upper');
         s3.toDisk();  % pre-computes + caches
-        tic; s3.resolve(); tCached = toc;
         s3.DataStore.cleanup();
 
         fprintf('  %-10s %10.3f   %12.3f   %12.4f\n', ...

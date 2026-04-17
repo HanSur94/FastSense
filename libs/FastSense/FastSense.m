@@ -86,6 +86,8 @@ classdef FastSense < handle
         YScale = 'linear'             % 'linear' or 'log' — Y axis scale
         ViolationsVisible = true      % global toggle for violation markers
         ShowThresholdLabels = false  % show inline name labels on threshold lines
+        ShowEventMarkers = true     % toggle event round-marker overlay (EVENT-07)
+        EventStore = []             % EventStore handle for event overlay queries
     end
 
     % ====================== INTERNAL DATA STORAGE ========================
@@ -137,6 +139,8 @@ classdef FastSense < handle
         LiveFileDate   = 0         % last known file modification datenum
         LiveFileBytes  = 0         % last known file size in bytes
         MetadataFileDate  = 0         % last known metadata file datenum
+        Tags_ = {}                    % cell of Tag handles added via addTag (for event overlay)
+        EventMarkerHandles_ = {}      % cell of line handles for cleanup
     end
 
     % ===================== PERFORMANCE TUNING ============================
@@ -513,89 +517,6 @@ classdef FastSense < handle
             end
         end
 
-        function addSensor(obj, sensor, varargin)
-            %ADDSENSOR Add a resolved Sensor's data and thresholds to the plot.
-            %   fp.ADDSENSOR(s) adds the sensor's X/Y data as a line and
-            %   all resolved thresholds with violation markers enabled.
-            %   fp.ADDSENSOR(s, 'ShowThresholds', false) adds only the data
-            %   line, suppressing threshold overlay.
-            %
-            %   The sensor's Name (or Key as fallback) is used as the
-            %   DisplayName for the line legend entry. Each threshold in
-            %   sensor.ResolvedThresholds is added via addThreshold() with
-            %   its resolved color, line style, direction, and label.
-            %
-            %   Must be called BEFORE render().
-            %
-            %   Inputs:
-            %     sensor   — a Sensor object with fields X, Y, Name, Key,
-            %                and ResolvedThresholds
-            %     varargin — name-value pairs:
-            %       'ShowThresholds' — logical (default: true)
-            %
-            %   Example:
-            %     s = sensorLib.resolve('temperature');
-            %     fp.addSensor(s);
-            %     fp.render();
-            %
-            %   See also addLine, addThreshold.
-
-            if obj.IsRendered
-                error('FastSense:alreadyRendered', ...
-                    'Cannot add sensors after render() has been called.');
-            end
-
-            showThresholds = true;
-            for k = 1:2:numel(varargin)
-                switch lower(varargin{k})
-                    case 'showthresholds'
-                        showThresholds = varargin{k+1};
-                end
-            end
-
-            displayName = sensor.Name;
-            if isempty(displayName)
-                displayName = sensor.Key;
-            end
-
-            if ~isempty(sensor.DataStore)
-                % Sensor is disk-backed — pass DataStore directly
-                obj.addLine([], [], 'DisplayName', displayName, ...
-                    'DataStore', sensor.DataStore);
-            else
-                obj.addLine(sensor.X, sensor.Y, 'DisplayName', displayName);
-            end
-
-            if showThresholds && ~isempty(sensor.ResolvedThresholds) && ...
-                    isfield(sensor.ResolvedThresholds, 'Label')
-                resolvedTh = sensor.ResolvedThresholds;
-                for i = 1:numel(resolvedTh)
-                    th = resolvedTh(i);
-                    thLabel = th.Label;
-                    if isempty(thLabel)
-                        thLabel = sprintf('Threshold %d', i);
-                    end
-                    [thColor, thStyle] = obj.resolveThresholdStyle(th.Color, th.LineStyle);
-                    nvArgs = {'Direction', th.Direction, ...
-                        'ShowViolations', true, ...
-                        'Label', thLabel, ...
-                        'Color', thColor, ...
-                        'LineStyle', thStyle};
-                    if ~isempty(th.X) && numel(th.X) > 1
-                        % Time-varying threshold
-                        obj.addThreshold(th.X, th.Y, nvArgs{:});
-                    else
-                        % Scalar threshold — use Value field
-                        thVal = th.Value;
-                        if isempty(thVal) && ~isempty(th.Y)
-                            thVal = th.Y(1);
-                        end
-                        obj.addThreshold(thVal, nvArgs{:});
-                    end
-                end
-            end
-        end
-
         function addThreshold(obj, varargin)
             %ADDTHRESHOLD Add a threshold line (scalar or time-varying).
             %   fp.ADDTHRESHOLD(value) adds a constant horizontal threshold.
@@ -938,6 +859,80 @@ classdef FastSense < handle
             y2 = ones(size(x)) * fillOpts.Baseline;
             shadedNV = struct2nvpairs(shadedArgs);
             obj.addShaded(x, y, y2, shadedNV{:});
+        end
+
+        function addTag(obj, tag, varargin)
+            %ADDTAG Polymorphic dispatch — route a Tag to the correct render path.
+            %   fp.ADDTAG(sensorTag)     — routes to addLine via tag.getXY
+            %   fp.ADDTAG(stateTag)      — routes to a staircase line (numeric Y)
+            %   fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
+            %   fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
+            %
+            %   Dispatches by tag.getKind() — NO isa() subtype checks (Pitfall 1).
+            %   Must be called BEFORE render() (enforced by IsRendered guard).
+            %
+            %   Error IDs:
+            %     FastSense:invalidTag                   — not a Tag object
+            %     FastSense:unsupportedTagKind           — kind not handled
+            %     FastSense:stateTagCellstrNotSupported  — cellstr Y StateTag (deferred)
+            %     FastSense:alreadyRendered              — render() already called
+            %
+            %   See also addLine, addThreshold, Tag, SensorTag, StateTag.
+
+            if obj.IsRendered
+                error('FastSense:alreadyRendered', ...
+                    'Cannot add tags after render() has been called.');
+            end
+            if ~isa(tag, 'Tag')
+                error('FastSense:invalidTag', ...
+                    'addTag requires a Tag object, got %s.', class(tag));
+            end
+            switch tag.getKind()
+                case 'sensor'
+                    [x, y] = tag.getXY();
+                    obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
+                case 'state'
+                    obj.addStateTagAsStaircase_(tag, varargin{:});
+                case 'monitor'
+                    [x, y] = tag.getXY();
+                    obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
+                case 'composite'
+                    [x, y] = tag.getXY();
+                    obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
+                otherwise
+                    error('FastSense:unsupportedTagKind', ...
+                        'Unsupported tag kind ''%s''.', tag.getKind());
+            end
+            obj.Tags_{end+1} = tag;
+        end
+
+        function addStateTagAsStaircase_(obj, tag, varargin)
+            %ADDSTATETAGASSTAIRCASE_ Render a numeric StateTag as a stepped line.
+            %   Private helper (name ends in _) invoked by addTag for the
+            %   'state' kind. Expands (X, Y) pairs into an interleaved
+            %   2N-1 staircase and delegates to addLine. Cellstr Y is not
+            %   supported in Phase 1005 (deferred).
+            [x, y] = tag.getXY();
+            if iscell(y)
+                error('FastSense:stateTagCellstrNotSupported', ...
+                    'Cellstr StateTag rendering is deferred (Phase 1005 supports numeric Y only).');
+            end
+            if isempty(x) || isempty(y)
+                return;
+            end
+            n = numel(x);
+            xStep = zeros(1, 2*n - 1);
+            yStep = zeros(1, 2*n - 1);
+            xStep(1) = x(1);
+            yStep(1) = y(1);
+            for i = 2:n
+                xStep(2*i - 2) = x(i);
+                yStep(2*i - 2) = y(i-1);
+                xStep(2*i - 1) = x(i);
+                yStep(2*i - 1) = y(i);
+            end
+            obj.addLine(xStep, yStep, 'DisplayName', tag.Name, ...
+                'AssumeSorted', true, varargin{:});
         end
 
         function render(obj, progressBar)
@@ -1314,6 +1309,9 @@ classdef FastSense < handle
                 set(hM, 'UserData', udM);
                 obj.Markers(i).hLine = hM;
             end
+
+            % --- Render event overlay markers (EVENT-07) ---
+            obj.renderEventLayer_();
 
             % --- Set static axis limits (use downsampled data, not full raw) ---
             if strcmp(obj.YScale, 'log')
@@ -2192,6 +2190,87 @@ classdef FastSense < handle
     % Internal helpers: timer callbacks, view mode, theme, listeners,
     % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
+        function renderEventLayer_(obj)
+            %RENDEREVENTLAYER_ Draw round markers at event timestamps (EVENT-07).
+            %   Separate render layer -- called AFTER line + threshold + marker
+            %   rendering. Single early-out at top if nothing to draw.
+            %   Batches markers by severity for performance (one line() per level).
+            if ~obj.ShowEventMarkers || isempty(obj.Tags_)
+                return;
+            end
+            % Auto-discover EventStore from first Tag that has one
+            es = obj.EventStore;
+            if isempty(es)
+                for i = 1:numel(obj.Tags_)
+                    if isprop(obj.Tags_{i}, 'EventStore') && ~isempty(obj.Tags_{i}.EventStore)
+                        es = obj.Tags_{i}.EventStore;
+                        break;
+                    end
+                end
+            end
+            if isempty(es), return; end
+            % Delete old markers
+            for i = 1:numel(obj.EventMarkerHandles_)
+                if ishandle(obj.EventMarkerHandles_{i})
+                    delete(obj.EventMarkerHandles_{i});
+                end
+            end
+            obj.EventMarkerHandles_ = {};
+            % Collect markers by severity (1=ok, 2=warn, 3=alarm)
+            xBySev = {[], [], []};
+            yBySev = {[], [], []};
+            for i = 1:numel(obj.Tags_)
+                tag = obj.Tags_{i};
+                events = es.getEventsForTag(char(tag.Key));
+                if isempty(events), continue; end
+                for j = 1:numel(events)
+                    ev = events(j);
+                    sev = max(1, min(3, ev.Severity));
+                    yVal = tag.valueAt(ev.StartTime);
+                    if isnan(yVal), continue; end
+                    xBySev{sev}(end+1) = ev.StartTime;
+                    yBySev{sev}(end+1) = yVal;
+                end
+            end
+            % Draw one line() per severity level
+            for s = 1:3
+                if ~isempty(xBySev{s})
+                    c = obj.severityToColor_(s);
+                    h = line(xBySev{s}, yBySev{s}, ...
+                        'Parent', obj.hAxes, ...
+                        'Marker', 'o', 'MarkerSize', 8, ...
+                        'MarkerFaceColor', c, 'MarkerEdgeColor', c, ...
+                        'LineStyle', 'none', 'HandleVisibility', 'off');
+                    obj.EventMarkerHandles_{end+1} = h;
+                end
+            end
+        end
+
+        function c = severityToColor_(obj, severity)
+            %SEVERITYTOCOLOR_ Map severity level to RGB color.
+            %   Uses DashboardTheme status colors if available in obj.Theme;
+            %   falls back to hardcoded defaults (RESEARCH Critical Finding 5).
+            if severity >= 3
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusAlarmColor')
+                    c = obj.Theme.StatusAlarmColor;
+                else
+                    c = [0.91 0.27 0.38];
+                end
+            elseif severity >= 2
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusWarnColor')
+                    c = obj.Theme.StatusWarnColor;
+                else
+                    c = [0.91 0.63 0.27];
+                end
+            else
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusOkColor')
+                    c = obj.Theme.StatusOkColor;
+                else
+                    c = [0.31 0.80 0.64];
+                end
+            end
+        end
+
         function S = buildExportStruct_(obj)
             %BUILDEXPORTSTRUCT_ Build the export data structure from Lines and Thresholds.
             %   S = BUILDEXPORTSTRUCT_(obj) returns a struct with fields:
@@ -2296,30 +2375,6 @@ classdef FastSense < handle
                 save(filepath, 'lines', 'thresholds', 'exported_datetime');
             else
                 save(filepath, 'lines', 'thresholds');
-            end
-        end
-
-        function [color, style] = resolveThresholdStyle(obj, color, style)
-            %RESOLVETHRESHOLDSTYLE Apply theme defaults for empty color/style.
-            %   [color, style] = RESOLVETHRESHOLDSTYLE(obj, color, style)
-            %   fills in empty color or style with Theme.ThresholdColor and
-            %   Theme.ThresholdStyle respectively. Used by addSensor to
-            %   resolve sensor-defined threshold visuals against the theme.
-            %
-            %   Inputs:
-            %     color — RGB triplet or empty
-            %     style — line style string or empty
-            %
-            %   Outputs:
-            %     color — resolved RGB triplet
-            %     style — resolved line style string
-            %
-            %   See also addSensor, addThreshold.
-            if isempty(color)
-                color = obj.Theme.ThresholdColor;
-            end
-            if isempty(style)
-                style = obj.Theme.ThresholdStyle;
             end
         end
 

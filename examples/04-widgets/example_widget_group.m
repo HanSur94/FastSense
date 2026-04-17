@@ -33,43 +33,24 @@ rng(42);
 N = 5000;
 t = linspace(0, 86400, N);  % 24 hours
 
-sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'F'];
-sTemp.X = t;
-sTemp.Y = 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.2;
-sTemp.Y(end) = 79;  % near warning level
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnTemp.addCondition(struct(), 78);
-sTemp.addThreshold(tHiWarnTemp);
+sTemp_x_ = t;
+sTemp_y_ = 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.2;
+sTemp_y_(end) = 79;  % near warning level
+sTemp.updateData(sTemp_x_, sTemp_y_);
 
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmTemp.addCondition(struct(), 85);
-sTemp.addThreshold(tHiAlarmTemp);
-sTemp.resolve();
-
-sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress = SensorTag('P-201', 'Name', 'Pressure');
 sPress.Units = 'psi';
-sPress.X = t;
-sPress.Y = 55 + 8*sin(2*pi*t/7200) + randn(1,N)*1.5;
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnPress.addCondition(struct(), 68);
-sPress.addThreshold(tHiWarnPress);
-sPress.resolve();
+sPress.updateData(t, 55 + 8*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
-sFlow = Sensor('F-301', 'Name', 'Flow Rate');
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
 sFlow.Units = 'L/min';
-sFlow.X = t;
-sFlow.Y = max(0, 120 + 10*sin(2*pi*t/1800) + randn(1,N)*4);
-sFlow.resolve();
+sFlow.updateData(t, max(0, 120 + 10*sin(2*pi*t/1800) + randn(1,N)*4));
 
-sVib = Sensor('V-501', 'Name', 'Vibration RMS');
+sVib = SensorTag('V-501', 'Name', 'Vibration RMS');
 sVib.Units = 'mm/s';
-sVib.X = t;
-sVib.Y = max(0.1, 1.5 + 0.4*sin(2*pi*t/5400) + randn(1,N)*0.2);
-sVib.resolve();
+sVib.updateData(t, max(0.1, 1.5 + 0.4*sin(2*pi*t/5400) + randn(1,N)*0.2));
 
 %% 2. Build dashboard
 d = DashboardEngine('Group Widget Demo');

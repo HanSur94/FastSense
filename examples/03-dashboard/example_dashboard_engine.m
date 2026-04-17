@@ -19,42 +19,21 @@ N = 10000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
 % Machine mode state channel: idle(0) -> running(1) -> idle(0) -> running(1)
-scMode = StateChannel('machine');
+scMode = StateTag('machine');
 scMode.X = [0, 7200, 43200, 57600];
 scMode.Y = [0, 1,    0,     1];
 
 % Temperature sensor with mode-dependent thresholds
-sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'C'];
-sTemp.X = t;
-sTemp.Y = 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8;
-sTemp.addStateChannel(scMode);
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnTemp.addCondition(struct('machine', 1), 78);
-sTemp.addThreshold(tHiWarnTemp);
+sTemp.updateData(t, 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8);
 
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmTemp.addCondition(struct('machine', 1), 85);
-sTemp.addThreshold(tHiAlarmTemp);
-
-tIdleHiTemp = Threshold('idle_hi', 'Name', 'Idle Hi', 'Direction', 'upper');
-tIdleHiTemp.addCondition(struct('machine', 0), 73);
-sTemp.addThreshold(tIdleHiTemp);
-sTemp.resolve();
 
 % Pressure sensor with unconditional thresholds
-sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress = SensorTag('P-201', 'Name', 'Pressure');
 sPress.Units = 'bar';
-sPress.X = t;
-sPress.Y = 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5;
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnPress.addCondition(struct(), 65);
-sPress.addThreshold(tHiWarnPress);
+sPress.updateData(t, 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
-tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmPress.addCondition(struct(), 70);
-sPress.addThreshold(tHiAlarmPress);
-sPress.resolve();
 
 %% 2. Create dashboard with sensor-bound widgets
 d = DashboardEngine('Process Monitoring — Line 4');
@@ -79,8 +58,6 @@ d.render();
 jsonPath = fullfile(tempdir, 'example_dashboard.json');
 d.save(jsonPath);
 fprintf('Dashboard saved to: %s\n', jsonPath);
-fprintf('Temperature violations: %d\n', sTemp.countViolations());
-fprintf('Pressure violations: %d\n', sPress.countViolations());
 
 %% 4. Export to .m script
 scriptPath = fullfile(tempdir, 'example_dashboard_export.m');

@@ -13,10 +13,9 @@ function setup(testCase)
     addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'libs', 'EventDetection'));
 
     % Create a simple sensor
-    s = Sensor('test_pressure', 'Name', 'Test Pressure');
+    s = SensorTag('test_pressure', 'Name', 'Test Pressure');
     t = linspace(0, 100, 10000);
-    s.X = t;
-    s.Y = 50 + 10*sin(2*pi*t/20) + randn(1, numel(t));
+    s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
     testCase.TestData.sensor = s;
 end
 
@@ -99,7 +98,7 @@ end
 %% Thresholds in main plot
 function test_thresholds_shown_when_enabled(testCase)
     s = createSensorWithThreshold();
-    sdp = SensorDetailPlot(s, 'ShowThresholds', true);
+    sdp = SensorDetailPlot(s);
     sdp.render();
     verifyGreaterThanOrEqual(testCase, numel(sdp.MainPlot.Thresholds), 1);
     delete(sdp);
@@ -132,14 +131,12 @@ end
 
 %% Helper: create fresh sensor with threshold (avoids shared handle mutation)
 function s = createSensorWithThreshold()
-    s = Sensor('test_th', 'Name', 'Threshold Test');
+    s = SensorTag('test_th', 'Name', 'Threshold Test');
     t = linspace(0, 100, 1000);
-    s.X = t;
-    s.Y = 50 + 10*sin(2*pi*t/20) + randn(1, numel(t));
-    sc = StateChannel('mode');
+    s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
+    sc = StateTag('mode');
     sc.X = [0 100];
     sc.Y = [1 1];
-    s.addStateChannel(sc);
     t_h_warning = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper');
     t_h_warning.addCondition(struct('mode', 1), 65);
     s.addThreshold(t_h_warning);

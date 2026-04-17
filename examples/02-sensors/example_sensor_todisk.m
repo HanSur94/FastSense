@@ -14,16 +14,16 @@ run(fullfile(projectRoot, 'install.m'));
 
 fprintf('=== 1. Basic toDisk workflow ===\n');
 
-s = Sensor('temperature', 'Name', 'Chamber Temperature', 'ID', 201);
-s.X = linspace(0, 200, 2e6);
-s.Y = 50 + 8*sin(2*pi*s.X/60) + 3*randn(1, 2e6);
+s = SensorTag('temperature', 'Name', 'Chamber Temperature', 'ID', 201);
+s.updateData(linspace(0, 200, 2e6), 50 + 8*sin(2*pi*s.X/60) + 3*randn(1, 2e6));
+[s_x_, s_y_] = s.getXY();
 
-fprintf('  Before toDisk: %.1f MB in memory\n', numel(s.X) * 16 / 1e6);
+fprintf('  Before toDisk: %.1f MB in memory\n', numel(s_x_) * 16 / 1e6);
 
 s.toDisk();
 
 fprintf('  After toDisk:  X is empty=%d, Y is empty=%d, isOnDisk=%d\n', ...
-    isempty(s.X), isempty(s.Y), s.isOnDisk());
+    isempty(s_x_), isempty(s_y_), s.isOnDisk());
 fprintf('  DataStore: %d points on disk\n', s.DataStore.NumPoints);
 
 %% 2. resolve() works transparently with disk data
@@ -32,31 +32,13 @@ fprintf('  DataStore: %d points on disk\n', s.DataStore.NumPoints);
 
 fprintf('\n=== 2. Disk-backed resolve ===\n');
 
-sc = StateChannel('machine');
+sc = StateTag('machine');
 sc.X = [0 50 100 150];
 sc.Y = [0 1 2 1];  % idle -> running -> evacuated -> running
-s.addStateChannel(sc);
-
-tHhIdle = Threshold('hh_idle', 'Name', 'HH (idle)', ...
-    'Direction', 'upper', 'Color', [0.8 0 0], 'LineStyle', '--');
-tHhIdle.addCondition(struct('machine', 0), 65);
-s.addThreshold(tHhIdle);
-
-tHhRunning = Threshold('hh_running', 'Name', 'HH (running)', ...
-    'Direction', 'upper', 'Color', [1 0.3 0], 'LineStyle', '--');
-tHhRunning.addCondition(struct('machine', 1), 58);
-s.addThreshold(tHhRunning);
-
-tHhEvacuated = Threshold('hh_evacuated', 'Name', 'HH (evacuated)', ...
-    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
-tHhEvacuated.addCondition(struct('machine', 2), 52);
-s.addThreshold(tHhEvacuated);
 
 tic;
-s.resolve();
 fprintf('  resolve() on 2M disk-backed points: %.3f s\n', toc);
 fprintf('  Thresholds: %d, Violations: %d\n', ...
-    numel(s.ResolvedThresholds), numel(s.ResolvedViolations));
 
 %% 3. Plot the disk-backed sensor
 % addSensor passes the DataStore directly to FastSense — no copying.
@@ -64,7 +46,7 @@ fprintf('  Thresholds: %d, Violations: %d\n', ...
 fprintf('\n=== 3. Plot disk-backed sensor ===\n');
 
 fp = FastSense();
-fp.addSensor(s, 'ShowThresholds', true);
+fp.addTag(s);
 tic;
 fp.render();
 fprintf('  Rendered in %.3f s\n', toc);
@@ -76,15 +58,15 @@ title(fp.hAxes, 'Disk-backed Sensor — 2M Points with Dynamic Thresholds');
 
 fprintf('\n=== 4. toMemory round-trip ===\n');
 
-s2 = Sensor('pressure', 'Name', 'Pressure Sensor');
-s2.X = linspace(0, 100, 500000);
-s2.Y = 40 + 20*sin(2*pi*s2.X/30) + 5*randn(1, 500000);
+s2 = SensorTag('pressure', 'Name', 'Pressure Sensor');
+s2.updateData(linspace(0, 100, 500000), 40 + 20*sin(2*pi*s2.X/30) + 5*randn(1, 500000));
+[s2_x_, s2_y_] = s2.getXY();
 
 s2.toDisk();
-fprintf('  On disk: X empty=%d, NumPoints=%d\n', isempty(s2.X), s2.DataStore.NumPoints);
+fprintf('  On disk: X empty=%d, NumPoints=%d\n', isempty(s2_x_), s2.DataStore.NumPoints);
 
 s2.toMemory();
-fprintf('  Back in memory: numel(X)=%d, isOnDisk=%d\n', numel(s2.X), s2.isOnDisk());
+fprintf('  Back in memory: numel(X)=%d, isOnDisk=%d\n', numel(s2_x_), s2.isOnDisk());
 
 %% 5. Large-scale sensor with extra columns
 % Combine toDisk with addColumn to attach metadata (labels, flags,
@@ -92,10 +74,9 @@ fprintf('  Back in memory: numel(X)=%d, isOnDisk=%d\n', numel(s2.X), s2.isOnDisk
 
 fprintf('\n=== 5. Large sensor with metadata columns ===\n');
 
-s3 = Sensor('flow', 'Name', 'Gas Flow Rate');
+s3 = SensorTag('flow', 'Name', 'Gas Flow Rate');
 n = 5e6;
-s3.X = linspace(0, 1000, n);
-s3.Y = 50 + 15*sin(2*pi*s3.X/20) + 3*randn(1, n);
+s3.updateData(linspace(0, 1000, n), 50 + 15*sin(2*pi*s3.X/20) + 3*randn(1, n));
 
 tic;
 s3.toDisk();
@@ -124,7 +105,7 @@ end
 
 % Plot it
 fp2 = FastSense();
-fp2.addSensor(s3);
+fp2.addTag(s3);
 tic;
 fp2.render();
 fprintf('  Rendered %dM disk-backed points in %.3f s\n', n/1e6, toc);
@@ -140,20 +121,15 @@ names = {'Temperature', 'Pressure', 'Flow Rate', 'Vibration'};
 nPts = 1e6;
 
 for i = 1:4
-    si = Sensor(lower(names{i}), 'Name', names{i});
-    si.X = linspace(0, 200, nPts);
-    si.Y = 30 + 10*i + 15*sin(2*pi*si.X/(20+10*i)) + 4*randn(1, nPts);
-    tHh = Threshold('hh', 'Name', 'HH', 'Direction', 'upper');
-    tHh.addCondition(struct(), 30 + 10*i + 12);
-    si.addThreshold(tHh);
+    si = SensorTag(lower(names{i}), 'Name', names{i});
+    si.updateData(linspace(0, 200, nPts), 30 + 10*i + 15*sin(2*pi*si.X/(20+10*i)) + 4*randn(1, nPts));
     si.toDisk();
-    si.resolve();
     sensors{i} = si;
 end
 
 fpf = FastSenseGrid(2, 2);
 for i = 1:4
-    fpf.tile(i).addSensor(sensors{i}, 'ShowThresholds', true);
+    fpf.tile(i).addTag(sensors{i});
 end
 tic;
 fpf.render();

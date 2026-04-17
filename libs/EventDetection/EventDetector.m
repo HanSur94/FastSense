@@ -2,7 +2,15 @@ classdef EventDetector < handle
     %EVENTDETECTOR Detects events from threshold violations.
     %   det = EventDetector()
     %   det = EventDetector('MinDuration', 2, 'OnEventStart', @myCallback)
-    %   events = det.detect(t, values, thresholdValue, direction, thresholdLabel, sensorName)
+    %
+    %   Call shape:
+    %     events = det.detect(tag, threshold)   % 2-arg Tag overload
+    %
+    %   Reads (X, Y) from tag.getXY() and derives threshold metadata
+    %   from the Threshold handle; forwards to the private detect_ body.
+    %   Dispatch is entry-level on isa(arg, 'Tag') — the ABSTRACT BASE —
+    %   matching the FastSense.addTag precedent (Pitfall 1: NO subclass
+    %   isa anywhere in this file).
 
     properties
         MinDuration      % numeric: minimum event duration (default 0)
@@ -28,10 +36,49 @@ classdef EventDetector < handle
             end
         end
 
-        function events = detect(obj, t, values, thresholdValue, direction, thresholdLabel, sensorName)
+        function events = detect(obj, tag, threshold)
             %DETECT Find events from threshold violations.
-            %   events = det.detect(t, values, thresholdValue, direction, thresholdLabel, sensorName)
-            %   Returns Event array.
+            %   events = det.detect(tag, threshold)
+            %
+            %   Pulls (t, values) from tag.getXY() and derives
+            %   (thresholdValue, direction, thresholdLabel, sensorName)
+            %   from the Threshold + Tag handles, then forwards to the
+            %   private detect_() body.
+
+            if ~isa(tag, 'Tag')
+                error('EventDetector:invalidTag', ...
+                    'First argument must be a Tag object; got %s.', class(tag));
+            end
+
+            [t, values] = tag.getXY();
+            if isempty(t)
+                events = [];
+                return;
+            end
+            tVals = threshold.allValues();
+            if isempty(tVals)
+                events = [];
+                return;
+            end
+            thresholdValue = tVals(1);
+            direction      = threshold.Direction;
+            thresholdLabel = threshold.Name;
+            if isempty(thresholdLabel)
+                thresholdLabel = threshold.Key;
+            end
+            sensorName = tag.Name;
+            if isempty(sensorName)
+                sensorName = tag.Key;
+            end
+            events = obj.detect_(t, values, thresholdValue, direction, ...
+                thresholdLabel, sensorName);
+        end
+    end
+
+    methods (Access = private)
+        function events = detect_(obj, t, values, thresholdValue, direction, thresholdLabel, sensorName)
+            %DETECT_ Core detection body.
+            %   Private implementation used by the Tag-overload dispatch.
 
             groups = groupViolations(t, values, thresholdValue, direction);
             events = [];
@@ -75,7 +122,7 @@ classdef EventDetector < handle
                 if isempty(events)
                     events = ev;
                 else
-                    events(end+1) = ev;
+                    events(end+1) = ev; %#ok<AGROW>
                 end
 
                 % Callback (MaxCallsPerEvent limits per-event; each event seen once)

@@ -249,9 +249,9 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
             d.addPage('P1');
             d.switchPage(1);
 
-            s = Sensor('testSensorListeners', 'Name', 'T');
-            s.X = (1:5);
-            s.Y = rand(1, 5);
+            s = SensorTag('testSensorListeners', 'Name', 'T');
+            s.updateData((1:5), rand(1, 5));
+            [s_x_, s_y_] = s.getXY();
 
             d.addWidget('fastsense', 'Title', 'T', 'Position', [1 1 6 2], ...
                 'Sensor', s);
@@ -261,7 +261,7 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
 
             % Trigger PostSet listener by assigning new data
             try
-                s.Y = rand(1, 10);
+                s_y_ = rand(1, 10);
                 testCase.verifyTrue(w.Dirty, ...
                     'PostSet listener should mark widget dirty when sensor Y changes');
             catch
@@ -318,7 +318,7 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
             content = fread(fid, '*char')';
             fclose(fid);
 
-            testCase.verifySubstring(content, 'SensorRegistry.get');
+            testCase.verifySubstring(content, 'TagRegistry.get');
             testCase.verifySubstring(content, 'temperature');
         end
 

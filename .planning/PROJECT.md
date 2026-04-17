@@ -41,6 +41,23 @@ Users can organize complex dashboards into navigable sections and pop out any wi
 ### Active
 
 - ✓ Dashboard performance optimization: theme caching, O(1) widget dispatch, single-pass live tick, in-place resize, visibility page switch — v1.0 Performance
+- ✓ Tag-based domain model: unified `Tag` foundation, `TagRegistry`, `MonitorTag` derived time-series, `CompositeTag` aggregation — v2.0
+- ✓ Events attached to tags with FastSense overlay rendering — v2.0
+
+## Current State
+
+**Shipped:** v2.0 Tag-Based Domain Model (2026-04-17)
+
+The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundation. Legacy `Sensor`/`Threshold`/`StateChannel`/`CompositeThreshold` classes are deleted. All consumers (FastSenseWidget, dashboard widgets, EventDetection, LiveEventPipeline) operate through the Tag API (`addTag`, `getXY`, `valueAt`). Events bind to tags via `EventBinding` registry and render as toggleable round markers in FastSense.
+
+**Vocabulary:** `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `TagRegistry`, `EventBinding`. FastSense API: `addTag(t)`.
+
+**Next milestone candidates:**
+- Asset hierarchy (Asset tree, templates, tag-to-asset binding, browse rollups)
+- Custom event GUI (click-drag region selection in FastSense → label dialog)
+- Calc tags / formula evaluator for arbitrary derived tags
+- Tri-state / continuous severity MonitorTag output
+- WebBridge parity for Tag API features
 
 ### Out of Scope
 
@@ -95,6 +112,11 @@ Users can organize complex dashboards into navigable sections and pop out any wi
 | repositionPanels for onResize | In-place panel repositioning vs destroy+recreate; fallback to rerenderWidgets on missing handles | ✓ Good |
 | switchPage visibility toggle | Hide/show panels instead of full rerender; pre-allocate all page panels at render() | ✓ Good |
 | Single-pass onLiveTick with updateLiveTimeRangeFrom | One activePageWidgets() call, merged mark-dirty+refresh loop | ✓ Good |
+| v2.0 reboot under unified `Tag` root (Option 2) | No-users codebase; preserves design wins from 1001-1003 as concepts; cleanest end state vs. interface-shim approach (Option 3) | Pending v2.0 |
+| Vocabulary: `Tag` suffix on all primitives (`SensorTag`, `MonitorTag`, ...) | Trendminer-faithful; uniform mental model; `addTag()` API replaces `addSensor()` | Pending v2.0 |
+| Single `TagRegistry` (replaces `SensorRegistry` + `ThresholdRegistry`) | One namespace, one search surface; fewer parallel singletons | Pending v2.0 |
+| MonitorTag as full time-series signal (not current-state only) | Plottable, persistable, event-detectable; reuses existing infrastructure | Pending v2.0 |
+| Defer asset hierarchy (D), custom event GUI (F), calc tags (G) to later milestones | Ambitious tier (A+B+C+E) is shippable on its own; D/F/G are independent additions | Pending v2.0 |
 
 ## Evolution
 
@@ -114,4 +136,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after v1.0 performance optimization milestone*
+*Last updated: 2026-04-16 — v2.0 milestone (Tag-Based Domain Model) initialized*

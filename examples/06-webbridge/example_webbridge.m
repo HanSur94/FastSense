@@ -39,39 +39,17 @@ function example_webbridge_run()
     tSeed = linspace(-60, 0, nSeed);
 
     % Temperature sensor
-    sTemp = Sensor('temperature', 'Name', 'Temperature');
+    sTemp = SensorTag('temperature', 'Name', 'Temperature');
     sTemp.Units = [char(176) 'C'];
-    sTemp.X = tSeed;
-    sTemp.Y = 22 + 3*sin(2*pi*tSeed/30) + randn(1, nSeed)*0.3;
-    tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper', ...
-        'Color', [1 0.8 0], 'LineStyle', '--');
-    tHiWarnTemp.addCondition(struct(), 28);
-    sTemp.addThreshold(tHiWarnTemp);
-    tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper', ...
-        'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tHiAlarmTemp.addCondition(struct(), 32);
-    sTemp.addThreshold(tHiAlarmTemp);
-
+    sTemp.updateData(tSeed, 22 + 3*sin(2*pi*tSeed/30) + randn(1, nSeed)*0.3);
     % Pressure sensor
-    sPress = Sensor('pressure', 'Name', 'Pressure');
+    sPress = SensorTag('pressure', 'Name', 'Pressure');
     sPress.Units = 'bar';
-    sPress.X = tSeed;
-    sPress.Y = 4.5 + 0.5*sin(2*pi*tSeed/20) + randn(1, nSeed)*0.1;
-    tMaxPress = Threshold('max', 'Name', 'Max', 'Direction', 'upper', ...
-        'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tMaxPress.addCondition(struct(), 5.5);
-    sPress.addThreshold(tMaxPress);
-
+    sPress.updateData(tSeed, 4.5 + 0.5*sin(2*pi*tSeed/20) + randn(1, nSeed)*0.1);
     % Vibration sensor
-    sVib = Sensor('vibration', 'Name', 'Vibration');
+    sVib = SensorTag('vibration', 'Name', 'Vibration');
     sVib.Units = 'mm/s';
-    sVib.X = tSeed;
-    sVib.Y = 2.0 + 0.8*randn(1, nSeed) + 0.5*sin(2*pi*tSeed/15);
-    tAlertVib = Threshold('alert', 'Name', 'Alert', 'Direction', 'upper', ...
-        'Color', [1 0.5 0], 'LineStyle', '--');
-    tAlertVib.addCondition(struct(), 4.0);
-    sVib.addThreshold(tAlertVib);
-
+    sVib.updateData(tSeed, 2.0 + 0.8*randn(1, nSeed) + 0.5*sin(2*pi*tSeed/15));
     %% ========== Build Dashboard ==========
     engine = DashboardEngine('Sensor Monitor');
     engine.addWidget('fastsense', ...
@@ -138,9 +116,6 @@ function example_webbridge_run()
     end
 
     function recalcAll()
-        sTemp.resolve();
-        sPress.resolve();
-        sVib.resolve();
         bridge.notifyDataChanged({'temperature', 'pressure', 'vibration'});
         fprintf('All sensors recalculated.\n');
     end

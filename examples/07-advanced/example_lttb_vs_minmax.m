@@ -19,7 +19,6 @@ fp1 = FastSense('Parent', ax1, 'LinkGroup', 'compare');
 fp1.addLine(x, y, 'DisplayName', 'MinMax', 'Color', [0 0.45 0.74], ...
     'DownsampleMethod', 'minmax');
 fp1.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.9 0 0], 'LineStyle', '--');
 fp1.render();
 title(ax1, 'MinMax Downsampling (preserves peaks/valleys)');
 
@@ -29,7 +28,6 @@ fp2 = FastSense('Parent', ax2, 'LinkGroup', 'compare');
 fp2.addLine(x, y, 'DisplayName', 'LTTB', 'Color', [0.85 0.33 0.1], ...
     'DownsampleMethod', 'lttb');
 fp2.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.9 0 0], 'LineStyle', '--');
 fp2.render();
 title(ax2, 'LTTB Downsampling (preserves visual shape)');
 

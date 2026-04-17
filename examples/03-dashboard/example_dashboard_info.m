@@ -18,32 +18,15 @@ rng(7);
 N = 10000;
 t = linspace(0, 86400, N);  % 24 hours in seconds
 
-sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'C'];
-sTemp.X = t;
-sTemp.Y = 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8;
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnTemp.addCondition(struct(), 78);
-sTemp.addThreshold(tHiWarnTemp);
+sTemp.updateData(t, 70 + 5*sin(2*pi*t/3600) + randn(1,N)*0.8);
 
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmTemp.addCondition(struct(), 85);
-sTemp.addThreshold(tHiAlarmTemp);
-sTemp.resolve();
 
-sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress = SensorTag('P-201', 'Name', 'Pressure');
 sPress.Units = 'bar';
-sPress.X = t;
-sPress.Y = 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5;
+sPress.updateData(t, 50 + 20*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnPress.addCondition(struct(), 65);
-sPress.addThreshold(tHiWarnPress);
-
-tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmPress.addCondition(struct(), 70);
-sPress.addThreshold(tHiAlarmPress);
-sPress.resolve();
 
 %% 2. Generate a process diagram image for the info page
 % The Markdown file references this image via ![...](example_dashboard_info_diagram.png)
@@ -122,12 +105,12 @@ assert(contains(jsonText, 'infoFile'), 'infoFile should be in JSON');
 fprintf('JSON contains infoFile field: OK\n');
 
 % Register sensors so that fromStruct can resolve them during load
-SensorRegistry.register('T-401', sTemp);
-SensorRegistry.register('P-201', sPress);
+TagRegistry.register('T-401', sTemp);
+TagRegistry.register('P-201', sPress);
 
 d2 = DashboardEngine.load(jsonPath);
 fprintf('Reloaded InfoFile: %s\n', d2.InfoFile);
 
 % Clean up registry
-SensorRegistry.unregister('T-401');
-SensorRegistry.unregister('P-201');
+TagRegistry.unregister('T-401');
+TagRegistry.unregister('P-201');

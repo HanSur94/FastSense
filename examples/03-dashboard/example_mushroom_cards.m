@@ -37,7 +37,7 @@ t = linspace(0, 86400, N);  % 24 hours in seconds
 modeChangeTimes = [0, 3600, 7200, 28800, 36000, 72000, 79200, 82800];
 modeValues      = [0, 1,    1,    2,     1,     0,     1,     1];
 
-scMode = StateChannel('machine');
+scMode = StateTag('machine');
 scMode.X = modeChangeTimes;
 scMode.Y = modeValues;
 
@@ -54,21 +54,9 @@ end
 tempNoise = 3 * sin(2*pi*t/3600) + randn(1, N) * 1.2;
 temp = tempBase + tempNoise;
 
-sTemp = Sensor('T-401', 'Name', 'Temperature');
+sTemp = SensorTag('T-401', 'Name', 'Temperature');
 sTemp.Units = [char(176) 'F'];
-sTemp.X = t;
-sTemp.Y = temp;
-sTemp.addStateChannel(scMode);
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnTemp.addCondition(struct('machine', 1), 78);
-sTemp.addThreshold(tHiWarnTemp);
-
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmTemp.addCondition(struct('machine', 1), 85);
-sTemp.addThreshold(tHiAlarmTemp);
-sTemp.resolve();
+sTemp.updateData(t, temp);
 
 % --- Pressure sensor P-201 ---
 pressBase = zeros(1, N);
@@ -83,21 +71,9 @@ end
 pressNoise = 8 * sin(2*pi*t/7200) + randn(1, N) * 2;
 pressure = pressBase + pressNoise;
 
-sPress = Sensor('P-201', 'Name', 'Pressure');
+sPress = SensorTag('P-201', 'Name', 'Pressure');
 sPress.Units = 'psi';
-sPress.X = t;
-sPress.Y = pressure;
-sPress.addStateChannel(scMode);
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-    'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-tHiWarnPress.addCondition(struct('machine', 1), 65);
-sPress.addThreshold(tHiWarnPress);
-
-tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-    'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-tHiAlarmPress.addCondition(struct('machine', 1), 70);
-sPress.addThreshold(tHiAlarmPress);
-sPress.resolve();
+sPress.updateData(t, pressure);
 
 %% ========== Create DashboardEngine ==========
 % Dark theme contrasts nicely with the state-colored icon circles.

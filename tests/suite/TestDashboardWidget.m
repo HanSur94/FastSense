@@ -59,19 +59,19 @@ classdef TestDashboardWidget < matlab.unittest.TestCase
         end
 
         function testSensorProperty(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature');
+            s = SensorTag('T-401', 'Name', 'Temperature');
             w = MockDashboardWidget('Sensor', s);
             testCase.verifyEqual(w.Sensor.Key, 'T-401');
         end
 
         function testTitleDefaultsToSensorName(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature');
+            s = SensorTag('T-401', 'Name', 'Temperature');
             w = MockDashboardWidget('Sensor', s);
             testCase.verifyEqual(w.Title, 'Temperature');
         end
 
         function testTitleOverrideBeatsSensorName(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature');
+            s = SensorTag('T-401', 'Name', 'Temperature');
             w = MockDashboardWidget('Title', 'Custom', 'Sensor', s);
             testCase.verifyEqual(w.Title, 'Custom');
         end

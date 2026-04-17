@@ -18,13 +18,9 @@ y_temp = 75 + 8*sin(x*2*pi/120) + 2*randn(1,n);
 fp1 = FastSense('Parent', ax1, 'LinkGroup', 'dashboard');
 fp1.addLine(x, y_temp, 'DisplayName', 'Temperature', 'Color', [0.8 0.2 0.1]);
 fp1.addThreshold(90, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'HH');
 fp1.addThreshold(85, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':',  'Label', 'H');
 fp1.addThreshold(65, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':',  'Label', 'L');
 fp1.addThreshold(60, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'LL');
 fp1.render();
 title(ax1, 'Temperature (C)');
 
@@ -34,13 +30,9 @@ y_press = 100 + 15*sin(x*2*pi/200) + 5*randn(1,n);
 fp2 = FastSense('Parent', ax2, 'LinkGroup', 'dashboard');
 fp2.addLine(x, y_press, 'DisplayName', 'Pressure', 'Color', [0.1 0.4 0.8]);
 fp2.addThreshold(130, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'HH');
 fp2.addThreshold(120, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':');
 fp2.addThreshold(80, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':');
 fp2.addThreshold(70, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'LL');
 fp2.render();
 title(ax2, 'Pressure (bar)');
 
@@ -53,11 +45,8 @@ y_flow(ramp_idx) = y_flow(ramp_idx) + linspace(0, 25, numel(ramp_idx));
 fp3 = FastSense('Parent', ax3, 'LinkGroup', 'dashboard');
 fp3.addLine(x, y_flow, 'DisplayName', 'Flow Rate', 'Color', [0.2 0.6 0.2]);
 fp3.addThreshold(75, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--');
 fp3.addThreshold(65, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':');
 fp3.addThreshold(35, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':');
 fp3.render();
 title(ax3, 'Flow Rate (L/min)');
 
@@ -72,13 +61,9 @@ end
 fp4 = FastSense('Parent', ax4, 'LinkGroup', 'dashboard');
 fp4.addLine(x, y_vib, 'DisplayName', 'Vibration', 'Color', [0.5 0.2 0.6]);
 fp4.addThreshold(4.0, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'Danger');
 fp4.addThreshold(2.5, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':', 'Label', 'Warning');
 fp4.addThreshold(-2.5, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':');
 fp4.addThreshold(-4.0, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--');
 fp4.render();
 title(ax4, 'Vibration (mm/s)');
 xlabel(ax4, 'Time (s)');

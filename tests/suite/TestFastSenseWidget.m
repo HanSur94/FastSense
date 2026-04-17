@@ -19,9 +19,8 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
         end
 
         function testSensorBinding(testCase)
-            s = Sensor('T-401', 'Name', 'Temperature');
-            s.X = 1:100;
-            s.Y = rand(1,100);
+            s = SensorTag('T-401', 'Name', 'Temperature');
+            s.updateData(1:100, rand(1,100));
 
             w = FastSenseWidget('Sensor', s);
             testCase.verifyEqual(w.Sensor, s);
@@ -55,16 +54,15 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             testCase.verifyTrue(isa(w.FastSenseObj, 'FastSense'));
         end
 
-        function testRenderWithSensor(testCase)
+        function testRenderWithTag(testCase)
             hFig = figure('Visible', 'off');
             testCase.addTeardown(@() close(hFig));
 
             hp = uipanel('Parent', hFig, 'Units', 'normalized', ...
                 'Position', [0 0 1 1]);
 
-            s = Sensor('T-401', 'Name', 'Temperature');
-            s.X = 1:100;
-            s.Y = rand(1,100);
+            s = SensorTag('T-401', 'Name', 'Temperature');
+            s.updateData(1:100, rand(1,100));
             t_hi_alarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
             t_hi_alarm.addCondition(struct(), 80);
             s.addThreshold(t_hi_alarm);
@@ -88,10 +86,9 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             testCase.verifyEqual(s.position.col, 5);
         end
 
-        function testToStructWithSensor(testCase)
-            sensor = Sensor('P-201', 'Name', 'Pressure');
-            sensor.X = 1:100;
-            sensor.Y = rand(1,100);
+        function testToStructWithTag(testCase)
+            sensor = SensorTag('P-201', 'Name', 'Pressure');
+            sensor.updateData(1:100, rand(1,100));
             w = FastSenseWidget('Sensor', sensor);
 
             s = w.toStruct();

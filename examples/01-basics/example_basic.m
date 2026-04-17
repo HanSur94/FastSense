@@ -17,16 +17,10 @@ fp.addLine(x, y, 'DisplayName', 'Noisy Sine', 'Color', [0 0.4470 0.7410]);
 
 % Alarm thresholds (red, dashed)
 fp.addThreshold(2.0, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', 'r', 'LineStyle', '--', 'Label', 'Alarm Hi');
 fp.addThreshold(-2.0, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', 'r', 'LineStyle', '--', 'Label', 'Alarm Lo');
-
 % Warning thresholds (orange, dotted)
 fp.addThreshold(1.5, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.6 0], 'LineStyle', ':', 'Label', 'Warn Hi');
 fp.addThreshold(-1.5, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.6 0], 'LineStyle', ':', 'Label', 'Warn Lo');
-
 fp.render();
 
 fprintf('Rendered in %.3f seconds. Try zooming and panning!\n', toc);

@@ -8,9 +8,8 @@ run(fullfile(projectRoot, 'install.m'));
 t = linspace(0, 60, 20000);  % 1 minute at ~333 Hz
 data = 25 + 5*sin(2*pi*t/15) + randn(1, numel(t));
 
-s = Sensor('vibration', 'Name', 'Motor Vibration');
-s.X = t;
-s.Y = data;
+s = SensorTag('vibration', 'Name', 'Motor Vibration');
+s.updateData(t, data);
 
 %% Plot it — one line is all you need
 sdp = SensorDetailPlot(s);

@@ -24,45 +24,25 @@ N = 5000;
 t = linspace(0, 3600, N);  % 1 hour
 
 % Temperature — last value above Hi Alarm => red/alarm
-sTemp = Sensor('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
-sTemp.X = t;
-sTemp.Y = 70 + 4*sin(2*pi*t/600) + randn(1,N)*0.5;
-sTemp.Y(end-200:end) = 92 + randn(1,201)*0.3;        % push tail into alarm
-tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnTemp.addCondition(struct(), 80);
-sTemp.addThreshold(tHiWarnTemp);
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C']);
+sTemp_x_ = t;
+sTemp_y_ = 70 + 4*sin(2*pi*t/600) + randn(1,N)*0.5;
+sTemp_y_(end-200:end) = 92 + randn(1,201)*0.3;        % push tail into alarm
+sTemp.updateData(sTemp_x_, sTemp_y_);
 
-tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmTemp.addCondition(struct(), 90);
-sTemp.addThreshold(tHiAlarmTemp);
-sTemp.resolve();
 
 % Pressure — last value between Hi Warn and Hi Alarm => yellow/warning
-sPress = Sensor('P-201', 'Name', 'Pressure', 'Units', 'bar');
-sPress.X = t;
-sPress.Y = 48 + 3*sin(2*pi*t/900) + randn(1,N)*0.8;
-sPress.Y(end-100:end) = 67 + randn(1,101)*0.4;       % push tail into warning
-tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', 'Direction', 'upper');
-tHiWarnPress.addCondition(struct(), 65);
-sPress.addThreshold(tHiWarnPress);
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar');
+sPress_x_ = t;
+sPress_y_ = 48 + 3*sin(2*pi*t/900) + randn(1,N)*0.8;
+sPress_y_(end-100:end) = 67 + randn(1,101)*0.4;       % push tail into warning
+sPress.updateData(sPress_x_, sPress_y_);
 
-tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmPress.addCondition(struct(), 75);
-sPress.addThreshold(tHiAlarmPress);
-sPress.resolve();
 
 % Flow — last value well within limits => green/ok
-sFlow = Sensor('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
-sFlow.X = t;
-sFlow.Y = 120 + 5*sin(2*pi*t/1200) + randn(1,N)*1.0;
-tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-tHiAlarmFlow.addCondition(struct(), 140);
-sFlow.addThreshold(tHiAlarmFlow);
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
+sFlow.updateData(t, 120 + 5*sin(2*pi*t/1200) + randn(1,N)*1.0);
 
-tLoAlarmFlow = Threshold('lo_alarm', 'Name', 'Lo Alarm', 'Direction', 'lower');
-tLoAlarmFlow.addCondition(struct(), 90);
-sFlow.addThreshold(tLoAlarmFlow);
-sFlow.resolve();
 
 %% 2. Build dashboard
 d = DashboardEngine('Status Widget Demo');
@@ -88,4 +68,3 @@ d.render();
 
 fprintf('Status demo: T-401=alarm, P-201=warning, F-301=ok\n');
 fprintf('Violations: T-401=%d  P-201=%d  F-301=%d\n', ...
-    sTemp.countViolations(), sPress.countViolations(), sFlow.countViolations());

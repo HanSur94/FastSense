@@ -28,9 +28,8 @@ N   = 2000;
 t   = linspace(0, 86400, N);
 y   = 70 + 6*sin(2*pi*t/7200) + randn(1, N)*1.5;
 
-s = Sensor('T-401', 'Name', 'Temperature');
-s.X = t;
-s.Y = y;
+s = SensorTag('T-401', 'Name', 'Temperature');
+s.updateData(t, y);
 
 %% Build dashboard — 2x2 grid of RawAxes widgets
 d = DashboardEngine('RawAxes Widget Demo');
@@ -69,7 +68,8 @@ function plotHistogram(ax, data)
 end
 
 function plotScatter(ax, sensor)
-    scatter(ax, 1:numel(sensor.Y), sensor.Y, 8, sensor.Y, 'filled');
+    [~, yData] = sensor.getXY();
+    scatter(ax, 1:numel(yData), yData, 8, yData, 'filled');
     colormap(ax, parula); colorbar(ax);
     xlabel(ax, 'Sample Index'); ylabel(ax, sensor.Name);
 end
@@ -84,12 +84,12 @@ function plotBarStats(ax, data)
 end
 
 function plotDistribution(ax, sensor)
-    q = quantile(sensor.Y, [0.25 0.50 0.75]);
-    mu = mean(sensor.Y);
+    [~, yData] = sensor.getXY();
+    q = quantile(yData, [0.25 0.50 0.75]);
+    mu = mean(yData);
     vals  = [q(1), q(2), q(3), mu];
     names = {'Q1', 'Median', 'Q3', 'Mean'};
     stem(ax, 1:4, vals, 'filled', 'LineWidth', 2, 'MarkerSize', 8, ...
-        'Color', [0.17 0.63 0.52]);
     set(ax, 'XTick', 1:4, 'XTickLabel', names);
     ylabel(ax, sensor.Name);
     yline(ax, q(2), '--', 'Median', 'Color', [0.5 0.5 0.5]);

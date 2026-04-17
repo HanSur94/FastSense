@@ -20,9 +20,8 @@ function test_gauge_widget()
     nPassed = nPassed + 1;
 
     % --- Test 2: Range auto-derives from Threshold.allValues() ---
-    s2 = Sensor('P-201', 'Name', 'Pressure');
-    s2.X = [1 2 3];
-    s2.Y = [40 50 60];
+    s2 = SensorTag('P-201', 'Name', 'Pressure');
+    s2.updateData([1 2 3], [40 50 60]);
     tLo = Threshold('P201_lo', 'Name', 'Lo', 'Direction', 'lower');
     tLo.addCondition(struct(), 30);
     s2.addThreshold(tLo);
@@ -35,9 +34,8 @@ function test_gauge_widget()
     nPassed = nPassed + 1;
 
     % --- Test 3: Units derive from Sensor ---
-    s3 = Sensor('T-101', 'Name', 'Temperature', 'Units', 'degC');
-    s3.X = [1 2 3];
-    s3.Y = [20 25 30];
+    s3 = SensorTag('T-101', 'Name', 'Temperature', 'Units', 'degC');
+    s3.updateData([1 2 3], [20 25 30]);
     w3 = GaugeWidget('Sensor', s3);
     assert(strcmp(w3.Units, 'degC'), 'Units should auto-derive from Sensor.Units');
     nPassed = nPassed + 1;
@@ -58,9 +56,8 @@ function test_gauge_widget()
     nPassed = nPassed + 1;
 
     % --- Test 6: Range fallback to Y data when no thresholds ---
-    s6 = Sensor('S-001', 'Name', 'Speed');
-    s6.X = [1 2 3];
-    s6.Y = [10 50 90];
+    s6 = SensorTag('S-001', 'Name', 'Speed');
+    s6.updateData([1 2 3], [10 50 90]);
     w6 = GaugeWidget('Sensor', s6);
     assert(isequal(w6.Range, [10 90]), ...
         sprintf('Range should fall back to Y data range, got [%g %g]', w6.Range(1), w6.Range(2)));

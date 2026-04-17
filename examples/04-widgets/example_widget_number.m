@@ -25,17 +25,17 @@ rng(42);
 N = 5000;
 t = linspace(0, 86400, N);  % 24 h in seconds
 
-sTemp = Sensor('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F']);
-sTemp.X = t;
-sTemp.Y = 72 + 4*sin(2*pi*t/3600) + randn(1,N)*0.6;
+sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F']);
+sTemp.updateData(t, 72 + 4*sin(2*pi*t/3600) + randn(1,N)*0.6);
+[sTemp_x_, sTemp_y_] = sTemp.getXY();
 
-sPress = Sensor('P-201', 'Name', 'Pressure', 'Units', 'psi');
-sPress.X = t;
-sPress.Y = 55 + 10*sin(2*pi*t/7200) + randn(1,N)*1.2;
+sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi');
+sPress.updateData(t, 55 + 10*sin(2*pi*t/7200) + randn(1,N)*1.2);
+[sPress_x_, sPress_y_] = sPress.getXY();
 
-sFlow = Sensor('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
-sFlow.X = t;
-sFlow.Y = max(0, 120 + 8*sin(2*pi*t/1800) + randn(1,N)*3);
+sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min');
+sFlow.updateData(t, max(0, 120 + 8*sin(2*pi*t/1800) + randn(1,N)*3));
+[sFlow_x_, sFlow_y_] = sFlow.getXY();
 
 %% 2. Build Dashboard
 d = DashboardEngine('NumberWidget Demo');
@@ -55,14 +55,14 @@ d.addWidget('number', ...
 % --- ValueFcn returning a scalar ---
 d.addWidget('number', 'Title', 'Flow Rate', ...
     'Position', [11 1 5 2], ...
-    'ValueFcn', @() sFlow.Y(end), ...
+    'ValueFcn', @() sFlow_y_(end), ...
     'Units', 'L/min', ...
     'Format', '%.1f');
 
 % --- ValueFcn returning a struct (value + unit + trend) ---
 d.addWidget('number', 'Title', 'Temp (struct)', ...
     'Position', [16 1 5 2], ...
-    'ValueFcn', @() struct('value', sTemp.Y(end), ...
+    'ValueFcn', @() struct('value', sTemp_y_(end), ...
                            'unit',  [char(176) 'F'], ...
                            'trend', 'up'));
 
@@ -82,7 +82,7 @@ d.addWidget('fastsense', ...
 d.render();
 
 fprintf('Dashboard rendered with %d widgets.\n', numel(d.Widgets));
-fprintf('  Temperature : %.1f %sF\n', sTemp.Y(end), char(176));
-fprintf('  Pressure    : %.0f psi\n', sPress.Y(end));
-fprintf('  Flow Rate   : %.1f L/min\n', sFlow.Y(end));
+fprintf('  Temperature : %.1f %sF\n', sTemp_y_(end), char(176));
+fprintf('  Pressure    : %.0f psi\n', sPress_y_(end));
+fprintf('  Flow Rate   : %.1f L/min\n', sFlow_y_(end));
 fprintf('  Batch Count : 42 items (static)\n');

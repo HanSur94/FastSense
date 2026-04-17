@@ -89,11 +89,10 @@ classdef TestStatusWidget < matlab.unittest.TestCase
                 'refresh should pick up new StatusFcn return value');
         end
 
-        function testRefreshWithSensor(testCase)
+        function testRefreshWithTag(testCase)
             %% Sensor-bound widget derives status from sensor data
-            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
-            s.X = [1 2 3];
-            s.Y = [70 71 72];
+            s = SensorTag('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.updateData([1 2 3], [70 71 72]);
 
             w = StatusWidget('Sensor', s);
             testCase.verifyEqual(w.Title, 'Temperature', ...
@@ -115,11 +114,9 @@ classdef TestStatusWidget < matlab.unittest.TestCase
             testCase.addTeardown(@() close(hFig));
 
             % Upper threshold violated: latest Y (85) > limit (80)
-            s = Sensor('T-401', 'Name', 'Temperature', 'Units', 'degC');
-            s.X = [1 2 3];
-            s.Y = [70 71 85];
+            s = SensorTag('T-401', 'Name', 'Temperature', 'Units', 'degC');
+            s.updateData([1 2 3], [70 71 85]);
             t1 = Threshold('T401_hi', 'Name', 'Hi Alarm', ...
-                'Direction', 'upper', 'Color', [0.9 0.2 0.2]);
             t1.addCondition(struct(), 80);
             s.addThreshold(t1);
 
@@ -133,9 +130,8 @@ classdef TestStatusWidget < matlab.unittest.TestCase
                 'Color should come from the Threshold.Color');
 
             % Upper threshold NOT violated: latest Y (75) < limit (80)
-            s2 = Sensor('T-402', 'Name', 'Temp Safe');
-            s2.X = [1 2 3];
-            s2.Y = [70 71 75];
+            s2 = SensorTag('T-402', 'Name', 'Temp Safe');
+            s2.updateData([1 2 3], [70 71 75]);
             t2 = Threshold('T402_hi', 'Name', 'Hi', 'Direction', 'upper');
             t2.addCondition(struct(), 80);
             s2.addThreshold(t2);
@@ -150,9 +146,8 @@ classdef TestStatusWidget < matlab.unittest.TestCase
                 'Color should be StatusOkColor when ok');
 
             % Lower threshold violated: latest Y (5) < limit (10)
-            s3 = Sensor('P-100', 'Name', 'Pressure');
-            s3.X = [1 2 3];
-            s3.Y = [20 15 5];
+            s3 = SensorTag('P-100', 'Name', 'Pressure');
+            s3.updateData([1 2 3], [20 15 5]);
             t3 = Threshold('P100_lo', 'Name', 'Lo Warn', 'Direction', 'lower');
             t3.addCondition(struct(), 10);
             s3.addThreshold(t3);
@@ -170,7 +165,7 @@ classdef TestStatusWidget < matlab.unittest.TestCase
 
         function testToStruct(testCase)
             %% Serialization includes type, title, position, and source
-            s = Sensor('V-100', 'Name', 'Valve');
+            s = SensorTag('V-100', 'Name', 'Valve');
             w = StatusWidget('Sensor', s, ...
                 'Description', 'Main valve status');
             st = w.toStruct();
@@ -241,11 +236,11 @@ classdef TestStatusWidget < matlab.unittest.TestCase
 
         function testThresholdKeyResolution(testCase)
             %% Threshold string key is resolved via ThresholdRegistry
-            ThresholdRegistry.clear();
+            TagRegistry.clear();
             t = Threshold('temp_hh', 'Name', 'Hi Hi', 'Direction', 'upper');
             t.addCondition(struct(), 100);
-            ThresholdRegistry.register('temp_hh', t);
-            testCase.addTeardown(@() ThresholdRegistry.clear());
+            TagRegistry.register('temp_hh', t);
+            testCase.addTeardown(@() TagRegistry.clear());
 
             w = StatusWidget('Title', 'T', 'Threshold', 'temp_hh', 'Value', 50);
             testCase.verifyEqual(w.Threshold, t, ...
@@ -254,8 +249,8 @@ classdef TestStatusWidget < matlab.unittest.TestCase
 
         function testMutualExclusivity(testCase)
             %% Setting Threshold clears Sensor; widget with both has Threshold, Sensor cleared
-            s = Sensor('T-401', 'Name', 'Temperature');
-            s.X = [1]; s.Y = [70];
+            s = SensorTag('T-401', 'Name', 'Temperature');
+            % TODO: s.X = [1]; s.Y = [70]; (needs manual fix)
             t = Threshold('temp_hi', 'Name', 'Hi', 'Direction', 'upper');
             t.addCondition(struct(), 80);
 
@@ -335,11 +330,11 @@ classdef TestStatusWidget < matlab.unittest.TestCase
 
         function testSerializeThresholdRoundTrip(testCase)
             %% toStruct produces source.type='threshold' + source.key; fromStruct restores
-            ThresholdRegistry.clear();
+            TagRegistry.clear();
             t = Threshold('press_hi', 'Name', 'Hi', 'Direction', 'upper');
             t.addCondition(struct(), 90);
-            ThresholdRegistry.register('press_hi', t);
-            testCase.addTeardown(@() ThresholdRegistry.clear());
+            TagRegistry.register('press_hi', t);
+            testCase.addTeardown(@() TagRegistry.clear());
 
             w = StatusWidget('Title', 'Pressure', ...
                 'Threshold', t, 'Value', 75);

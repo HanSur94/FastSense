@@ -22,9 +22,7 @@ tic;
 fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Sensor (with dropouts)', 'Color', [0 0.5 0.3]);
 fp.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.9 0 0], 'LineStyle', '--', 'Label', 'Upper Limit');
 fp.addThreshold(-1.0, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.9 0 0], 'LineStyle', '--', 'Label', 'Lower Limit');
 fp.render();
 
 fprintf('Rendered in %.3f seconds. Zoom into the gaps!\n', toc);

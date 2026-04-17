@@ -20,32 +20,19 @@ N = 101;
 t = linspace(0, 10, N);
 
 % RPM sensor
-s_rpm = Sensor('rpm_main', 'Name', 'Main RPM');
+s_rpm = SensorTag('rpm_main', 'Name', 'Main RPM');
 s_rpm.Units = 'rpm';
-s_rpm.X = t;
-s_rpm.Y = 100 + 20*sin(t);
+s_rpm.updateData(t, 100 + 20*sin(t));
 
 % Bearing temperature sensor with thresholds
-s_temp = Sensor('temp_bearing', 'Name', 'Bearing Temp');
+s_temp = SensorTag('temp_bearing', 'Name', 'Bearing Temp');
 s_temp.Units = [char(176) 'C'];
-s_temp.X = t;
-s_temp.Y = 60 + 5*randn(1, N);
-tWarning = Threshold('warning', 'Name', 'Warning', ...
-    'Direction', 'upper', 'Color', [0.91 0.63 0.27], 'LineStyle', '--');
-tWarning.addCondition(struct(), 65);
-s_temp.addThreshold(tWarning);
-
-tAlarm = Threshold('alarm', 'Name', 'Alarm', ...
-    'Direction', 'upper', 'Color', [0.91 0.27 0.38], 'LineStyle', '-');
-tAlarm.addCondition(struct(), 70);
-s_temp.addThreshold(tAlarm);
-s_temp.resolve();
+s_temp.updateData(t, 60 + 5*randn(1, N));
 
 % Line pressure sensor
-s_pres = Sensor('pressure', 'Name', 'Line Pressure');
+s_pres = SensorTag('pressure', 'Name', 'Line Pressure');
 s_pres.Units = 'bar';
-s_pres.X = t;
-s_pres.Y = 2.5 + 0.3*randn(1, N);
+s_pres.updateData(t, 2.5 + 0.3*randn(1, N));
 
 %% Build dashboard
 d = DashboardEngine('GroupWidget Demo', 'Theme', 'light');

@@ -18,33 +18,16 @@ data(30000:30200) = data(30000:30200) + 20;  % spike at t~90
 data(70000:70300) = data(70000:70300) + 25;  % bigger spike at t~210
 data(50000:50100) = data(50000:50100) - 18;  % dip at t~150
 
-s = Sensor('temperature', 'Name', 'Chamber Temperature');
-s.X = t;
-s.Y = data;
+s = SensorTag('temperature', 'Name', 'Chamber Temperature');
+s.updateData(t, data);
 
 % Add state channel (constant state for simplicity)
-sc = StateChannel('mode');
+sc = StateTag('mode');
 sc.X = [0 300];
 sc.Y = [1 1];
-s.addStateChannel(sc);
 
 % Add threshold rules
-tHWarning = Threshold('h_warning', 'Name', 'H Warning', ...
-    'Direction', 'upper', 'Color', [1 0.75 0], 'LineStyle', '--');
-tHWarning.addCondition(struct('mode', 1), 62);
-s.addThreshold(tHWarning);
 
-tHhAlarm = Threshold('hh_alarm', 'Name', 'HH Alarm', ...
-    'Direction', 'upper', 'Color', [1 0 0], 'LineStyle', '-');
-tHhAlarm.addCondition(struct('mode', 1), 70);
-s.addThreshold(tHhAlarm);
-
-tLWarning = Threshold('l_warning', 'Name', 'L Warning', ...
-    'Direction', 'lower', 'Color', [0.3 0.6 1], 'LineStyle', '--');
-tLWarning.addCondition(struct('mode', 1), 38);
-s.addThreshold(tLWarning);
-
-s.resolve();
 
 %% 2. Create events matching the spikes
 % Event is a handle class — setStats(peak, numPoints, min, max, mean, rms, std)

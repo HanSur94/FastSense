@@ -115,10 +115,10 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
             testCase.verifyEqual(w.CurrentValue, 90);
         end
 
-        function testRefreshWithSensor(testCase)
-            s = Sensor('P-201', 'Name', 'Pressure', 'Units', 'bar');
-            s.X = [1 2 3];
-            s.Y = [40 50 60];
+        function testRefreshWithTag(testCase)
+            s = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar');
+            s.updateData([1 2 3], [40 50 60]);
+            [s_x_, s_y_] = s.getXY();
             w = GaugeWidget('Sensor', s);
             hFig = figure('Visible', 'off');
             testCase.addTeardown(@() close(hFig));
@@ -127,22 +127,19 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
             testCase.verifyEqual(w.CurrentValue, 60, ...
                 'Sensor-driven gauge should read Y(end)');
             % Append new data and refresh
-            s.Y = [40 50 60 85];
-            s.X = [1 2 3 4];
+            s_y_ = [40 50 60 85];
+            % TODO: s_x_ = [1 2 3 4]; (needs manual fix)
             w.refresh();
             testCase.verifyEqual(w.CurrentValue, 85);
         end
 
-        function testRangeDeriveFromSensor(testCase)
-            s = Sensor('P-201', 'Name', 'Pressure');
-            s.X = [1 2 3];
-            s.Y = [40 50 60];
+        function testRangeDeriveFromTag(testCase)
+            s = SensorTag('P-201', 'Name', 'Pressure');
+            s.updateData([1 2 3], [40 50 60]);
             t1 = Threshold('P201_lo', 'Name', 'Lo', ...
-                'Direction', 'lower', 'Color', [1 0.6 0]);
             t1.addCondition(struct(), 30);
             s.addThreshold(t1);
             t2 = Threshold('P201_hi', 'Name', 'Hi', ...
-                'Direction', 'upper', 'Color', [1 0 0]);
             t2.addCondition(struct(), 80);
             s.addThreshold(t2);
             w = GaugeWidget('Sensor', s);
@@ -150,10 +147,9 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
                 'Range should auto-derive from Threshold values');
         end
 
-        function testUnitsDeriveFromSensor(testCase)
-            s = Sensor('T-101', 'Name', 'Temperature', 'Units', 'degC');
-            s.X = [1 2 3];
-            s.Y = [20 25 30];
+        function testUnitsDeriveFromTag(testCase)
+            s = SensorTag('T-101', 'Name', 'Temperature', 'Units', 'degC');
+            s.updateData([1 2 3], [20 25 30]);
             w = GaugeWidget('Sensor', s);
             testCase.verifyEqual(w.Units, 'degC', ...
                 'Units should auto-derive from Sensor.Units');
@@ -232,7 +228,6 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
             %% Value above upper threshold -> alarm color in getValueColor
             theme = DashboardTheme();
             t = Threshold('press_hi', 'Name', 'Hi Alarm', ...
-                'Direction', 'upper');
             t.addCondition(struct(), 80);
 
             % Violation: value 90 > threshold 80
@@ -254,8 +249,8 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
 
         function testMutualExclusivity(testCase)
             %% Setting Threshold clears Sensor
-            s = Sensor('P-201', 'Name', 'Pressure');
-            s.X = [1]; s.Y = [50];
+            s = SensorTag('P-201', 'Name', 'Pressure');
+            % TODO: s_x_ = [1]; s_y_ = [50]; (needs manual fix)
             t = Threshold('press_hi', 'Name', 'Hi', 'Direction', 'upper');
             t.addCondition(struct(), 80);
 
@@ -268,11 +263,11 @@ classdef TestGaugeWidget < matlab.unittest.TestCase
 
         function testSerializeThresholdRoundTrip(testCase)
             %% toStruct/fromStruct preserves threshold key
-            ThresholdRegistry.clear();
+            TagRegistry.clear();
             t = Threshold('press_hi', 'Name', 'Hi', 'Direction', 'upper');
             t.addCondition(struct(), 90);
-            ThresholdRegistry.register('press_hi', t);
-            testCase.addTeardown(@() ThresholdRegistry.clear());
+            TagRegistry.register('press_hi', t);
+            testCase.addTeardown(@() TagRegistry.clear());
 
             w = GaugeWidget('Title', 'Pressure', ...
                 'Threshold', t, 'StaticValue', 70, 'Range', [0 100]);

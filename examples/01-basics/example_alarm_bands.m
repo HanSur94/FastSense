@@ -22,16 +22,10 @@ fp.addLine(x, y, 'DisplayName', 'Process Variable', 'Color', [0.2 0.4 0.7]);
 
 % Alarm limits (red, dashed) — hard limits
 fp.addThreshold(62, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'HH Alarm');
 fp.addThreshold(38, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'LL Alarm');
-
 % Warning limits (orange, dotted) — soft limits
 fp.addThreshold(58, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':', 'Label', 'H Warning');
 fp.addThreshold(42, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':', 'Label', 'L Warning');
-
 fp.render();
 
 fprintf('Rendered in %.3f seconds.\n', toc);

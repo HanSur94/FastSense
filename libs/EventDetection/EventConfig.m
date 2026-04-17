@@ -32,26 +32,13 @@ classdef EventConfig < handle
             obj.MaxBackups = 5;
         end
 
-        function addSensor(obj, sensor)
-            %ADDSENSOR Register a sensor with its data.
-            sensor.resolve();
-            obj.Sensors{end+1} = sensor;
-
-            % Store data for viewer
-            if ~isempty(sensor.Name)
-                name = sensor.Name;
-            else
-                name = sensor.Key;
-            end
-            entry.name = name;
-            entry.t = sensor.X;
-            entry.y = sensor.Y;
-
-            if isempty(obj.SensorData)
-                obj.SensorData = entry;
-            else
-                obj.SensorData(end+1) = entry;
-            end
+        function addSensor(~, ~)
+            %ADDSENSOR Legacy entry point -- no longer functional.
+            %   The Sensor.resolve() pipeline was deleted in Phase 1011.
+            %   Use MonitorTag + EventStore for event detection.
+            error('EventConfig:legacyRemoved', ...
+                ['addSensor() depended on the deleted Sensor.resolve() pipeline. ', ...
+                 'Use MonitorTag + EventStore for event detection.']);
         end
 
         function setColor(obj, label, rgb)
@@ -74,14 +61,9 @@ classdef EventConfig < handle
             det = obj.buildDetector();
             events = [];
 
-            for i = 1:numel(obj.Sensors)
-                newEvents = detectEventsFromSensor(obj.Sensors{i}, det);
-                if isempty(events)
-                    events = newEvents;
-                elseif ~isempty(newEvents)
-                    events = [events, newEvents];
-                end
-            end
+            % Legacy Sensor-based detection removed in Phase 1011.
+            % EventConfig.runDetection now returns empty events.
+            % Use MonitorTag + EventStore for event detection.
 
             % Post-detection severity escalation
             if obj.EscalateSeverity && ~isempty(events)
@@ -126,85 +108,10 @@ classdef EventConfig < handle
             store.save();
         end
 
-        function events = escalateEvents(obj, events)
-            %ESCALATEEVENTS Escalate events whose peak exceeds a higher threshold.
-
-            % Build threshold map: key = 'SensorName|Direction' -> struct array {Label, Value}
-            threshMap = containers.Map();
-            for i = 1:numel(obj.Sensors)
-                s = obj.Sensors{i};
-                if ~isempty(s.Name); sName = s.Name; else; sName = s.Key; end
-                if isempty(s.ResolvedThresholds); continue; end
-                for j = 1:numel(s.ResolvedThresholds)
-                    th = s.ResolvedThresholds(j);
-                    key = [sName, '|', th.Direction];
-                    validY = th.Y(~isnan(th.Y));
-                    if isempty(validY); continue; end
-                    entry.Label = th.Label;
-                    entry.Value = validY(1);
-                    if threshMap.isKey(key)
-                        threshMap(key) = [threshMap(key), entry];
-                    else
-                        threshMap(key) = entry;
-                    end
-                end
-            end
-
-            % Escalate each event
-            for i = 1:numel(events)
-                ev = events(i);
-                key = [ev.SensorName, '|', ev.Direction];
-                if ~threshMap.isKey(key); continue; end
-
-                thresholds = threshMap(key);
-                bestLabel = ev.ThresholdLabel;
-                bestValue = ev.ThresholdValue;
-
-                for j = 1:numel(thresholds)
-                    th = thresholds(j);
-                    if strcmp(ev.Direction, 'upper')
-                        % For 'upper': escalate if peak exceeds a higher threshold
-                        if th.Value > ev.ThresholdValue && ev.PeakValue >= th.Value
-                            if th.Value > bestValue
-                                bestValue = th.Value;
-                                bestLabel = th.Label;
-                            end
-                        end
-                    else
-                        % For 'lower': escalate if peak is below a lower threshold
-                        if th.Value < ev.ThresholdValue && ev.PeakValue <= th.Value
-                            if th.Value < bestValue
-                                bestValue = th.Value;
-                                bestLabel = th.Label;
-                            end
-                        end
-                    end
-                end
-
-                if ~strcmp(bestLabel, ev.ThresholdLabel)
-                    ev.escalateTo(bestLabel, bestValue);
-                end
-            end
-
-            % Deduplicate: remove events contained within another with same label
-            remove = false(1, numel(events));
-            for i = 1:numel(events)
-                if remove(i); continue; end
-                for j = i+1:numel(events)
-                    if remove(j); continue; end
-                    ei = events(i); ej = events(j);
-                    if ~strcmp(ei.SensorName, ej.SensorName); continue; end
-                    if ~strcmp(ei.ThresholdLabel, ej.ThresholdLabel); continue; end
-                    % Check containment
-                    if ei.StartTime <= ej.StartTime && ei.EndTime >= ej.EndTime
-                        remove(j) = true;
-                    elseif ej.StartTime <= ei.StartTime && ej.EndTime >= ei.EndTime
-                        remove(i) = true;
-                        break;
-                    end
-                end
-            end
-            events = events(~remove);
+        function events = escalateEvents(~, events)
+            %ESCALATEEVENTS Legacy severity escalation -- no-op after Phase 1011.
+            %   ResolvedThresholds-based escalation was removed with the
+            %   legacy Sensor pipeline.  Returns events unchanged.
         end
     end
 end

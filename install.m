@@ -74,19 +74,14 @@ function yes = needs_build(root)
         return;
     end
     mex_dir = fullfile(root, 'libs', 'FastSense', 'private');
-    sensor_dir = fullfile(root, 'libs', 'SensorThreshold', 'private');
-    % Probe a representative MEX from each library — if any are missing,
+    % Probe a representative MEX from the FastSense library -- if missing,
     % trigger build_mex() which will compile only the missing ones.
     probes = {
         fullfile(mex_dir, ['binary_search_mex.' mexext()])
         fullfile(mex_dir, 'binary_search_mex.mex')
-        fullfile(sensor_dir, ['to_step_function_mex.' mexext()])
-        fullfile(sensor_dir, 'to_step_function_mex.mex')
     };
-    % Need build if either probe set is missing
     core_ok = exist(probes{1}, 'file') == 3 || exist(probes{2}, 'file') == 3;
-    step_ok = exist(probes{3}, 'file') == 3 || exist(probes{4}, 'file') == 3;
-    yes = ~core_ok || ~step_ok;
+    yes = ~core_ok;
 end
 
 function first_run(root)
@@ -115,7 +110,7 @@ function verify_installation(root)
     n_warn = 0;
 
     % Check core classes
-    core_classes = {'FastSense', 'Sensor', 'EventDetector', ...
+    core_classes = {'FastSense', 'SensorTag', 'EventDetector', ...
                     'DashboardEngine', 'WebBridge'};
     for i = 1:numel(core_classes)
         if exist(core_classes{i}, 'class') == 8 || exist(core_classes{i}, 'file') == 2
@@ -178,10 +173,10 @@ end
 
 function jit_warmup()
 %JIT_WARMUP Force MATLAB's JIT to compile all hot code paths once per session.
-%   Runs a tiny end-to-end workflow (sensor creation, state channels,
-%   threshold resolve, downsampling, rendering setup) on trivial data.
-%   Subsequent calls are no-ops. Adds ~0.1-0.3 s on first install() call
-%   but eliminates multi-second JIT overhead on real workloads.
+%   Runs a tiny end-to-end workflow (Tag creation, MonitorTag evaluation,
+%   downsampling, rendering setup) on trivial data.  Subsequent calls are
+%   no-ops.  Adds ~0.1-0.3 s on first install() call but eliminates
+%   multi-second JIT overhead on real workloads.
     persistent warmedUp;
     if ~isempty(warmedUp)
         return;
@@ -189,40 +184,23 @@ function jit_warmup()
     warmedUp = true;
 
     try
-        % --- Sensor + StateChannel + resolve pipeline ---
-        sw = Sensor('__jit_warmup__');
-        sw.X = [0 1 2 3 4 5];
-        sw.Y = [50 60 40 70 30 80];
+        % --- SensorTag + StateTag + MonitorTag pipeline ---
+        st = SensorTag('__jit_warmup__', ...
+            'X', [0 1 2 3 4 5], 'Y', [50 60 40 70 30 80]);
 
-        sc1 = StateChannel('s1');
-        sc1.X = [0 2 4]; sc1.Y = [0 1 2];
-        sc2 = StateChannel('s2');
-        sc2.X = [0 3];   sc2.Y = {'A', 'B'};
-        sw.addStateChannel(sc1);
-        sw.addStateChannel(sc2);
+        stateT = StateTag('s1', 'X', [0 2 4], 'Y', [0 1 2]);
 
-        tUpper1 = Threshold('upper_1', 'Direction', 'upper');
-        tUpper1.addCondition(struct('s1', 1), 65);
-        sw.addThreshold(tUpper1);
-        tLower1 = Threshold('lower_1', 'Direction', 'lower');
-        tLower1.addCondition(struct('s1', 2), 35);
-        sw.addThreshold(tLower1);
-        tUpper2 = Threshold('upper_2', 'Direction', 'upper');
-        tUpper2.addCondition(struct('s1', 1, 's2', 'B'), 55);
-        sw.addThreshold(tUpper2);
-        tLower2 = Threshold('lower_2', 'Direction', 'lower');
-        tLower2.addCondition(struct('s1', 0, 's2', 'A'), 45);
-        sw.addThreshold(tLower2);
-        sw.resolve();
+        mon = MonitorTag('upper_1', st, @(x, y) y > 65);
+        [~, ~] = mon.getXY();
 
         % --- FastSense downsample + render setup (hidden figure) ---
         fig = figure('Visible', 'off');
         ax = axes('Parent', fig);
         fp = FastSense('Parent', ax);
-        fp.addSensor(sw, 'ShowThresholds', true);
+        fp.addTag(st);
         fp.render();
         close(fig);
     catch
-        % Warmup is best-effort — never block install on failure
+        % Warmup is best-effort -- never block install on failure
     end
 end

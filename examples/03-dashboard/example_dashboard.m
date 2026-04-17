@@ -55,7 +55,6 @@ for ft = fault_times
 end
 fp4.addLine(x, y_vib, 'DisplayName', 'Vibration');
 fp4.addMarker(fault_times, [3 3 3], 'Marker', 'v', 'MarkerSize', 10, ...
-    'Color', [1 0.3 0.3], 'Label', 'Fault');
 fp4.addThreshold(2.5, 'Direction', 'upper', 'ShowViolations', true);
 
 fig.renderAll();

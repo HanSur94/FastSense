@@ -32,9 +32,7 @@ tic;
 fp2 = FastSense('StorageMode', 'disk');
 fp2.addLine(x, y, 'DisplayName', '5M pts (disk)', 'Color', [0.8 0.2 0.1]);
 fp2.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', 'r', 'LineStyle', '--', 'Label', 'Upper Limit');
 fp2.addThreshold(-1.0, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', 'r', 'LineStyle', '--', 'Label', 'Lower Limit');
 fp2.render();
 fprintf('  5M points on disk: rendered in %.3f s\n', toc);
 title(fp2.hAxes, 'Disk Mode — 5M Points (SQLite)');
@@ -48,7 +46,6 @@ y = cumsum(randn(1, n_mid)) / sqrt(n_mid);
 
 fp3 = FastSense('MemoryLimit', 10e6);  % 10 MB threshold
 fp3.addLine(x, y, 'DisplayName', '2M pts (auto-offloaded)', ...
-    'Color', [0.1 0.6 0.3]);
 fp3.render();
 fprintf('  2M points (%.1f MB) > 10 MB limit => stored on disk\n', ...
     n_mid * 16 / 1e6);

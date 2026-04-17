@@ -138,9 +138,9 @@ classdef DetachedMirror < handle
 
             s = original.toStruct();
 
-            % Remove sensor source references so fromStruct doesn't call
-            % SensorRegistry.get() (which throws when sensors aren't registered).
-            % restoreLiveRefs copies live Sensor references directly afterward.
+            % Remove source references so fromStruct doesn't call
+            % TagRegistry.get() (which throws when tags aren't registered).
+            % restoreLiveRefs copies live Tag references directly afterward.
             s = DetachedMirror.stripSensorRefs(s);
 
             switch s.type
@@ -262,8 +262,8 @@ classdef DetachedMirror < handle
         end
 
         function s = stripSensorRefs(s)
-        %STRIPSENSORREFS Remove sensor source fields from a widget struct.
-        %   Prevents fromStruct from calling SensorRegistry.get() which may throw.
+        %STRIPSENSORREFS Remove source fields from a widget struct.
+        %   Prevents fromStruct from calling TagRegistry.get() which may throw.
             sensorFields = {'source', 'sourceX', 'sourceY', 'sourceColor', 'sources'};
             for k = 1:numel(sensorFields)
                 if isfield(s, sensorFields{k})

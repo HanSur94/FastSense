@@ -28,7 +28,14 @@ classdef FastSenseDataStore < handle
     %     vals = ds.getColumnSlice('labels', 1, 100);
     %     names = ds.listColumns();
     %
-    %   See also FastSense, FastSenseDefaults, mksqlite.
+    %   MonitorTag persistence cache (MONITOR-09, Phase 1007):
+    %     ds.storeMonitor(key, X, Y, parentKey, numPts, xMin, xMax);
+    %     [X, Y, meta] = ds.loadMonitor(key);  % meta = {parent_key,
+    %                                          %   num_points, parent_xmin,
+    %                                          %   parent_xmax, computed_at}
+    %     ds.clearMonitor(key);
+    %
+    %   See also FastSense, FastSenseDefaults, mksqlite, MonitorTag.
 
     properties (SetAccess = private)
         NumPoints  = 0
@@ -493,6 +500,77 @@ classdef FastSenseDataStore < handle
             mksqlite(obj.DbId, 'DELETE FROM resolved_violations');
         end
 
+        % ---- MONITOR-09: MonitorTag opt-in persistence API ----
+        %
+        % storeMonitor / loadMonitor / clearMonitor mirror the
+        % storeResolved / loadResolved / clearResolved trio above. Called
+        % ONLY when MonitorTag.Persist=true (Pitfall 2 opt-in gate). The
+        % monitors table schema lives in initSqlite (one-time migration;
+        % no runtime CREATE TABLE in the hot path). Staleness detection
+        % is the caller's responsibility via MonitorTag.cacheIsStale_.
+
+        function storeMonitor(obj, key, X, Y, parentKey, parentNumPts, parentXMin, parentXMax)
+            %STOREMONITOR Cache a MonitorTag's derived (X, Y) plus staleness quad.
+            %   ds.storeMonitor(key, X, Y, parentKey, parentNumPts, parentXMin, parentXMax)
+            %   upserts a monitors row. The quad (parent_key, num_points,
+            %   parent_xmin, parent_xmax) is stamped at write time and is
+            %   compared at load time by MonitorTag.cacheIsStale_.
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
+            % Defensive schema: DataStores built via the build_store_mex
+            % fast path before Phase 1007 existed in a session do not have
+            % the monitors table. IF NOT EXISTS is a no-op on fresh
+            % MATLAB-fallback DataStores which always run initSqlite.
+            obj.ensureMonitorsTable_();
+            mksqlite(obj.DbId, 'BEGIN TRANSACTION');
+            try
+                mksqlite(obj.DbId, ...
+                    ['INSERT OR REPLACE INTO monitors ' ...
+                     '(key, x_blob, y_blob, parent_key, num_points, ' ...
+                     ' parent_xmin, parent_xmax, computed_at) ' ...
+                     'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'], ...
+                    key, X(:).', Y(:).', parentKey, parentNumPts, ...
+                    parentXMin, parentXMax, now);
+                mksqlite(obj.DbId, 'COMMIT');
+            catch ME
+                try mksqlite(obj.DbId, 'ROLLBACK'); catch; end
+                rethrow(ME);
+            end
+            obj.closeDb();
+        end
+
+        function [X, Y, meta] = loadMonitor(obj, key)
+            %LOADMONITOR Retrieve cached MonitorTag (X, Y) + staleness metadata.
+            %   [X, Y, meta] = ds.loadMonitor(key) returns X=[] on miss.
+            %   Callers must verify freshness via the returned meta struct
+            %   (fields: parent_key, num_points, parent_xmin, parent_xmax,
+            %   computed_at).
+            X = []; Y = []; meta = struct();
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
+            obj.ensureMonitorsTable_();
+            rows = mksqlite(obj.DbId, ...
+                'SELECT * FROM monitors WHERE key = ? LIMIT 1', key);
+            if isempty(rows) || numel(rows) == 0; return; end
+            r = rows(1);
+            X = r.x_blob(:).';
+            Y = r.y_blob(:).';
+            meta = struct( ...
+                'parent_key',  r.parent_key, ...
+                'num_points',  r.num_points, ...
+                'parent_xmin', r.parent_xmin, ...
+                'parent_xmax', r.parent_xmax, ...
+                'computed_at', r.computed_at);
+        end
+
+        function clearMonitor(obj, key)
+            %CLEARMONITOR Delete a cached MonitorTag row by key.
+            if ~obj.UseSqlite; return; end
+            obj.ensureOpen();
+            obj.ensureMonitorsTable_();
+            mksqlite(obj.DbId, 'DELETE FROM monitors WHERE key = ?', key);
+        end
+
         function cleanup(obj)
             %CLEANUP Close the database and delete temp files.
             obj.closeDb();
@@ -511,6 +589,28 @@ classdef FastSenseDataStore < handle
     end
 
     methods (Access = private)
+        function ensureMonitorsTable_(obj)
+            %ENSUREMONITORSTABLE_ Defensive schema for the monitors cache.
+            %   DataStores built via build_store_mex before Phase 1007
+            %   existed may not have the monitors table. This is a
+            %   no-op on fresh MATLAB-fallback DataStores that ran
+            %   initSqlite. Only called from MONITOR-09 methods; never
+            %   on hot-path chunk reads (Pitfall A1 compliant — no
+            %   storeMonitor/loadMonitor call unless the caller opts in).
+            if ~obj.UseSqlite || obj.DbId < 0; return; end
+            mksqlite(obj.DbId, [ ...
+                'CREATE TABLE IF NOT EXISTS monitors (' ...
+                '  key         TEXT PRIMARY KEY,' ...
+                '  x_blob      BLOB NOT NULL,' ...
+                '  y_blob      BLOB NOT NULL,' ...
+                '  parent_key  TEXT NOT NULL,' ...
+                '  num_points  INTEGER NOT NULL,' ...
+                '  parent_xmin REAL NOT NULL,' ...
+                '  parent_xmax REAL NOT NULL,' ...
+                '  computed_at REAL NOT NULL' ...
+                ')']);
+        end
+
         function ensureOpen(obj)
             %ENSUREOPEN Reopen the SQLite connection if it was closed.
             if obj.DbOpen || ~obj.UseSqlite || isempty(obj.DbPath); return; end
@@ -597,6 +697,22 @@ classdef FastSenseDataStore < handle
                 '  y_data BLOB,' ...
                 '  direction TEXT NOT NULL,' ...
                 '  label TEXT NOT NULL' ...
+                ')']);
+
+            % MONITOR-09 opt-in cache for MonitorTag.Persist=true consumers.
+            % Quad-signature staleness stamp (parent_key, num_points,
+            % parent_xmin, parent_xmax) is written at storeMonitor time and
+            % compared at loadMonitor time by MonitorTag.cacheIsStale_.
+            mksqlite(obj.DbId, [ ...
+                'CREATE TABLE monitors (' ...
+                '  key         TEXT PRIMARY KEY,' ...
+                '  x_blob      BLOB NOT NULL,' ...
+                '  y_blob      BLOB NOT NULL,' ...
+                '  parent_key  TEXT NOT NULL,' ...
+                '  num_points  INTEGER NOT NULL,' ...
+                '  parent_xmin REAL NOT NULL,' ...
+                '  parent_xmax REAL NOT NULL,' ...
+                '  computed_at REAL NOT NULL' ...
                 ')']);
 
             mksqlite(obj.DbId, 'BEGIN TRANSACTION');

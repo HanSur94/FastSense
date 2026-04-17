@@ -15,10 +15,8 @@ colors = [0 0.447 0.741; 0.85 0.325 0.098; 0.929 0.694 0.125; 0.494 0.184 0.556;
 for i = 1:5
     y = sin(x * 2 * pi * i / 10) + 0.3 * randn(1, n) + i * 2;
     fp.addLine(x, y, 'DisplayName', sprintf('Sensor %d', i), ...
-        'Color', colors(i,:), 'LineWidth', 1);
 end
 fp.addThreshold(10, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', 'r', 'LineStyle', '--');
 fp.render();
 
 fprintf('Rendered in %.3f seconds.\n', toc);

@@ -1,13 +1,11 @@
 classdef FastSenseWidget < DashboardWidget
 %FASTSENSEWIDGET Dashboard widget wrapping a FastSense instance.
 %
-%   Supports three data binding modes:
-%     Sensor:    w = FastSenseWidget('Sensor', sensorObj)
+%   Supports data binding modes:
+%     Tag:       w = FastSenseWidget('Tag', tagObj)
 %     DataStore: w = FastSenseWidget('DataStore', dsObj)
 %     Inline:    w = FastSenseWidget('XData', x, 'YData', y)
 %     File:      w = FastSenseWidget('File', 'path.mat', 'XVar', 'x', 'YVar', 'y')
-%
-%   When bound to a Sensor, Thresholds apply automatically.
 
     properties (Access = public)
         DataStoreObj = []
@@ -22,13 +20,14 @@ classdef FastSenseWidget < DashboardWidget
         YLimits             = []    % Fixed Y-axis range [min max]; empty = auto-scale
         ShowThresholdLabels = false % show inline name labels on threshold lines
     end
+    %   (Tag property now lives on the DashboardWidget base class — Plan 1009-02.)
 
     properties (SetAccess = private)
         FastSenseObj  = []
         IsSettingTime = false  % guard to distinguish programmatic vs user xlim change
         CachedXMin    = inf    % cached minimum of X data for O(1) getTimeRange()
         CachedXMax    = -inf   % cached maximum of X data for O(1) getTimeRange()
-        LastSensorRef = []     % sensor handle snapshot for cache invalidation check
+        LastTagRef    = []     % Tag handle snapshot for cache-invalidation
     end
 
     methods
@@ -37,18 +36,24 @@ classdef FastSenseWidget < DashboardWidget
             if isequal(obj.Position, [1 1 6 2])
                 obj.Position = [1 1 12 3];
             end
-            if ~isempty(obj.Sensor)
+
+            % Tag cascade (v2.0 Tag API).
+            if ~isempty(obj.Tag)
+                if ~isa(obj.Tag, 'Tag')
+                    error('FastSenseWidget:invalidTag', ...
+                        'Tag must be a Tag subclass; got %s.', class(obj.Tag));
+                end
                 if isempty(obj.XLabel), obj.XLabel = 'Time'; end
                 if isempty(obj.YLabel)
-                    if ~isempty(obj.Sensor.Units)
-                        obj.YLabel = obj.Sensor.Units;
-                    elseif ~isempty(obj.Sensor.Name)
-                        obj.YLabel = obj.Sensor.Name;
+                    if isprop(obj.Tag, 'Units') && ~isempty(obj.Tag.Units)
+                        obj.YLabel = obj.Tag.Units;
+                    elseif ~isempty(obj.Tag.Name)
+                        obj.YLabel = obj.Tag.Name;
                     else
-                        obj.YLabel = obj.Sensor.Key;
+                        obj.YLabel = obj.Tag.Key;
                     end
                 end
-                obj.LastSensorRef = obj.Sensor;
+                obj.LastTagRef = obj.Tag;
                 obj.updateTimeRangeCache();
             end
         end
@@ -66,9 +71,9 @@ classdef FastSenseWidget < DashboardWidget
             obj.FastSenseObj = fp;
             fp.ShowThresholdLabels = obj.ShowThresholdLabels;
 
-            % Bind data
-            if ~isempty(obj.Sensor)
-                fp.addSensor(obj.Sensor);
+            % Bind data — Tag-first dispatch (v2.0).
+            if ~isempty(obj.Tag)
+                fp.addTag(obj.Tag);
             elseif ~isempty(obj.DataStoreObj)
                 fp.addLine([], [], 'DataStore', obj.DataStoreObj);
             elseif ~isempty(obj.File)
@@ -98,8 +103,8 @@ classdef FastSenseWidget < DashboardWidget
                 ylim(ax, obj.YLimits);
             end
 
-            % Update time range cache and sensor identity snapshot
-            obj.LastSensorRef = obj.Sensor;
+            % Update time range cache and data-source identity snapshots
+            obj.LastTagRef = obj.Tag;
             obj.updateTimeRangeCache();
 
             % Listen for manual zoom/pan to disable global time for this widget
@@ -110,112 +115,49 @@ classdef FastSenseWidget < DashboardWidget
         end
 
         function refresh(obj)
-            % Re-render sensor-bound widgets so updated data + violations show.
-            % Uses incremental updateData() path when sensor identity is unchanged
+            % Re-render Tag-bound widgets so updated data shows.
+            % Uses incremental updateData() path when tag identity is unchanged
             % (PERF2-01); falls back to full teardown/rebuild on first render,
-            % sensor swap, or error.  Zoom state (xlim) is preserved in both paths.
-            if isempty(obj.Sensor), return; end
-            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            % tag swap, or error.  Zoom state (xlim) is preserved in both paths.
 
-            % --- Incremental path (sensor identity unchanged, already rendered) ---
-            sensorUnchanged = ~isempty(obj.LastSensorRef) && ...
-                              obj.Sensor == obj.LastSensorRef;
+            if isempty(obj.Tag), return; end
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            tagUnchanged = ~isempty(obj.LastTagRef) && obj.Tag == obj.LastTagRef;
             fpValid = ~isempty(obj.FastSenseObj) && ...
                       obj.FastSenseObj.IsRendered && ...
                       ~isempty(obj.FastSenseObj.hAxes) && ...
                       ishandle(obj.FastSenseObj.hAxes);
-            if sensorUnchanged && fpValid
+            if tagUnchanged && fpValid
                 try
-                    obj.FastSenseObj.updateData(1, obj.Sensor.X, obj.Sensor.Y);
+                    [x, y] = obj.Tag.getXY();
+                    obj.FastSenseObj.updateData(1, x, y);
                     obj.updateTimeRangeCache();
                     return;
                 catch
-                    % Fall through to full rebuild on any error
+                    % fall through to full teardown/rebuild
                 end
             end
-
-            % --- Full teardown/rebuild path ---
-            % Save zoom state before teardown
-            savedXLim = [];
-            if ~isempty(obj.FastSenseObj) && ~isempty(obj.FastSenseObj.hAxes) && ...
-                    ishandle(obj.FastSenseObj.hAxes)
-                savedXLim = get(obj.FastSenseObj.hAxes, 'XLim');
-            end
-
-            % Delete old axes and FastSense, then rebuild
-            if ~isempty(obj.FastSenseObj)
-                try delete(obj.FastSenseObj); catch , end
-                obj.FastSenseObj = [];
-            end
-            % Delete any leftover axes in the panel
-            ch = findobj(obj.hPanel, 'Type', 'axes');
-            delete(ch);
-
-            ax = axes('Parent', obj.hPanel, ...
-                'Units', 'normalized', ...
-                'Position', [0.08 0.12 0.88 0.78]);
-
-            fp = FastSense('Parent', ax);
-            obj.FastSenseObj = fp;
-            fp.ShowThresholdLabels = obj.ShowThresholdLabels;
-            fp.addSensor(obj.Sensor);
-
-            if ~isempty(obj.Title)
-                title(ax, obj.Title, 'Color', get(ax, 'XColor'));
-            end
-            if ~isempty(obj.XLabel)
-                xlabel(ax, obj.XLabel, 'Color', get(ax, 'XColor'));
-            end
-            if ~isempty(obj.YLabel)
-                ylabel(ax, obj.YLabel, 'Color', get(ax, 'XColor'));
-            end
-
-            fp.render();
-
-            % Apply fixed Y-axis limits if configured
-            if ~isempty(obj.YLimits) && numel(obj.YLimits) == 2
-                ylim(ax, obj.YLimits);
-            end
-
-            % Update cache and sensor identity after successful rebuild
-            obj.LastSensorRef = obj.Sensor;
-            obj.updateTimeRangeCache();
-
-            % Restore zoom state
-            if ~isempty(savedXLim)
-                obj.IsSettingTime = true;
-                xlim(ax, savedXLim);
-                obj.IsSettingTime = false;
-            end
-
-            try
-                addlistener(ax, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
-            catch
-            end
+            obj.rebuildForTag_();
         end
 
         function update(obj)
-        %UPDATE Incrementally update sensor data without full axes rebuild.
+        %UPDATE Incrementally update Tag data without full axes rebuild.
         %   Uses FastSenseObj.updateData() to replace data and re-downsample,
         %   avoiding the expensive delete/recreate cycle of refresh().
         %   Falls back to refresh() if FastSenseObj is not in a renderable state.
-            if isempty(obj.Sensor), return; end
-            if isempty(obj.hPanel) || ~ishandle(obj.hPanel)
-                return;
-            end
 
-            % Use incremental path if FastSenseObj is already rendered
+            if isempty(obj.Tag), return; end
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
             if ~isempty(obj.FastSenseObj) && obj.FastSenseObj.IsRendered
                 try
-                    obj.FastSenseObj.updateData(1, obj.Sensor.X, obj.Sensor.Y);
+                    [x, y] = obj.Tag.getXY();
+                    obj.FastSenseObj.updateData(1, x, y);
                     obj.updateTimeRangeCache();
                     return;
                 catch
-                    % Fall through to full refresh on any error
+                    % fall through to refresh()
                 end
             end
-
-            % Fallback: full rebuild
             obj.refresh();
         end
 
@@ -270,8 +212,12 @@ classdef FastSenseWidget < DashboardWidget
             lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
 
             yData = [];
-            if ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
-                yData = obj.Sensor.Y;
+            if ~isempty(obj.Tag)
+                try
+                    [~, yData] = obj.Tag.getXY();
+                catch
+                    yData = [];
+                end
             elseif ~isempty(obj.YData)
                 yData = obj.YData;
             end
@@ -308,8 +254,8 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.YLimits), s.yLimits = obj.YLimits; end
             if obj.ShowThresholdLabels, s.showThresholdLabels = true; end
 
-            if ~isempty(obj.Sensor)
-                % base class handles sensor source
+            if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
+                s.source = struct('type', 'tag', 'key', obj.Tag.Key);
                 s.thresholds = obj.Thresholds;
             elseif ~isempty(obj.File)
                 s.source = struct('type', 'file', 'path', obj.File, ...
@@ -326,26 +272,89 @@ classdef FastSenseWidget < DashboardWidget
         %   For sorted time arrays (the common case) the last element is the
         %   max candidate and the first is the min candidate, so this avoids
         %   a full-array scan on every live tick.
-            if ~isempty(obj.Sensor) && ~isempty(obj.Sensor.X)
-                x = obj.Sensor.X;
-                n = numel(x);
-                if n == 0
+            if ~isempty(obj.Tag)
+                try
+                    [x, ~] = obj.Tag.getXY();
+                    n = numel(x);
+                    if n == 0
+                        obj.CachedXMin = inf;
+                        obj.CachedXMax = -inf;
+                        return;
+                    end
+                    obj.CachedXMax = x(n);
+                    if isinf(obj.CachedXMin)
+                        obj.CachedXMin = x(1);
+                    end
+                catch
                     obj.CachedXMin = inf;
                     obj.CachedXMax = -inf;
-                    return;
                 end
-                % Max always updated — last element of sorted time array
-                obj.CachedXMax = x(n);
-                % Min only changes on full reassignment, not incremental append
-                if isinf(obj.CachedXMin)
-                    obj.CachedXMin = x(1);
-                end
-            elseif ~isempty(obj.XData)
+                return;
+            end
+            if ~isempty(obj.XData)
                 obj.CachedXMin = min(obj.XData);
                 obj.CachedXMax = max(obj.XData);
             else
                 obj.CachedXMin = inf;
                 obj.CachedXMax = -inf;
+            end
+        end
+
+        function rebuildForTag_(obj)
+        %REBUILDFORTAG_ Full teardown + rebuild FastSense from obj.Tag.
+        %   Preserves zoom state (xlim) across the rebuild.
+            % Save zoom state before teardown
+            savedXLim = [];
+            if ~isempty(obj.FastSenseObj) && ~isempty(obj.FastSenseObj.hAxes) && ...
+                    ishandle(obj.FastSenseObj.hAxes)
+                savedXLim = get(obj.FastSenseObj.hAxes, 'XLim');
+            end
+
+            % Delete old FastSense + leftover axes in the panel
+            if ~isempty(obj.FastSenseObj)
+                try delete(obj.FastSenseObj); catch, end
+                obj.FastSenseObj = [];
+            end
+            ch = findobj(obj.hPanel, 'Type', 'axes');
+            delete(ch);
+
+            ax = axes('Parent', obj.hPanel, ...
+                'Units', 'normalized', ...
+                'Position', [0.08 0.12 0.88 0.78]);
+
+            fp = FastSense('Parent', ax);
+            obj.FastSenseObj = fp;
+            fp.ShowThresholdLabels = obj.ShowThresholdLabels;
+            fp.addTag(obj.Tag);
+
+            if ~isempty(obj.Title)
+                title(ax, obj.Title, 'Color', get(ax, 'XColor'));
+            end
+            if ~isempty(obj.XLabel)
+                xlabel(ax, obj.XLabel, 'Color', get(ax, 'XColor'));
+            end
+            if ~isempty(obj.YLabel)
+                ylabel(ax, obj.YLabel, 'Color', get(ax, 'XColor'));
+            end
+
+            fp.render();
+
+            if ~isempty(obj.YLimits) && numel(obj.YLimits) == 2
+                ylim(ax, obj.YLimits);
+            end
+
+            obj.LastTagRef = obj.Tag;
+            obj.updateTimeRangeCache();
+
+            if ~isempty(savedXLim)
+                obj.IsSettingTime = true;
+                xlim(ax, savedXLim);
+                obj.IsSettingTime = false;
+            end
+
+            try
+                addlistener(ax, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
+            catch
             end
         end
     end
@@ -363,12 +372,22 @@ classdef FastSenseWidget < DashboardWidget
 
             if isfield(s, 'source')
                 switch s.source.type
-                    case 'sensor'
-                        if exist('SensorRegistry', 'class')
+                    case 'tag'
+                        if exist('TagRegistry', 'class')
                             try
-                                obj.Sensor = SensorRegistry.get(s.source.name);
+                                obj.Tag = TagRegistry.get(s.source.key);
                             catch
-                                % Sensor not in registry; resolver will
+                                warning('FastSenseWidget:tagNotFound', ...
+                                    'TagRegistry key ''%s'' not found.', s.source.key);
+                            end
+                        end
+                    case 'sensor'
+                        % Backward compat: old JSON with type='sensor' resolves via TagRegistry.
+                        if exist('TagRegistry', 'class')
+                            try
+                                obj.Tag = TagRegistry.get(s.source.name);
+                            catch
+                                % Tag not in registry; resolver will
                                 % bind it in configToWidgets if provided.
                             end
                         end

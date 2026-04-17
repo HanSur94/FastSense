@@ -36,82 +36,22 @@ function example_dashboard_live_run()
     tSeed = linspace(-20, 0, nSeed);
 
     % Temperature sensor T-401 (4 thresholds: upper/lower warn + alarm)
-    sTemp = Sensor('T-401', 'Name', 'Temperature');
+    sTemp = SensorTag('T-401', 'Name', 'Temperature');
     sTemp.Units = [char(176) 'F'];
-    sTemp.X = tSeed;
-    sTemp.Y = 70 + 2*sin(2*pi*tSeed/10) + randn(1, nSeed)*0.5;
-    tHiWarnTemp = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-        'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-    tHiWarnTemp.addCondition(struct(), 78);
-    sTemp.addThreshold(tHiWarnTemp);
-
-    tHiAlarmTemp = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-        'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tHiAlarmTemp.addCondition(struct(), 82);
-    sTemp.addThreshold(tHiAlarmTemp);
-
-    tLoWarnTemp = Threshold('lo_warn', 'Name', 'Lo Warn', ...
-        'Direction', 'lower', 'Color', [1 0.8 0], 'LineStyle', '--');
-    tLoWarnTemp.addCondition(struct(), 62);
-    sTemp.addThreshold(tLoWarnTemp);
-
-    tLoAlarmTemp = Threshold('lo_alarm', 'Name', 'Lo Alarm', ...
-        'Direction', 'lower', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tLoAlarmTemp.addCondition(struct(), 58);
-    sTemp.addThreshold(tLoAlarmTemp);
-    sTemp.resolve();
+    sTemp.updateData(tSeed, 70 + 2*sin(2*pi*tSeed/10) + randn(1, nSeed)*0.5);
+    [sTemp_x_, sTemp_y_] = sTemp.getXY();
 
     % Pressure sensor P-201 (4 thresholds: upper/lower warn + alarm)
-    sPress = Sensor('P-201', 'Name', 'Pressure');
+    sPress = SensorTag('P-201', 'Name', 'Pressure');
     sPress.Units = 'psi';
-    sPress.X = tSeed;
-    sPress.Y = 50 + 5*sin(2*pi*tSeed/15) + randn(1, nSeed)*1.0;
-    tHiWarnPress = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-        'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-    tHiWarnPress.addCondition(struct(), 64);
-    sPress.addThreshold(tHiWarnPress);
-
-    tHiAlarmPress = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-        'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tHiAlarmPress.addCondition(struct(), 68);
-    sPress.addThreshold(tHiAlarmPress);
-
-    tLoWarnPress = Threshold('lo_warn', 'Name', 'Lo Warn', ...
-        'Direction', 'lower', 'Color', [1 0.8 0], 'LineStyle', '--');
-    tLoWarnPress.addCondition(struct(), 36);
-    sPress.addThreshold(tLoWarnPress);
-
-    tLoAlarmPress = Threshold('lo_alarm', 'Name', 'Lo Alarm', ...
-        'Direction', 'lower', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tLoAlarmPress.addCondition(struct(), 32);
-    sPress.addThreshold(tLoAlarmPress);
-    sPress.resolve();
+    sPress.updateData(tSeed, 50 + 5*sin(2*pi*tSeed/15) + randn(1, nSeed)*1.0);
+    [sPress_x_, sPress_y_] = sPress.getXY();
 
     % Flow sensor F-301 (4 thresholds: upper/lower warn + alarm)
-    sFlow = Sensor('F-301', 'Name', 'Flow Rate');
+    sFlow = SensorTag('F-301', 'Name', 'Flow Rate');
     sFlow.Units = 'L/min';
-    sFlow.X = tSeed;
-    sFlow.Y = max(0, 120 + 8*sin(2*pi*tSeed/8) + randn(1, nSeed)*2.0);
-    tHiWarnFlow = Threshold('hi_warn', 'Name', 'Hi Warn', ...
-        'Direction', 'upper', 'Color', [1 0.8 0], 'LineStyle', '--');
-    tHiWarnFlow.addCondition(struct(), 135);
-    sFlow.addThreshold(tHiWarnFlow);
-
-    tHiAlarmFlow = Threshold('hi_alarm', 'Name', 'Hi Alarm', ...
-        'Direction', 'upper', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tHiAlarmFlow.addCondition(struct(), 145);
-    sFlow.addThreshold(tHiAlarmFlow);
-
-    tLoWarnFlow = Threshold('lo_warn', 'Name', 'Lo Warn', ...
-        'Direction', 'lower', 'Color', [1 0.8 0], 'LineStyle', '--');
-    tLoWarnFlow.addCondition(struct(), 95);
-    sFlow.addThreshold(tLoWarnFlow);
-
-    tLoAlarmFlow = Threshold('lo_alarm', 'Name', 'Lo Alarm', ...
-        'Direction', 'lower', 'Color', [1 0.2 0.2], 'LineStyle', '-');
-    tLoAlarmFlow.addCondition(struct(), 85);
-    sFlow.addThreshold(tLoAlarmFlow);
-    sFlow.resolve();
+    sFlow.updateData(tSeed, max(0, 120 + 8*sin(2*pi*tSeed/8) + randn(1, nSeed)*2.0));
+    [sFlow_x_, sFlow_y_] = sFlow.getXY();
 
     %% ========== EventStore for violation events ==========
     store = EventStore(fullfile(tempdir, 'dashboard_live_events.mat'));
@@ -137,6 +77,9 @@ function example_dashboard_live_run()
 
     % --- Row 1-2: Header + KPIs + Status ---
     % DashboardEngine uses a 24-column grid: Position = [col row width height].
+    sPress.updateData(sPress_x_, sPress_y_);
+    sFlow.updateData(sFlow_x_, sFlow_y_);
+    sTemp.updateData(sTemp_x_, sTemp_y_);
     d.addWidget('text', 'Title', 'Live Monitor', ...
         'Position', [1 1 4 2], ...
         'Content', 'Simulated Process', ...
@@ -256,17 +199,14 @@ function example_dashboard_live_run()
         newF = max(0, fB + 8*sin(2*pi*elapsed/8) + randn*3);
 
         % Append to sensors
-        sTemp.X(end+1)  = elapsed;
-        sTemp.Y(end+1)  = newT;
-        sPress.X(end+1) = elapsed;
-        sPress.Y(end+1) = newP;
-        sFlow.X(end+1)  = elapsed;
-        sFlow.Y(end+1)  = newF;
+        sTemp_x_(end+1) = elapsed;
+        sTemp_y_(end+1) = newT;
+        sPress_x_(end+1) = elapsed;
+        sPress_y_(end+1) = newP;
+        sFlow_x_(end+1) = elapsed;
+        sFlow_y_(end+1) = newF;
 
         % Re-resolve thresholds so violation markers update
-        sTemp.resolve();
-        sPress.resolve();
-        sFlow.resolve();
 
         % Check thresholds and create Event objects + alarm log
         checkAndLog(elapsed, sTemp, newT, 82, 78, 62, 58);
@@ -307,9 +247,9 @@ function example_dashboard_live_run()
 
     %% ==================== Nested: plot callbacks ====================
     function plotHist(ax)
-        if numel(sTemp.Y) < 2, return; end
-        nH = min(numel(sTemp.Y), 600);
-        histogram(ax, sTemp.Y(end-nH+1:end), 30, ...
+        if numel(sTemp_y_) < 2, return; end
+        nH = min(numel(sTemp_y_), 600);
+        histogram(ax, sTemp_y_(end-nH+1:end), 30, ...
             'FaceColor', [0.31 0.80 0.64], 'EdgeColor', 'none');
         xlabel(ax, [char(176) 'F']);
         ylabel(ax, 'Count');

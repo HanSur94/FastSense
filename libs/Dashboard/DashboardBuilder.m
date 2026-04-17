@@ -996,13 +996,13 @@ classdef DashboardBuilder < handle
                 case 2  % Sensor
                     if ~isempty(srcKey)
                         try
-                            sensor = SensorRegistry.get(srcKey);
-                            if isprop(w, 'Sensor')
-                                w.Sensor = sensor;
+                            tag = TagRegistry.get(srcKey);
+                            if isprop(w, 'Tag')
+                                w.Tag = tag;
                             end
                         catch ME
-                            warning('DashboardBuilder:sensorNotFound', ...
-                                'Sensor "%s" not found: %s', srcKey, ME.message);
+                            warning('DashboardBuilder:tagNotFound', ...
+                                'Tag "%s" not found: %s', srcKey, ME.message);
                         end
                     end
                 case 3  % MAT File

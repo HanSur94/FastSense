@@ -46,10 +46,7 @@ event_x = [10 25 42 58 73 90];
 event_y = interp1(x, y4, event_x);
 fp4.addLine(x, y4, 'DisplayName', 'Random Walk');
 fp4.addMarker(event_x, event_y, 'Marker', 'v', 'MarkerSize', 10, ...
-    'Color', [0.9 0.2 0.2], 'Label', 'Anomaly');
 fp4.addMarker(event_x, event_y - 0.5, 'Marker', '^', 'MarkerSize', 8, ...
-    'Color', [0.2 0.6 0.2], 'Label', 'Recovery');
-
 fig.renderAll();
 
 fig.setTileTitle(1, 'addBand — Alarm Zones');

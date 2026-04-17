@@ -7,11 +7,10 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
     end
 
     methods (TestMethodSetup)
-        function createSensor(testCase)
-            s = Sensor('test_pressure', 'Name', 'Test Pressure');
+        function createTag(testCase)
+            s = SensorTag('test_pressure', 'Name', 'Test Pressure');
             t = linspace(0, 100, 10000);
-            s.X = t;
-            s.Y = 50 + 10*sin(2*pi*t/20) + randn(1, numel(t));
+            s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
             testCase.TestData.sensor = s;
         end
     end
@@ -24,7 +23,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
     methods (Test)
         %% Construction
-        function testConstructorStoresSensor(testCase)
+        function testConstructorStoresTag(testCase)
             sdp = SensorDetailPlot(testCase.TestData.sensor);
             testCase.verifyEqual(sdp.Sensor.Key, 'test_pressure');
             delete(sdp);
@@ -96,15 +95,15 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Thresholds in main plot
         function testThresholdsShownWhenEnabled(testCase)
-            s = TestSensorDetailPlot.createSensorWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholds', true);
+            s = TestSensorDetailPlot.createTagWithThreshold();
+            sdp = SensorDetailPlot(s);
             sdp.render();
             testCase.verifyGreaterThanOrEqual(numel(sdp.MainPlot.Thresholds), 1);
             delete(sdp);
         end
 
         function testThresholdsHiddenWhenDisabled(testCase)
-            s = TestSensorDetailPlot.createSensorWithThreshold();
+            s = TestSensorDetailPlot.createTagWithThreshold();
             sdp = SensorDetailPlot(s, 'ShowThresholds', false);
             sdp.render();
             testCase.verifyEqual(numel(sdp.MainPlot.Thresholds), 0);
@@ -113,7 +112,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Threshold bands in navigator
         function testNavigatorHasThresholdBands(testCase)
-            s = TestSensorDetailPlot.createSensorWithThreshold();
+            s = TestSensorDetailPlot.createTagWithThreshold();
             sdp = SensorDetailPlot(s, 'ShowThresholdBands', true);
             sdp.render();
             testCase.verifyGreaterThanOrEqual(numel(sdp.NavigatorPlot.Bands), 1);
@@ -121,7 +120,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
         end
 
         function testNavigatorNoBandsWhenDisabled(testCase)
-            s = TestSensorDetailPlot.createSensorWithThreshold();
+            s = TestSensorDetailPlot.createTagWithThreshold();
             sdp = SensorDetailPlot(s, 'ShowThresholdBands', false);
             sdp.render();
             testCase.verifyEqual(numel(sdp.NavigatorPlot.Bands), 0);
@@ -315,15 +314,13 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
     end
 
     methods (Static, Access = private)
-        function s = createSensorWithThreshold()
-            s = Sensor('test_th', 'Name', 'Threshold Test');
+        function s = createTagWithThreshold()
+            s = SensorTag('test_th', 'Name', 'Threshold Test');
             t = linspace(0, 100, 1000);
-            s.X = t;
-            s.Y = 50 + 10*sin(2*pi*t/20) + randn(1, numel(t));
-            sc = StateChannel('mode');
+            s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
+            sc = StateTag('mode');
             sc.X = [0 100];
             sc.Y = [1 1];
-            s.addStateChannel(sc);
             t_h_warning = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper');
             t_h_warning.addCondition(struct('mode', 1), 65);
             s.addThreshold(t_h_warning);

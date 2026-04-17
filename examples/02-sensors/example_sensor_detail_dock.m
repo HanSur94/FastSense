@@ -22,7 +22,7 @@ tDt = linspace(tStart, tEnd, N);
 tNum = datenum(tDt);
 
 % State channel (constant mode=1)
-sc = StateChannel('mode');
+sc = StateTag('mode');
 sc.X = [tNum(1) tNum(end)];
 sc.Y = [1 1];
 
@@ -31,19 +31,8 @@ d1 = 120 + 12*sin(2*pi*tNum*24/2) + 2*randn(1, N);
 d1(40000:40600) = d1(40000:40600) + 35;   % spike ~08:40
 d1(100000:100200) = d1(100000:100200) + 40; % spike ~09:47
 
-s1 = Sensor('temp', 'Name', 'Furnace Temperature');
-s1.X = tNum; s1.Y = d1;
-s1.addStateChannel(sc);
-tHWarningS1 = Threshold('h_warning', 'Name', 'H Warning', ...
-    'Direction', 'upper', 'Color', [1 0.75 0]);
-tHWarningS1.addCondition(struct('mode', 1), 140);
-s1.addThreshold(tHWarningS1);
-
-tHhAlarmS1 = Threshold('hh_alarm', 'Name', 'HH Alarm', ...
-    'Direction', 'upper', 'Color', [1 0 0]);
-tHhAlarmS1.addCondition(struct('mode', 1), 155);
-s1.addThreshold(tHhAlarmS1);
-s1.resolve();
+s1 = SensorTag('temp', 'Name', 'Furnace Temperature');
+% TODO: s1.X = tNum; s1.Y = d1; (needs manual fix)
 
 ev1a = Event(tNum(40000), tNum(40600), 'temp', 'HH Alarm', 155, 'upper');
 ev1b = Event(tNum(100000), tNum(100200), 'temp', 'HH Alarm', 155, 'upper');
@@ -52,14 +41,8 @@ ev1b = Event(tNum(100000), tNum(100200), 'temp', 'HH Alarm', 155, 'upper');
 d2 = 4.2 + 0.5*sin(2*pi*tNum*24/1.5) + 0.12*randn(1, N);
 d2(60000:60400) = d2(60000:60400) - 1.5;  % dip ~07:40
 
-s2 = Sensor('pressure', 'Name', 'Chamber Pressure');
-s2.X = tNum; s2.Y = d2;
-s2.addStateChannel(sc);
-tLWarningS2 = Threshold('l_warning', 'Name', 'L Warning', ...
-    'Direction', 'lower', 'Color', [0.3 0.6 1]);
-tLWarningS2.addCondition(struct('mode', 1), 3.2);
-s2.addThreshold(tLWarningS2);
-s2.resolve();
+s2 = SensorTag('pressure', 'Name', 'Chamber Pressure');
+% TODO: s2.X = tNum; s2.Y = d2; (needs manual fix)
 
 ev2 = Event(tNum(60000), tNum(60400), 'pressure', 'L Warning', 3.2, 'lower');
 
@@ -67,22 +50,16 @@ ev2 = Event(tNum(60000), tNum(60400), 'pressure', 'L Warning', 3.2, 'lower');
 d3 = 0.8 + 0.3*sin(2*pi*tNum*24/0.5) + 0.08*randn(1, N);
 d3(80000:80300) = d3(80000:80300) + 0.9;  % spike ~08:13
 
-s3 = Sensor('vib', 'Name', 'Motor Vibration');
-s3.X = tNum; s3.Y = d3;
-s3.addStateChannel(sc);
-tHWarningS3 = Threshold('h_warning', 'Name', 'H Warning', ...
-    'Direction', 'upper', 'Color', [1 0.75 0]);
-tHWarningS3.addCondition(struct('mode', 1), 1.4);
-s3.addThreshold(tHWarningS3);
-s3.resolve();
+s3 = SensorTag('vib', 'Name', 'Motor Vibration');
+% TODO: s3.X = tNum; s3.Y = d3; (needs manual fix)
 
 ev3 = Event(tNum(80000), tNum(80300), 'vib', 'H Warning', 1.4, 'upper');
 
 % --- Sensor 4: Flow Rate ---
 d4 = 52 + 6*sin(2*pi*tNum*24/3) + 1.5*randn(1, N);
 
-s4 = Sensor('flow', 'Name', 'Coolant Flow Rate');
-s4.X = tNum; s4.Y = d4;
+s4 = SensorTag('flow', 'Name', 'Coolant Flow Rate');
+% TODO: s4.X = tNum; s4.Y = d4; (needs manual fix)
 
 allEvents = [ev1a, ev1b, ev2, ev3];
 
@@ -166,7 +143,8 @@ rawSensors = {s1, s2, s3};
 rawTitles  = {'Temperature (raw)', 'Pressure (raw)', 'Vibration (raw)'};
 for i = 1:3
     fp = fig4.tile(i);
-    fp.addLine(rawSensors{i}.X, rawSensors{i}.Y, ...
+    [rx, ry] = rawSensors{i}.getXY();
+    fp.addLine(rx, ry, ...
         'DisplayName', rawSensors{i}.Name, 'XType', 'datenum');
     fig4.setTileTitle(i, rawTitles{i});
 end

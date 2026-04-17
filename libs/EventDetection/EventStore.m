@@ -12,6 +12,7 @@ classdef EventStore < handle
 
     properties (Access = private)
         events_     = []
+        nextId_     = 0
     end
 
     methods
@@ -25,6 +26,8 @@ classdef EventStore < handle
         function append(obj, newEvents)
             if isempty(newEvents); return; end
             for i = 1:numel(newEvents)
+                obj.nextId_ = obj.nextId_ + 1;
+                newEvents(i).Id = sprintf('evt_%d', obj.nextId_);
                 if isempty(obj.events_)
                     obj.events_ = newEvents(i);
                 else
@@ -35,6 +38,70 @@ classdef EventStore < handle
 
         function events = getEvents(obj)
             events = obj.events_;
+        end
+
+        function events = getEventsForTag(obj, tagKey)
+        %GETEVENTSFORTAG Return events bound to tagKey via EventBinding + carrier fallback.
+        %   Primary path: uses EventBinding.getEventsForTag for events
+        %   with non-empty Id (Phase 1010 EVENT-01/EVENT-03).
+        %   Fallback path: carrier-field matching (SensorName/ThresholdLabel)
+        %   for events without Id (backward compat, Pitfall 4).
+        %
+        %   Errors:
+        %     EventStore:invalidTagKey — tagKey not char / string
+            events = [];
+            if isempty(obj.events_), return; end
+            if ~ischar(tagKey) && ~isstring(tagKey)
+                error('EventStore:invalidTagKey', ...
+                    'tagKey must be char or string; got %s.', class(tagKey));
+            end
+            tagKey = char(tagKey);
+            % Primary path: EventBinding-based lookup
+            boundEvents = EventBinding.getEventsForTag(tagKey, obj);
+            % Fallback path: carrier-field matching (SensorName/ThresholdLabel)
+            % for events NOT already found by EventBinding
+            keep = false(1, numel(obj.events_));
+            for i = 1:numel(obj.events_)
+                ev = obj.events_(i);
+                % Check if this event was already found by EventBinding (by Id)
+                alreadyBound = false;
+                evId = '';
+                if isa(ev, 'Event') && ~isempty(ev.Id)
+                    evId = ev.Id;
+                end
+                if ~isempty(evId)
+                    for bi = 1:numel(boundEvents)
+                        if strcmp(evId, boundEvents(bi).Id)
+                            alreadyBound = true;
+                            break;
+                        end
+                    end
+                end
+                if alreadyBound
+                    continue;
+                end
+                sn = '';
+                tl = '';
+                if isa(ev, 'Event')
+                    sn = ev.SensorName;
+                    tl = ev.ThresholdLabel;
+                elseif isstruct(ev)
+                    if isfield(ev, 'SensorName'), sn = ev.SensorName; end
+                    if isfield(ev, 'ThresholdLabel'), tl = ev.ThresholdLabel; end
+                end
+                keep(i) = strcmp(sn, tagKey) || strcmp(tl, tagKey);
+            end
+            carrierEvents = obj.events_(keep);
+            % Combine: EventBinding results + carrier fallback (dedup by handle ==)
+            if isempty(boundEvents) && isempty(carrierEvents)
+                events = [];
+            elseif isempty(boundEvents)
+                events = carrierEvents;
+            elseif isempty(carrierEvents)
+                events = boundEvents;
+            else
+                events = [boundEvents, carrierEvents];
+            end
         end
 
         function save(obj)

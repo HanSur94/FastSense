@@ -11,7 +11,7 @@ function example_event_detection_live()
     run(fullfile(projectRoot, 'install.m'));
 
     persistent dataTimer liveViewer liveCfg liveN fpTemp fpPres fpVib hPlotFig;
-    persistent tempFile presFile vibFile;
+    persistent tempFile presFile vibFile sensorBuf;
 
     fprintf('\n=== Event Detection Live Demo ===\n\n');
 
@@ -37,27 +37,16 @@ function example_event_detection_live()
     burstIdx = t >= 35 & t <= 45;
     vibration(burstIdx) = vibration(burstIdx) + 4 * abs(sin((t(burstIdx)-35)*3));
 
-    % --- 2. Create Sensor objects ---
-    sTemp = Sensor('temperature', 'Name', 'Temperature');
-    sTemp.X = t; sTemp.Y = temp;
-    tTempWarn = Threshold('temp_warning', 'Name', 'temp warning', 'Direction', 'upper');
-    tTempWarn.addCondition(struct(), 85);
-    sTemp.addThreshold(tTempWarn);
-    tTempCrit = Threshold('temp_critical', 'Name', 'temp critical', 'Direction', 'upper');
-    tTempCrit.addCondition(struct(), 95);
-    sTemp.addThreshold(tTempCrit);
+    % --- 2. Create SensorTag objects ---
+    sTemp = SensorTag('temperature', 'Name', 'Temperature', 'X', t, 'Y', temp);
+    sPres = SensorTag('pressure', 'Name', 'Pressure', 'X', t, 'Y', pressure);
+    sVib = SensorTag('vibration', 'Name', 'Vibration', 'X', t, 'Y', vibration);
 
-    sPres = Sensor('pressure', 'Name', 'Pressure');
-    sPres.X = t; sPres.Y = pressure;
-    tPresLow = Threshold('pressure_low', 'Name', 'pressure low', 'Direction', 'lower');
-    tPresLow.addCondition(struct(), 4);
-    sPres.addThreshold(tPresLow);
-
-    sVib = Sensor('vibration', 'Name', 'Vibration');
-    sVib.X = t; sVib.Y = vibration;
-    tVibHigh = Threshold('vibration_high', 'Name', 'vibration high', 'Direction', 'upper');
-    tVibHigh.addCondition(struct(), 5);
-    sVib.addThreshold(tVibHigh);
+    % Keep mutable buffers for live append
+    sensorBuf = struct();
+    sensorBuf(1).x = t; sensorBuf(1).y = temp;
+    sensorBuf(2).x = t; sensorBuf(2).y = pressure;
+    sensorBuf(3).x = t; sensorBuf(3).y = vibration;
 
     % --- 3. Configure event detection ---
     cfg = EventConfig();
@@ -65,9 +54,9 @@ function example_event_detection_live()
     cfg.OnEventStart = eventLogger();
     cfg.MaxCallsPerEvent = 2;
 
-    cfg.addSensor(sTemp);
-    cfg.addSensor(sPres);
-    cfg.addSensor(sVib);
+    cfg.addTag(sTemp);
+    cfg.addTag(sPres);
+    cfg.addTag(sVib);
 
     cfg.setColor('temp warning',  [1.0 0.8 0.0]);
     cfg.setColor('temp critical', [1.0 0.2 0.0]);
@@ -106,10 +95,6 @@ function example_event_detection_live()
     ax1 = subplot(3,1,1, 'Parent', hPlotFig);
     fpTemp = FastSense('Parent', ax1, 'LinkGroup', 'live_demo');
     fpTemp.addLine(t, temp, 'DisplayName', 'Temperature', 'Color', [0.8 0.2 0.1]);
-    fpTemp.addThreshold(85, 'Direction', 'upper', 'ShowViolations', true, ...
-        'Color', [1 0.8 0], 'LineStyle', '--', 'Label', 'temp warning');
-    fpTemp.addThreshold(95, 'Direction', 'upper', 'ShowViolations', true, ...
-        'Color', [1 0.2 0], 'LineStyle', '-', 'Label', 'temp critical');
     fpTemp.render();
     title(ax1, 'Temperature (C)');
     ylabel(ax1, 'C');
@@ -118,8 +103,6 @@ function example_event_detection_live()
     ax2 = subplot(3,1,2, 'Parent', hPlotFig);
     fpPres = FastSense('Parent', ax2, 'LinkGroup', 'live_demo');
     fpPres.addLine(t, pressure, 'DisplayName', 'Pressure', 'Color', [0.2 0.5 1]);
-    fpPres.addThreshold(4, 'Direction', 'lower', 'ShowViolations', true, ...
-        'Color', [0.2 0.5 1], 'LineStyle', '--', 'Label', 'pressure low');
     fpPres.render();
     title(ax2, 'Pressure (bar)');
     ylabel(ax2, 'bar');
@@ -128,8 +111,6 @@ function example_event_detection_live()
     ax3 = subplot(3,1,3, 'Parent', hPlotFig);
     fpVib = FastSense('Parent', ax3, 'LinkGroup', 'live_demo');
     fpVib.addLine(t, vibration, 'DisplayName', 'Vibration', 'Color', [0.8 0.3 0.8]);
-    fpVib.addThreshold(5, 'Direction', 'upper', 'ShowViolations', true, ...
-        'Color', [0.8 0.3 0.8], 'LineStyle', '--', 'Label', 'vibration high');
     fpVib.render();
     title(ax3, 'Vibration (mm/s)');
     ylabel(ax3, 'mm/s');
@@ -180,25 +161,22 @@ function example_event_detection_live()
                 newPres(vi:span) = newPres(vi:span) - 4;
             end
 
-            % Update sensor objects
-            for i = 1:numel(liveCfg.Sensors)
-                s = liveCfg.Sensors{i};
-                switch s.Key
-                    case 'temperature'
-                        s.X = [s.X, tNew]; s.Y = [s.Y, newTemp];
-                    case 'pressure'
-                        s.X = [s.X, tNew]; s.Y = [s.Y, newPres];
-                    case 'vibration'
-                        s.X = [s.X, tNew]; s.Y = [s.Y, newVib];
-                end
-                liveCfg.SensorData(i).t = s.X;
-                liveCfg.SensorData(i).y = s.Y;
+            % Update buffers and SensorTag objects
+            sensorBuf(1).x = [sensorBuf(1).x, tNew]; sensorBuf(1).y = [sensorBuf(1).y, newTemp];
+            sensorBuf(2).x = [sensorBuf(2).x, tNew]; sensorBuf(2).y = [sensorBuf(2).y, newPres];
+            sensorBuf(3).x = [sensorBuf(3).x, tNew]; sensorBuf(3).y = [sensorBuf(3).y, newVib];
+
+            sensors = {sTemp, sPres, sVib};
+            for i = 1:3
+                sensors{i}.updateData(sensorBuf(i).x, sensorBuf(i).y);
+                liveCfg.SensorData(i).t = sensorBuf(i).x;
+                liveCfg.SensorData(i).y = sensorBuf(i).y;
             end
 
-            % Write updated data to .mat files — FastSense startLive picks them up
-            sT = liveCfg.Sensors{1}; x = sT.X; y = sT.Y; save(tempFile, 'x', 'y');
-            sP = liveCfg.Sensors{2}; x = sP.X; y = sP.Y; save(presFile, 'x', 'y');
-            sV = liveCfg.Sensors{3}; x = sV.X; y = sV.Y; save(vibFile,  'x', 'y');
+            % Write updated data to .mat files
+            x = sensorBuf(1).x; y = sensorBuf(1).y; save(tempFile, 'x', 'y');
+            x = sensorBuf(2).x; y = sensorBuf(2).y; save(presFile, 'x', 'y');
+            x = sensorBuf(3).x; y = sensorBuf(3).y; save(vibFile,  'x', 'y');
 
             % Re-detect events
             fprintf('--- Live Update (t=%.1f) ---\n', tNew(end));

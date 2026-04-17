@@ -32,14 +32,9 @@ fp.addLine(x, y, 'DisplayName', 'Accelerometer', 'Color', [0.1 0.3 0.6]);
 
 % ISO 10816 style velocity thresholds (simplified for displacement)
 fp.addThreshold(1.2, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--', 'Label', 'Danger');
 fp.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':', 'Label', 'Alert');
 fp.addThreshold(-0.8, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [1 0.5 0], 'LineStyle', ':');
 fp.addThreshold(-1.2, 'Direction', 'lower', 'ShowViolations', true, ...
-    'Color', [0.8 0 0], 'LineStyle', '--');
-
 fp.render();
 
 fprintf('Rendered in %.3f seconds. Zoom into burst regions!\n', toc);
