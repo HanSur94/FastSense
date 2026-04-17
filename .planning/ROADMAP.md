@@ -243,7 +243,7 @@ Plans:
 - [x] 1011-01-PLAN.md — SensorTag data inlining + delete 8 legacy classes + private helpers + install.m update
 - [x] 1011-02-PLAN.md — Delete legacy-only test files + benchmark files
 - [x] 1011-03-PLAN.md — Remove legacy branches from 19 consumer production files
-- [ ] 1011-04-PLAN.md — Migrate 42 examples + 4 benchmarks + surviving test fixtures to Tag API
+- [x] 1011-04-PLAN.md — Migrate 42 examples + 4 benchmarks + surviving test fixtures to Tag API
 - [ ] 1011-05-PLAN.md — Rewrite golden integration test + grep audit + phase-exit gate
 
 ## Progress
@@ -261,7 +261,7 @@ Plans:
 | 1008. CompositeTag | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1009. Consumer migration | v2.0 | 4/4 | Complete    | 2026-04-17 |
 | 1010. Event ↔ Tag binding + overlay | v2.0 | 3/3 | Complete    | 2026-04-17 |
-| 1011. Cleanup + delete legacy | v2.0 | 3/5 | In Progress|  |
+| 1011. Cleanup + delete legacy | v2.0 | 4/5 | In Progress|  |
 
 ## Backlog
 
@@ -269,7 +269,7 @@ Plans:
 
 **Goal:** Add Home Assistant-style Mushroom Card widgets to the dashboard engine — minimal, icon-driven cards with clean visual design for sensor status, controls, and quick glance data. Three new widget classes: IconCardWidget, ChipBarWidget, SparklineCardWidget, plus theme additions and full serializer/builder/detach integration.
 **Requirements:** [MUSH-01: DashboardTheme InfoColor, MUSH-02: IconCardWidget, MUSH-03: ChipBarWidget, MUSH-04: SparklineCardWidget, MUSH-05: DashboardEngine type registration, MUSH-06: DashboardSerializer integration, MUSH-07: DetachedMirror + DashboardBuilder integration]
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation

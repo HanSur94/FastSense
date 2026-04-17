@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1011-03-PLAN.md
-last_updated: "2026-04-17T09:30:31.666Z"
+stopped_at: Completed 1011-04-PLAN.md
+last_updated: "2026-04-17T09:32:09.216Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 15
   completed_phases: 13
   total_plans: 47
-  completed_plans: 45
+  completed_plans: 46
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1011 (Cleanup — delete legacy) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -115,6 +115,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1011 P02 | 58 | 1 tasks | 37 files |
 | Phase 1011 P01 | 3min | 2 tasks | 22 files |
 | Phase 1011 P03 | 15min | 2 tasks | 21 files |
+| Phase 1011 P04 | 962 | 2 tasks | 100 files |
 
 ## Accumulated Context
 
@@ -232,6 +233,7 @@ Recent decisions affecting current work:
 - [Phase 1011]: Inlined 7 Sensor data properties directly onto SensorTag (no delegate)
 - [Phase 1011]: DashboardWidget maps legacy Sensor NV to Tag for backward compat; all fromStruct methods use TagRegistry.get
 - [Phase 1011]: EventDetector 6-arg legacy path removed; LiveEventPipeline takes MonitorTargets directly
+- [Phase 1011]: SensorTag X/Y via constructor args or updateData(); test method names renamed to avoid grep false positives
 
 ### Roadmap Evolution
 
@@ -265,6 +267,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T09:30:31.658Z
-Stopped at: Completed 1011-03-PLAN.md
+Last session: 2026-04-17T09:32:09.211Z
+Stopped at: Completed 1011-04-PLAN.md
 Resume file: None
