@@ -1,98 +1,108 @@
 classdef SensorTag < Tag
-    %SENSORTAG Concrete Tag subclass wrapping a legacy Sensor data carrier.
-    %   SensorTag composes a legacy Sensor (HAS-A, not IS-A) via a private
-    %   Sensor_ delegate.  It satisfies the Tag contract (getXY, valueAt,
-    %   getTimeRange, getKind='sensor', toStruct, fromStruct) and forwards
-    %   data-role methods (load, toDisk, toMemory, isOnDisk) to the inner
-    %   Sensor.  Threshold machinery on Sensor (addThreshold, resolve,
-    %   ResolvedThresholds/Violations/StateBands) is deliberately NOT
-    %   forwarded — that stays on the legacy class until Phase 1011 cleanup.
+    %SENSORTAG Concrete Tag subclass for sensor time-series data.
+    %   SensorTag is the primary sensor data carrier in the Tag-based domain
+    %   model.  It stores time-series data (X, Y) directly and satisfies the
+    %   Tag contract (getXY, valueAt, getTimeRange, getKind='sensor',
+    %   toStruct, fromStruct).  Data-role methods (load, toDisk, toMemory,
+    %   isOnDisk) operate on the inlined private properties.
     %
-    %   Properties (Dependent): DataStore — mirrors obj.Sensor_.DataStore.
+    %   Properties (Dependent): DataStore -- read-only view of the disk store.
     %
     %   Constructor accepts Tag universals (Name, Units, Description,
-    %   Labels, Metadata, Criticality, SourceRef), Sensor extras (ID,
+    %   Labels, Metadata, Criticality, SourceRef), sensor extras (ID,
     %   Source, MatFile, KeyName), and inline 'X'/'Y' data arrays.
     %
     %   Example:
     %     st = SensorTag('press_a', 'Name', 'Pressure A', 'Units', 'bar');
-    %     st.load('data/press_a.mat');  % populates inner Sensor X, Y
+    %     st.load('data/press_a.mat');  % populates X_, Y_ from file
     %     [x, y] = st.getXY();
     %     TagRegistry.register('press_a', st);
     %
-    %   See also Tag, TagRegistry, Sensor, StateTag.
+    %   See also Tag, TagRegistry, StateTag.
 
     properties (Access = private)
-        Sensor_           % handle to legacy Sensor instance (composition delegate)
-        listeners_ = {}   % cell of handles implementing invalidate(); strong refs
+        X_         = []    % double: timestamps
+        Y_         = []    % double: values
+        DataStore_ = []    % FastSenseDataStore
+        ID_        = []    % numeric
+        Source_    = ''    % char
+        MatFile_   = ''    % char
+        KeyName_   = ''    % char: defaults to Key
+        listeners_ = {}    % cell of handles implementing invalidate(); strong refs
     end
 
     properties (Dependent)
-        DataStore   % mirrors obj.Sensor_.DataStore (read-only view)
+        DataStore   % read-only view of DataStore_
     end
 
     methods
         function obj = SensorTag(key, varargin)
-            %SENSORTAG Construct a SensorTag by delegating to Tag + Sensor.
-            %   t = SensorTag(key) creates a SensorTag with the given key
-            %   and an inner Sensor delegate bearing the same key.
+            %SENSORTAG Construct a SensorTag with inlined data storage.
+            %   t = SensorTag(key) creates a SensorTag with the given key.
             %
             %   t = SensorTag(key, Name, Value, ...) accepts Tag universals
             %   (Name, Units, Description, Labels, Metadata, Criticality,
-            %   SourceRef), Sensor extras (ID, Source, MatFile, KeyName),
+            %   SourceRef), sensor extras (ID, Source, MatFile, KeyName),
             %   and inline data payload (X, Y).
             %
             %   Errors:
-            %     Tag:invalidKey           — key empty / not char
-            %     SensorTag:unknownOption  — unrecognized NV key
+            %     Tag:invalidKey           -- key empty / not char
+            %     SensorTag:unknownOption  -- unrecognized NV key
             [tagArgs, sensorArgs, inlineX, inlineY] = SensorTag.splitArgs_(varargin);
-            obj@Tag(key, tagArgs{:});              % MUST be first — no obj access before
-            obj.Sensor_ = Sensor(key, sensorArgs{:});
-            if ~isempty(inlineX) || ~isempty(inlineY)
-                obj.Sensor_.X = inlineX;
-                obj.Sensor_.Y = inlineY;
+            obj@Tag(key, tagArgs{:});              % MUST be first -- no obj access before
+
+            % Store sensor extras directly
+            obj.KeyName_ = key;  % default: same as Key
+            for i = 1:2:numel(sensorArgs)
+                switch sensorArgs{i}
+                    case 'ID',       obj.ID_      = sensorArgs{i+1};
+                    case 'Source',   obj.Source_   = sensorArgs{i+1};
+                    case 'MatFile',  obj.MatFile_  = sensorArgs{i+1};
+                    case 'KeyName',  obj.KeyName_  = sensorArgs{i+1};
+                end
             end
-            % Tag defaults Name to Key; mirror to inner Sensor for any
-            % downstream consumer that still reads Sensor.Name directly.
-            obj.Sensor_.Name = obj.Name;
+
+            if ~isempty(inlineX) || ~isempty(inlineY)
+                obj.X_ = inlineX;
+                obj.Y_ = inlineY;
+            end
         end
 
         function ds = get.DataStore(obj)
-            %GET.DATASTORE Forward the dependent DataStore read to the delegate.
-            ds = obj.Sensor_.DataStore;
+            %GET.DATASTORE Return the disk-backed DataStore (read-only view).
+            ds = obj.DataStore_;
         end
 
         % ---- Tag contract ----
 
         function [X, Y] = getXY(obj)
-            %GETXY Return delegate X, Y by reference (zero-copy via COW).
+            %GETXY Return X, Y by reference (zero-copy via COW).
             %   MATLAB copy-on-write guarantees no memory allocation until
-            %   the caller mutates X or Y — this is the Pitfall 9 path.
-            X = obj.Sensor_.X;
-            Y = obj.Sensor_.Y;
+            %   the caller mutates X or Y.
+            X = obj.X_;
+            Y = obj.Y_;
         end
 
         function v = valueAt(obj, t)
             %VALUEAT Return Y at the last index where X <= t (ZOH, clamped).
-            %   Mirrors StateChannel.bsearchRight semantics for a consistent
-            %   behaviour across Tag kinds.  Returns NaN on empty data.
-            if isempty(obj.Sensor_.X) || isempty(obj.Sensor_.Y)
+            %   Returns NaN on empty data.
+            if isempty(obj.X_) || isempty(obj.Y_)
                 v = NaN;
                 return;
             end
-            idx = binary_search(obj.Sensor_.X, t, 'right');
-            v = obj.Sensor_.Y(idx);
+            idx = binary_search(obj.X_, t, 'right');
+            v = obj.Y_(idx);
         end
 
         function [tMin, tMax] = getTimeRange(obj)
             %GETTIMERANGE Return [X(1), X(end)].  [NaN NaN] if empty.
-            if isempty(obj.Sensor_.X)
+            if isempty(obj.X_)
                 tMin = NaN;
                 tMax = NaN;
                 return;
             end
-            tMin = obj.Sensor_.X(1);
-            tMax = obj.Sensor_.X(end);
+            tMin = obj.X_(1);
+            tMax = obj.X_(end);
         end
 
         function k = getKind(obj) %#ok<MANU>
@@ -102,10 +112,10 @@ classdef SensorTag < Tag
 
         function s = toStruct(obj)
             %TOSTRUCT Serialize SensorTag state to a plain struct.
-            %   Tag universals at the top level; Sensor-specific extras
-            %   nested under `s.sensor` (only when non-default) to keep the
-            %   struct compact.  X/Y are INTENTIONALLY OMITTED — runtime
-            %   data, not serialization state (RESEARCH §6 / Pitfall 5).
+            %   Tag universals at the top level; sensor-specific extras
+            %   nested under s.sensor (only when non-default) to keep the
+            %   struct compact.  X/Y are INTENTIONALLY OMITTED -- runtime
+            %   data, not serialization state.
             s = struct();
             s.kind        = 'sensor';
             s.key         = obj.Key;
@@ -118,61 +128,91 @@ classdef SensorTag < Tag
             s.sourceref   = obj.SourceRef;
 
             sensorExtras = struct();
-            if ~isempty(obj.Sensor_.ID)
-                sensorExtras.id = obj.Sensor_.ID;
+            if ~isempty(obj.ID_)
+                sensorExtras.id = obj.ID_;
             end
-            if ~isempty(obj.Sensor_.Source)
-                sensorExtras.source = obj.Sensor_.Source;
+            if ~isempty(obj.Source_)
+                sensorExtras.source = obj.Source_;
             end
-            if ~isempty(obj.Sensor_.MatFile)
-                sensorExtras.matfile = obj.Sensor_.MatFile;
+            if ~isempty(obj.MatFile_)
+                sensorExtras.matfile = obj.MatFile_;
             end
-            if ~isempty(obj.Sensor_.KeyName) && ~strcmp(obj.Sensor_.KeyName, obj.Key)
-                sensorExtras.keyname = obj.Sensor_.KeyName;
+            if ~isempty(obj.KeyName_) && ~strcmp(obj.KeyName_, obj.Key)
+                sensorExtras.keyname = obj.KeyName_;
             end
             if ~isempty(fieldnames(sensorExtras))
                 s.sensor = sensorExtras;
             end
         end
 
-        % ---- Data-role delegation ----
+        % ---- Data-role methods ----
 
         function load(obj, matFile)
-            %LOAD Delegate to inner Sensor.load with optional MatFile override.
-            %   t.load() uses the already-configured MatFile on the delegate.
-            %   t.load(path) sets Sensor_.MatFile = path before delegating.
+            %LOAD Load sensor data from a .mat file.
+            %   t.load() uses the already-configured MatFile.
+            %   t.load(path) sets MatFile before loading.
             %
-            %   Re-raises: Sensor:noMatFile, Sensor:fileNotFound,
-            %              Sensor:fieldNotFound (see Sensor.load).
+            %   Errors:
+            %     SensorTag:noMatFile      -- MatFile not set
+            %     SensorTag:fileNotFound   -- file does not exist
+            %     SensorTag:fieldNotFound  -- KeyName not in file
             if nargin >= 2 && ~isempty(matFile)
-                obj.Sensor_.MatFile = matFile;
+                obj.MatFile_ = matFile;
             end
-            obj.Sensor_.load();
+            if isempty(obj.MatFile_)
+                error('SensorTag:noMatFile', 'MatFile property is not set.');
+            end
+            if ~exist(obj.MatFile_, 'file')
+                error('SensorTag:fileNotFound', 'File not found: %s', obj.MatFile_);
+            end
+            data = builtin('load', obj.MatFile_);
+            if ~isfield(data, obj.KeyName_)
+                error('SensorTag:fieldNotFound', ...
+                    'Field ''%s'' not found in %s. Available: %s', ...
+                    obj.KeyName_, obj.MatFile_, strjoin(fieldnames(data), ', '));
+            end
+            entry = data.(obj.KeyName_);
+            if isstruct(entry)
+                if isfield(entry, 'x'), obj.X_ = entry.x; end
+                if isfield(entry, 'X'), obj.X_ = entry.X; end
+                if isfield(entry, 'y'), obj.Y_ = entry.y; end
+                if isfield(entry, 'Y'), obj.Y_ = entry.Y; end
+            else
+                obj.Y_ = entry;
+                obj.X_ = 1:numel(entry);
+            end
         end
 
         function toDisk(obj)
-            %TODISK Delegate to inner Sensor.toDisk (0-arg parity).
-            obj.Sensor_.toDisk();
+            %TODISK Move X/Y data to disk-backed FastSenseDataStore.
+            %   Clears X_ and Y_ from memory after transfer.
+            if isempty(obj.X_) && ~isempty(obj.DataStore_), return; end
+            if isempty(obj.X_)
+                error('SensorTag:noData', 'No X/Y data to move to disk.');
+            end
+            obj.DataStore_ = FastSenseDataStore(obj.X_, obj.Y_);
+            obj.X_ = []; obj.Y_ = [];
         end
 
         function toMemory(obj)
-            %TOMEMORY Delegate to inner Sensor.toMemory.
-            obj.Sensor_.toMemory();
+            %TOMEMORY Load disk-backed data back into memory.
+            if isempty(obj.DataStore_), return; end
+            [obj.X_, obj.Y_] = obj.DataStore_.readSlice(1, obj.DataStore_.NumPoints);
+            obj.DataStore_.cleanup();
+            obj.DataStore_ = [];
         end
 
         function tf = isOnDisk(obj)
-            %ISONDISK Delegate to inner Sensor.isOnDisk.
-            tf = obj.Sensor_.isOnDisk();
+            %ISONDISK True if sensor data is stored on disk.
+            tf = ~isempty(obj.DataStore_);
         end
 
-        % ---- Observer hook (Phase 1006 additive) ----
+        % ---- Observer hook ----
 
         function addListener(obj, m)
             %ADDLISTENER Register a listener notified on underlying data change.
             %   Listener must implement an invalidate() method. Strong
-            %   reference — caller manages lifecycle. Idempotency is the
-            %   caller's responsibility (duplicates permitted because
-            %   invalidate() is cheap and idempotent).
+            %   reference -- caller manages lifecycle.
             %
             %   Errors: SensorTag:invalidListener if ~ismethod(m, 'invalidate').
             if ~ismethod(m, 'invalidate')
@@ -183,12 +223,9 @@ classdef SensorTag < Tag
         end
 
         function updateData(obj, X, Y)
-            %UPDATEDATA Replace inner Sensor X/Y and fire listeners (MONITOR-04).
-            %   Additive API — does NOT touch load/toDisk/toMemory paths.
-            %   Any registered MonitorTag or other listener receives an
-            %   invalidate() call after the new data is installed.
-            obj.Sensor_.X = X;
-            obj.Sensor_.Y = Y;
+            %UPDATEDATA Replace X/Y data and fire listeners.
+            obj.X_ = X;
+            obj.Y_ = Y;
             obj.notifyListeners_();
         end
     end
@@ -205,9 +242,6 @@ classdef SensorTag < Tag
     methods (Static)
         function obj = fromStruct(s)
             %FROMSTRUCT Reconstruct SensorTag from a toStruct output.
-            %   Unwraps the cellstr Labels wrap (same pattern as MockTag),
-            %   extracts Sensor extras from the optional s.sensor nested
-            %   struct, and forwards everything to the SensorTag ctor.
             if ~isstruct(s) || ~isfield(s, 'key') || isempty(s.key)
                 error('SensorTag:invalidSource', ...
                     'fromStruct requires a struct with non-empty .key');
