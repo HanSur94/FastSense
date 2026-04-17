@@ -218,7 +218,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 1010-01-PLAN.md — Event.TagKeys + EventBinding singleton + EventStore auto-Id/eventsForTag migration + MonitorTag emission update (EVENT-01, EVENT-02, EVENT-03, EVENT-04, EVENT-05)
+- [x] 1010-01-PLAN.md — Event.TagKeys + EventBinding singleton + EventStore auto-Id/eventsForTag migration + MonitorTag emission update (EVENT-01, EVENT-02, EVENT-03, EVENT-04, EVENT-05)
 - [ ] 1010-02-PLAN.md — Tag.addManualEvent + Tag.eventsAttached + FastSense renderEventLayer_ overlay (EVENT-06, EVENT-07)
 - [ ] 1010-03-PLAN.md — 0-event render benchmark + phase-exit Pitfall audit (all 7 EVENT gates)
 **UI hint**: yes
@@ -253,7 +253,7 @@ Plans:
 | 1007. MonitorTag streaming + persistence | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1008. CompositeTag | v2.0 | 3/3 | Complete    | 2026-04-16 |
 | 1009. Consumer migration | v2.0 | 4/4 | Complete    | 2026-04-17 |
-| 1010. Event ↔ Tag binding + overlay | v2.0 | 0/3 | Planning    | — |
+| 1010. Event ↔ Tag binding + overlay | v2.0 | 1/3 | In Progress|  |
 | 1011. Cleanup + delete legacy | v2.0 | 0/? | Not started | — |
 
 ## Backlog
@@ -262,7 +262,7 @@ Plans:
 
 **Goal:** Add Home Assistant-style Mushroom Card widgets to the dashboard engine — minimal, icon-driven cards with clean visual design for sensor status, controls, and quick glance data. Three new widget classes: IconCardWidget, ChipBarWidget, SparklineCardWidget, plus theme additions and full serializer/builder/detach integration.
 **Requirements:** [MUSH-01: DashboardTheme InfoColor, MUSH-02: IconCardWidget, MUSH-03: ChipBarWidget, MUSH-04: SparklineCardWidget, MUSH-05: DashboardEngine type registration, MUSH-06: DashboardSerializer integration, MUSH-07: DetachedMirror + DashboardBuilder integration]
-**Plans:** 4/4 plans complete
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 999.1-01-PLAN.md — DashboardTheme InfoColor + IconCardWidget implementation

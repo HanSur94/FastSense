@@ -69,11 +69,11 @@
 
 ### EVENT — Events on Tag
 
-- [ ] **EVENT-01**: `Event.TagKeys` (cell of strings) replaces the current `SensorName`/`ThresholdLabel` denormalized strings. Supports many-to-many Event ↔ Tag binding (one event can reference multiple tags; one tag can have many events).
-- [ ] **EVENT-02**: Separate `EventBinding` registry stores `(eventId, tagKey)` rows. **Critical: Event holds NO Tag handles; Tag holds NO Event handles.** Prevents serialization cycles and matches PI AF event-frame ↔ element binding pattern.
-- [ ] **EVENT-03**: `EventStore.eventsForTag(key)` query returns all events bound to the given tag (filters via EventBinding). `Tag.eventsAttached()` is a query, not a stored property.
-- [ ] **EVENT-04**: `Event.Severity` field (numeric, mapped to theme color via `StatusOkColor`/`StatusWarnColor`/`StatusAlarmColor`). ISA-18.2 priority levels.
-- [ ] **EVENT-05**: `Event.Category` field (`'alarm'|'maintenance'|'process_change'|'manual_annotation'`). Drives default render style in FastSense overlay; drives filter in EventTimelineWidget.
+- [x] **EVENT-01**: `Event.TagKeys` (cell of strings) replaces the current `SensorName`/`ThresholdLabel` denormalized strings. Supports many-to-many Event ↔ Tag binding (one event can reference multiple tags; one tag can have many events).
+- [x] **EVENT-02**: Separate `EventBinding` registry stores `(eventId, tagKey)` rows. **Critical: Event holds NO Tag handles; Tag holds NO Event handles.** Prevents serialization cycles and matches PI AF event-frame ↔ element binding pattern.
+- [x] **EVENT-03**: `EventStore.eventsForTag(key)` query returns all events bound to the given tag (filters via EventBinding). `Tag.eventsAttached()` is a query, not a stored property.
+- [x] **EVENT-04**: `Event.Severity` field (numeric, mapped to theme color via `StatusOkColor`/`StatusWarnColor`/`StatusAlarmColor`). ISA-18.2 priority levels.
+- [x] **EVENT-05**: `Event.Category` field (`'alarm'|'maintenance'|'process_change'|'manual_annotation'`). Drives default render style in FastSense overlay; drives filter in EventTimelineWidget.
 - [ ] **EVENT-06**: Manual event creation API — `tag.addManualEvent(tStart, tEnd, label, message)` writes a new Event to the bound EventStore with `TagKeys = {tag.Key}` and `Category = 'manual_annotation'`. Foundation for the deferred custom-event-GUI milestone (F).
 - [ ] **EVENT-07**: FastSense renders events bound to a plotted Tag as **round marker symbols** at event timestamps (Trendminer-style). Theme-driven color from `Event.Severity`. **Toggleable** via `FastSense.ShowEventMarkers` property (default true). Implemented as a **separate render layer** (Pitfalls §10) — `renderEventLayer()` after `renderLines()`, single early-out if no events.
 

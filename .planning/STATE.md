@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: verifying
-stopped_at: Completed 1009-04-PLAN.md (Phase 1009 closed)
-last_updated: "2026-04-17T07:59:24.658Z"
+status: executing
+stopped_at: Completed 1010-01-PLAN.md
+last_updated: "2026-04-17T08:27:00.771Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 15
   completed_phases: 12
-  total_plans: 39
-  completed_plans: 39
+  total_plans: 42
+  completed_plans: 40
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1009 — Consumer migration
+**Current focus:** Phase 1010 — Event ↔ Tag binding + FastSense overlay
 
 ## Current Position
 
-Phase: 1010
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 1010 (Event ↔ Tag binding + FastSense overlay) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-17
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -109,6 +109,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1009 P02 | 14min | 4 tasks | 13 files |
 | Phase 1009-consumer-migration P03 | 2149s | 4 tasks | 7 files |
 | Phase 1009-consumer-migration P04 | 5min | 2 tasks | 1 files |
+| Phase 1010 P01 | 9m 16s | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -219,6 +220,7 @@ Recent decisions affecting current work:
 - [Phase 1009]: DashboardEngine.onLiveTick uses unconditional markDirty for Tag widgets (Sensor parity; RESEARCH Q#2 Option A)
 - [Phase 1009-consumer-migration]: EventDetector varargin shim (detect_) preserves all 6-arg callers; LEP uses separate MonitorTargets map; processMonitorTag_ enforces Pitfall Y ordering; Phase 1007 SC#4 realized end-to-end
 - [Phase 1009-consumer-migration]: Phase 1009 closes: all 6 Pitfall gates PASS; 0.3% overhead on Pitfall 9; handoff to Phase 1010 explicit
+- [Phase 1010]: Event.Id uses sequential counter in EventStore.append; EventBinding singleton with forward+reverse index; carrier fallback preserved for backward compat
 
 ### Roadmap Evolution
 
@@ -252,6 +254,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T07:54:52.057Z
-Stopped at: Completed 1009-04-PLAN.md (Phase 1009 closed)
+Last session: 2026-04-17T08:27:00.766Z
+Stopped at: Completed 1010-01-PLAN.md
 Resume file: None
