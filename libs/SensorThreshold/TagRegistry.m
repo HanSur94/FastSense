@@ -40,7 +40,7 @@ classdef TagRegistry
     %     got = TagRegistry.get('press_a');
     %     critical = TagRegistry.findByLabel('critical');
     %
-    %   See also Tag, MockTag, ThresholdRegistry.
+    %   See also Tag, MockTag.
 
     methods (Static)
 

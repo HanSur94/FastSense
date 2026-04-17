@@ -6,7 +6,7 @@ classdef DashboardEngine < handle
 %     d.Theme = 'light';
 %     d.LiveInterval = 5;
 %     d.addWidget('fastsense', 'Title', 'Temp', 'Position', [1 1 6 3], ...
-%                 'Sensor', SensorRegistry.get('temperature'));
+%                 'Tag', TagRegistry.get('temperature'));
 %     d.render();
 %
 %   One-liner with name-value options:

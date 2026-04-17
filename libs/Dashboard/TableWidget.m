@@ -189,8 +189,10 @@ classdef TableWidget < DashboardWidget
             if isfield(s, 'source')
                 switch s.source.type
                     case 'sensor'
-                        if exist('SensorRegistry', 'class')
-                            obj.Sensor = SensorRegistry.get(s.source.name);
+                        if exist('TagRegistry', 'class')
+                            try
+                                obj.Tag = TagRegistry.get(s.source.name);
+                            catch, end
                         end
                         if isfield(s.source, 'mode')
                             obj.Mode = s.source.mode;

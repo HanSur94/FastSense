@@ -337,7 +337,7 @@ classdef MultiStatusWidget < DashboardWidget
             % Resolve string key if needed
             if ischar(t) || isstring(t)
                 try
-                    t = ThresholdRegistry.get(t);
+                    t = TagRegistry.get(t);
                 catch
                     return;
                 end
@@ -442,18 +442,18 @@ classdef MultiStatusWidget < DashboardWidget
                             case 'threshold'
                                 entry = struct('label', '');
                                 if isfield(it, 'label'), entry.label = it.label; end
-                                if isfield(it, 'key') && exist('ThresholdRegistry', 'class')
+                                if isfield(it, 'key') && exist('TagRegistry', 'class')
                                     try
-                                        entry.threshold = ThresholdRegistry.get(it.key);
+                                        entry.threshold = TagRegistry.get(it.key);
                                     catch
                                     end
                                 end
                                 if isfield(it, 'value'), entry.value = it.value; end
                                 entries{i} = entry;
                             case 'sensor'
-                                if isfield(it, 'key') && exist('SensorRegistry', 'class')
+                                if isfield(it, 'key') && exist('TagRegistry', 'class')
                                     try
-                                        entries{i} = SensorRegistry.get(it.key);
+                                        entries{i} = TagRegistry.get(it.key);
                                     catch
                                     end
                                 end

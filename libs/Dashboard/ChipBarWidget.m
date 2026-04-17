@@ -208,9 +208,9 @@ classdef ChipBarWidget < DashboardWidget
                     chip = obj.Chips{i};
                     if isstruct(chip) && isfield(chip, 'threshold') && ...
                             (ischar(chip.threshold) || isstring(chip.threshold))
-                        if exist('ThresholdRegistry', 'class')
+                        if exist('TagRegistry', 'class')
                             try
-                                chip.threshold = ThresholdRegistry.get(chip.threshold);
+                                chip.threshold = TagRegistry.get(chip.threshold);
                                 obj.Chips{i} = chip;
                             catch
                                 warning('ChipBarWidget:thresholdNotFound', ...
@@ -246,7 +246,7 @@ classdef ChipBarWidget < DashboardWidget
                 % Threshold-based chip color
                 t = chip.threshold;
                 if ischar(t) || isstring(t)
-                    try t = ThresholdRegistry.get(t); catch, chipColor = [0.5 0.5 0.5]; return; end
+                    try t = TagRegistry.get(t); catch, chipColor = [0.5 0.5 0.5]; return; end
                 end
                 val = [];
                 if isfield(chip, 'valueFcn') && ~isempty(chip.valueFcn)

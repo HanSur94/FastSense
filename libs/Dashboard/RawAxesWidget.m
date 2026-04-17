@@ -133,8 +133,10 @@ classdef RawAxesWidget < DashboardWidget
             if isfield(s, 'source')
                 switch s.source.type
                     case 'sensor'
-                        if exist('SensorRegistry', 'class')
-                            obj.Sensor = SensorRegistry.get(s.source.name);
+                        if exist('TagRegistry', 'class')
+                            try
+                                obj.Tag = TagRegistry.get(s.source.name);
+                            catch, end
                         end
                     case 'callback'
                         obj.PlotFcn = str2func(s.source.function);
