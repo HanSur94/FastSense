@@ -82,7 +82,10 @@ function plotBarStats(ax, data)
 end
 
 function plotDistribution(ax, sensor)
-    q = quantile(sensor.Y, [0.25 0.50 0.75]);
+    % Toolbox-free quartile computation (Statistics Toolbox's quantile() is
+    % unavailable in the project's CI environment — per CLAUDE.md, FastSense
+    % must be toolbox-free).
+    q = quartilesNoToolbox(sensor.Y);
     mu = mean(sensor.Y);
     vals  = [q(1), q(2), q(3), mu];
     names = {'Q1', 'Median', 'Q3', 'Mean'};
@@ -91,4 +94,18 @@ function plotDistribution(ax, sensor)
     set(ax, 'XTick', 1:4, 'XTickLabel', names);
     ylabel(ax, sensor.Name);
     yline(ax, q(2), '--', 'Median', 'Color', [0.5 0.5 0.5]);
+end
+
+function q = quartilesNoToolbox(y)
+%QUARTILESNOTOOLBOX [Q1, Median, Q3] via linear interpolation (no Statistics Toolbox).
+    y = sort(y(:));
+    n = numel(y);
+    q = zeros(1, 3);
+    for i = 1:3
+        p = 0.25 * i;
+        h = (n - 1) * p + 1;
+        lo = floor(h);
+        hi = min(lo + 1, n);
+        q(i) = y(lo) + (h - lo) * (y(hi) - y(lo));
+    end
 end

@@ -57,7 +57,6 @@ temp(overIdx) = temp(overIdx) + 12;
 
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', temp);
 
-
 % --- Pressure sensor P-201 ---
 pressBase = zeros(1, N);
 for k = 1:N
@@ -72,7 +71,6 @@ pressNoise = 8*sin(2*pi*t/7200) + randn(1,N)*2;
 pressure = pressBase + pressNoise;
 
 sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', pressure);
-
 
 % --- Flow sensor F-301 ---
 flowBase = zeros(1, N);
@@ -89,29 +87,40 @@ flow = max(0, flowBase + flowNoise);
 
 sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', flow);
 
-
-%% ========== Build alarm log ==========
+%% ========== Build mock alarm log ==========
+% Violation tracking moved to MonitorTag in the v2.0 Tag model; this demo
+% does not wire a MonitorTag so we synthesize a small alarm log by
+% picking the top-2 samples per sensor and labelling them by a simple
+% warn/alarm threshold. Consumed unchanged by the TableWidget below.
 alarmLog = {};
-sensors = {sTemp, sPress, sFlow};
-for si = 1:numel(sensors)
-    s = sensors{si};
-    if isempty(s.ResolvedViolations)
-        continue;
-    end
-    for vi = 1:numel(s.ResolvedViolations)
-        v = s.ResolvedViolations(vi);
-        if isempty(v.X)
-            continue;
+sensorSpecs = { ...
+    sTemp,  78, 85, 'T-401'; ...
+    sPress, 60, 70, 'P-201'; ...
+    sFlow,  130, 150, 'F-301' ...
+};
+for si = 1:size(sensorSpecs, 1)
+    s        = sensorSpecs{si, 1};
+    warnVal  = sensorSpecs{si, 2};
+    alarmVal = sensorSpecs{si, 3};
+    sKey     = sensorSpecs{si, 4};
+    [~, yAll] = s.getXY();
+    xAll      = s.X;
+    [~, peakIdx] = maxk(yAll, 2);
+    peakIdx = sort(peakIdx);
+    for j = 1:numel(peakIdx)
+        yVal = yAll(peakIdx(j));
+        if yVal >= alarmVal
+            label = 'Hi Alarm';
+        elseif yVal >= warnVal
+            label = 'Hi Warn';
+        else
+            label = 'Peak';
         end
-        nSample = min(2, numel(v.X));
-        idx = round(linspace(1, numel(v.X), nSample));
-        for j = 1:nSample
-            tSec = v.X(idx(j));
-            hours = floor(tSec / 3600);
-            mins = floor(mod(tSec, 3600) / 60);
-            timeStr = sprintf('%02d:%02d', hours, mins);
-            alarmLog(end+1, :) = {timeStr, s.Key, sprintf('%.1f', v.Y(idx(j))), v.Label}; %#ok<AGROW>
-        end
+        tSec  = xAll(peakIdx(j));
+        hours = floor(tSec / 3600);
+        mins  = floor(mod(tSec, 3600) / 60);
+        timeStr = sprintf('%02d:%02d', hours, mins);
+        alarmLog(end+1, :) = {timeStr, sKey, sprintf('%.1f', yVal), label}; %#ok<AGROW>
     end
 end
 if ~isempty(alarmLog)

@@ -26,7 +26,6 @@ temp = 70 + 6*sin(2*pi*t/3600) + randn(1, N)*1.5;
 
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'X', t, 'Y', temp);
 
-
 %% 2. Build a static alarm log by sampling the sensor at its local peaks
 % In the v2.0 Tag model, thresholds live on separate MonitorTag objects
 % rather than a Sensor.ResolvedViolations list — so for this TableWidget

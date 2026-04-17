@@ -32,9 +32,6 @@ yTemp = 70 + 4*sin(2*pi*t/3600) + randn(1, N)*0.8;
 yTemp(end) = 76;  % near warning — interesting gauge position
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', yTemp);
 
-% State-independent thresholds (empty condition struct)
-
-
 %% 2. Build dashboard with 6 gauges (4 styles + 2 data sources)
 d = DashboardEngine('Gauge Widget Demo');
 

@@ -28,16 +28,13 @@ yTemp = 70 + 4*sin(2*pi*t/600) + randn(1,N)*0.5;
 yTemp(end-200:end) = 92 + randn(1,201)*0.3;        % push tail into alarm
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C'], 'X', t, 'Y', yTemp);
 
-
 % Pressure — last value between Hi Warn and Hi Alarm => yellow/warning
 yPress = 48 + 3*sin(2*pi*t/900) + randn(1,N)*0.8;
 yPress(end-100:end) = 67 + randn(1,101)*0.4;       % push tail into warning
 sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'bar', 'X', t, 'Y', yPress);
 
-
 % Flow — last value well within limits => green/ok
 sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', 120 + 5*sin(2*pi*t/1200) + randn(1,N)*1.0);
-
 
 %% 2. Build dashboard
 d = DashboardEngine('Status Widget Demo');

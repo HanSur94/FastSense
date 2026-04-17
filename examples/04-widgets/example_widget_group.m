@@ -37,7 +37,6 @@ yTemp = 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.2;
 yTemp(end) = 79;  % near warning level
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', yTemp);
 
-
 sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', 55 + 8*sin(2*pi*t/7200) + randn(1,N)*1.5);
 
 sFlow = SensorTag('F-301', 'Name', 'Flow Rate', 'Units', 'L/min', 'X', t, 'Y', max(0, 120 + 10*sin(2*pi*t/1800) + randn(1,N)*4));

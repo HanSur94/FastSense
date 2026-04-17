@@ -28,7 +28,6 @@ t = linspace(0, 86400, N);  % 24 hours in seconds
 % Temperature — nearly normal distribution
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'F'], 'X', t, 'Y', 72 + 4*sin(2*pi*t/3600) + randn(1,N)*1.5);
 
-
 % Pressure — bimodal (two machine modes)
 modeA = t < 43200;  % first 12 hours: lower pressure
 modeB = t >= 43200; % second 12 hours: higher pressure

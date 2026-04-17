@@ -43,10 +43,8 @@ end
 yTemp = baseTemp + 4*sin(2*pi*t/3600) + randn(1,N)*1.5;
 sTemp = SensorTag('T-401', 'Name', 'Temperature', 'Units', [char(176) 'C'], 'X', t, 'Y', yTemp);
 
-
 % Pressure sensor — simple unconditional thresholds
 sPress = SensorTag('P-201', 'Name', 'Pressure', 'Units', 'psi', 'X', t, 'Y', 50 + 15*sin(2*pi*t/7200) + randn(1,N)*2);
-
 
 %% 2. Inline data — synthetic vibration signal (no Sensor)
 x = linspace(0, 10, N);
