@@ -102,7 +102,62 @@ function test_event_tag_binding()
     assert(strcmp(ev.SensorName, 'temp'), 'compat: SensorName set');
     assert(strcmp(ev.ThresholdLabel, 'warning high'), 'compat: ThresholdLabel set');
 
-    fprintf('    All 10 event_tag_binding tests passed.\n');
+    % testMonitorTagRecomputeEmitsTagKeys
+    EventBinding.clear();
+    st = SensorTag('press_a', 'X', 1:10, 'Y', [0 0 5 8 9 8 5 0 0 0]);
+    es = EventStore('');
+    m = MonitorTag('press_hi', st, @(x, y) y > 4, 'EventStore', es);
+    [~, ~] = m.getXY();  % triggers recompute -> fireEventsOnRisingEdges_
+    assert(es.numEvents() >= 1, 'monRecompute: at least one event');
+    ev = es.getEvents();
+    ev1 = ev(1);
+    assert(~isempty(ev1.TagKeys), 'monRecompute: TagKeys populated');
+    assert(iscell(ev1.TagKeys), 'monRecompute: TagKeys is cell');
+    assert(any(strcmp('press_hi', ev1.TagKeys)), 'monRecompute: has monitor key');
+    assert(any(strcmp('press_a', ev1.TagKeys)), 'monRecompute: has parent key');
+    assert(~isempty(ev1.Id), 'monRecompute: Id assigned');
+    % Verify EventBinding has the entries
+    boundKeys = EventBinding.getTagKeysForEvent(ev1.Id);
+    assert(any(strcmp('press_hi', boundKeys)), 'monRecompute: EventBinding has monitor key');
+    assert(any(strcmp('press_a', boundKeys)), 'monRecompute: EventBinding has parent key');
+    % Verify eventsForTag returns them
+    result = es.getEventsForTag('press_hi');
+    assert(numel(result) >= 1, 'monRecompute: eventsForTag finds monitor key');
+    result2 = es.getEventsForTag('press_a');
+    assert(numel(result2) >= 1, 'monRecompute: eventsForTag finds parent key');
+
+    % testMonitorTagStreamingEmitsTagKeys
+    EventBinding.clear();
+    st2 = SensorTag('press_b', 'X', 1:5, 'Y', [0 0 5 8 0]);
+    es2 = EventStore('');
+    m2 = MonitorTag('press_hi2', st2, @(x, y) y > 4, 'EventStore', es2);
+    [~, ~] = m2.getXY();  % initial recompute
+    nBefore = es2.numEvents();
+    % Append new data that crosses threshold and closes
+    st2.updateData([1:5, 6:10], [0 0 5 8 0, 0 0 7 9 0]);
+    m2.appendData(6:10, [0 0 7 9 0]);
+    nAfter = es2.numEvents();
+    assert(nAfter > nBefore, 'monStreaming: new event from appendData');
+    allEvts = es2.getEvents();
+    lastEv = allEvts(end);
+    assert(~isempty(lastEv.TagKeys), 'monStreaming: TagKeys populated');
+    assert(any(strcmp('press_hi2', lastEv.TagKeys)), 'monStreaming: has monitor key');
+    assert(any(strcmp('press_b', lastEv.TagKeys)), 'monStreaming: has parent key');
+    assert(~isempty(lastEv.Id), 'monStreaming: Id assigned');
+    boundKeys2 = EventBinding.getTagKeysForEvent(lastEv.Id);
+    assert(any(strcmp('press_hi2', boundKeys2)), 'monStreaming: EventBinding has monitor key');
+
+    % testLegacyCarrierStillPopulated
+    EventBinding.clear();
+    st3 = SensorTag('sens_c', 'X', 1:10, 'Y', [0 0 5 8 9 8 5 0 0 0]);
+    es3 = EventStore('');
+    m3 = MonitorTag('thr_c', st3, @(x, y) y > 4, 'EventStore', es3);
+    [~, ~] = m3.getXY();
+    ev3 = es3.getEvents();
+    assert(strcmp(ev3(1).SensorName, 'sens_c'), 'legacy: SensorName still set');
+    assert(strcmp(ev3(1).ThresholdLabel, 'thr_c'), 'legacy: ThresholdLabel still set');
+
+    fprintf('    All 13 event_tag_binding tests passed.\n');
 end
 
 function add_event_tag_binding_path()
