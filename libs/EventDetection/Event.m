@@ -20,6 +20,13 @@ classdef Event < handle
         StdValue        % numeric: standard deviation of signal during event
     end
 
+    properties
+        TagKeys   = {}   % cell of char: tag keys bound to this event (EVENT-01)
+        Severity  = 1    % numeric: 1=ok/info, 2=warn, 3=alarm (EVENT-04)
+        Category  = ''   % char: alarm|maintenance|process_change|manual_annotation (EVENT-05)
+        Id        = ''   % char: unique id assigned by EventStore.append (EVENT-02)
+    end
+
     properties (Constant)
         DIRECTIONS = {'upper', 'lower'}
     end

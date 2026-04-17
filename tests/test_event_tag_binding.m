@@ -98,7 +98,7 @@ function test_event_tag_binding()
 
     % testConstructorBackwardCompat
     ev = Event(10, 20, 'temp', 'warning high', 80, 'upper');
-    assert(e.StartTime == 10 || ev.StartTime == 10, 'compat: constructor works');
+    assert(ev.StartTime == 10, 'compat: constructor works');
     assert(strcmp(ev.SensorName, 'temp'), 'compat: SensorName set');
     assert(strcmp(ev.ThresholdLabel, 'warning high'), 'compat: ThresholdLabel set');
 
