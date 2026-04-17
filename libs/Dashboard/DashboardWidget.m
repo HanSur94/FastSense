@@ -29,6 +29,7 @@ classdef DashboardWidget < handle
 
     properties (Dependent)
         Type                    % Widget type string (from getType)
+        Sensor                  % Backward-compat alias for Tag (v1.x API)
     end
 
     methods
@@ -55,6 +56,16 @@ classdef DashboardWidget < handle
 
         function t = get.Type(obj)
             t = obj.getType();
+        end
+
+        function s = get.Sensor(obj)
+            %GET.SENSOR Backward-compat alias for Tag (v1.x API).
+            s = obj.Tag;
+        end
+
+        function set.Sensor(obj, s)
+            %SET.SENSOR Backward-compat alias — maps to Tag property.
+            obj.Tag = s;
         end
 
         function s = toStruct(obj)
