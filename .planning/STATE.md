@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: executing
-stopped_at: Completed 1012-04-PLAN.md
-last_updated: "2026-04-22T11:32:59.924Z"
+status: verifying
+stopped_at: Completed 1012-05-PLAN.md
+last_updated: "2026-04-22T11:52:32.342Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 15
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 32
-  completed_plans: 31
+  completed_plans: 32
   percent: 0
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1012 (Tag Pipeline — raw files to per-tag MAT via registry, batch and live) — EXECUTING
-Plan: 2 of 5
-Status: Ready to execute
+Plan: 5 of 5
+Status: Phase complete — ready for verification
 Last activity: 2026-04-22
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -118,6 +118,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1011 P04 | 962 | 2 tasks | 100 files |
 | Phase 1011 P05 | 22min | 2 tasks | 13 files |
 | Phase 1012 P04 | 12min | 1 tasks | 2 files |
+| Phase 1012 P05 | 11min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -242,6 +243,10 @@ Recent decisions affecting current work:
 - [Phase 1012]: BatchTagPipeline: LastFileParseCount captured pre-reset so verifyError+property-read works
 - [Phase 1012]: BatchTagPipeline: D-17 proven via MonitorTag.recomputeCount_ (no FastSenseDataStore dependency in tests)
 - [Phase 1012]: BatchTagPipeline: isIngestable_ docstring rewritten to avoid tripping the Pitfall 10 regex gate
+- [Phase 1012]: Plan 05: Inline-lambda predicate instead of @ClassName.staticPrivate handle -- Octave 7+ rejects cross-class private-method handles at TagRegistry.find call time
+- [Phase 1012]: Plan 05: Removed the static isIngestable_ block in LiveTagPipeline to eliminate single-source-of-truth drift; predicate now lives only inline in eligibleTags_
+- [Phase 1012]: Plan 05: Added Dependent TagStateCount property so testTagStateGCDropsUnregistered observes GC without relaxing tagState_ access
+- [Phase 1012]: Plan 05: LastFileParseCount assigned OUTSIDE outer try/catch in onTick_ so partial-failure ticks still update observability
 
 ### Roadmap Evolution
 
@@ -262,6 +267,7 @@ None yet.
 - Phase 1006: MonitorTag live-tick performance unverified — bench at phase exit (≤10% regression vs. legacy `Sensor.resolve` at 12-widget tick)
 - Phase 1008: CompositeTag merge-sort streaming aggregation must avoid N×M union materialization — 8 children × 100k samples bench gates phase exit (<50MB peak, <200ms compute)
 - Phase 1009: Per-widget consumer migration is many small commits, not one big PR — each commit must keep `tests/run_all_tests.m` AND the golden integration test green
+- Phase 1012 deferred: BatchTagPipeline.eligibleTags_ fails on Octave due to cross-class private-method handle rejection - see .planning/phases/1012-.../deferred-items.md
 
 ### Quick Tasks Completed
 
@@ -276,6 +282,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T11:32:59.919Z
-Stopped at: Completed 1012-04-PLAN.md
+Last session: 2026-04-22T11:52:28.267Z
+Stopped at: Completed 1012-05-PLAN.md
 Resume file: None
