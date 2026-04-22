@@ -83,6 +83,64 @@ classdef BatchTagPipeline < handle
             obj.OutputDir = opts.OutputDir;
             obj.Verbose   = opts.Verbose;
         end
+
+        function report = run(obj)
+            %RUN Enumerate tags, ingest each, write per-tag .mat; throw at end if any failed.
+            %   Returns a report struct with fields:
+            %     succeeded - cellstr of tag keys that wrote OK
+            %     failed    - struct array of failed tags (key, file, errorId, message)
+            %
+            %   Throws TagPipeline:ingestFailed at end if ANY tag failed.
+            obj.fileCache_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            report = struct('succeeded', {{}}, 'failed', struct([]));
+
+            tags = obj.eligibleTags_();
+            if obj.Verbose
+                fprintf('[BATCH-TAG-PIPELINE] %d ingestable tag(s)\n', numel(tags));
+            end
+
+            for i = 1:numel(tags)
+                t = tags{i};
+                try
+                    [x, y] = obj.ingestTag_(t);
+                    writeTagMat_(obj.OutputDir, t, x, y, 'overwrite');
+                    report.succeeded{end+1} = char(t.Key); %#ok<AGROW>
+                catch ex
+                    if obj.Verbose
+                        fprintf(2, '[BATCH-TAG-PIPELINE] %s failed: %s (%s)\n', ...
+                            char(t.Key), ex.message, ex.identifier);
+                    end
+                    rsFile = '';
+                    try
+                        rsFile = t.RawSource.file;
+                    catch
+                        rsFile = '';
+                    end
+                    entry = struct( ...
+                        'key',     char(t.Key), ...
+                        'file',    rsFile, ...
+                        'errorId', ex.identifier, ...
+                        'message', ex.message);
+                    if isempty(report.failed)
+                        report.failed = entry;
+                    else
+                        report.failed(end+1) = entry; %#ok<AGROW>
+                    end
+                end
+            end
+
+            obj.LastReport = report;
+            % MAJOR-2 / revision-1: capture parse count BEFORE clearing the cache.
+            obj.LastFileParseCount = double(obj.fileCache_.Count);
+            % Clean up the per-run cache so a second run() starts fresh.
+            obj.fileCache_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+            if ~isempty(report.failed)
+                error('TagPipeline:ingestFailed', ...
+                    '%d tag(s) failed during ingest (succeeded: %d). See LastReport.failed.', ...
+                    numel(report.failed), numel(report.succeeded));
+            end
+        end
     end
 
     methods (Access = private)
@@ -90,14 +148,55 @@ classdef BatchTagPipeline < handle
             %ELIGIBLETAGS_ Filter TagRegistry to SensorTag/StateTag with non-empty RawSource.
             tags = TagRegistry.find(@BatchTagPipeline.isIngestable_);
         end
+
+        function [x, y] = ingestTag_(obj, tag)
+            %INGESTTAG_ Parse (with cache) + select columns for a single tag.
+            rs = tag.RawSource;
+            abspath = obj.absPath_(rs.file);
+            parsed = obj.parseOrCache_(abspath);
+            [x, y] = selectTimeAndValue_(parsed, rs);
+        end
+
+        function parsed = parseOrCache_(obj, abspath)
+            %PARSEORCACHE_ Return cached parse if available; else parse and cache.
+            if obj.fileCache_.isKey(abspath)
+                parsed = obj.fileCache_(abspath);
+                return;
+            end
+            parsed = obj.dispatchParse_(abspath);
+            obj.fileCache_(abspath) = parsed;
+        end
+
+        function parsed = dispatchParse_(obj, abspath)  %#ok<INUSL>
+            %DISPATCHPARSE_ Internal parser dispatch (D-02 forward-compat shape).
+            [~, ~, ext] = fileparts(abspath);
+            ext = lower(ext);
+            switch ext
+                case {'.csv', '.txt', '.dat'}
+                    parsed = readRawDelimited_(abspath);
+                otherwise
+                    error('TagPipeline:unknownExtension', ...
+                        'Unsupported extension ''%s''. Supported: .csv .txt .dat', ext);
+            end
+        end
+
+        function ap = absPath_(~, path)
+            %ABSPATH_ Resolve to an absolute path (pwd-relative fallback).
+            if ~isempty(path) && (path(1) == filesep() || ...
+                    (ispc() && numel(path) >= 2 && path(2) == ':'))
+                ap = path;
+            else
+                ap = fullfile(pwd(), path);
+            end
+        end
     end
 
     methods (Static, Access = private)
         function tf = isIngestable_(t)
             %ISINGESTABLE_ Predicate: true iff SensorTag/StateTag with non-empty RawSource.
-            %   D-16 / Pitfall 10: POSITIVE isa-checks ONLY. Adding MonitorTag.RawSource
-            %   in a future phase requires an explicit branch here -- never add a
-            %   negative `~isa(t, 'MonitorTag')` check.
+            %   D-16 / Pitfall 10: POSITIVE isa-checks ONLY. Adding Monitor/Composite
+            %   RawSource in a future phase requires an explicit positive branch here
+            %   -- never a negative check against the derived types.
             tf = false;
             if ~(isa(t, 'SensorTag') || isa(t, 'StateTag'))
                 return;
