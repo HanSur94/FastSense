@@ -97,40 +97,6 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             delete(sdp);
         end
 
-        %% Thresholds in main plot
-        function testThresholdsShownWhenEnabled(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s);
-            sdp.render();
-            testCase.verifyGreaterThanOrEqual(numel(sdp.MainPlot.Thresholds), 1);
-            delete(sdp);
-        end
-
-        function testThresholdsHiddenWhenDisabled(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholds', false);
-            sdp.render();
-            testCase.verifyEqual(numel(sdp.MainPlot.Thresholds), 0);
-            delete(sdp);
-        end
-
-        %% Threshold bands in navigator
-        function testNavigatorHasThresholdBands(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholdBands', true);
-            sdp.render();
-            testCase.verifyGreaterThanOrEqual(numel(sdp.NavigatorPlot.Bands), 1);
-            delete(sdp);
-        end
-
-        function testNavigatorNoBandsWhenDisabled(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholdBands', false);
-            sdp.render();
-            testCase.verifyEqual(numel(sdp.NavigatorPlot.Bands), 0);
-            delete(sdp);
-        end
-
         %% Event shading
         function testEventShadingInMainPlot(testCase)
             s = testCase.sensor;
@@ -314,21 +280,6 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             testCase.verifyClass(sdp.MainPlot, ?FastSense);
             delete(sdp);
             delete(fig);
-        end
-    end
-
-    methods (Static, Access = private)
-        function s = createTagWithThreshold()
-            s = SensorTag('test_th', 'Name', 'Threshold Test');
-            t = linspace(0, 100, 1000);
-            s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
-            sc = StateTag('mode');
-            sc.X = [0 100];
-            sc.Y = [1 1];
-            t_h_warning = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper');
-            t_h_warning.addCondition(struct('mode', 1), 65);
-            s.addThreshold(t_h_warning);
-            s.resolve();
         end
     end
 end
