@@ -50,6 +50,13 @@ function install()
     addpath(fullfile(root, 'libs', 'Dashboard'));
     addpath(fullfile(root, 'libs', 'WebBridge'));
 
+    % Demo workspaces (Phase 1015+): add each demo dir so the entry-point
+    % function (e.g. run_demo) is callable without manual addpath.
+    demoRoot = fullfile(root, 'demo');
+    if isfolder(demoRoot)
+        addpath(fullfile(demoRoot, 'industrial_plant'));
+    end
+
     dirs = {'examples', 'benchmarks', 'tests'};
     for i = 1:numel(dirs)
         d = fullfile(root, dirs{i});
