@@ -148,6 +148,58 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
         % 6. needs_build returns true when binary is missing
         % ------------------------------------------------------------------
 
+        function testOctaveSubdirProbeAcceptsBinary(testCase)
+            %TESTOCTAVESUBDIRPROBEACCEPTSBINARY Subdir binary satisfies needs_build on Octave.
+            %   Skipped on MATLAB (mexext disambiguates natively).
+            if ~exist('OCTAVE_VERSION', 'builtin')
+                testCase.log('testOctaveSubdirProbe: SKIPPED (MATLAB)');
+                return;
+            end
+
+            tag = derive_octave_tag_();
+            testCase.assumeNotEmpty(tag, 'Cannot derive Octave platform tag on this system');
+
+            subdir = fullfile(testCase.MexDir, ['octave-' tag]);
+            if ~isfolder(subdir)
+                mkdir(subdir);
+                rmSubdir = true;
+            else
+                rmSubdir = false;
+            end
+            cleanup_dir = onCleanup(@() maybe_rmdir_(subdir, rmSubdir));
+
+            sentinel    = fullfile(subdir, 'binary_search_mex.mex');
+            cleanup_bin = onCleanup(@() delete_if_exists_(sentinel));
+
+            fid = fopen(sentinel, 'w');
+            fprintf(fid, 'placeholder');
+            fclose(fid);
+            addpath(subdir);
+            cleanup_path = onCleanup(@() rmpath(subdir));
+
+            old_env = getenv('FASTSENSE_SKIP_BUILD');
+            setenv('FASTSENSE_SKIP_BUILD', '');
+            restore_env = onCleanup(@() setenv('FASTSENSE_SKIP_BUILD', old_env));
+
+            fresh = mex_stamp(testCase.Root);
+            [old_stamp, stamp_existed] = read_file_safe_(testCase.StampFile);
+            write_file_(testCase.StampFile, fresh);
+            restore_stamp = onCleanup(@() restore_file_( ...
+                testCase.StampFile, old_stamp, stamp_existed));
+
+            flat_bin     = fullfile(testCase.MexDir, 'binary_search_mex.mex');
+            flat_existed = (exist(flat_bin, 'file') == 3);
+            flat_backup  = [flat_bin '.bak_subdir_test'];
+            if flat_existed
+                movefile(flat_bin, flat_backup);
+            end
+            restore_flat = onCleanup(@() restore_binary_(flat_bin, flat_backup, flat_existed));
+
+            result = install('__probe_needs_build__');
+            testCase.assertFalse(result, ...
+                'needs_build must return false when octave-<tag>/ binary is present');
+        end
+
         function testNeedsBuildReturnsTrueWhenBinaryMissing(testCase)
             %TESTNEEDSBUILDRETSURNSTRUEWHENBINARYMISSING no binary -> true.
             old_env = getenv('FASTSENSE_SKIP_BUILD');
@@ -248,5 +300,27 @@ function delete_if_exists_(p)
 %DELETE_IF_EXISTS_ Delete a file silently.
     if exist(p, 'file') ~= 0
         delete(p);
+    end
+end
+
+function tag = derive_octave_tag_()
+%DERIVE_OCTAVE_TAG_ Mirror of get_octave_platform_tag from install.m.
+    arch = lower(computer('arch'));
+    isDarwin = ~isempty(strfind(arch, 'darwin'));
+    isLinux  = ~isempty(strfind(arch, 'linux'));
+    isWin    = ~isempty(strfind(arch, 'mingw')) || ~isempty(strfind(arch, 'w64'));
+    isArm    = ~isempty(strfind(arch, 'aarch64')) || ~isempty(strfind(arch, 'arm64'));
+    if isDarwin && isArm;      tag = 'macos-arm64';
+    elseif isDarwin;           tag = 'macos-x86_64';
+    elseif isLinux;            tag = 'linux-x86_64';
+    elseif isWin;              tag = 'windows-x86_64';
+    else;                      tag = '';
+    end
+end
+
+function maybe_rmdir_(d, wasCreated)
+%MAYBE_RMDIR_ Remove directory d if it was created by this test.
+    if wasCreated && isfolder(d)
+        try; rmdir(d); catch; end
     end
 end

@@ -136,12 +136,89 @@ function test_mex_prebuilt()
     assert(result == true, ...
         'testNeedsBuildReturnsTrueWhenBinaryMissing: expected true when binary absent');
 
-    fprintf('    All 6 mex_prebuilt tests passed.\n');
+    % ------------------------------------------------------------------
+    % 7. Octave subdir probe: binary in octave-<tag>/ satisfies needs_build
+    %    when flat private/ location is empty.  Skipped on MATLAB.
+    % ------------------------------------------------------------------
+    if ~exist('OCTAVE_VERSION', 'builtin')
+        fprintf('    testOctaveSubdirProbe: SKIPPED (MATLAB)\n');
+    else
+        run_octave_subdir_probe_test_(repo_root, mex_dir);
+    end
+
+    fprintf('    All 7 mex_prebuilt tests passed.\n');
 end
 
 % =========================================================================
 % Local helpers
 % =========================================================================
+
+function run_octave_subdir_probe_test_(repo_root, mex_dir)
+%RUN_OCTAVE_SUBDIR_PROBE_TEST_ Verify needs_build accepts subdir binary.
+%   Creates a temp octave-<tag>/binary_search_mex.mex sentinel,
+%   adds it to path, and asserts needs_build returns false.
+    tag = derive_octave_tag_();
+    assert(~isempty(tag), 'testOctaveSubdirProbe: could not derive platform tag');
+
+    subdir = fullfile(mex_dir, ['octave-' tag]);
+    if ~isfolder(subdir)
+        mkdir(subdir);
+        rmSubdir = true;
+    else
+        rmSubdir = false;
+    end
+
+    sentinel   = fullfile(subdir, 'binary_search_mex.mex');
+    stamp_file = fullfile(mex_dir, '.mex-version');
+    [old_stamp, stamp_existed] = read_file_safe_(stamp_file);
+    write_file_(stamp_file, mex_stamp(repo_root));
+
+    fid = fopen(sentinel, 'w');
+    fprintf(fid, 'placeholder');
+    fclose(fid);
+    addpath(subdir);
+
+    old_env = getenv('FASTSENSE_SKIP_BUILD');
+    setenv('FASTSENSE_SKIP_BUILD', '');
+
+    flat_bin    = fullfile(mex_dir, 'binary_search_mex.mex');
+    flat_existed = (exist(flat_bin, 'file') == 3);
+    flat_backup  = [flat_bin '.bak_subdir_test'];
+    if flat_existed
+        movefile(flat_bin, flat_backup);
+    end
+
+    result = install('__probe_needs_build__');
+
+    setenv('FASTSENSE_SKIP_BUILD', old_env);
+    if flat_existed && exist(flat_backup, 'file') == 2
+        movefile(flat_backup, flat_bin);
+    end
+    delete_if_exists_(sentinel);
+    rmpath(subdir);
+    if rmSubdir && isfolder(subdir)
+        rmdir(subdir);
+    end
+    restore_file_(stamp_file, old_stamp, stamp_existed);
+
+    assert(result == false, ...
+        'testOctaveSubdirProbe: needs_build must return false when subdir binary is present');
+end
+
+function tag = derive_octave_tag_()
+%DERIVE_OCTAVE_TAG_ Mirror of get_octave_platform_tag from install.m.
+    arch = lower(computer('arch'));
+    isDarwin = ~isempty(strfind(arch, 'darwin'));
+    isLinux  = ~isempty(strfind(arch, 'linux'));
+    isWin    = ~isempty(strfind(arch, 'mingw')) || ~isempty(strfind(arch, 'w64'));
+    isArm    = ~isempty(strfind(arch, 'aarch64')) || ~isempty(strfind(arch, 'arm64'));
+    if isDarwin && isArm;      tag = 'macos-arm64';
+    elseif isDarwin;           tag = 'macos-x86_64';
+    elseif isLinux;            tag = 'linux-x86_64';
+    elseif isWin;              tag = 'windows-x86_64';
+    else;                      tag = '';
+    end
+end
 
 function [content, existed] = read_file_safe_(p)
 %READ_FILE_SAFE_ Read file; return '' and false if missing.
