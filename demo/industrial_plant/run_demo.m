@@ -56,4 +56,10 @@ function ctx = run_demo()
         'plantHealthKey', plantHealthKey, ...
         'rawDir',         rawDir, ...
         'tagsDir',        tagsDir);
+
+    % Plan 02 hook: build the full dashboard on top of the plumbing.
+    % buildDashboard creates the DashboardEngine, renders the figure,
+    % pre-detaches the main reactor pressure plot, starts the live timer,
+    % and wires a CloseRequestFcn that calls teardownDemo(ctx).
+    ctx.engine = buildDashboard(ctx);
 end

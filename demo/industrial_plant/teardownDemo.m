@@ -58,11 +58,26 @@ function teardownDemo(ctx)
     % ---- Dashboard engine (plan 02 wires this) ----
     if isfield(ctx, 'engine') && ~isempty(ctx.engine)
         try
-            if ismethod(ctx.engine, 'stop')
+            % DashboardEngine uses stopLive() to halt the live timer
+            % (no plain stop() method). Try stopLive() first, fall back
+            % to stop() for forward compatibility.
+            if ismethod(ctx.engine, 'stopLive')
+                ctx.engine.stopLive();
+            elseif ismethod(ctx.engine, 'stop')
                 ctx.engine.stop();
             end
         catch
         end
+    end
+
+    % Also sweep dashboard LiveTimer stragglers that might have leaked.
+    try
+        stragglers = timerfindall('Tag', 'DashboardEngine');
+        for i = 1:numel(stragglers)
+            try stop(stragglers(i)); catch, end
+            try delete(stragglers(i)); catch, end
+        end
+    catch
     end
 
     % ---- Final: TagRegistry.clear() always runs ----
