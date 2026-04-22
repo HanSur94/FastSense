@@ -29,6 +29,7 @@ classdef SensorTag < Tag
         MatFile_   = ''    % char
         KeyName_   = ''    % char: defaults to Key
         listeners_ = {}    % cell of handles implementing invalidate(); strong refs
+        RawSource_ = struct()   % struct: {file (required), column (opt), format (opt)} — Phase 1012
     end
 
     properties (Dependent)
@@ -36,6 +37,7 @@ classdef SensorTag < Tag
         X           % read-only view of X_ (backward-compat with legacy Sensor.X)
         Y           % read-only view of Y_ (backward-compat with legacy Sensor.Y)
         Thresholds  % always {} (backward-compat with legacy Sensor.Thresholds cell array)
+        RawSource   % read-only view of RawSource_ (Phase 1012 pipeline binding)
     end
 
     methods
@@ -58,10 +60,11 @@ classdef SensorTag < Tag
             obj.KeyName_ = key;  % default: same as Key
             for i = 1:2:numel(sensorArgs)
                 switch sensorArgs{i}
-                    case 'ID',       obj.ID_      = sensorArgs{i+1};
-                    case 'Source',   obj.Source_   = sensorArgs{i+1};
-                    case 'MatFile',  obj.MatFile_  = sensorArgs{i+1};
-                    case 'KeyName',  obj.KeyName_  = sensorArgs{i+1};
+                    case 'ID',        obj.ID_         = sensorArgs{i+1};
+                    case 'Source',    obj.Source_     = sensorArgs{i+1};
+                    case 'MatFile',   obj.MatFile_    = sensorArgs{i+1};
+                    case 'KeyName',   obj.KeyName_    = sensorArgs{i+1};
+                    case 'RawSource', obj.RawSource_  = SensorTag.validateRawSource_(sensorArgs{i+1});
                 end
             end
 
@@ -97,6 +100,14 @@ classdef SensorTag < Tag
             %   branch. Consumers should migrate to the TagRegistry +
             %   MonitorTag workflow for threshold behaviour.
             v = {};
+        end
+
+        function r = get.RawSource(obj)
+            %GET.RAWSOURCE Return the raw-data source binding (read-only view).
+            %   Populated only for SensorTags whose 'RawSource' NV-pair was
+            %   set at construction. Consumed by BatchTagPipeline /
+            %   LiveTagPipeline to locate the raw file + column for this tag.
+            r = obj.RawSource_;
         end
 
         % ---- Tag contract ----
@@ -165,6 +176,9 @@ classdef SensorTag < Tag
             end
             if ~isempty(obj.KeyName_) && ~strcmp(obj.KeyName_, obj.Key)
                 sensorExtras.keyname = obj.KeyName_;
+            end
+            if ~isempty(fieldnames(obj.RawSource_))
+                sensorExtras.rawsource = obj.RawSource_;
             end
             if ~isempty(fieldnames(sensorExtras))
                 s.sensor = sensorExtras;
@@ -293,7 +307,8 @@ classdef SensorTag < Tag
 
             if isfield(s, 'sensor') && isstruct(s.sensor)
                 sensorKeyMap = {'id', 'ID'; 'source', 'Source'; ...
-                                'matfile', 'MatFile'; 'keyname', 'KeyName'};
+                                'matfile', 'MatFile'; 'keyname', 'KeyName'; ...
+                                'rawsource', 'RawSource'};
                 for r = 1:size(sensorKeyMap, 1)
                     if isfield(s.sensor, sensorKeyMap{r, 1})
                         nvArgs(end+1:end+2) = ...
@@ -316,11 +331,27 @@ classdef SensorTag < Tag
             end
         end
 
+        function rs = validateRawSource_(rs)
+            %VALIDATERAWSOURCE_ Check + normalize a RawSource struct (Phase 1012).
+            %   Errors:
+            %     TagPipeline:invalidRawSource — not a struct, or missing/empty file
+            if ~isstruct(rs) || ~isscalar(rs)
+                error('TagPipeline:invalidRawSource', ...
+                    'RawSource must be a scalar struct with field ''file''.');
+            end
+            if ~isfield(rs, 'file') || isempty(rs.file) || ~ischar(rs.file)
+                error('TagPipeline:invalidRawSource', ...
+                    'RawSource.file must be a non-empty char.');
+            end
+            if ~isfield(rs, 'column'),  rs.column = '';  end
+            if ~isfield(rs, 'format'),  rs.format = '';  end
+        end
+
         function [tagArgs, sensorArgs, inlineX, inlineY] = splitArgs_(args)
             %SPLITARGS_ Partition varargin into Tag NV / Sensor NV / inline X,Y.
             tagKeys    = {'Name', 'Units', 'Description', 'Labels', ...
                           'Metadata', 'Criticality', 'SourceRef'};
-            sensorKeys = {'ID', 'Source', 'MatFile', 'KeyName'};
+            sensorKeys = {'ID', 'Source', 'MatFile', 'KeyName', 'RawSource'};
             tagArgs    = {};
             sensorArgs = {};
             inlineX    = [];

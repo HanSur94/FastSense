@@ -39,19 +39,35 @@ classdef StateTag < Tag
     end
 
     properties (Access = private)
-        listeners_ = {}   % cell of handles implementing invalidate(); strong refs
+        listeners_ = {}         % cell of handles implementing invalidate(); strong refs
+        RawSource_ = struct()   % struct: {file (required), column (opt), format (opt)} — Phase 1012
+    end
+
+    properties (Dependent)
+        RawSource   % read-only view of RawSource_ (Phase 1012 pipeline binding)
     end
 
     methods
         function obj = StateTag(key, varargin)
-            %STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y.
-            %   Valid name-value keys: 'X', 'Y', plus Tag universals (Name,
-            %   Units, Description, Labels, Metadata, Criticality, SourceRef).
+            %STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y + RawSource.
+            %   Valid name-value keys: 'X', 'Y', 'RawSource', plus Tag universals
+            %   (Name, Units, Description, Labels, Metadata, Criticality, SourceRef).
             %   Raises StateTag:unknownOption for unrecognized or dangling keys.
-            [tagArgs, xVal, yVal, hasX, hasY] = StateTag.splitArgs_(varargin);
+            %   Raises TagPipeline:invalidRawSource if RawSource is malformed.
+            [tagArgs, xVal, yVal, hasX, hasY, rsVal, hasRs] = ...
+                StateTag.splitArgs_(varargin);
             obj@Tag(key, tagArgs{:});   % MUST be first — Pitfall 8
-            if hasX, obj.X = xVal; end
-            if hasY, obj.Y = yVal; end
+            if hasX,  obj.X = xVal; end
+            if hasY,  obj.Y = yVal; end
+            if hasRs, obj.RawSource_ = rsVal; end
+        end
+
+        function r = get.RawSource(obj)
+            %GET.RAWSOURCE Return the raw-data source binding (read-only view).
+            %   Populated only for StateTags whose 'RawSource' NV-pair was
+            %   set at construction. Consumed by BatchTagPipeline /
+            %   LiveTagPipeline to locate the raw file + column for this tag.
+            r = obj.RawSource_;
         end
 
         function [X, Y] = getXY(obj)
@@ -133,6 +149,9 @@ classdef StateTag < Tag
             else
                 s.y = obj.Y;
             end
+            if ~isempty(fieldnames(obj.RawSource_))
+                s.rawsource = obj.RawSource_;
+            end
         end
 
         % ---- Observer hook (Phase 1006 additive) ----
@@ -210,25 +229,32 @@ classdef StateTag < Tag
                 if iscell(Y) && numel(Y) == 1 && iscell(Y{1}), Y = Y{1}; end
                 yVal = Y;
             end
+            rsArg = {};
+            if isfield(s, 'rawsource') && isstruct(s.rawsource) && ...
+                    ~isempty(fieldnames(s.rawsource))
+                rsArg = {'RawSource', s.rawsource};
+            end
             obj = StateTag(s.key, ...
                 'Name', name, 'Units', units, 'Description', description, ...
                 'Labels', labels, 'Metadata', metadata, ...
                 'Criticality', criticality, 'SourceRef', sourceref, ...
-                'X', xVal, 'Y', yVal);
+                'X', xVal, 'Y', yVal, rsArg{:});
         end
     end
 
     methods (Static, Access = private)
-        function [tagArgs, xVal, yVal, hasX, hasY] = splitArgs_(args)
-            %SPLITARGS_ Partition varargin into Tag universals vs. X/Y.
+        function [tagArgs, xVal, yVal, hasX, hasY, rsVal, hasRs] = splitArgs_(args)
+            %SPLITARGS_ Partition varargin into Tag universals vs. X/Y vs. RawSource.
             %   Unknown or dangling keys raise StateTag:unknownOption.
+            %   Malformed RawSource raises TagPipeline:invalidRawSource via
+            %   StateTag's OWN inline validateRawSource_ (NOT a cross-class
+            %   call — revision-1 Major-3 decision for Octave reliability).
             tagKeys = {'Name', 'Units', 'Description', 'Labels', ...
                        'Metadata', 'Criticality', 'SourceRef'};
             tagArgs = {};
-            xVal = [];
-            yVal = [];
-            hasX = false;
-            hasY = false;
+            xVal = []; yVal = [];
+            hasX = false; hasY = false;
+            rsVal = struct(); hasRs = false;
             i = 1;
             while i <= numel(args)
                 k = args{i};
@@ -244,12 +270,39 @@ classdef StateTag < Tag
                     xVal = v; hasX = true;
                 elseif strcmp(k, 'Y')
                     yVal = v; hasY = true;
+                elseif strcmp(k, 'RawSource')
+                    rsVal = StateTag.validateRawSource_(v);
+                    hasRs = true;
                 else
                     error('StateTag:unknownOption', ...
                         'Unknown option ''%s''.', char(k));
                 end
                 i = i + 2;
             end
+        end
+
+        function rs = validateRawSource_(rs)
+            %VALIDATERAWSOURCE_ Check + normalize a RawSource struct.
+            %   Body duplicated verbatim from the equivalent helper on the
+            %   sibling SensorTag class (see libs/SensorThreshold/SensorTag.m)
+            %   to avoid cross-class static-private call fragility on Octave
+            %   (Phase 1012-02 revision-1 / Major-3). Single source of truth
+            %   for the contract is enforced by the shared behavior tests in
+            %   TestSensorTag.m + TestStateTag.m — both classes must pass
+            %   identical assertions on invalid RawSource inputs.
+            %
+            %   Errors:
+            %     TagPipeline:invalidRawSource — not a struct, or missing/empty file
+            if ~isstruct(rs) || ~isscalar(rs)
+                error('TagPipeline:invalidRawSource', ...
+                    'RawSource must be a scalar struct with field ''file''.');
+            end
+            if ~isfield(rs, 'file') || isempty(rs.file) || ~ischar(rs.file)
+                error('TagPipeline:invalidRawSource', ...
+                    'RawSource.file must be a non-empty char.');
+            end
+            if ~isfield(rs, 'column'),  rs.column = '';  end
+            if ~isfield(rs, 'format'),  rs.format = '';  end
         end
     end
 end
