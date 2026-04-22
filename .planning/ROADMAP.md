@@ -401,13 +401,13 @@ Plans:
 **Goal:** Restore MATLAB CI `Tests → MATLAB Tests` job to green by migrating or deleting classdef tests in `tests/suite/*.m` that reference legacy classes deleted in commit `4188a7f` (Phase 1011: `Sensor`, `Threshold`, `ThresholdRule`, `CompositeThreshold`, `StateChannel`, `SensorRegistry`). Also fix two confirmed product/test bugs in `TestDashboardBugFixes` (deleted-handle guard in `DashboardBuilder.exitEditMode`; local-variable assignment bug in `testSensorListenersMultiPage`).
 **Requirements**: No exclusive REQ-IDs (test infrastructure hygiene; scope captured by 1014-CONTEXT.md decisions D-01..D-06).
 **Depends on:** Phase 1012 (complete) — v2.0 migration closed at Phase 1011 MIGRATE-03; this phase pays off the test-debt left by that cleanup. Independent of Phase 1013.
-**Plans:** 7 plans
+**Plans:** 2/7 plans executed
 
 Plans:
 - [x] 1014-01-PLAN.md — Wave 0 unblocker: Category C (TestNavigatorOverlay + TestSensorDetailPlot.TestData.sensor) + Category E (testSensorListenersMultiPage test fix + DashboardBuilder.exitEditMode lib guard)
 - [ ] 1014-02-PLAN.md — Widget threshold-test DELETE batch (TestStatusWidget, TestGaugeWidget, TestIconCardWidget, TestMultiStatusWidget, TestChipBarWidget)
 - [ ] 1014-03-PLAN.md — *Tag.m Threshold-call strip (TestIconCardWidgetTag, TestMultiStatusWidgetTag, TestSensorDetailPlotTag, TestEventDetectorTag, TestLiveEventPipelineTag, TestFastSenseAddTag, TestMonitorTagPersistence)
 - [ ] 1014-04-PLAN.md — TestSensorDetailPlot heavy-hitter (21 erroring methods, single-file migrate-or-delete; D-05 kill-switch risk)
-- [ ] 1014-05-PLAN.md — EventDetection tests collapse (delete TestEventDetector.m, TestIncrementalDetector.m; prune TestEventStore, TestEventConfig, TestLivePipeline)
+- [x] 1014-05-PLAN.md — EventDetection tests collapse (delete TestEventDetector.m, TestIncrementalDetector.m; prune TestEventStore, TestEventConfig, TestLivePipeline)
 - [ ] 1014-06-PLAN.md — Dashboard small-numbers batch (13 files: BugFixes residual, BuilderInteraction, Engine, Performance, ToolbarImageExport, SerializerRoundTrip, DataSource, DataStoreWAL, DatastoreEdgeCases, FastSenseWidget[×2], NumberWidget, WebBridge)
 - [ ] 1014-07-PLAN.md — Category F residuals (TestTag, TestToolbar, TestMonitorTagEvents) + full-suite gate + CI push confirmation

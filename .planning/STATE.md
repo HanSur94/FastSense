@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1012-05-PLAN.md
-last_updated: "2026-04-22T14:39:05.966Z"
+stopped_at: Completed 1014-05-PLAN.md (Wave 1 parallel — EventDetection test-suite collapse)
+last_updated: "2026-04-22T14:55:44.954Z"
 last_activity: 2026-04-22 -- Phase 1014 Plan 01 complete (Wave 0 pilots landed)
 progress:
   total_phases: 16
@@ -119,6 +119,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1011 P05 | 22min | 2 tasks | 13 files |
 | Phase 1012 P04 | 12min | 1 tasks | 2 files |
 | Phase 1012 P05 | 11min | 1 tasks | 1 files |
+| Phase 1014 P05 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -250,6 +251,7 @@ Recent decisions affecting current work:
 - [Phase 1014 Plan 01]: R2020b-compatible `properties (Access = private)` + `TestMethodSetup` fixture is the canonical Category C pattern — seeded in TestNavigatorOverlay.m for Wave 1 copy
 - [Phase 1014 Plan 01]: TestSensorDetailPlot.m received only the `sensor` property migration; legacy-class methods (Sensor/Threshold/ThresholdRule calls + createTagWithThreshold helper) are Plan 04's exclusive scope per D-02-A
 - [Phase 1014 Plan 01]: `DashboardBuilder.exitEditMode` is the only libs/ edit permitted in Phase 1014 (per D-02-E + D-05); guard wraps the first two set(hFig, ...) calls, late guard preserved as idempotent belt-and-suspenders
+- [Phase 1014]: [Phase 1014 Plan 05]: EventDetection test suite collapsed — deleted TestEventDetector/TestIncrementalDetector/TestLivePipeline entirely; pruned TestEventStore (7→1 methods) and TestEventConfig (9→3 methods); 37 methods eliminated; live-path coverage in TestEventDetectorTag/TestEventStoreRw/TestLiveEventPipelineTag untouched
 
 ### Roadmap Evolution
 
@@ -287,6 +289,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T11:52:28.267Z
-Stopped at: Completed 1014-01-PLAN.md (Wave 0 — Category C pilot + Category E fixes)
+Last session: 2026-04-22T14:55:44.845Z
+Stopped at: Completed 1014-05-PLAN.md (Wave 1 parallel — EventDetection test-suite collapse)
 Resume file: None
