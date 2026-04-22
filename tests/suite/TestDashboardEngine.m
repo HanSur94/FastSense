@@ -108,6 +108,12 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
         end
 
         function testTimerContinuesAfterError(testCase)
+            % Verifies onLiveTimerError restarts the timer after a TimerFcn
+            % throw. Uses a ONE-SHOT TimerFcn (first tick errors, subsequent
+            % ticks no-op) so we don't spin a runaway error loop that
+            % outpaces teardown -- the earlier "always throw" pattern
+            % produced ~500k stderr lines on MATLAB CI in certain timing
+            % windows.
             d = DashboardEngine('ErrorTest');
             d.LiveInterval = 0.1;
             d.render();
@@ -121,15 +127,20 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             warnState = warning('off', 'DashboardEngine:timerError');
             testCase.addTeardown(@() warning(warnState));
 
-            % Replace TimerFcn with one that always throws.
-            % MATLAB's timer infrastructure will call ErrorFcn when TimerFcn errors.
-            set(d.LiveTimer, 'TimerFcn', @(~,~) error('testError:force', 'forced test error'));
+            % Counter is a handle class (containers.Map), so mutations inside
+            % the TimerFcn body persist across calls even when the TimerFcn
+            % is an anonymous function (which captures by value).
+            counter = containers.Map({'n'}, {int32(0)});
+            set(d.LiveTimer, 'TimerFcn', @(~,~) errorOnce(counter));
 
-            % Wait for the timer to fire and the ErrorFcn to restart it.
-            pause(0.5);
+            % Wait briefly -- timer fires once, errors, ErrorFcn restarts,
+            % next tick calls errorOnce (which no-ops), loop ends.
+            pause(0.3);
 
             % Timer must still be running (restarted inside ErrorFcn).
             testCase.verifyTrue(strcmp(d.LiveTimer.Running, 'on'));
+            % Counter should show exactly one throw.
+            testCase.verifyEqual(counter('n'), int32(1));
         end
 
         function testAddWidgetWithTag(testCase)
@@ -213,4 +224,17 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             testCase.verifyTrue(w.Collapsed);
         end
     end
+end
+
+function errorOnce(counter)
+    %ERRORONCE Throw exactly once; no-op on subsequent calls.
+    %   Used by testTimerContinuesAfterError to verify ErrorFcn restart
+    %   semantics without triggering a runaway error loop. `counter` is a
+    %   containers.Map (handle class) so increments persist across calls.
+    n = counter('n');
+    if n == 0
+        counter('n') = int32(1);
+        error('testError:force', 'forced test error (one-shot)');
+    end
+    % No-op on subsequent invocations.
 end
