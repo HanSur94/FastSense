@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: verifying
-stopped_at: Completed 1012-05-PLAN.md
-last_updated: "2026-04-22T12:05:23.981Z"
+stopped_at: Phase 1015 context gathered
+last_updated: "2026-04-22T14:24:05.858Z"
 last_activity: 2026-04-22
 progress:
-  total_phases: 15
+  total_phases: 16
   completed_phases: 9
   total_plans: 32
   completed_plans: 32
@@ -256,6 +256,7 @@ Recent decisions affecting current work:
 - Milestone v2.0 added: Tag-Based Domain Model (Ambitious tier — A+B+C+E) — full SensorThreshold reboot under unified `Tag` root + MonitorTag time-series + CompositeTag aggregation + events attached to tags
 - Phases 1004-1011 mapped (2026-04-16): 8-phase strangler-fig decomposition — Tag introduced as parallel hierarchy in Phase 1004; legacy classes deleted only in Phase 1011. 45/45 v2.0 REQs mapped (TAG, MONITOR, COMPOSITE, META, EVENT, ALIGN, MIGRATE). Phase 1009 owns no exclusive REQ-IDs (structural consumer-migration phase).
 - Phase 1012 added (2026-04-22): Tag Pipeline end-to-end — connect TagRegistry to arbitrary raw data files (.dat/.txt/.csv/...), process raw → per-tag .mat files with tag data + metadata, live pipeline variant, load .mat for plotting/dashboarding, including monitor tags.
+- Phase 1015 added (2026-04-22): Demo showcase workspace — fully-fledged live demo dashboard with real-world-style updating data sources, all widget types, tags/groups, tabs, tooltips, and detachable widgets.
 
 ### Pending Todos
 
@@ -282,6 +283,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T11:52:28.267Z
-Stopped at: Completed 1012-05-PLAN.md
-Resume file: None
+Last session: 2026-04-22T14:24:05.852Z
+Stopped at: Phase 1015 context gathered
+Resume file: .planning/phases/1015-demo-showcase-workspace-fully-fledged-live-demo-dashboard-with-real-world-style-updating-data-sources-all-widget-types-tags-groups-tabs-tooltips-and-detachable-widgets/1015-CONTEXT.md
