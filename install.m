@@ -62,6 +62,24 @@ function varargout = install(varargin)
         end
     end
 
+    % --- Octave: prepend platform-tagged MEX subdir to path (additive) ---
+    % On Octave all platforms produce identically-named *.mex files, so
+    % we store them in separate octave-<tag>/ subdirs and prepend the right
+    % one.  This must happen BEFORE needs_build so the probe sees the binary.
+    octTag = get_octave_platform_tag();
+    if ~isempty(octTag)
+        candidates = {
+            fullfile(root, 'libs', 'FastSense', 'private',            ['octave-' octTag])
+            fullfile(root, 'libs', 'FastSense',                        ['octave-' octTag])
+            fullfile(root, 'libs', 'SensorThreshold', 'private',       ['octave-' octTag])
+        };
+        for k = 1:numel(candidates)
+            if isfolder(candidates{k})
+                addpath(candidates{k});
+            end
+        end
+    end
+
     % --- Test shim: expose needs_build result for unit tests ---
     if nargin == 1 && ischar(varargin{1}) && strcmp(varargin{1}, '__probe_needs_build__')
         varargout{1} = needs_build(root);
@@ -93,11 +111,28 @@ function yes = needs_build(root)
     end
     mex_dir = fullfile(root, 'libs', 'FastSense', 'private');
     % Probe a representative MEX from the FastSense library.
+    % On Octave we also accept the binary from the platform-tagged subdir
+    % (libs/FastSense/private/octave-<tag>/) which install() adds to path
+    % before calling needs_build.  The path-based exist() call picks it up
+    % automatically when the subdir is on the path, so a third probe that
+    % checks the absolute subdir path handles the case where the subdir was
+    % NOT yet on path (e.g., when __probe_needs_build__ is called after a
+    % fresh addpath in the shim but before the candidates loop would run).
+    octTag = get_octave_platform_tag();
     probes = {
         fullfile(mex_dir, ['binary_search_mex.' mexext()])
         fullfile(mex_dir, 'binary_search_mex.mex')
     };
-    core_ok = exist(probes{1}, 'file') == 3 || exist(probes{2}, 'file') == 3;
+    if ~isempty(octTag)
+        probes{end+1} = fullfile(mex_dir, ['octave-' octTag], 'binary_search_mex.mex');
+    end
+    core_ok = false;
+    for pi = 1:numel(probes)
+        if exist(probes{pi}, 'file') == 2 || exist(probes{pi}, 'file') == 3
+            core_ok = true;
+            break;
+        end
+    end
     if ~core_ok
         yes = true;
         return;
@@ -213,6 +248,41 @@ function verify_installation(root)
     end
 end
 
+
+function tag = get_octave_platform_tag()
+%GET_OCTAVE_PLATFORM_TAG Return platform tag string for Octave subdir layout.
+%   Returns a char such as 'macos-arm64', 'linux-x86_64', etc., or '' when
+%   called from MATLAB (where per-platform subdirs are not needed because
+%   mexext() already disambiguates binaries by extension).
+%
+%   Tag derivation (from computer('arch') on Octave):
+%     darwin  + aarch64/arm64  -> 'macos-arm64'
+%     darwin  (other)          -> 'macos-x86_64'
+%     linux   (any)            -> 'linux-x86_64'
+%     mingw / w64 (any)        -> 'windows-x86_64'
+%     unrecognized             -> ''
+
+    if ~exist('OCTAVE_VERSION', 'builtin')
+        tag = '';
+        return;
+    end
+    arch     = lower(computer('arch'));
+    isDarwin = ~isempty(strfind(arch, 'darwin'));
+    isLinux  = ~isempty(strfind(arch, 'linux'));
+    isWin    = ~isempty(strfind(arch, 'mingw')) || ~isempty(strfind(arch, 'w64'));
+    isArm    = ~isempty(strfind(arch, 'aarch64')) || ~isempty(strfind(arch, 'arm64'));
+    if isDarwin && isArm
+        tag = 'macos-arm64';
+    elseif isDarwin
+        tag = 'macos-x86_64';
+    elseif isLinux
+        tag = 'linux-x86_64';
+    elseif isWin
+        tag = 'windows-x86_64';
+    else
+        tag = '';
+    end
+end
 
 function jit_warmup()
 %JIT_WARMUP Force MATLAB's JIT to compile all hot code paths once per session.
