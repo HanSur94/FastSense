@@ -1,6 +1,11 @@
 classdef TestNavigatorOverlay < matlab.unittest.TestCase
+    properties (Access = private)
+        hFig
+        hAxes
+    end
+
     methods (TestClassSetup)
-        function addPaths(testCase)
+        function addPaths(testCase) %#ok<MANU>
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             install();
         end
@@ -8,19 +13,19 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
     methods (TestMethodSetup)
         function createFixture(testCase)
-            testCase.TestData.hFig = figure('Visible', 'off');
-            testCase.TestData.hAxes = axes('Parent', testCase.TestData.hFig);
+            testCase.hFig = figure('Visible', 'off');
+            testCase.hAxes = axes('Parent', testCase.hFig);
             % Draw a dummy line so axes has data range
-            plot(testCase.TestData.hAxes, [0 100], [0 10]);
-            xlim(testCase.TestData.hAxes, [0 100]);
-            ylim(testCase.TestData.hAxes, [0 10]);
+            plot(testCase.hAxes, [0 100], [0 10]);
+            xlim(testCase.hAxes, [0 100]);
+            ylim(testCase.hAxes, [0 10]);
         end
     end
 
     methods (TestMethodTeardown)
         function destroyFixture(testCase)
-            if ishandle(testCase.TestData.hFig)
-                delete(testCase.TestData.hFig);
+            if ishandle(testCase.hFig)
+                delete(testCase.hFig);
             end
         end
     end
@@ -28,7 +33,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
     methods (Test)
         %% Construction
         function testConstructorCreatesOverlay(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             testCase.verifyClass(ov, ?NavigatorOverlay);
             testCase.verifyTrue(ishandle(ov.hRegion));
             testCase.verifyTrue(ishandle(ov.hDimLeft));
@@ -40,7 +45,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% setRange
         function testSetRangeUpdatesPatches(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             ov.setRange(20, 60);
 
             % Region patch X vertices should span [20, 60]
@@ -69,7 +74,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% Boundary clamping
         function testSetRangeClampsToAxesLimits(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             ov.setRange(-10, 120);
 
             regionX = get(ov.hRegion, 'XData');
@@ -80,7 +85,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% Minimum width
         function testSetRangeEnforcesMinimumWidth(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             % 0.5% of range [0,100] = 0.5
             ov.setRange(50, 50.1);
 
@@ -92,7 +97,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% OnRangeChanged callback
         function testCallbackFiresOnSetRange(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             callbackFired = false;
             capturedRange = [0 0];
             ov.OnRangeChanged = @(xMin, xMax) deal_callback(xMin, xMax);
@@ -110,16 +115,16 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% Cleanup
         function testDeleteRemovesGraphics(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             hReg = ov.hRegion;
             delete(ov);
             testCase.verifyFalse(ishandle(hReg));
         end
 
         function testDeleteRestoresFigureCallbacks(testCase)
-            hFig = testCase.TestData.hFig;
+            hFig = testCase.hFig;
             oldDown = get(hFig, 'WindowButtonDownFcn');
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             delete(ov);
             restoredDown = get(hFig, 'WindowButtonDownFcn');
             testCase.verifyEqual(restoredDown, oldDown);
@@ -127,7 +132,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% Panning preserves region width at boundary
         function testPanPreservesWidthAtLeftBoundary(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             ov.setRange(5, 25);  % width = 20
             ov.setRange(-10, 10);  % pan past left edge
             regionX = get(ov.hRegion, 'XData');
@@ -139,7 +144,7 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
         end
 
         function testPanPreservesWidthAtRightBoundary(testCase)
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
+            ov = NavigatorOverlay(testCase.hAxes);
             ov.setRange(80, 95);  % width = 15
             ov.setRange(90, 110);  % pan past right edge
             regionX = get(ov.hRegion, 'XData');
@@ -149,9 +154,9 @@ classdef TestNavigatorOverlay < matlab.unittest.TestCase
 
         %% Hold state is preserved
         function testHoldStatePreserved(testCase)
-            hold(testCase.TestData.hAxes, 'off');
-            ov = NavigatorOverlay(testCase.TestData.hAxes);
-            testCase.verifyFalse(ishold(testCase.TestData.hAxes));
+            hold(testCase.hAxes, 'off');
+            ov = NavigatorOverlay(testCase.hAxes);
+            testCase.verifyFalse(ishold(testCase.hAxes));
             delete(ov);
         end
     end
