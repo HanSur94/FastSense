@@ -38,8 +38,18 @@ function [store, plantHealthKey] = registerPlantTags(rawDir)
 
     % EventStore needs a file path (atomic save); demo uses a tempname so
     % nothing persists between runs (D-02 clean-start).
-    eventFile = fullfile(tempdir(), sprintf('industrial_plant_events_%d.mat', ...
-                                            feature('getpid')));
+    % Use an Octave-safe pid getter (feature('getpid') is MATLAB-only).
+    pid = 0;
+    try
+        if exist('OCTAVE_VERSION', 'builtin')
+            pid = double(getpid());
+        else
+            pid = double(feature('getpid'));
+        end
+    catch
+        pid = 0;
+    end
+    eventFile = fullfile(tempdir(), sprintf('industrial_plant_events_%d.mat', pid));
     store = EventStore(eventFile);
 
     % ---- SensorTags ----
