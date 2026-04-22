@@ -385,3 +385,13 @@ Plans:
 - [x] 1012-03-PLAN.md — Private parser helpers: readRawDelimited_, selectTimeAndValue_, writeTagMat_ (D-01, D-02, D-04, D-09, D-10, D-11, D-19 — 7 error IDs)
 - [x] 1012-04-PLAN.md — BatchTagPipeline class + suite (D-02, D-07, D-08, D-09, D-10, D-12, D-15, D-16, D-17, D-18, D-19)
 - [x] 1012-05-PLAN.md — LiveTagPipeline class + suite, modTime+lastIndex tick state machine (D-07, D-12, D-13, D-14, D-15, D-16, D-18, D-19)
+
+### Phase 1013: Live event markers and click-to-details on FastSense and FastSenseWidget
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 1012
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 1013 to break down)

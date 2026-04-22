@@ -256,6 +256,7 @@ Recent decisions affecting current work:
 - Milestone v2.0 added: Tag-Based Domain Model (Ambitious tier — A+B+C+E) — full SensorThreshold reboot under unified `Tag` root + MonitorTag time-series + CompositeTag aggregation + events attached to tags
 - Phases 1004-1011 mapped (2026-04-16): 8-phase strangler-fig decomposition — Tag introduced as parallel hierarchy in Phase 1004; legacy classes deleted only in Phase 1011. 45/45 v2.0 REQs mapped (TAG, MONITOR, COMPOSITE, META, EVENT, ALIGN, MIGRATE). Phase 1009 owns no exclusive REQ-IDs (structural consumer-migration phase).
 - Phase 1012 added (2026-04-22): Tag Pipeline end-to-end — connect TagRegistry to arbitrary raw data files (.dat/.txt/.csv/...), process raw → per-tag .mat files with tag data + metadata, live pipeline variant, load .mat for plotting/dashboarding, including monitor tags.
+- Phase 1013 added (2026-04-22): Live event markers and click-to-details on FastSense and FastSenseWidget — extends Phase 1010 with open-event visibility (EventStore Single-Source-of-Truth with Status field), click→details panel, and FastSenseWidget-level ShowEventMarkers/EventStore wiring
 
 ### Pending Todos
 
