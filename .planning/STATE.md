@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: verifying
+status: executing
 stopped_at: Completed 1012-05-PLAN.md
-last_updated: "2026-04-22T12:05:23.981Z"
-last_activity: 2026-04-22
+last_updated: "2026-04-22T14:39:05.966Z"
+last_activity: 2026-04-22 -- Phase 1014 Plan 01 complete (Wave 0 pilots landed)
 progress:
-  total_phases: 15
+  total_phases: 16
   completed_phases: 9
   total_plans: 32
   completed_plans: 32
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1012 — Tag Pipeline — raw files to per-tag MAT via registry, batch and live
+**Current focus:** Phase 1014 — Fix ~140 MATLAB test-suite failures from v2.0 legacy-class deletion
 
 ## Current Position
 
-Phase: 1012
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-22
+Phase: 1014 (Fix ~140 MATLAB test-suite failures from v2.0 legacy-class deletion) — EXECUTING
+Plan: 2 of 7 (Plan 01 Wave 0 complete)
+Status: Executing Phase 1014 — Wave 1 ready (Plans 02-05 parallelizable)
+Last activity: 2026-04-22 -- Phase 1014 Plan 01 complete (Wave 0 pilots landed)
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 
@@ -247,6 +247,9 @@ Recent decisions affecting current work:
 - [Phase 1012]: Plan 05: Removed the static isIngestable_ block in LiveTagPipeline to eliminate single-source-of-truth drift; predicate now lives only inline in eligibleTags_
 - [Phase 1012]: Plan 05: Added Dependent TagStateCount property so testTagStateGCDropsUnregistered observes GC without relaxing tagState_ access
 - [Phase 1012]: Plan 05: LastFileParseCount assigned OUTSIDE outer try/catch in onTick_ so partial-failure ticks still update observability
+- [Phase 1014 Plan 01]: R2020b-compatible `properties (Access = private)` + `TestMethodSetup` fixture is the canonical Category C pattern — seeded in TestNavigatorOverlay.m for Wave 1 copy
+- [Phase 1014 Plan 01]: TestSensorDetailPlot.m received only the `sensor` property migration; legacy-class methods (Sensor/Threshold/ThresholdRule calls + createTagWithThreshold helper) are Plan 04's exclusive scope per D-02-A
+- [Phase 1014 Plan 01]: `DashboardBuilder.exitEditMode` is the only libs/ edit permitted in Phase 1014 (per D-02-E + D-05); guard wraps the first two set(hFig, ...) calls, late guard preserved as idempotent belt-and-suspenders
 
 ### Roadmap Evolution
 
@@ -285,5 +288,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-22T11:52:28.267Z
-Stopped at: Completed 1012-05-PLAN.md
+Stopped at: Completed 1014-01-PLAN.md (Wave 0 — Category C pilot + Category E fixes)
 Resume file: None

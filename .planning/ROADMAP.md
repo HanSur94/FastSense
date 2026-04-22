@@ -404,7 +404,7 @@ Plans:
 **Plans:** 7 plans
 
 Plans:
-- [ ] 1014-01-PLAN.md — Wave 0 unblocker: Category C (TestNavigatorOverlay + TestSensorDetailPlot.TestData.sensor) + Category E (testSensorListenersMultiPage test fix + DashboardBuilder.exitEditMode lib guard)
+- [x] 1014-01-PLAN.md — Wave 0 unblocker: Category C (TestNavigatorOverlay + TestSensorDetailPlot.TestData.sensor) + Category E (testSensorListenersMultiPage test fix + DashboardBuilder.exitEditMode lib guard)
 - [ ] 1014-02-PLAN.md — Widget threshold-test DELETE batch (TestStatusWidget, TestGaugeWidget, TestIconCardWidget, TestMultiStatusWidget, TestChipBarWidget)
 - [ ] 1014-03-PLAN.md — *Tag.m Threshold-call strip (TestIconCardWidgetTag, TestMultiStatusWidgetTag, TestSensorDetailPlotTag, TestEventDetectorTag, TestLiveEventPipelineTag, TestFastSenseAddTag, TestMonitorTagPersistence)
 - [ ] 1014-04-PLAN.md — TestSensorDetailPlot heavy-hitter (21 erroring methods, single-file migrate-or-delete; D-05 kill-switch risk)
