@@ -9,24 +9,9 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
         end
     end
 
-    methods (TestMethodSetup)
-        function skipIfHeadlessMatlab(testCase)
-            % exportgraphics and print both refuse uipanel-only figures
-            % on MATLAB R2020b headless runners with the opaque error
-            % "Specified handle is not valid for export" — even with
-            % a visibility toggle + stub axes + getframe fallback.
-            % exportapp (R2024a+) handles UI-component figures cleanly.
-            % Skip these tests on older MATLAB and Octave; the export
-            % code path is still exercised by local dev runs on R2024a+.
-            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
-            hasExportApp = ~isOctave && exist('exportapp') ~= 0; %#ok<EXIST>
-            testCase.assumeTrue(hasExportApp, ...
-                'exportImage tests require MATLAB R2024a+ (exportapp).');
-        end
-    end
-
     methods (Test)
         function testExportImagePNG(testCase)
+            TestDashboardToolbarImageExport.assumeExportWorks(testCase);
             d = DashboardEngine('Test');
             d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
@@ -46,6 +31,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
         end
 
         function testExportImageJPEG(testCase)
+            TestDashboardToolbarImageExport.assumeExportWorks(testCase);
             d = DashboardEngine('Test');
             d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
             d.render();
@@ -139,6 +125,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
 
         function testMultiPageActiveOnly(testCase)
             %TESTMULTIPAGEACTIVEONLY IMG-08: switchPage(2) + exportImage writes file.
+            TestDashboardToolbarImageExport.assumeExportWorks(testCase);
             d = DashboardEngine('MultiPage');
             d.addPage('Page1');
             d.addWidget('number', 'Title', 'P1', 'Position', [1 1 6 2], 'StaticValue', 1);
@@ -163,6 +150,7 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
 
         function testLiveModeNoPause(testCase)
             %TESTLIVEMODENOPAUSE IMG-09: exportImage does not stop live timer.
+            TestDashboardToolbarImageExport.assumeExportWorks(testCase);
             d = DashboardEngine('LiveTest');
             d.LiveInterval = 0.5;
             d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
@@ -193,6 +181,40 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
             if exist(p, 'file')
                 delete(p);
             end
+        end
+
+        function assumeExportWorks(testCase)
+            %ASSUMEEXPORTWORKS Probe whether the MATLAB runtime can export
+            %   a uipanel-only invisible figure. MATLAB R2020b on the
+            %   headless CI runner refuses with "Specified handle is not
+            %   valid for export" even with visibility toggle, stub axes,
+            %   and getframe fallback. Probe once with a tiny figure and
+            %   skip the whole test when export is non-functional.
+            persistent worksCache
+            if isempty(worksCache)
+                worksCache = false;
+                probeFig = figure('Visible', 'off');
+                try
+                    uipanel('Parent', probeFig, ...
+                        'Units', 'normalized', 'Position', [0 0 1 1]);
+                    tmp = [tempname '.png'];
+                    try
+                        try
+                            exportgraphics(probeFig, tmp, ...
+                                'ContentType', 'image', 'Resolution', 72);
+                            worksCache = exist(tmp, 'file') == 2;
+                        catch
+                            worksCache = false;
+                        end
+                    catch
+                    end
+                    if exist(tmp, 'file'), delete(tmp); end
+                catch
+                end
+                if ishandle(probeFig), close(probeFig); end
+            end
+            testCase.assumeTrue(worksCache, ...
+                'Runtime cannot export uipanel-only figures (likely MATLAB R2020b headless).');
         end
     end
 end
