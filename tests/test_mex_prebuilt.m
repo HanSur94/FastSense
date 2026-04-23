@@ -19,7 +19,7 @@ function test_mex_prebuilt()
     repo_root = fullfile(fileparts(mfilename('fullpath')), '..');
     mex_dir   = fullfile(repo_root, 'libs', 'FastSense', 'private');
     stamp_file = fullfile(mex_dir, '.mex-version');
-    sentinel   = fullfile(mex_dir, ['binary_search_mex.' mexext()]);
+    sentinel   = resolve_sentinel_(mex_dir);
 
     % ------------------------------------------------------------------
     % 1. Stamp stability
@@ -67,21 +67,20 @@ function test_mex_prebuilt()
     [old_stamp, stamp_existed] = read_file_safe_(stamp_file);
     write_file_(stamp_file, fresh);
 
-    bin_existed = (exist(sentinel, 'file') == 3);
-    if ~bin_existed
-        % If no real binary exists, we cannot make this probe pass —
-        % just ensure test does not crash; mark expected result conditional.
-        restore_file_(stamp_file, old_stamp, stamp_existed);
-        setenv('FASTSENSE_SKIP_BUILD', old_env);
-        % Skip assertion — sentinel must be a real MEX binary for type==3.
-        fprintf('    testNeedsBuildFalseWhenMatch: SKIPPED (no prebuilt binary present)\n');
-    else
-        result = install('__probe_needs_build__');
-        restore_file_(stamp_file, old_stamp, stamp_existed);
-        setenv('FASTSENSE_SKIP_BUILD', old_env);
-        assert(result == false, ...
-            'testNeedsBuildReturnsFalseWhenStampMatches: expected false when stamp matches');
-    end
+    % Plan 1013-07: committed binaries are a prerequisite — no SKIP fallback.
+    assert(exist(sentinel, 'file') == 3, ...
+        sprintf('testNeedsBuildFalseWhenMatch: committed sentinel missing at %s', sentinel));
+    % Plan 1013-07: exercise fresh-state path — private/ must NOT be on path
+    % when the probe runs (otherwise mex_stamp is reachable by accident and
+    % the bug is masked).  Callers of install() in the wild only have the
+    % repo root on path, not libs/FastSense/private/.
+    rmpath_silent_(mex_dir);
+    result = install('__probe_needs_build__');
+    add_fastsense_private_path();
+    restore_file_(stamp_file, old_stamp, stamp_existed);
+    setenv('FASTSENSE_SKIP_BUILD', old_env);
+    assert(result == false, ...
+        'testNeedsBuildReturnsFalseWhenStampMatches: expected false when stamp matches');
 
     % ------------------------------------------------------------------
     % 5. needs_build returns true when stamp mismatches
@@ -92,17 +91,16 @@ function test_mex_prebuilt()
     [old_stamp, stamp_existed] = read_file_safe_(stamp_file);
     write_file_(stamp_file, 'sha256:0000000000000000000000000000000000000000000000000000000000000000');
 
-    bin_existed = (exist(sentinel, 'file') == 3);
-    if ~bin_existed
-        touch_binary_(sentinel);
-    end
+    % Plan 1013-07: committed binaries are a prerequisite — no touch_binary_ fallback.
+    assert(exist(sentinel, 'file') == 3, ...
+        sprintf('testNeedsBuildTrueWhenMismatch: committed sentinel missing at %s', sentinel));
 
+    % Plan 1013-07: fresh-state path — private/ must NOT be on path.
+    rmpath_silent_(mex_dir);
     result = install('__probe_needs_build__');
+    add_fastsense_private_path();
 
     restore_file_(stamp_file, old_stamp, stamp_existed);
-    if ~bin_existed
-        delete_if_exists_(sentinel);
-    end
     setenv('FASTSENSE_SKIP_BUILD', old_env);
 
     assert(result == true, ...
@@ -226,6 +224,53 @@ function run_octave_subdir_probe_test_(repo_root, mex_dir)
 
     assert(result == false, ...
         'testOctaveSubdirProbe: needs_build must return false when subdir binary is present');
+end
+
+function rmpath_silent_(p)
+%RMPATH_SILENT_ Remove p (and any canonical-equivalent) from path.  Silent on absence.
+%   Handles relative-vs-absolute differences by canonicalizing via what().
+    canon = canon_path_(p);
+    dirs = strsplit(path, pathsep);
+    for i = 1:numel(dirs)
+        if isempty(dirs{i}); continue; end
+        if strcmp(dirs{i}, p) || strcmp(canon_path_(dirs{i}), canon)
+            w = warning('off', 'all');
+            rmpath(dirs{i});
+            warning(w);
+        end
+    end
+end
+
+function c = canon_path_(p)
+%CANON_PATH_ Canonicalize a path (resolve ./ and ..).  Returns input on failure.
+    try
+        info = what(p);
+        if ~isempty(info) && ~isempty(info(1).path)
+            c = info(1).path;
+            return;
+        end
+    catch
+    end
+    c = p;
+end
+
+function p = resolve_sentinel_(mex_dir)
+%RESOLVE_SENTINEL_ Return absolute path to a committed MEX sentinel binary.
+%   Resolves per Plan 1013-03 subdir layout + Plan 1013-04 committed
+%   macos-arm64 binaries (VERIFICATION.md gap fix 1013-07).
+%   On MATLAB: flat private/binary_search_mex.<mexext()>.
+%   On Octave: private/octave-<tag>/binary_search_mex.mex where tag comes
+%   from derive_octave_tag_().
+    if exist('OCTAVE_VERSION', 'builtin')
+        tag = derive_octave_tag_();
+        if isempty(tag)
+            p = fullfile(mex_dir, 'binary_search_mex.mex');
+            return;
+        end
+        p = fullfile(mex_dir, ['octave-' tag], 'binary_search_mex.mex');
+    else
+        p = fullfile(mex_dir, ['binary_search_mex.' mexext()]);
+    end
 end
 
 function tag = derive_octave_tag_()

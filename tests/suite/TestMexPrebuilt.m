@@ -24,11 +24,13 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
             repo_root = fullfile(fileparts(mfilename('fullpath')), '..', '..');
             addpath(repo_root);
             install();
+            % MATLAB R2025b+ silently rejects addpath() for private/ directories.
+            % add_fastsense_private_path() handles this by copying to a temp proxy.
+            add_fastsense_private_path();
             testCase.Root = repo_root;
             testCase.MexDir = fullfile(repo_root, 'libs', 'FastSense', 'private');
             testCase.StampFile = fullfile(testCase.MexDir, '.mex-version');
-            testCase.SentinelBin = fullfile(testCase.MexDir, ...
-                ['binary_search_mex.' mexext()]);
+            testCase.SentinelBin = resolve_sentinel_(testCase.MexDir);
         end
     end
 
@@ -104,12 +106,15 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
             restore_stamp = onCleanup(@() restore_file_( ...
                 testCase.StampFile, old_stamp, stamp_existed));
 
-            % Place sentinel binary if not already present.
-            bin_existed = (exist(testCase.SentinelBin, 'file') == 3);
-            if ~bin_existed
-                touch_binary_(testCase.SentinelBin);
-            end
-            restore_bin = onCleanup(@() maybe_delete_(testCase.SentinelBin, bin_existed));
+            % Plan 1013-07: committed binaries are a prerequisite — no touch_binary_ fallback.
+            testCase.assertTrue(exist(testCase.SentinelBin, 'file') == 3 || ...
+                exist(testCase.SentinelBin, 'file') == 2, ...
+                sprintf('Expected committed sentinel binary at %s', testCase.SentinelBin));
+
+            % Plan 1013-07: exercise fresh-state path — private/ must NOT be
+            % on path when the probe runs (mirrors end-user install() call).
+            rmpath_silent_(testCase.MexDir);
+            restore_path = onCleanup(@() add_fastsense_private_path());
 
             result = install('__probe_needs_build__');
             testCase.assertFalse(result, ...
@@ -132,12 +137,14 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
             restore_stamp = onCleanup(@() restore_file_( ...
                 testCase.StampFile, old_stamp, stamp_existed));
 
-            % Ensure binary is present.
-            bin_existed = (exist(testCase.SentinelBin, 'file') == 3);
-            if ~bin_existed
-                touch_binary_(testCase.SentinelBin);
-            end
-            restore_bin = onCleanup(@() maybe_delete_(testCase.SentinelBin, bin_existed));
+            % Plan 1013-07: committed binaries are a prerequisite — no touch_binary_ fallback.
+            testCase.assertTrue(exist(testCase.SentinelBin, 'file') == 3 || ...
+                exist(testCase.SentinelBin, 'file') == 2, ...
+                sprintf('Expected committed sentinel binary at %s', testCase.SentinelBin));
+
+            % Plan 1013-07: fresh-state path — private/ must NOT be on path.
+            rmpath_silent_(testCase.MexDir);
+            restore_path = onCleanup(@() add_fastsense_private_path());
 
             result = install('__probe_needs_build__');
             testCase.assertTrue(result, ...
@@ -316,6 +323,53 @@ function delete_if_exists_(p)
 %DELETE_IF_EXISTS_ Delete a file silently.
     if exist(p, 'file') ~= 0
         delete(p);
+    end
+end
+
+function rmpath_silent_(p)
+%RMPATH_SILENT_ Remove p (and any canonical-equivalent) from path.  Silent on absence.
+    canon = canon_path_(p);
+    dirs = strsplit(path, pathsep);
+    for i = 1:numel(dirs)
+        if isempty(dirs{i}); continue; end
+        if strcmp(dirs{i}, p) || strcmp(canon_path_(dirs{i}), canon)
+            w = warning('off', 'all');
+            rmpath(dirs{i});
+            warning(w);
+        end
+    end
+end
+
+function c = canon_path_(p)
+%CANON_PATH_ Canonicalize a path (resolve ./ and ..).  Returns input on failure.
+    try
+        info = what(p);
+        if ~isempty(info) && ~isempty(info(1).path)
+            c = info(1).path;
+            return;
+        end
+    catch
+    end
+    c = p;
+end
+
+function p = resolve_sentinel_(mex_dir)
+%RESOLVE_SENTINEL_ Return absolute path to a committed MEX sentinel binary.
+%   Resolves per Plan 1013-03 subdir layout + Plan 1013-04 committed
+%   macos-arm64 binaries (VERIFICATION.md gap fix 1013-07).
+%   On MATLAB: flat private/binary_search_mex.<mexext()>.
+%   On Octave: private/octave-<tag>/binary_search_mex.mex where tag comes
+%   from derive_octave_tag_().  On Octave macOS ARM64 this is
+%   octave-macos-arm64/binary_search_mex.mex (committed by Plan 1013-04).
+    if exist('OCTAVE_VERSION', 'builtin')
+        tag = derive_octave_tag_();
+        if isempty(tag)
+            p = fullfile(mex_dir, 'binary_search_mex.mex');
+            return;
+        end
+        p = fullfile(mex_dir, ['octave-' tag], 'binary_search_mex.mex');
+    else
+        p = fullfile(mex_dir, ['binary_search_mex.' mexext()]);
     end
 end
 
