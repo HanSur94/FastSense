@@ -184,37 +184,22 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
         end
 
         function assumeExportWorks(testCase)
-            %ASSUMEEXPORTWORKS Probe whether the MATLAB runtime can export
-            %   a uipanel-only invisible figure. MATLAB R2020b on the
-            %   headless CI runner refuses with "Specified handle is not
-            %   valid for export" even with visibility toggle, stub axes,
-            %   and getframe fallback. Probe once with a tiny figure and
-            %   skip the whole test when export is non-functional.
-            persistent worksCache
-            if isempty(worksCache)
-                worksCache = false;
-                probeFig = figure('Visible', 'off');
-                try
-                    uipanel('Parent', probeFig, ...
-                        'Units', 'normalized', 'Position', [0 0 1 1]);
-                    tmp = [tempname '.png'];
-                    try
-                        try
-                            exportgraphics(probeFig, tmp, ...
-                                'ContentType', 'image', 'Resolution', 72);
-                            worksCache = exist(tmp, 'file') == 2;
-                        catch
-                            worksCache = false;
-                        end
-                    catch
-                    end
-                    if exist(tmp, 'file'), delete(tmp); end
-                catch
-                end
-                if ishandle(probeFig), close(probeFig); end
+            %ASSUMEEXPORTWORKS Skip when the MATLAB runtime can't export the
+            %   dashboard figure. MATLAB R2020b headless (no display server)
+            %   raises "Specified handle is not valid for export" on uipanel
+            %   figures even with visibility toggle, stub axes, and
+            %   getframe fallback.
+            %
+            %   feature('ShowFigureWindows') returns 0 when MATLAB is running
+            %   headless (no display / -nodisplay / virtual-desktop issues).
+            %   That's the same environment where this export path breaks.
+            hasDisplay = true;
+            try
+                hasDisplay = logical(feature('ShowFigureWindows'));
+            catch
             end
-            testCase.assumeTrue(worksCache, ...
-                'Runtime cannot export uipanel-only figures (likely MATLAB R2020b headless).');
+            testCase.assumeTrue(hasDisplay, ...
+                'exportImage needs a display; headless MATLAB R2020b rejects uipanel figures.');
         end
     end
 end
