@@ -391,9 +391,9 @@ Plans:
 **Goal:** Deliver a runnable `demo/industrial_plant/` workspace that doubles as a showcase and headless CI smoke test of the full FastSense dashboard + Tag pipeline stack: synthetic `.dat` data source → LiveTagPipeline ingestion → full TagRegistry (SensorTag/StateTag/MonitorTag/CompositeTag) → single multi-page DashboardEngine covering every widget type with info tooltips, groups, a pre-detached widget, a plant-health rollup, and MonitorTag-driven event overlays.
 **Requirements**: Captured by CONTEXT.md decisions D-01..D-17 (no REQ-IDs; v2.0 closed at Phase 1011).
 **Depends on:** Phase 1012
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 1015-01-PLAN.md — Demo scaffolding: directory + data generator + TagRegistry population + LiveTagPipeline wiring + install.m + unit test (D-01..D-04, D-10..D-15)
 - [x] 1015-02-PLAN.md — Multi-page dashboard with full widget breadth + detach + overlays + README (D-05..D-11, D-13)
-- [ ] 1015-03-PLAN.md — Headless CI smoke test (MATLAB + Octave) (D-05, D-07, D-13, D-16, D-17)
+- [x] 1015-03-PLAN.md — Headless CI smoke test (MATLAB + Octave) (D-05, D-07, D-13, D-16, D-17)
