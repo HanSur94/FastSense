@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776965916729,
+  "lastUpdate": 1776966057660,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -34163,6 +34163,310 @@ window.BENCHMARK_DATA = {
           {
             "name": "Dashboard broadcastTimeRange stdmean",
             "value": 0.057,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2e2537c3fd811483397625cbd4d73b2383d8cddc",
+          "message": "fix(dashboard): widget audit bugs — titles, IconCard, Image, resize hooks, time axis, axis labels (#62)\n\n* fix(quick-260423-q3v-01): add title rendering to 5 chart widgets\n\n- BarChart/Histogram/Scatter/Heatmap/Image widgets now render Title on axes\n- Uses canonical title block from RawAxesWidget (fg color + WidgetTitleFontSize)\n- ImageWidget keeps axes invisible but forces title Visible='on'\n\n* fix(quick-260423-q3v-02): IconCardWidget Tag branch falls back to Tag.Y(end)\n\n- valueAt(now) returns [] when Tag.X is seconds (not serial date)\n- Added Tag.Y(end) fallback mirroring the Sensor branch\n- Preserves Units inheritance block unchanged\n\n* fix(quick-260423-q3v-03): ImageWidget uses imagesc with explicit colormap for 2D data\n\n- Branch on ndims(imgData)==2: imagesc+parula for matrices, image() for RGB\n- image() was clipping scalar-field matrices to colormap 1..64, rendering a dark block\n- Title kept visible in refresh() too (idempotent with render() setting)\n- Scaling property untouched (API compat)\n\n* fix(quick-260423-q3v-04): add SizeChangedFcn+relayout_ to 7 pixel-dependent widgets\n\n- ChipBar/IconCard/MultiStatus/Number/Sparkline/Status/Text now rescale on resize\n- relayout_ tears down uicontrols+axes children and re-renders (idempotent)\n- try/catch guards SizeChangedFcn for Octave versions that reject it\n- New private methods block added to SparklineCardWidget and TextWidget\n\n* fix(quick-260423-q3v-05): human-readable time-axis labels via formatTimeAxis_\n\n- FastSenseWidget: call formatTimeAxis_ after fp.render() in render/rebuildForTag_\n  and after updateData() in refresh/update paths\n- EventTimelineWidget: call formatTimeAxis_ at end of refresh()\n- Helper converts numeric seconds to HH:MM:SS (range >= 1h) or MM:SS (< 1h)\n  via datestr(xt/86400, fmt); no-op for ranges <= 300s\n- Cosmetic-only: underlying numeric X data untouched, zoom may regenerate\n  numeric ticks (known limitation)\n\n* fix(quick-260423-q3v-06): ScatterWidget auto-derives xlabel/ylabel from SensorX/SensorY\n\n- refresh() now calls xlabel/ylabel after plot when SensorX/SensorY set\n- axisLabelForSensor_ helper builds 'Name (Units)' with graceful Key/empty fallback\n- No-op when sensors unset (preserves current behavior)\n\n* fix(widgets): title re-apply in refresh + thermometer aspect ratio\n\nBarChartWidget.refresh and HistogramWidget.refresh now re-apply the\ntitle after bar()/plot() calls. Those plot commands internally call\nnewplot which clears the axes title, so the render-time title was\nbeing wiped the moment data rendered.\n\nGaugeWidget.renderThermometer drops the fixed DataAspectRatio [1 2 1]\nand widens its axes Position ([0.15 0.10 0.7 0.80]) so the thermometer\nfills a narrow 4-column panel instead of cramping the bulb, value, and\nmin/max labels on top of each other.\n\nFollow-up to quick-task 260423-q3v audit bugs.\n\n* fix(IconCardWidget): stop self-erasing Tag via Sensor alias\n\nThe constructor's \"if Tag is set, clear Sensor\" block was destructive:\nafter Phase 1011 migrated Sensor to a Dependent alias for Tag (see\nDashboardWidget.set.Sensor), `obj.Sensor = []` resolves to\n`obj.Tag = []` and wipes the Tag we just assigned. The refresh loop\nthen hits the empty-Tag branch and the widget shows \"--\" forever,\neven with a fully populated SensorTag bound.\n\nThis was the real root cause of bug #2 in the widget audit — the\nvalueAt(now)/Y(end) fallback I added in quick-260423-q3v-02 never\nran because Tag was already empty by the time refresh fired.\n\nKept the Threshold clear (Threshold is a real independent property).",
+          "timestamp": "2026-04-23T19:34:28+02:00",
+          "tree_id": "c4bc5d6dda36499ffb8c5d01f717ab1a1be1c978",
+          "url": "https://github.com/HanSur94/FastSense/commit/2e2537c3fd811483397625cbd4d73b2383d8cddc"
+        },
+        "date": 1776966056656,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 2.32,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.117,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 146.984,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 1.667,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 245.005,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 0.93,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 15.044,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 4,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 10.809,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.032,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 165.475,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 0.697,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 251.892,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 1.373,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 14.323,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 1.295,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 21.203,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.097,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 186.836,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 0.7,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 257.084,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 2.679,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 13.888,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.807,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 105.494,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.521,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1213.719,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 12.677,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 256.505,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 0.866,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 14.36,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 1.027,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 210.341,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.436,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2343.978,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 111.814,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 267.534,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 7.472,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 14.351,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.001,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 1072.933,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 30.378,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22583.44,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 1423.282,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 608.988,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 424.711,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 14.47,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.198,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 264.385,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 69.407,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 1.254,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.112,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 0.242,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.184,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.195,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.121,
             "unit": "ms"
           }
         ]
