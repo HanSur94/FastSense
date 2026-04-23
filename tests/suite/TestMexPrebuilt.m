@@ -176,7 +176,13 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
             cleanup_dir = onCleanup(@() maybe_rmdir_(subdir, rmSubdir));
 
             sentinel    = fullfile(subdir, 'binary_search_mex.mex');
-            cleanup_bin = onCleanup(@() delete_if_exists_(sentinel));
+            % Plan 1013-07 (Rule 1 fix): preserve committed binary if present.
+            sentinel_existed = (exist(sentinel, 'file') == 3 || exist(sentinel, 'file') == 2);
+            sentinel_backup  = [sentinel '.bak_probe_test'];
+            if sentinel_existed
+                movefile(sentinel, sentinel_backup);
+            end
+            cleanup_bin = onCleanup(@() restore_placeholder_then_binary_(sentinel, sentinel_backup, sentinel_existed));
 
             fid = fopen(sentinel, 'w');
             fprintf(fid, 'placeholder');
@@ -308,6 +314,14 @@ function maybe_delete_(p, was_present)
 %MAYBE_DELETE_ Delete p unless it was already present before the test.
     if ~was_present
         delete_if_exists_(p);
+    end
+end
+
+function restore_placeholder_then_binary_(p, backup, was_present)
+%RESTORE_PLACEHOLDER_THEN_BINARY_ Delete placeholder at p, restore backup.
+    delete_if_exists_(p);
+    if was_present && exist(backup, 'file') ~= 0
+        movefile(backup, p);
     end
 end
 

@@ -194,6 +194,14 @@ function run_octave_subdir_probe_test_(repo_root, mex_dir)
     [old_stamp, stamp_existed] = read_file_safe_(stamp_file);
     write_file_(stamp_file, mex_stamp(repo_root));
 
+    % Plan 1013-07 (Rule 1 fix): preserve the committed binary if present so
+    % the test does not destroy it.  Back up -> placeholder -> restore.
+    sentinel_existed = (exist(sentinel, 'file') == 3 || exist(sentinel, 'file') == 2);
+    sentinel_backup  = [sentinel '.bak_probe_test'];
+    if sentinel_existed
+        movefile(sentinel, sentinel_backup);
+    end
+
     fid = fopen(sentinel, 'w');
     fprintf(fid, 'placeholder');
     fclose(fid);
@@ -215,7 +223,11 @@ function run_octave_subdir_probe_test_(repo_root, mex_dir)
     if flat_existed && exist(flat_backup, 'file') == 2
         movefile(flat_backup, flat_bin);
     end
+    % Plan 1013-07 (Rule 1 fix): restore the committed binary.
     delete_if_exists_(sentinel);
+    if sentinel_existed && exist(sentinel_backup, 'file') ~= 0
+        movefile(sentinel_backup, sentinel);
+    end
     rmpath(subdir);
     if rmSubdir && isfolder(subdir)
         rmdir(subdir);

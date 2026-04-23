@@ -173,7 +173,14 @@ function build_mex()
         extra_srcs  = mex_files{i, 3};  extra_srcs  = extra_srcs{1};
         extra_flags = mex_files{i, 4};  extra_flags = extra_flags{1};
 
-        % Skip if MEX binary already exists (e.g., from CI cache)
+        % NOTE (Plan 1013-07): This per-file mtime-based skip is the BACKSTOP, not
+        % the primary gate.  The primary gating mechanism is install.m:needs_build
+        % calling mex_stamp(root) against libs/FastSense/private/.mex-version — if
+        % the stamp matches, build_mex() is never invoked.  This guard exists so
+        % that (a) manual build_mex() calls don't waste time recompiling unchanged
+        % sources, and (b) if the stamp check ever regresses silently (as it did
+        % before 1013-07), users still aren't forced through full C compilation.
+        % Do not remove without replacing the stamp gate's guarantees.
         if exist(fullfile(outDir, [out_name, '.', mexext()]), 'file') == 3 || ...
            exist(fullfile(outDir, [out_name, '.mex']), 'file') == 3
             fprintf('Compiling %s ... SKIPPED (already exists)\n', mex_files{i, 1});
