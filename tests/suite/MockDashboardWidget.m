@@ -23,5 +23,13 @@ classdef MockDashboardWidget < DashboardWidget
             obj.Position = [s.position.col, s.position.row, ...
                             s.position.width, s.position.height];
         end
+
+        function invokeClearPanelControls(hPanel)
+            %INVOKECLEARPANELCONTROLS Test-visible wrapper around the
+            %   protected DashboardWidget.clearPanelControls helper.
+            %   Subclasses can call protected static methods on the
+            %   parent class; ordinary test code cannot.
+            DashboardWidget.clearPanelControls(hPanel);
+        end
     end
 end
