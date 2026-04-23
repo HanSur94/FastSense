@@ -71,6 +71,15 @@ classdef FastSenseWidget < DashboardWidget
             obj.FastSenseObj = fp;
             fp.ShowThresholdLabels = obj.ShowThresholdLabels;
 
+            % Slide the X window as new samples arrive on updateData(). The
+            % default empty LiveViewMode leaves the window frozen at the
+            % initial render's data range, so later samples appear off the
+            % right edge of live widgets. 'reset' grows the window to cover
+            % the full current X range each tick — appropriate for
+            % dashboard use where users expect to see all data since the
+            % live pipeline started.
+            fp.LiveViewMode = 'reset';
+
             % Bind data — Tag-first dispatch (v2.0).
             if ~isempty(obj.Tag)
                 fp.addTag(obj.Tag);
@@ -110,9 +119,24 @@ classdef FastSenseWidget < DashboardWidget
 
             fp.render();
 
-            % Apply fixed Y-axis limits if configured
+            % Apply fixed Y-axis limits if configured; otherwise expand the
+            % auto-computed range so threshold lines stay visible even when
+            % the initial data range is narrower than the threshold value.
             if ~isempty(obj.YLimits) && numel(obj.YLimits) == 2
                 ylim(ax, obj.YLimits);
+            else
+                yInit = [];
+                try
+                    if ~isempty(obj.Tag)
+                        [~, yInit] = obj.Tag.getXY();
+                    elseif ~isempty(obj.YData)
+                        yInit = obj.YData;
+                    end
+                catch
+                end
+                if ~isempty(yInit)
+                    obj.autoScaleY_(yInit);
+                end
             end
 
             % Update time range cache and data-source identity snapshots
@@ -143,6 +167,7 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
+                    obj.autoScaleY_(y);
                     obj.updateTimeRangeCache();
                     return;
                 catch
@@ -164,6 +189,7 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
+                    obj.autoScaleY_(y);
                     obj.updateTimeRangeCache();
                     return;
                 catch
@@ -171,6 +197,51 @@ classdef FastSenseWidget < DashboardWidget
                 end
             end
             obj.refresh();
+        end
+
+        function autoScaleY_(obj, y)
+        %AUTOSCALEY_ Rescale the Y axis to cover current data + thresholds.
+        %   FastSense locks YLim to manual mode at first render, so new
+        %   samples outside the initial range would fall off the chart.
+        %   This helper recomputes the Y extent every tick (including any
+        %   threshold values so MonitorTag lines stay visible) and updates
+        %   the axes. Skipped when the widget has a user-pinned YLimits.
+            if ~isempty(obj.YLimits)
+                return;
+            end
+            if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered
+                return;
+            end
+            ax = obj.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax)
+                return;
+            end
+            if isempty(y)
+                return;
+            end
+            yMin = min(y(:));
+            yMax = max(y(:));
+            if iscell(obj.Thresholds)
+                for i = 1:numel(obj.Thresholds)
+                    e = obj.Thresholds{i};
+                    if isstruct(e) && isfield(e, 'Value') && isfinite(e.Value)
+                        yMin = min(yMin, e.Value);
+                        yMax = max(yMax, e.Value);
+                    end
+                end
+            elseif isnumeric(obj.Thresholds) && ~isempty(obj.Thresholds)
+                yMin = min(yMin, min(obj.Thresholds(:)));
+                yMax = max(yMax, max(obj.Thresholds(:)));
+            end
+            if ~isfinite(yMin) || ~isfinite(yMax)
+                return;
+            end
+            if yMax > yMin
+                pad = (yMax - yMin) * 0.08;
+            else
+                pad = max(abs(yMax) * 0.1, 1);
+            end
+            set(ax, 'YLim', [yMin - pad, yMax + pad]);
         end
 
         function setTimeRange(obj, tStart, tEnd)
