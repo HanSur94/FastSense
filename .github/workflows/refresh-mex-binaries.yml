@@ -23,6 +23,11 @@ on:
       - 'libs/FastSense/private/mex_src/**'
       - 'libs/FastSense/build_mex.m'
       - 'libs/FastSense/mksqlite.c'
+      # Defensive: refresh if the stamp formula itself changes. The formula
+      # is reimplemented in bash inside the aggregator job; if mex_stamp.m
+      # and the aggregator drift, stamps mismatch and binaries rebuild
+      # without the committed stamp updating -- infinite rebuild loop.
+      - 'libs/FastSense/mex_stamp.m'
   workflow_dispatch:
 
 concurrency:
