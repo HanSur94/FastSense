@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 6 * * 1'
+    # Nightly full-suite run. PRs use path-filtered subsets (see `changes` job);
+    # nightly runs everything so cross-library regressions surface within 24h.
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -14,8 +16,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Two-tier CI: PRs run only the jobs whose inputs changed, push-to-main and
+  # the nightly schedule run the full suite. Changes to any path in the `core`
+  # filter (install.m, MEX C sources, workflows themselves, lint config, the
+  # test runner, the coverage script) force a full run on PRs as a safety net.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      matlab: ${{ steps.filter.outputs.matlab }}
+      mex: ${{ steps.filter.outputs.mex }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'install.m'
+              - 'libs/FastSense/private/mex_src/**'
+              - 'libs/FastSense/private/.mex-version'
+              - '.github/workflows/**'
+              - 'miss_hit.cfg'
+              - 'tests/run_all_tests.m'
+              - 'scripts/run_tests_with_coverage.m'
+            matlab:
+              - 'libs/**'
+              - 'tests/**'
+              - 'examples/**'
+              - 'scripts/**.m'
+              - 'install.m'
+              - 'run_profile.m'
+            mex:
+              - 'libs/**/mex_src/**'
+              - 'libs/**/build_mex.m'
+              - 'libs/FastSense/mksqlite.c'
+              - 'libs/FastSense/private/.mex-version'
+
   lint:
     name: MATLAB Lint
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true'
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
@@ -35,15 +77,17 @@ jobs:
 
   build-mex:
     name: Build MEX (Linux)
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     uses: ./.github/workflows/_build-mex-octave.yml
     with:
       artifact-name: mex-linux
 
   build-mex-matlab:
     name: Build MEX (MATLAB Linux)
+    needs: changes
     timeout-minutes: 30
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -95,8 +139,8 @@ jobs:
   octave:
     name: Octave Tests
     timeout-minutes: 45
-    needs: build-mex
-    if: github.event_name != 'schedule'
+    needs: [changes, build-mex]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     container: gnuoctave/octave:11.1.0
     env:
@@ -148,8 +192,9 @@ jobs:
   # This job catches PRs that break the compile path without shipping artifacts.
   mex-build-macos:
     name: MEX Build (macOS ${{ matrix.os == 'macos-latest' && 'ARM64' || 'x64' }})
+    needs: changes
     timeout-minutes: 20
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.mex == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -173,8 +218,9 @@ jobs:
   # This job catches PRs that break the compile path without shipping artifacts.
   mex-build-windows:
     name: MEX Build (Windows ${{ matrix.os == 'windows-latest' && 'latest' || '2022' }})
+    needs: changes
     timeout-minutes: 30
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.mex == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -241,9 +287,9 @@ jobs:
 
   matlab:
     name: MATLAB Tests
-    needs: build-mex-matlab
+    needs: [changes, build-mex-matlab]
     timeout-minutes: 45
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     env:
       FASTSENSE_SKIP_BUILD: "1"
