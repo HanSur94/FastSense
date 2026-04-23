@@ -34,6 +34,13 @@ classdef ImageWidget < DashboardWidget
                 'Position', [0.02 captionH+0.02 0.96 0.96-captionH], ...
                 'Visible', 'off');
 
+            if ~isempty(obj.Title)
+                title(obj.hAxes, obj.Title, ...
+                    'Color', theme.ForegroundColor, ...
+                    'FontSize', theme.WidgetTitleFontSize);
+                try set(get(obj.hAxes, 'Title'), 'Visible', 'on'); catch, end
+            end
+
             if ~isempty(obj.Caption)
                 obj.hCaption = uicontrol(parentPanel, ...
                     'Style', 'text', ...
@@ -62,9 +69,20 @@ classdef ImageWidget < DashboardWidget
             end
             if isempty(imgData), return; end
 
-            obj.hImage = image(obj.hAxes, imgData);
+            % For matrices (not RGB uint8), use imagesc so CData auto-scales to
+            % the colormap range -- image() would clip to 1..64 and render a dark block.
+            if ndims(imgData) == 2
+                obj.hImage = imagesc(obj.hAxes, imgData);
+                colormap(obj.hAxes, 'parula');
+            else
+                obj.hImage = image(obj.hAxes, imgData);
+            end
             axis(obj.hAxes, 'image');
             set(obj.hAxes, 'Visible', 'off');
+            % Keep title visible even though axes is invisible (set by render()).
+            if ~isempty(obj.Title)
+                try set(get(obj.hAxes, 'Title'), 'Visible', 'on'); catch, end
+            end
         end
 
         function t = getType(~)
