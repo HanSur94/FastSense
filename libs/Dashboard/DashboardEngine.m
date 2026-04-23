@@ -275,15 +275,19 @@ classdef DashboardEngine < handle
             obj.Layout.allocatePanels(obj.hFigure, obj.activePageWidgets(), themeStruct);
             obj.Layout.OnScrollCallback = @(r1, r2) obj.onScrollRealize(r1, r2);
 
-            % Progress-bar accounting: sum widgets across all pages so the
-            % bar covers everything render() will realize (active + hidden).
-            totalWidgets = obj.totalWidgetCountAcrossPages();
+            % Progress-bar accounting covers only the active page — hidden
+            % pages keep their lazy-realization contract (realized on switch).
+            totalWidgets = numel(obj.activePageWidgets());
             totalPages   = max(1, numel(obj.Pages));
             obj.Progress_ = DashboardProgress(obj.Name, totalWidgets, totalPages, obj.ProgressMode);
 
             obj.realizeBatch(5);
 
-            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle
+            obj.Progress_.finish();
+            obj.Progress_ = [];
+
+            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle.
+            % Widgets stay unrealized until the user switches to the page.
             if numel(obj.Pages) > 1
                 for pgIdx = 1:numel(obj.Pages)
                     if pgIdx == obj.ActivePage
@@ -291,11 +295,8 @@ classdef DashboardEngine < handle
                     end
                     pgWidgets = obj.Pages{pgIdx}.Widgets;
                     obj.Layout.allocatePanels(obj.hFigure, pgWidgets, themeStruct);
-                    pageName = obj.Pages{pgIdx}.Name;
-                    % Realize + hide panels for non-active pages
+                    % Hide panels for non-active pages
                     for wi = 1:numel(pgWidgets)
-                        obj.Layout.realizeWidget(pgWidgets{wi});
-                        obj.Progress_.tick(pgWidgets{wi}, pgIdx, pageName);
                         if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
                             set(pgWidgets{wi}.hPanel, 'Visible', 'off');
                         end
@@ -303,23 +304,8 @@ classdef DashboardEngine < handle
                 end
             end
 
-            obj.Progress_.finish();
-            obj.Progress_ = [];
-
             % Auto-detect time range from data
             obj.updateGlobalTimeRange();
-        end
-
-        function n = totalWidgetCountAcrossPages(obj)
-        %TOTALWIDGETCOUNTACROSSPAGES Sum of widgets across all Pages, or numel(Widgets) for single-page.
-            if isempty(obj.Pages)
-                n = numel(obj.Widgets);
-                return;
-            end
-            n = 0;
-            for k = 1:numel(obj.Pages)
-                n = n + numel(obj.Pages{k}.Widgets);
-            end
         end
 
         function startLive(obj)

@@ -99,6 +99,23 @@ classdef TestDashboardProgress < matlab.unittest.TestCase
             testCase.verifyFalse(contains(out, 'rendered'));
         end
 
+        function testRenderPreservesLazyPageRealization(testCase)
+            d = DashboardEngine('LazyCheck');
+            d.ProgressMode = 'on';
+            d.addPage('P1'); d.switchPage(1);
+            d.addWidget('number', 'Title', 'P1W', 'Position', [1 1 12 1], 'StaticValue', 1);
+            d.addPage('P2'); d.switchPage(2);
+            d.addWidget('number', 'Title', 'P2W', 'Position', [1 1 12 1], 'StaticValue', 2);
+            d.switchPage(1);
+            evalc('d.render();');
+            testCase.addTeardown(@() close(d.hFigure));
+            set(d.hFigure, 'Visible', 'off');
+            testCase.verifyTrue(d.Pages{1}.Widgets{1}.Realized, ...
+                'Active page widget must be realized');
+            testCase.verifyFalse(d.Pages{2}.Widgets{1}.Realized, ...
+                'Non-active page widget must stay unrealized');
+        end
+
         function testRerenderEmitsSummary(testCase)
             d = DashboardEngine('Rerender');
             d.ProgressMode = 'on';

@@ -85,6 +85,23 @@ function test_dashboard_progress()
     assert(isempty(strfind(out, 'rendered 1 widgets')), ...
         'testEngineRenderSilentByDefault: progress output leaked in auto mode');
 
+    % testRenderPreservesLazyPageRealization — non-active page widgets
+    % must remain unrealized after render() so switchPage stays lazy.
+    d = DashboardEngine('LazyCheck');
+    d.ProgressMode = 'on';
+    d.addPage('P1'); d.switchPage(1);
+    d.addWidget('number', 'Title', 'P1W', 'Position', [1 1 12 1], 'StaticValue', 1);
+    d.addPage('P2'); d.switchPage(2);
+    d.addWidget('number', 'Title', 'P2W', 'Position', [1 1 12 1], 'StaticValue', 2);
+    d.switchPage(1);
+    evalc('d.render();');
+    try, set(d.hFigure, 'Visible', 'off'); end
+    assert(d.Pages{1}.Widgets{1}.Realized, ...
+        'testRenderPreservesLazyPageRealization: active page widget must be realized');
+    assert(~d.Pages{2}.Widgets{1}.Realized, ...
+        'testRenderPreservesLazyPageRealization: non-active page widget must stay unrealized');
+    try, close(d.hFigure); end
+
     fprintf('    All tests passed.\n');
 end
 
