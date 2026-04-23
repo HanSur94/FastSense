@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: verifying
-stopped_at: Completed 1015-03-PLAN.md
-last_updated: "2026-04-23T16:55:34.366Z"
+status: executing
+stopped_at: Completed 1015-04-PLAN.md (gap closure)
+last_updated: "2026-04-23T17:27:26.694Z"
 last_activity: 2026-04-23
 progress:
   total_phases: 16
   completed_phases: 10
-  total_plans: 35
-  completed_plans: 35
+  total_plans: 36
+  completed_plans: 36
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1015 — Demo showcase workspace
+**Current focus:** Phase 1015 — demo-showcase-workspace
 
 ## Current Position
 
-Phase: 1015 (Demo showcase workspace) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 1015 (demo-showcase-workspace) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-04-23
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -122,6 +122,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1015 P01 | 35min | 3 tasks | 11 files |
 | Phase 1015-demo-showcase-workspace-fully-fledged-live-demo-dashboard-with-real-world-style-updating-data-sources-all-widget-types-tags-groups-tabs-tooltips-and-detachable-widgets P02 | 10min | 2 tasks | 11 files |
 | Phase 1015 P03 | 6min | 2 tasks | 2 files |
+| Phase 1015 P04 | 8min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -263,6 +264,7 @@ Recent decisions affecting current work:
 - [Phase 1015]: engine.Pages iteration instead of private allPageWidgets method
 - [Phase 1015]: getEventsForTag is real API; eventsForTag was plan typo
 - [Phase 1015]: Octave-timer-absence skip guard mirrors Plan 01 pattern
+- [Phase 1015-04]: deriveColor dispatch uses isa(sensor, 'Tag') base-class check (Pitfall 1); Tag-path threshold v >= 0.5 mirrors deriveColorFromTag_; legacy Sensor branch preserved byte-for-byte
 
 ### Roadmap Evolution
 
@@ -299,6 +301,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-23T16:55:27.412Z
-Stopped at: Completed 1015-03-PLAN.md
+Last session: 2026-04-23T17:27:26.669Z
+Stopped at: Completed 1015-04-PLAN.md (gap closure)
 Resume file: None
