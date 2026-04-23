@@ -62,7 +62,7 @@ jobs:
             libs/FastSense/private/*.mexa64
             libs/SensorThreshold/private/*.mexa64
             libs/FastSense/mksqlite.mexa64
-          key: mex-matlab-linux-r2020b-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
+          key: mex-matlab-linux-r2020b-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m', 'libs/FastSense/private/.mex-version') }}
 
       - name: Compile MEX files (MATLAB)
         if: steps.cache-mex-matlab.outputs.cache-hit != 'true'
@@ -142,6 +142,10 @@ jobs:
             echo "_Results file not produced (test job likely crashed before completion)._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Smoke test: ensure Octave MEX sources still compile on macOS.
+  # Authoritative prebuilt binaries for releases come from refresh-mex-binaries.yml,
+  # which commits platform-specific binaries into libs/.../octave-<platform>/.
+  # This job catches PRs that break the compile path without shipping artifacts.
   mex-build-macos:
     name: MEX Build (macOS ${{ matrix.os == 'macos-latest' && 'ARM64' || 'x64' }})
     timeout-minutes: 20
@@ -163,6 +167,10 @@ jobs:
       - name: List compiled MEX binaries
         run: find libs -name '*.mex*' -type f | sort
 
+  # Smoke test: ensure Octave MEX sources still compile on Windows.
+  # Authoritative prebuilt binaries for releases come from refresh-mex-binaries.yml,
+  # which commits platform-specific binaries into libs/.../octave-<platform>/.
+  # This job catches PRs that break the compile path without shipping artifacts.
   mex-build-windows:
     name: MEX Build (Windows ${{ matrix.os == 'windows-latest' && 'latest' || '2022' }})
     timeout-minutes: 30

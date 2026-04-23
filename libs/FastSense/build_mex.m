@@ -46,7 +46,26 @@ function build_mex()
 
     rootDir = fileparts(mfilename('fullpath'));
     srcDir  = fullfile(rootDir, 'private', 'mex_src');
-    outDir  = fullfile(rootDir, 'private');
+
+    % Determine output directories.  Under Octave all platforms produce
+    % identically-named *.mex files, so we route outputs into a platform-
+    % tagged subdir (e.g., private/octave-macos-arm64/).  Under MATLAB each
+    % platform uses a unique extension (mexmaca64, mexa64, …) so the flat
+    % private/ location is fine.
+    isOctave = exist('OCTAVE_VERSION', 'builtin');
+    if isOctave
+        octTag        = local_octave_tag_(computer('arch'));
+        outDir        = fullfile(rootDir, 'private',  ['octave-' octTag]);
+        outDirMksql   = fullfile(rootDir,             ['octave-' octTag]);
+        sensorPrivDir = fullfile(rootDir, '..', 'SensorThreshold', 'private', ['octave-' octTag]);
+        if ~isfolder(outDir);        mkdir(outDir);        end
+        if ~isfolder(outDirMksql);   mkdir(outDirMksql);   end
+        if ~isfolder(sensorPrivDir); mkdir(sensorPrivDir); end
+    else
+        outDir        = fullfile(rootDir, 'private');
+        outDirMksql   = rootDir;
+        sensorPrivDir = fullfile(rootDir, '..', 'SensorThreshold', 'private');
+    end
 
     % Detect architecture — normalize varying platform strings into a
     % canonical label.  Octave returns 'aarch64-...' or 'x86_64-...',
@@ -154,7 +173,14 @@ function build_mex()
         extra_srcs  = mex_files{i, 3};  extra_srcs  = extra_srcs{1};
         extra_flags = mex_files{i, 4};  extra_flags = extra_flags{1};
 
-        % Skip if MEX binary already exists (e.g., from CI cache)
+        % NOTE (Plan 1013-07): This per-file mtime-based skip is the BACKSTOP, not
+        % the primary gate.  The primary gating mechanism is install.m:needs_build
+        % calling mex_stamp(root) against libs/FastSense/private/.mex-version — if
+        % the stamp matches, build_mex() is never invoked.  This guard exists so
+        % that (a) manual build_mex() calls don't waste time recompiling unchanged
+        % sources, and (b) if the stamp check ever regresses silently (as it did
+        % before 1013-07), users still aren't forced through full C compilation.
+        % Do not remove without replacing the stamp gate's guarantees.
         if exist(fullfile(outDir, [out_name, '.', mexext()]), 'file') == 3 || ...
            exist(fullfile(outDir, [out_name, '.mex']), 'file') == 3
             fprintf('Compiling %s ... SKIPPED (already exists)\n', mex_files{i, 1});
@@ -198,15 +224,17 @@ function build_mex()
         end
     end
 
-    % Compile mksqlite with bundled SQLite3 amalgamation
-    if exist(fullfile(rootDir, ['mksqlite.', mexext()]), 'file') == 3 || ...
-       exist(fullfile(rootDir, 'mksqlite.mex'), 'file') == 3
+    % Compile mksqlite with bundled SQLite3 amalgamation.
+    % On Octave the target directory is outDirMksql (platform-tagged subdir);
+    % on MATLAB it is rootDir (flat FastSense/ root).
+    if exist(fullfile(outDirMksql, ['mksqlite.', mexext()]), 'file') == 3 || ...
+       exist(fullfile(outDirMksql, 'mksqlite.mex'), 'file') == 3
         fprintf('Compiling mksqlite.c ... SKIPPED (already exists)\n');
         n_success = n_success + 1;
     else
     fprintf('Compiling mksqlite.c ... ');
     try
-        compile_mex(mksqlite_src, 'mksqlite', rootDir, include_flag, ...
+        compile_mex(mksqlite_src, 'mksqlite', outDirMksql, include_flag, ...
                     [opt_flags, sqlite3_flags], compiler, {sqlite3_src});
         fprintf('OK\n');
         n_success = n_success + 1;
@@ -227,8 +255,8 @@ function build_mex()
         fprintf('(%d failed — MATLAB fallback will be used for those.)\n', n_fail);
     end
 
-    % Copy shared MEX files to SensorThreshold/private so they're accessible there
-    sensorPrivDir = fullfile(rootDir, '..', 'SensorThreshold', 'private');
+    % Copy shared MEX files into the correct SensorThreshold/private location.
+    % Under Octave this is private/octave-<tag>/; under MATLAB the flat private/.
     copy_mex_to(outDir, sensorPrivDir, 'violation_cull_mex');
     copy_mex_to(outDir, sensorPrivDir, 'compute_violations_mex');
     copy_mex_to(outDir, sensorPrivDir, 'resolve_disk_mex');
@@ -357,5 +385,34 @@ function [gcc_path, gcc_name] = find_gcc()
     if status == 0 && ~isempty(strfind(result, 'Free Software Foundation'))
         gcc_path = 'gcc';
         gcc_name = 'gcc';
+    end
+end
+
+function tag = local_octave_tag_(arch_raw)
+%LOCAL_OCTAVE_TAG_ Derive Octave platform tag from computer('arch') string.
+%   Returns the same tag as get_octave_platform_tag() in install.m.
+%   Kept inline here so build_mex.m remains self-contained.
+%
+%   Rules (applied to lowercase arch string):
+%     darwin  + aarch64/arm64  -> 'macos-arm64'
+%     darwin  (other)          -> 'macos-x86_64'
+%     linux                    -> 'linux-x86_64'
+%     mingw / w64              -> 'windows-x86_64'
+%     unrecognized             -> 'unknown'
+    arch     = lower(arch_raw);
+    isDarwin = ~isempty(strfind(arch, 'darwin'));
+    isLinux  = ~isempty(strfind(arch, 'linux'));
+    isWin    = ~isempty(strfind(arch, 'mingw')) || ~isempty(strfind(arch, 'w64'));
+    isArm    = ~isempty(strfind(arch, 'aarch64')) || ~isempty(strfind(arch, 'arm64'));
+    if isDarwin && isArm
+        tag = 'macos-arm64';
+    elseif isDarwin
+        tag = 'macos-x86_64';
+    elseif isLinux
+        tag = 'linux-x86_64';
+    elseif isWin
+        tag = 'windows-x86_64';
+    else
+        tag = 'unknown';
     end
 end

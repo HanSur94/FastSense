@@ -24,9 +24,12 @@ jobs:
         with:
           path: |
             libs/FastSense/private/*.mex
+            libs/FastSense/private/octave-linux-x86_64/*.mex
+            libs/FastSense/octave-linux-x86_64/*.mex
             libs/SensorThreshold/private/*.mex
+            libs/SensorThreshold/private/octave-linux-x86_64/*.mex
             libs/FastSense/mksqlite.mex
-          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
+          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m', 'libs/FastSense/private/.mex-version') }}
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
@@ -38,6 +41,9 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: |
             libs/FastSense/private/*.mex
+            libs/FastSense/private/octave-linux-x86_64/*.mex
+            libs/FastSense/octave-linux-x86_64/*.mex
             libs/SensorThreshold/private/*.mex
+            libs/SensorThreshold/private/octave-linux-x86_64/*.mex
             libs/FastSense/mksqlite.mex
           retention-days: 1
