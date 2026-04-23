@@ -44,6 +44,7 @@ Users can organize complex dashboards into navigable sections and pop out any wi
 - ✓ Tag-based domain model: unified `Tag` foundation, `TagRegistry`, `MonitorTag` derived time-series, `CompositeTag` aggregation — v2.0
 - ✓ Events attached to tags with FastSense overlay rendering — v2.0
 - ✓ Tag ingestion pipeline: raw `.csv`/`.txt`/`.dat` → per-tag `.mat` via `BatchTagPipeline` + `LiveTagPipeline`; `SensorTag`/`StateTag` gain `RawSource` NV-pair — validated in Phase 1012
+- ✓ Prebuilt MEX binaries shipped for macOS ARM64; `.mex-version` stamp gates rebuild; `refresh-mex-binaries.yml` CI produces binaries for 7 platform×runtime combos; 5 existing CI workflows reuse committed binaries — validated in Phase 1013 (MATLAB-side + Windows/Linux verification deferred to HUMAN-UAT)
 
 ## Current State
 
@@ -137,4 +138,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-22 — Phase 1012 Tag Pipeline complete*
+*Last updated: 2026-04-23 — Phase 1013 Prebuilt MEX Binaries complete (HUMAN-UAT pending MATLAB/Windows/Linux)*
