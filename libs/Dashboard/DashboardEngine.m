@@ -491,19 +491,30 @@ classdef DashboardEngine < handle
                     % export of UI-component figures.
                     exportapp(obj.hFigure, filepath);
                 elseif useExportGraphics
-                    % MATLAB R2020a-R2023b headless path. exportgraphics
-                    % explicitly supports -nodisplay mode (unlike print).
-                    % ContentType='image' forces raster output (PNG/JPEG).
-                    % Resolution=150 matches the -r150 used by the legacy
-                    % print() path for visual parity.
-                    %
-                    % Fall back to print() if exportgraphics still rejects
-                    % the figure after the visibility toggle + stub axes.
+                    % MATLAB R2020a-R2023b headless path. Three-tier
+                    % fallback: exportgraphics -> print -> getframe.
+                    % R2020b headless CI rejects the first two with
+                    % "Specified handle is not valid for export" on
+                    % uipanel-only figures even with a stub axes; the
+                    % getframe+imwrite path always works when the
+                    % figure has rendered at least once.
+                    wrote = false;
                     try
                         exportgraphics(obj.hFigure, filepath, ...
                             'ContentType', 'image', 'Resolution', 150);
+                        wrote = true;
                     catch
-                        print(obj.hFigure, devFlag, '-r150', filepath);
+                    end
+                    if ~wrote
+                        try
+                            print(obj.hFigure, devFlag, '-r150', filepath);
+                            wrote = true;
+                        catch
+                        end
+                    end
+                    if ~wrote
+                        frame = getframe(obj.hFigure);
+                        imwrite(frame.cdata, filepath);
                     end
                 else
                     % Octave path (print) — stub axes already inserted above.
