@@ -26,8 +26,11 @@ classdef TestTag < matlab.unittest.TestCase
     methods (Test)
 
         function testConstructorRequiresKey(testCase)
-            % Key must be non-empty char.
-            testCase.verifyError(@() MockTag(), 'Tag:invalidKey');
+            % Key must be non-empty char. Empty-string key must throw
+            % Tag:invalidKey. (Calling MockTag() with zero args would fail
+            % in the MockTag constructor forwarding line with MATLAB:minrhs
+            % before reaching Tag's nargin<1 check — not a meaningful
+            % contract probe, so we only exercise the empty-string case.)
             testCase.verifyError(@() MockTag(''), 'Tag:invalidKey');
         end
 
