@@ -297,7 +297,7 @@ None yet.
 | 260405-oqu | Create 4 dedicated widget example scripts (iconcard, chipbar, sparkline, divider) | 2026-04-05 | 1f53bca | [260405-oqu-create-5-dedicated-widget-example-script](./quick/260405-oqu-create-5-dedicated-widget-example-script/) |
 | 260405-ovf | Update README based on research of 12 highly-starred open-source projects | 2026-04-05 | 144fbb2 | [260405-ovf-update-project-readme-based-on-research-](./quick/260405-ovf-update-project-readme-based-on-research-/) |
 | 260405-plc | Change DashboardToolbar Edit button to open source file in MATLAB editor | 2026-04-05 | 5188b04 | [260405-plc-change-the-edit-button-of-dashboardengin](./quick/260405-plc-change-the-edit-button-of-dashboardengin/) |
-| 260423-s4s | Auto-trigger refresh-mex-binaries.yml on mex_stamp.m formula changes | 2026-04-23 | pending | [260423-s4s-auto-trigger-refresh-mex-binaries-yml-on](./quick/260423-s4s-auto-trigger-refresh-mex-binaries-yml-on/) |
+| 260423-s4s | Auto-trigger refresh-mex-binaries.yml on mex_stamp.m formula changes | 2026-04-23 | 1d65e48 | [260423-s4s-auto-trigger-refresh-mex-binaries-yml-on](./quick/260423-s4s-auto-trigger-refresh-mex-binaries-yml-on/) |
 
 ## Session Continuity
 
