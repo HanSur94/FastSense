@@ -954,9 +954,16 @@ classdef DashboardEngine < handle
             % (PostSet listeners on Sensor.X/Y do not fire reliably in Octave for indexed assignment)
             for i = 1:numel(ws)
                 w = ws{i};
-                if ~isempty(w.Sensor) || ~isempty(w.Tag)
-                    w.markDirty();
-                end
+                % Mark every widget dirty on every live tick. The previous
+                % guard (`~isempty(w.Sensor) || ~isempty(w.Tag)`) skipped
+                % Threshold-bound widgets (MonitorTag-backed StatusWidget /
+                % IconCardWidget), Sensors-plural MultiStatusWidget,
+                % ChipBarWidget (per-chip StatusFcn), and any widget using
+                % StatusFcn / ValueFcn / DataFcn — so their dots / labels
+                % never moved once the initial render was done. Tick
+                % everything; the widget-local refresh() decides whether
+                % anything actually needs redrawing.
+                w.markDirty();
                 % Dead-handle recovery: panel was destroyed (e.g. by a layout bug or
                 % figure-close race). Drop Realized so the next scroll-realize pass
                 % can rebuild it, and skip this tick.
