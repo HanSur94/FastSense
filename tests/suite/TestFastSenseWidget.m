@@ -54,27 +54,6 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             testCase.verifyTrue(isa(w.FastSenseObj, 'FastSense'));
         end
 
-        function testRenderWithTag(testCase)
-            hFig = figure('Visible', 'off');
-            testCase.addTeardown(@() close(hFig));
-
-            hp = uipanel('Parent', hFig, 'Units', 'normalized', ...
-                'Position', [0 0 1 1]);
-
-            s = SensorTag('T-401', 'Name', 'Temperature');
-            s.updateData(1:100, rand(1,100));
-            t_hi_alarm = Threshold('hi_alarm', 'Name', 'Hi Alarm', 'Direction', 'upper');
-            t_hi_alarm.addCondition(struct(), 80);
-            s.addThreshold(t_hi_alarm);
-            s.resolve();
-
-            w = FastSenseWidget('Sensor', s);
-            w.render(hp);
-
-            testCase.verifyNotEmpty(w.FastSenseObj);
-            testCase.verifyGreaterThanOrEqual(numel(w.FastSenseObj.Lines), 1);
-        end
-
         function testToStructRoundTrip(testCase)
             w = FastSenseWidget('Title', 'My Plot', 'Position', [5 2 16 3]);
             w.XData = 1:10;

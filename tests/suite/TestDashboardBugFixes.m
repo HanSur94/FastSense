@@ -261,7 +261,7 @@ classdef TestDashboardBugFixes < matlab.unittest.TestCase
 
             % Trigger PostSet listener by assigning new data
             try
-                s_y_ = rand(1, 10);
+                s.updateData(1:10, rand(1, 10));
                 testCase.verifyTrue(w.Dirty, ...
                     'PostSet listener should mark widget dirty when sensor Y changes');
             catch

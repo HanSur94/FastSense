@@ -121,8 +121,14 @@ classdef DashboardBuilder < handle
             obj.DragMode = '';
 
             hFig = obj.Engine.hFigure;
-            set(hFig, 'WindowButtonMotionFcn', obj.OldMotionFcn);
-            set(hFig, 'WindowButtonUpFcn', obj.OldButtonUpFcn);
+            % FIX: guard first before any `set` calls. If the figure was
+            % deleted externally, downstream cleanup (safeDelete, clear*)
+            % still runs since those are handle-safe; we only skip set()
+            % on an invalid handle.
+            if ~isempty(hFig) && ishandle(hFig)
+                set(hFig, 'WindowButtonMotionFcn', obj.OldMotionFcn);
+                set(hFig, 'WindowButtonUpFcn', obj.OldButtonUpFcn);
+            end
             obj.OldMotionFcn = '';
             obj.OldButtonUpFcn = '';
 
