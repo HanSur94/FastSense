@@ -90,6 +90,13 @@ classdef FastSenseWidget < DashboardWidget
             % (697000..769000 ≈ 1910-2100). No explicit XType handoff
             % needed here.
 
+            % Apply thresholds — must be BEFORE fp.render() (FastSense
+            % rejects addThreshold calls after render). Accepted forms:
+            %   'auto'                     — no-op (default)
+            %   numeric scalar/vector      — one upper threshold per value
+            %   cell of structs            — {struct('Value',..,'Direction',..,'Label',..), ...}
+            applyThresholds_(fp, obj.Thresholds);
+
             % Set title and axis labels
             if ~isempty(obj.Title)
                 title(ax, obj.Title, 'Color', get(ax, 'XColor'));
@@ -420,6 +427,46 @@ classdef FastSenseWidget < DashboardWidget
             end
             if isfield(s, 'showThresholdLabels')
                 obj.ShowThresholdLabels = s.showThresholdLabels;
+            end
+        end
+    end
+end
+
+function applyThresholds_(fp, spec)
+    %APPLYTHRESHOLDS_ Push a Thresholds spec into a FastSense instance.
+    %   Accepts 'auto' / [] (no-op), numeric scalar/vector (upper lines),
+    %   or a cell of structs with fields Value / Direction / Label.
+    if isempty(spec)
+        return;
+    end
+    if ischar(spec) || (isstring(spec) && isscalar(spec))
+        % 'auto' (or any other string) means "no thresholds wired".
+        return;
+    end
+    if isnumeric(spec)
+        for i = 1:numel(spec)
+            fp.addThreshold(spec(i), 'Direction', 'upper');
+        end
+        return;
+    end
+    if iscell(spec)
+        for i = 1:numel(spec)
+            e = spec{i};
+            if ~isstruct(e) || ~isfield(e, 'Value')
+                continue;
+            end
+            dir = 'upper';
+            if isfield(e, 'Direction') && ~isempty(e.Direction)
+                dir = e.Direction;
+            end
+            lbl = '';
+            if isfield(e, 'Label') && ~isempty(e.Label)
+                lbl = e.Label;
+            end
+            if isempty(lbl)
+                fp.addThreshold(e.Value, 'Direction', dir);
+            else
+                fp.addThreshold(e.Value, 'Direction', dir, 'Label', lbl);
             end
         end
     end
