@@ -87,7 +87,9 @@ function test_mex_prebuilt()
     else
         restore_file_(stamp_file, old_stamp, stamp_existed);
         setenv('FASTSENSE_SKIP_BUILD', old_env);
-        fprintf('SKIP section 4 (testNeedsBuildFalseWhenMatch): no committed sentinel for this platform at %s — expected pre-refresh-mex-binaries.yml first run\n', sentinel);
+        fprintf(['SKIP section 4 (testNeedsBuildFalseWhenMatch): no committed ' ...
+            'sentinel for this platform at %s -- expected pre refresh-mex-' ...
+            'binaries.yml first run\n'], sentinel);
     end
 
     % ------------------------------------------------------------------
@@ -116,7 +118,9 @@ function test_mex_prebuilt()
     else
         restore_file_(stamp_file, old_stamp, stamp_existed);
         setenv('FASTSENSE_SKIP_BUILD', old_env);
-        fprintf('SKIP section 5 (testNeedsBuildTrueWhenMismatch): no committed sentinel for this platform at %s — expected pre-refresh-mex-binaries.yml first run\n', sentinel);
+        fprintf(['SKIP section 5 (testNeedsBuildTrueWhenMismatch): no committed ' ...
+            'sentinel for this platform at %s -- expected pre refresh-mex-' ...
+            'binaries.yml first run\n'], sentinel);
     end
 
     % ------------------------------------------------------------------
