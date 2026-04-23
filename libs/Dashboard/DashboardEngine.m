@@ -1277,9 +1277,28 @@ classdef DashboardEngine < handle
             set(obj.hTimeEnd, 'String', obj.formatTimeVal(tEnd));
         end
 
+    end
+
+    methods (Access = public)
+
         function str = formatTimeVal(~, t)
-            % Detect datenum (modern dates are > 700000)
-            if t > 700000
+        %FORMATTIMEVAL Format a numeric time value as a human-readable string.
+        %   Supports three numeric ranges:
+        %     posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
+        %     MATLAB datenum (t > 700000, not posix) — uses datestr directly
+        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix
+        %
+        %   The posix bracket is evaluated BEFORE the datenum bracket because
+        %   posix seconds for modern dates (year 2001-2128) are also > 700000
+        %   and would be wrongly interpreted as datenums without this ordering.
+            % Order matters: posix epoch seconds (year 2000-2128) are > 700000,
+            % so the posix bracket must be evaluated BEFORE the datenum bracket.
+            if t > 9e8 && t < 5e9
+                % Posix epoch seconds (year ~2000 - 2128)
+                str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
+                              'yyyy-mm-dd HH:MM');
+            elseif t > 700000
+                % MATLAB datenum (days since year 0000)
                 if t > 730000
                     str = datestr(t, 'yyyy-mm-dd HH:MM');
                 else
@@ -1298,6 +1317,10 @@ classdef DashboardEngine < handle
                 end
             end
         end
+
+    end
+
+    methods (Access = private)
 
         function onLiveTimerError(obj, ~, eventData)
         %ONLIVETIMERROR Handle errors that escape onLiveTick.
