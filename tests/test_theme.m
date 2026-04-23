@@ -3,10 +3,10 @@ function test_theme()
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
 
-    % testDefaultPreset
+    % testDefaultPreset — 'default' is a legacy alias for 'light'
     t = FastSenseTheme('default');
     assert(isstruct(t), 'testDefaultPreset: must return struct');
-    assert(isequal(t.Background, [1 1 1]), 'testDefaultPreset: Background');
+    assert(all(t.Background > [0.9 0.9 0.9]), 'testDefaultPreset: Background (aliased to light)');
     assert(isfield(t, 'AxesColor'), 'testDefaultPreset: AxesColor field');
     assert(isfield(t, 'ForegroundColor'), 'testDefaultPreset: ForegroundColor field');
     assert(isfield(t, 'GridColor'), 'testDefaultPreset: GridColor field');
@@ -33,7 +33,7 @@ function test_theme()
     t = FastSenseTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
     assert(t.FontSize == 14, 'testMergeOverrides: FontSize');
     assert(t.LineWidth == 2.0, 'testMergeOverrides: LineWidth');
-    assert(isequal(t.Background, [1 1 1]), 'testMergeOverrides: Background unchanged');
+    assert(all(t.Background > [0.9 0.9 0.9]), 'testMergeOverrides: Background unchanged (light)');
 
     % testInvalidPresetErrors
     threw = false;
@@ -55,24 +55,15 @@ function test_theme()
     assert(all(t.Background > [0.9 0.9 0.9]), 'testLightPreset: Background');
     assert(size(t.LineColorOrder, 2) == 3, 'testLightPreset: LineColorOrder Nx3');
 
-    % testIndustrialPreset
-    t = FastSenseTheme('industrial');
-    assert(t.LineWidth >= 1.0, 'testIndustrialPreset: LineWidth');
-    assert(size(t.LineColorOrder, 2) == 3, 'testIndustrialPreset: LineColorOrder Nx3');
-
-    % testScientificPreset
-    t = FastSenseTheme('scientific');
-    assert(strcmp(t.FontName, 'Times New Roman'), 'testScientificPreset: FontName');
-    assert(t.GridAlpha == 0, 'testScientificPreset: no grid');
-    assert(t.LineWidth < 1.0, 'testScientificPreset: thin lines');
-    assert(size(t.LineColorOrder, 2) == 3, 'testScientificPreset: LineColorOrder Nx3');
-
-    % testOceanPreset
-    t = FastSenseTheme('ocean');
-    assert(isequal(t.Background, [1 1 1]), 'testOceanPreset: Background should be white');
-    assert(isequal(t.AxesColor, [1 1 1]), 'testOceanPreset: AxesColor should be white');
-    assert(size(t.LineColorOrder, 2) == 3, 'testOceanPreset: LineColorOrder Nx3');
-    assert(size(t.LineColorOrder, 1) == 8, 'testOceanPreset: 8 colors');
+    % testLegacyPresetAliasing — industrial/scientific/ocean all alias to 'light'
+    tLight = FastSenseTheme('light');
+    for legacy = {'industrial', 'scientific', 'ocean'}
+        t = FastSenseTheme(legacy{1});
+        assert(isequal(t.Background, tLight.Background), ...
+            sprintf('testLegacyPresetAliasing: %s -> light Background', legacy{1}));
+        assert(size(t.LineColorOrder, 2) == 3, ...
+            sprintf('testLegacyPresetAliasing: %s LineColorOrder Nx3', legacy{1}));
+    end
 
     % testStructAsPreset
     custom = struct('Background', [0 0 0], 'FontSize', 16);
@@ -90,5 +81,5 @@ function test_theme()
     t = FastSenseTheme('default', 'LineColorOrder', customColors);
     assert(isequal(t.LineColorOrder, customColors), 'testCustomPaletteMatrix');
 
-    fprintf('    All 12 theme tests passed.\n');
+    fprintf('    All theme tests passed.\n');
 end
