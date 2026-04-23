@@ -161,6 +161,8 @@ classdef IconCardWidget < DashboardWidget
                     v = obj.Tag.valueAt(now);
                     if ~isempty(v) && ~any(isnan(v))
                         obj.CurrentValue = v;
+                    elseif isprop(obj.Tag, 'Y') && ~isempty(obj.Tag.Y)
+                        obj.CurrentValue = obj.Tag.Y(end);
                     end
                     if isempty(obj.Units) && isprop(obj.Tag, 'Units') && ~isempty(obj.Tag.Units)
                         obj.Units = obj.Tag.Units;
