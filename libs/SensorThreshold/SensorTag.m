@@ -267,7 +267,12 @@ classdef SensorTag < Tag
             obj.X_ = X;
             obj.Y_ = Y;
             obj.notifyListeners_();
-            notify(obj, 'DataChanged');
+            % notify() is MATLAB-only; Octave hasn't implemented it.
+            % Widget wiring via addlistener falls back to the explicit
+            % invalidate() path on Octave.
+            if exist('OCTAVE_VERSION', 'builtin') == 0
+                notify(obj, 'DataChanged');
+            end
         end
     end
 

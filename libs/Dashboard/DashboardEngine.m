@@ -485,8 +485,18 @@ classdef DashboardEngine < handle
                     % ContentType='image' forces raster output (PNG/JPEG).
                     % Resolution=150 matches the -r150 used by the legacy
                     % print() path for visual parity.
-                    exportgraphics(obj.hFigure, filepath, ...
-                        'ContentType', 'image', 'Resolution', 150);
+                    %
+                    % Some MATLAB versions/headless modes reject
+                    % uipanel-only figures even with a stub axes ("handle
+                    % is not valid for export"). Fall back to print() in
+                    % that case — the stub axes makes print's
+                    % uipanel-recursion limitation a non-issue.
+                    try
+                        exportgraphics(obj.hFigure, filepath, ...
+                            'ContentType', 'image', 'Resolution', 150);
+                    catch
+                        print(obj.hFigure, devFlag, '-r150', filepath);
+                    end
                 else
                     % Octave path (print) — stub axes already inserted above.
                     print(obj.hFigure, devFlag, '-r150', filepath);
@@ -1037,11 +1047,13 @@ classdef DashboardEngine < handle
         end
     end
 
-    methods (Hidden, Access = {?matlab.unittest.TestCase})
+    methods (Hidden)
         function triggerTimeSlidersChangedForTest(obj)
         %TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
         %   callback without going through UI events. Exposes the private
-        %   onTimeSlidersChanged() debounce path to TestCase subclasses.
+        %   onTimeSlidersChanged() debounce path to tests.
+        %   (Hidden, not the narrower Access = {?matlab.unittest.TestCase},
+        %   so Octave parsing survives — Octave has no matlab.unittest.)
             obj.onTimeSlidersChanged();
         end
     end

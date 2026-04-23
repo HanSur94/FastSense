@@ -594,12 +594,14 @@ classdef FastSenseDataStore < handle
         end
     end
 
-    methods (Hidden, Access = {?matlab.unittest.TestCase})
+    methods (Hidden)
         function ensureOpenForTest(obj)
         %ENSUREOPENFORTEST Test-only hook to force-reopen the DB handle.
         %   Exposes the private ensureOpen() lifecycle helper so WAL-mode
         %   tests can query journal_mode via mksqlite(DbId, ...) without
-        %   hitting MethodRestricted.
+        %   hitting MethodRestricted. Hidden (rather than narrower
+        %   Access = {?matlab.unittest.TestCase}) so Octave parsing
+        %   survives — Octave has no matlab.unittest.
             obj.ensureOpen();
         end
     end
