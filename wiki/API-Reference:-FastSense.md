@@ -642,6 +642,15 @@ CLEARMONITOR Delete a cached MonitorTag row by key.
 
 CLEANUP Close the database and delete temp files.
 
+#### `ensureOpenForTest(obj)`
+
+ENSUREOPENFORTEST Test-only hook to force-reopen the DB handle.
+  Exposes the private ensureOpen() lifecycle helper so WAL-mode
+  tests can query journal_mode via mksqlite(DbId, ...) without
+  hitting MethodRestricted. Hidden (rather than narrower
+  Access = {?matlab.unittest.TestCase}) so Octave parsing
+  survives — Octave has no matlab.unittest.
+
 ### Static Methods
 
 #### `FastSenseDataStore.c = toCategorical(s)`

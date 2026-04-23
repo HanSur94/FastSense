@@ -161,6 +161,14 @@ MARKALLDIRTY Flag all widgets as needing refresh.
 
 ONRESIZE Handle figure resize: reposition all widget panels.
 
+#### `triggerTimeSlidersChangedForTest(obj)`
+
+TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
+  callback without going through UI events. Exposes the private
+  onTimeSlidersChanged() debounce path to tests.
+  (Hidden, not the narrower Access = {?matlab.unittest.TestCase},
+  so Octave parsing survives — Octave has no matlab.unittest.)
+
 ### Static Methods
 
 #### `DashboardEngine.types = widgetTypes()`
