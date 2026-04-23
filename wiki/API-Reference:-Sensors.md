@@ -2,6 +2,64 @@
 
 # API Reference: Sensors
 
+## `BatchTagPipeline` --- Synchronous raw-data -> per-tag .mat pipeline.
+
+> Inherits from: `handle`
+
+Enumerates TagRegistry for ingestable tags (SensorTag/StateTag
+  with a non-empty RawSource), de-duplicates file reads, parses
+  each raw file once, slices the requested column per tag, and
+  writes <OutputDir>/<tag.Key>.mat in the SensorTag.load shape.
+
+  Batch semantics (D-12, D-15, D-18):
+    - OutputDir required at construction; auto-created if missing.
+    - run() returns a report struct; throws TagPipeline:ingestFailed
+      at end-of-run if any tag failed.
+    - Each tag's ingest is a try/catch boundary; one failing tag
+      does NOT abort the batch.
+
+  Observability (Major-2 / revision-1):
+    - LastFileParseCount: public SetAccess=private property
+      recording the number of DISTINCT raw files parsed in the
+      most recent run(). Captured BEFORE the end-of-run cache
+      reset. Enables testFileCacheDedup to assert exact dedup
+      without wrapping readRawDelimited_ (blocked by MATLAB's
+      private-folder scoping).
+
+  Errors (namespaced under TagPipeline:*):
+    TagPipeline:invalidOutputDir      -- OutputDir missing / empty
+    TagPipeline:cannotCreateOutputDir -- mkdir failed
+    TagPipeline:ingestFailed          -- 1+ tags failed (end-of-run throw)
+    TagPipeline:unknownExtension      -- file ext not .csv/.txt/.dat
+
+### Constructor
+
+```matlab
+obj = BatchTagPipeline(varargin)
+```
+
+BATCHTAGPIPELINE Construct with required OutputDir NV-pair.
+  p = BatchTagPipeline('OutputDir', dir)
+  p = BatchTagPipeline('OutputDir', dir, 'Verbose', true)
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| OutputDir | `''` |  |
+| Verbose | `false` |  |
+
+### Methods
+
+#### `report = run(obj)`
+
+RUN Enumerate tags, ingest each, write per-tag .mat; throw at end if any failed.
+  Returns a report struct with fields:
+    succeeded - cellstr of tag keys that wrote OK
+    failed    - struct array of failed tags (key, file, errorId, message)
+
+---
+
 ## `CompositeTag` --- Aggregate MonitorTag/CompositeTag children into a 0/1 derived series.
 
 > Inherits from: `Tag`
@@ -217,6 +275,82 @@ FROMSTRUCT Pass-1 reconstruction from a toStruct output.
   `ChildKeys_` + `ChildWeights_` for Pass-2 `resolveRefs` to
   consume.  UserFn is NOT restored -- consumers re-bind it
   after loadFromStructs for 'user_fn' mode.
+
+---
+
+## `LiveTagPipeline` --- Timer-driven raw-data -> per-tag .mat pipeline.
+
+> Inherits from: `handle`
+
+Mirrors MatFileDataSource's modTime + lastIndex state machine
+  over raw text files. Does NOT subclass LiveEventPipeline (D-14)
+  -- borrows the timer ergonomics only.
+
+  Live semantics (D-13, D-14, D-18):
+    - Each tick re-enumerates TagRegistry, stats each tag's RawSource.file.
+    - Files with advanced mtime are re-parsed ONCE (per-tick file cache).
+    - New rows (lastIndex+1 : total) are appended to <OutputDir>/<tag.Key>.mat.
+    - Append uses load->concat->save (Pitfall 2 guard); the writer
+      never uses the dash-append flag of save (which would clobber
+      the existing `data` variable rather than merge its fields).
+    - Per-tag try/catch: one tag's failure does NOT abort the tick.
+    - tagState_ entries GC'd each tick for tags no longer eligible.
+
+  Observability (Major-2 / revision-1):
+    - LastFileParseCount: public SetAccess=private property recording the
+      number of DISTINCT files parsed in the most recent tick. Captured
+      BEFORE the per-tick tickCache goes out of scope. Mirrors
+      BatchTagPipeline's mechanism so tests can assert dedup behavior
+      via direct property read rather than wrapping readRawDelimited_.
+
+  Shares readRawDelimited_ / selectTimeAndValue_ / writeTagMat_ with
+  BatchTagPipeline -- single source of truth for parse + shape + write.
+
+### Constructor
+
+```matlab
+obj = LiveTagPipeline(varargin)
+```
+
+LIVETAGPIPELINE Construct with OutputDir (required) + options.
+  p = LiveTagPipeline('OutputDir', dir)
+  p = LiveTagPipeline('OutputDir', dir, 'Interval', 5, 'Verbose', true)
+  p = LiveTagPipeline('OutputDir', dir, 'ErrorFcn', @(ex) ...)
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| OutputDir | `''` |  |
+| Interval | `15` | seconds |
+| Status | `'stopped'` | 'stopped' \| 'running' \| 'error' |
+| ErrorFcn | `[]` | optional @(ex) callback for tick-level errors |
+| Verbose | `false` |  |
+
+### Methods
+
+#### `start(obj)`
+
+START Launch the polling timer and set Status='running'.
+
+#### `stop(obj)`
+
+STOP Halt the polling timer; mirrors the pattern used by the
+  live-event pipeline class in libs/EventDetection/.
+  Pitfall 8 -- guard with isvalid + try/catch so stop()
+  during an in-flight tick doesn't cascade errors.
+
+#### `tickOnce(obj)`
+
+TICKONCE Run one tick synchronously (exposed for tests).
+  Production callers use start()/stop(); tests call this
+  to avoid pausing for timer intervals.
+
+#### `n = get()`
+
+GET.TAGSTATECOUNT Dependent property exposing tagState_.Count.
+  RESEARCH Q3 observability -- lets tests verify that entries
+  for unregistered tags are GC'd between ticks.
 
 ---
 
@@ -466,6 +600,13 @@ GET.THRESHOLDS Always empty cell array (backward-compat stub).
   branch. Consumers should migrate to the TagRegistry +
   MonitorTag workflow for threshold behaviour.
 
+#### `r = get()`
+
+GET.RAWSOURCE Return the raw-data source binding (read-only view).
+  Populated only for SensorTags whose 'RawSource' NV-pair was
+  set at construction. Consumed by BatchTagPipeline /
+  LiveTagPipeline to locate the raw file + column for this tag.
+
 #### `[X, Y] = getXY(obj)`
 
 GETXY Return X, Y by reference (zero-copy via COW).
@@ -566,10 +707,11 @@ StateTag models a piecewise-constant ("zero-order hold") time
 obj = StateTag(key, varargin)
 ```
 
-STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y.
-  Valid name-value keys: 'X', 'Y', plus Tag universals (Name,
-  Units, Description, Labels, Metadata, Criticality, SourceRef).
+STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y + RawSource.
+  Valid name-value keys: 'X', 'Y', 'RawSource', plus Tag universals
+  (Name, Units, Description, Labels, Metadata, Criticality, SourceRef).
   Raises StateTag:unknownOption for unrecognized or dangling keys.
+  Raises TagPipeline:invalidRawSource if RawSource is malformed.
 
 ### Properties
 
@@ -579,6 +721,13 @@ STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y.
 | Y | `[]` | 1xN numeric OR 1xN cell of char: state values |
 
 ### Methods
+
+#### `r = get()`
+
+GET.RAWSOURCE Return the raw-data source binding (read-only view).
+  Populated only for StateTags whose 'RawSource' NV-pair was
+  set at construction. Consumed by BatchTagPipeline /
+  LiveTagPipeline to locate the raw file + column for this tag.
 
 #### `[X, Y] = getXY(obj)`
 

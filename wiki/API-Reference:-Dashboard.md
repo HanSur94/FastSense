@@ -55,6 +55,12 @@ GETCACHEDTHEME Return cached theme struct, recomputing only when Theme changes.
 
 #### `stopLive(obj)`
 
+Clear IsLive FIRST so any in-flight onLiveTimerError callback
+does not re-`start(obj.LiveTimer)` on the timer we are about to
+delete (observed on CI as a runaway 500k+ stderr loop in
+testTimerContinuesAfterError). Then stop/delete the timer with
+isvalid + try/catch guards, matching LiveTagPipeline.stop().
+
 #### `save(obj, filepath)`
 
 #### `exportScript(obj, filepath)`

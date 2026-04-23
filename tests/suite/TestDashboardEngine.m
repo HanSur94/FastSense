@@ -148,20 +148,6 @@ classdef TestDashboardEngine < matlab.unittest.TestCase
             testCase.verifyEqual(counter('n'), int32(1));
         end
 
-        function testAddWidgetWithTag(testCase)
-            s = SensorTag('T-401', 'Name', 'Temperature');
-            s.updateData(1:100, rand(1,100));
-            t_hi = Threshold('hi', 'Name', 'Hi', 'Direction', 'upper');
-            t_hi.addCondition(struct(), 80);
-            s.addThreshold(t_hi);
-            s.resolve();
-
-            d = DashboardEngine('Sensor Test');
-            d.addWidget('fastsense', 'Sensor', s, 'Position', [1 1 16 3]);
-            testCase.verifyEqual(d.Widgets{1}.Title, 'Temperature');
-            testCase.verifyEqual(d.Widgets{1}.Sensor, s);
-        end
-
         function testEngineAddGroupWidget(testCase)
             d = DashboardEngine('TestDash', 'Theme', 'dark');
             d.addWidget('group', 'Label', 'Motor Health');

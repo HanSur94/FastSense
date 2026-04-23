@@ -42,3 +42,6 @@
 __pycache__/
 wiki-gen-summary.md
 .claude/worktrees/
+.planning/
+.superpowers/
+docs/superpowers/

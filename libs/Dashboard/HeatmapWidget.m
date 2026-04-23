@@ -33,6 +33,12 @@ classdef HeatmapWidget < DashboardWidget
                 'XColor', theme.AxisColor, ...
                 'YColor', theme.AxisColor);
 
+            if ~isempty(obj.Title)
+                title(obj.hAxes, obj.Title, ...
+                    'Color', theme.ForegroundColor, ...
+                    'FontSize', theme.WidgetTitleFontSize);
+            end
+
             obj.refresh();
         end
 

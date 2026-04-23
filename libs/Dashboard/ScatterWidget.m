@@ -29,6 +29,11 @@ classdef ScatterWidget < DashboardWidget
                 'Color', theme.WidgetBackground, ...
                 'XColor', theme.AxisColor, ...
                 'YColor', theme.AxisColor);
+            if ~isempty(obj.Title)
+                title(obj.hAxes, obj.Title, ...
+                    'Color', theme.ForegroundColor, ...
+                    'FontSize', theme.WidgetTitleFontSize);
+            end
             obj.refresh();
         end
 
@@ -60,6 +65,16 @@ classdef ScatterWidget < DashboardWidget
                     'LineStyle', 'none', ...
                     'Marker', '.', ...
                     'MarkerSize', obj.MarkerSize);
+            end
+
+            % Auto-derive axis labels from SensorX/SensorY if present.
+            if ~isempty(obj.SensorX)
+                xl = obj.axisLabelForSensor_(obj.SensorX);
+                if ~isempty(xl), xlabel(obj.hAxes, xl); end
+            end
+            if ~isempty(obj.SensorY)
+                yl = obj.axisLabelForSensor_(obj.SensorY);
+                if ~isempty(yl), ylabel(obj.hAxes, yl); end
             end
         end
 
@@ -103,6 +118,30 @@ classdef ScatterWidget < DashboardWidget
             end
             if ~isempty(obj.SensorColor)
                 s.sensorColor = obj.SensorColor.Key;
+            end
+        end
+    end
+
+    methods (Access = private)
+        function lbl = axisLabelForSensor_(~, s)
+        %AXISLABELFORSENSOR_ Build "Name (Units)" label with graceful fallbacks.
+            lbl = '';
+            if isempty(s), return; end
+            name = '';
+            if isprop(s, 'Name') && ~isempty(s.Name)
+                name = s.Name;
+            elseif isprop(s, 'Key') && ~isempty(s.Key)
+                name = s.Key;
+            end
+            if isempty(name), return; end
+            units = '';
+            if isprop(s, 'Units') && ~isempty(s.Units)
+                units = s.Units;
+            end
+            if isempty(units)
+                lbl = name;
+            else
+                lbl = sprintf('%s (%s)', name, units);
             end
         end
     end

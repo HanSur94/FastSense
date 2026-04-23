@@ -195,14 +195,14 @@ classdef TestMonitorTagEvents < matlab.unittest.TestCase
 
         % ---- Source-file gates ----
 
-        function testCarrierPatternNoTagKeys(testCase)
-            here = fileparts(mfilename('fullpath'));
-            repo = fileparts(fileparts(here));
-            src  = fileread(fullfile(repo, 'libs', 'SensorThreshold', 'MonitorTag.m'));
-            matches = regexp(src, '\.TagKeys', 'match');
-            testCase.verifyEmpty(matches, ...
-                'Pitfall 5: Event.TagKeys does not exist pre-Phase-1010; use SensorName+ThresholdLabel.');
-        end
+        % testCarrierPatternNoTagKeys removed 2026-04-23 (Phase 1014-07):
+        % Phase 1010 (EVENT-01) legitimately added `ev.TagKeys = {...}`
+        % writes to MonitorTag.m (see lines ~617 and ~727 -- "Phase 1010
+        % (EVENT-01): TagKeys + EventBinding after append"). The Pitfall-5
+        % pre-Phase-1010 invariant this test guarded is no longer a
+        % product constraint. testClassHeaderDocumentsCarrier below still
+        % enforces the SensorName+ThresholdLabel carrier fields for
+        % backward compatibility.
 
         function testClassHeaderDocumentsCarrier(testCase)
             here = fileparts(mfilename('fullpath'));

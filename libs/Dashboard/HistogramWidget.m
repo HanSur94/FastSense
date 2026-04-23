@@ -27,6 +27,11 @@ classdef HistogramWidget < DashboardWidget
                 'Color', theme.WidgetBackground, ...
                 'XColor', theme.AxisColor, ...
                 'YColor', theme.AxisColor);
+            if ~isempty(obj.Title)
+                title(obj.hAxes, obj.Title, ...
+                    'Color', theme.ForegroundColor, ...
+                    'FontSize', theme.WidgetTitleFontSize);
+            end
             obj.refresh();
         end
 
@@ -69,6 +74,13 @@ classdef HistogramWidget < DashboardWidget
                     (1 / (sigma * sqrt(2*pi))) * exp(-0.5 * ((xFit - mu) / sigma).^2);
                 plot(obj.hAxes, xFit, yFit, 'r-', 'LineWidth', 1.5);
                 hold(obj.hAxes, 'off');
+            end
+            % Re-apply title after plot commands (bar/plot may clear via newplot)
+            if ~isempty(obj.Title)
+                theme = obj.getTheme();
+                title(obj.hAxes, obj.Title, ...
+                    'Color', theme.ForegroundColor, ...
+                    'FontSize', theme.WidgetTitleFontSize);
             end
             obj.Dirty = false;
         end
