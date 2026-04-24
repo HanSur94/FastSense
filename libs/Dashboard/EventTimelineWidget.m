@@ -18,7 +18,6 @@ classdef EventTimelineWidget < DashboardWidget
         FilterSensors = {}   % Cell array of Sensor names to filter
         FilterTagKey  = ''   % Tag-key filter (MONITOR-05 carrier: SensorName OR ThresholdLabel match)
         ColorSource = 'event' % 'event' or 'theme'
-        EventMarkersVisible = true   % runtime toggle; when false, refresh() clears bars and skips redraw (not serialized)
     end
 
     properties (SetAccess = private)
@@ -91,9 +90,6 @@ classdef EventTimelineWidget < DashboardWidget
         end
 
         function refresh(obj)
-            if ~obj.EventMarkersVisible
-                return;
-            end
             events = obj.resolveEvents();
 
             if isempty(events) || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
@@ -163,26 +159,6 @@ classdef EventTimelineWidget < DashboardWidget
 
             % Reformat time-axis ticks to HH:MM:SS / MM:SS for readability.
             obj.formatTimeAxis_(obj.hAxes);
-        end
-
-        function setEventMarkersVisible(obj, tf)
-            %SETEVENTMARKERSVISIBLE Show or hide event bars in place.
-            %   Sets EventMarkersVisible and either clears existing hBars
-            %   (when false) or calls refresh() to redraw them (when true).
-            %   Runtime-only — never persisted via toStruct/fromStruct.
-            obj.EventMarkersVisible = logical(tf);
-            if ~obj.EventMarkersVisible
-                for i = 1:numel(obj.hBars)
-                    if ishandle(obj.hBars{i})
-                        delete(obj.hBars{i});
-                    end
-                end
-                obj.hBars = {};
-            else
-                if ~isempty(obj.hAxes) && ishandle(obj.hAxes)
-                    obj.refresh();
-                end
-            end
         end
 
         function t = getType(~)
