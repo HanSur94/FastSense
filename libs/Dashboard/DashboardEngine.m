@@ -24,6 +24,7 @@ classdef DashboardEngine < handle
         Theme        = 'light'
         LiveInterval = 5
         InfoFile     = ''
+        ProgressMode = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
     end
 
     properties (SetAccess = private)
@@ -56,6 +57,7 @@ classdef DashboardEngine < handle
         hTimeStart      = []
         hTimeEnd        = []
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
+        Progress_           = []   % DashboardProgress instance (active during render)
     end
 
     methods (Access = public)
@@ -272,9 +274,20 @@ classdef DashboardEngine < handle
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             obj.Layout.allocatePanels(obj.hFigure, obj.activePageWidgets(), themeStruct);
             obj.Layout.OnScrollCallback = @(r1, r2) obj.onScrollRealize(r1, r2);
+
+            % Progress-bar accounting covers only the active page — hidden
+            % pages keep their lazy-realization contract (realized on switch).
+            totalWidgets = numel(obj.activePageWidgets());
+            totalPages   = max(1, numel(obj.Pages));
+            obj.Progress_ = DashboardProgress(obj.Name, totalWidgets, totalPages, obj.ProgressMode);
+
             obj.realizeBatch(5);
 
-            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle
+            obj.Progress_.finish();
+            obj.Progress_ = [];
+
+            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle.
+            % Widgets stay unrealized until the user switches to the page.
             if numel(obj.Pages) > 1
                 for pgIdx = 1:numel(obj.Pages)
                     if pgIdx == obj.ActivePage
@@ -856,7 +869,16 @@ classdef DashboardEngine < handle
                     delete(w.hPanel);
                 end
             end
-            obj.Layout.createPanels(obj.hFigure, ws, theme);
+            totalPages = max(1, numel(obj.Pages));
+            obj.Progress_ = DashboardProgress(obj.Name, numel(ws), totalPages, obj.ProgressMode);
+            [pgIdx, pgName] = obj.activePageLabel();
+            obj.Layout.allocatePanels(obj.hFigure, ws, theme);
+            for i = 1:numel(ws)
+                obj.Layout.realizeWidget(ws{i});
+                obj.Progress_.tick(ws{i}, pgIdx, pgName);
+            end
+            obj.Progress_.finish();
+            obj.Progress_ = [];
             % Re-wire detach callback after panel recreation (Pitfall 3 in RESEARCH.md)
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
         end
@@ -954,13 +976,27 @@ classdef DashboardEngine < handle
                 end
             end
             order = [visible, offscreen];
+            [activePgIdx, activePgName] = obj.activePageLabel();
             for b = 1:batchSize:numel(order)
                 bEnd = min(b + batchSize - 1, numel(order));
                 for i = b:bEnd
                     obj.Layout.realizeWidget(ws{order(i)});
+                    if ~isempty(obj.Progress_)
+                        obj.Progress_.tick(ws{order(i)}, activePgIdx, activePgName);
+                    end
                 end
                 drawnow;
             end
+        end
+
+        function [idx, name] = activePageLabel(obj)
+        %ACTIVEPAGELABEL Index and name of the active page, or (1, '') if single-page.
+            if isempty(obj.Pages) || obj.ActivePage < 1
+                idx = 1; name = '';
+                return;
+            end
+            idx = obj.ActivePage;
+            name = obj.Pages{idx}.Name;
         end
 
         function onScrollRealize(obj, topRow, bottomRow)
