@@ -2294,198 +2294,80 @@ classdef FastSense < handle
         end
 
         function openEventDetails_(obj, ev)
-            %OPENEVENTDETAILS_ Open a floating uipanel showing every Event field.
-            %   Models DashboardLayout.openInfoPopup pattern but uses uipanel
-            %   inside obj.hFigure instead of a standalone figure. Installs
-            %   figure-level ESC + click-outside dismiss handlers; saves and
-            %   restores the prior WindowButtonDownFcn + WindowKeyPressFcn.
+            %OPENEVENTDETAILS_ Open a separate floating figure with event fields.
+            %   Phase 1012 refit: uses a standalone figure (not a uipanel) so the
+            %   OS provides native drag, native close button, and no uipanel
+            %   border rendering quirks. ESC still dismisses via WindowKeyPressFcn
+            %   on the popup figure.
             obj.closeEventDetails_();  % idempotent guard
-            fig = obj.hFigure;
-            if isempty(fig) || ~ishandle(fig), return; end
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure), return; end
 
-            % Save prior callbacks
-            obj.PrevWBDFcn_ = get(fig, 'WindowButtonDownFcn');
-            obj.PrevKPFcn_  = get(fig, 'WindowKeyPressFcn');
-
-            % Anchor: compute normalized figure position from the clicked data coords.
-            pos = obj.computeDetailsPanelAnchor_(ev.StartTime, ev);
-            pnl = uipanel('Parent', fig, ...
-                'Units', 'normalized', ...
-                'Position', pos, ...
-                'BorderType', 'none');       % Phase 1012: no black outline
-            try
-                set(pnl, 'BackgroundColor', [0.15 0.15 0.18]);
-                set(pnl, 'ForegroundColor', [0.92 0.92 0.94]);
-            catch
-                % Octave older versions may not support these properties on uipanel
+            % Position popup near the main figure (top-right offset).
+            mainPos = get(obj.hFigure, 'Position');   % [x y w h] in pixels (default)
+            popupW  = 360;
+            popupH  = 380;
+            popupX  = mainPos(1) + mainPos(3) + 20;   % to the right of main figure
+            popupY  = mainPos(2) + mainPos(4) - popupH;
+            if popupX + popupW > obj.screenWidth_()
+                popupX = max(0, mainPos(1) - popupW - 20);  % flip to the left
             end
 
-            % Title (with event id) — Enable='inactive' + ButtonDownFcn makes it
-            % a draggable handle for the whole panel (Phase 1012 "floatable").
-            titleStr = sprintf('Event %s  (drag)', ev.Id);
-            uicontrol('Parent', pnl, 'Style', 'text', ...
-                'String', titleStr, ...
-                'Units', 'normalized', 'Position', [0.05 0.88 0.70 0.10], ...
-                'FontWeight', 'bold', 'HorizontalAlignment', 'left', ...
-                'Enable', 'inactive', ...
-                'ButtonDownFcn', @(~,~) obj.beginDetailsDrag_());
+            popupFig = figure( ...
+                'Name',            sprintf('Event %s', ev.Id), ...
+                'NumberTitle',     'off', ...
+                'MenuBar',         'none', ...
+                'ToolBar',         'none', ...
+                'DockControls',    'off', ...
+                'Resize',          'on', ...
+                'Color',           [0.15 0.15 0.18], ...
+                'Position',        [popupX popupY popupW popupH], ...
+                'CloseRequestFcn', @(~,~) obj.closeEventDetails_(), ...
+                'WindowKeyPressFcn', @(~,evt) obj.onKeyPressForDetailsDismiss_(evt));
 
-            % X close button (top-right)
-            uicontrol('Parent', pnl, 'Style', 'pushbutton', ...
-                'String', 'X', ...
-                'Units', 'normalized', 'Position', [0.88 0.88 0.10 0.10], ...
-                'Callback', @(~,~) obj.closeEventDetails_());
-
-            % Field dump
+            % Field dump (the only widget inside — fills the whole figure,
+            % BackgroundColor matches figure so no visible border)
             txt = obj.formatEventFields_(ev);
-            uicontrol('Parent', pnl, 'Style', 'edit', ...
+            uicontrol('Parent', popupFig, 'Style', 'edit', ...
                 'Max', 100, 'Min', 0, ...
                 'Enable', 'inactive', ...
                 'HorizontalAlignment', 'left', ...
-                'Units', 'normalized', 'Position', [0.05 0.05 0.90 0.80], ...
+                'Units', 'normalized', 'Position', [0.02 0.02 0.96 0.96], ...
                 'String', txt, ...
-                'FontName', 'Courier', 'FontSize', 10);
+                'FontName', 'Courier', 'FontSize', 11, ...
+                'BackgroundColor', [0.15 0.15 0.18], ...
+                'ForegroundColor', [0.92 0.92 0.94]);
 
-            obj.hEventDetails_ = pnl;
-            set(fig, 'WindowButtonDownFcn', @(~,~) obj.onFigureClickForDetailsDismiss_());
-            set(fig, 'WindowKeyPressFcn',   @(~,evt) obj.onKeyPressForDetailsDismiss_(evt));
+            obj.hEventDetails_ = popupFig;
         end
 
         function closeEventDetails_(obj)
-            %CLOSEEVENTDETAILS_ Dismiss the floating details panel; restore prior callbacks.
-            wasOpen = ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_);
-            if wasOpen
+            %CLOSEEVENTDETAILS_ Dismiss the popup figure.
+            if ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_)
                 delete(obj.hEventDetails_);
             end
             obj.hEventDetails_ = [];
-            if wasOpen && ~isempty(obj.hFigure) && ishandle(obj.hFigure)
-                set(obj.hFigure, 'WindowButtonDownFcn', obj.PrevWBDFcn_);
-                set(obj.hFigure, 'WindowKeyPressFcn',   obj.PrevKPFcn_);
-                % Clear any stuck drag handlers as well
-                if ~isempty(obj.PrevWBMFcn_)
-                    set(obj.hFigure, 'WindowButtonMotionFcn', obj.PrevWBMFcn_);
-                end
-                if ~isempty(obj.PrevWBUFcn_)
-                    set(obj.hFigure, 'WindowButtonUpFcn', obj.PrevWBUFcn_);
-                end
-            end
+            % Clear any stale saved callbacks from pre-refit uipanel era
             obj.PrevWBDFcn_ = [];
             obj.PrevKPFcn_  = [];
             obj.PrevWBMFcn_ = [];
             obj.PrevWBUFcn_ = [];
         end
 
-        function beginDetailsDrag_(obj)
-            %BEGINDETAILSDRAG_ Start dragging the event-details uipanel.
-            %   Fired by ButtonDownFcn on the title uicontrol. Captures the
-            %   mouse->panel-origin offset, then installs motion/up handlers
-            %   on the parent figure for the duration of the drag.
-            fig = obj.hFigure;
-            if isempty(fig) || ~ishandle(fig), return; end
-            if isempty(obj.hEventDetails_) || ~ishandle(obj.hEventDetails_), return; end
-            try
-                cp = get(fig, 'CurrentPoint');               % figure pixels
-                prevUnits = get(obj.hEventDetails_, 'Units');
-                set(obj.hEventDetails_, 'Units', 'pixels');
-                pp = get(obj.hEventDetails_, 'Position');     % [x y w h] in pixels
-                set(obj.hEventDetails_, 'Units', prevUnits);
-                obj.DragOffsetPx_ = [cp(1) - pp(1), cp(2) - pp(2)];
-            catch
-                obj.DragOffsetPx_ = [0 0];
-            end
-            obj.PrevWBMFcn_ = get(fig, 'WindowButtonMotionFcn');
-            obj.PrevWBUFcn_ = get(fig, 'WindowButtonUpFcn');
-            set(fig, 'WindowButtonMotionFcn', @(~,~) obj.onDetailsDragMove_());
-            set(fig, 'WindowButtonUpFcn',     @(~,~) obj.endDetailsDrag_());
-        end
-
-        function onDetailsDragMove_(obj)
-            %ONDETAILSDRAGMOVE_ Track mouse during drag; update panel position.
-            fig = obj.hFigure;
-            if isempty(fig) || ~ishandle(fig), return; end
-            if isempty(obj.hEventDetails_) || ~ishandle(obj.hEventDetails_), return; end
-            try
-                cp = get(fig, 'CurrentPoint');
-                prevUnits = get(obj.hEventDetails_, 'Units');
-                set(obj.hEventDetails_, 'Units', 'pixels');
-                pp = get(obj.hEventDetails_, 'Position');
-                newPos = [cp(1) - obj.DragOffsetPx_(1), ...
-                          cp(2) - obj.DragOffsetPx_(2), ...
-                          pp(3), pp(4)];
-                set(obj.hEventDetails_, 'Position', newPos);
-                set(obj.hEventDetails_, 'Units', prevUnits);
-            catch
-                % swallow — keep figure responsive even if a frame fails
-            end
-        end
-
-        function endDetailsDrag_(obj)
-            %ENDDETAILSDRAG_ Restore figure motion/up handlers on mouse release.
-            fig = obj.hFigure;
-            if isempty(fig) || ~ishandle(fig), return; end
-            set(fig, 'WindowButtonMotionFcn', obj.PrevWBMFcn_);
-            set(fig, 'WindowButtonUpFcn',     obj.PrevWBUFcn_);
-            obj.PrevWBMFcn_ = [];
-            obj.PrevWBUFcn_ = [];
-        end
-
-        function onFigureClickForDetailsDismiss_(obj)
-            %ONFIGURECLICKFORDETAILSDISMISS_ Close panel when click lands outside it.
-            if isempty(obj.hEventDetails_) || ~ishandle(obj.hEventDetails_)
-                obj.closeEventDetails_();
-                return;
-            end
-            clicked = gco;
-            insidePanel = false;
-            h = clicked;
-            while ~isempty(h) && ishandle(h)
-                if h == obj.hEventDetails_
-                    insidePanel = true;
-                    break;
-                end
-                try
-                    h = get(h, 'Parent');
-                catch
-                    break;
-                end
-            end
-            if ~insidePanel
-                obj.closeEventDetails_();
-            end
-        end
-
         function onKeyPressForDetailsDismiss_(obj, eventData)
-            %ONKEYPRESSFORDETAILSDISMISS_ Close panel on ESC key.
+            %ONKEYPRESSFORDETAILSDISMISS_ Close popup on ESC key.
             if isfield(eventData, 'Key') && strcmp(eventData.Key, 'escape')
                 obj.closeEventDetails_();
             end
         end
 
-        function pos = computeDetailsPanelAnchor_(obj, anchorX, ~)
-            %COMPUTEDETAILSPANELANCHOR_ Compute normalized figure coords for the panel.
-            %   Anchors near the marker's screen X; clamps to [0 0 1 1] so the
-            %   panel never renders half-off-screen (Pitfall D).
-            %
-            %   Panel size: 0.28 x 0.45 (normalized). X offset: just right of
-            %   the marker; flipped to the left if the right edge would overflow.
-            panelW = 0.28;
-            panelH = 0.45;
-            axPos = get(obj.hAxes, 'Position');  % [x y w h] normalized
-            xl = get(obj.hAxes, 'XLim');
-            % Normalize anchorX into figure space via axes position + xlim.
-            fx = axPos(1) + axPos(3) * (anchorX - xl(1)) / max(eps, xl(2) - xl(1));
-            fy = axPos(2) + axPos(4) * 0.5;  % panel vertical center - middle of axes
-            % Default: panel right of marker
-            panelX = fx + 0.01;
-            if panelX + panelW > 1.0
-                % Flip to left side of marker
-                panelX = fx - panelW - 0.01;
+        function w = screenWidth_(~)
+            %SCREENWIDTH_ Return pixel width of the primary display (for popup placement).
+            try
+                su = get(0, 'ScreenSize');   % [x y w h]
+                w  = su(3);
+            catch
+                w = 1920;  % safe fallback
             end
-            panelY = fy - panelH / 2;
-            % Clamp
-            panelX = max(0, min(1 - panelW, panelX));
-            panelY = max(0, min(1 - panelH, panelY));
-            pos = [panelX, panelY, panelW, panelH];
         end
 
         function c = severityToColor_(obj, severity)
