@@ -107,6 +107,23 @@ classdef DashboardWidget < handle
         end
     end
 
+    methods (Static, Access = protected)
+        function clearPanelControls(hPanel)
+        %CLEARPANELCONTROLS Delete uicontrol children of hPanel at depth 1,
+        %   preserving DashboardLayout-injected buttons (InfoIconButton,
+        %   DetachButton). Used by widget relayout_/refresh_ paths that
+        %   rebuild their own controls on resize or theme change.
+            if isempty(hPanel) || ~ishandle(hPanel), return; end
+            protectedTags = {'InfoIconButton', 'DetachButton'};
+            kids = findobj(hPanel, '-depth', 1, 'Type', 'uicontrol');
+            for i = 1:numel(kids)
+                if ~ismember(get(kids(i), 'Tag'), protectedTags)
+                    delete(kids(i));
+                end
+            end
+        end
+    end
+
     methods
         function setTimeRange(~, ~, ~)
             % Override in subclasses to respond to global time changes.
@@ -115,6 +132,15 @@ classdef DashboardWidget < handle
         function [tMin, tMax] = getTimeRange(~)
             % Override in subclasses to report data time range.
             tMin = inf; tMax = -inf;
+        end
+
+        function series = getPreviewSeries(~, ~)
+        %GETPREVIEWSERIES Optional preview data for the time-range envelope.
+        %   series = getPreviewSeries(obj, nBuckets) returns a struct with
+        %   fields xCenters, yMin, yMax — each a 1xnBuckets row vector;
+        %   yMin/yMax MUST be normalized to [0,1] within the widget's own
+        %   y-range. Base returns [] to opt out of the preview envelope.
+            series = [];
         end
 
         function lines = asciiRender(obj, width, height)

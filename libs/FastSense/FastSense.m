@@ -415,10 +415,44 @@ classdef FastSense < handle
             knownDefaults.DataStore = [];
             [known, passthrough] = parseOpts(knownDefaults, varargin, obj.Verbose);
 
+            % Detect whether the caller explicitly passed 'XType' as an
+            % NV-pair. parseOpts defaults it to 'numeric', so an
+            % unspecified call is indistinguishable from
+            % 'XType','numeric' at the parsed-options layer — we walk
+            % raw varargin here to tell them apart.
+            explicitXType = false;
+            for k = 1:2:numel(varargin)-1
+                isStrLike = ischar(varargin{k}) || ...
+                    (isstring(varargin{k}) && isscalar(varargin{k}));
+                if isStrLike && strcmpi(char(varargin{k}), 'XType')
+                    explicitXType = true;
+                    break;
+                end
+            end
+
             % Set XType if explicitly provided
             if strcmp(known.XType, 'datenum')
                 obj.XType = 'datenum';
                 obj.IsDatetime = true;
+            end
+
+            % Auto-promote XType to 'datenum' when X values fall inside the
+            % MATLAB serial-date range for years 1910-2100 (datenum 697000
+            % .. 769000). Lets Tag/SensorTag data timestamped with `now()`
+            % render with proper date ticks instead of scientific-notation
+            % numbers, without requiring every caller to pass 'XType',
+            % 'datenum' by hand. Suppressed when the caller explicitly
+            % asked for 'numeric' (numeric counters / indices that happen
+            % to land in the datenum window must be able to opt out).
+            if ~explicitXType && strcmp(obj.XType, 'numeric') && ...
+                    isnumeric(x) && ~isempty(x)
+                xMinProbe = min(x);
+                xMaxProbe = max(x);
+                if isfinite(xMinProbe) && isfinite(xMaxProbe) && ...
+                        xMinProbe > 697000 && xMaxProbe < 769000
+                    obj.XType = 'datenum';
+                    obj.IsDatetime = true;
+                end
             end
 
             dsMethod = known.DownsampleMethod;

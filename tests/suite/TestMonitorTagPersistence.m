@@ -35,6 +35,17 @@ classdef TestMonitorTagPersistence < matlab.unittest.TestCase
         end
     end
 
+    methods (Access = private)
+        function requireSqlite_(testCase)
+            % MONITOR-09 persistence rides on FastSenseDataStore's SQLite
+            % backend. Without mksqlite, storeMonitor/loadMonitor silently
+            % fall through to the binary fallback which has no monitor
+            % table — tests can't exercise the intended path.
+            testCase.assumeTrue(exist('mksqlite') == 3, ...
+                'mksqlite MEX not available on this runner.'); %#ok<EXIST>
+        end
+    end
+
     methods (TestMethodTeardown)
         function teardownRegistry(testCase) %#ok<MANU>
             TagRegistry.clear();
@@ -58,6 +69,7 @@ classdef TestMonitorTagPersistence < matlab.unittest.TestCase
         % ---- Scenario 2: Persist=false + bound DataStore writes nothing ----
 
         function testPersistFalseNoDataStoreWrites(testCase)
+            testCase.requireSqlite_();
             parent = SensorTag('p', 'X', 1:10, 'Y', ones(1, 10));
             ds = FastSenseDataStore(1:10, ones(1, 10));
             cleanup = onCleanup(@() ds.cleanup());
@@ -74,6 +86,7 @@ classdef TestMonitorTagPersistence < matlab.unittest.TestCase
         % ---- Scenario 3: Persist=true writes on getXY ----
 
         function testPersistTrueWritesOnGetXY(testCase)
+            testCase.requireSqlite_();
             parent = SensorTag('p', 'X', 1:10, 'Y', ones(1, 10));
             ds = FastSenseDataStore(1:10, ones(1, 10));
             cleanup = onCleanup(@() ds.cleanup());
@@ -100,6 +113,7 @@ classdef TestMonitorTagPersistence < matlab.unittest.TestCase
         % ---- Scenario 4: round-trip across in-process sessions ----
 
         function testPersistRoundTripAcrossSessions(testCase)
+            testCase.requireSqlite_();
             parent = SensorTag('p', 'X', 1:10, 'Y', ones(1, 10) * 10);
             ds = FastSenseDataStore(1:10, ones(1, 10));
             cleanup = onCleanup(@() ds.cleanup());
@@ -124,6 +138,7 @@ classdef TestMonitorTagPersistence < matlab.unittest.TestCase
         % ---- Scenario 5: stale detection via quad mismatch ----
 
         function testPersistStaleAfterParentMutation(testCase)
+            testCase.requireSqlite_();
             parent1 = SensorTag('p', 'X', 1:10, 'Y', ones(1, 10) * 10);
             ds = FastSenseDataStore(1:10, ones(1, 10));
             cleanup = onCleanup(@() ds.cleanup());
@@ -150,6 +165,7 @@ classdef TestMonitorTagPersistence < matlab.unittest.TestCase
         % ---- Scenario 6: low-level FastSenseDataStore trio ----
 
         function testStoreMonitorLoadMonitorClearMonitor(testCase)
+            testCase.requireSqlite_();
             ds = FastSenseDataStore(1:10, ones(1, 10));
             cleanup = onCleanup(@() ds.cleanup());
 

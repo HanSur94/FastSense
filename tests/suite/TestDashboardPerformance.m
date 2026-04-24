@@ -92,9 +92,14 @@ classdef TestDashboardPerformance < matlab.unittest.TestCase
             testCase.addTeardown(@() close(d.hFigure));
             % Update global time range so sliders have valid range
             d.updateGlobalTimeRange();
-            % Simulate slider change
-            set(d.hTimeSliderL, 'Value', 0.2);
-            d.onTimeSlidersChanged();
+            % Simulate slider change via the TimeRangeSelector API (phase
+            % 1016 replaced the dual uicontrol sliders with a single
+            % TimeRangeSelector; hTimeSliderL is now a shim pointing at
+            % the selector and has no 'Value' property).
+            tr   = d.DataTimeRange;
+            span = tr(2) - tr(1);
+            d.TimeRangeSelector_.setSelection(tr(1) + 0.2 * span, tr(2));
+            d.triggerTimeSlidersChangedForTest();
             % Debounce timer should have been created (SliderDebounceTimer is readable)
             testCase.verifyFalse(isempty(d.SliderDebounceTimer));
             % Clean up the timer via its readable handle before test teardown

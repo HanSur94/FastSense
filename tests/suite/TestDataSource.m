@@ -8,16 +8,12 @@ classdef TestDataSource < matlab.unittest.TestCase
     end
 
     methods (Test)
-        function testCannotInstantiate(testCase)
-            threw = false;
-            try
-                ds = DataSource();
-                error('Should not reach here');
-            catch ex
-                threw = true;
-                testCase.verifyTrue(contains(ex.message, 'Abstract'), 'cannot_instantiate');
-            end
-            testCase.verifyTrue(threw, 'DataSource should not be instantiable');
+        function testFetchNewMustBeImplementedBySubclass(testCase)
+            % DataSource is the abstract interface for fetchNew. The class
+            % itself can be instantiated, but calling fetchNew() on the base
+            % class throws 'DataSource:abstract' — subclasses MUST override.
+            ds = DataSource();
+            testCase.verifyError(@() ds.fetchNew(), 'DataSource:abstract');
         end
 
         function testSubclassMustImplementFetchNew(testCase)

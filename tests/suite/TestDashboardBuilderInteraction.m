@@ -136,7 +136,8 @@ classdef TestDashboardBuilderInteraction < matlab.unittest.TestCase
             testCase.triggerMouseUp();
 
             newPos = testCase.Engine.Widgets{1}.Position;
-            testCase.verifyLessThanOrEqual(newPos(1)+newPos(3)-1, 12);
+            testCase.verifyLessThanOrEqual(newPos(1)+newPos(3)-1, ...
+                testCase.Engine.Layout.Columns);
         end
 
         function testDragClampsRowToMinOne(testCase)
@@ -245,12 +246,15 @@ classdef TestDashboardBuilderInteraction < matlab.unittest.TestCase
             testCase.triggerMouseUp();
 
             newPos = testCase.Engine.Widgets{2}.Position;
-            testCase.verifyLessThanOrEqual(newPos(1)+newPos(3)-1, 12);
+            testCase.verifyLessThanOrEqual(newPos(1)+newPos(3)-1, ...
+                testCase.Engine.Layout.Columns);
         end
 
         %% --- Mouse Move Visual Feedback Tests ---
 
         function testMouseMoveDragUpdatesPanelPosition(testCase)
+            % Motion moves the snap-ghost outline, not the heavy widget panel.
+            % The panel repositions on mouseup; during motion we watch hGhost.
             panelPos = get(testCase.Engine.Widgets{1}.hPanel, 'Position');
             startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
             testCase.Builder.MockCurrentPoint = startPt;
@@ -258,16 +262,21 @@ classdef TestDashboardBuilderInteraction < matlab.unittest.TestCase
 
             origPanelPos = get(testCase.Engine.Widgets{1}.hPanel, 'Position');
 
-            dx = 0.1;
-            testCase.Builder.MockCurrentPoint = [startPt(1)+dx, startPt(2)];
+            [stepW, ~] = testCase.gridStepSize();
+            testCase.Builder.MockCurrentPoint = [startPt(1)+2*stepW, startPt(2)];
             testCase.triggerMotion();
 
-            newPanelPos = get(testCase.Engine.Widgets{1}.hPanel, 'Position');
-            testCase.verifyEqual(newPanelPos(1), origPanelPos(1)+dx, 'AbsTol', 1e-6);
-            testCase.verifyEqual(newPanelPos(3), origPanelPos(3), 'AbsTol', 1e-6);
+            testCase.verifyNotEmpty(testCase.Builder.hGhost, ...
+                'Ghost outline should exist during drag motion');
+            ghostPos = get(testCase.Builder.hGhost, 'Position');
+            testCase.verifyGreaterThan(ghostPos(1), origPanelPos(1), ...
+                'Ghost should move right when mouse moves right');
+            testCase.verifyEqual(ghostPos(3), origPanelPos(3), 'AbsTol', 1e-6);
         end
 
         function testMouseMoveResizeUpdatesSize(testCase)
+            % Resize motion updates the snap-ghost width, not the panel.
+            % The panel resizes on mouseup; during motion we watch hGhost.
             panelPos = get(testCase.Engine.Widgets{1}.hPanel, 'Position');
             startPt = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
             testCase.Builder.MockCurrentPoint = startPt;
@@ -275,13 +284,15 @@ classdef TestDashboardBuilderInteraction < matlab.unittest.TestCase
 
             origPanelPos = get(testCase.Engine.Widgets{1}.hPanel, 'Position');
 
-            dx = 0.05;
-            testCase.Builder.MockCurrentPoint = [startPt(1)+dx, startPt(2)];
+            [stepW, ~] = testCase.gridStepSize();
+            testCase.Builder.MockCurrentPoint = [startPt(1)+2*stepW, startPt(2)];
             testCase.triggerMotion();
 
-            newPanelPos = get(testCase.Engine.Widgets{1}.hPanel, 'Position');
-            testCase.verifyGreaterThan(newPanelPos(3), origPanelPos(3));
-            testCase.verifyEqual(newPanelPos(1), origPanelPos(1), 'AbsTol', 1e-6);
+            testCase.verifyNotEmpty(testCase.Builder.hGhost, ...
+                'Ghost outline should exist during resize motion');
+            ghostPos = get(testCase.Builder.hGhost, 'Position');
+            testCase.verifyGreaterThan(ghostPos(3), origPanelPos(3));
+            testCase.verifyEqual(ghostPos(1), origPanelPos(1), 'AbsTol', 1e-6);
         end
 
         function testMouseMoveWithNoDragIsNoop(testCase)

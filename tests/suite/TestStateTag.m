@@ -202,5 +202,67 @@ classdef TestStateTag < matlab.unittest.TestCase
             testCase.verifyEqual(t2.Y{3}, 'idle');
         end
 
+        % ---- Phase 1012-02: RawSource property (D-05 + D-06 + D-11) ----
+
+        function testRawSourceProperty(testCase)
+            %TESTRAWSOURCEPROPERTY Phase 1012-02: RawSource NV-pair wiring.
+            %   Covers the 8 behaviors in Plan 1012-02 Task 2:
+            %     1. Accepts RawSource struct with file/column/format
+            %     2. Getter returns stored struct
+            %     3. Missing file raises TagPipeline:invalidRawSource
+            %     4. toStruct emits s.rawsource when set; absent when not
+            %     5. fromStruct round-trips RawSource
+            %     6. Existing constructor regression (no RawSource still works)
+            %     7. Cellstr Y + RawSource combination (D-11)
+            %     8. Unknown option still throws StateTag:unknownOption
+
+            % 1+2. Construct + getter
+            rs = struct('file', 'm.csv', 'column', 'state', 'format', '');
+            t = StateTag('k', 'RawSource', rs);
+            r = t.RawSource;
+            testCase.verifyTrue(isstruct(r));
+            testCase.verifyEqual(r.file,   'm.csv');
+            testCase.verifyEqual(r.column, 'state');
+            testCase.verifyEqual(r.format, '');
+
+            % 3. Missing file -> TagPipeline:invalidRawSource (from StateTag's
+            %    OWN inline validateRawSource_, NOT a cross-class call)
+            testCase.verifyError( ...
+                @() StateTag('k2', 'RawSource', struct('column', 'x')), ...
+                'TagPipeline:invalidRawSource');
+
+            % 4. toStruct emits s.rawsource when set; absent otherwise
+            s1 = t.toStruct();
+            testCase.verifyTrue(isfield(s1, 'rawsource'));
+            testCase.verifyEqual(s1.rawsource.file, 'm.csv');
+
+            tPlain = StateTag('plain');
+            sPlain = tPlain.toStruct();
+            testCase.verifyFalse(isfield(sPlain, 'rawsource'));
+
+            % 5. Round-trip through fromStruct preserves RawSource
+            t1b = StateTag.fromStruct(s1);
+            r1b = t1b.RawSource;
+            testCase.verifyEqual(r1b.file,   'm.csv');
+            testCase.verifyEqual(r1b.column, 'state');
+
+            % 6. Existing constructor path (no RawSource) still works
+            tExisting = StateTag('k3', 'X', [1 2 3], 'Y', [0 1 0]);
+            testCase.verifyEqual(tExisting.X, [1 2 3]);
+            testCase.verifyEqual(tExisting.Y, [0 1 0]);
+
+            % 7. D-11: Cellstr Y combined with RawSource must still work
+            tCellstr = StateTag('k4', 'X', [1 2], 'Y', {'a', 'b'}, ...
+                'RawSource', struct('file', 'm.csv'));
+            testCase.verifyTrue(iscell(tCellstr.Y));
+            testCase.verifyEqual(tCellstr.Y{1}, 'a');
+            testCase.verifyEqual(tCellstr.RawSource.file, 'm.csv');
+
+            % 8. Unknown option still throws StateTag:unknownOption
+            testCase.verifyError( ...
+                @() StateTag('k5', 'NoSuch', 1), ...
+                'StateTag:unknownOption');
+        end
+
     end
 end

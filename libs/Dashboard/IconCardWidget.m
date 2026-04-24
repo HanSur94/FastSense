@@ -75,7 +75,10 @@ classdef IconCardWidget < DashboardWidget
             end
             if ~isempty(obj.Tag)
                 obj.Threshold = [];
-                obj.Sensor    = [];
+                % NOTE: do NOT clear obj.Sensor here. Sensor is a Dependent
+                % alias for Tag (see DashboardWidget.set.Sensor) — setting
+                % it to [] wipes the Tag we just stored, causing the widget
+                % to render "--" forever.
             end
             % Mutual exclusivity: Threshold wins (per D-08)
             if ~isempty(obj.Threshold) && ~isempty(obj.Sensor)
@@ -86,6 +89,8 @@ classdef IconCardWidget < DashboardWidget
         function render(obj, parentPanel)
         %RENDER Create icon, value text, and label inside parentPanel.
             obj.hPanel = parentPanel;
+            % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
+            try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme();
 
             bgColor  = theme.WidgetBackground;
@@ -161,6 +166,8 @@ classdef IconCardWidget < DashboardWidget
                     v = obj.Tag.valueAt(now);
                     if ~isempty(v) && ~any(isnan(v))
                         obj.CurrentValue = v;
+                    elseif isprop(obj.Tag, 'Y') && ~isempty(obj.Tag.Y)
+                        obj.CurrentValue = obj.Tag.Y(end);
                     end
                     if isempty(obj.Units) && isprop(obj.Tag, 'Units') && ~isempty(obj.Tag.Units)
                         obj.Units = obj.Tag.Units;
@@ -169,8 +176,20 @@ classdef IconCardWidget < DashboardWidget
                     % fall through — state branch handles inactive below
                 end
             elseif ~isempty(obj.Threshold)
-                % Threshold mode: value from ValueFcn or StaticValue (no Sensor)
-                if ~isempty(obj.ValueFcn)
+                % Threshold mode: value from ValueFcn or StaticValue (no Sensor).
+                % Monitor-kind tags are their own binary alarm signal;
+                % calling getXY triggers the lazy recompute that fires
+                % events into the attached EventStore, so refreshing this
+                % widget also keeps the Events page populated.
+                if thresholdIsMonitorKind_(obj.Threshold)
+                    try
+                        [~, yMon] = obj.Threshold.getXY();
+                        if ~isempty(yMon)
+                            obj.CurrentValue = yMon(end);
+                        end
+                    catch
+                    end
+                elseif ~isempty(obj.ValueFcn)
                     result = obj.ValueFcn();
                     if isstruct(result)
                         obj.CurrentValue = result.value;
@@ -333,6 +352,14 @@ classdef IconCardWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function relayout_(obj)
+        %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
+            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            obj.render(obj.hPanel);
+        end
+
         function color = resolveIconColor(obj, theme)
         %RESOLVEICONCOLOR Map current state to a theme color.
             switch obj.CurrentState
@@ -371,7 +398,23 @@ classdef IconCardWidget < DashboardWidget
             % CompositeThreshold: delegate to computeStatus, no val needed (per D-04)
             if isa(obj.Threshold, 'CompositeThreshold')
                 cStatus = obj.Threshold.computeStatus();
-                if strcmp(cStatus, 'ok'), state = 'active'; else, state = 'alarm'; end
+                if strcmp(cStatus, 'ok'), state = 'ok'; else, state = 'alarm'; end
+                return;
+            end
+            % Monitor-kind tags are their own binary alarm signal.
+            % CurrentValue was set from getXY() during refresh; anything
+            % >0.5 means the monitor is firing.
+            if thresholdIsMonitorKind_(obj.Threshold)
+                val = obj.CurrentValue;
+                if isempty(val) || any(isnan(val))
+                    state = 'inactive';
+                    return;
+                end
+                if val(end) > 0.5
+                    state = 'alarm';
+                else
+                    state = 'ok';
+                end
                 return;
             end
             val = obj.CurrentValue;
@@ -409,5 +452,20 @@ classdef IconCardWidget < DashboardWidget
                 end
             end
         end
+    end
+end
+
+function tf = thresholdIsMonitorKind_(t)
+    %THRESHOLDISMONITORKIND_ True when t is a Tag reporting kind='monitor'.
+    %   Uses the Tag.getKind() dispatch rather than isa() to stay within
+    %   the project's Pitfall 1 convention (no subtype checks in widget
+    %   code; widgets use the Tag polymorphic API).
+    tf = false;
+    if isempty(t)
+        return;
+    end
+    try
+        tf = strcmp(t.getKind(), 'monitor');
+    catch
     end
 end

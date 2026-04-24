@@ -15,9 +15,9 @@ classdef DashboardLayout < handle
         Columns         = 24
         TotalRows       = 4
         ContentArea     = [0 0 1 1]
-        Padding         = [0.02 0.02 0.02 0.02]
-        GapH            = 0.008
-        GapV            = 0.015
+        Padding         = [0 0 0 0]
+        GapH            = 0
+        GapV            = 0
         RowHeight       = 0.22
         ScrollbarWidth  = 0.015
         OnScrollCallback = []       % function handle: @(topRow, bottomRow)
@@ -174,19 +174,25 @@ classdef DashboardLayout < handle
             end
         end
 
-        function allocatePanels(obj, hFigure, widgets, theme)
-        %ALLOCATEPANELS Create viewport, canvas, scrollbar and placeholder panels.
-        %   Like createPanels but does NOT call widget.render(). Instead,
-        %   each widget gets its hPanel assigned and a placeholder label.
+        function ensureViewport(obj, hFigure, theme)
+        %ENSUREVIEWPORT Create viewport/canvas/scrollbar only if they do not exist yet.
+        %   Idempotent: if the viewport handle is already valid, returns immediately
+        %   without deleting or recreating anything. On the first call the viewport,
+        %   canvas, and (if needed) scrollbar are created and TotalRows is reset to 0
+        %   so that subsequent additive allocatePanels calls accumulate row counts.
+            if ~isempty(obj.hViewport) && ishandle(obj.hViewport)
+                return;
+            end
+
             obj.hFigure = hFigure;
-            % Save current scroll state before any updates
+            obj.TotalRows = 0;
+
+            % Save current scroll state (always default on first creation)
             prevCr = obj.canvasRatio();
             prevScrollVal = 1;  % default = top
             if ~isempty(obj.hScrollbar) && ishandle(obj.hScrollbar)
                 prevScrollVal = get(obj.hScrollbar, 'Value');
             end
-
-            obj.TotalRows = obj.calculateMaxRow(widgets);
 
             % Compute RowHeight so grid cells are square in pixels
             ca = obj.ContentArea;
@@ -199,21 +205,14 @@ classdef DashboardLayout < handle
             padL = obj.Padding(1); padR = obj.Padding(3);
             innerW = 1 - padL - padR;
             cellW = (innerW - (obj.Columns - 1) * obj.GapH) / obj.Columns;
-            % cellW is in normalized viewport width; convert to pixel ratio
             if vpPxH > 0
                 obj.RowHeight = cellW * vpPxW / vpPxH;
             end
-            obj.GapV = obj.GapH * vpPxW / vpPxH;
+            if vpPxH > 0
+                obj.GapV = obj.GapH * vpPxW / vpPxH;
+            end
 
             cr = obj.canvasRatio();
-
-            % Clean up old viewport/canvas/scrollbar
-            if ~isempty(obj.hViewport) && ishandle(obj.hViewport)
-                delete(obj.hViewport);
-            end
-            if ~isempty(obj.hScrollbar) && ishandle(obj.hScrollbar)
-                delete(obj.hScrollbar);
-            end
 
             ca = obj.ContentArea;
             scrollNeeded = cr > 1;
@@ -231,8 +230,6 @@ classdef DashboardLayout < handle
 
             % Restore scroll position, compensating for canvas ratio change
             if prevCr > 1 && cr > 1
-                % Convert old scroll offset to proportional position, then
-                % map to new canvas ratio so the same content stays visible
                 oldOffset = prevScrollVal * (1 - prevCr);
                 scrollVal = max(0, min(1, oldOffset / (1 - cr)));
             else
@@ -243,7 +240,7 @@ classdef DashboardLayout < handle
             % Create canvas (may be taller than viewport for scrolling)
             obj.hCanvas = uipanel('Parent', obj.hViewport, ...
                 'Units', 'normalized', ...
-                'Position', [0, canvasY, 1, cr], ...
+                'Position', [0, canvasY, 1, max(1, cr)], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', theme.DashboardBackground);
 
@@ -265,6 +262,41 @@ classdef DashboardLayout < handle
             else
                 obj.hScrollbar = [];
                 try set(hFigure, 'WindowScrollWheelFcn', ''); catch , end
+            end
+
+            obj.VisibleRows = obj.computeVisibleRows(scrollVal);
+        end
+
+        function resetViewport(obj)
+        %RESETVIEWPORT Destroy the current viewport so the next ensureViewport call rebuilds it.
+        %   Use when a full layout rebuild is required (e.g. single-page reflow).
+            if ~isempty(obj.hViewport) && ishandle(obj.hViewport)
+                delete(obj.hViewport);
+            end
+            obj.hViewport = [];
+            if ~isempty(obj.hScrollbar) && ishandle(obj.hScrollbar)
+                delete(obj.hScrollbar);
+            end
+            obj.hScrollbar = [];
+            obj.hCanvas = [];
+            obj.TotalRows = 0;
+        end
+
+        function allocatePanels(obj, hFigure, widgets, theme)
+        %ALLOCATEPANELS Create placeholder panels for widgets (additive; no viewport destruction).
+        %   Calls ensureViewport (idempotent) to guarantee hViewport/hCanvas exist, then
+        %   accumulates TotalRows and appends widget panels to the shared canvas.
+        %   Multiple calls for different page-widget sets are safe: earlier panels survive.
+            % Ensure viewport exists (idempotent — no-op if already live)
+            obj.ensureViewport(hFigure, theme);
+
+            % Accumulate TotalRows across additive calls rather than overwriting
+            obj.TotalRows = max(obj.TotalRows, obj.calculateMaxRow(widgets));
+
+            % Get current scroll value for VisibleRows update
+            scrollVal = 1;
+            if ~isempty(obj.hScrollbar) && ishandle(obj.hScrollbar)
+                scrollVal = get(obj.hScrollbar, 'Value');
             end
 
             % Create widget panels on canvas (placeholder only, no render)
@@ -298,7 +330,7 @@ classdef DashboardLayout < handle
                     'Tag', 'placeholder');
             end
 
-            % Compute initial VisibleRows from scrollbar value
+            % Update VisibleRows from current scroll position
             obj.VisibleRows = obj.computeVisibleRows(scrollVal);
         end
 
@@ -338,6 +370,9 @@ classdef DashboardLayout < handle
                 return;
             end
             obj.closeInfoPopup();    % dismiss any open popup before panel teardown
+            % Full rebuild required for reflow: reset the viewport so ensureViewport
+            % inside createPanels/allocatePanels recreates it from scratch.
+            obj.resetViewport();
             obj.createPanels(hFigure, widgets, theme);
         end
 

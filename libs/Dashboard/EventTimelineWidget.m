@@ -156,6 +156,9 @@ classdef EventTimelineWidget < DashboardWidget
 
             set(obj.hAxes, 'YTick', 1:numel(labels), 'YTickLabel', labels);
             set(obj.hAxes, 'YLim', [0.3, numel(labels) + 0.7]);
+
+            % Reformat time-axis ticks to HH:MM:SS / MM:SS for readability.
+            obj.formatTimeAxis_(obj.hAxes);
         end
 
         function t = getType(~)
@@ -297,11 +300,16 @@ classdef EventTimelineWidget < DashboardWidget
                 if ~isempty(ev.ThresholdLabel)
                     lbl = [ev.SensorName ' — ' ev.ThresholdLabel];
                 end
-                % Color based on direction/severity hint in label
-                if ~isempty(strfind(lower(ev.ThresholdLabel), 'alarm'))
+                % Colour routing is driven by the numeric Severity field
+                % (1=ok/info, 2=warn, 3=alarm; see Event.m EVENT-04) with
+                % a ThresholdLabel keyword fallback for events authored
+                % before Severity existed.
+                clr = warnColor;
+                if isfield(ev, 'Severity') && ~isempty(ev.Severity) && ev.Severity >= 3
                     clr = alarmColor;
-                else
-                    clr = warnColor;
+                elseif ~isfield(ev, 'Severity') && ~isempty(ev.ThresholdLabel) && ...
+                        ~isempty(strfind(lower(ev.ThresholdLabel), 'alarm'))
+                    clr = alarmColor;
                 end
                 evts(end+1) = struct('startTime', ev.StartTime, ...
                     'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
@@ -355,6 +363,29 @@ classdef EventTimelineWidget < DashboardWidget
             if ~obj.IsSettingTime
                 obj.UseGlobalTime = false;
             end
+        end
+
+        function formatTimeAxis_(~, ax)
+        %FORMATTIMEAXIS_ Replace numeric-seconds x-ticks with HH:MM:SS labels.
+        %   No-op when range <= 300s (raw seconds readable) or ax invalid.
+            if isempty(ax) || ~ishandle(ax), return; end
+            xl = get(ax, 'XLim');
+            rangeSec = xl(2) - xl(1);
+            if rangeSec <= 300, return; end
+            xt = get(ax, 'XTick');
+            if isempty(xt), return; end
+            if rangeSec >= 3600
+                fmt = 'HH:MM:SS';
+            else
+                fmt = 'MM:SS';
+            end
+            lbl = cell(1, numel(xt));
+            for i = 1:numel(xt)
+                % xt(i) is seconds; serial-date day = seconds / 86400
+                lbl{i} = datestr(xt(i) / 86400, fmt);
+            end
+            set(ax, 'XTickMode', 'manual', 'XTickLabelMode', 'manual', ...
+                'XTickLabel', lbl);
         end
 
     end

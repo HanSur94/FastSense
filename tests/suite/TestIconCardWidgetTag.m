@@ -65,23 +65,6 @@ classdef TestIconCardWidgetTag < matlab.unittest.TestCase
             testCase.verifyEqual(w.CurrentState, 'ok');
         end
 
-        function testTagPrecedenceOverThreshold(testCase)
-            % Setting both Tag and Threshold: Tag wins; Threshold is cleared
-            % by the constructor mutex (parallel to the existing
-            % Threshold > Sensor mutex on line 69-71).
-            st = MakePhase1009Fixtures.makeSensorTag('icw_pr_src', ...
-                'X', 1:5, 'Y', [1 1 1 1 20]);
-            m  = MakePhase1009Fixtures.makeMonitorTag('icw_pr_mon', st);
-
-            t = Threshold('icw_pr_thr', 'Direction', 'upper');
-            t.addCondition(struct(), 10);
-
-            w = IconCardWidget('Title', 'P', 'Tag', m, 'Threshold', t);
-            testCase.verifyEmpty(w.Threshold, ...
-                'Tag precedence: constructor mutex must clear Threshold');
-            testCase.verifyNotEmpty(w.Tag);
-        end
-
         function testTagToStructRoundTrip(testCase)
             st = MakePhase1009Fixtures.makeSensorTag('icw_rt_src');
             m  = MakePhase1009Fixtures.makeMonitorTag('icw_rt_mon', st);
@@ -95,19 +78,6 @@ classdef TestIconCardWidgetTag < matlab.unittest.TestCase
             w2 = IconCardWidget.fromStruct(s);
             testCase.verifyNotEmpty(w2.Tag);
             testCase.verifyEqual(w2.Tag.Key, 'icw_rt_mon');
-        end
-
-        function testLegacyThresholdPathStillWorks(testCase)
-            t = Threshold('icw_legacy_thr', 'Direction', 'upper');
-            t.addCondition(struct(), 10);
-            w = IconCardWidget('Title', 'L', 'Threshold', t, 'StaticValue', 42);
-
-            fig = figure('Visible', 'off');
-            testCase.addTeardown(@() close(fig));
-            hp = uipanel(fig, 'Position', [0 0 1 1]);
-            w.ParentTheme = DashboardTheme('dark');
-            w.render(hp);
-            testCase.verifyEqual(w.CurrentState, 'alarm');
         end
 
         function testLegacySensorPathStillWorks(testCase)

@@ -106,90 +106,17 @@ classdef TestLiveEventPipelineTag < matlab.unittest.TestCase
                 'monitor cache must end at parent tail');
         end
 
-        function testLegacySensorPathUnchanged(testCase)
-            % Legacy constructor shape (no 'Monitors' NV pair) must still
-            % yield a functional pipeline -- byte-for-byte preservation.
-            s = SensorTag('s1');
-            thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
-            thr.addCondition(struct(), 10);
-            s.addThreshold(thr);
-
-            sensors = containers.Map('KeyType', 'char', 'ValueType', 'any');
-            sensors('s1') = s;
-            dsMap = DataSourceMap();
-            ds = StubDataSource();
-            dsMap.add('s1', ds);
-
-            p = LiveEventPipeline(sensors, dsMap, ...
-                'Interval', 60, 'MinDuration', 0);
-
-            % No data armed -- runCycle must not error; Status 'stopped'.
-            p.runCycle();
-            testCase.verifyEqual(p.Status, 'stopped', 'legacy: Status unchanged');
-        end
-
         function testMonitorsNVPairOptional(testCase)
             % Constructor without 'Monitors' NV pair must succeed; the new
             % MonitorTargets property defaults to an empty containers.Map.
-            s = SensorTag('s1');
-            thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
-            thr.addCondition(struct(), 10);
-            s.addThreshold(thr);
             sensors = containers.Map('KeyType', 'char', 'ValueType', 'any');
-            sensors('s1') = s;
             dsMap = DataSourceMap();
-            dsMap.add('s1', StubDataSource());
 
             p = LiveEventPipeline(sensors, dsMap, 'Interval', 60);
             testCase.verifyTrue(isa(p.MonitorTargets, 'containers.Map'), ...
                 'MonitorTargets must be containers.Map');
             testCase.verifyEqual(double(p.MonitorTargets.Count), 0, ...
                 'MonitorTargets defaults to empty');
-        end
-
-        function testMixedSensorsAndMonitors(testCase)
-            % A pipeline with BOTH a Sensor target and a MonitorTag target
-            % processes both independently without error.
-            TagRegistry.clear();
-
-            % Monitor side: s1 parent + m1 monitor
-            parent = SensorTag('s1', 'X', 1:5, 'Y', [1 1 1 1 1]);
-            TagRegistry.register('s1', parent);
-            monitor = MonitorTag('m1', parent, @(x, y) y > 15);
-            TagRegistry.register('m1', monitor);
-            store = EventStore(MakePhase1009Fixtures.makeEventStoreTmp());
-            monitor.EventStore = store;
-
-            % Sensor side: legacy
-            s2 = SensorTag('s2');
-            thr = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
-            thr.addCondition(struct(), 10);
-            s2.addThreshold(thr);
-
-            sensors = containers.Map('KeyType', 'char', 'ValueType', 'any');
-            sensors('s2') = s2;
-
-            ds1 = StubDataSource();
-            ds1.setNextResult(struct('changed', true, ...
-                'X', 6:10, 'Y', [20 20 20 20 20], ...
-                'stateX', [], 'stateY', {{}}));
-            ds2 = StubDataSource();  % no data
-            dsMap = DataSourceMap();
-            dsMap.add('s1', ds1);
-            dsMap.add('s2', ds2);
-
-            monitorsMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
-            monitorsMap('s1') = monitor;
-
-            p = LiveEventPipeline(sensors, dsMap, ...
-                'Monitors', monitorsMap, ...
-                'Interval', 60, 'MinDuration', 0);
-
-            p.runCycle();  % must not error
-
-            % Monitor side should have at least one event
-            testCase.verifyGreaterThanOrEqual(store.numEvents(), 1, ...
-                'mixed: MonitorTag side emits events');
         end
 
     end

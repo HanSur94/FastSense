@@ -12,10 +12,12 @@ function cfg = FastSenseDefaults()
 %     cfg — struct with the following fields:
 %
 %   Theme Settings:
-%     cfg.Theme                    — preset name ('default', 'dark',
-%                                    'light', 'industrial', 'scientific')
+%     cfg.Theme                    — preset name ('light' or 'dark';
+%                                    legacy names 'default',
+%                                    'industrial', 'scientific', 'ocean'
+%                                    are accepted and aliased to 'light')
 %                                    or a struct of theme overrides
-%                                    (default: 'default')
+%                                    (default: 'light')
 %     cfg.ThemeDir                 — folder containing custom theme .m
 %                                    files, relative to this file
 %                                    (default: 'themes')

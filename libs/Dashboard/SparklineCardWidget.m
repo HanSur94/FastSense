@@ -64,6 +64,8 @@ classdef SparklineCardWidget < DashboardWidget
         function render(obj, parentPanel)
         %RENDER Create all graphics objects inside parentPanel.
             obj.hPanel = parentPanel;
+            % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
+            try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme      = obj.getTheme();
             bgColor    = theme.WidgetBackground;
             fgColor    = theme.ForegroundColor;
@@ -280,6 +282,16 @@ classdef SparklineCardWidget < DashboardWidget
                         obj.StaticValue = s.source.value;
                 end
             end
+        end
+    end
+
+    methods (Access = private)
+        function relayout_(obj)
+        %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
+            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            obj.render(obj.hPanel);
         end
     end
 end

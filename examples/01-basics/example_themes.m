@@ -11,8 +11,10 @@ y1 = sin(x*2*pi/10) + 0.2*randn(1,n);
 y2 = cos(x*2*pi/8) + 0.3*randn(1,n);
 y3 = 0.5*sin(x*2*pi/5) + 0.15*randn(1,n);
 
-%% 1. All 6 built-in theme presets
-themes = {'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'};
+%% 1. Built-in theme presets ('light' and 'dark')
+%   Legacy preset names ('default', 'industrial', 'scientific', 'ocean')
+%   are accepted and aliased to 'light' for backward compatibility.
+themes = {'light', 'dark'};
 
 for i = 1:numel(themes)
     themeName = themes{i};
@@ -26,7 +28,7 @@ for i = 1:numel(themes)
     title(fp.hAxes, sprintf('Theme: %s', themeName));
 end
 
-fprintf('All 6 themes rendered. Compare the styles!\n');
+fprintf('Both themes rendered. Compare the styles!\n');
 
 %% 2. Color palettes via LineColorOrder ('vibrant', 'muted', 'colorblind')
 palettes = {'vibrant', 'muted', 'colorblind'};
@@ -50,9 +52,9 @@ fp.render();
 title(fp.hAxes, 'Custom theme overrides (dark + larger font/lines)');
 
 %% 4. reapplyTheme — switch theme on a rendered plot
-fp.Theme = FastSenseTheme('ocean');
+fp.Theme = FastSenseTheme('light');
 fp.reapplyTheme();
-title(fp.hAxes, 'reapplyTheme: switched from dark to ocean');
+title(fp.hAxes, 'reapplyTheme: switched from dark to light');
 fprintf('reapplyTheme() demo: switched theme on an already-rendered plot.\n');
 
 %% 5. FastSenseDefaults — inspect global defaults

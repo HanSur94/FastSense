@@ -106,11 +106,11 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             w2.render(hp2);
             testCase.verifyEqual(w2.CurrentTrend, 'down');
 
-            % Flat data -> 'flat'
+            % Flat data -> 'flat' (small variation in middle, flat recent window)
             s3 = SensorTag('flat', 'Name', 'Flat');
             s3_x_ = 1:20;
             s3_y_ = 50 * ones(1, 20);
-            s3_y_(1) = 49; s3_y_(end) = 51;
+            s3_y_(1) = 49; s3_y_(10) = 51;
             s3.updateData(s3_x_, s3_y_);
             w3 = NumberWidget('Sensor', s3);
             hp3 = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
@@ -141,8 +141,8 @@ classdef TestNumberWidget < matlab.unittest.TestCase
             st = w.toStruct();
             testCase.verifyEqual(st.type, 'number');
             testCase.verifyTrue(isfield(st, 'source'));
-            testCase.verifyEqual(st.source.type, 'sensor');
-            testCase.verifyEqual(st.source.name, 'P-201');
+            testCase.verifyEqual(st.source.type, 'tag');
+            testCase.verifyEqual(st.source.key, 'P-201');
             testCase.verifyEqual(st.units, 'bar');
         end
 

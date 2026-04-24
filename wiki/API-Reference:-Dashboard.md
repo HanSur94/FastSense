@@ -20,6 +20,8 @@ obj = DashboardEngine(name, varargin)
 | Theme | `'light'` |  |
 | LiveInterval | `5` |  |
 | InfoFile | `''` |  |
+| ProgressMode | `'auto'` | 'auto' \| 'on' \| 'off' — render progress bar visibility |
+| ShowTimePanel | `true` | hide the bottom time slider panel |
 
 ### Methods
 
@@ -55,6 +57,12 @@ GETCACHEDTHEME Return cached theme struct, recomputing only when Theme changes.
 
 #### `stopLive(obj)`
 
+Clear IsLive FIRST so any in-flight onLiveTimerError callback
+does not re-`start(obj.LiveTimer)` on the timer we are about to
+delete (observed on CI as a runaway 500k+ stderr loop in
+testTimerContinuesAfterError). Then stop/delete the timer with
+isvalid + try/catch guards, matching LiveTagPipeline.stop().
+
 #### `save(obj, filepath)`
 
 #### `exportScript(obj, filepath)`
@@ -75,6 +83,16 @@ PREVIEW Print ASCII representation of the dashboard to console.
 #### `showInfo(obj)`
 
 SHOWINFO Display the linked Markdown info file in a browser.
+  When InfoFile is empty, displays a built-in placeholder page
+  describing how to attach a custom info file.
+
+#### `writeAndOpenInfoHtml(obj, html)`
+
+WRITEANDOPENINFOHTML Write rendered HTML to the cached temp file and open it.
+
+#### `md = buildPlaceholderInfoMarkdown(obj)`
+
+BUILDPLACEHOLDERINFOMARKDOWN Default info page shown when no InfoFile is set.
 
 #### `cleanupInfoTempFile(obj)`
 
@@ -110,6 +128,23 @@ SETCONTENTAREA Update the Layout content area.
   without direct write-access to the Layout property (required
   for Octave compatibility).
 
+#### `[effToolbarH, effPageBarH, effTimeH] = applyChromeVisibility(obj, toolbarH, pageBarH)`
+
+APPLYCHROMEVISIBILITY Set chrome Visible state + return effective heights.
+  Respects ShowToolbar and ShowTimePanel flags. Returns the heights
+  that should be used for the content-area calculation (0 when the
+  corresponding chrome element is hidden).
+
+#### `applyVisibilityAndRelayout(obj)`
+
+APPLYVISIBILITYANDRELAYOUT Re-apply ShowToolbar/ShowTimePanel + re-layout widgets.
+
+#### `applyThemeToChrome(obj)`
+
+APPLYTHEMETOCHROME Restyle figure + non-widget chrome using the current Theme.
+  Widget panels are NOT touched here — call rerenderWidgets() after
+  this method to recreate widget content with the new theme.
+
 #### `rerenderWidgets(obj)`
 
 RERENDERWIDGETS Delete all widget panels and recreate them.
@@ -123,10 +158,41 @@ UPDATEGLOBALTIMERANGE Scan all widgets for data time bounds.
 UPDATELIVETIMERANGE Update DataTimeRange without resetting sliders.
   Called during live mode to expand the time range as data grows.
 
-#### `updateLiveTimeRangeFrom(obj, ws)`
+#### `newTMax = updateLiveTimeRangeFrom(obj, ws)`
 
 UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
   Like updateLiveTimeRange but accepts ws to avoid re-fetching activePageWidgets().
+  Returns the new tMax (or NaN when no widget has finite time data).
+
+#### `createStaleBanner(obj, theme, toolbarH)`
+
+CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
+  A uipanel strip below the toolbar containing a message label and
+  a close button. Hidden by default; shown when staleness is detected
+  and not previously dismissed by the user.
+
+#### `showStaleBanner(obj, staleTitles)`
+
+SHOWSTALEBANNER Display the warning listing the widgets without new data.
+  staleTitles is a cell array of widget Title strings whose tMax
+  did not advance on the last live tick.
+
+#### `hideStaleBanner(obj)`
+
+HIDESTALEBANNER Clear the stale-data warning overlay.
+
+#### `onStaleBannerClose(obj)`
+
+ONSTALEBANNERCLOSE User dismissed the warning; stay hidden until data resumes.
+
+#### `msg = buildStaleMessage(obj, staleTitles, intervalStr)`
+
+BUILDSTALEMESSAGE Compose the banner text listing stale widgets.
+
+#### `staleTitles = detectStaleWidgets(obj, ws)`
+
+DETECTSTALEWIDGETS Return titles of widgets whose tMax did not advance.
+  Updates LastTMaxPerWidget_ with the current observation.
 
 #### `broadcastTimeRange(obj, tStart, tEnd)`
 
@@ -139,6 +205,10 @@ RESETGLOBALTIME Re-attach all widgets to global time and apply.
 #### `realizeBatch(obj, batchSize)`
 
 REALIZEBATCH Render widgets in batches with drawnow between.
+
+#### `[idx, name] = activePageLabel(obj)`
+
+ACTIVEPAGELABEL Index and name of the active page, or (1, '') if single-page.
 
 #### `onScrollRealize(obj, topRow, bottomRow)`
 
@@ -154,6 +224,39 @@ MARKALLDIRTY Flag all widgets as needing refresh.
 #### `onResize(obj)`
 
 ONRESIZE Handle figure resize: reposition all widget panels.
+
+#### `triggerTimeSlidersChangedForTest(obj)`
+
+TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
+  callback without going through UI events. Exposes the private
+  onTimeSlidersChanged() debounce path to tests.
+  (Hidden, not the narrower Access = {?matlab.unittest.TestCase},
+  so Octave parsing survives — Octave has no matlab.unittest.)
+
+#### `broadcastTimeRangeNow(obj, tStart, tEnd)`
+
+BROADCASTTIMERANGENOW Test-only synchronous broadcast bypassing the
+  SliderDebounceTimer. Stock Octave 7 batch mode has unreliable
+  timer scheduling; tests should use this entry point to drive
+  the broadcast deterministically. Also updates the time labels
+  (skipping the debounced onRangeSelectorChanged path).
+
+#### `env = computePreviewEnvelopeForTest(obj, nBuckets)`
+
+COMPUTEPREVIEWENVELOPEFORTEST Test-only wrapper around the
+  private computePreviewEnvelopeReturning_. Runs the real
+  aggregation and returns the envelope struct so tests can
+  assert shape/monotonicity without scraping the selector's
+  patch handles. When nBuckets is omitted, uses the method's
+  own width-derived default.
+
+#### `str = formatTimeVal(~, t)`
+
+FORMATTIMEVAL Format a numeric time value as a human-readable string.
+  Supports three numeric ranges:
+    posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
+    MATLAB datenum (t > 700000, not posix) — uses datestr directly
+    raw numeric (t <= 700000) — formats as s/m/h/d suffix
 
 ### Static Methods
 
@@ -297,6 +400,14 @@ Override in subclasses to respond to global time changes.
 
 Override in subclasses to report data time range.
 
+#### `series = getPreviewSeries(~, ~)`
+
+GETPREVIEWSERIES Optional preview data for the time-range envelope.
+  series = getPreviewSeries(obj, nBuckets) returns a struct with
+  fields xCenters, yMin, yMax — each a 1xnBuckets row vector;
+  yMin/yMax MUST be normalized to [0,1] within the widget's own
+  y-range. Base returns [] to opt out of the preview envelope.
+
 #### `lines = asciiRender(obj, width, height)`
 
 ASCIIRENDER Return ASCII representation of this widget.
@@ -344,6 +455,7 @@ obj = FastSenseWidget(varargin)
 | YLabel | `''` | Y-axis label (auto-set from Sensor if empty) |
 | YLimits | `[]` | Fixed Y-axis range [min max]; empty = auto-scale |
 | ShowThresholdLabels | `false` | show inline name labels on threshold lines |
+| LiveViewMode | `'reset'` |  |
 
 ### Methods
 
@@ -363,6 +475,27 @@ UPDATE Incrementally update Tag data without full axes rebuild.
   avoiding the expensive delete/recreate cycle of refresh().
   Falls back to refresh() if FastSenseObj is not in a renderable state.
 
+#### `autoScaleY_(obj, y)`
+
+AUTOSCALEY_ Rescale the Y axis to cover current data + thresholds.
+  FastSense locks YLim to manual mode at first render, so new
+  samples outside the initial range would fall off the chart.
+  This helper recomputes the Y extent every tick (including any
+  threshold values so MonitorTag lines stay visible) and updates
+  the axes. Skipped when:
+    - the widget has a user-pinned YLimits NV-pair, or
+    - the user manually zoomed Y via mouse (UserZoomedY),
+  so we never fight an explicit human interaction.
+
+#### `onYLimChanged(obj)`
+
+ONYLIMCHANGED Detach widget from automatic Y rescale after user zoom.
+  Fired by the YLim PostSet listener. When the YLim change came
+  from inside autoScaleY_ (IsSettingYLim==true) we ignore it; any
+  other source — mouse scroll, drag, zoom toolbar, programmatic
+  ylim() from user code — counts as a manual override and
+  latches UserZoomedY so live ticks stop fighting the user.
+
 #### `setTimeRange(obj, tStart, tEnd)`
 
 #### `onXLimChanged(obj)`
@@ -374,6 +507,15 @@ detach this widget from global time.
 
 Return cached min/max in O(1). Cache is kept up to date by
 updateTimeRangeCache() which is called from render/refresh/update.
+
+#### `series = getPreviewSeries(obj, nBuckets)`
+
+GETPREVIEWSERIES Per-bucket min/max preview for the dashboard envelope.
+  series = getPreviewSeries(obj, nBuckets) returns a struct with
+  fields xCenters, yMin, yMax — each a 1xnBuckets row vector; yMin
+  and yMax are normalized into [0,1] across the widget's own
+  current y-range. Returns [] when no data is bound or when the
+  sample count is too low to downsample meaningfully.
 
 #### `t = getType(~)`
 
@@ -795,9 +937,9 @@ obj = DashboardLayout(varargin)
 | Columns | `24` |  |
 | TotalRows | `4` |  |
 | ContentArea | `[0 0 1 1]` |  |
-| Padding | `[0.02 0.02 0.02 0.02]` |  |
-| GapH | `0.008` |  |
-| GapV | `0.015` |  |
+| Padding | `[0 0 0 0]` |  |
+| GapH | `0` |  |
+| GapV | `0` |  |
 | RowHeight | `0.22` |  |
 | ScrollbarWidth | `0.015` |  |
 | OnScrollCallback | `[]` | function handle: @(topRow, bottomRow) |
@@ -831,11 +973,26 @@ FIGURETOCANVASDELTA Convert figure-normalized deltas to canvas deltas.
 
 #### `newPos = resolveOverlap(obj, pos, existingPositions)`
 
+#### `ensureViewport(obj, hFigure, theme)`
+
+ENSUREVIEWPORT Create viewport/canvas/scrollbar only if they do not exist yet.
+  Idempotent: if the viewport handle is already valid, returns immediately
+  without deleting or recreating anything. On the first call the viewport,
+  canvas, and (if needed) scrollbar are created and TotalRows is reset to 0
+  so that subsequent additive allocatePanels calls accumulate row counts.
+
+#### `resetViewport(obj)`
+
+RESETVIEWPORT Destroy the current viewport so the next ensureViewport call rebuilds it.
+  Use when a full layout rebuild is required (e.g. single-page reflow).
+
 #### `allocatePanels(obj, hFigure, widgets, theme)`
 
-ALLOCATEPANELS Create viewport, canvas, scrollbar and placeholder panels.
-  Like createPanels but does NOT call widget.render(). Instead,
-  each widget gets its hPanel assigned and a placeholder label.
+ALLOCATEPANELS Create placeholder panels for widgets (additive; no viewport destruction).
+  Calls ensureViewport (idempotent) to guarantee hViewport/hCanvas exist, then
+  accumulates TotalRows and appends widget panels to the shared canvas.
+  Multiple calls for different page-widget sets are safe: earlier panels survive.
+Ensure viewport exists (idempotent — no-op if already live)
 
 #### `realizeWidget(obj, widget)`
 
@@ -885,8 +1042,11 @@ ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
 
 > Inherits from: `handle`
 
-Provides buttons for: Live mode toggle, Edit mode, Save, Image, Export.
-  Sits at the top of the dashboard figure.
+Provides buttons for: Sync, Live (toggle with blue border when active),
+  Config (opens DashboardConfigDialog), Image, Export, and Info (always
+  present — shows a placeholder page when no InfoFile is configured).
+  Every button has a descriptive tooltip. Sits at the top of the
+  dashboard figure.
 
 ### Constructor
 
@@ -910,7 +1070,13 @@ SETLASTUPDATETIME Update the last-update label with a timestamp.
 
 #### `onLiveToggle(obj, src)`
 
-#### `onSave(obj)`
+#### `setLiveActiveIndicator(obj, isActive)`
+
+SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
+
+#### `onConfig(obj)`
+
+ONCONFIG Open the dashboard config dialog.
 
 #### `onExport(obj)`
 
@@ -939,8 +1105,6 @@ DEFAULTIMAGEFILENAME Build sanitized default filename for the dialog.
   in-codebase precedent.
 
 #### `onInfo(obj)`
-
-#### `onEdit(obj)`
 
 #### `contentArea = getContentArea(obj)`
 
@@ -1029,6 +1193,43 @@ FROMSTRUCT Reconstruct ChipBarWidget from a saved struct.
 
 ---
 
+## `DashboardConfigDialog` --- Config editor for a DashboardEngine.
+
+> Inherits from: `handle`
+
+Opens a figure listing every public DashboardEngine property with
+  an editable control. Apply writes values back to the engine and
+  propagates visible changes (figure title, theme re-render, live
+  timer restart). Close dismisses without additional changes.
+
+  Enum-like properties get a popup menu:
+    Theme         — {'light', 'dark'}
+    ProgressMode  — {'auto', 'on', 'off'}
+  Numeric properties get a numeric edit control. Everything else
+  gets a plain text edit.
+
+  Usage (usually invoked by the toolbar Config button):
+    dlg = DashboardConfigDialog(engine);
+    % ...user edits fields, clicks Apply/Close...
+
+### Constructor
+
+```matlab
+obj = DashboardConfigDialog(engine)
+```
+
+### Methods
+
+#### `close(obj)`
+
+CLOSE Destroy the dialog figure.
+
+#### `apply(obj)`
+
+APPLY Write all control values back to the engine and propagate.
+
+---
+
 ## `DashboardPage` --- Named page container within a multi-page dashboard.
 
 > Inherits from: `handle`
@@ -1065,6 +1266,30 @@ ADDWIDGET Append widget w to the Widgets list.
 
 TOSTRUCT Serialize the page to a struct with name and widgets fields.
   s = pg.toStruct() returns s.name (char) and s.widgets (cell).
+
+---
+
+## `DashboardProgress` --- Progress-bar helper for DashboardEngine render passes.
+
+> Inherits from: `handle`
+
+Emits a self-updating progress line to stdout as widgets are realized
+  during DashboardEngine.render() / rerenderWidgets(), and a final
+  summary line on completion.
+
+  Silent outside interactive sessions so test / CI output stays clean.
+
+### Constructor
+
+```matlab
+obj = DashboardProgress(name, totalWidgets, totalPages, mode)
+```
+
+### Methods
+
+#### `tick(obj, widget, pageIdx, pageName)`
+
+#### `finish(obj)`
 
 ---
 
@@ -1569,4 +1794,117 @@ TOSTRUCT Serialize widget to a struct for JSON export.
 #### `SparklineCardWidget.obj = fromStruct(s)`
 
 FROMSTRUCT Deserialize a SparklineCardWidget from a struct.
+
+---
+
+## `TimeRangeSelector` --- Single-window time-range selector with data-preview envelope.
+
+> Inherits from: `handle`
+
+selector = TimeRangeSelector(hPanel) attaches a time-range selector to a
+  uipanel. The selector owns its own axes inside the panel and draws:
+
+      * an (optional) aggregate min/max envelope patch behind the selection,
+      * a semi-transparent selection rectangle that can be panned by dragging
+        its middle and resized by dragging either of its two edge handles,
+      * two line handles at the left and right edges of the selection window.
+
+  Interaction uses figure-level WindowButton{Down,Motion,Up}Fcn. Any previously
+  installed callbacks are saved on construction and restored on delete().
+
+  Usage (the contract plan 03 uses to wire this into DashboardEngine):
+
+      selector = TimeRangeSelector(hPanel, ...
+          'OnRangeChanged', @(tStart, tEnd) onRangeChanged(tStart, tEnd), ...
+          'Theme',          themeStruct);
+      selector.setDataRange(tMin, tMax);        % full extent user can scrub
+      selector.setSelection(tStart, tEnd);      % fires OnRangeChanged
+      selector.setEnvelope(xC, yMin, yMax);     % optional preview
+      [tS, tE] = selector.getSelection();
+      delete(selector);                         % restores figure callbacks
+
+  Properties (public, configurable):
+      OnRangeChanged  Function handle @(tStart, tEnd). May be [].
+      Theme           Theme struct (or []).
+      MinWidthFrac    Minimum selection width as fraction of DataRange span.
+      EdgeTolPx       Pixel tolerance for edge hit-testing.
+
+  Properties (read-only, set internally):
+      hPanel, hFigure, hAxes, hEnvelope, hSelection, hEdgeLeft, hEdgeRight
+      DataRange       1x2 [tMin tMax].
+      Selection       1x2 [tStart tEnd].
+      DragState       'idle' | 'panning' | 'resizeLeft' | 'resizeRight'.
+
+  Methods:
+      setDataRange(tMin, tMax)         Set full extent; rescales selection.
+      setSelection(tStart, tEnd)       Set/clamp/reorder selection; fires callback.
+      getSelection()                   Return [tStart, tEnd].
+      setEnvelope(xC, yMin, yMax)      Update or hide aggregate envelope.
+      delete()                         Restore saved figure callbacks.
+
+  Compatible with MATLAB R2020b+ and Octave 7+ (D-11): uses only axes, patch,
+  line, uipanel primitives and WindowButton{Down,Motion,Up}Fcn — no
+  matlab.graphics.*, no uifigure/uiaxes, no addlistener on primitive properties.
+
+### Constructor
+
+```matlab
+obj = TimeRangeSelector(hPanel, varargin)
+```
+
+TimeRangeSelector  Construct a selector attached to a uipanel.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| OnRangeChanged | `[]` | function handle @(tStart, tEnd) |
+| Theme | `[]` | struct from DashboardTheme, or [] |
+| MinWidthFrac | `0.005` | minimum selection width as fraction of DataRange span |
+| EdgeTolPx | `10` | pixel tolerance for edge hit-test |
+
+### Methods
+
+#### `setDataRange(obj, tMin, tMax)`
+
+setDataRange  Set the full extent the user can scrub over.
+  The current selection is rescaled proportionally so that a
+  50%-selected window remains 50% wide after the change.
+  Programmatic — does NOT fire OnRangeChanged; only user
+  drag interactions do.
+
+#### `setSelection(obj, tStart, tEnd)`
+
+setSelection  Update the selection window, clamping and reordering.
+  Swapped inputs (tStart > tEnd) are reordered. Values outside
+  DataRange are clamped. Widths smaller than MinWidthFrac * span
+  are widened around the requested midpoint. Fires OnRangeChanged
+  with the final [tStart, tEnd] (if the callback is set).
+Reorder swapped bounds (tStart < tEnd).
+
+#### `[tStart, tEnd] = getSelection(obj)`
+
+getSelection  Return the current selection as [tStart, tEnd].
+
+#### `setLabels(obj, leftText, rightText)`
+
+setLabels  Update the inline edge labels that track the selection.
+  Pass empty strings to hide a side's label. The text sits at the
+  mid-height of the selector, inside each edge handle.
+
+#### `setEnvelope(obj, xC, yMin, yMax)`
+
+setEnvelope  (Legacy) Draw the aggregate min/max preview envelope.
+  Kept for backward compat with tests. New code should prefer
+  setPreviewLines for per-widget line previews.
+
+#### `setPreviewLines(obj, lines)`
+
+setPreviewLines  Draw one downsampled line per widget preview.
+  lines is a cell array of structs, each with fields x and y
+  (equal-length row vectors; y already normalized to [0,1]).
+  Each line is rendered with a distinct color from a fixed
+  palette, placed behind the selection rectangle so drag
+  interactions remain unaffected.
+Clear previous preview lines.
 

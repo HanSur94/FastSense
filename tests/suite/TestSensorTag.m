@@ -229,6 +229,97 @@ classdef TestSensorTag < matlab.unittest.TestCase
             testCase.verifyEqual(s2.sensor.id, 42);
             testCase.verifyEqual(s2.sensor.source, 'file.csv');
         end
+
+        % ---- Phase 1012-02: RawSource property (D-05 + D-06) ----
+
+        function testRawSourceProperty(testCase)
+            %TESTRAWSOURCEPROPERTY Phase 1012-02: RawSource NV-pair wiring.
+            %   Covers the 10 behaviors in Plan 1012-02 Task 1:
+            %     1. Accepts RawSource struct with file/column/format
+            %     2. Omitting column/format normalizes to ''
+            %     3. Missing file field raises TagPipeline:invalidRawSource
+            %     4. Non-struct RawSource raises TagPipeline:invalidRawSource
+            %     5. Empty file raises TagPipeline:invalidRawSource
+            %     6. toStruct emits s.sensor.rawsource when set
+            %     7. fromStruct round-trips RawSource
+            %     8. Existing constructor path still works (no regression)
+            %     9. Unknown option still throws SensorTag:unknownOption
+            %    10. RawSource is read-only (no setter)
+
+            % 1. Construct with full RawSource struct
+            rs = struct('file', 'a.csv', 'column', 'p', 'format', '');
+            t = SensorTag('k', 'RawSource', rs);
+            r = t.RawSource;
+            testCase.verifyTrue(isstruct(r));
+            testCase.verifyEqual(r.file,   'a.csv');
+            testCase.verifyEqual(r.column, 'p');
+            testCase.verifyEqual(r.format, '');
+
+            % 2. Omitting column/format normalizes to ''
+            t2 = SensorTag('k2', 'RawSource', struct('file', 'b.csv'));
+            r2 = t2.RawSource;
+            testCase.verifyEqual(r2.file,   'b.csv');
+            testCase.verifyEqual(r2.column, '');
+            testCase.verifyEqual(r2.format, '');
+
+            % 3. Missing file field -> TagPipeline:invalidRawSource
+            testCase.verifyError( ...
+                @() SensorTag('k3', 'RawSource', struct('column', 'x')), ...
+                'TagPipeline:invalidRawSource');
+
+            % 4. Non-struct RawSource -> TagPipeline:invalidRawSource
+            testCase.verifyError( ...
+                @() SensorTag('k4', 'RawSource', 'notastruct'), ...
+                'TagPipeline:invalidRawSource');
+
+            % 5. Empty file -> TagPipeline:invalidRawSource
+            testCase.verifyError( ...
+                @() SensorTag('k5', 'RawSource', struct('file', '')), ...
+                'TagPipeline:invalidRawSource');
+
+            % 6. toStruct emits s.sensor.rawsource when set; absent when not
+            s1 = t.toStruct();
+            testCase.verifyTrue(isfield(s1, 'sensor'));
+            testCase.verifyTrue(isfield(s1.sensor, 'rawsource'));
+            testCase.verifyEqual(s1.sensor.rawsource.file, 'a.csv');
+
+            tPlain = SensorTag('plain');
+            sPlain = tPlain.toStruct();
+            if isfield(sPlain, 'sensor')
+                testCase.verifyFalse(isfield(sPlain.sensor, 'rawsource'));
+            end
+
+            % 7. Round-trip through fromStruct preserves RawSource
+            t1b = SensorTag.fromStruct(s1);
+            r1b = t1b.RawSource;
+            testCase.verifyEqual(r1b.file,   'a.csv');
+            testCase.verifyEqual(r1b.column, 'p');
+            testCase.verifyEqual(r1b.format, '');
+
+            % 8. Existing constructor (no RawSource) still works
+            tExisting = SensorTag('k6', 'Name', 'X', 'Units', 'bar');
+            testCase.verifyEqual(tExisting.Name,  'X');
+            testCase.verifyEqual(tExisting.Units, 'bar');
+
+            % 9. Unknown option still throws SensorTag:unknownOption
+            testCase.verifyError( ...
+                @() SensorTag('k7', 'NoSuch', 1), ...
+                'SensorTag:unknownOption');
+
+            % 10. RawSource is a read-only dependent property (no setter).
+            %   MATLAB throws MException on assign; Octave silently ignores
+            %   writes to Dependent properties without a setter. Assert the
+            %   invariant: the stored value must NOT change after an assign
+            %   attempt (works on both runtimes).
+            rsBefore = t.RawSource;
+            try
+                setRawSource_(t);
+            catch
+                % MATLAB path: threw as expected.
+            end
+            rsAfter = t.RawSource;
+            testCase.verifyEqual(rsAfter.file, rsBefore.file);
+        end
     end
 
     methods (Access = private)
@@ -250,4 +341,9 @@ function deleteIfExists(p)
     if exist(p, 'file')
         delete(p);
     end
+end
+
+function setRawSource_(t)
+    %SETRAWSOURCE_ Attempt to assign RawSource (must throw — read-only dependent).
+    t.RawSource = struct('file', 'x.csv');
 end

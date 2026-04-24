@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 6 * * 1'
+    # Nightly full-suite run. PRs use path-filtered subsets (see `changes` job);
+    # nightly runs everything so cross-library regressions surface within 24h.
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -14,8 +16,116 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Two-tier CI: PRs run only the jobs whose inputs changed, push-to-main and
+  # the nightly schedule run the full suite. Within MATLAB/Octave jobs the
+  # `test_pattern` output narrows the test set further when only downstream
+  # libs (Dashboard, EventDetection, WebBridge) changed. Foundational libs
+  # (FastSense, SensorThreshold), test infrastructure, and `core` paths
+  # (install.m, MEX C sources, workflows themselves, lint config, the test
+  # runner, the coverage script) all force a full run on PRs as a safety net.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      matlab: ${{ steps.filter.outputs.matlab }}
+      mex: ${{ steps.filter.outputs.mex }}
+      test_pattern: ${{ steps.test_pattern.outputs.pattern }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'install.m'
+              - 'libs/FastSense/private/mex_src/**'
+              - 'libs/FastSense/private/.mex-version'
+              - '.github/workflows/**'
+              - 'miss_hit.cfg'
+              - 'tests/run_all_tests.m'
+              - 'scripts/run_tests_with_coverage.m'
+            matlab:
+              - 'libs/**'
+              - 'tests/**'
+              - 'examples/**'
+              - 'scripts/**.m'
+              - 'install.m'
+              - 'run_profile.m'
+            mex:
+              - 'libs/**/mex_src/**'
+              - 'libs/**/build_mex.m'
+              - 'libs/FastSense/mksqlite.c'
+              - 'libs/FastSense/private/.mex-version'
+            fastsense:
+              - 'libs/FastSense/**'
+            sensorthreshold:
+              - 'libs/SensorThreshold/**'
+            eventdetection:
+              - 'libs/EventDetection/**'
+            dashboard:
+              - 'libs/Dashboard/**'
+            webbridge:
+              - 'libs/WebBridge/**'
+            tests:
+              - 'tests/**'
+            examples:
+              - 'examples/**'
+
+      - name: Compute test pattern
+        id: test_pattern
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          F_CORE: ${{ steps.filter.outputs.core }}
+          F_MEX: ${{ steps.filter.outputs.mex }}
+          F_FASTSENSE: ${{ steps.filter.outputs.fastsense }}
+          F_SENSORTHRESHOLD: ${{ steps.filter.outputs.sensorthreshold }}
+          F_EVENTDETECTION: ${{ steps.filter.outputs.eventdetection }}
+          F_DASHBOARD: ${{ steps.filter.outputs.dashboard }}
+          F_WEBBRIDGE: ${{ steps.filter.outputs.webbridge }}
+          F_TESTS: ${{ steps.filter.outputs.tests }}
+          F_EXAMPLES: ${{ steps.filter.outputs.examples }}
+        run: |
+          # Non-PR events (push, schedule, manual) always run the full suite.
+          # On PRs, foundational lib changes or any safety-net trigger also
+          # force the full suite. Only when the change is confined to the
+          # downstream libs (Dashboard/EventDetection/WebBridge) do we narrow.
+          if [ "$EVENT_NAME" != "pull_request" ] \
+             || [ "$F_CORE" = "true" ] || [ "$F_MEX" = "true" ] \
+             || [ "$F_FASTSENSE" = "true" ] || [ "$F_SENSORTHRESHOLD" = "true" ] \
+             || [ "$F_TESTS" = "true" ] || [ "$F_EXAMPLES" = "true" ]; then
+            echo "pattern=" >> "$GITHUB_OUTPUT"
+            echo "Full suite (no narrowing)."
+            exit 0
+          fi
+          # Conservative downstream bundles per the dependency graph:
+          #   WebBridge   ← only WebBridge tests
+          #   Dashboard   ← Dashboard + WebBridge tests
+          #   EventDetection ← EventDetection + Dashboard + WebBridge tests
+          patterns=()
+          if [ "$F_EVENTDETECTION" = "true" ]; then
+            patterns+=("Event" "Notification" "DataSource" "MatFile" "Mock" "Live.*Pipeline" "Incremental")
+          fi
+          if [ "$F_EVENTDETECTION" = "true" ] || [ "$F_DASHBOARD" = "true" ]; then
+            patterns+=("Dashboard" "Widget" "Toolbar" "InfoTooltip" "MarkdownRenderer")
+          fi
+          if [ "$F_EVENTDETECTION" = "true" ] || [ "$F_DASHBOARD" = "true" ] || [ "$F_WEBBRIDGE" = "true" ]; then
+            patterns+=("WebBridge")
+          fi
+          if [ "${#patterns[@]}" -eq 0 ]; then
+            echo "pattern=" >> "$GITHUB_OUTPUT"
+            echo "No matlab paths matched; full suite (jobs may still skip via job-level if:)."
+            exit 0
+          fi
+          IFS='|'
+          pattern="${patterns[*]}"
+          echo "pattern=${pattern}" >> "$GITHUB_OUTPUT"
+          echo "Narrowed test pattern: ${pattern}"
+
   lint:
     name: MATLAB Lint
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true'
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
@@ -35,15 +145,17 @@ jobs:
 
   build-mex:
     name: Build MEX (Linux)
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     uses: ./.github/workflows/_build-mex-octave.yml
     with:
       artifact-name: mex-linux
 
   build-mex-matlab:
     name: Build MEX (MATLAB Linux)
+    needs: changes
     timeout-minutes: 30
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -62,7 +174,7 @@ jobs:
             libs/FastSense/private/*.mexa64
             libs/SensorThreshold/private/*.mexa64
             libs/FastSense/mksqlite.mexa64
-          key: mex-matlab-linux-r2020b-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m') }}
+          key: mex-matlab-linux-r2020b-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m', 'libs/FastSense/private/.mex-version') }}
 
       - name: Compile MEX files (MATLAB)
         if: steps.cache-mex-matlab.outputs.cache-hit != 'true'
@@ -95,8 +207,8 @@ jobs:
   octave:
     name: Octave Tests
     timeout-minutes: 45
-    needs: build-mex
-    if: github.event_name != 'schedule'
+    needs: [changes, build-mex]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     container: gnuoctave/octave:11.1.0
     env:
@@ -111,13 +223,20 @@ jobs:
           name: mex-linux
 
       - name: Run tests
+        env:
+          TEST_PATTERN: ${{ needs.changes.outputs.test_pattern }}
         run: |
           # Writes /tmp/test-results.txt for the downstream "Write test summary" step.
           # Octave 11.1.0 fixed the break_closure_cycles GC crash (upstream bug #67749)
           # that plagued 8.x-10.x, so the old `|| true` workaround dance is gone.
+          # TEST_PATTERN is empty for full runs (push/schedule/foundational PR
+          # changes) and a regex for narrowed downstream-only PR changes.
+          if [ -n "$TEST_PATTERN" ]; then
+            echo "Running narrowed Octave suite: $TEST_PATTERN"
+          fi
           xvfb-run octave --eval "
             cd('tests');
-            r = run_all_tests();
+            r = run_all_tests('${TEST_PATTERN}');
             fid = fopen('/tmp/test-results.txt', 'w');
             fprintf(fid, '%d %d\n', r.passed, r.failed);
             fclose(fid);
@@ -142,10 +261,15 @@ jobs:
             echo "_Results file not produced (test job likely crashed before completion)._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Smoke test: ensure Octave MEX sources still compile on macOS.
+  # Authoritative prebuilt binaries for releases come from refresh-mex-binaries.yml,
+  # which commits platform-specific binaries into libs/.../octave-<platform>/.
+  # This job catches PRs that break the compile path without shipping artifacts.
   mex-build-macos:
     name: MEX Build (macOS ${{ matrix.os == 'macos-latest' && 'ARM64' || 'x64' }})
+    needs: changes
     timeout-minutes: 20
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.mex == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -163,10 +287,15 @@ jobs:
       - name: List compiled MEX binaries
         run: find libs -name '*.mex*' -type f | sort
 
+  # Smoke test: ensure Octave MEX sources still compile on Windows.
+  # Authoritative prebuilt binaries for releases come from refresh-mex-binaries.yml,
+  # which commits platform-specific binaries into libs/.../octave-<platform>/.
+  # This job catches PRs that break the compile path without shipping artifacts.
   mex-build-windows:
     name: MEX Build (Windows ${{ matrix.os == 'windows-latest' && 'latest' || '2022' }})
+    needs: changes
     timeout-minutes: 30
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.mex == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -233,9 +362,9 @@ jobs:
 
   matlab:
     name: MATLAB Tests
-    needs: build-mex-matlab
+    needs: [changes, build-mex-matlab]
     timeout-minutes: 45
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     env:
       FASTSENSE_SKIP_BUILD: "1"
@@ -281,7 +410,7 @@ jobs:
       - name: Run tests with coverage
         uses: matlab-actions/run-command@v3
         with:
-          command: "addpath('scripts'); run_tests_with_coverage();"
+          command: "addpath('scripts'); run_tests_with_coverage('${{ needs.changes.outputs.test_pattern }}');"
 
       - name: Write MATLAB test summary
         if: always()

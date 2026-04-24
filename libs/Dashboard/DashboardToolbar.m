@@ -1,8 +1,11 @@
 classdef DashboardToolbar < handle
 %DASHBOARDTOOLBAR Global toolbar for dashboard controls.
 %
-%   Provides buttons for: Live mode toggle, Edit mode, Save, Image, Export.
-%   Sits at the top of the dashboard figure.
+%   Provides buttons for: Sync, Live (toggle with blue border when active),
+%   Config (opens DashboardConfigDialog), Image, Export, and Info (always
+%   present — shows a placeholder page when no InfoFile is configured).
+%   Every button has a descriptive tooltip. Sits at the top of the
+%   dashboard figure.
 
     properties (Access = public)
         Height = 0.04
@@ -11,8 +14,8 @@ classdef DashboardToolbar < handle
     properties (SetAccess = private)
         hPanel       = []
         hLiveBtn     = []
-        hEditBtn     = []
-        hSaveBtn     = []
+        hLivePanel   = []
+        hConfigBtn     = []
         hExportBtn   = []
         hImageBtn    = []
         hSyncBtn     = []
@@ -20,11 +23,13 @@ classdef DashboardToolbar < handle
         hLastUpdate  = []
         hInfoBtn     = []
         Engine       = []
+        Theme_       = []
     end
 
     methods
         function obj = DashboardToolbar(engine, hFigure, theme)
             obj.Engine = engine;
+            obj.Theme_ = theme;
 
             obj.hPanel = uipanel('Parent', hFigure, ...
                 'Units', 'normalized', ...
@@ -32,34 +37,32 @@ classdef DashboardToolbar < handle
                 'BorderType', 'none', ...
                 'BackgroundColor', theme.ToolbarBackground);
 
+            % Title: always reserve room for the (now mandatory) Info button
             obj.hTitleText = uicontrol('Parent', obj.hPanel, ...
                 'Style', 'edit', ...
                 'Units', 'normalized', ...
-                'Position', [0.01 0.1 0.3 0.8], ...
+                'Position', [0.01 0.1 0.27 0.8], ...
                 'String', engine.Name, ...
                 'FontSize', theme.HeaderFontSize, ...
                 'FontWeight', 'bold', ...
                 'ForegroundColor', theme.ToolbarFontColor, ...
                 'BackgroundColor', theme.ToolbarBackground, ...
                 'HorizontalAlignment', 'left', ...
+                'TooltipString', 'Dashboard name (click to edit)', ...
                 'Callback', @(src,~) obj.onNameEdit(src));
 
             btnW = 0.06;
             btnH = 0.7;
             btnY = 0.15;
 
-            % Conditional Info button (only when InfoFile is set)
-            if ~isempty(engine.InfoFile)
-                % Shorten title to make room
-                set(obj.hTitleText, 'Position', [0.01 0.1 0.27 0.8]);
-
-                obj.hInfoBtn = uicontrol('Parent', obj.hPanel, ...
-                    'Style', 'pushbutton', ...
-                    'Units', 'normalized', ...
-                    'Position', [0.29 btnY 0.05 btnH], ...
-                    'String', 'Info', ...
-                    'Callback', @(~,~) obj.onInfo());
-            end
+            % Mandatory Info button — opens linked info file or a placeholder page.
+            obj.hInfoBtn = uicontrol('Parent', obj.hPanel, ...
+                'Style', 'pushbutton', ...
+                'Units', 'normalized', ...
+                'Position', [0.29 btnY 0.05 btnH], ...
+                'String', 'Info', ...
+                'TooltipString', 'Show dashboard info page', ...
+                'Callback', @(~,~) obj.onInfo());
 
             rightEdge = 0.99;
 
@@ -69,6 +72,7 @@ classdef DashboardToolbar < handle
                 'Units', 'normalized', ...
                 'Position', [rightEdge btnY btnW btnH], ...
                 'String', 'Export', ...
+                'TooltipString', 'Export dashboard as MATLAB script (.m)', ...
                 'Callback', @(~,~) obj.onExport());
 
             rightEdge = rightEdge - btnW - 0.005;
@@ -81,28 +85,30 @@ classdef DashboardToolbar < handle
                 'Callback', @(~,~) obj.onImage());
 
             rightEdge = rightEdge - btnW - 0.005;
-            obj.hSaveBtn = uicontrol('Parent', obj.hPanel, ...
+            obj.hConfigBtn = uicontrol('Parent', obj.hPanel, ...
                 'Style', 'pushbutton', ...
                 'Units', 'normalized', ...
                 'Position', [rightEdge btnY btnW btnH], ...
-                'String', 'Save', ...
-                'Callback', @(~,~) obj.onSave());
+                'String', 'Config', ...
+                'TooltipString', 'Open dashboard config dialog', ...
+                'Callback', @(~,~) obj.onConfig());
 
             rightEdge = rightEdge - btnW - 0.005;
-            obj.hEditBtn = uicontrol('Parent', obj.hPanel, ...
-                'Style', 'pushbutton', ...
+            % Wrap Live toggle in a thin panel so we can show a blue border when active.
+            obj.hLivePanel = uipanel('Parent', obj.hPanel, ...
                 'Units', 'normalized', ...
                 'Position', [rightEdge btnY btnW btnH], ...
-                'String', 'Edit', ...
-                'Callback', @(~,~) obj.onEdit());
-
-            rightEdge = rightEdge - btnW - 0.005;
-            obj.hLiveBtn = uicontrol('Parent', obj.hPanel, ...
+                'BorderType', 'line', ...
+                'HighlightColor', theme.ToolbarBackground, ...
+                'BorderWidth', 2, ...
+                'BackgroundColor', theme.ToolbarBackground);
+            obj.hLiveBtn = uicontrol('Parent', obj.hLivePanel, ...
                 'Style', 'togglebutton', ...
                 'Units', 'normalized', ...
-                'Position', [rightEdge btnY btnW btnH], ...
+                'Position', [0 0 1 1], ...
                 'String', 'Live', ...
                 'Value', 0, ...
+                'TooltipString', 'Toggle live mode — auto-refresh widgets from data', ...
                 'Callback', @(src,~) obj.onLiveToggle(src));
 
             rightEdge = rightEdge - btnW - 0.005;
@@ -143,18 +149,30 @@ classdef DashboardToolbar < handle
         end
 
         function onLiveToggle(obj, src)
-            if get(src, 'Value')
+            isOn = logical(get(src, 'Value'));
+            if isOn
                 obj.Engine.startLive();
             else
                 obj.Engine.stopLive();
             end
+            obj.setLiveActiveIndicator(isOn);
         end
 
-        function onSave(obj)
-            [file, path] = uiputfile('*.json', 'Save Dashboard');
-            if file ~= 0
-                obj.Engine.save(fullfile(path, file));
+        function setLiveActiveIndicator(obj, isActive)
+        %SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
+            if isempty(obj.hLivePanel) || ~ishandle(obj.hLivePanel)
+                return;
             end
+            if isActive
+                set(obj.hLivePanel, 'HighlightColor', obj.Theme_.InfoColor);
+            else
+                set(obj.hLivePanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+            end
+        end
+
+        function onConfig(obj)
+        %ONCONFIG Open the dashboard config dialog.
+            DashboardConfigDialog(obj.Engine);
         end
 
         function onExport(obj)
@@ -217,19 +235,6 @@ classdef DashboardToolbar < handle
 
         function onInfo(obj)
             obj.Engine.showInfo();
-        end
-
-        function onEdit(obj)
-            fp = obj.Engine.FilePath;
-            if isempty(fp)
-                warndlg('No source file associated with this dashboard. Save first or load from a file.', 'Edit');
-                return;
-            end
-            if ~exist(fp, 'file')
-                warndlg(sprintf('Source file not found: %s', fp), 'Edit');
-                return;
-            end
-            edit(fp);
         end
 
         function contentArea = getContentArea(obj)

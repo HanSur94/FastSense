@@ -1,11 +1,47 @@
+# MEX binaries — ignored globally, un-ignored at committed shipped locations.
 *.mexmaci64
 *.mexmaca64
 *.mexa64
 *.mexw64
 *.mex
+
+# MATLAB prebuilts (private/ kernels + mksqlite at FastSense root)
+!libs/FastSense/private/*.mexmaci64
+!libs/FastSense/private/*.mexmaca64
+!libs/FastSense/private/*.mexa64
+!libs/FastSense/private/*.mexw64
+!libs/FastSense/mksqlite.mexmaci64
+!libs/FastSense/mksqlite.mexmaca64
+!libs/FastSense/mksqlite.mexa64
+!libs/FastSense/mksqlite.mexw64
+!libs/SensorThreshold/private/*.mexmaci64
+!libs/SensorThreshold/private/*.mexmaca64
+!libs/SensorThreshold/private/*.mexa64
+!libs/SensorThreshold/private/*.mexw64
+
+# Octave prebuilts — platform-tagged subdirs
+!libs/FastSense/private/octave-linux-x86_64/*.mex
+!libs/FastSense/private/octave-macos-arm64/*.mex
+!libs/FastSense/private/octave-macos-x86_64/*.mex
+!libs/FastSense/private/octave-windows-x86_64/*.mex
+!libs/FastSense/octave-linux-x86_64/mksqlite.mex
+!libs/FastSense/octave-macos-arm64/mksqlite.mex
+!libs/FastSense/octave-macos-x86_64/mksqlite.mex
+!libs/FastSense/octave-windows-x86_64/mksqlite.mex
+!libs/SensorThreshold/private/octave-linux-x86_64/*.mex
+!libs/SensorThreshold/private/octave-macos-arm64/*.mex
+!libs/SensorThreshold/private/octave-macos-x86_64/*.mex
+!libs/SensorThreshold/private/octave-windows-x86_64/*.mex
+
+# The stamp file is plain text but lives alongside the binaries — always tracked.
+!libs/FastSense/private/.mex-version
+
 .DS_Store
 .worktrees/
 *.egg-info/
 __pycache__/
 wiki-gen-summary.md
 .claude/worktrees/
+.planning/
+.superpowers/
+docs/superpowers/

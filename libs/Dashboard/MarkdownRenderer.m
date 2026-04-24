@@ -297,34 +297,29 @@ classdef MarkdownRenderer
         end
 
         function css = getCSS(themeName)
-            switch themeName
-                case {'dark', 'industrial', 'ocean'}
-                    bg = '#1a1a2e';
-                    fg = '#d4d4d4';
-                    codeBg = '#2d2d44';
-                    linkColor = '#5ca8e6';
-                    hrColor = '#3a3a5c';
-                    tableBorder = '#3a3a5c';
-                    tableHeadBg = '#2d2d44';
-                    tableStripeBg = '#22223a';
-                case {'light', 'scientific'}
-                    bg = '#ffffff';
-                    fg = '#2d2d2d';
-                    codeBg = '#f4f4f4';
-                    linkColor = '#0066cc';
-                    hrColor = '#ddd';
-                    tableBorder = '#ddd';
-                    tableHeadBg = '#f4f4f4';
-                    tableStripeBg = '#fafafa';
-                otherwise
-                    bg = '#ffffff';
-                    fg = '#2d2d2d';
-                    codeBg = '#f4f4f4';
-                    linkColor = '#0066cc';
-                    hrColor = '#ddd';
-                    tableBorder = '#ddd';
-                    tableHeadBg = '#f4f4f4';
-                    tableStripeBg = '#fafafa';
+            % Only 'dark' and 'light' remain as distinct presets. Every
+            % other name (empty, 'default', or a legacy alias like
+            % 'industrial' / 'scientific' / 'ocean') resolves to the light
+            % CSS palette, matching how FastSenseTheme / DashboardTheme
+            % alias those names to their 'light' structs.
+            if strcmp(themeName, 'dark')
+                bg = '#1a1a2e';
+                fg = '#d4d4d4';
+                codeBg = '#2d2d44';
+                linkColor = '#5ca8e6';
+                hrColor = '#3a3a5c';
+                tableBorder = '#3a3a5c';
+                tableHeadBg = '#2d2d44';
+                tableStripeBg = '#22223a';
+            else
+                bg = '#ffffff';
+                fg = '#2d2d2d';
+                codeBg = '#f4f4f4';
+                linkColor = '#0066cc';
+                hrColor = '#ddd';
+                tableBorder = '#ddd';
+                tableHeadBg = '#f4f4f4';
+                tableStripeBg = '#fafafa';
             end
             css = sprintf([ ...
                 'body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; ' ...

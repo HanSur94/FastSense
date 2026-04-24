@@ -1,9 +1,16 @@
-function run_tests_with_coverage()
+function run_tests_with_coverage(pattern)
 %RUN_TESTS_WITH_COVERAGE Run tests with code coverage and generate Cobertura XML.
+%   run_tests_with_coverage(PATTERN) restricts the run to test files whose
+%   short name matches the regular expression PATTERN. Empty/missing PATTERN
+%   runs the full suite. Used by CI for path-filtered PR runs.
     import matlab.unittest.TestSuite
     import matlab.unittest.TestRunner
     import matlab.unittest.plugins.CodeCoveragePlugin
     import matlab.unittest.plugins.codecoverage.CoberturaFormat
+
+    if nargin < 1 || isempty(pattern)
+        pattern = '';
+    end
 
     test_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'tests');
     repo_root = fullfile(test_dir, '..');
@@ -14,6 +21,17 @@ function run_tests_with_coverage()
     addpath(suite_dir);
 
     suite = TestSuite.fromFolder(suite_dir);
+    if ~isempty(pattern)
+        fprintf('Filtering tests by pattern: %s\n', pattern);
+        names = {suite.Name};
+        keep = ~cellfun(@isempty, regexp(names, pattern, 'once'));
+        suite = suite(keep);
+        if isempty(suite)
+            fprintf('No tests matched pattern; nothing to run.\n');
+            return;
+        end
+        fprintf('Running %d test methods after filtering.\n', numel(suite));
+    end
     runner = TestRunner.withTextOutput;
 
     % Add code coverage for all library source files

@@ -105,7 +105,7 @@ classdef TestFastSenseAddTag < matlab.unittest.TestCase
         function testAddTagMixedWithLegacy(testCase)
             fp = FastSense();
             legacy = SensorTag('legacy', 'Name', 'Legacy');
-            legacy.updateData(1:50, cos(legacy.X * 0.2));
+            legacy.updateData(1:50, cos((1:50) * 0.2));
             fp.addTag(legacy, 'ShowThresholds', false);
 
             st = SensorTag('modern', 'Name', 'Modern', 'X', 1:30, 'Y', sin(1:30));

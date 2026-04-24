@@ -51,6 +51,8 @@ classdef StatusWidget < DashboardWidget
 
         function render(obj, parentPanel)
             obj.hPanel = parentPanel;
+            % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
+            try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme();
 
             bgColor = theme.WidgetBackground;
@@ -100,9 +102,19 @@ classdef StatusWidget < DashboardWidget
             theme = obj.getTheme();
 
             if ~isempty(obj.Threshold)
-                val = obj.resolveCurrentValue_();
-                if isempty(val), return; end
-                [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromThreshold(val, theme);
+                % MonitorTag bound as Threshold: it already IS a binary
+                % alarm signal (0/1), so query its latest sample directly
+                % instead of going through the legacy Value / ValueFcn +
+                % threshold-comparison path (which returns [] and early-
+                % exits when neither Value nor ValueFcn is supplied — the
+                % normal way to wire a MonitorTag-backed indicator).
+                if thresholdIsMonitorKind_(obj.Threshold)
+                    [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromMonitorTag_(theme);
+                else
+                    val = obj.resolveCurrentValue_();
+                    if isempty(val), return; end
+                    [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromThreshold(val, theme);
+                end
             elseif ~isempty(obj.Sensor)
                 if isempty(obj.Sensor.Y), return; end
                 [obj.CurrentStatus, obj.CurrentColor] = obj.deriveStatusFromSensor(theme);
@@ -124,13 +136,17 @@ classdef StatusWidget < DashboardWidget
             % Update label
             if ~isempty(obj.hLabelText) && ishandle(obj.hLabelText)
                 if ~isempty(obj.Threshold)
-                    val = obj.resolveCurrentValue_();
-                    if ~isempty(val)
-                        lbl = sprintf('%s: %.1f', obj.Title, val);
-                    else
+                    if thresholdIsMonitorKind_(obj.Threshold)
                         lbl = sprintf('%s: %s', obj.Title, upper(obj.CurrentStatus));
+                    else
+                        val = obj.resolveCurrentValue_();
+                        if ~isempty(val)
+                            lbl = sprintf('%s: %.1f', obj.Title, val);
+                        else
+                            lbl = sprintf('%s: %s', obj.Title, upper(obj.CurrentStatus));
+                        end
                     end
-                elseif ~isempty(obj.Sensor)
+                elseif ~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)
                     val = obj.Sensor.Y(end);
                     units = '';
                     if ~isempty(obj.Sensor.Units)
@@ -269,6 +285,14 @@ classdef StatusWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function relayout_(obj)
+        %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
+            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            obj.render(obj.hPanel);
+        end
+
         function val = resolveCurrentValue_(obj)
             %RESOLVECURRENTVALUE_ Return the current scalar value from ValueFcn or Value.
             val = [];
@@ -280,6 +304,33 @@ classdef StatusWidget < DashboardWidget
                 end
             elseif ~isempty(obj.Value)
                 val = obj.Value;
+            end
+        end
+
+        function [status, color] = deriveStatusFromMonitorTag_(obj, theme)
+            %DERIVESTATUSFROMMONITORTAG_ Map a MonitorTag's latest 0/1
+            %   sample to status/color. Triggers the MonitorTag's lazy
+            %   recompute (which also appends any new transition events
+            %   to the attached EventStore), so the Events page receives
+            %   fresh events whenever this widget refreshes.
+            status = 'ok';
+            color  = theme.StatusOkColor;
+            try
+                [~, y] = obj.Threshold.getXY();
+                if ~isempty(y) && y(end) > 0.5
+                    status = 'violation';
+                    crit = '';
+                    try
+                        crit = obj.Threshold.Criticality;
+                    catch
+                    end
+                    if any(strcmp(crit, {'high', 'safety'}))
+                        color = theme.StatusAlarmColor;
+                    else
+                        color = theme.StatusWarnColor;
+                    end
+                end
+            catch
             end
         end
 
@@ -374,5 +425,19 @@ classdef StatusWidget < DashboardWidget
                 otherwise,      color = [0.5 0.5 0.5];
             end
         end
+    end
+end
+
+function tf = thresholdIsMonitorKind_(t)
+    %THRESHOLDISMONITORKIND_ True when t is a Tag reporting kind='monitor'.
+    %   Uses Tag.getKind() rather than isa() to stay within the project's
+    %   Pitfall 1 convention (no subtype checks in widget code).
+    tf = false;
+    if isempty(t)
+        return;
+    end
+    try
+        tf = strcmp(t.getKind(), 'monitor');
+    catch
     end
 end

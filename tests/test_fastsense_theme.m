@@ -15,10 +15,10 @@ function test_fastsense_theme()
     assert(isequal(fp.Theme.Background, [0.5 0.5 0.5]), 'testThemeConstructorStruct');
     assert(isfield(fp.Theme, 'FontSize'), 'testThemeConstructorStruct: inherits defaults');
 
-    % testDefaultThemeWhenNoneSpecified
+    % testDefaultThemeWhenNoneSpecified — default is now 'light'
     fp = FastSense();
     assert(isstruct(fp.Theme), 'testDefaultTheme: must have theme');
-    assert(isequal(fp.Theme.Background, [1 1 1]), 'testDefaultTheme: default bg');
+    assert(all(fp.Theme.Background > [0.9 0.9 0.9]), 'testDefaultTheme: default bg is light');
 
     % testThemeAppliedOnRender
     fp = FastSense('Theme', 'dark');
@@ -30,11 +30,11 @@ function test_fastsense_theme()
     assert(all(axColor < [0.25 0.25 0.25]), 'testThemeAppliedOnRender: axes bg');
     close(fp.hFigure);
 
-    % testThemeFontApplied
+    % testLegacyPresetAliasedToLight — 'scientific' was removed; it now aliases to 'light'
     fp = FastSense('Theme', 'scientific');
     fp.addLine(1:100, rand(1,100));
     fp.render();
-    assert(strcmp(get(fp.hAxes, 'FontName'), 'Times New Roman'), 'testThemeFontApplied');
+    assert(all(get(fp.hFigure, 'Color') > [0.9 0.9 0.9]), 'testLegacyPresetAliased: scientific -> light');
     close(fp.hFigure);
 
     % testThemeWithParentAxes

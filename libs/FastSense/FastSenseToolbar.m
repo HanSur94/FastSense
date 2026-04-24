@@ -512,7 +512,7 @@ classdef FastSenseToolbar < handle
             %   checkmark. Selecting a theme closes the popup and applies it
             %   to the target (and its parent dock, if any).
 
-            builtins = {'default', 'dark', 'light', 'industrial', 'scientific'};
+            builtins = {'light', 'dark'};
 
             % Get custom themes
             cfg = getDefaults();
@@ -599,7 +599,7 @@ classdef FastSenseToolbar < handle
             if isempty(currentTheme); return; end
 
             % Check built-in presets
-            presets = {'default', 'dark', 'light', 'industrial', 'scientific'};
+            presets = {'light', 'dark'};
             for i = 1:numel(presets)
                 ref = FastSenseTheme(presets{i});
                 if obj.themesEqual(currentTheme, ref)
@@ -661,7 +661,7 @@ classdef FastSenseToolbar < handle
             %   FastSenseDock (via AppData), to the entire dock hierarchy.
             %
             %   Input:
-            %     name — theme name string (e.g. 'dark', 'scientific')
+            %     name — theme name string (e.g. 'light', 'dark')
             cfg = getDefaults();
 
             % Resolve: check custom themes first, then built-in

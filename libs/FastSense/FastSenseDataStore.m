@@ -92,6 +92,12 @@ classdef FastSenseDataStore < handle
                 xOut = []; yOut = [];
                 return;
             end
+            if xMin > xMax
+                % Inverted range is a caller bug but historically treated
+                % as an empty result, not a runtime error.
+                xOut = []; yOut = [];
+                return;
+            end
             obj.ensureOpen();
             if obj.UseSqlite
                 [xOut, yOut] = obj.getRangeSqlite(xMin, xMax);
@@ -585,6 +591,18 @@ classdef FastSenseDataStore < handle
 
         function delete(obj)
             obj.cleanup();
+        end
+    end
+
+    methods (Hidden)
+        function ensureOpenForTest(obj)
+        %ENSUREOPENFORTEST Test-only hook to force-reopen the DB handle.
+        %   Exposes the private ensureOpen() lifecycle helper so WAL-mode
+        %   tests can query journal_mode via mksqlite(DbId, ...) without
+        %   hitting MethodRestricted. Hidden (rather than narrower
+        %   Access = {?matlab.unittest.TestCase}) so Octave parsing
+        %   survives — Octave has no matlab.unittest.
+            obj.ensureOpen();
         end
     end
 

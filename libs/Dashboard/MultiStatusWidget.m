@@ -20,6 +20,8 @@ classdef MultiStatusWidget < DashboardWidget
 
         function render(obj, parentPanel)
             obj.hPanel = parentPanel;
+            % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
+            try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme();
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
@@ -232,6 +234,14 @@ classdef MultiStatusWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function relayout_(obj)
+        %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
+            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            obj.render(obj.hPanel);
+        end
+
         function expandedItems = expandSensors_(obj)
         %EXPANDSENSORS_ Expand CompositeThreshold/CompositeTag items into children + summary.
         %   Non-composite items pass through unchanged.
@@ -374,9 +384,35 @@ classdef MultiStatusWidget < DashboardWidget
             end
         end
 
-        function color = deriveColor(~, sensor, defaultColor)
+        function color = deriveColor(obj, sensor, defaultColor)
+            %DERIVECOLOR Derive cell color for a bare (non-struct) Sensors entry.
+            %   Two branches by item type:
+            %     - Tag handle (SensorTag/MonitorTag/CompositeTag): dispatch
+            %       through sensor.valueAt(now); value >= 0.5 -> alarm color
+            %       (mirrors deriveColorFromTag_ for struct-wrapped items).
+            %     - Legacy Sensor handle (.Y + .Thresholds cell): original
+            %       threshold-walk (byte-for-byte preserved for backward compat).
+            %   Gap closure for 1015-UAT Test 1: MonitorTag has no .Y property,
+            %   so the legacy branch threw. See 1015-04-PLAN.md.
             color = defaultColor;
-            if isempty(sensor) || isempty(sensor.Y)
+            if isempty(sensor)
+                return;
+            end
+            if isa(sensor, 'Tag')
+                try
+                    theme = obj.getTheme();
+                    v = sensor.valueAt(now);
+                    if ~isempty(v) && isnumeric(v) && ~any(isnan(v)) && v(1) >= 0.5
+                        color = theme.StatusAlarmColor;
+                    end
+                catch
+                    % Defensive: any Tag-side failure falls through to default.
+                end
+                return;
+            end
+            % Legacy Sensor path (pre-Phase-1011 Sensor objects and any other
+            % non-Tag duck-typed handle exposing .Y + .Thresholds).
+            if isempty(sensor.Y)
                 return;
             end
             val = sensor.Y(end);

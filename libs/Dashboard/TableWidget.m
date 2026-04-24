@@ -178,7 +178,7 @@ classdef TableWidget < DashboardWidget
                 obj.Description = s.description;
             end
             if isfield(s, 'columnNames')
-                obj.ColumnNames = s.columnNames;
+                obj.ColumnNames = reshape(s.columnNames, 1, []);
             end
             if isfield(s, 'mode')
                 obj.Mode = s.mode;

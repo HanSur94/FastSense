@@ -20,10 +20,12 @@ classdef DashboardEngine < handle
 %   see FastSenseGrid.
 
     properties (Access = public)
-        Name         = ''
-        Theme        = 'light'
-        LiveInterval = 5
-        InfoFile     = ''
+        Name          = ''
+        Theme         = 'light'
+        LiveInterval  = 5
+        InfoFile      = ''
+        ProgressMode  = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
+        ShowTimePanel = true     % hide the bottom time slider panel
     end
 
     properties (SetAccess = private)
@@ -51,11 +53,19 @@ classdef DashboardEngine < handle
         TimePanelHeight = 0.06
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
         hTimePanel      = []
-        hTimeSliderL    = []       % Left (start) slider
-        hTimeSliderR    = []       % Right (end) slider
+        hTimeSliderL    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
+        hTimeSliderR    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
         hTimeStart      = []
         hTimeEnd        = []
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
+        TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
+        Progress_           = []   % DashboardProgress instance (active during render)
+        % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
+        hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
+        hStaleBannerText     = []  % uicontrol text child of hStaleBanner
+        hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
+        LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
+        StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
     end
 
     methods (Access = public)
@@ -101,6 +111,9 @@ classdef DashboardEngine < handle
             if obj.ActivePage == 0
                 obj.ActivePage = 1;
             end
+            % Refresh the preview envelope (D-07). Safe before render():
+            % computePreviewEnvelope guards on TimeRangeSelector_ presence.
+            try obj.computePreviewEnvelope(); catch, end
         end
 
         function switchPage(obj, pageIdx)
@@ -155,6 +168,8 @@ classdef DashboardEngine < handle
                     obj.realizeBatch(5);
                 end
             end
+            % Refresh the preview envelope on the newly active page (D-07).
+            try obj.computePreviewEnvelope(); catch, end
         end
 
         function w = addWidget(obj, type, varargin)
@@ -266,15 +281,33 @@ classdef DashboardEngine < handle
             % Create time control panel at bottom
             obj.createTimePanel(themeStruct);
 
-            % Content area between toolbar and time panel
-            obj.Layout.ContentArea = [0, obj.TimePanelHeight, ...
-                1, 1 - toolbarH - pageBarH - obj.TimePanelHeight];
+            % Create the stale-data banner (hidden by default; toggled by live tick)
+            obj.createStaleBanner(themeStruct, toolbarH);
+
+            % Apply visibility flags + compute content area based on effective heights
+            [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
+            obj.Layout.ContentArea = [0, effTimeH, ...
+                1, 1 - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % Create viewport once up front — additive allocatePanels calls below
+            % will reuse it rather than destroying and recreating it each time.
+            obj.Layout.ensureViewport(obj.hFigure, themeStruct);
             obj.Layout.allocatePanels(obj.hFigure, obj.activePageWidgets(), themeStruct);
             obj.Layout.OnScrollCallback = @(r1, r2) obj.onScrollRealize(r1, r2);
+
+            % Progress-bar accounting covers only the active page — hidden
+            % pages keep their lazy-realization contract (realized on switch).
+            totalWidgets = numel(obj.activePageWidgets());
+            totalPages   = max(1, numel(obj.Pages));
+            obj.Progress_ = DashboardProgress(obj.Name, totalWidgets, totalPages, obj.ProgressMode);
+
             obj.realizeBatch(5);
 
-            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle
+            obj.Progress_.finish();
+            obj.Progress_ = [];
+
+            % Pre-allocate panels for non-active pages (hidden) so switchPage is O(1) visibility toggle.
+            % Widgets stay unrealized until the user switches to the page.
             if numel(obj.Pages) > 1
                 for pgIdx = 1:numel(obj.Pages)
                     if pgIdx == obj.ActivePage
@@ -300,6 +333,22 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.IsLive = true;
+            % Baseline per-widget tMax so the first tick has a reference.
+            obj.LastTMaxPerWidget_ = containers.Map( ...
+                'KeyType', 'char', 'ValueType', 'double');
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
+                [~, tMax] = ws{i}.getTimeRange();
+                if ~isfinite(tMax), continue; end
+                if ~isempty(ws{i}.Title)
+                    key = ws{i}.Title;
+                else
+                    key = sprintf('Widget %d', i);
+                end
+                obj.LastTMaxPerWidget_(key) = tMax;
+            end
+            obj.StaleBannerDismissed_ = false;
+            obj.hideStaleBanner();
             obj.LiveTimer = timer('ExecutionMode', 'fixedRate', ...
                 'Period', obj.LiveInterval, ...
                 'TimerFcn', @(~,~) obj.onLiveTick(), ...
@@ -308,9 +357,24 @@ classdef DashboardEngine < handle
         end
 
         function stopLive(obj)
+            % Clear IsLive FIRST so any in-flight onLiveTimerError callback
+            % does not re-`start(obj.LiveTimer)` on the timer we are about to
+            % delete (observed on CI as a runaway 500k+ stderr loop in
+            % testTimerContinuesAfterError). Then stop/delete the timer with
+            % isvalid + try/catch guards, matching LiveTagPipeline.stop().
+            obj.IsLive = false;
+            obj.hideStaleBanner();
+            obj.LastTMaxPerWidget_ = [];
+            obj.StaleBannerDismissed_ = false;
             if ~isempty(obj.LiveTimer)
-                stop(obj.LiveTimer);
-                delete(obj.LiveTimer);
+                try
+                    if isvalid(obj.LiveTimer)
+                        stop(obj.LiveTimer);
+                        delete(obj.LiveTimer);
+                    end
+                catch
+                    % best-effort teardown
+                end
                 obj.LiveTimer = [];
             end
             if ~isempty(obj.SliderDebounceTimer)
@@ -318,7 +382,6 @@ classdef DashboardEngine < handle
                 try delete(obj.SliderDebounceTimer); catch, end
                 obj.SliderDebounceTimer = [];
             end
-            obj.IsLive = false;
         end
 
         function save(obj, filepath)
@@ -440,7 +503,38 @@ classdef DashboardEngine < handle
             useExportApp      = ~isOctave && exist('exportapp') ~= 0;       %#ok<EXIST>
             useExportGraphics = ~isOctave && exist('exportgraphics') ~= 0;  %#ok<EXIST>
 
+            % Both exportgraphics (MATLAB) and print (Octave) only find
+            % axes DIRECTLY under the figure — they do not recurse into
+            % uipanels. Widgets live inside uipanels, so insert a hidden
+            % 1px stub axes when none exists. exportapp handles uipanels
+            % on its own and does not need the stub.
             stubAxes = [];
+            if ~useExportApp
+                topLevelChildren = get(obj.hFigure, 'children');
+                hasTopAxes = false;
+                for k = 1:numel(topLevelChildren)
+                    if strcmp(get(topLevelChildren(k), 'type'), 'axes')
+                        hasTopAxes = true;
+                        break;
+                    end
+                end
+                if ~hasTopAxes
+                    stubAxes = axes('Parent', obj.hFigure, ...
+                        'Units', 'pixels', 'Position', [0 0 1 1], ...
+                        'Visible', 'off', 'HitTest', 'off');
+                end
+            end
+
+            % Some MATLAB builds (notably R2020b headless) refuse to
+            % export an invisible figure with the opaque error
+            % "Specified handle is not valid for export" even when
+            % exportgraphics/print are used with a stub axes. Temporarily
+            % flip Visible='on' around the export call and restore it.
+            origVisible = get(obj.hFigure, 'Visible');
+            needsVisibilityToggle = ~useExportApp && strcmp(origVisible, 'off');
+            if needsVisibilityToggle
+                try set(obj.hFigure, 'Visible', 'on'); catch, end
+            end
             try
                 if useExportApp
                     % exportapp signature is exportapp(fig, filename) only
@@ -449,34 +543,44 @@ classdef DashboardEngine < handle
                     % export of UI-component figures.
                     exportapp(obj.hFigure, filepath);
                 elseif useExportGraphics
-                    % MATLAB R2020a-R2023b headless path. exportgraphics
-                    % explicitly supports -nodisplay mode (unlike print).
-                    % ContentType='image' forces raster output (PNG/JPEG).
-                    % Resolution=150 matches the -r150 used by the legacy
-                    % print() path for visual parity.
-                    exportgraphics(obj.hFigure, filepath, ...
-                        'ContentType', 'image', 'Resolution', 150);
-                else
-                    % Octave path — preserves stub-axes behaviour (Octave's
-                    % print() does not recurse into uipanels).
-                    topLevelChildren = get(obj.hFigure, 'children');
-                    hasTopAxes = false;
-                    for k = 1:numel(topLevelChildren)
-                        if strcmp(get(topLevelChildren(k), 'type'), 'axes')
-                            hasTopAxes = true;
-                            break;
+                    % MATLAB R2020a-R2023b headless path. Three-tier
+                    % fallback: exportgraphics -> print -> getframe.
+                    % R2020b headless CI rejects the first two with
+                    % "Specified handle is not valid for export" on
+                    % uipanel-only figures even with a stub axes; the
+                    % getframe+imwrite path always works when the
+                    % figure has rendered at least once.
+                    wrote = false;
+                    try
+                        exportgraphics(obj.hFigure, filepath, ...
+                            'ContentType', 'image', 'Resolution', 150);
+                        wrote = true;
+                    catch
+                    end
+                    if ~wrote
+                        try
+                            print(obj.hFigure, devFlag, '-r150', filepath);
+                            wrote = true;
+                        catch
                         end
                     end
-                    if ~hasTopAxes
-                        stubAxes = axes('Parent', obj.hFigure, ...
-                            'Units', 'pixels', 'Position', [0 0 1 1], ...
-                            'Visible', 'off', 'HitTest', 'off');
+                    if ~wrote
+                        frame = getframe(obj.hFigure);
+                        imwrite(frame.cdata, filepath);
                     end
+                else
+                    % Octave path (print) — stub axes already inserted above.
                     print(obj.hFigure, devFlag, '-r150', filepath);
                 end
                 if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
             catch ME
                 if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
                 error('DashboardEngine:imageWriteFailed', ...
                     'Failed to write image ''%s'': %s', filepath, ME.message);
             end
@@ -601,7 +705,13 @@ classdef DashboardEngine < handle
 
         function showInfo(obj)
         %SHOWINFO Display the linked Markdown info file in a browser.
+        %   When InfoFile is empty, displays a built-in placeholder page
+        %   describing how to attach a custom info file.
             if isempty(obj.InfoFile)
+                mdText = obj.buildPlaceholderInfoMarkdown();
+                mdDir = pwd;
+                html = MarkdownRenderer.render(mdText, obj.Theme, mdDir);
+                obj.writeAndOpenInfoHtml(html);
                 return;
             end
 
@@ -647,7 +757,11 @@ classdef DashboardEngine < handle
             mdDir = fileparts(mdPath);
             html = MarkdownRenderer.render(mdText, obj.Theme, mdDir);
 
-            % Write temp file (reuse path)
+            obj.writeAndOpenInfoHtml(html);
+        end
+
+        function writeAndOpenInfoHtml(obj, html)
+        %WRITEANDOPENINFOHTML Write rendered HTML to the cached temp file and open it.
             if isempty(obj.InfoTempFile)
                 obj.InfoTempFile = [tempname '.html'];
             end
@@ -660,7 +774,6 @@ classdef DashboardEngine < handle
             fwrite(fid, html);
             fclose(fid);
 
-            % Display
             if exist('OCTAVE_VERSION', 'builtin')
                 if ismac
                     system(['open "' obj.InfoTempFile '"']);
@@ -672,6 +785,29 @@ classdef DashboardEngine < handle
             else
                 web(obj.InfoTempFile, '-new');
             end
+        end
+
+        function md = buildPlaceholderInfoMarkdown(obj)
+        %BUILDPLACEHOLDERINFOMARKDOWN Default info page shown when no InfoFile is set.
+            name = obj.Name;
+            if isempty(name)
+                name = 'Dashboard';
+            end
+            md = sprintf([ ...
+                '# %s\n\n' ...
+                'No info page has been configured for this dashboard.\n\n' ...
+                '## Add your own info page\n\n' ...
+                'Attach a Markdown file at construction:\n\n' ...
+                '```matlab\n' ...
+                'd = DashboardEngine(''%s'', ''InfoFile'', ''notes.md'');\n' ...
+                '```\n\n' ...
+                'Or set it after construction:\n\n' ...
+                '```matlab\n' ...
+                'd.InfoFile = ''notes.md'';\n' ...
+                '```\n\n' ...
+                'Relative paths resolve against the loaded dashboard JSON ' ...
+                'directory (or `pwd` for unsaved dashboards).\n'], ...
+                name, name);
         end
 
         function cleanupInfoTempFile(obj)
@@ -793,6 +929,119 @@ classdef DashboardEngine < handle
             obj.Layout.ContentArea = contentArea;
         end
 
+        function [effToolbarH, effPageBarH, effTimeH] = applyChromeVisibility(obj, toolbarH, pageBarH)
+        %APPLYCHROMEVISIBILITY Set chrome Visible state + return effective heights.
+        %   Respects ShowToolbar and ShowTimePanel flags. Returns the heights
+        %   that should be used for the content-area calculation (0 when the
+        %   corresponding chrome element is hidden).
+            if nargin < 2 || isempty(toolbarH)
+                if ~isempty(obj.Toolbar), toolbarH = obj.Toolbar.Height; else, toolbarH = 0; end
+            end
+            if nargin < 3 || isempty(pageBarH)
+                if numel(obj.Pages) > 1, pageBarH = obj.PageBarHeight; else, pageBarH = 0; end
+            end
+            timeH = obj.TimePanelHeight;
+
+            effToolbarH = toolbarH;  % toolbar is always visible (config lives there)
+            if obj.ShowTimePanel
+                tpVis = 'on';  effTimeH = timeH;
+            else
+                tpVis = 'off'; effTimeH = 0;
+            end
+            effPageBarH = pageBarH;  % page bar follows multi-page state, not a flag
+
+            if ~isempty(obj.hTimePanel) && ishandle(obj.hTimePanel)
+                set(obj.hTimePanel, 'Visible', tpVis);
+            end
+        end
+
+        function applyVisibilityAndRelayout(obj)
+        %APPLYVISIBILITYANDRELAYOUT Re-apply ShowToolbar/ShowTimePanel + re-layout widgets.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure) || isempty(obj.Layout)
+                return;
+            end
+            [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility();
+            obj.Layout.ContentArea = [0, effTimeH, ...
+                1, 1 - effToolbarH - effPageBarH - effTimeH];
+            try
+                obj.rerenderWidgets();
+            catch
+                % best-effort: layout requires active widgets
+            end
+        end
+
+        function applyThemeToChrome(obj)
+        %APPLYTHEMETOCHROME Restyle figure + non-widget chrome using the current Theme.
+        %   Widget panels are NOT touched here — call rerenderWidgets() after
+        %   this method to recreate widget content with the new theme.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            theme = obj.getCachedTheme();
+
+            set(obj.hFigure, 'Color', theme.DashboardBackground);
+
+            % Content-area viewport + canvas
+            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hViewport) && ...
+                    ishandle(obj.Layout.hViewport)
+                set(obj.Layout.hViewport, ...
+                    'BackgroundColor', theme.DashboardBackground);
+            end
+            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hCanvas) && ...
+                    ishandle(obj.Layout.hCanvas)
+                set(obj.Layout.hCanvas, ...
+                    'BackgroundColor', theme.DashboardBackground);
+            end
+
+            % Toolbar panel + title + last-update label
+            if ~isempty(obj.Toolbar)
+                tb = obj.Toolbar;
+                if ~isempty(tb.hPanel) && ishandle(tb.hPanel)
+                    set(tb.hPanel, 'BackgroundColor', theme.ToolbarBackground);
+                end
+                if ~isempty(tb.hTitleText) && ishandle(tb.hTitleText)
+                    set(tb.hTitleText, ...
+                        'BackgroundColor', theme.ToolbarBackground, ...
+                        'ForegroundColor', theme.ToolbarFontColor);
+                end
+                if ~isempty(tb.hLastUpdate) && ishandle(tb.hLastUpdate)
+                    fadedFg = theme.ToolbarFontColor * 0.6 + ...
+                        theme.ToolbarBackground * 0.4;
+                    set(tb.hLastUpdate, ...
+                        'BackgroundColor', theme.ToolbarBackground, ...
+                        'ForegroundColor', fadedFg);
+                end
+                if ~isempty(tb.hLivePanel) && ishandle(tb.hLivePanel)
+                    set(tb.hLivePanel, 'BackgroundColor', theme.ToolbarBackground);
+                    % Preserve blue accent when live is active; otherwise blend in.
+                    if obj.IsLive
+                        set(tb.hLivePanel, 'HighlightColor', theme.InfoColor);
+                    else
+                        set(tb.hLivePanel, 'HighlightColor', theme.ToolbarBackground);
+                    end
+                end
+            end
+
+            % Time control panel + its labels
+            if ~isempty(obj.hTimePanel) && ishandle(obj.hTimePanel)
+                set(obj.hTimePanel, ...
+                    'BackgroundColor', theme.ToolbarBackground, ...
+                    'ForegroundColor', theme.WidgetBorderColor);
+            end
+            for h = [obj.hTimeStart, obj.hTimeEnd]
+                if ~isempty(h) && ishandle(h)
+                    set(h, ...
+                        'BackgroundColor', theme.ToolbarBackground, ...
+                        'ForegroundColor', theme.ToolbarFontColor);
+                end
+            end
+
+            % Page bar (visible or placeholder)
+            if ~isempty(obj.hPageBar) && ishandle(obj.hPageBar)
+                set(obj.hPageBar, 'BackgroundColor', theme.ToolbarBackground);
+            end
+        end
+
         function rerenderWidgets(obj)
         %RERENDERWIDGETS Delete all widget panels and recreate them.
             theme = obj.getCachedTheme();
@@ -804,7 +1053,16 @@ classdef DashboardEngine < handle
                     delete(w.hPanel);
                 end
             end
-            obj.Layout.createPanels(obj.hFigure, ws, theme);
+            totalPages = max(1, numel(obj.Pages));
+            obj.Progress_ = DashboardProgress(obj.Name, numel(ws), totalPages, obj.ProgressMode);
+            [pgIdx, pgName] = obj.activePageLabel();
+            obj.Layout.allocatePanels(obj.hFigure, ws, theme);
+            for i = 1:numel(ws)
+                obj.Layout.realizeWidget(ws{i});
+                obj.Progress_.tick(ws{i}, pgIdx, pgName);
+            end
+            obj.Progress_.finish();
+            obj.Progress_ = [];
             % Re-wire detach callback after panel recreation (Pitfall 3 in RESEARCH.md)
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
         end
@@ -823,13 +1081,18 @@ classdef DashboardEngine < handle
             end
             obj.DataTimeRange = [tMin, tMax];
 
-            % Reset sliders to full range
-            if ~isempty(obj.hTimeSliderL) && ishandle(obj.hTimeSliderL)
-                set(obj.hTimeSliderL, 'Value', 0);
-                set(obj.hTimeSliderR, 'Value', 1);
+            % Reset selection to full range via the selector.
+            % Guard on type (not ishandle) — hTimeSliderL now points at a
+            % TimeRangeSelector which ishandle() returns false for under
+            % stock Octave 7.
+            if ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                obj.TimeRangeSelector_.setDataRange(tMin, tMax);
             end
 
             obj.updateTimeLabels(tMin, tMax);
+            % Refresh the preview envelope after DataTimeRange change (D-07).
+            try obj.computePreviewEnvelope(); catch, end
         end
 
         function updateLiveTimeRange(obj)
@@ -848,9 +1111,10 @@ classdef DashboardEngine < handle
             obj.DataTimeRange = [tMin, tMax];
         end
 
-        function updateLiveTimeRangeFrom(obj, ws)
+        function newTMax = updateLiveTimeRangeFrom(obj, ws)
         %UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
         %   Like updateLiveTimeRange but accepts ws to avoid re-fetching activePageWidgets().
+        %   Returns the new tMax (or NaN when no widget has finite time data).
             tMin = inf; tMax = -inf;
             for i = 1:numel(ws)
                 [wMin, wMax] = ws{i}.getTimeRange();
@@ -858,9 +1122,147 @@ classdef DashboardEngine < handle
                 if wMax > tMax, tMax = wMax; end
             end
             if isinf(tMin) || isinf(tMax)
+                newTMax = NaN;
                 return;
             end
             obj.DataTimeRange = [tMin, tMax];
+            newTMax = tMax;
+        end
+
+        function createStaleBanner(obj, theme, toolbarH)
+        %CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
+        %   A uipanel strip below the toolbar containing a message label and
+        %   a close button. Hidden by default; shown when staleness is detected
+        %   and not previously dismissed by the user.
+            if ~isempty(obj.hStaleBanner) && ishandle(obj.hStaleBanner)
+                return;
+            end
+            bannerH = 0.035;
+            warnColor = theme.StatusWarnColor;
+            fgColor   = [0.15 0.10 0.02];
+
+            obj.hStaleBanner = uipanel('Parent', obj.hFigure, ...
+                'Units', 'normalized', ...
+                'Position', [0, 1 - toolbarH - bannerH, 1, bannerH], ...
+                'BorderType', 'none', ...
+                'BackgroundColor', warnColor, ...
+                'Visible', 'off');
+
+            obj.hStaleBannerText = uicontrol('Parent', obj.hStaleBanner, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.01, 0.1, 0.94, 0.8], ...
+                'String', '', ...
+                'FontWeight', 'bold', ...
+                'FontSize', 10, ...
+                'HorizontalAlignment', 'left', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', warnColor);
+
+            obj.hStaleBannerClose = uicontrol('Parent', obj.hStaleBanner, ...
+                'Style', 'pushbutton', ...
+                'Units', 'normalized', ...
+                'Position', [0.96, 0.15, 0.03, 0.7], ...
+                'String', 'X', ...
+                'FontWeight', 'bold', ...
+                'TooltipString', 'Dismiss this warning (reappears when data resumes then stops again)', ...
+                'Callback', @(~,~) obj.onStaleBannerClose());
+        end
+
+        function showStaleBanner(obj, staleTitles)
+        %SHOWSTALEBANNER Display the warning listing the widgets without new data.
+        %   staleTitles is a cell array of widget Title strings whose tMax
+        %   did not advance on the last live tick.
+            if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
+                return;
+            end
+            secs = obj.LiveInterval;
+            if secs >= 10
+                intervalStr = sprintf('%.0fs', secs);
+            else
+                intervalStr = sprintf('%.1fs', secs);
+            end
+            msg = obj.buildStaleMessage(staleTitles, intervalStr);
+            set(obj.hStaleBannerText, 'String', msg);
+            set(obj.hStaleBanner, 'Visible', 'on');
+            % Widget panels are created after the banner, so they render on top
+            % by default. Raise the banner to the front so it is actually seen.
+            try
+                uistack(obj.hStaleBanner, 'top');
+            catch
+                % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+            end
+        end
+
+        function hideStaleBanner(obj)
+        %HIDESTALEBANNER Clear the stale-data warning overlay.
+            if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
+                return;
+            end
+            set(obj.hStaleBanner, 'Visible', 'off');
+        end
+
+        function onStaleBannerClose(obj)
+        %ONSTALEBANNERCLOSE User dismissed the warning; stay hidden until data resumes.
+            obj.StaleBannerDismissed_ = true;
+            obj.hideStaleBanner();
+        end
+
+        function msg = buildStaleMessage(obj, staleTitles, intervalStr) %#ok<INUSL>
+        %BUILDSTALEMESSAGE Compose the banner text listing stale widgets.
+            if exist('OCTAVE_VERSION', 'builtin')
+                % Octave's default char() range is 8-bit; use an ASCII marker
+                % to avoid the "range error for conversion" warning.
+                warnChar = '[!]';
+            else
+                warnChar = char(hex2dec('26A0'));
+            end
+            n = numel(staleTitles);
+            if n == 0
+                msg = sprintf('%s  No new data in the last %s', warnChar, intervalStr);
+                return;
+            end
+            shownMax = 3;
+            if n <= shownMax
+                listStr = strjoin(staleTitles, ', ');
+            else
+                head = strjoin(staleTitles(1:shownMax), ', ');
+                listStr = sprintf('%s (+%d more)', head, n - shownMax);
+            end
+            if n == 1
+                msg = sprintf('%s  No new data (%s) from: %s', ...
+                    warnChar, intervalStr, listStr);
+            else
+                msg = sprintf('%s  %d widgets have no new data (%s): %s', ...
+                    warnChar, n, intervalStr, listStr);
+            end
+        end
+
+        function staleTitles = detectStaleWidgets(obj, ws)
+        %DETECTSTALEWIDGETS Return titles of widgets whose tMax did not advance.
+        %   Updates LastTMaxPerWidget_ with the current observation.
+            staleTitles = {};
+            if isempty(obj.LastTMaxPerWidget_)
+                obj.LastTMaxPerWidget_ = containers.Map('KeyType', 'char', 'ValueType', 'double');
+            end
+            for i = 1:numel(ws)
+                w = ws{i};
+                [~, tMax] = w.getTimeRange();
+                if ~isfinite(tMax)
+                    continue;  % no time-series data to compare
+                end
+                if ~isempty(w.Title)
+                    key = w.Title;
+                else
+                    key = sprintf('Widget %d', i);
+                end
+                if obj.LastTMaxPerWidget_.isKey(key)
+                    if tMax <= obj.LastTMaxPerWidget_(key)
+                        staleTitles{end+1} = key; %#ok<AGROW>
+                    end
+                end
+                obj.LastTMaxPerWidget_(key) = tMax;
+            end
         end
 
         function broadcastTimeRange(obj, tStart, tEnd)
@@ -902,13 +1304,27 @@ classdef DashboardEngine < handle
                 end
             end
             order = [visible, offscreen];
+            [activePgIdx, activePgName] = obj.activePageLabel();
             for b = 1:batchSize:numel(order)
                 bEnd = min(b + batchSize - 1, numel(order));
                 for i = b:bEnd
                     obj.Layout.realizeWidget(ws{order(i)});
+                    if ~isempty(obj.Progress_)
+                        obj.Progress_.tick(ws{order(i)}, activePgIdx, activePgName);
+                    end
                 end
                 drawnow;
             end
+        end
+
+        function [idx, name] = activePageLabel(obj)
+        %ACTIVEPAGELABEL Index and name of the active page, or (1, '') if single-page.
+            if isempty(obj.Pages) || obj.ActivePage < 1
+                idx = 1; name = '';
+                return;
+            end
+            idx = obj.ActivePage;
+            name = obj.Pages{idx}.Name;
         end
 
         function onScrollRealize(obj, topRow, bottomRow)
@@ -934,16 +1350,42 @@ classdef DashboardEngine < handle
             % Update global time range from pre-fetched list
             obj.updateLiveTimeRangeFrom(ws);
 
+            % Per-widget staleness detection — which widgets' tMax did not advance?
+            staleTitles = obj.detectStaleWidgets(ws);
+            if isempty(staleTitles)
+                % Fresh data somewhere → reset the user's dismissal so the
+                % banner can re-appear next time things go stale.
+                obj.StaleBannerDismissed_ = false;
+                obj.hideStaleBanner();
+            elseif ~obj.StaleBannerDismissed_
+                obj.showStaleBanner(staleTitles);
+            end
+
             % Single pass: mark sensor-bound or Tag-bound widgets dirty, then refresh
             % if dirty+realized+visible. Base-class Tag property ensures all widgets
             % expose w.Tag (Plan 1009-02); no isprop guard needed.
             % (PostSet listeners on Sensor.X/Y do not fire reliably in Octave for indexed assignment)
             for i = 1:numel(ws)
                 w = ws{i};
-                if ~isempty(w.Sensor) || ~isempty(w.Tag)
-                    w.markDirty();
+                % Mark every widget dirty on every live tick. The previous
+                % guard (`~isempty(w.Sensor) || ~isempty(w.Tag)`) skipped
+                % Threshold-bound widgets (MonitorTag-backed StatusWidget /
+                % IconCardWidget), Sensors-plural MultiStatusWidget,
+                % ChipBarWidget (per-chip StatusFcn), and any widget using
+                % StatusFcn / ValueFcn / DataFcn — so their dots / labels
+                % never moved once the initial render was done. Tick
+                % everything; the widget-local refresh() decides whether
+                % anything actually needs redrawing.
+                w.markDirty();
+                % Dead-handle recovery: panel was destroyed (e.g. by a layout bug or
+                % figure-close race). Drop Realized so the next scroll-realize pass
+                % can rebuild it, and skip this tick.
+                if ~isempty(w.hPanel) && ~ishandle(w.hPanel)
+                    w.markUnrealized();
+                    continue;
                 end
-                if w.Dirty && w.Realized && obj.Layout.isWidgetVisible(w.Position)
+                if w.Dirty && w.Realized && ~isempty(w.hPanel) && ishandle(w.hPanel) && ...
+                        obj.Layout.isWidgetVisible(w.Position)
                     try
                         if isa(w, 'FastSenseWidget')
                             w.update();
@@ -976,15 +1418,16 @@ classdef DashboardEngine < handle
                 obj.Toolbar.setLastUpdateTime(obj.LastUpdateTime);
             end
 
-            % Re-apply current slider positions to the updated time range
-            % Use direct broadcastTimeRange (not debounced) since live tick is already rate-limited
-            if ~isempty(obj.hTimeSliderL) && ishandle(obj.hTimeSliderL)
-                valL = get(obj.hTimeSliderL, 'Value');
-                valR = get(obj.hTimeSliderR, 'Value');
-                tr = obj.DataTimeRange;
-                span = tr(2) - tr(1);
-                tStart = tr(1) + valL * span;
-                tEnd   = tr(1) + valR * span;
+            % Re-apply current selection to the updated data range (D-06).
+            % Use isa(...) guard, not ishandle() — hTimeSliderL now points
+            % at a TimeRangeSelector which ishandle() returns false for
+            % under stock Octave 7. Broadcast is direct (not debounced)
+            % since the live tick is already rate-limited.
+            if ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                obj.TimeRangeSelector_.setDataRange( ...
+                    obj.DataTimeRange(1), obj.DataTimeRange(2));
+                [tStart, tEnd] = obj.TimeRangeSelector_.getSelection();
                 obj.broadcastTimeRange(tStart, tEnd);
             end
 
@@ -992,6 +1435,8 @@ classdef DashboardEngine < handle
             for i = 1:numel(ws)
                 ws{i}.Dirty = false;
             end
+            % Refresh the preview envelope on every live tick (D-07).
+            try obj.computePreviewEnvelope(); catch, end
         end
 
         function markAllDirty(obj)
@@ -1010,6 +1455,17 @@ classdef DashboardEngine < handle
         end
 
         function delete(obj)
+            % Tear down the selector first so its figure-level callback
+            % restore happens before the figure/panel potentially go away.
+            if ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                try delete(obj.TimeRangeSelector_); catch, end
+                obj.TimeRangeSelector_ = [];
+            end
+            % Clear the shim references so downstream cleanup doesn't try
+            % to set() anything on a now-deleted selector handle.
+            obj.hTimeSliderL = [];
+            obj.hTimeSliderR = [];
             if ~isempty(obj.SliderDebounceTimer)
                 try stop(obj.SliderDebounceTimer); catch, end
                 try delete(obj.SliderDebounceTimer); catch, end
@@ -1017,6 +1473,38 @@ classdef DashboardEngine < handle
             end
             obj.stopLive();
             obj.cleanupInfoTempFile();
+        end
+    end
+
+    methods (Hidden)
+        function triggerTimeSlidersChangedForTest(obj)
+        %TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
+        %   callback without going through UI events. Exposes the private
+        %   onTimeSlidersChanged() debounce path to tests.
+        %   (Hidden, not the narrower Access = {?matlab.unittest.TestCase},
+        %   so Octave parsing survives — Octave has no matlab.unittest.)
+            obj.onTimeSlidersChanged();
+        end
+
+        function broadcastTimeRangeNow(obj, tStart, tEnd)
+        %BROADCASTTIMERANGENOW Test-only synchronous broadcast bypassing the
+        %   SliderDebounceTimer. Stock Octave 7 batch mode has unreliable
+        %   timer scheduling; tests should use this entry point to drive
+        %   the broadcast deterministically. Also updates the time labels
+        %   (skipping the debounced onRangeSelectorChanged path).
+            obj.updateTimeLabels(tStart, tEnd);
+            obj.broadcastTimeRange(tStart, tEnd);
+        end
+
+        function env = computePreviewEnvelopeForTest(obj, nBuckets)
+        %COMPUTEPREVIEWENVELOPEFORTEST Test-only wrapper around the
+        %   private computePreviewEnvelopeReturning_. Runs the real
+        %   aggregation and returns the envelope struct so tests can
+        %   assert shape/monotonicity without scraping the selector's
+        %   patch handles. When nBuckets is omitted, uses the method's
+        %   own width-derived default.
+            if nargin < 2, nBuckets = []; end
+            env = obj.computePreviewEnvelopeReturning_(nBuckets);
         end
     end
 
@@ -1049,16 +1537,25 @@ classdef DashboardEngine < handle
         function wireListeners(obj, w)
         %WIRELISTENERS Wire sensor data-change listeners to mark widget dirty.
         %   Called for both single-page and multi-page addWidget paths so
-        %   sensor PostSet events mark widgets dirty regardless of page routing.
-            if ~isempty(w.Sensor) && isprop(w.Sensor, 'X')
-                try
-                    addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
-                catch
-                    % Octave may not support addlistener on all property types
-                end
-                try
-                    addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
-                catch
+        %   sensor data-change events mark widgets dirty regardless of page
+        %   routing. Uses Tag's 'DataChanged' event (fired from updateData);
+        %   falls back to PostSet on X/Y for legacy Sensor-class bindings
+        %   that still expose settable X/Y properties.
+            if isempty(w.Sensor), return; end
+            try
+                addlistener(w.Sensor, 'DataChanged', @(~,~) w.markDirty());
+            catch
+                % Legacy fallback: PostSet on X/Y. Won't fire for Dependent
+                % properties (Tag.X/Y) but kept for Sensor-class bindings.
+                if isprop(w.Sensor, 'X')
+                    try
+                        addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
+                    catch
+                    end
+                    try
+                        addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
+                    catch
+                    end
                 end
             end
         end
@@ -1149,9 +1646,11 @@ classdef DashboardEngine < handle
         function createTimePanel(obj, theme)
             tH = obj.TimePanelHeight;
 
-            % Simple uipanel + dual sliders. NavigatorOverlay doesn't
-            % work reliably in dashboard context (axes interaction
-            % handlers, z-order, uipanel isolation). Sliders just work.
+            % Bottom time panel now hosts a single TimeRangeSelector with a
+            % data-preview envelope behind a draggable selection rectangle
+            % (phase 1016, D-01/D-02). The legacy dual uicontrol sliders
+            % have been replaced; hTimeSliderL / hTimeSliderR survive as
+            % shims pointing at the selector handle (D-10).
             obj.hTimePanel = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
                 'Position', [0, 0, 1, tH], ...
@@ -1159,93 +1658,74 @@ classdef DashboardEngine < handle
                 'BackgroundColor', theme.ToolbarBackground, ...
                 'ForegroundColor', theme.WidgetBorderColor);
 
-            % Start time label
-            obj.hTimeStart = uicontrol('Parent', obj.hTimePanel, ...
-                'Style', 'text', ...
+            % Time labels are rendered INSIDE the selector as text objects
+            % that track the selection edges — set via updateTimeLabels ->
+            % TimeRangeSelector.setLabels. No uicontrol text fields needed.
+            obj.hTimeStart = [];
+            obj.hTimeEnd   = [];
+
+            % Reset button on the far left of the time panel — restores
+            % the selection to the full DataTimeRange. Double-clicking the
+            % selection patch does the same, but a visible button is more
+            % discoverable.
+            uicontrol('Parent', obj.hTimePanel, ...
+                'Style', 'pushbutton', ...
                 'Units', 'normalized', ...
-                'Position', [0.005 0.55 0.12 0.4], ...
-                'String', '', ...
+                'Position', [0.003 0.15 0.035 0.7], ...
+                'String', 'Reset', ...
                 'FontSize', 9, ...
+                'TooltipString', 'Reset the time window to the full data range', ...
                 'ForegroundColor', theme.ToolbarFontColor, ...
                 'BackgroundColor', theme.ToolbarBackground, ...
-                'HorizontalAlignment', 'left');
+                'Callback', @(~, ~) obj.resetTimeRange());
 
-            % End time label
-            obj.hTimeEnd = uicontrol('Parent', obj.hTimePanel, ...
-                'Style', 'text', ...
-                'Units', 'normalized', ...
-                'Position', [0.88 0.55 0.115 0.4], ...
-                'String', '', ...
-                'FontSize', 9, ...
-                'ForegroundColor', theme.ToolbarFontColor, ...
-                'BackgroundColor', theme.ToolbarBackground, ...
-                'HorizontalAlignment', 'right');
+            % Single TimeRangeSelector replaces the two uicontrol sliders.
+            obj.TimeRangeSelector_ = TimeRangeSelector(obj.hTimePanel, ...
+                'OnRangeChanged', @(a, b) obj.onRangeSelectorChanged(a, b), ...
+                'Theme', theme);
 
-            % "From" / "To" labels
-            uicontrol('Parent', obj.hTimePanel, ...
-                'Style', 'text', ...
-                'Units', 'normalized', ...
-                'Position', [0.005 0.05 0.04 0.45], ...
-                'String', 'From:', ...
-                'FontSize', 8, ...
-                'ForegroundColor', theme.ToolbarFontColor * 0.7 + ...
-                    theme.ToolbarBackground * 0.3, ...
-                'BackgroundColor', theme.ToolbarBackground, ...
-                'HorizontalAlignment', 'left');
+            % Legacy shims (D-10): tests still read these handles; wire
+            % them to the selector so existing `set(..., 'Value', ...)`
+            % call-sites at least find a live handle. The shim itself is
+            % not expected to accept slider-style Value writes — those
+            % tests are documented as out-of-scope for this phase.
+            obj.hTimeSliderL = obj.TimeRangeSelector_;
+            obj.hTimeSliderR = obj.TimeRangeSelector_;
+        end
 
-            uicontrol('Parent', obj.hTimePanel, ...
-                'Style', 'text', ...
-                'Units', 'normalized', ...
-                'Position', [0.50 0.05 0.03 0.45], ...
-                'String', 'To:', ...
-                'FontSize', 8, ...
-                'ForegroundColor', theme.ToolbarFontColor * 0.7 + ...
-                    theme.ToolbarBackground * 0.3, ...
-                'BackgroundColor', theme.ToolbarBackground, ...
-                'HorizontalAlignment', 'left');
-
-            % Left slider (range start): 0 = data start, 1 = data end
-            obj.hTimeSliderL = uicontrol('Parent', obj.hTimePanel, ...
-                'Style', 'slider', ...
-                'Units', 'normalized', ...
-                'Position', [0.045 0.1 0.45 0.42], ...
-                'Min', 0, 'Max', 1, 'Value', 0, ...
-                'SliderStep', [0.01 0.1], ...
-                'Callback', @(src,~) obj.onTimeSlidersChanged());
-
-            % Right slider (range end): 0 = data start, 1 = data end
-            obj.hTimeSliderR = uicontrol('Parent', obj.hTimePanel, ...
-                'Style', 'slider', ...
-                'Units', 'normalized', ...
-                'Position', [0.535 0.1 0.45 0.42], ...
-                'Min', 0, 'Max', 1, 'Value', 1, ...
-                'SliderStep', [0.01 0.1], ...
-                'Callback', @(src,~) obj.onTimeSlidersChanged());
+        function resetTimeRange(obj)
+        %RESETTIMERANGE Restore the selection to the full DataTimeRange.
+        %   Wired to the "Reset" button on the time panel; also reachable
+        %   via double-click on the selection patch inside the selector.
+            if isempty(obj.TimeRangeSelector_) || ...
+                    ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
+            end
+            tr = obj.DataTimeRange;
+            obj.TimeRangeSelector_.setSelection(tr(1), tr(2));
+            % setSelection fires OnRangeChanged, which debounces through
+            % SliderDebounceTimer into broadcastTimeRange — restoring xlim
+            % on every widget. No extra plumbing needed.
         end
 
         function onTimeSlidersChanged(obj)
-            valL = get(obj.hTimeSliderL, 'Value');
-            valR = get(obj.hTimeSliderR, 'Value');
-
-            % Enforce left < right
-            if valL >= valR
-                valR = min(1, valL + 0.01);
-                if valL >= valR
-                    valL = valR - 0.01;
-                    set(obj.hTimeSliderL, 'Value', valL);
-                end
-                set(obj.hTimeSliderR, 'Value', valR);
+        %ONTIMESLIDERSCHANGED Legacy test entry point (D-10).
+        %   Reads the current selection from the TimeRangeSelector and
+        %   routes it through onRangeSelectorChanged so tests see the
+        %   same 100 ms-debounced broadcast pipeline as live drag events.
+            if isempty(obj.TimeRangeSelector_) || ...
+                    ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
             end
+            [tStart, tEnd] = obj.TimeRangeSelector_.getSelection();
+            obj.onRangeSelectorChanged(tStart, tEnd);
+        end
 
-            tr = obj.DataTimeRange;
-            span = tr(2) - tr(1);
-            tStart = tr(1) + valL * span;
-            tEnd   = tr(1) + valR * span;
-
-            % Update labels immediately for visual feedback
+        function onRangeSelectorChanged(obj, tStart, tEnd)
+        %ONRANGESELECTORCHANGED Callback from TimeRangeSelector.OnRangeChanged.
+        %   Plugs into the same broadcast pipeline as the legacy slider
+        %   callback, including the 100 ms SliderDebounceTimer coalescing (D-06).
             obj.updateTimeLabels(tStart, tEnd);
-
-            % Debounce the expensive broadcastTimeRange — coalesce rapid slider events
             if ~isempty(obj.SliderDebounceTimer)
                 try stop(obj.SliderDebounceTimer); catch, end
                 try delete(obj.SliderDebounceTimer); catch, end
@@ -1258,14 +1738,116 @@ classdef DashboardEngine < handle
         end
 
         function updateTimeLabels(obj, tStart, tEnd)
-            if isempty(obj.hTimeStart), return; end
-            set(obj.hTimeStart, 'String', obj.formatTimeVal(tStart));
-            set(obj.hTimeEnd, 'String', obj.formatTimeVal(tEnd));
+            if isempty(obj.TimeRangeSelector_) || ...
+                    ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
+            end
+            obj.TimeRangeSelector_.setLabels( ...
+                obj.formatTimeVal(tStart), ...
+                obj.formatTimeVal(tEnd));
         end
 
+        function computePreviewEnvelope(obj, nBuckets)
+        %COMPUTEPREVIEWENVELOPE Aggregate per-bucket min/max across
+        %   active-page widgets and push the result onto the selector's
+        %   envelope patch (D-07, D-08). nBuckets optional; when omitted,
+        %   defaults to ~200 based on panel axes pixel width, clamped to
+        %   [50, 400]. Silently no-ops when no selector is wired yet (e.g.
+        %   before render()).
+            if nargin < 2, nBuckets = []; end
+            obj.computePreviewEnvelopeReturning_(nBuckets);
+        end
+
+        function env = computePreviewEnvelopeReturning_(obj, nBuckets)
+        %COMPUTEPREVIEWENVELOPERETURNING_ computePreviewEnvelope + return.
+        %   Same side-effects as computePreviewEnvelope, but additionally
+        %   returns the aggregate envelope struct (xCenters, yMin, yMax)
+        %   so Hidden test accessors can verify shape/monotonicity without
+        %   scraping the selector's patch XData/YData.
+            env = [];
+            if isempty(obj.TimeRangeSelector_) || ...
+                    ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
+            end
+            if isempty(nBuckets)
+                % Derive nBuckets from figure pixel width; clamp to [50, 400].
+                nBuckets = 200;
+                try
+                    oldU = get(obj.hFigure, 'Units');
+                    set(obj.hFigure, 'Units', 'pixels');
+                    figPx = get(obj.hFigure, 'Position');
+                    set(obj.hFigure, 'Units', oldU);
+                    axWpx = figPx(3) * 0.94;
+                    nBuckets = max(50, min(400, floor(axWpx / 2)));
+                catch
+                end
+            end
+            ws = obj.activePageWidgets();
+            if isempty(ws)
+                obj.TimeRangeSelector_.setPreviewLines({});
+                env = struct('xCenters', [], 'yMin', [], 'yMax', []);
+                return;
+            end
+            aggMin = inf(1, nBuckets);
+            aggMax = -inf(1, nBuckets);
+            xCenters = [];
+            linesList = {};
+            for i = 1:numel(ws)
+                try
+                    s = ws{i}.getPreviewSeries(nBuckets);
+                catch
+                    s = [];
+                end
+                if isempty(s) || ~isstruct(s), continue; end
+                if ~isfield(s, 'xCenters') || ~isfield(s, 'yMin') || ~isfield(s, 'yMax')
+                    continue;
+                end
+                if numel(s.yMin) ~= nBuckets || numel(s.yMax) ~= nBuckets
+                    continue;
+                end
+                if isempty(xCenters), xCenters = s.xCenters; end
+                % Aggregate min/max kept so computePreviewEnvelopeForTest
+                % can still return an envelope struct for existing tests.
+                aggMin = min(aggMin, s.yMin);
+                aggMax = max(aggMax, s.yMax);
+                % Per-widget line: midpoint of bucket, already normalized
+                % to [0,1] by the widget (D-08).
+                yMid = (s.yMin + s.yMax) / 2;
+                linesList{end + 1} = struct('x', s.xCenters, 'y', yMid); %#ok<AGROW>
+            end
+            if isempty(xCenters) || ~any(isfinite(aggMin))
+                obj.TimeRangeSelector_.setPreviewLines({});
+                env = struct('xCenters', [], 'yMin', [], 'yMax', []);
+                return;
+            end
+            aggMin(~isfinite(aggMin)) = 0;
+            aggMax(~isfinite(aggMax)) = 0;
+            obj.TimeRangeSelector_.setPreviewLines(linesList);
+            env = struct('xCenters', xCenters, 'yMin', aggMin, 'yMax', aggMax);
+        end
+
+    end
+
+    methods (Access = public)
+
         function str = formatTimeVal(~, t)
-            % Detect datenum (modern dates are > 700000)
-            if t > 700000
+        %FORMATTIMEVAL Format a numeric time value as a human-readable string.
+        %   Supports three numeric ranges:
+        %     posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
+        %     MATLAB datenum (t > 700000, not posix) — uses datestr directly
+        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix
+        %
+        %   The posix bracket is evaluated BEFORE the datenum bracket because
+        %   posix seconds for modern dates (year 2001-2128) are also > 700000
+        %   and would be wrongly interpreted as datenums without this ordering.
+            % Order matters: posix epoch seconds (year 2000-2128) are > 700000,
+            % so the posix bracket must be evaluated BEFORE the datenum bracket.
+            if t > 9e8 && t < 5e9
+                % Posix epoch seconds (year ~2000 - 2128)
+                str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
+                              'yyyy-mm-dd HH:MM');
+            elseif t > 700000
+                % MATLAB datenum (days since year 0000)
                 if t > 730000
                     str = datestr(t, 'yyyy-mm-dd HH:MM');
                 else
@@ -1284,6 +1866,10 @@ classdef DashboardEngine < handle
                 end
             end
         end
+
+    end
+
+    methods (Access = private)
 
         function onLiveTimerError(obj, ~, eventData)
         %ONLIVETIMERROR Handle errors that escape onLiveTick.

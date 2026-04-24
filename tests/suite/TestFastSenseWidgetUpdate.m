@@ -9,7 +9,7 @@ classdef TestFastSenseWidgetUpdate < matlab.unittest.TestCase
     methods (Test)
         function testUpdateMethodExists(testCase)
             s = SensorTag('T-1', 'Name', 'Temp');
-            % TODO: s.X = 1:100; s.Y = rand(1,100); s.resolve(); (needs manual fix)
+            s.updateData(1:100, rand(1, 100));
 
             d = DashboardEngine('UpdateTest');
             d.addWidget('fastsense', 'Sensor', s, 'Position', [1 1 24 3]);
@@ -22,13 +22,13 @@ classdef TestFastSenseWidgetUpdate < matlab.unittest.TestCase
             testCase.verifyTrue(w.FastSenseObj.IsRendered);
 
             % update() should not error when FastSenseObj is rendered
-            % TODO: s.X = 1:200; s.Y = rand(1,200); (needs manual fix)
+            s.updateData(1:200, rand(1, 200));
             w.update();
         end
 
         function testUpdateFallsBackToRefreshWhenNotRendered(testCase)
             s = SensorTag('T-2', 'Name', 'Pressure');
-            % TODO: s.X = 1:50; s.Y = rand(1,50); s.resolve(); (needs manual fix)
+            s.updateData(1:50, rand(1, 50));
 
             w = FastSenseWidget('Sensor', s, 'Position', [1 1 12 3]);
             % FastSenseObj is empty — update() should fall back to refresh()

@@ -25,7 +25,7 @@ fprintf('Rendered with toolbar in %.3f seconds.\n', toc);
 fprintf('Try: Data Cursor (click), Crosshair (hover), Grid, Legend, Autoscale Y, Export PNG\n');
 
 %% Dashboard with toolbar
-fig = FastSenseGrid(1, 2, 'Theme', 'industrial');
+fig = FastSenseGrid(1, 2, 'Theme', 'dark');
 fp1 = fig.tile(1);
 fp1.addLine(x, y1, 'DisplayName', 'Pressure');
 fp1.addThreshold(1.0, 'Direction', 'upper', 'ShowViolations', true);

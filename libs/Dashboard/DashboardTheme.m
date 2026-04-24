@@ -1,9 +1,12 @@
 function theme = DashboardTheme(preset, varargin)
 %DASHBOARDTHEME Returns a theme struct with FastSenseTheme + dashboard fields.
 %
-%   theme = DashboardTheme()              % default preset
-%   theme = DashboardTheme('dark')        % named preset
+%   theme = DashboardTheme()              % 'light' preset (default)
+%   theme = DashboardTheme('dark')        % named preset ('light' or 'dark')
 %   theme = DashboardTheme('dark', 'DashboardBackground', [0.1 0.1 0.2])
+%
+%   Legacy preset names ('default', 'industrial', 'scientific', 'ocean')
+%   are accepted and aliased to 'light' for backward compatibility.
 %
 %   Returns a struct containing all FastSenseTheme fields plus dashboard-specific
 %   fields.
@@ -20,7 +23,14 @@ function theme = DashboardTheme(preset, varargin)
 %     GaugeArcWidth, KpiFontSize.
 
     if nargin == 0
-        preset = 'default';
+        preset = 'light';
+    end
+
+    % Alias legacy preset names to 'light' so existing configs, tests,
+    % and examples keep working after the theme catalog was trimmed to
+    % 'light' and 'dark'.
+    if ischar(preset) && any(strcmpi(preset, {'default', 'industrial', 'scientific', 'ocean'}))
+        preset = 'light';
     end
 
     % Get base FastSenseTheme
@@ -42,7 +52,7 @@ function theme = DashboardTheme(preset, varargin)
 end
 
 function d = getDashboardDefaults(preset)
-    switch preset
+    switch lower(preset)
         case 'dark'
             d.DashboardBackground = [0.10 0.10 0.18];
             d.WidgetBackground    = [0.09 0.13 0.24];
@@ -57,7 +67,7 @@ function d = getDashboardDefaults(preset)
             d.GroupBorderColor    = [0.25 0.30 0.40];
             d.TabActiveBg         = [0.16 0.22 0.34];
             d.TabInactiveBg       = [0.10 0.12 0.18];
-        case 'light'
+        otherwise % 'light' (also: legacy aliases default/industrial/scientific/ocean)
             d.DashboardBackground = [0.96 0.96 0.97];
             d.WidgetBackground    = [1.00 1.00 1.00];
             d.WidgetBorderColor   = [0.85 0.85 0.87];
@@ -71,57 +81,6 @@ function d = getDashboardDefaults(preset)
             d.GroupBorderColor    = [0.80 0.82 0.85];
             d.TabActiveBg         = [0.90 0.92 0.95];
             d.TabInactiveBg       = [0.82 0.84 0.88];
-        case 'industrial'
-            d.DashboardBackground = [0.15 0.15 0.16];
-            d.WidgetBackground    = [0.20 0.20 0.21];
-            d.WidgetBorderColor   = [0.30 0.30 0.31];
-            d.ToolbarBackground   = [0.20 0.20 0.21];
-            d.ToolbarFontColor    = [0.78 0.78 0.78];
-            d.DragHandleColor     = [0.90 0.60 0.10];
-            d.DropZoneColor       = [0.30 0.30 0.31];
-            d.GridLineColor       = [0.32 0.32 0.34];
-            d.GroupHeaderBg       = [0.22 0.22 0.22];
-            d.GroupHeaderFg       = [0.90 0.90 0.90];
-            d.GroupBorderColor    = [0.35 0.35 0.35];
-            d.TabActiveBg         = [0.22 0.22 0.22];
-            d.TabInactiveBg       = [0.14 0.14 0.14];
-        case 'scientific'
-            d.DashboardBackground = [0.98 0.98 0.96];
-            d.WidgetBackground    = [1.00 1.00 1.00];
-            d.WidgetBorderColor   = [0.80 0.80 0.78];
-            d.ToolbarBackground   = [0.94 0.94 0.92];
-            d.ToolbarFontColor    = [0.15 0.15 0.20];
-            d.DragHandleColor     = [0.00 0.45 0.74];
-            d.DropZoneColor       = [0.80 0.80 0.78];
-            d.GridLineColor       = [0.82 0.82 0.80];
-            d.GroupHeaderBg       = [0.88 0.88 0.86];
-            d.GroupHeaderFg       = [0.15 0.15 0.20];
-            d.GroupBorderColor    = [0.80 0.80 0.78];
-            d.TabActiveBg         = [0.88 0.88 0.86];
-            d.TabInactiveBg       = [0.94 0.94 0.92];
-        case 'ocean'
-            d.DashboardBackground = [0.05 0.12 0.18];
-            d.WidgetBackground    = [0.07 0.16 0.24];
-            d.WidgetBorderColor   = [0.12 0.25 0.35];
-            d.ToolbarBackground   = [0.07 0.16 0.24];
-            d.ToolbarFontColor    = [0.60 0.78 0.85];
-            d.DragHandleColor     = [0.00 0.75 0.85];
-            d.DropZoneColor       = [0.12 0.25 0.35];
-            d.GridLineColor       = [0.15 0.28 0.40];
-            d.GroupHeaderBg       = [0.10 0.22 0.30];
-            d.GroupHeaderFg       = [0.80 0.95 1.00];
-            d.GroupBorderColor    = [0.18 0.30 0.40];
-            d.TabActiveBg         = [0.10 0.22 0.30];
-            d.TabInactiveBg       = [0.06 0.14 0.22];
-        otherwise % 'default'
-            d.DashboardBackground = [0.94 0.94 0.94];
-            d.WidgetBackground    = [1.00 1.00 1.00];
-            d.WidgetBorderColor   = [0.80 0.80 0.80];
-            d.ToolbarBackground   = [0.90 0.90 0.90];
-            d.ToolbarFontColor    = [0.20 0.20 0.20];
-            d.DragHandleColor     = [0.20 0.60 0.40];
-            d.DropZoneColor       = [0.80 0.80 0.80];
-            d.GridLineColor       = [0.82 0.82 0.82];
     end
 
     % Axis label/tick color — derive from toolbar font (readable on widget bg)

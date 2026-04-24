@@ -45,7 +45,7 @@ jobs:
         run: git config --global --add safe.directory /__w/FastSense/FastSense
 
       - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@v1.21.0
+        uses: benchmark-action/github-action-benchmark@v1.22.0
         with:
           name: FastSense Performance
           tool: customSmallerIsBetter

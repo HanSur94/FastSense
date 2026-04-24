@@ -35,7 +35,10 @@ classdef TestToolbar < matlab.unittest.TestCase
             testCase.addTeardown(@close, fp.hFigure);
             tb = FastSenseToolbar(fp);
             children = get(tb.hToolbar, 'Children');
-            testCase.verifyEqual(numel(children), 11, ...
+            % Buttons created in createToolbar(): cursor, crosshair, grid,
+            % legend, autoscale, exportPNG, exportData, refresh, live,
+            % metadata, violations, theme = 12.
+            testCase.verifyEqual(numel(children), 12, ...
                 sprintf('testToolbarHasAllButtons: got %d', numel(children)));
         end
 
@@ -134,7 +137,8 @@ classdef TestToolbar < matlab.unittest.TestCase
             testCase.verifyEqual(tb.Mode, 'cursor', 'testMutualExcl: cursor on');
             tb.setCrosshair(true);
             testCase.verifyEqual(tb.Mode, 'crosshair', 'testMutualExcl: crosshair replaces cursor');
-            testCase.verifyEqual(get(tb.hCursorBtn, 'State'), 'off', 'testMutualExcl: cursor btn off');
+            % char() handles R2020b (already char) + newer releases (OnOffSwitchState enum)
+            testCase.verifyEqual(char(get(tb.hCursorBtn, 'State')), 'off', 'testMutualExcl: cursor btn off');
         end
 
         function testCursorMode(testCase)
@@ -170,14 +174,15 @@ classdef TestToolbar < matlab.unittest.TestCase
             % Violations should be visible initially
             testCase.verifyTrue(fp.ViolationsVisible, 'testViolationsToggle: default true');
             hM = fp.Thresholds(1).hMarkers;
-            testCase.verifyEqual(get(hM, 'Visible'), 'on', 'testViolationsToggle: markers visible');
+            % char() handles R2020b (already char) + newer releases (OnOffSwitchState enum)
+            testCase.verifyEqual(char(get(hM, 'Visible')), 'on', 'testViolationsToggle: markers visible');
             % Toggle off via toolbar callback
             tb.setViolationsVisible(false);
             testCase.verifyTrue(~fp.ViolationsVisible, 'testViolationsToggle: now false');
-            testCase.verifyEqual(get(hM, 'Visible'), 'off', 'testViolationsToggle: markers hidden');
+            testCase.verifyEqual(char(get(hM, 'Visible')), 'off', 'testViolationsToggle: markers hidden');
             % Toggle back on
             tb.setViolationsVisible(true);
-            testCase.verifyEqual(get(hM, 'Visible'), 'on', 'testViolationsToggle: markers back');
+            testCase.verifyEqual(char(get(hM, 'Visible')), 'on', 'testViolationsToggle: markers back');
         end
     end
 

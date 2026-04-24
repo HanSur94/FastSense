@@ -40,10 +40,16 @@ classdef LiveEventPipeline < handle
             defaults.MaxBackups        = 5;
             defaults.MaxCallsPerEvent  = 1;
             defaults.OnEventStart      = [];
+            defaults.Monitors          = [];  % NV-pair override for MonitorTargets
             opts = parseOpts(defaults, varargin);
 
             % Accept MonitorTargets map (containers.Map of key -> MonitorTag).
-            if isa(monitors, 'containers.Map')
+            % 'Monitors' NV-pair takes precedence over the first positional
+            % arg — lets callers pass an empty/legacy sensors map positionally
+            % while supplying the real monitors by name (Tag-path pattern).
+            if isa(opts.Monitors, 'containers.Map')
+                obj.MonitorTargets = opts.Monitors;
+            elseif isa(monitors, 'containers.Map')
                 obj.MonitorTargets = monitors;
             else
                 obj.MonitorTargets = containers.Map( ...
