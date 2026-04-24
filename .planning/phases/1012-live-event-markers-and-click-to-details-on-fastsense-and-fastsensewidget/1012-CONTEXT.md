@@ -32,16 +32,16 @@ Single source of truth is `EventStore` (D1 — locked during brainstorm). Open e
 - Peak/Min/Max/Mean/RMS/Std are **running/partial** values updated on each live-tick append — users see the peak climb during an open event.
 
 ### Marker rendering
-- Y-position: `Y = signal value at StartTime`, computed via `interp1(x, y, startT, 'nearest', 'extrap')` — anchors the marker visually to the event's cause on the signal line.
+- Y-position: `Y = signal value at StartTime`, computed via **`tag.valueAt(startT)`** — this is the method already used by Phase 1010's `renderEventLayer_` (ZOH via `binary_search`); keep consistent to avoid behavioral drift between open and closed markers.
 - Open = hollow circle (`MarkerFaceColor='none'`, `MarkerEdgeColor=severityColor`); closed = filled — universally-read open/closed visual grammar, no extra color needed.
 - Z-order: marker layer is `uistack(...,'top')` after `renderLines()` — markers always visible, zero impact on the line-rendering hot path (Pitfall 10).
 - Marker size: fixed `8 pt` (new theme constant `EventMarkerSize`), not axes-relative — stable across zoom/resize.
 
 ### Click-to-details surface
-- Surface type: floating `uipanel` inside the same figure, anchored near the clicked marker; closes on outside-click, ESC, or X-button — matches the Phase-3 info-tooltip pattern already present in `DashboardLayout`.
+- Surface type: floating `uipanel` inside the same figure, anchored near the clicked marker; closes on outside-click, ESC, or X-button. **Implementation note (after research):** Phase 3's `openInfoPopup` uses a separate `figure`, not a `uipanel` — so the close mechanics cannot be lifted verbatim. Plan-phase will build a new `uipanel`-based popup that mimics the Phase-3 UX: ESC via parent-figure `WindowKeyPressFcn`, click-outside via parent `WindowButtonDownFcn` with hit-test against the panel's Position, X-button via a top-right `uicontrol` with a `Callback` that deletes the panel handle.
 - Fields shown (full dump, single vertical block): `StartTime`, `EndTime` (or `"Open"` when `IsOpen==true`), duration (or `"Open"`), `PeakValue`, `Min`, `Max`, `Mean`, `RMS`, `Std`, `Severity`, `Category`, `TagKeys`, `ThresholdLabel`, `Notes`.
 - Three redundant dismiss paths: `ESC` key + click-outside + `X` button.
-- Click detection: per-marker `ButtonDownFcn` with `UserData.eventId` — simple & fast for typical `N < 100` events; no hit-test indirection.
+- Click detection: per-marker `ButtonDownFcn` with `UserData.eventId` — simple & fast for typical `N < 100` events; no hit-test indirection. **Implementation note (after research):** Phase 1010's `renderEventLayer_` currently batches markers by severity (3 `line()` calls). For per-marker click callbacks, plan-phase must switch to one `line()` per event. Pitfall-10 regression guard: zero-event bench of a 12-line FastSense plot must show no measurable regression.
 
 ### FastSenseWidget wiring + live refresh
 - `FastSenseWidget` gains `ShowEventMarkers` (logical, default `false` for back-compat) and `EventStore` (handle, default empty) — forwarded to the inner `FastSense` during `render()`; mirrors the Phase-9 `ShowThresholdLabels` pattern.
@@ -77,7 +77,7 @@ Single source of truth is `EventStore` (D1 — locked during brainstorm). Open e
 
 ### Integration points
 - `libs/EventDetection/Event.m` — new `IsOpen` property + backward-compatible `fromStruct` (missing `IsOpen` → default `false`).
-- `libs/EventDetection/EventStore.m` — new `closeEvent(id, endTime, finalStats)` method; on-disk schema: nullable `end_time`, new `is_open` column.
+- `libs/EventDetection/EventStore.m` — new `closeEvent(id, endTime, finalStats)` method. **Storage is a `.mat`-file-backed handle array of `Event` objects, NOT SQLite** (clarification after research). `IsOpen` is added to `Event` as a default-`false` property; MATLAB/Octave materialize missing fields on `.mat` load via the class definition, so no migration script is required (precedent: Phase 1010 added 4 fields the same way).
 - `libs/SensorThreshold/MonitorTag.m` (Phase 1006/1007) — rising-edge `appendData` path emits an open Event and caches its Id; falling-edge calls `closeEvent`; running-stats fields accumulate per tick.
 - `libs/FastSense/FastSense.m::renderEventLayer_` — extend with open-event styling (hollow vs filled) + per-marker `ButtonDownFcn` wiring + click-details panel; add `EventMarkerSize` theme lookup.
 - `libs/Dashboard/FastSenseWidget.m` — new `ShowEventMarkers` + `EventStore` properties; `render()` and `refresh()` forward them; `refresh()` performs marker diff against a cached `LastEventIds_` set.
