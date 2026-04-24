@@ -64,7 +64,7 @@ classdef DashboardEngine < handle
         hStaleBannerText     = []  % uicontrol text child of hStaleBanner
         hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
         LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
-        StaleBannerDismissed_= false  % true after user clicks X; reset when data flows again
+        StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
     end
 
     methods (Access = public)
@@ -976,13 +976,13 @@ classdef DashboardEngine < handle
             set(obj.hFigure, 'Color', theme.DashboardBackground);
 
             % Content-area viewport + canvas
-            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hViewport) ...
-                    && ishandle(obj.Layout.hViewport)
+            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hViewport) && ...
+                    ishandle(obj.Layout.hViewport)
                 set(obj.Layout.hViewport, ...
                     'BackgroundColor', theme.DashboardBackground);
             end
-            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hCanvas) ...
-                    && ishandle(obj.Layout.hCanvas)
+            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hCanvas) && ...
+                    ishandle(obj.Layout.hCanvas)
                 set(obj.Layout.hCanvas, ...
                     'BackgroundColor', theme.DashboardBackground);
             end
@@ -999,10 +999,11 @@ classdef DashboardEngine < handle
                         'ForegroundColor', theme.ToolbarFontColor);
                 end
                 if ~isempty(tb.hLastUpdate) && ishandle(tb.hLastUpdate)
+                    fadedFg = theme.ToolbarFontColor * 0.6 + ...
+                        theme.ToolbarBackground * 0.4;
                     set(tb.hLastUpdate, ...
                         'BackgroundColor', theme.ToolbarBackground, ...
-                        'ForegroundColor', theme.ToolbarFontColor * 0.6 ...
-                            + theme.ToolbarBackground * 0.4);
+                        'ForegroundColor', fadedFg);
                 end
                 if ~isempty(tb.hLivePanel) && ishandle(tb.hLivePanel)
                     set(tb.hLivePanel, 'BackgroundColor', theme.ToolbarBackground);
