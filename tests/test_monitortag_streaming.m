@@ -30,16 +30,24 @@ function test_monitortag_streaming()
     m = MonitorTag('m2', parent, @(x, y) y > 5, 'EventStore', store);
     [~, ~] = m.getXY();
     e1 = store.getEvents();
-    assert(numel(e1) == 1, 'Scenario 2: Plan 02 emits 1 event for open run');
+    % Phase 1012 Plan 02: recompute_ emits 1 IsOpen=true event (EndTime=NaN) for open run.
+    assert(numel(e1) == 1, 'Scenario 2: Plan 02 emits 1 open event for trailing open run');
     assert(e1(1).StartTime == 6, 'Scenario 2: first event StartTime 6');
-    assert(e1(1).EndTime == 10,  'Scenario 2: first event EndTime 10');
+    assert(e1(1).IsOpen == true, ...
+        'Scenario 2: open run emits IsOpen=true event (Phase 1012)');
+    assert(isnan(e1(1).EndTime), ...
+        'Scenario 2: open event EndTime must be NaN before close (Phase 1012)');
     m.appendData(11:15, [10 10 0 0 0]);
     e2 = store.getEvents();
-    assert(numel(e2) == 2, 'Scenario 2: tail must emit a SECOND event');
-    assert(e2(2).StartTime == 6, ...
-        'Scenario 2: second event StartTime must be carried original start (6)');
-    assert(e2(2).EndTime == 12, ...
-        'Scenario 2: second event EndTime must be falling edge in tail (12)');
+    % Phase 1012: closeEvent updates the same event in place — still 1 event, now closed.
+    assert(numel(e2) == 1, ...
+        'Scenario 2: closeEvent updates in place — still exactly 1 event (Phase 1012)');
+    assert(e2(1).StartTime == 6, ...
+        'Scenario 2: event StartTime unchanged after close');
+    assert(e2(1).EndTime == 12, ...
+        'Scenario 2: event EndTime set to falling edge (x=12) via closeEvent');
+    assert(e2(1).IsOpen == false, ...
+        'Scenario 2: event is no longer open after falling edge');
     TagRegistry.clear();
 
     % --- Scenario 3: open run continues through entire tail ---

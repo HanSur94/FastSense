@@ -386,8 +386,28 @@ classdef MonitorTag < Tag
                 newOngoing = NaN;
             end
 
-            % Stage 4: emit events for runs that CLOSE inside newX.
-            obj.fireEventsInTail_(newX, raw_new, priorLastFlag, priorOngoingStart);
+            % Phase 1012: update open-run running stats with the tail slice
+            % BEFORE fireEventsInTail_ so that a close-in-this-chunk sees fresh stats.
+            % Mask selects WHICH samples are inside the alarm run (raw_new==1);
+            % VALUES accumulated are the RAW sensor signal (newY), not the boolean.
+            % newY = raw signal (user-supplied values); raw_new = derived 0/1 condition mask.
+            if ~isempty(obj.cache_.openEventId_)
+                openMask = (raw_new == 1);
+                if any(openMask)
+                    obj.updateOpenStats_(newX(openMask), newY(openMask));  % newY = raw signal
+                end
+            end
+            % Stage 4: emit events for runs that CLOSE inside newX (+ Phase 1012: open emission).
+            % Pass newY so fireEventsInTail_ can compute inline stats for same-chunk closed runs.
+            obj.fireEventsInTail_(newX, raw_new, priorLastFlag, priorOngoingStart, newY);
+            % Phase 1012: if a rising edge seeded a new open event inside this chunk,
+            % backfill openStats_ from the rising edge onward. Again: newY = raw values.
+            if ~isempty(obj.cache_.openEventId_) && obj.cache_.openStats_.nPoints == 0
+                startIdx = find(raw_new == 1, 1, 'first');
+                if ~isempty(startIdx)
+                    obj.updateOpenStats_(newX(startIdx:end), newY(startIdx:end));  % newY = raw signal
+                end
+            end
 
             % Extend cache and write new boundary-state fields.
             obj.cache_.x = [obj.cache_.x, newX];
@@ -456,7 +476,9 @@ classdef MonitorTag < Tag
                     'computedAt',      now, ...
                     'lastStateFlag_',  0, ...
                     'lastHystState_',  false, ...
-                    'ongoingRunStart_', NaN);
+                    'ongoingRunStart_', NaN, ...
+                    'openStats_',      MonitorTag.emptyOpenStats_(), ...
+                    'openEventId_',    '');
                 obj.dirty_ = false;
                 return;
             end
@@ -481,7 +503,16 @@ classdef MonitorTag < Tag
                 end
             end
             % Stage 4: event emission on rising edges
+            % Phase 1012: seed openEventId_ + openStats_ BEFORE calling the
+            % emitter so that fireEventsOnRisingEdges_ can safely access them.
+            if ~isfield(obj.cache_, 'openEventId_')
+                obj.cache_.openEventId_ = '';
+                obj.cache_.openStats_   = MonitorTag.emptyOpenStats_();
+            end
             obj.fireEventsOnRisingEdges_(px, raw);
+            % Phase 1012: preserve openEventId_/openStats_ set by fireEventsOnRisingEdges_.
+            savedOpenEventId = obj.cache_.openEventId_;
+            savedOpenStats   = obj.cache_.openStats_;
             % Write cache + boundary-state fields (read by appendData).
             lastFlag = 0;
             if ~isempty(raw), lastFlag = double(raw(end)); end
@@ -491,7 +522,9 @@ classdef MonitorTag < Tag
                 'computedAt',      now, ...
                 'lastStateFlag_',  lastFlag, ...
                 'lastHystState_',  finalHyst, ...
-                'ongoingRunStart_', newOngoing);
+                'ongoingRunStart_', newOngoing, ...
+                'openStats_',      savedOpenStats, ...
+                'openEventId_',    savedOpenEventId);
             obj.dirty_ = false;
         end
 
@@ -577,40 +610,153 @@ classdef MonitorTag < Tag
             endIdx   = find(d == -1) - 1;
         end
 
-        function fireEventsInTail_(obj, newX, bin_new, priorLastFlag, priorOngoingStart)
-            %FIREEVENTSINTAIL_ Emit events ONLY for runs that close inside newX.
+        function updateOpenStats_(obj, xSlice, ySlice)
+            %UPDATEOPENSTATS_ Incrementally update cache_.openStats_ with a tail slice.
+            %   Called once per appendData tick while a run is open. O(N) where N
+            %   is the SLICE length — never O(run-length). Derives PeakValue/
+            %   Mean/RMS/Std/NumPoints at closeEvent time via flushOpenStats_.
+            if isempty(xSlice) || isempty(ySlice), return; end
+            S = obj.cache_.openStats_;
+            S.nPoints = S.nPoints + numel(ySlice);
+            S.sumY    = S.sumY    + sum(ySlice);
+            S.sumYSq  = S.sumYSq  + sum(ySlice .^ 2);
+            S.maxY    = max(S.maxY, max(ySlice));
+            S.minY    = min(S.minY, min(ySlice));
+            % PeakAbs tracks the worst |y| seen — direction-aware peak.
+            S.peakAbs = max(S.peakAbs, max(abs(ySlice)));
+            if isnan(S.firstT), S.firstT = xSlice(1); end
+            S.lastT   = xSlice(end);
+            obj.cache_.openStats_ = S;
+        end
+
+        function fs = flushOpenStats_(obj)
+            %FLUSHOPENSTATS_ Convert cache_.openStats_ to the finalStats struct
+            %   shape expected by EventStore.closeEvent / Event.close. Does NOT
+            %   reset the accumulator — caller does that.
+            S = obj.cache_.openStats_;
+            n = max(1, S.nPoints);
+            meanY = S.sumY / n;
+            varY  = max(0, S.sumYSq / n - meanY ^ 2);  % guard FP negative
+            fs = struct( ...
+                'PeakValue', S.peakAbs, ...
+                'NumPoints', S.nPoints, ...
+                'MinValue',  S.minY, ...
+                'MaxValue',  S.maxY, ...
+                'MeanValue', meanY, ...
+                'RmsValue',  sqrt(S.sumYSq / n), ...
+                'StdValue',  sqrt(varY));
+        end
+
+        function fireEventsInTail_(obj, newX, bin_new, priorLastFlag, priorOngoingStart, newY)
+            %FIREEVENTSINTAIL_ Emit events for tail runs; Phase 1012 supports
+            %   IsOpen=true open-event emission + closeEvent on falling edge.
             %
-            %   Phase 1007 (MONITOR-08) streaming-event emission.
+            %   newY (optional, Phase 1012): raw sensor values parallel to newX —
+            %   used to compute inline stats for same-chunk closed events.
+            %
+            %   Phase 1007 (MONITOR-08) streaming-event emission extended:
             %   If priorLastFlag == 1 AND bin_new(1) == 1 the first run in
             %   the tail is a continuation of the open run; use
-            %   priorOngoingStart as its effective StartTime. Runs still
-            %   open at the tail end are NOT emitted — they carry forward
-            %   as state for the next appendData call.
+            %   priorOngoingStart as its effective StartTime.
             %
-            %   MONITOR-05 carrier pattern unchanged from Plan 02:
-            %     SensorName     = obj.Parent.Key
-            %     ThresholdLabel = obj.Key
-            %   (Phase 1010 will migrate to a per-Tag keys array on Event.)
+            %   Phase 1012: runs still open at tail end emit an IsOpen=true
+            %   Event (was `continue` pre-phase). Falling edge calls
+            %   EventStore.closeEvent(openEventId_, endT, finalStats).
+            if nargin < 6, newY = []; end
             if isempty(bin_new), return; end
-            if isempty(obj.EventStore) && ...
-                    isempty(obj.OnEventStart) && ...
-                    isempty(obj.OnEventEnd)
-                return;
-            end
+            hasHooks = ~isempty(obj.EventStore) || ~isempty(obj.OnEventStart) || ~isempty(obj.OnEventEnd);
+            if ~hasHooks, return; end
+
             [sI, eI] = obj.findRuns_(bin_new);
+
+            % ---- Part 1: close the currently-open event when its falling edge arrives
+            if ~isempty(obj.cache_.openEventId_)
+                % A falling edge manifests in two cases when priorLastFlag==1:
+                %   (a) bin_new has a run starting at 1 that ends before numel(bin_new)
+                %       — the continuation run closes within this chunk.
+                %   (b) bin_new(1)==0 — the run ended exactly at the chunk boundary;
+                %       the open event must close at the last 1 of the PRIOR chunk.
+                %       In this case, use the prior chunk's last X (priorOngoingStart
+                %       tracks the run start, but we use cache_.x(end) for the endT).
+                shouldClose = false;
+                endT = NaN;
+                if priorLastFlag == 1 && ~isempty(sI) && sI(1) == 1 && eI(1) < numel(bin_new)
+                    % Case (a): continuation run closes inside this chunk.
+                    shouldClose = true;
+                    endT = newX(eI(1));
+                elseif priorLastFlag == 1 && (isempty(bin_new) || ~bin_new(1))
+                    % Case (b): chunk starts with 0 — falling edge was at chunk boundary.
+                    shouldClose = true;
+                    % End time is the last cached X (the sample where alarm was last 1).
+                    if ~isempty(obj.cache_.x)
+                        endT = obj.cache_.x(end);
+                    else
+                        endT = newX(1);  % fallback
+                    end
+                end
+                if shouldClose
+                    % Stats were already updated in appendData BEFORE this call.
+                    fs = obj.flushOpenStats_();
+                    if ~isempty(obj.EventStore)
+                        try
+                            obj.EventStore.closeEvent(obj.cache_.openEventId_, endT, fs);
+                        catch
+                            % store out-of-sync — log, but don't crash the live tick
+                        end
+                    end
+                    if ~isempty(obj.OnEventEnd)
+                        evSnap = struct('Id', obj.cache_.openEventId_, ...
+                            'StartTime', priorOngoingStart, 'EndTime', endT, ...
+                            'IsOpen', false);
+                        obj.OnEventEnd(evSnap);
+                    end
+                    obj.cache_.openEventId_ = '';
+                    obj.cache_.openStats_   = MonitorTag.emptyOpenStats_();
+                    % Drop the first run — it was the open run that just closed.
+                    if numel(sI) >= 1
+                        sI = sI(2:end);
+                        eI = eI(2:end);
+                    end
+                end
+            end
+
+            % ---- Part 2: process remaining runs
             for k = 1:numel(sI)
                 if eI(k) == numel(bin_new)
-                    % Run still open at tail end — don't emit yet.
+                    % Run still open at tail — Phase 1012: emit OPEN event.
+                    if k == 1 && priorLastFlag == 1 && sI(k) == 1 && ~isnan(priorOngoingStart)
+                        startT = priorOngoingStart;
+                    else
+                        startT = newX(sI(k));
+                    end
+                    % Skip if we ALREADY have an open event cached — run extends further.
+                    if ~isempty(obj.cache_.openEventId_), continue; end
+                    ev = Event(startT, NaN, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                    ev.IsOpen = true;
+                    if ~isempty(obj.EventStore)
+                        obj.EventStore.append(ev);
+                        ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
+                        EventBinding.attach(ev.Id, char(obj.Key));
+                        EventBinding.attach(ev.Id, char(obj.Parent.Key));
+                        obj.cache_.openEventId_ = ev.Id;
+                    end
+                    if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
                     continue;
                 end
-                if k == 1 && priorLastFlag == 1 && sI(k) == 1 && ...
-                        ~isnan(priorOngoingStart)
+                % Closed run — existing emission path.
+                if k == 1 && priorLastFlag == 1 && sI(k) == 1 && ~isnan(priorOngoingStart)
                     startT = priorOngoingStart;
                 else
                     startT = newX(sI(k));
                 end
                 endT = newX(eI(k));
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                % Phase 1012: compute inline stats for same-chunk closed events.
+                if ~isempty(newY)
+                    yRun = newY(sI(k):eI(k));
+                    ev.setStats(max(abs(yRun)), numel(yRun), min(yRun), max(yRun), ...
+                        mean(yRun), sqrt(mean(yRun .^ 2)), std(yRun));
+                end
                 if ~isempty(obj.EventStore)
                     obj.EventStore.append(ev);
                     % Phase 1010 (EVENT-01): TagKeys + EventBinding after append (Id assigned)
@@ -618,12 +764,8 @@ classdef MonitorTag < Tag
                     EventBinding.attach(ev.Id, char(obj.Key));
                     EventBinding.attach(ev.Id, char(obj.Parent.Key));
                 end
-                if ~isempty(obj.OnEventStart)
-                    obj.OnEventStart(ev);
-                end
-                if ~isempty(obj.OnEventEnd)
-                    obj.OnEventEnd(ev);
-                end
+                if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
+                if ~isempty(obj.OnEventEnd),   obj.OnEventEnd(ev);   end
             end
         end
 
@@ -651,7 +793,9 @@ classdef MonitorTag < Tag
                 'computedAt',      meta.computed_at, ...
                 'lastStateFlag_',  lastFlag, ...
                 'lastHystState_',  logical(lastFlag), ...
-                'ongoingRunStart_', NaN);
+                'ongoingRunStart_', NaN, ...
+                'openStats_',      MonitorTag.emptyOpenStats_(), ...
+                'openEventId_',    '');
             obj.dirty_ = false;
             tf = true;
         end
@@ -699,6 +843,8 @@ classdef MonitorTag < Tag
 
         function fireEventsOnRisingEdges_(obj, px, bin)
             %FIREEVENTSONRISINGEDGES_ Emit Events on 0-to-1 transitions after debounce+hysteresis.
+            %   Phase 1012: trailing open runs emit IsOpen=true events for
+            %   parity with the appendData tail branch.
             %
             %   MONITOR-05 CARRIER PATTERN (Phase 1006 pre-Phase-1010):
             %     A per-Tag keys field on Event does NOT exist yet. Use the
@@ -717,7 +863,11 @@ classdef MonitorTag < Tag
                 return;
             end
             [sI, eI] = obj.findRuns_(bin);
+            % Phase 1012: detect trailing open run (last run ends at last bin index)
+            lastOpenRun = ~isempty(eI) && eI(end) == numel(bin);
+            % Closed runs first
             for k = 1:numel(sI)
+                if lastOpenRun && k == numel(sI), continue; end  % last run is OPEN — handled below
                 startT = px(sI(k));
                 endT   = px(eI(k));
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
@@ -728,12 +878,27 @@ classdef MonitorTag < Tag
                     EventBinding.attach(ev.Id, char(obj.Key));
                     EventBinding.attach(ev.Id, char(obj.Parent.Key));
                 end
-                if ~isempty(obj.OnEventStart)
-                    obj.OnEventStart(ev);
+                if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
+                if ~isempty(obj.OnEventEnd),   obj.OnEventEnd(ev);   end
+            end
+            % Phase 1012: open run (trailing) — emit IsOpen=true event
+            if lastOpenRun && isempty(obj.cache_.openEventId_)
+                startT = px(sI(end));
+                ev = Event(startT, NaN, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                ev.IsOpen = true;
+                if ~isempty(obj.EventStore)
+                    obj.EventStore.append(ev);
+                    ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
+                    EventBinding.attach(ev.Id, char(obj.Key));
+                    EventBinding.attach(ev.Id, char(obj.Parent.Key));
+                    obj.cache_.openEventId_ = ev.Id;
+                    % Seed openStats_ from the run portion of the parent grid.
+                    [px_parent, py_parent] = obj.Parent.getXY();
+                    if ~isempty(px_parent) && sI(end) <= numel(px_parent)
+                        obj.updateOpenStats_(px_parent(sI(end):eI(end)), py_parent(sI(end):eI(end)));
+                    end
                 end
-                if ~isempty(obj.OnEventEnd)
-                    obj.OnEventEnd(ev);
-                end
+                if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
             end
         end
     end
@@ -783,6 +948,22 @@ classdef MonitorTag < Tag
     end
 
     methods (Static, Access = private)
+        function s = emptyOpenStats_()
+            %EMPTYOPENSTATS_ Zero struct for open-run running stats accumulator.
+            %   Returned by the three cache_ init paths (recompute_ empty-parent,
+            %   recompute_ main block, tryLoadFromDisk_) so that a fresh or
+            %   cold-reloaded MonitorTag always has the field available.
+            s = struct( ...
+                'nPoints', 0, ...
+                'sumY',    0, ...
+                'sumYSq',  0, ...
+                'maxY',   -inf, ...
+                'minY',    inf, ...
+                'peakAbs', 0, ...
+                'firstT',  NaN, ...
+                'lastT',   NaN);
+        end
+
         function v = fieldOr_(s, fieldName, defaultVal)
             %FIELDOR_ Return s.(fieldName) if present and non-empty, else defaultVal.
             if isfield(s, fieldName) && ~isempty(s.(fieldName))

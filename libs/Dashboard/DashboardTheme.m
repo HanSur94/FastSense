@@ -98,6 +98,7 @@ function d = getDashboardDefaults(preset)
     d.InfoColor            = [0.27 0.52 0.85];
     d.GaugeArcWidth        = 8;
     d.KpiFontSize          = 28;
+    d.EventMarkerSize      = 8;        % Phase 1012 — FastSense event overlay marker size (pt)
 
     % Group widget shared defaults (overridden per preset above where applicable)
     if ~isfield(d, 'GroupHeaderBg')

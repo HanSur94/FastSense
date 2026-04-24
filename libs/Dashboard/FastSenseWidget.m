@@ -19,6 +19,8 @@ classdef FastSenseWidget < DashboardWidget
         YLabel       = ''    % Y-axis label (auto-set from Sensor if empty)
         YLimits             = []    % Fixed Y-axis range [min max]; empty = auto-scale
         ShowThresholdLabels = false % show inline name labels on threshold lines
+        ShowEventMarkers    = false % Phase 1012 — toggle event round-marker overlay
+        EventStore          = []    % Phase 1012 — EventStore handle forwarded to inner FastSense
         % Forwarded to FastSense.LiveViewMode on render:
         %   'reset'    — window covers the full X range every tick (default:
         %                matches dashboard-demo expectation that users see
@@ -39,6 +41,9 @@ classdef FastSenseWidget < DashboardWidget
         CachedXMin    = inf    % cached minimum of X data for O(1) getTimeRange()
         CachedXMax    = -inf   % cached maximum of X data for O(1) getTimeRange()
         LastTagRef    = []     % Tag handle snapshot for cache-invalidation
+        LastEventIds_      = {}    % Phase 1012 — cell of event Ids at last refresh
+        LastEventOpen_     = []    % Phase 1012 — logical array parallel to LastEventIds_
+        LastEventSeverity_ = []    % Phase 1012 — numeric array parallel to LastEventIds_
     end
 
     methods
@@ -81,6 +86,22 @@ classdef FastSenseWidget < DashboardWidget
             fp = FastSense('Parent', ax);
             obj.FastSenseObj = fp;
             fp.ShowThresholdLabels = obj.ShowThresholdLabels;
+            % Phase 1012 — guarded forwarding of event-marker state to inner FastSense.
+            % FastSense.ShowEventMarkers defaults to TRUE (shipped by Phase 1010).
+            % FastSenseWidget.ShowEventMarkers defaults to FALSE (back-compat for
+            % dashboards that never opted into the overlay). If we unconditionally
+            % forwarded widget->inner here, we'd silently HIDE markers on any
+            % pre-1012 widget dashboard that had set fp.EventStore directly
+            % (rare but possible via low-level access to FastSenseObj). The guard
+            % below forwards only when the widget has explicitly opted in
+            % (ShowEventMarkers=true OR EventStore has been configured at the
+            % widget level). Otherwise we leave the inner FastSense's own
+            % properties untouched — preserving the Phase-1010 default-true
+            % behaviour for consumers that bypassed the widget API.
+            if obj.ShowEventMarkers || ~isempty(obj.EventStore)
+                fp.ShowEventMarkers = obj.ShowEventMarkers;
+                fp.EventStore       = obj.EventStore;
+            end
 
             % Slide the X window as new samples arrive on updateData().
             % Forwarded from the widget-level LiveViewMode property so
@@ -179,7 +200,18 @@ classdef FastSenseWidget < DashboardWidget
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
-            tagUnchanged = ~isempty(obj.LastTagRef) && obj.Tag == obj.LastTagRef;
+            % Handle identity: MATLAB overloads == for handle subclasses;
+            % Octave does not, so fall back to Key-equality (Phase 1006
+            % precedent) — semantically equivalent for the refresh fast-path
+            % because the only way two tags share a Key is if they were
+            % registered through TagRegistry under the same name.
+            try
+                tagUnchanged = ~isempty(obj.LastTagRef) && obj.Tag == obj.LastTagRef;
+            catch
+                tagUnchanged = ~isempty(obj.LastTagRef) && ...
+                               isa(obj.LastTagRef, 'Tag') && ...
+                               strcmp(char(obj.Tag.Key), char(obj.LastTagRef.Key));
+            end
             fpValid = ~isempty(obj.FastSenseObj) && ...
                       obj.FastSenseObj.IsRendered && ...
                       ~isempty(obj.FastSenseObj.hAxes) && ...
@@ -190,6 +222,7 @@ classdef FastSenseWidget < DashboardWidget
                     obj.FastSenseObj.updateData(1, x, y);
                     obj.autoScaleY_(y);
                     obj.updateTimeRangeCache();
+                    obj.refreshEventMarkers_();  % Phase 1012
                     obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
                     return;
                 catch
@@ -197,6 +230,7 @@ classdef FastSenseWidget < DashboardWidget
                 end
             end
             obj.rebuildForTag_();
+            obj.refreshEventMarkers_();  % Phase 1012
         end
 
         function update(obj)
@@ -213,6 +247,7 @@ classdef FastSenseWidget < DashboardWidget
                     obj.FastSenseObj.updateData(1, x, y);
                     obj.autoScaleY_(y);
                     obj.updateTimeRangeCache();
+                    obj.refreshEventMarkers_();  % Phase 1012
                     obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
                     return;
                 catch
@@ -498,6 +533,8 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.YLabel), s.yLabel = obj.YLabel; end
             if ~isempty(obj.YLimits), s.yLimits = obj.YLimits; end
             if obj.ShowThresholdLabels, s.showThresholdLabels = true; end
+            if obj.ShowEventMarkers, s.showEventMarkers = true; end
+            % NOTE: EventStore is a runtime handle — intentionally NOT serialized (Pitfall E).
 
             if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
                 s.source = struct('type', 'tag', 'key', obj.Tag.Key);
@@ -512,6 +549,50 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function refreshEventMarkers_(obj)
+            %REFRESHEVENTMARKERS_ Diff LastEventIds_/LastEventOpen_ vs current EventStore state.
+            %   Triggers inner FastSense.refreshEventLayer() on any change: added/removed
+            %   events, or open-to-closed transitions. Always updates the cache.
+            if ~obj.ShowEventMarkers || isempty(obj.EventStore) || isempty(obj.Tag), return; end
+            if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered, return; end
+            events = obj.EventStore.getEventsForTag(char(obj.Tag.Key));
+            nE = numel(events);
+            ids = cell(1, nE);
+            openFlags = false(1, nE);
+            sevs      = zeros(1, nE);
+            for k = 1:nE
+                ids{k} = events(k).Id;
+                openFlags(k) = logical(events(k).IsOpen);
+                sevs(k)      = double(events(k).Severity);
+            end
+            changed = false;
+            if numel(ids) ~= numel(obj.LastEventIds_)
+                changed = true;
+            else
+                for k = 1:nE
+                    if ~any(strcmp(ids{k}, obj.LastEventIds_))
+                        changed = true; break;
+                    end
+                    idx = find(strcmp(ids{k}, obj.LastEventIds_), 1);
+                    if isempty(idx); continue; end
+                    if obj.LastEventOpen_(idx) ~= openFlags(k)
+                        changed = true; break;   % open <-> closed transition
+                    end
+                    if ~isempty(obj.LastEventSeverity_) && ...
+                            idx <= numel(obj.LastEventSeverity_) && ...
+                            obj.LastEventSeverity_(idx) ~= sevs(k)
+                        changed = true; break;   % severity bumped -> re-color
+                    end
+                end
+            end
+            if changed
+                obj.FastSenseObj.refreshEventLayer();
+            end
+            obj.LastEventIds_      = ids;
+            obj.LastEventOpen_     = openFlags;
+            obj.LastEventSeverity_ = sevs;
+        end
+
         function formatTimeAxis_(~, ax)
         %FORMATTIMEAXIS_ Replace numeric-seconds x-ticks with HH:MM:SS labels.
         %   No-op when range <= 300s (raw seconds readable) or ax invalid.
@@ -593,6 +674,11 @@ classdef FastSenseWidget < DashboardWidget
             fp = FastSense('Parent', ax);
             obj.FastSenseObj = fp;
             fp.ShowThresholdLabels = obj.ShowThresholdLabels;
+            % Phase 1012 — guarded forwarding (see render() comment above).
+            if obj.ShowEventMarkers || ~isempty(obj.EventStore)
+                fp.ShowEventMarkers = obj.ShowEventMarkers;
+                fp.EventStore       = obj.EventStore;
+            end
             fp.addTag(obj.Tag);
 
             if ~isempty(obj.Title)
@@ -686,6 +772,9 @@ classdef FastSenseWidget < DashboardWidget
             end
             if isfield(s, 'showThresholdLabels')
                 obj.ShowThresholdLabels = s.showThresholdLabels;
+            end
+            if isfield(s, 'showEventMarkers')
+                obj.ShowEventMarkers = s.showEventMarkers;
             end
         end
     end

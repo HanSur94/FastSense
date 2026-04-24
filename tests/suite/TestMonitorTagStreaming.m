@@ -68,28 +68,34 @@ classdef TestMonitorTagStreaming < matlab.unittest.TestCase
         % ---- Scenario 2: ongoing run extends into tail (falling edge in tail) ----
 
         function testAppendOngoingRunExtendsIntoTail(testCase)
-            % Plan 02 recompute_ fires 1 event for open run (StartTime=6, EndTime=10).
-            % appendData fires a SECOND event (the continuation) with
-            % StartTime=6 and EndTime=12 once the falling edge arrives in tail.
+            % Phase 1012 Plan 02 open-event semantics:
+            % recompute_ emits 1 IsOpen=true event for the open run (StartTime=6, EndTime=NaN).
+            % appendData calls EventStore.closeEvent when the falling edge arrives in tail —
+            % resulting in exactly 1 event with StartTime=6 and EndTime=12.
             parent = SensorTag('p', 'X', 1:10, 'Y', [0 0 0 0 0 10 10 10 10 10]);
             store  = EventStore('');
             m = MonitorTag('m', parent, @(x, y) y > 5, 'EventStore', store);
             [~, ~] = m.getXY();
             events1 = store.getEvents();
             testCase.verifyNumElements(events1, 1, ...
-                'Scenario 2: Plan 02 recompute_ emits 1 event for open run at parent end');
+                'Scenario 2: recompute_ emits 1 open event for trailing open run');
             testCase.verifyEqual(events1(1).StartTime, 6);
-            testCase.verifyEqual(events1(1).EndTime, 10);
+            testCase.verifyTrue(events1(1).IsOpen, ...
+                'Scenario 2: open run emits IsOpen=true event (Phase 1012)');
+            testCase.verifyTrue(isnan(events1(1).EndTime), ...
+                'Scenario 2: open event EndTime must be NaN before close');
 
             m.appendData(11:15, [10 10 0 0 0]);
 
             events2 = store.getEvents();
-            testCase.verifyNumElements(events2, 2, ...
-                'Scenario 2: tail falling edge must produce a SECOND event');
-            testCase.verifyEqual(events2(2).StartTime, 6, ...
-                'Scenario 2: second event starts at the original run start (carried)');
-            testCase.verifyEqual(events2(2).EndTime, 12, ...
-                'Scenario 2: second event ends at the falling edge in tail (x=12)');
+            testCase.verifyNumElements(events2, 1, ...
+                'Scenario 2: closeEvent updates in place — still exactly 1 event');
+            testCase.verifyEqual(events2(1).StartTime, 6, ...
+                'Scenario 2: event StartTime unchanged after close');
+            testCase.verifyEqual(events2(1).EndTime, 12, ...
+                'Scenario 2: event EndTime set to falling edge (x=12) via closeEvent');
+            testCase.verifyFalse(events2(1).IsOpen, ...
+                'Scenario 2: event is no longer open after falling edge');
         end
 
         % ---- Scenario 3: ongoing run extends ACROSS tail (no falling edge) ----

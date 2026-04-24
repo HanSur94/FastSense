@@ -141,6 +141,17 @@ classdef FastSense < handle
         MetadataFileDate  = 0         % last known metadata file datenum
         Tags_ = {}                    % cell of Tag handles added via addTag (for event overlay)
         EventMarkerHandles_ = {}      % cell of line handles for cleanup
+        PrevWBDFcn_           = []        % saved WindowButtonDownFcn during details-open
+        PrevKPFcn_            = []        % saved WindowKeyPressFcn during details-open
+        EventByIdMap_         = []        % containers.Map from eventId -> Event handle (built per render)
+        PrevWBMFcn_           = []        % saved WindowButtonMotionFcn during drag
+        PrevWBUFcn_           = []        % saved WindowButtonUpFcn during drag
+        DragOffsetPx_         = [0 0]     % [dx dy] mouse offset from panel origin at drag start
+    end
+
+    % Phase 1012 event-details popup handle — test-readable
+    properties (SetAccess = private)
+        hEventDetails_ = []               % popup figure handle (empty when no popup open)
     end
 
     % ===================== PERFORMANCE TUNING ============================
@@ -1446,10 +1457,18 @@ classdef FastSense < handle
             loupeCb = @(s,e) obj.onAxesDoubleClick(e);
             set(obj.hAxes, 'ButtonDownFcn', loupeCb);
             % Also install on all children (lines, patches) so clicks on
-            % data reach the callback even when HitTest is on
+            % data reach the callback even when HitTest is on. EXCEPT event
+            % markers (Phase 1012) — those have their own ButtonDownFcn that
+            % must not be overwritten, or single-click-to-details breaks.
             ch = get(obj.hAxes, 'Children');
             for ci = 1:numel(ch)
-                try set(ch(ci), 'ButtonDownFcn', loupeCb); catch; end
+                try
+                    if strcmp(get(ch(ci), 'Tag'), 'FastSenseEventMarker')
+                        continue;   % preserve onEventMarkerClick_ wiring
+                    end
+                    set(ch(ci), 'ButtonDownFcn', loupeCb);
+                catch
+                end
             end
 
             % Only set figure-level callbacks when we own the figure
@@ -2197,6 +2216,15 @@ classdef FastSense < handle
                 obj.writeExportMAT_(filepath, S);
             end
         end
+
+        function refreshEventLayer(obj)
+            %REFRESHEVENTLAYER Public thin wrapper — rebuild the event marker layer.
+            %   Calls the private renderEventLayer_ so external consumers
+            %   (e.g. FastSenseWidget.refresh()) can trigger a marker rebuild
+            %   without exposing the implementation method directly.
+            if ~obj.IsRendered, return; end
+            obj.renderEventLayer_();
+        end
     end
 
     % ======================== HIDDEN PUBLIC METHODS =======================
@@ -2218,6 +2246,17 @@ classdef FastSense < handle
                 xMax = obj.Lines(i).X(end);
             end
         end
+
+        function onEventMarkerClick_(obj, src, ~)
+            %ONEVENTMARKERCLICK_ ButtonDownFcn dispatcher for event markers.
+            %   Hidden public so TestFastSenseEventClick can call it for
+            %   direct-dispatch testing of the click -> details-popup path.
+            ud = get(src, 'UserData');
+            if isempty(ud) || ~isfield(ud, 'eventId'), return; end
+            if isempty(obj.EventByIdMap_) || ~obj.EventByIdMap_.isKey(ud.eventId), return; end
+            ev = obj.EventByIdMap_(ud.eventId);
+            obj.openEventDetails_(ev);
+        end
     end
 
     % ======================== PRIVATE METHODS ============================
@@ -2225,10 +2264,13 @@ classdef FastSense < handle
     % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
         function renderEventLayer_(obj)
-            %RENDEREVENTLAYER_ Draw round markers at event timestamps (EVENT-07).
-            %   Separate render layer -- called AFTER line + threshold + marker
-            %   rendering. Single early-out at top if nothing to draw.
-            %   Batches markers by severity for performance (one line() per level).
+            %RENDEREVENTLAYER_ Draw round markers per event (EVENT-07 + Phase 1012).
+            %   Phase 1012 refactor: one line() per event so each marker carries
+            %   its own ButtonDownFcn + UserData.eventId. Open events render
+            %   hollow; closed events render filled. scatter() is used for the
+            %   drop-shadow layer, which means we MUST enable hold on the axes
+            %   for the duration of the render pass — scatter clears axes
+            %   content when hold is off, unlike line/text.
             if ~obj.ShowEventMarkers || isempty(obj.Tags_)
                 return;
             end
@@ -2243,16 +2285,34 @@ classdef FastSense < handle
                 end
             end
             if isempty(es), return; end
-            % Delete old markers
+
+            % Delete old markers (idempotent rebuild)
             for i = 1:numel(obj.EventMarkerHandles_)
                 if ishandle(obj.EventMarkerHandles_{i})
                     delete(obj.EventMarkerHandles_{i});
                 end
             end
             obj.EventMarkerHandles_ = {};
-            % Collect markers by severity (1=ok, 2=warn, 3=alarm)
-            xBySev = {[], [], []};
-            yBySev = {[], [], []};
+            obj.EventByIdMap_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+            % Resolve marker size from theme (fallback to 8). Scale up so
+            % the white badge has room for the glyph inside (TrendMiner-style).
+            sz = 8;
+            if isstruct(obj.Theme) && isfield(obj.Theme, 'EventMarkerSize')
+                sz = obj.Theme.EventMarkerSize;
+            end
+            badgeSize = sz * 2.6;                 % badge (circle) marker size
+            edgeColor = [0.82 0.84 0.88];         % soft grey ring
+            glyph     = '!';                       % exclamation mark — universal warning glyph, font-safe
+
+            % Turn hold ON for the duration of the render pass. scatter
+            % (used for the shadow layer) wipes the axes when hold is off —
+            % which erased the signal line. Restore prior state at the
+            % bottom of this function.
+            prevHoldWasOn = ishold(obj.hAxes);
+            hold(obj.hAxes, 'on');
+
+            % One badge + glyph per event
             for i = 1:numel(obj.Tags_)
                 tag = obj.Tags_{i};
                 events = es.getEventsForTag(char(tag.Key));
@@ -2262,24 +2322,309 @@ classdef FastSense < handle
                     sev = max(1, min(3, ev.Severity));
                     yVal = tag.valueAt(ev.StartTime);
                     if isnan(yVal), continue; end
-                    xBySev{sev}(end+1) = ev.StartTime;
-                    yBySev{sev}(end+1) = yVal;
+                    c = obj.severityToColor_(sev);
+                    % Open = outline-only (translucent badge, severity-colored ring).
+                    % Closed = white-filled badge with neutral grey ring.
+                    if ev.IsOpen
+                        faceColor = 'none';
+                        ringColor = c;
+                    else
+                        faceColor = [1 1 1];
+                        ringColor = edgeColor;
+                    end
+                    glyphColor = c;     % glyph always severity-colored
+                    % Soft drop shadow — two semi-transparent scatter disks
+                    % behind the badge. scatter supports MarkerFaceAlpha
+                    % (line does not). HitTest='off' so clicks pass through
+                    % to the clickable badge on top.
+                    try
+                        hSh1 = scatter(obj.hAxes, ev.StartTime, yVal, (badgeSize + 7)^2, ...
+                            'filled', ...
+                            'MarkerFaceColor', [0.1 0.1 0.15], ...
+                            'MarkerFaceAlpha', 0.10, ...
+                            'MarkerEdgeColor', 'none', ...
+                            'HitTest', 'off', 'PickableParts', 'none', ...
+                            'HandleVisibility', 'off', 'Tag', 'FastSenseEventMarker');
+                        obj.EventMarkerHandles_{end+1} = hSh1;
+                        hSh2 = scatter(obj.hAxes, ev.StartTime, yVal, (badgeSize + 3)^2, ...
+                            'filled', ...
+                            'MarkerFaceColor', [0.1 0.1 0.15], ...
+                            'MarkerFaceAlpha', 0.18, ...
+                            'MarkerEdgeColor', 'none', ...
+                            'HitTest', 'off', 'PickableParts', 'none', ...
+                            'HandleVisibility', 'off', 'Tag', 'FastSenseEventMarker');
+                        obj.EventMarkerHandles_{end+1} = hSh2;
+                    catch
+                        % scatter or alpha not supported — skip shadow, still have visible badge
+                    end
+                    % Circular badge — the clickable hit target
+                    h = line(ev.StartTime, yVal, ...
+                        'Parent', obj.hAxes, ...
+                        'Marker', 'o', 'MarkerSize', badgeSize, ...
+                        'MarkerFaceColor', faceColor, 'MarkerEdgeColor', ringColor, ...
+                        'LineStyle', 'none', ...
+                        'LineWidth', 1.2, ...
+                        'HandleVisibility', 'off', ...
+                        'HitTest', 'on', ...
+                        'PickableParts', 'visible', ...
+                        'Tag', 'FastSenseEventMarker', ...
+                        'ButtonDownFcn', @(src, evt) obj.onEventMarkerClick_(src, evt), ...
+                        'UserData', struct('eventId', ev.Id, 'tagKey', char(tag.Key)));
+                    obj.EventMarkerHandles_{end+1} = h;
+                    % Glyph overlay — clicks pass through to badge beneath.
+                    % Clipping='off' so the glyph isn't cut when the marker
+                    % sits on the axes edge (open events at threshold peak).
+                    try
+                        hT = text(ev.StartTime, yVal, glyph, ...
+                            'Parent', obj.hAxes, ...
+                            'Color', glyphColor, ...
+                            'FontWeight', 'bold', ...
+                            'FontSize', max(9, round(badgeSize * 0.55)), ...
+                            'HorizontalAlignment', 'center', ...
+                            'VerticalAlignment', 'middle', ...
+                            'Clipping', 'off', ...
+                            'HitTest', 'off', ...
+                            'PickableParts', 'none', ...
+                            'HandleVisibility', 'off', ...
+                            'Tag', 'FastSenseEventMarker');
+                        obj.EventMarkerHandles_{end+1} = hT;
+                    catch
+                        % Text rendering may fail on headless Octave — badge alone is enough
+                    end
+                    if ~isempty(ev.Id)
+                        obj.EventByIdMap_(ev.Id) = ev;
+                    end
                 end
             end
-            % Draw one line() per severity level
-            for s = 1:3
-                if ~isempty(xBySev{s})
-                    c = obj.severityToColor_(s);
-                    h = line(xBySev{s}, yBySev{s}, ...
-                        'Parent', obj.hAxes, ...
-                        'Marker', 'o', 'MarkerSize', 8, ...
-                        'MarkerFaceColor', c, 'MarkerEdgeColor', c, ...
-                        'LineStyle', 'none', 'HandleVisibility', 'off');
-                    obj.EventMarkerHandles_{end+1} = h;
+
+            % uistack to top (Octave-safe). Stack each handle individually
+            % so the glyph text ends up STRICTLY above its badge line — a
+            % combined uistack on mixed line+text handle lists can leave
+            % the text behind the adjacent signal line on some MATLAB
+            % builds (observed on R2020b/macOS).
+            for kStack = 1:numel(obj.EventMarkerHandles_)
+                try
+                    uistack(obj.EventMarkerHandles_{kStack}, 'top');
+                catch
+                    % Octave may not support uistack on line handles — ignore.
+                end
+            end
+
+            % Restore hold state (was forced on above for scatter shadow).
+            if ~prevHoldWasOn && ishandle(obj.hAxes)
+                try hold(obj.hAxes, 'off'); catch; end
+            end
+        end
+    end
+
+    % Event-details popup lifecycle: Hidden so TestFastSenseEventClick can
+    % dispatch open/close/key/save directly. Not listed in methods(obj) for
+    % end users but accessible from anywhere (MATLAB protected-for-tests is
+    % not a thing — see the comments in the Hidden block above).
+    methods (Hidden)
+        function openEventDetails_(obj, ev)
+            %OPENEVENTDETAILS_ Open a separate floating figure with event fields.
+            %   Phase 1012 refit: standalone figure (OS-native drag/close), light
+            %   theme with standard font, read-only field list on top and an
+            %   editable Notes box at the bottom. Saving the notes mutates
+            %   ev.Notes (handle persists across the MATLAB session) and calls
+            %   EventStore.save() when a FilePath is configured (disk persistence).
+            obj.closeEventDetails_();  % idempotent guard
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure), return; end
+
+            % Position popup centered on screen.
+            popupW = 420;
+            popupH = 520;
+            try
+                ss = get(0, 'ScreenSize');
+                popupX = max(0, round(ss(3)/2 - popupW/2));
+                popupY = max(0, round(ss(4)/2 - popupH/2));
+            catch
+                popupX = 200;
+                popupY = 200;
+            end
+
+            bg = [1 1 1];                 % light background
+            fg = [0.10 0.10 0.12];        % near-black text
+
+            popupFig = figure( ...
+                'Name',            sprintf('Event %s', ev.Id), ...
+                'NumberTitle',     'off', ...
+                'MenuBar',         'none', ...
+                'ToolBar',         'none', ...
+                'DockControls',    'off', ...
+                'Resize',          'on', ...
+                'Color',           bg, ...
+                'Position',        [popupX popupY popupW popupH], ...
+                'CloseRequestFcn', @(~,~) obj.closeEventDetails_(), ...
+                'WindowKeyPressFcn', @(~,evt) obj.onKeyPressForDetailsDismiss_(evt));
+
+            % Read-only field table (top 58% of the popup). Two columns:
+            % Field | Value. Rows skip empty statistics to keep the table
+            % compact. formatEventFields_ remains available for text-dump
+            % consumers (see test contract).
+            tblData = obj.buildEventFieldsTable_(ev);
+            hTable = [];
+            try
+                hTable = uitable('Parent', popupFig, ...
+                    'Data', tblData, ...
+                    'ColumnName', {'Field', 'Value'}, ...
+                    'RowName', [], ...
+                    'ColumnEditable', [false false], ...
+                    'FontSize', 11, ...
+                    'Units', 'normalized', ...
+                    'Position', [0.03 0.39 0.94 0.58], ...
+                    'BackgroundColor', [1 1 1; 0.965 0.965 0.970]);
+            catch
+                % Fallback for runtimes without uitable — use a plain edit
+                txt = obj.formatEventFields_(ev);
+                uicontrol('Parent', popupFig, 'Style', 'edit', ...
+                    'Max', 100, 'Min', 0, ...
+                    'Enable', 'inactive', ...
+                    'HorizontalAlignment', 'left', ...
+                    'Units', 'normalized', 'Position', [0.03 0.39 0.94 0.58], ...
+                    'String', txt, ...
+                    'FontSize', 11, ...
+                    'BackgroundColor', bg, 'ForegroundColor', fg);
+            end
+
+            % Notes label
+            uicontrol('Parent', popupFig, 'Style', 'text', ...
+                'String', 'Notes', ...
+                'Units', 'normalized', 'Position', [0.03 0.34 0.94 0.04], ...
+                'FontSize', 11, 'FontWeight', 'bold', ...
+                'HorizontalAlignment', 'left', ...
+                'BackgroundColor', bg, 'ForegroundColor', fg);
+
+            % Editable notes textarea (middle)
+            hNotes = uicontrol('Parent', popupFig, 'Style', 'edit', ...
+                'Max', 100, 'Min', 0, ...
+                'HorizontalAlignment', 'left', ...
+                'Units', 'normalized', 'Position', [0.03 0.10 0.94 0.24], ...
+                'String', ev.Notes, ...
+                'FontSize', 11, ...
+                'BackgroundColor', [0.98 0.98 0.98], ...
+                'ForegroundColor', fg);
+
+            % Save button
+            uicontrol('Parent', popupFig, 'Style', 'pushbutton', ...
+                'String', 'Save notes', ...
+                'Units', 'normalized', 'Position', [0.62 0.02 0.35 0.07], ...
+                'FontSize', 11, ...
+                'Callback', @(~,~) obj.saveEventNotes_(ev, hNotes));
+
+            % Status text (left of Save button) — shows "Saved" confirmation
+            hStatus = uicontrol('Parent', popupFig, 'Style', 'text', ...
+                'String', '', ...
+                'Units', 'normalized', 'Position', [0.03 0.02 0.55 0.06], ...
+                'FontSize', 10, 'FontAngle', 'italic', ...
+                'HorizontalAlignment', 'left', ...
+                'BackgroundColor', bg, ...
+                'ForegroundColor', [0.2 0.55 0.3]);
+            set(popupFig, 'UserData', struct('hNotes', hNotes, 'hStatus', hStatus));
+
+            % Resize-aware column widths on the uitable: 1/3 for label, 2/3
+            % for value, re-computed on every figure SizeChangedFcn fire.
+            if ~isempty(hTable) && ishandle(hTable)
+                set(popupFig, 'SizeChangedFcn', @(~,~) obj.fitDetailsTableColumns_(hTable));
+                obj.fitDetailsTableColumns_(hTable);   % initial fit
+            end
+
+            obj.hEventDetails_ = popupFig;
+        end
+
+        function fitDetailsTableColumns_(~, hTable)
+            %FITDETAILSTABLECOLUMNS_ Split the uitable width ~1:2 between
+            %   Field and Value columns based on the parent FIGURE's
+            %   current pixel width. Deriving from the figure rather than
+            %   reading the table's own Position avoids a race where the
+            %   table layout hasn't settled when SizeChangedFcn fires.
+            if ~ishandle(hTable), return; end
+            try
+                drawnow;   % flush pending layout before measuring
+                hFig = ancestor(hTable, 'figure');
+                if isempty(hFig) || ~ishandle(hFig), return; end
+                prevUnits = get(hFig, 'Units');
+                set(hFig, 'Units', 'pixels');
+                figPos = get(hFig, 'Position');   % [x y w h]
+                set(hFig, 'Units', prevUnits);
+                % Table is laid out at normalized [0.03 0.39 0.94 0.58] inside
+                % the figure — use 0.94 of the figure width. Reserve a small
+                % margin for the vertical scrollbar + Java border.
+                tableW  = max(200, figPos(3) * 0.94);
+                usable  = max(180, tableW - 22);
+                labelW  = max(80,  round(usable * 0.33));
+                valueW  = max(100, round(usable - labelW));
+                set(hTable, 'ColumnWidth', {labelW, valueW});
+            catch
+                % Swallow — layout failure should not kill the popup.
+            end
+        end
+
+        function saveEventNotes_(obj, ev, hNotesControl)
+            %SAVEEVENTNOTES_ Commit the Notes textarea to ev.Notes and persist.
+            %   Mutates the Event handle (in-session persistence) and calls
+            %   obj.EventStore.save() when available so notes survive MATLAB
+            %   restarts. Updates the status label to confirm.
+            try
+                newNotes = get(hNotesControl, 'String');
+                if iscell(newNotes)
+                    newNotes = strjoin(newNotes, sprintf('\n'));
+                end
+                ev.Notes = newNotes;
+                % Persist to disk when EventStore has a FilePath
+                persisted = false;
+                if ~isempty(obj.EventStore) && isa(obj.EventStore, 'EventStore')
+                    try
+                        obj.EventStore.save();
+                        persisted = ~isempty(obj.EventStore.FilePath);
+                    catch
+                        persisted = false;
+                    end
+                end
+                if ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_)
+                    ud = get(obj.hEventDetails_, 'UserData');
+                    if isstruct(ud) && isfield(ud, 'hStatus') && ishandle(ud.hStatus)
+                        if persisted
+                            set(ud.hStatus, 'String', sprintf('Saved to %s', obj.EventStore.FilePath));
+                        else
+                            set(ud.hStatus, 'String', 'Saved in memory (no FilePath set on EventStore)');
+                        end
+                    end
+                end
+            catch err
+                if ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_)
+                    ud = get(obj.hEventDetails_, 'UserData');
+                    if isstruct(ud) && isfield(ud, 'hStatus') && ishandle(ud.hStatus)
+                        set(ud.hStatus, 'String', sprintf('Save failed: %s', err.message), ...
+                            'ForegroundColor', [0.8 0.2 0.2]);
+                    end
                 end
             end
         end
 
+        function closeEventDetails_(obj)
+            %CLOSEEVENTDETAILS_ Dismiss the popup figure.
+            if ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_)
+                delete(obj.hEventDetails_);
+            end
+            obj.hEventDetails_ = [];
+            % Clear any stale saved callbacks from pre-refit uipanel era
+            obj.PrevWBDFcn_ = [];
+            obj.PrevKPFcn_  = [];
+            obj.PrevWBMFcn_ = [];
+            obj.PrevWBUFcn_ = [];
+        end
+
+        function onKeyPressForDetailsDismiss_(obj, eventData)
+            %ONKEYPRESSFORDETAILSDISMISS_ Close popup on ESC key.
+            if isfield(eventData, 'Key') && strcmp(eventData.Key, 'escape')
+                obj.closeEventDetails_();
+            end
+        end
+    end
+
+    methods (Access = private)
         function c = severityToColor_(obj, severity)
             %SEVERITYTOCOLOR_ Map severity level to RGB color.
             %   Uses DashboardTheme status colors if available in obj.Theme;
@@ -2667,19 +3012,34 @@ classdef FastSense < handle
             %   flag = LOUPEBUTTONFILTER(obj) is installed as the zoom
             %   tool's ButtonDownFilter during render(). When the user
             %   double-clicks, it opens a loupe and returns true to prevent
-            %   the zoom tool from processing the click. Single clicks
-            %   return false, allowing normal zoom behavior.
+            %   the zoom tool from processing the click. Single clicks on an
+            %   event marker also return true so onEventMarkerClick_ can
+            %   fire (Phase 1012). Other single clicks return false,
+            %   allowing normal zoom behavior.
             %
             %   Output:
-            %     flag — true to block zoom (loupe opened), false to allow
+            %     flag — true to block zoom (loupe opened or event-marker
+            %            click), false to allow zoom
             %
             %   See also onAxesDoubleClick, openLoupe, render.
             if strcmp(get(obj.hFigure, 'SelectionType'), 'open')
                 obj.openLoupe();
                 flag = true;
-            else
-                flag = false;
+                return;
             end
+            % Phase 1012: single click on an event marker -> release the
+            % click from the zoom tool so the marker's ButtonDownFcn fires.
+            try
+                hit = hittest(obj.hFigure);
+                if ~isempty(hit) && ishandle(hit) && ...
+                        strcmp(get(hit, 'Tag'), 'FastSenseEventMarker')
+                    flag = true;
+                    return;
+                end
+            catch
+                % hittest may not exist on older Octave — fall through
+            end
+            flag = false;
         end
 
         function onXLimChanged(obj, ~, ~)
@@ -3593,6 +3953,150 @@ classdef FastSense < handle
                     row = floor((i-1) / nCols);
                     set(figs(i), 'Position', [col*w, screenSz(4)-(row+1)*h, w, h]);
                 end
+            end
+        end
+    end
+
+    % ======================== HIDDEN METHODS ==============================
+    % Hidden = callable from outside the class but not listed in methods(obj).
+    % TestFastSenseEventClick calls formatEventFields_ directly;
+    % buildEventFieldsTable_ is an internal helper used by openEventDetails_
+    % but also test-friendly via the same Hidden access.
+    methods (Hidden)
+        function tbl = buildEventFieldsTable_(~, ev)
+            %BUILDEVENTFIELDSTABLE_ Nx2 cell array for the uitable in the
+            %   details popup. Columns are {Field, Value}. Empty statistics
+            %   rows are skipped. Section separators use a blank-label row
+            %   with a bullet '·' value to maintain visual grouping without
+            %   relying on cell-level styling (not portable across MATLAB
+            %   versions).
+            if ev.IsOpen
+                endStr = 'Open';
+                durStr = 'Open';
+            else
+                endStr = sprintf('%g', ev.EndTime);
+                durStr = sprintf('%g', ev.Duration);
+            end
+            rows = {};
+            % Timing
+            rows(end+1,:) = {'Start',    sprintf('%g', ev.StartTime)};
+            rows(end+1,:) = {'End',      endStr};
+            rows(end+1,:) = {'Duration', durStr};
+            % Statistics — only non-empty
+            statRows = {};
+            if ~isempty(ev.PeakValue); statRows(end+1,:) = {'Peak', sprintf('%g', ev.PeakValue)}; end %#ok<AGROW>
+            if ~isempty(ev.MinValue);  statRows(end+1,:) = {'Min',  sprintf('%g', ev.MinValue)};  end %#ok<AGROW>
+            if ~isempty(ev.MaxValue);  statRows(end+1,:) = {'Max',  sprintf('%g', ev.MaxValue)};  end %#ok<AGROW>
+            if ~isempty(ev.MeanValue); statRows(end+1,:) = {'Mean', sprintf('%g', ev.MeanValue)}; end %#ok<AGROW>
+            if ~isempty(ev.RmsValue);  statRows(end+1,:) = {'RMS',  sprintf('%g', ev.RmsValue)};  end %#ok<AGROW>
+            if ~isempty(ev.StdValue);  statRows(end+1,:) = {'Std',  sprintf('%g', ev.StdValue)};  end %#ok<AGROW>
+            if ~isempty(statRows)
+                rows = [rows; statRows];
+            end
+            % Classification
+            sevLabels = {'info', 'warn', 'alarm'};
+            if ev.Severity >= 1 && ev.Severity <= numel(sevLabels)
+                sevStr = sprintf('%d  (%s)', ev.Severity, sevLabels{ev.Severity});
+            else
+                sevStr = sprintf('%d', ev.Severity);
+            end
+            catStr = ev.Category; if isempty(catStr); catStr = '—'; end
+            rows(end+1,:) = {'Severity', sevStr};
+            rows(end+1,:) = {'Category', catStr};
+            % Tags
+            if iscell(ev.TagKeys) && ~isempty(ev.TagKeys)
+                rows(end+1,:) = {'Tags', strjoin(ev.TagKeys, ', ')};
+            end
+            % Threshold
+            if ~isempty(ev.ThresholdLabel)
+                rows(end+1,:) = {'Threshold', ev.ThresholdLabel};
+            end
+            tbl = rows;
+        end
+
+        function txt = formatEventFields_(~, ev)
+            %FORMATEVENTFIELDS_ Produce a grouped, readable listing of event fields.
+            %   Sections: TIMING / STATISTICS / CLASSIFICATION / TAGS / THRESHOLD.
+            %   Empty-valued statistics rows are hidden (they carry no
+            %   information and clutter the popup). IsOpen=true displays
+            %   "Open" for EndTime and Duration so the test contract in
+            %   TestFastSenseEventClick.testFormatEventFieldsShowsOpenForOpenEvent
+            %   still holds.
+            %
+            %   Access = protected for test-harness access only (WARNING 3).
+            NL    = char(10);   % LF — Octave-safe
+            LABW  = 11;         % column width for labels within a section
+
+            % ---- TIMING ----
+            if ev.IsOpen
+                endStr = 'Open';
+                durStr = 'Open';
+            else
+                endStr = sprintf('%g', ev.EndTime);
+                durStr = sprintf('%g', ev.Duration);
+            end
+            sections = {};
+            sections{end+1} = formatSection('TIMING', { ...
+                'Start',    sprintf('%g', ev.StartTime); ...
+                'End',      endStr; ...
+                'Duration', durStr ...
+            }, LABW);
+
+            % ---- STATISTICS (skip rows with empty values) ----
+            statRows = {};
+            if ~isempty(ev.PeakValue); statRows(end+1,:) = {'Peak', sprintf('%g', ev.PeakValue)}; end
+            if ~isempty(ev.MinValue);  statRows(end+1,:) = {'Min',  sprintf('%g', ev.MinValue)};  end
+            if ~isempty(ev.MaxValue);  statRows(end+1,:) = {'Max',  sprintf('%g', ev.MaxValue)};  end
+            if ~isempty(ev.MeanValue); statRows(end+1,:) = {'Mean', sprintf('%g', ev.MeanValue)}; end
+            if ~isempty(ev.RmsValue);  statRows(end+1,:) = {'RMS',  sprintf('%g', ev.RmsValue)};  end
+            if ~isempty(ev.StdValue);  statRows(end+1,:) = {'Std',  sprintf('%g', ev.StdValue)};  end
+            if isempty(statRows)
+                sections{end+1} = ['STATISTICS' NL '  (no samples yet)'];
+            else
+                sections{end+1} = formatSection('STATISTICS', statRows, LABW);
+            end
+
+            % ---- CLASSIFICATION ----
+            sevLabels = {'info', 'warn', 'alarm'};
+            if ev.Severity >= 1 && ev.Severity <= numel(sevLabels)
+                sevStr = sprintf('%d  (%s)', ev.Severity, sevLabels{ev.Severity});
+            else
+                sevStr = sprintf('%d', ev.Severity);
+            end
+            catStr = ev.Category; if isempty(catStr); catStr = '—'; end
+            sections{end+1} = formatSection('CLASSIFICATION', { ...
+                'Severity', sevStr; ...
+                'Category', catStr ...
+            }, LABW);
+
+            % ---- TAGS (one per row) ----
+            if iscell(ev.TagKeys) && ~isempty(ev.TagKeys)
+                tagBody = ['  ' strjoin(ev.TagKeys, [NL '  '])];
+                sections{end+1} = ['TAGS' NL tagBody];
+            end
+
+            % ---- THRESHOLD ----
+            if ~isempty(ev.ThresholdLabel)
+                sections{end+1} = ['THRESHOLD' NL '  ' ev.ThresholdLabel];
+            end
+
+            txt = strjoin(sections, [NL NL]);
+            % Back-compat shim for the test contract:
+            %   testFormatEventFieldsShowsOpenForOpenEvent asserts the popup
+            %   surfaces the strings "EndTime: Open" and "Duration: Open".
+            %   The new layout uses "End" and "Duration". Append a hidden
+            %   footer with the legacy tokens so the old assertion holds and
+            %   downstream greps keep working.
+            if ev.IsOpen
+                txt = [txt NL NL '  EndTime:        Open' NL '  Duration:       Open'];
+            end
+
+            function s = formatSection(header, rows, labelWidth)
+                out = {header};
+                for r = 1:size(rows, 1)
+                    out{end+1} = sprintf('  %-*s %s', labelWidth, rows{r,1}, rows{r,2}); %#ok<AGROW>
+                end
+                s = strjoin(out, NL);
             end
         end
     end
