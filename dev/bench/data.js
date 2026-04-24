@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777033737680,
+  "lastUpdate": 1777036927740,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -42899,6 +42899,310 @@ window.BENCHMARK_DATA = {
           {
             "name": "Dashboard broadcastTimeRange stdmean",
             "value": 0.021,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb26e459e17f073c176244f06074057b630ab4d1",
+          "message": "fix(ci): repair Tests + Benchmark failures on main (#76)\n\n* fix(ci): repair tests + benchmark failures on main\n\n- Update theme tests to PR #68 contract (legacy names alias to 'light',\n  Background now [0.98 0.98 0.98]). testScientificPreset now asserts the\n  alias contract instead of removed scientific-specific styling.\n- TestDemoIndustrialPlantHeadless/testAllWidgetsRendered + smoke test:\n  DashboardEngine lazy-realizes widgets on non-active pages. Switch to\n  each page before asserting Realized.\n- teardownDemo: call delete(ctx.engine) so the destructor runs\n  synchronously, cleaning up SliderDebounceTimer + TimeRangeSelector\n  before the dangling-timer check.\n- TimeRangeSelector.restoreCallback_: wrap isvalid(obj) in try/catch;\n  Octave does not implement isvalid() for classdef handles, which\n  was crashing the Octave benchmark job.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* fix(ci): tag dashboard/pipeline timers for reliable sweep; guard TimeRangeSelector on Octave\n\n- Add Tag='DashboardEngine' to LiveTimer and SliderDebounceTimer so\n  teardownDemo's fallback sweep can find and stop them if stopLive()\n  silently fails.\n- Add Tag='LiveTagPipeline' to LiveTagPipeline.timer_ for same reason.\n- Update teardownDemo fallback sweep to cover both 'DashboardEngine'\n  and 'LiveTagPipeline' tags.\n- Guard TimeRangeSelector construction in createTimePanel() behind\n  exist('OCTAVE_VERSION','builtin')==0: patch() with FaceAlpha + NaN\n  vertex data crashes Octave's xvfb/FLTK backend (segfault). All\n  callers of TimeRangeSelector_ already check ~isempty(), so leaving\n  it empty on Octave is safe.\n\nFixes testCleanTeardownNoDanglingTimers, testTeardownLeavesNoDanglingTimers,\nand the Octave benchmark segfault.\n\n* fix(ci): clean up FastSense widget timers on engine teardown; revert Octave guard\n\n- Add FastSenseWidget.delete() that calls delete(FastSenseObj) so that\n  FastSense.stopRefineTimer/stopLive fire eagerly on teardown instead\n  of waiting for GC. Errored singleShot hRefineTimers were surviving\n  past teardownDemo's timerfindall() measurement.\n- Add explicit widget iteration in DashboardEngine.delete() so the\n  FastSenseWidget destructors run deterministically when delete(engine)\n  is called from teardownDemo.\n- Revert the createTimePanel() Octave guard: the original benchmark\n  segfault was caused by the isvalid() bug (fixed in round 1), not by\n  buildGraphics_(). The guard broke test_dashboard_preview_envelope and\n  test_dashboard_range_selector_integration on Octave.\n\nFixes testCleanTeardownNoDanglingTimers (16->14) and\ntestTeardownLeavesNoDanglingTimers (26->24).\n\n* fix(ci): restore Octave guard for TimeRangeSelector; skip dependent assertions on Octave\n\nThe createTimePanel() Octave guard (patch+FaceAlpha+NaN crashes xvfb)\nwas needed for the benchmark — confirmed by benchmark passing with guard\nand failing without. Restore the guard and update the two affected\nOctave tests:\n\n- test_dashboard_preview_envelope: wrap Case 1 struct-shape assertions\n  in an exist('OCTAVE_VERSION') + isempty(env) check; skip gracefully\n  with a notice when TimeRangeSelector_ was not constructed on Octave.\n- test_dashboard_range_selector_integration: add early-return on Octave\n  when TimeRangeSelector_ is empty (same guard reason), reporting a\n  deliberate skip.\n\nMATLAB tests are unaffected (guard does not fire; TimeRangeSelector_\nis always constructed on MATLAB). Octave benchmark now passes again.\n\n---------\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-24T15:15:10+02:00",
+          "tree_id": "411d18a890d3520d556a53c8cbae1b5d3204f262",
+          "url": "https://github.com/HanSur94/FastSense/commit/bb26e459e17f073c176244f06074057b630ab4d1"
+        },
+        "date": 1777036926757,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 2.414,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.262,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 154.056,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 0.846,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 259.895,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 1.379,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 17.134,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 4.194,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 10.926,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.034,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 177.605,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 0.756,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 272.092,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 4.663,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 16.772,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 1.516,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 21.493,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.182,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 208.369,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 3.983,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 280.759,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 0.858,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 16.807,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.781,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 108.34,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.066,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1293.126,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 5.607,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 282.015,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 2.358,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 16.424,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 1.23,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 212.823,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.45,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2461.202,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 71.493,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 273.386,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 1.353,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 14.717,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.167,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 1074.31,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 30.165,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22523.592,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 887.728,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 571.273,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 389.168,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 16.797,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.927,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 263.415,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 62.478,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 3.058,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.135,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 0.283,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.114,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.115,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.02,
             "unit": "ms"
           }
         ]
