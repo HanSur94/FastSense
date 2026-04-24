@@ -58,14 +58,23 @@ function teardownDemo(ctx)
     % ---- Dashboard engine (plan 02 wires this) ----
     if isfield(ctx, 'engine') && ~isempty(ctx.engine)
         try
-            % DashboardEngine uses stopLive() to halt the live timer
-            % (no plain stop() method). Try stopLive() first, fall back
-            % to stop() for forward compatibility.
+            % DashboardEngine uses stopLive() to halt the live timer and the
+            % SliderDebounceTimer introduced in Phase 1016 (PR #73).
             if ismethod(ctx.engine, 'stopLive')
                 ctx.engine.stopLive();
             elseif ismethod(ctx.engine, 'stop')
                 ctx.engine.stop();
             end
+        catch
+        end
+        try
+            % Explicitly invoke the destructor so SliderDebounceTimer,
+            % TimeRangeSelector, and any remaining timers are cleaned up.
+            % This is necessary because MATLAB's GC does not guarantee
+            % immediate destruction when the variable goes out of scope,
+            % and the timer-count test measures timerfindall() before ctx
+            % is cleared.
+            delete(ctx.engine);
         catch
         end
     end

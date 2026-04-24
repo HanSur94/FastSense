@@ -265,8 +265,20 @@ classdef TimeRangeSelector < handle
     methods (Access = private)
         function restoreCallback_(obj, cb)
             %restoreCallback_  Restore OnRangeChanged after temporary suppression.
-            if isvalid(obj)
-                obj.OnRangeChanged = cb;
+            %   isvalid() on a classdef handle is not implemented in Octave 7+;
+            %   wrap in try/catch matching the EventViewer pattern.
+            try
+                if isvalid(obj)
+                    obj.OnRangeChanged = cb;
+                end
+            catch
+                % Octave: isvalid() unsupported for classdef handles.
+                % Restore unconditionally — if obj is deleted, the assignment
+                % is a no-op since the handle is invalid.
+                try
+                    obj.OnRangeChanged = cb;
+                catch
+                end
             end
         end
 

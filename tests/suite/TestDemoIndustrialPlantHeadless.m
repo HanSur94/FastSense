@@ -79,9 +79,13 @@ classdef TestDemoIndustrialPlantHeadless < matlab.unittest.TestCase
             ctx = run_demo();
             cleanup = onCleanup(@() safeTeardown_(ctx)); %#ok<NASGU>
 
-            % Collect widgets across all pages via the publicly-readable
-            % engine.Pages cell (allPageWidgets() is a private method; Plan 02
-            % established this direct-iteration pattern).
+            % Count widgets across all pages (panels pre-allocated on render
+            % for O(1) page-switching, but widgets are lazy-realized: they
+            % become Realized only when their page is activated via switchPage).
+            % Walk all pages, switch to each one to trigger realization, then
+            % verify Realized. switchPage internally calls realizeBatch(5) for
+            % any unrealized widgets on the newly-active page (DashboardEngine
+            % lines 158-169).
             ws = {};
             for p = 1:numel(ctx.engine.Pages)
                 pw = ctx.engine.Pages{p}.Widgets;
@@ -94,10 +98,19 @@ classdef TestDemoIndustrialPlantHeadless < matlab.unittest.TestCase
             testCase.verifyGreaterThanOrEqual(nW, 25, ...
                 sprintf('Expected >=25 widgets across all pages; got %d.', nW));
 
-            for i = 1:nW
-                testCase.verifyTrue(ws{i}.Realized, ...
-                    sprintf('Widget %d (%s) not Realized after render.', ...
-                        i, class(ws{i})));
+            % Switch to every page so the lazy-realization batch runs, then
+            % verify every widget on that page is Realized.
+            for p = 1:numel(ctx.engine.Pages)
+                try
+                    ctx.engine.switchPage(p);
+                catch
+                end
+                pw = ctx.engine.Pages{p}.Widgets;
+                for q = 1:numel(pw)
+                    testCase.verifyTrue(pw{q}.Realized, ...
+                        sprintf('Page %d Widget %d (%s) not Realized after switchPage.', ...
+                            p, q, class(pw{q})));
+                end
             end
 
             teardownDemo(ctx);

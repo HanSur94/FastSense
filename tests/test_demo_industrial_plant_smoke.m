@@ -62,6 +62,10 @@ function test_demo_industrial_plant_smoke()
 
         % --- Assertion 2: widgets rendered across all pages ---
         % Iterate engine.Pages{i}.Widgets directly (allPageWidgets is private).
+        % Non-active pages are lazy-realized: panels are pre-allocated on
+        % render() but widgets only become Realized when switchPage() is called.
+        % Switch to each page before asserting Realized (mirrors the class-based
+        % TestDemoIndustrialPlantHeadless.testAllWidgetsRendered fix).
         ws = {};
         for p = 1:numel(ctx.engine.Pages)
             pw = ctx.engine.Pages{p}.Widgets;
@@ -71,9 +75,17 @@ function test_demo_industrial_plant_smoke()
         end
         nW = numel(ws);
         assert(nW >= 25, sprintf('expected >=25 widgets, got %d', nW));
-        for i = 1:nW
-            assert(ws{i}.Realized == true, ...
-                sprintf('widget %d (%s) not Realized', i, class(ws{i})));
+        for p = 1:numel(ctx.engine.Pages)
+            try
+                ctx.engine.switchPage(p);
+            catch
+            end
+            pw = ctx.engine.Pages{p}.Widgets;
+            for q = 1:numel(pw)
+                assert(pw{q}.Realized == true, ...
+                    sprintf('page %d widget %d (%s) not Realized after switchPage', ...
+                        p, q, class(pw{q})));
+            end
         end
 
         % --- Assertion 3: anomaly injection fires MonitorTag event ---

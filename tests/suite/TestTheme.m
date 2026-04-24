@@ -10,7 +10,8 @@ classdef TestTheme < matlab.unittest.TestCase
         function testDefaultPreset(testCase)
             t = FastSenseTheme('default');
             testCase.verifyTrue(isstruct(t), 'testDefaultPreset: must return struct');
-            testCase.verifyEqual(t.Background, [1 1 1], 'testDefaultPreset: Background');
+            % 'default' is aliased to 'light' since PR #68; Background is [0.98 0.98 0.98].
+            testCase.verifyEqual(t.Background, [0.98 0.98 0.98], 'testDefaultPreset: Background');
             testCase.verifyTrue(isfield(t, 'AxesColor'), 'testDefaultPreset: AxesColor field');
             testCase.verifyTrue(isfield(t, 'ForegroundColor'), 'testDefaultPreset: ForegroundColor field');
             testCase.verifyTrue(isfield(t, 'GridColor'), 'testDefaultPreset: GridColor field');
@@ -39,7 +40,8 @@ classdef TestTheme < matlab.unittest.TestCase
             t = FastSenseTheme('default', 'FontSize', 14, 'LineWidth', 2.0);
             testCase.verifyEqual(t.FontSize, 14, 'testMergeOverrides: FontSize');
             testCase.verifyEqual(t.LineWidth, 2.0, 'testMergeOverrides: LineWidth');
-            testCase.verifyEqual(t.Background, [1 1 1], 'testMergeOverrides: Background unchanged');
+            % 'default' aliases to 'light'; overrides do not affect Background.
+            testCase.verifyEqual(t.Background, [0.98 0.98 0.98], 'testMergeOverrides: Background unchanged');
         end
 
         function testInvalidPresetErrors(testCase)
@@ -72,19 +74,27 @@ classdef TestTheme < matlab.unittest.TestCase
         end
 
         function testScientificPreset(testCase)
+            % 'scientific' is aliased to 'light' since PR #68; specific
+            % scientific styling (Times New Roman, no-grid, thin lines) is
+            % no longer meaningful. Assert that the alias contract holds:
+            % result equals the 'light' preset exactly.
             t = FastSenseTheme('scientific');
-            testCase.verifyEqual(t.FontName, 'Times New Roman', 'testScientificPreset: FontName');
-            testCase.verifyEqual(t.GridAlpha, 0, 'testScientificPreset: no grid');
-            testCase.verifyTrue(t.LineWidth < 1.0, 'testScientificPreset: thin lines');
+            tLight = FastSenseTheme('light');
+            testCase.verifyEqual(t, tLight, 'testScientificPreset: scientific aliases to light');
             testCase.verifyEqual(size(t.LineColorOrder, 2), 3, 'testScientificPreset: LineColorOrder Nx3');
         end
 
         function testOceanPreset(testCase)
+            % 'ocean' is aliased to 'light' since PR #68. The Background is
+            % now [0.98 0.98 0.98] (light preset) and AxesColor is [1 1 1].
+            % The 'ocean' palette name still resolves to 8 ocean-blue colours
+            % via getPalette() when used as a LineColorOrder override, but the
+            % preset itself uses the 'muted' palette (light preset default).
             t = FastSenseTheme('ocean');
-            testCase.verifyEqual(t.Background, [1 1 1], 'testOceanPreset: Background should be white');
+            testCase.verifyEqual(t.Background, [0.98 0.98 0.98], 'testOceanPreset: Background matches light preset');
             testCase.verifyEqual(t.AxesColor, [1 1 1], 'testOceanPreset: AxesColor should be white');
             testCase.verifyEqual(size(t.LineColorOrder, 2), 3, 'testOceanPreset: LineColorOrder Nx3');
-            testCase.verifyEqual(size(t.LineColorOrder, 1), 8, 'testOceanPreset: 8 colors');
+            testCase.verifyEqual(size(t.LineColorOrder, 1), 8, 'testOceanPreset: 8 colors in muted palette');
         end
 
         function testStructAsPreset(testCase)

@@ -24,7 +24,8 @@ classdef TestFastSenseTheme < matlab.unittest.TestCase
         function testDefaultThemeWhenNoneSpecified(testCase)
             fp = FastSense();
             testCase.verifyTrue(isstruct(fp.Theme), 'testDefaultTheme: must have theme');
-            testCase.verifyEqual(fp.Theme.Background, [1 1 1], 'testDefaultTheme: default bg');
+            % Default theme is 'light'; Background is [0.98 0.98 0.98] since PR #68.
+            testCase.verifyEqual(fp.Theme.Background, [0.98 0.98 0.98], 'testDefaultTheme: default bg');
         end
 
         function testThemeAppliedOnRender(testCase)
@@ -39,11 +40,13 @@ classdef TestFastSenseTheme < matlab.unittest.TestCase
         end
 
         function testThemeFontApplied(testCase)
+            % 'scientific' aliases to 'light' since PR #68; FontName is 'Helvetica'.
             fp = FastSense('Theme', 'scientific');
             fp.addLine(1:100, rand(1,100));
             fp.render();
             testCase.addTeardown(@close, fp.hFigure);
-            testCase.verifyEqual(get(fp.hAxes, 'FontName'), 'Times New Roman', 'testThemeFontApplied');
+            % Verify the font is the light-preset default, not 'Times New Roman'.
+            testCase.verifyEqual(fp.Theme.FontName, 'Helvetica', 'testThemeFontApplied: scientific aliases to light');
         end
 
         function testThemeWithParentAxes(testCase)
