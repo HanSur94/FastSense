@@ -29,7 +29,7 @@ fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-Available presets: 'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'. See [[API Reference: Themes]] for customization options.
+Available presets: 'light', 'dark'. Legacy names ('default', 'industrial', 'scientific', 'ocean') are aliased to 'light'. See [[API Reference: Themes]] for customization options.
 
 ## 3. Thresholds and Violations
 
@@ -105,7 +105,7 @@ fig.renderAll();
 tb = FastSenseToolbar(fig);
 ```
 
-Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Refresh, Live Mode, Metadata, Violations.
+Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Export Data, Refresh, Live Mode, Metadata, Violations.
 
 ## 8. Linked Axes
 
@@ -192,6 +192,34 @@ FastSense.distFig();
 % Or use specific grid dimensions
 FastSense.distFig('Rows', 2, 'Cols', 3);
 ```
+
+## 15. Storage Modes
+
+For large datasets, FastSense automatically selects memory or disk storage:
+
+```matlab
+% Control storage mode explicitly
+fp = FastSense('StorageMode', 'disk');  % Force disk storage
+fp.addLine(x, y);
+fp.render();
+
+% Or configure memory limit for auto mode
+fp = FastSense('StorageMode', 'auto', 'MemoryLimit', 1e9);  % 1GB limit
+```
+
+Disk mode uses SQLite for efficient range queries on very large datasets.
+
+## 16. Progress Tracking
+
+For batch rendering of large dashboards, enable progress bars:
+
+```matlab
+grid = FastSenseGrid(3, 3, 'ShowProgress', true);
+% Progress bars appear during renderAll()
+grid.renderAll();
+```
+
+Set `ShowProgress`, false to disable console output.
 
 ## Next Steps
 

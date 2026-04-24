@@ -190,3 +190,31 @@ drawnow;  % Manual drawnow when ready to display
 ```
 
 This is demonstrated in the 100M point stress test example, where it provides measurable performance gains for very large datasets.
+
+## MEX Compilation
+
+For maximum performance, compile the C kernels using the included build script:
+
+```matlab
+build_mex();  % Compile with platform-specific SIMD optimization
+```
+
+The build system automatically detects your architecture and compiler:
+- **x86_64**: Uses AVX2 + FMA instructions (with SSE2 fallback)
+- **ARM64**: Uses NEON instructions  
+- **Unknown**: Falls back to scalar operations
+
+On Octave, the build prefers real GCC for superior auto-vectorization. On MATLAB, it uses the configured default compiler (Xcode Clang on macOS, MSVC on Windows).
+
+## Architecture-Specific Optimizations
+
+FastSense kernels use different SIMD instruction sets based on your CPU:
+
+| Architecture | Instructions | Throughput |
+|--------------|-------------|------------|
+| Apple M1/M2/M3 | ARM NEON | 2-4 doubles/cycle |
+| Intel/AMD x64 | AVX2 + FMA | 4 doubles/cycle |
+| Older x64 | SSE2 fallback | 2 doubles/cycle |
+| Other | Scalar | 1 double/cycle |
+
+The MEX compilation automatically targets the best available instruction set for your hardware.

@@ -123,36 +123,6 @@ fig.MetadataTileIndex = 1;   % which tile to attach to
 
 ---
 
-## Live Event Detection
-
-Combine live mode with event detection for real-time monitoring using the LiveEventPipeline:
-
-```matlab
-% Create sensors with thresholds
-tempSensor = Sensor('temperature', 'Name', 'Temperature');
-tempSensor.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
-tempSensor.addThresholdRule(struct(), 82, 'Direction', 'upper', 'Label', 'Hi Alarm');
-tempSensor.resolve();
-
-sensors = containers.Map();
-sensors('temperature') = tempSensor;
-
-% Configure data sources
-dsMap = DataSourceMap();
-dsMap.add('temperature', MockDataSource('BaseValue', 70, 'NoiseStd', 2));
-
-% Set up pipeline with event store
-pipeline = LiveEventPipeline(sensors, dsMap, ...
-    'EventFile', 'events.mat', ...
-    'Interval', 15, ...
-    'MinDuration', 0.5);
-
-% Start live event detection
-pipeline.start();
-```
-
----
-
 ## Octave Compatibility
 
 GNU Octave does not support MATLAB timers. Use `runLive()` for a blocking poll loop:
@@ -189,7 +159,7 @@ fig.refresh();
 
 ## Toolbar Integration
 
-The [[FastSenseToolbar|API Reference: FastSenseToolbar]] provides a Live Mode button:
+The [[API Reference: FastSenseToolbar]] provides a Live Mode button:
 
 ```matlab
 tb = FastSenseToolbar(fp);
@@ -236,5 +206,5 @@ pb.freeze();   % becomes permanent line
 
 - [[API Reference: FastPlot]] — startLive(), stopLive(), updateData() methods
 - [[API Reference: Dashboard]] — Dashboard live mode
-- [[API Reference: Event Detection]] — Live event detection
+- [[API Reference: Utilities]] — ConsoleProgressBar class
 - [[Examples]] — example_dashboard_live.m, example_live_pipeline.m
