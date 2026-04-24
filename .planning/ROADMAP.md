@@ -378,11 +378,11 @@ Plans:
 
 **Requirements**: (no REQ-IDs — extension of Phase 1010's shipped EVENT-01..EVENT-07 set; no new requirement block)
 **Depends on:** Phase 1010 (Event.TagKeys, EventBinding, EventStore.eventsForTag, FastSense.renderEventLayer_ all shipped), Phase 1011 (legacy cleanup complete — clean Tag-only codebase)
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 1012-01-PLAN.md — Event.IsOpen + EventStore.closeEvent + Wave 0 test scaffolding + Pitfall-10 bench harness
-- [ ] 1012-02-PLAN.md — MonitorTag rising-edge open emission + running stats accumulator + falling-edge closeEvent
+- [x] 1012-02-PLAN.md — MonitorTag rising-edge open emission + running stats accumulator + falling-edge closeEvent
 - [ ] 1012-03-PLAN.md — DashboardTheme.EventMarkerSize + renderEventLayer_ per-event refactor + click-details uipanel + FastSenseWidget.ShowEventMarkers/EventStore wiring + serializer + bench gate + example
 
 **UI hint**: yes

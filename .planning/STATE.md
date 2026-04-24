@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
 status: executing
-stopped_at: Completed 1012-01-PLAN.md
-last_updated: "2026-04-24T07:46:08.250Z"
+stopped_at: Completed 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget-02-PLAN.md
+last_updated: "2026-04-24T08:09:02.411Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 15
   completed_phases: 8
   total_plans: 30
-  completed_plans: 28
+  completed_plans: 29
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 1012 (live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-24
 
@@ -118,6 +118,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1011 P04 | 962 | 2 tasks | 100 files |
 | Phase 1011 P05 | 22min | 2 tasks | 13 files |
 | Phase 1012 P01 | 15 | 4 tasks | 11 files |
+| Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget P02 | 17 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -240,6 +241,9 @@ Recent decisions affecting current work:
 - [Phase 1011]: IncrementalEventDetector.process() and EventConfig.addSensor() stubbed as dead code after legacy pipeline deletion
 - [Phase 1012]: Event.close() instance method chosen over public EndTime setter — encapsulates all private field mutation (D1 SSOT); EventStore.closeEvent delegates to ev.close()
 - [Phase 1012]: EventStore:alreadyClosed is a distinct error from EventStore:unknownEventId — callers can distinguish not-found from found-but-already-done
+- [Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget]: cache_ openStats_/openEventId_ seeded via isfield guard BEFORE fireEventsOnRisingEdges_ in recompute_; preserved via savedOpenEventId/savedOpenStats locals to prevent struct overwrite losing emitter-set values
+- [Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget]: fireEventsInTail_ accepts optional newY param — enables inline stats for same-chunk closed events without requiring separate accumulator path
+- [Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget]: Octave test file avoids nested functions (SIGILL on handle-class cycle cleanup); all 7 tests inlined without mkFixture subfn
 
 ### Roadmap Evolution
 
@@ -273,6 +277,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-24T07:46:08.228Z
-Stopped at: Completed 1012-01-PLAN.md
+Last session: 2026-04-24T08:09:02.389Z
+Stopped at: Completed 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget-02-PLAN.md
 Resume file: None
