@@ -2344,13 +2344,13 @@ classdef FastSense < handle
             % compact. formatEventFields_ remains available for text-dump
             % consumers (see test contract).
             tblData = obj.buildEventFieldsTable_(ev);
+            hTable = [];
             try
-                uitable('Parent', popupFig, ...
+                hTable = uitable('Parent', popupFig, ...
                     'Data', tblData, ...
                     'ColumnName', {'Field', 'Value'}, ...
                     'RowName', [], ...
                     'ColumnEditable', [false false], ...
-                    'ColumnWidth', {120, 240}, ...
                     'FontSize', 11, ...
                     'Units', 'normalized', ...
                     'Position', [0.03 0.39 0.94 0.58], ...
@@ -2403,7 +2403,33 @@ classdef FastSense < handle
                 'ForegroundColor', [0.2 0.55 0.3]);
             set(popupFig, 'UserData', struct('hNotes', hNotes, 'hStatus', hStatus));
 
+            % Resize-aware column widths on the uitable: 1/3 for label, 2/3
+            % for value, re-computed on every figure SizeChangedFcn fire.
+            if ~isempty(hTable) && ishandle(hTable)
+                set(popupFig, 'SizeChangedFcn', @(~,~) obj.fitDetailsTableColumns_(hTable));
+                obj.fitDetailsTableColumns_(hTable);   % initial fit
+            end
+
             obj.hEventDetails_ = popupFig;
+        end
+
+        function fitDetailsTableColumns_(~, hTable)
+            %FITDETAILSTABLECOLUMNS_ Split the uitable width ~1:2 between
+            %   Field and Value columns based on current pixel width.
+            if ~ishandle(hTable), return; end
+            try
+                prevUnits = get(hTable, 'Units');
+                set(hTable, 'Units', 'pixels');
+                pp = get(hTable, 'Position');   % [x y w h]
+                set(hTable, 'Units', prevUnits);
+                % Reserve ~22px for vertical scrollbar + small padding.
+                totalW = max(200, pp(3) - 22);
+                labelW = max(80,  round(totalW * 0.33));
+                valueW = max(100, totalW - labelW);
+                set(hTable, 'ColumnWidth', {labelW, valueW});
+            catch
+                % Swallow — layout failure should not kill the popup.
+            end
         end
 
         function saveEventNotes_(obj, ev, hNotesControl)
