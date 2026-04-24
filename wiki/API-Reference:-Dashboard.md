@@ -20,6 +20,7 @@ obj = DashboardEngine(name, varargin)
 | Theme | `'light'` |  |
 | LiveInterval | `5` |  |
 | InfoFile | `''` |  |
+| ProgressMode | `'auto'` | 'auto' \| 'on' \| 'off' — render progress bar visibility |
 
 ### Methods
 
@@ -145,6 +146,10 @@ RESETGLOBALTIME Re-attach all widgets to global time and apply.
 #### `realizeBatch(obj, batchSize)`
 
 REALIZEBATCH Render widgets in batches with drawnow between.
+
+#### `[idx, name] = activePageLabel(obj)`
+
+ACTIVEPAGELABEL Index and name of the active page, or (1, '') if single-page.
 
 #### `onScrollRealize(obj, topRow, bottomRow)`
 
@@ -1079,6 +1084,30 @@ ADDWIDGET Append widget w to the Widgets list.
 
 TOSTRUCT Serialize the page to a struct with name and widgets fields.
   s = pg.toStruct() returns s.name (char) and s.widgets (cell).
+
+---
+
+## `DashboardProgress` --- Progress-bar helper for DashboardEngine render passes.
+
+> Inherits from: `handle`
+
+Emits a self-updating progress line to stdout as widgets are realized
+  during DashboardEngine.render() / rerenderWidgets(), and a final
+  summary line on completion.
+
+  Silent outside interactive sessions so test / CI output stays clean.
+
+### Constructor
+
+```matlab
+obj = DashboardProgress(name, totalWidgets, totalPages, mode)
+```
+
+### Methods
+
+#### `tick(obj, widget, pageIdx, pageName)`
+
+#### `finish(obj)`
 
 ---
 
