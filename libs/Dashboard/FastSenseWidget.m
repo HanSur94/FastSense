@@ -509,6 +509,18 @@ classdef FastSenseWidget < DashboardWidget
                 s.source = struct('type', 'data', 'x', obj.XData, 'y', obj.YData);
             end
         end
+
+        function delete(obj)
+            % Explicitly stop FastSense timers (hRefineTimer, LiveTimer,
+            % DeferredTimer) before the base-class delete() destroys hPanel.
+            % Without this, an errored singleShot hRefineTimer can survive
+            % after teardownDemo and show up in timerfindall().
+            if ~isempty(obj.FastSenseObj)
+                try delete(obj.FastSenseObj); catch, end
+                obj.FastSenseObj = [];
+            end
+            delete@DashboardWidget(obj);
+        end
     end
 
     methods (Access = private)

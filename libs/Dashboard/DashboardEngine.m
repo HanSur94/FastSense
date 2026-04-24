@@ -1473,6 +1473,17 @@ classdef DashboardEngine < handle
                 obj.SliderDebounceTimer = [];
             end
             obj.stopLive();
+            % Explicitly delete all widgets in every page so that
+            % FastSenseWidget.delete() fires and cleans up FastSense timers
+            % (hRefineTimer, DeferredTimer, LiveTimer) before MATLAB's GC
+            % might delay their destruction. Without this, errored singleShot
+            % timers can survive past teardownDemo's timerfindall() measurement.
+            for pgIdx = 1:numel(obj.Pages)
+                pgWidgets = obj.Pages{pgIdx}.Widgets;
+                for wi = 1:numel(pgWidgets)
+                    try delete(pgWidgets{wi}); catch, end
+                end
+            end
             obj.cleanupInfoTempFile();
         end
     end
@@ -1681,23 +1692,17 @@ classdef DashboardEngine < handle
                 'Callback', @(~, ~) obj.resetTimeRange());
 
             % Single TimeRangeSelector replaces the two uicontrol sliders.
-            % Guard on Octave: patch() with FaceAlpha + NaN vertex data crashes
-            % Octave's xvfb/FLTK rendering backend (segfault). All callers of
-            % TimeRangeSelector_ already check ~isempty(), so leaving it empty
-            % on Octave is safe.
-            if exist('OCTAVE_VERSION', 'builtin') == 0
-                obj.TimeRangeSelector_ = TimeRangeSelector(obj.hTimePanel, ...
-                    'OnRangeChanged', @(a, b) obj.onRangeSelectorChanged(a, b), ...
-                    'Theme', theme);
+            obj.TimeRangeSelector_ = TimeRangeSelector(obj.hTimePanel, ...
+                'OnRangeChanged', @(a, b) obj.onRangeSelectorChanged(a, b), ...
+                'Theme', theme);
 
-                % Legacy shims (D-10): tests still read these handles; wire
-                % them to the selector so existing `set(..., 'Value', ...)`
-                % call-sites at least find a live handle. The shim itself is
-                % not expected to accept slider-style Value writes — those
-                % tests are documented as out-of-scope for this phase.
-                obj.hTimeSliderL = obj.TimeRangeSelector_;
-                obj.hTimeSliderR = obj.TimeRangeSelector_;
-            end
+            % Legacy shims (D-10): tests still read these handles; wire
+            % them to the selector so existing `set(..., 'Value', ...)`
+            % call-sites at least find a live handle. The shim itself is
+            % not expected to accept slider-style Value writes — those
+            % tests are documented as out-of-scope for this phase.
+            obj.hTimeSliderL = obj.TimeRangeSelector_;
+            obj.hTimeSliderR = obj.TimeRangeSelector_;
         end
 
         function resetTimeRange(obj)
