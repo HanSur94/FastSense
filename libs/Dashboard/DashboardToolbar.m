@@ -2,9 +2,10 @@ classdef DashboardToolbar < handle
 %DASHBOARDTOOLBAR Global toolbar for dashboard controls.
 %
 %   Provides buttons for: Sync, Live (toggle with blue border when active),
-%   Save, Image, Export, and Info (always present — shows a placeholder
-%   page when no InfoFile is configured). Every button has a descriptive
-%   tooltip. Sits at the top of the dashboard figure.
+%   Config (opens DashboardConfigDialog), Image, Export, and Info (always
+%   present — shows a placeholder page when no InfoFile is configured).
+%   Every button has a descriptive tooltip. Sits at the top of the
+%   dashboard figure.
 
     properties (Access = public)
         Height = 0.04
@@ -14,7 +15,7 @@ classdef DashboardToolbar < handle
         hPanel       = []
         hLiveBtn     = []
         hLivePanel   = []
-        hSaveBtn     = []
+        hConfigBtn     = []
         hExportBtn   = []
         hImageBtn    = []
         hSyncBtn     = []
@@ -84,13 +85,13 @@ classdef DashboardToolbar < handle
                 'Callback', @(~,~) obj.onImage());
 
             rightEdge = rightEdge - btnW - 0.005;
-            obj.hSaveBtn = uicontrol('Parent', obj.hPanel, ...
+            obj.hConfigBtn = uicontrol('Parent', obj.hPanel, ...
                 'Style', 'pushbutton', ...
                 'Units', 'normalized', ...
                 'Position', [rightEdge btnY btnW btnH], ...
-                'String', 'Save', ...
-                'TooltipString', 'Save dashboard to JSON file', ...
-                'Callback', @(~,~) obj.onSave());
+                'String', 'Config', ...
+                'TooltipString', 'Open dashboard config dialog', ...
+                'Callback', @(~,~) obj.onConfig());
 
             rightEdge = rightEdge - btnW - 0.005;
             % Wrap Live toggle in a thin panel so we can show a blue border when active.
@@ -169,11 +170,9 @@ classdef DashboardToolbar < handle
             end
         end
 
-        function onSave(obj)
-            [file, path] = uiputfile('*.json', 'Save Dashboard');
-            if file ~= 0
-                obj.Engine.save(fullfile(path, file));
-            end
+        function onConfig(obj)
+        %ONCONFIG Open the dashboard config dialog.
+            DashboardConfigDialog(obj.Engine);
         end
 
         function onExport(obj)
