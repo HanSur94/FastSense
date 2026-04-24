@@ -2243,13 +2243,16 @@ classdef FastSense < handle
             obj.EventMarkerHandles_ = {};
             obj.EventByIdMap_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
-            % Resolve marker size from theme (fallback to 8)
+            % Resolve marker size from theme (fallback to 8). Scaled up
+            % because triangle markers visually read smaller than circles
+            % at the same MarkerSize, and we need room for the '!' overlay.
             sz = 8;
             if isstruct(obj.Theme) && isfield(obj.Theme, 'EventMarkerSize')
                 sz = obj.Theme.EventMarkerSize;
             end
+            triSize = sz * 2.0;   % triangle glyph size (TrendMiner-style caution sign)
 
-            % One line() per event
+            % One triangle + '!' per event
             for i = 1:numel(obj.Tags_)
                 tag = obj.Tags_{i};
                 events = es.getEventsForTag(char(tag.Key));
@@ -2261,13 +2264,16 @@ classdef FastSense < handle
                     if isnan(yVal), continue; end
                     c = obj.severityToColor_(sev);
                     if ev.IsOpen
-                        faceColor = 'none';   % hollow
+                        faceColor = 'none';   % hollow triangle for open events
+                        textColor = c;         % '!' in severity color (visible on bg)
                     else
-                        faceColor = c;         % filled
+                        faceColor = c;         % filled triangle for closed events
+                        textColor = [1 1 1];   % white '!' on severity-colored fill
                     end
+                    % Triangle marker — the clickable hit target
                     h = line(ev.StartTime, yVal, ...
                         'Parent', obj.hAxes, ...
-                        'Marker', 'o', 'MarkerSize', sz, ...
+                        'Marker', '^', 'MarkerSize', triSize, ...
                         'MarkerFaceColor', faceColor, 'MarkerEdgeColor', c, ...
                         'LineStyle', 'none', ...
                         'HandleVisibility', 'off', ...
@@ -2277,6 +2283,23 @@ classdef FastSense < handle
                         'ButtonDownFcn', @(src, evt) obj.onEventMarkerClick_(src, evt), ...
                         'UserData', struct('eventId', ev.Id, 'tagKey', char(tag.Key)));
                     obj.EventMarkerHandles_{end+1} = h;
+                    % Exclamation mark overlay — clicks pass through to triangle
+                    try
+                        hT = text(ev.StartTime, yVal, '!', ...
+                            'Parent', obj.hAxes, ...
+                            'Color', textColor, ...
+                            'FontWeight', 'bold', ...
+                            'FontSize', max(7, round(triSize * 0.65)), ...
+                            'HorizontalAlignment', 'center', ...
+                            'VerticalAlignment', 'middle', ...
+                            'HitTest', 'off', ...
+                            'PickableParts', 'none', ...
+                            'HandleVisibility', 'off', ...
+                            'Tag', 'FastSenseEventMarker');
+                        obj.EventMarkerHandles_{end+1} = hT;
+                    catch
+                        % Text rendering may fail on headless Octave — triangle alone is enough
+                    end
                     if ~isempty(ev.Id)
                         obj.EventByIdMap_(ev.Id) = ev;
                     end

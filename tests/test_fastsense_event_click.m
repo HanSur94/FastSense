@@ -3,16 +3,14 @@ function test_fastsense_event_click
     addpath(root); install();
     nPassed = 0; nFailed = 0;
 
-    % --- Helper: find round marker handles (Octave-compat via findall on figure) ---
-    % (EventMarkerHandles_ is private; use findall for Octave compat)
+    % --- Helper: find event-marker line handles by Tag (shape-agnostic) ---
+    % Phase 1012 uses '^' (triangle) markers tagged 'FastSenseEventMarker'.
     function handles = findRoundMarkers(fig)
         allLines = findall(fig, 'Type', 'line');
         handles = {};
         for ci = 1:numel(allLines)
             try
-                mk = get(allLines(ci), 'Marker');
-                ls = get(allLines(ci), 'LineStyle');
-                if strcmp(mk, 'o') && strcmp(ls, 'none')
+                if strcmp(get(allLines(ci), 'Tag'), 'FastSenseEventMarker')
                     handles{end+1} = allLines(ci); %#ok<AGROW>
                 end
             catch
