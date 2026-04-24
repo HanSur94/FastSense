@@ -34,15 +34,19 @@ function example_event_markers
 
     fprintf('Rising edge at t=7 -> open event should appear HOLLOW.\n');
     pause(1);
-    parent.appendData([6 7 8 9], [1 10 10 10]);
-    mon.appendData([6 7 8 9], [1 10 10 10]);
+    newX1 = [6 7 8 9];
+    newY1 = [1 10 10 10];
+    parent.updateData([parent.X, newX1], [parent.Y, newY1]);  % SensorTag: full replace
+    mon.appendData(newX1, newY1);                              % MonitorTag: incremental
     d.onLiveTick();
     drawnow;
 
     fprintf('Falling edge at t=12 -> marker should become FILLED.\n');
     pause(2);
-    parent.appendData([10 11 12 13], [10 10 1 1]);
-    mon.appendData([10 11 12 13], [10 10 1 1]);
+    newX2 = [10 11 12 13];
+    newY2 = [10 10 1 1];
+    parent.updateData([parent.X, newX2], [parent.Y, newY2]);
+    mon.appendData(newX2, newY2);
     d.onLiveTick();
     drawnow;
 
