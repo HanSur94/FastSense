@@ -174,6 +174,14 @@ TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
   (Hidden, not the narrower Access = {?matlab.unittest.TestCase},
   so Octave parsing survives — Octave has no matlab.unittest.)
 
+#### `str = formatTimeVal(~, t)`
+
+FORMATTIMEVAL Format a numeric time value as a human-readable string.
+  Supports three numeric ranges:
+    posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
+    MATLAB datenum (t > 700000, not posix) — uses datestr directly
+    raw numeric (t <= 700000) — formats as s/m/h/d suffix
+
 ### Static Methods
 
 #### `DashboardEngine.types = widgetTypes()`
@@ -363,6 +371,7 @@ obj = FastSenseWidget(varargin)
 | YLabel | `''` | Y-axis label (auto-set from Sensor if empty) |
 | YLimits | `[]` | Fixed Y-axis range [min max]; empty = auto-scale |
 | ShowThresholdLabels | `false` | show inline name labels on threshold lines |
+| LiveViewMode | `'reset'` |  |
 
 ### Methods
 
@@ -381,6 +390,27 @@ UPDATE Incrementally update Tag data without full axes rebuild.
   Uses FastSenseObj.updateData() to replace data and re-downsample,
   avoiding the expensive delete/recreate cycle of refresh().
   Falls back to refresh() if FastSenseObj is not in a renderable state.
+
+#### `autoScaleY_(obj, y)`
+
+AUTOSCALEY_ Rescale the Y axis to cover current data + thresholds.
+  FastSense locks YLim to manual mode at first render, so new
+  samples outside the initial range would fall off the chart.
+  This helper recomputes the Y extent every tick (including any
+  threshold values so MonitorTag lines stay visible) and updates
+  the axes. Skipped when:
+    - the widget has a user-pinned YLimits NV-pair, or
+    - the user manually zoomed Y via mouse (UserZoomedY),
+  so we never fight an explicit human interaction.
+
+#### `onYLimChanged(obj)`
+
+ONYLIMCHANGED Detach widget from automatic Y rescale after user zoom.
+  Fired by the YLim PostSet listener. When the YLim change came
+  from inside autoScaleY_ (IsSettingYLim==true) we ignore it; any
+  other source — mouse scroll, drag, zoom toolbar, programmatic
+  ylim() from user code — counts as a manual override and
+  latches UserZoomedY so live ticks stop fighting the user.
 
 #### `setTimeRange(obj, tStart, tEnd)`
 
@@ -850,11 +880,26 @@ FIGURETOCANVASDELTA Convert figure-normalized deltas to canvas deltas.
 
 #### `newPos = resolveOverlap(obj, pos, existingPositions)`
 
+#### `ensureViewport(obj, hFigure, theme)`
+
+ENSUREVIEWPORT Create viewport/canvas/scrollbar only if they do not exist yet.
+  Idempotent: if the viewport handle is already valid, returns immediately
+  without deleting or recreating anything. On the first call the viewport,
+  canvas, and (if needed) scrollbar are created and TotalRows is reset to 0
+  so that subsequent additive allocatePanels calls accumulate row counts.
+
+#### `resetViewport(obj)`
+
+RESETVIEWPORT Destroy the current viewport so the next ensureViewport call rebuilds it.
+  Use when a full layout rebuild is required (e.g. single-page reflow).
+
 #### `allocatePanels(obj, hFigure, widgets, theme)`
 
-ALLOCATEPANELS Create viewport, canvas, scrollbar and placeholder panels.
-  Like createPanels but does NOT call widget.render(). Instead,
-  each widget gets its hPanel assigned and a placeholder label.
+ALLOCATEPANELS Create placeholder panels for widgets (additive; no viewport destruction).
+  Calls ensureViewport (idempotent) to guarantee hViewport/hCanvas exist, then
+  accumulates TotalRows and appends widget panels to the shared canvas.
+  Multiple calls for different page-widget sets are safe: earlier panels survive.
+Ensure viewport exists (idempotent — no-op if already live)
 
 #### `realizeWidget(obj, widget)`
 
