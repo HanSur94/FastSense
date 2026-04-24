@@ -2,9 +2,9 @@ classdef DashboardToolbar < handle
 %DASHBOARDTOOLBAR Global toolbar for dashboard controls.
 %
 %   Provides buttons for: Sync, Live (toggle with blue border when active),
-%   Edit, Save, Image, Export, and Info (always present — shows a
-%   placeholder page when no InfoFile is configured). Every button has a
-%   descriptive tooltip. Sits at the top of the dashboard figure.
+%   Save, Image, Export, and Info (always present — shows a placeholder
+%   page when no InfoFile is configured). Every button has a descriptive
+%   tooltip. Sits at the top of the dashboard figure.
 
     properties (Access = public)
         Height = 0.04
@@ -14,7 +14,6 @@ classdef DashboardToolbar < handle
         hPanel       = []
         hLiveBtn     = []
         hLivePanel   = []
-        hEditBtn     = []
         hSaveBtn     = []
         hExportBtn   = []
         hImageBtn    = []
@@ -92,15 +91,6 @@ classdef DashboardToolbar < handle
                 'String', 'Save', ...
                 'TooltipString', 'Save dashboard to JSON file', ...
                 'Callback', @(~,~) obj.onSave());
-
-            rightEdge = rightEdge - btnW - 0.005;
-            obj.hEditBtn = uicontrol('Parent', obj.hPanel, ...
-                'Style', 'pushbutton', ...
-                'Units', 'normalized', ...
-                'Position', [rightEdge btnY btnW btnH], ...
-                'String', 'Edit', ...
-                'TooltipString', 'Open dashboard source script in editor', ...
-                'Callback', @(~,~) obj.onEdit());
 
             rightEdge = rightEdge - btnW - 0.005;
             % Wrap Live toggle in a thin panel so we can show a blue border when active.
@@ -246,19 +236,6 @@ classdef DashboardToolbar < handle
 
         function onInfo(obj)
             obj.Engine.showInfo();
-        end
-
-        function onEdit(obj)
-            fp = obj.Engine.FilePath;
-            if isempty(fp)
-                warndlg('No source file associated with this dashboard. Save first or load from a file.', 'Edit');
-                return;
-            end
-            if ~exist(fp, 'file')
-                warndlg(sprintf('Source file not found: %s', fp), 'Edit');
-                return;
-            end
-            edit(fp);
         end
 
         function contentArea = getContentArea(obj)
