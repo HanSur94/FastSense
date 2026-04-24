@@ -398,7 +398,8 @@ classdef MonitorTag < Tag
                 end
             end
             % Stage 4: emit events for runs that CLOSE inside newX (+ Phase 1012: open emission).
-            obj.fireEventsInTail_(newX, raw_new, priorLastFlag, priorOngoingStart);
+            % Pass newY so fireEventsInTail_ can compute inline stats for same-chunk closed runs.
+            obj.fireEventsInTail_(newX, raw_new, priorLastFlag, priorOngoingStart, newY);
             % Phase 1012: if a rising edge seeded a new open event inside this chunk,
             % backfill openStats_ from the rising edge onward. Again: newY = raw values.
             if ~isempty(obj.cache_.openEventId_) && obj.cache_.openStats_.nPoints == 0
@@ -646,9 +647,12 @@ classdef MonitorTag < Tag
                 'StdValue',  sqrt(varY));
         end
 
-        function fireEventsInTail_(obj, newX, bin_new, priorLastFlag, priorOngoingStart)
+        function fireEventsInTail_(obj, newX, bin_new, priorLastFlag, priorOngoingStart, newY)
             %FIREEVENTSINTAIL_ Emit events for tail runs; Phase 1012 supports
             %   IsOpen=true open-event emission + closeEvent on falling edge.
+            %
+            %   newY (optional, Phase 1012): raw sensor values parallel to newX —
+            %   used to compute inline stats for same-chunk closed events.
             %
             %   Phase 1007 (MONITOR-08) streaming-event emission extended:
             %   If priorLastFlag == 1 AND bin_new(1) == 1 the first run in
@@ -658,6 +662,7 @@ classdef MonitorTag < Tag
             %   Phase 1012: runs still open at tail end emit an IsOpen=true
             %   Event (was `continue` pre-phase). Falling edge calls
             %   EventStore.closeEvent(openEventId_, endT, finalStats).
+            if nargin < 6, newY = []; end
             if isempty(bin_new), return; end
             hasHooks = ~isempty(obj.EventStore) || ~isempty(obj.OnEventStart) || ~isempty(obj.OnEventEnd);
             if ~hasHooks, return; end
@@ -666,11 +671,31 @@ classdef MonitorTag < Tag
 
             % ---- Part 1: close the currently-open event when its falling edge arrives
             if ~isempty(obj.cache_.openEventId_)
-                % A falling edge manifests as the first run ending before numel(bin_new),
-                % where priorLastFlag==1 and sI(1)==1 (continuation of the open run).
+                % A falling edge manifests in two cases when priorLastFlag==1:
+                %   (a) bin_new has a run starting at 1 that ends before numel(bin_new)
+                %       — the continuation run closes within this chunk.
+                %   (b) bin_new(1)==0 — the run ended exactly at the chunk boundary;
+                %       the open event must close at the last 1 of the PRIOR chunk.
+                %       In this case, use the prior chunk's last X (priorOngoingStart
+                %       tracks the run start, but we use cache_.x(end) for the endT).
+                shouldClose = false;
+                endT = NaN;
                 if priorLastFlag == 1 && ~isempty(sI) && sI(1) == 1 && eI(1) < numel(bin_new)
-                    % Stats were already updated in appendData BEFORE this call.
+                    % Case (a): continuation run closes inside this chunk.
+                    shouldClose = true;
                     endT = newX(eI(1));
+                elseif priorLastFlag == 1 && (isempty(bin_new) || ~bin_new(1))
+                    % Case (b): chunk starts with 0 — falling edge was at chunk boundary.
+                    shouldClose = true;
+                    % End time is the last cached X (the sample where alarm was last 1).
+                    if ~isempty(obj.cache_.x)
+                        endT = obj.cache_.x(end);
+                    else
+                        endT = newX(1);  % fallback
+                    end
+                end
+                if shouldClose
+                    % Stats were already updated in appendData BEFORE this call.
                     fs = obj.flushOpenStats_();
                     if ~isempty(obj.EventStore)
                         try
@@ -726,6 +751,12 @@ classdef MonitorTag < Tag
                 end
                 endT = newX(eI(k));
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                % Phase 1012: compute inline stats for same-chunk closed events.
+                if ~isempty(newY)
+                    yRun = newY(sI(k):eI(k));
+                    ev.setStats(max(abs(yRun)), numel(yRun), min(yRun), max(yRun), ...
+                        mean(yRun), sqrt(mean(yRun .^ 2)), std(yRun));
+                end
                 if ~isempty(obj.EventStore)
                     obj.EventStore.append(ev);
                     % Phase 1010 (EVENT-01): TagKeys + EventBinding after append (Id assigned)
