@@ -21,6 +21,7 @@ obj = DashboardEngine(name, varargin)
 | LiveInterval | `5` |  |
 | InfoFile | `''` |  |
 | ProgressMode | `'auto'` | 'auto' \| 'on' \| 'off' — render progress bar visibility |
+| ShowTimePanel | `true` | hide the bottom time slider panel |
 
 ### Methods
 
@@ -82,6 +83,16 @@ PREVIEW Print ASCII representation of the dashboard to console.
 #### `showInfo(obj)`
 
 SHOWINFO Display the linked Markdown info file in a browser.
+  When InfoFile is empty, displays a built-in placeholder page
+  describing how to attach a custom info file.
+
+#### `writeAndOpenInfoHtml(obj, html)`
+
+WRITEANDOPENINFOHTML Write rendered HTML to the cached temp file and open it.
+
+#### `md = buildPlaceholderInfoMarkdown(obj)`
+
+BUILDPLACEHOLDERINFOMARKDOWN Default info page shown when no InfoFile is set.
 
 #### `cleanupInfoTempFile(obj)`
 
@@ -117,6 +128,23 @@ SETCONTENTAREA Update the Layout content area.
   without direct write-access to the Layout property (required
   for Octave compatibility).
 
+#### `[effToolbarH, effPageBarH, effTimeH] = applyChromeVisibility(obj, toolbarH, pageBarH)`
+
+APPLYCHROMEVISIBILITY Set chrome Visible state + return effective heights.
+  Respects ShowToolbar and ShowTimePanel flags. Returns the heights
+  that should be used for the content-area calculation (0 when the
+  corresponding chrome element is hidden).
+
+#### `applyVisibilityAndRelayout(obj)`
+
+APPLYVISIBILITYANDRELAYOUT Re-apply ShowToolbar/ShowTimePanel + re-layout widgets.
+
+#### `applyThemeToChrome(obj)`
+
+APPLYTHEMETOCHROME Restyle figure + non-widget chrome using the current Theme.
+  Widget panels are NOT touched here — call rerenderWidgets() after
+  this method to recreate widget content with the new theme.
+
 #### `rerenderWidgets(obj)`
 
 RERENDERWIDGETS Delete all widget panels and recreate them.
@@ -130,10 +158,41 @@ UPDATEGLOBALTIMERANGE Scan all widgets for data time bounds.
 UPDATELIVETIMERANGE Update DataTimeRange without resetting sliders.
   Called during live mode to expand the time range as data grows.
 
-#### `updateLiveTimeRangeFrom(obj, ws)`
+#### `newTMax = updateLiveTimeRangeFrom(obj, ws)`
 
 UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
   Like updateLiveTimeRange but accepts ws to avoid re-fetching activePageWidgets().
+  Returns the new tMax (or NaN when no widget has finite time data).
+
+#### `createStaleBanner(obj, theme, toolbarH)`
+
+CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
+  A uipanel strip below the toolbar containing a message label and
+  a close button. Hidden by default; shown when staleness is detected
+  and not previously dismissed by the user.
+
+#### `showStaleBanner(obj, staleTitles)`
+
+SHOWSTALEBANNER Display the warning listing the widgets without new data.
+  staleTitles is a cell array of widget Title strings whose tMax
+  did not advance on the last live tick.
+
+#### `hideStaleBanner(obj)`
+
+HIDESTALEBANNER Clear the stale-data warning overlay.
+
+#### `onStaleBannerClose(obj)`
+
+ONSTALEBANNERCLOSE User dismissed the warning; stay hidden until data resumes.
+
+#### `msg = buildStaleMessage(obj, staleTitles, intervalStr)`
+
+BUILDSTALEMESSAGE Compose the banner text listing stale widgets.
+
+#### `staleTitles = detectStaleWidgets(obj, ws)`
+
+DETECTSTALEWIDGETS Return titles of widgets whose tMax did not advance.
+  Updates LastTMaxPerWidget_ with the current observation.
 
 #### `broadcastTimeRange(obj, tStart, tEnd)`
 
@@ -949,8 +1008,11 @@ ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
 
 > Inherits from: `handle`
 
-Provides buttons for: Live mode toggle, Edit mode, Save, Image, Export.
-  Sits at the top of the dashboard figure.
+Provides buttons for: Sync, Live (toggle with blue border when active),
+  Config (opens DashboardConfigDialog), Image, Export, and Info (always
+  present — shows a placeholder page when no InfoFile is configured).
+  Every button has a descriptive tooltip. Sits at the top of the
+  dashboard figure.
 
 ### Constructor
 
@@ -974,7 +1036,13 @@ SETLASTUPDATETIME Update the last-update label with a timestamp.
 
 #### `onLiveToggle(obj, src)`
 
-#### `onSave(obj)`
+#### `setLiveActiveIndicator(obj, isActive)`
+
+SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
+
+#### `onConfig(obj)`
+
+ONCONFIG Open the dashboard config dialog.
 
 #### `onExport(obj)`
 
@@ -1003,8 +1071,6 @@ DEFAULTIMAGEFILENAME Build sanitized default filename for the dialog.
   in-codebase precedent.
 
 #### `onInfo(obj)`
-
-#### `onEdit(obj)`
 
 #### `contentArea = getContentArea(obj)`
 
@@ -1090,6 +1156,43 @@ TOSTRUCT Serialize widget to struct for JSON export.
 #### `ChipBarWidget.obj = fromStruct(s)`
 
 FROMSTRUCT Reconstruct ChipBarWidget from a saved struct.
+
+---
+
+## `DashboardConfigDialog` --- Config editor for a DashboardEngine.
+
+> Inherits from: `handle`
+
+Opens a figure listing every public DashboardEngine property with
+  an editable control. Apply writes values back to the engine and
+  propagates visible changes (figure title, theme re-render, live
+  timer restart). Close dismisses without additional changes.
+
+  Enum-like properties get a popup menu:
+    Theme         — {'light', 'dark'}
+    ProgressMode  — {'auto', 'on', 'off'}
+  Numeric properties get a numeric edit control. Everything else
+  gets a plain text edit.
+
+  Usage (usually invoked by the toolbar Config button):
+    dlg = DashboardConfigDialog(engine);
+    % ...user edits fields, clicks Apply/Close...
+
+### Constructor
+
+```matlab
+obj = DashboardConfigDialog(engine)
+```
+
+### Methods
+
+#### `close(obj)`
+
+CLOSE Destroy the dialog figure.
+
+#### `apply(obj)`
+
+APPLY Write all control values back to the engine and propagate.
 
 ---
 
