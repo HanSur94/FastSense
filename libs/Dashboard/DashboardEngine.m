@@ -20,11 +20,13 @@ classdef DashboardEngine < handle
 %   see FastSenseGrid.
 
     properties (Access = public)
-        Name         = ''
-        Theme        = 'light'
-        LiveInterval = 5
-        InfoFile     = ''
-        ProgressMode = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
+        Name          = ''
+        Theme         = 'light'
+        LiveInterval  = 5
+        InfoFile      = ''
+        ProgressMode  = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
+        ShowToolbar   = true     % hide the top toolbar for presenter/embed mode
+        ShowTimePanel = true     % hide the bottom time slider panel
     end
 
     properties (SetAccess = private)
@@ -268,9 +270,10 @@ classdef DashboardEngine < handle
             % Create time control panel at bottom
             obj.createTimePanel(themeStruct);
 
-            % Content area between toolbar and time panel
-            obj.Layout.ContentArea = [0, obj.TimePanelHeight, ...
-                1, 1 - toolbarH - pageBarH - obj.TimePanelHeight];
+            % Apply visibility flags + compute content area based on effective heights
+            [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
+            obj.Layout.ContentArea = [0, effTimeH, ...
+                1, 1 - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
@@ -891,6 +894,55 @@ classdef DashboardEngine < handle
         %   without direct write-access to the Layout property (required
         %   for Octave compatibility).
             obj.Layout.ContentArea = contentArea;
+        end
+
+        function [effToolbarH, effPageBarH, effTimeH] = applyChromeVisibility(obj, toolbarH, pageBarH)
+        %APPLYCHROMEVISIBILITY Set chrome Visible state + return effective heights.
+        %   Respects ShowToolbar and ShowTimePanel flags. Returns the heights
+        %   that should be used for the content-area calculation (0 when the
+        %   corresponding chrome element is hidden).
+            if nargin < 2 || isempty(toolbarH)
+                if ~isempty(obj.Toolbar), toolbarH = obj.Toolbar.Height; else, toolbarH = 0; end
+            end
+            if nargin < 3 || isempty(pageBarH)
+                if numel(obj.Pages) > 1, pageBarH = obj.PageBarHeight; else, pageBarH = 0; end
+            end
+            timeH = obj.TimePanelHeight;
+
+            if obj.ShowToolbar
+                tbVis = 'on';  effToolbarH = toolbarH;
+            else
+                tbVis = 'off'; effToolbarH = 0;
+            end
+            if obj.ShowTimePanel
+                tpVis = 'on';  effTimeH = timeH;
+            else
+                tpVis = 'off'; effTimeH = 0;
+            end
+            effPageBarH = pageBarH;  % page bar follows multi-page state, not a flag
+
+            if ~isempty(obj.Toolbar) && ~isempty(obj.Toolbar.hPanel) ...
+                    && ishandle(obj.Toolbar.hPanel)
+                set(obj.Toolbar.hPanel, 'Visible', tbVis);
+            end
+            if ~isempty(obj.hTimePanel) && ishandle(obj.hTimePanel)
+                set(obj.hTimePanel, 'Visible', tpVis);
+            end
+        end
+
+        function applyVisibilityAndRelayout(obj)
+        %APPLYVISIBILITYANDRELAYOUT Re-apply ShowToolbar/ShowTimePanel + re-layout widgets.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure) || isempty(obj.Layout)
+                return;
+            end
+            [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility();
+            obj.Layout.ContentArea = [0, effTimeH, ...
+                1, 1 - effToolbarH - effPageBarH - effTimeH];
+            try
+                obj.rerenderWidgets();
+            catch
+                % best-effort: layout requires active widgets
+            end
         end
 
         function applyThemeToChrome(obj)

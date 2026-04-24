@@ -117,6 +117,70 @@ function test_dashboard_config_dialog()
         nFailed = nFailed + 1;
     end
 
+    % testAllControlsHaveTooltips
+    try
+        d = DashboardEngine('TipCheck');
+        dlg = DashboardConfigDialog(d);
+        for i = 1:numel(dlg.hEditCtrls)
+            h = dlg.hEditCtrls{i};
+            tip = get(h, 'TooltipString');
+            assert(~isempty(tip), sprintf('control %d (%s) missing tooltip', ...
+                i, dlg.PropSpecs{i}.name));
+        end
+        dlg.close();
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testAllControlsHaveTooltips: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % testInfoFileHasBrowseButton
+    try
+        d = DashboardEngine('BrowseCheck');
+        dlg = DashboardConfigDialog(d);
+        browseBtns = findobj(dlg.hFigure, 'Style', 'pushbutton', ...
+            'String', 'Browse…');
+        assert(~isempty(browseBtns), 'expected Browse button for InfoFile');
+        dlg.close();
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testInfoFileHasBrowseButton: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % testVisibilityFlagsTogglePanels
+    try
+        d = DashboardEngine('VisTest');
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+
+        assert(strcmp(get(d.Toolbar.hPanel, 'Visible'), 'on'), ...
+            'toolbar should start visible');
+        assert(strcmp(get(d.hTimePanel, 'Visible'), 'on'), ...
+            'time panel should start visible');
+
+        d.ShowToolbar = false;
+        d.ShowTimePanel = false;
+        d.applyVisibilityAndRelayout();
+
+        assert(strcmp(get(d.Toolbar.hPanel, 'Visible'), 'off'), ...
+            'toolbar should be hidden');
+        assert(strcmp(get(d.hTimePanel, 'Visible'), 'off'), ...
+            'time panel should be hidden');
+
+        % Content area should now span the full figure height
+        ca = d.Layout.ContentArea;
+        assert(abs(ca(2) - 0) < 1e-9 && abs(ca(4) - 1) < 1e-9, ...
+            sprintf('content area should fill full height, got [%g %g %g %g]', ca));
+
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testVisibilityFlagsTogglePanels: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
     fprintf('    %d passed, %d failed.\n', nPassed, nFailed);
     if nFailed > 0
         error('test_dashboard_config_dialog:fail', ...

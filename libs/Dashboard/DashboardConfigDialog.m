@@ -40,9 +40,11 @@ classdef DashboardConfigDialog < handle
 
         function apply(obj)
         %APPLY Write all control values back to the engine and propagate.
-            oldTheme = obj.Engine.Theme;
-            oldName  = obj.Engine.Name;
-            oldLive  = obj.Engine.LiveInterval;
+            oldTheme      = obj.Engine.Theme;
+            oldName       = obj.Engine.Name;
+            oldLive       = obj.Engine.LiveInterval;
+            oldShowTb     = obj.Engine.ShowToolbar;
+            oldShowTp     = obj.Engine.ShowTimePanel;
 
             for i = 1:numel(obj.PropSpecs)
                 spec = obj.PropSpecs{i};
@@ -55,7 +57,7 @@ classdef DashboardConfigDialog < handle
                         'Dashboard Config');
                 end
             end
-            obj.propagateChanges(oldTheme, oldName, oldLive);
+            obj.propagateChanges(oldTheme, oldName, oldLive, oldShowTb, oldShowTp);
         end
     end
 
@@ -67,6 +69,8 @@ classdef DashboardConfigDialog < handle
             knownChoices = struct( ...
                 'Theme',        {{{'light', 'dark'}}}, ...
                 'ProgressMode', {{{'auto', 'on', 'off'}}});
+            tooltips = obj.tooltipMap();
+            filePickerProps = {'InfoFile'};
 
             names = obj.discoverPublicPropertyNames(eng);
             for i = 1:numel(names)
@@ -78,13 +82,44 @@ classdef DashboardConfigDialog < handle
                     s.type = 'popup';
                     choicePair = knownChoices.(n);
                     s.choices = choicePair{1};
+                elseif islogical(cur) || (isnumeric(cur) && isscalar(cur) ...
+                        && ismember(cur, [0 1]) && obj.isKnownBoolProp(n))
+                    s.type = 'bool';
                 elseif isnumeric(cur)
                     s.type = 'numeric';
                 else
                     s.type = 'text';
                 end
+                if ismember(n, filePickerProps)
+                    s.filePicker = true;
+                    s.fileFilter = '*.md';
+                else
+                    s.filePicker = false;
+                end
+                if isfield(tooltips, n)
+                    s.tooltip = tooltips.(n);
+                else
+                    s.tooltip = '';
+                end
                 specs{end+1} = s; %#ok<AGROW>
             end
+        end
+
+        function tf = isKnownBoolProp(obj, name) %#ok<INUSL>
+        %ISKNOWNBOOLPROP True when the named property is a logical toggle we expose.
+            tf = ismember(name, {'ShowToolbar', 'ShowTimePanel'});
+        end
+
+        function m = tooltipMap(obj) %#ok<MANU>
+        %TOOLTIPMAP Explanations shown as tooltips on each config control.
+            m = struct( ...
+                'Name',          'Dashboard title shown in the window and toolbar.', ...
+                'Theme',         'Color scheme preset. Apply re-themes the whole dashboard.', ...
+                'LiveInterval',  'Seconds between live-mode refresh ticks.', ...
+                'InfoFile',      'Path to a Markdown file opened by the Info button. Empty = built-in placeholder. Relative paths resolve against the loaded .json directory (or pwd if unsaved).', ...
+                'ProgressMode',  'Render-progress bar visibility: ''auto'' = only for slow renders, ''on'' = always, ''off'' = never.', ...
+                'ShowToolbar',   'Show the top toolbar. Uncheck for presenter or embed mode; the content area expands to fill.', ...
+                'ShowTimePanel', 'Show the bottom time-slider panel. Uncheck when widgets manage their own time range.');
         end
 
         function names = discoverPublicPropertyNames(obj, eng) %#ok<INUSL>
@@ -177,6 +212,8 @@ classdef DashboardConfigDialog < handle
         function h = createControl(obj, spec, pos)
             eng = obj.Engine;
             cur = eng.(spec.name);
+            tip = '';
+            if isfield(spec, 'tooltip'), tip = spec.tooltip; end
             switch spec.type
                 case 'popup'
                     choices = spec.choices;
@@ -186,22 +223,64 @@ classdef DashboardConfigDialog < handle
                         'Style', 'popupmenu', ...
                         'String', choices, ...
                         'Value', idx, ...
-                        'Position', pos);
+                        'Position', pos, ...
+                        'TooltipString', tip);
                 case 'numeric'
                     if isempty(cur), txt = ''; else, txt = num2str(cur); end
                     h = uicontrol('Parent', obj.hFigure, ...
                         'Style', 'edit', ...
                         'String', txt, ...
                         'Position', pos, ...
-                        'HorizontalAlignment', 'left');
-                otherwise  % 'text'
-                    if isempty(cur), cur = ''; end
+                        'HorizontalAlignment', 'left', ...
+                        'TooltipString', tip);
+                case 'bool'
                     h = uicontrol('Parent', obj.hFigure, ...
-                        'Style', 'edit', ...
-                        'String', cur, ...
+                        'Style', 'checkbox', ...
+                        'String', '', ...
+                        'Value', double(logical(cur)), ...
                         'Position', pos, ...
-                        'HorizontalAlignment', 'left');
+                        'TooltipString', tip);
+                otherwise  % 'text' (optionally with a browse button)
+                    if isempty(cur), cur = ''; end
+                    hasPicker = isfield(spec, 'filePicker') && spec.filePicker;
+                    if hasPicker
+                        browseW = 70;
+                        editPos = [pos(1), pos(2), pos(3) - browseW - 4, pos(4)];
+                        browsePos = [pos(1) + editPos(3) + 4, pos(2), browseW, pos(4)];
+                        h = uicontrol('Parent', obj.hFigure, ...
+                            'Style', 'edit', ...
+                            'String', cur, ...
+                            'Position', editPos, ...
+                            'HorizontalAlignment', 'left', ...
+                            'TooltipString', tip);
+                        uicontrol('Parent', obj.hFigure, ...
+                            'Style', 'pushbutton', ...
+                            'String', 'Browse…', ...
+                            'Position', browsePos, ...
+                            'TooltipString', sprintf('Pick a file for %s', spec.name), ...
+                            'Callback', @(~,~) obj.onBrowseFor(h, spec));
+                    else
+                        h = uicontrol('Parent', obj.hFigure, ...
+                            'Style', 'edit', ...
+                            'String', cur, ...
+                            'Position', pos, ...
+                            'HorizontalAlignment', 'left', ...
+                            'TooltipString', tip);
+                    end
             end
+        end
+
+        function onBrowseFor(obj, hEdit, spec) %#ok<INUSL>
+        %ONBROWSEFOR Pop a uigetfile dialog and write the result into hEdit.
+            filter = '*.md';
+            if isfield(spec, 'fileFilter') && ~isempty(spec.fileFilter)
+                filter = spec.fileFilter;
+            end
+            [file, path] = uigetfile(filter, sprintf('Select %s', spec.name));
+            if isequal(file, 0) || isempty(file)
+                return;  % user cancelled
+            end
+            set(hEdit, 'String', fullfile(path, file));
         end
 
         function v = readControl(obj, h, spec) %#ok<INUSL>
@@ -216,12 +295,14 @@ classdef DashboardConfigDialog < handle
                         error('DashboardConfigDialog:invalidNumber', ...
                             '%s must be numeric (got %s)', spec.name, str);
                     end
+                case 'bool'
+                    v = logical(get(h, 'Value'));
                 otherwise  % text
                     v = get(h, 'String');
             end
         end
 
-        function propagateChanges(obj, oldTheme, oldName, oldLive)
+        function propagateChanges(obj, oldTheme, oldName, oldLive, oldShowTb, oldShowTp)
         %PROPAGATECHANGES Reflect engine changes back into the live figure.
             eng = obj.Engine;
 
@@ -255,6 +336,12 @@ classdef DashboardConfigDialog < handle
             if eng.IsLive && eng.LiveInterval ~= oldLive
                 eng.stopLive();
                 eng.startLive();
+            end
+
+            % Chrome visibility toggles → hide/show panels + re-layout widgets
+            if ~isequal(logical(eng.ShowToolbar), logical(oldShowTb)) ...
+                    || ~isequal(logical(eng.ShowTimePanel), logical(oldShowTp))
+                eng.applyVisibilityAndRelayout();
             end
         end
 
