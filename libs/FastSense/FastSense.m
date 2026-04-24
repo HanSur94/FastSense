@@ -2415,17 +2415,26 @@ classdef FastSense < handle
 
         function fitDetailsTableColumns_(~, hTable)
             %FITDETAILSTABLECOLUMNS_ Split the uitable width ~1:2 between
-            %   Field and Value columns based on current pixel width.
+            %   Field and Value columns based on the parent FIGURE's
+            %   current pixel width. Deriving from the figure rather than
+            %   reading the table's own Position avoids a race where the
+            %   table layout hasn't settled when SizeChangedFcn fires.
             if ~ishandle(hTable), return; end
             try
-                prevUnits = get(hTable, 'Units');
-                set(hTable, 'Units', 'pixels');
-                pp = get(hTable, 'Position');   % [x y w h]
-                set(hTable, 'Units', prevUnits);
-                % Reserve ~22px for vertical scrollbar + small padding.
-                totalW = max(200, pp(3) - 22);
-                labelW = max(80,  round(totalW * 0.33));
-                valueW = max(100, totalW - labelW);
+                drawnow;   % flush pending layout before measuring
+                hFig = ancestor(hTable, 'figure');
+                if isempty(hFig) || ~ishandle(hFig), return; end
+                prevUnits = get(hFig, 'Units');
+                set(hFig, 'Units', 'pixels');
+                figPos = get(hFig, 'Position');   % [x y w h]
+                set(hFig, 'Units', prevUnits);
+                % Table is laid out at normalized [0.03 0.39 0.94 0.58] inside
+                % the figure — use 0.94 of the figure width. Reserve a small
+                % margin for the vertical scrollbar + Java border.
+                tableW  = max(200, figPos(3) * 0.94);
+                usable  = max(180, tableW - 22);
+                labelW  = max(80,  round(usable * 0.33));
+                valueW  = max(100, round(usable - labelW));
                 set(hTable, 'ColumnWidth', {labelW, valueW});
             catch
                 % Swallow — layout failure should not kill the popup.
