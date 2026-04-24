@@ -21,7 +21,7 @@ FastPlot consists of five integrated libraries:
 |---------|-------------|
 | **FastSense** | Core plotting engine with dynamic downsampling, dashboard layouts (FastSenseGrid, FastSenseDock), interactive toolbar, themes, and disk-backed storage via FastSenseDataStore |
 | **Dashboard** | Widget-based dashboard engine with 8 widget types, 24-column responsive grid, edit mode, and JSON persistence |
-| **SensorThreshold** | Sensor data containers with state-dependent threshold rules, violation detection, and SensorRegistry catalog |
+| **SensorThreshold** | Tag-based domain model with SensorTag/StateTag/MonitorTag/CompositeTag entities, raw data pipeline, and TagRegistry |
 | **EventDetection** | Event detection from threshold violations, EventViewer with Gantt timeline, live pipeline with notifications |
 | **WebBridge** | TCP server for web-based visualization with NDJSON protocol |
 
@@ -34,7 +34,7 @@ FastPlot consists of five integrated libraries:
 - **Interactive toolbar** — data cursor, crosshair, grid/legend toggle, autoscale, PNG export
 - **6 built-in themes** — default, dark, light, industrial, scientific, ocean
 - **Linked axes** — synchronized zoom/pan across subplots
-- **Sensor system** — state-dependent thresholds with condition-based rules and violation markers
+- **Tag system** — unified domain model with SensorTag, StateTag, MonitorTag, and CompositeTag entities
 - **Event detection** — group violations into events with statistics, Gantt viewer, click-to-plot
 - **Live mode** — file polling with auto-refresh (preserve/follow/reset view modes)
 - **Disk-backed storage** — SQLite-backed chunked DataStore for 100M+ point datasets
@@ -71,20 +71,29 @@ fig.renderAll();
 ```
 
 ```matlab
-% Sensor with state-dependent thresholds
-s = Sensor('pressure', 'Name', 'Chamber Pressure');
-s.X = linspace(0, 100, 1e6);
-s.Y = randn(1, 1e6) * 10 + 50;
+% Tag-based workflow with monitoring
+st = SensorTag('pressure', 'X', x, 'Y', sin(x) * 30 + 50);
+TagRegistry.register('pressure', st);
 
-sc = StateChannel('machine');
-sc.X = [0 30 60 80]; sc.Y = [0 1 2 1];
-s.addStateChannel(sc);
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.resolve();
+mt = MonitorTag('pressure_hi', st, @(x, y) y > 70);
+TagRegistry.register('pressure_hi', mt);
 
 fp = FastSense('Theme', 'industrial');
-fp.addSensor(s, 'ShowThresholds', true);
+fp.addTag(st);
+fp.addTag(mt);
 fp.render();
+```
+
+```matlab
+% Widget dashboard
+d = DashboardEngine('Process Monitor', 'Theme', 'dark');
+d.addWidget('fastsense', 'Title', 'Temperature', 'Position', [1 1 12 4], ...
+            'Tag', TagRegistry.get('temp'));
+d.addWidget('gauge', 'Title', 'Pressure', 'Position', [13 1 6 4], ...
+            'ValueFcn', @() 42.5, 'Range', [0 100], 'Units', 'bar');
+d.addWidget('status', 'Title', 'Pump Status', 'Position', [19 1 6 2], ...
+            'StatusFcn', @() 'ok');
+d.render();
 ```
 
 ## Requirements

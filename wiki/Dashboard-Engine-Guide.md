@@ -13,7 +13,7 @@ FastSense provides two dashboard systems:
 | Feature | FastSenseGrid | DashboardEngine |
 |---------|---------------|-----------------|
 | Grid | Fixed rows x cols | 24-column responsive |
-| Tile content | FastSense instances only | 8 widget types (plots, gauges, numbers, tables, etc.) |
+| Tile content | FastSense instances only | 20+ widget types (plots, gauges, numbers, tables, etc.) |
 | Persistence | None | JSON save/load + .m script export |
 | Visual editor | No | Yes (drag/resize, palette, properties panel) |
 | Scrolling | No | Auto-scrollbar when content overflows |
@@ -90,16 +90,16 @@ d.addWidget('fastsense', 'Position', [1 1 12 8], 'Sensor', mySensor);
 d.addWidget('fastsense', 'Title', 'Raw', 'Position', [13 1 12 8], ...
     'XData', x, 'YData', y);
 
-% From MAT file
-d.addWidget('fastsense', 'Title', 'File', 'Position', [1 9 24 6], ...
-    'File', 'data.mat', 'XVar', 'x', 'YVar', 'y');
-
 % From DataStore
-d.addWidget('fastsense', 'Title', 'Store', 'Position', [1 15 24 6], ...
+d.addWidget('fastsense', 'Title', 'Store', 'Position', [1 9 24 6], ...
     'DataStore', myDataStore);
+
+% From MAT file
+d.addWidget('fastsense', 'Title', 'File', 'Position', [1 15 24 6], ...
+    'File', 'data.mat', 'XVar', 'x', 'YVar', 'y');
 ```
 
-When bound to a Sensor, threshold rules apply automatically (resolved violations are shown). The widget title, X-axis label (`'Time'`), and Y-axis label (sensor Units or Name) are auto-derived.
+When bound to a Sensor, threshold rules apply automatically. The widget title, X-axis label, and Y-axis label are auto-derived.
 
 ### Number (big value display)
 
@@ -231,6 +231,81 @@ d.addWidget('timeline', 'Title', 'Temp Events', ...
     'FilterSensors', {'T-401', 'T-402'});
 ```
 
+### Icon Card (compact status)
+
+```matlab
+d.addWidget('iconcard', 'Title', 'Temp', ...
+    'Position', [1 1 6 2], ...
+    'StaticValue', 23.5, 'Units', 'degC');
+
+% Sensor-bound with automatic state coloring
+d.addWidget('iconcard', 'Title', 'Pump Status', ...
+    'Position', [7 1 6 2], ...
+    'Sensor', sensorObj);
+```
+
+Compact Mushroom Card-style widget with colored icon, value, and label. Icon color reflects the current threshold state.
+
+### Sparkline Card (KPI with trend)
+
+```matlab
+d.addWidget('sparkline', 'Title', 'CPU Usage', ...
+    'Position', [13 1 8 3], ...
+    'StaticValue', 42.0, 'SparkData', cpuHistory, 'Units', '%');
+
+% Sensor-bound
+d.addWidget('sparkline', 'Title', 'Temperature', ...
+    'Position', [1 4 8 3], ...
+    'Sensor', sTemp);
+```
+
+KPI card combining a big-number display with a mini sparkline chart and delta indicator.
+
+### Chip Bar (status strip)
+
+```matlab
+chips = {
+    struct('label', 'Pump',  'statusFcn', @() 'ok'),
+    struct('label', 'Tank',  'statusFcn', @() 'warn'),
+    struct('label', 'Fan',   'statusFcn', @() 'alarm')
+};
+
+d.addWidget('chipbar', 'Title', 'System Health', ...
+    'Position', [1 1 24 2], ...
+    'Chips', chips);
+```
+
+Horizontal row of mini status chips for system health summary. Displays colored circle icons with labels in a compact strip.
+
+### Divider (visual separator)
+
+```matlab
+d.addWidget('divider', 'Position', [1 3 24 1]);
+d.addWidget('divider', 'Position', [1 8 24 1], ...
+    'Thickness', 2, 'Color', [0.8 0.2 0.2]);
+```
+
+Horizontal divider line for visual section separation. Static widget with configurable thickness and color.
+
+### Group (container widgets)
+
+```matlab
+% Panel mode
+w1 = NumberWidget('Title', 'Temp', 'StaticValue', 25);
+w2 = StatusWidget('Title', 'Status', 'StaticStatus', 'ok');
+d.addWidget('group', 'Title', 'Temperature Section', ...
+    'Position', [1 1 12 8], ...
+    'Mode', 'panel', 'Children', {w1, w2});
+
+% Collapsible mode
+d.addWidget('group', 'Title', 'Sensor Overview', ...
+    'Position', [1 9 24 6], ...
+    'Mode', 'collapsible', 'Children', {w1, w2}, ...
+    'Collapsed', false);
+```
+
+Container widget that groups other widgets. Supports panel, collapsible, and tabbed modes.
+
 ---
 
 ## Sensor Binding
@@ -265,9 +340,35 @@ Benefits of Sensor binding:
 - **Title:** auto-derived from `Sensor.Name` or `Sensor.Key`
 - **Units:** auto-derived from `Sensor.Units`
 - **Value:** uses `Sensor.Y(end)` for number, gauge, and status widgets
-- **Thresholds:** FastSenseWidget renders resolved thresholds and violations
+- **Thresholds:** FastSenseWidget renders threshold rules and violations
 - **Status:** StatusWidget checks the latest value against all threshold rules
 - **Live refresh:** calling `refresh()` re-reads the sensor data
+
+---
+
+## Multi-Page Dashboards
+
+DashboardEngine supports multiple named pages for organizing large dashboard sets:
+
+```matlab
+d = DashboardEngine('Multi-Page Dashboard');
+
+% Add pages
+pg1 = d.addPage('Overview');
+pg2 = d.addPage('Detailed Analysis');
+
+% Widgets go to the active page (last added)
+d.addWidget('text', 'Title', 'Overview Page', 'Position', [1 1 24 2]);
+
+% Switch to different page
+d.switchPage(1);  % Back to Overview
+d.addWidget('number', 'Title', 'Total Count', 'Position', [1 3 8 2], ...
+    'StaticValue', 1234);
+
+d.render();
+```
+
+The dashboard renders a page bar below the toolbar when multiple pages are present. Click page names to switch between them.
 
 ---
 
@@ -312,11 +413,11 @@ DashboardEngine uses `DashboardTheme`, which extends `FastSenseTheme` with dashb
 
 ```matlab
 d = DashboardEngine('My Dashboard');
-d.Theme = 'dark';        % or 'light', 'industrial', 'scientific', 'ocean'
+d.Theme = 'dark';        % or 'light'
 d.render();
 ```
 
-Available presets: `'default'`, `'dark'`, `'light'`, `'industrial'`, `'scientific'`, `'ocean'`.
+Available presets: `'light'`, `'dark'`. Legacy preset names (`'default'`, `'industrial'`, `'scientific'`, `'ocean'`) are aliased to `'light'` for backward compatibility.
 
 You can also override specific theme properties:
 
@@ -347,6 +448,8 @@ d.stopLive();    % stop
 
 You can also toggle live mode from the toolbar's Live button. The toolbar shows the last update timestamp when live mode is active.
 
+Live mode includes stale data detection - widgets that stop receiving new data trigger a warning banner listing the affected widgets.
+
 ---
 
 ## Global Time Controls
@@ -358,6 +461,8 @@ The time panel at the bottom of the dashboard has two sliders that control the v
 - **RawAxesWidget:** passes the time range to the PlotFcn
 
 If a user manually zooms a specific widget, that widget detaches from global time (`UseGlobalTime = false`). Click the **Sync** button in the toolbar to re-attach all widgets.
+
+The time selector includes an optional preview envelope showing aggregated min/max data from all widgets for visual navigation.
 
 ---
 
@@ -393,6 +498,20 @@ d.render();
 ```
 
 An **Info** button appears in the toolbar. Clicking it renders the Markdown file as HTML and opens it in the system browser. Supports basic Markdown syntax including headers, lists, code blocks, and tables.
+
+---
+
+## Progress Indication
+
+Dashboard rendering can display a progress bar during widget realization:
+
+```matlab
+d = DashboardEngine('Large Dashboard');
+d.ProgressMode = 'on';   % 'auto', 'on', 'off'
+d.render();
+```
+
+In `'auto'` mode (default), the progress bar appears only for large dashboards (15+ widgets) in interactive sessions. Silent in batch/CI environments.
 
 ---
 
