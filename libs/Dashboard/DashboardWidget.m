@@ -143,6 +143,15 @@ classdef DashboardWidget < handle
             series = [];
         end
 
+        function t = getEventTimes(~)
+        %GETEVENTTIMES Optional list of event times for the time-slider overlay.
+        %   t = getEventTimes(obj) returns a row vector of event start times
+        %   in the dashboard's time axis. Override to expose events to the
+        %   TimeRangeSelector event-marker overlay; base returns [] so
+        %   widgets without events contribute nothing.
+            t = [];
+        end
+
         function lines = asciiRender(obj, width, height)
         %ASCIIRENDER Return ASCII representation of this widget.
         %   lines = asciiRender(obj, width, height) returns a cell array

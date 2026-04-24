@@ -61,6 +61,7 @@ classdef TimeRangeSelector < handle
         hAxes       = []
         hEnvelope   = []   % single patch for aggregate min/max envelope (legacy)
         hPreviewLines = []  % array of line handles, one per widget preview
+        hEventMarkers = []  % array of line handles, one per event marker
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
@@ -245,6 +246,73 @@ classdef TimeRangeSelector < handle
             obj.hPreviewLines = handles;
             % Send preview lines to the BACK so the selection patch, edges,
             % and labels stay on top. Works in MATLAB and Octave.
+            if ~isempty(handles) && ishandle(obj.hAxes)
+                ch = get(obj.hAxes, 'Children');
+                mask = true(size(ch));
+                for k = 1:numel(handles)
+                    mask(ch == handles(k)) = false;
+                end
+                others = ch(mask);
+                set(obj.hAxes, 'Children', [others(:); handles(:)]);
+            end
+        end
+
+        function setEventMarkers(obj, times)
+            %setEventMarkers  Draw a faint full-height line per event time.
+            %   setEventMarkers(times) clears any existing markers and draws
+            %   one vertical line per finite time in `times`. Non-finite
+            %   values (NaN, +/-Inf) are silently dropped. Empty input just
+            %   clears the markers.
+            %
+            %   Markers are purely visual — they have HitTest='off' and
+            %   PickableParts='none' so they never intercept drag/pan/resize
+            %   of the selection window. They are sent to the BACK of the
+            %   axes children list so the selection patch, edges, and labels
+            %   remain visible on top.
+            %
+            %   For MATLAB/Octave parity we do NOT use an RGBA 4-tuple on
+            %   Color (Octave 7 support is inconsistent). Instead the marker
+            %   colour is blended toward the theme's AxesColor to produce a
+            %   near-background shade that reads as translucent.
+            % Clear previous marker handles.
+            for k = 1:numel(obj.hEventMarkers)
+                if ishandle(obj.hEventMarkers(k))
+                    delete(obj.hEventMarkers(k));
+                end
+            end
+            obj.hEventMarkers = [];
+            if nargin < 2 || isempty(times)
+                return;
+            end
+            times = times(:).';
+            times = times(isfinite(times));
+            if isempty(times)
+                return;
+            end
+            % Derive marker colour from theme (foreground/toolbar font) and
+            % blend toward the axes background to get a translucent feel.
+            markerColor = [0.55 0.55 0.55];
+            if isstruct(obj.Theme) && isfield(obj.Theme, 'ToolbarFontColor')
+                markerColor = obj.Theme.ToolbarFontColor;
+            end
+            try
+                if isstruct(obj.Theme) && isfield(obj.Theme, 'AxesColor')
+                    bg = obj.Theme.AxesColor;
+                    markerColor = 0.35 * markerColor + 0.65 * bg;
+                end
+            catch
+            end
+            handles = [];
+            for i = 1:numel(times)
+                t = times(i);
+                h = line(obj.hAxes, [t t], [0 1], ...
+                    'Color', markerColor, 'LineWidth', 1, ...
+                    'HitTest', 'off', 'PickableParts', 'none');
+                handles(end + 1) = h; %#ok<AGROW>
+            end
+            obj.hEventMarkers = handles;
+            % Send markers to the BACK so the selection patch, edges, and
+            % labels stay on top. Works in MATLAB and Octave.
             if ~isempty(handles) && ishandle(obj.hAxes)
                 ch = get(obj.hAxes, 'Children');
                 mask = true(size(ch));

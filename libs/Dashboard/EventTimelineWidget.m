@@ -89,6 +89,20 @@ classdef EventTimelineWidget < DashboardWidget
             end
         end
 
+        function t = getEventTimes(obj)
+        %GETEVENTTIMES Event start times from resolveEvents (override).
+        %   Mirrors the same filtering pipeline the widget uses to draw
+        %   bars, so the time-slider overlay always matches what the
+        %   widget itself renders.
+            t = [];
+            evts = obj.resolveEvents();
+            if isempty(evts), return; end
+            raw = [evts.startTime];           % resolveEvents emits lowercase
+            if isempty(raw), return; end
+            raw = raw(isfinite(raw));
+            t = raw(:).';
+        end
+
         function refresh(obj)
             events = obj.resolveEvents();
 

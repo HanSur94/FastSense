@@ -442,6 +442,32 @@ classdef FastSenseWidget < DashboardWidget
             end
         end
 
+        function t = getEventTimes(obj)
+        %GETEVENTTIMES Event start times from the wrapped FastSense.EventStore.
+        %   Returns [] when the FastSense instance is absent, has no
+        %   EventStore, or when any access raises. Never throws.
+            t = [];
+            try
+                if isempty(obj.FastSenseObj) || ~isa(obj.FastSenseObj, 'FastSense')
+                    return;
+                end
+                if ~isprop(obj.FastSenseObj, 'EventStore') || isempty(obj.FastSenseObj.EventStore)
+                    return;
+                end
+                raw = obj.FastSenseObj.EventStore.getEvents();
+                if isempty(raw), return; end
+                n = numel(raw);
+                tmp = zeros(1, n);
+                for i = 1:n
+                    tmp(i) = raw(i).StartTime;   % PascalCase: Event object / struct
+                end
+                tmp = tmp(isfinite(tmp));
+                t = tmp(:).';
+            catch
+                t = [];
+            end
+        end
+
         function t = getType(~)
             t = 'fastsense';
         end
