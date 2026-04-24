@@ -164,14 +164,77 @@ classdef TestDashboardInfo < matlab.unittest.TestCase
             testCase.verifyTrue(ishandle(d.Toolbar.hInfoBtn));
         end
 
-        function testToolbarInfoButtonAbsent(testCase)
+        function testToolbarInfoButtonAlwaysPresent(testCase)
+            % Info button is mandatory — always rendered, even without InfoFile.
             d = DashboardEngine('Toolbar No Info');
             d.addWidget('text', 'Title', 'T', 'Position', [1 1 4 2], ...
                 'Content', 'x');
             d.render();
             testCase.addTeardown(@() close(d.hFigure));
 
-            testCase.verifyTrue(isempty(d.Toolbar.hInfoBtn));
+            testCase.verifyNotEmpty(d.Toolbar.hInfoBtn);
+            testCase.verifyTrue(ishandle(d.Toolbar.hInfoBtn));
+        end
+
+        function testShowInfoWithoutInfoFileShowsPlaceholder(testCase)
+            % When no InfoFile is set, showInfo renders a built-in placeholder.
+            d = DashboardEngine('Placeholder Test');
+            d.showInfo();
+            testCase.addTeardown(@() d.cleanupInfoTempFile());
+
+            testCase.verifyNotEmpty(d.InfoTempFile);
+            testCase.verifyEqual(exist(d.InfoTempFile, 'file'), 2);
+
+            html = fileread(d.InfoTempFile);
+            testCase.verifyTrue(contains(html, 'Placeholder Test'));
+            testCase.verifyTrue(contains(html, 'InfoFile'));
+        end
+
+        function testToolbarButtonsHaveTooltips(testCase)
+            % Every visible toolbar button should carry a non-empty tooltip.
+            d = DashboardEngine('Tooltip Test');
+            d.addWidget('text', 'Title', 'T', 'Position', [1 1 4 2], ...
+                'Content', 'x');
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+
+            handles = {d.Toolbar.hLiveBtn, ...
+                d.Toolbar.hConfigBtn, d.Toolbar.hImageBtn, ...
+                d.Toolbar.hExportBtn, d.Toolbar.hSyncBtn, ...
+                d.Toolbar.hInfoBtn};
+            for i = 1:numel(handles)
+                tip = get(handles{i}, 'TooltipString');
+                testCase.verifyNotEmpty(tip, ...
+                    sprintf('Button %d missing tooltip', i));
+            end
+        end
+
+        function testLiveButtonBorderReflectsActiveState(testCase)
+            % Live button should show a blue border when live mode is ON,
+            % and a neutral (toolbar-background) border when OFF.
+            d = DashboardEngine('Live Border Test');
+            d.addWidget('text', 'Title', 'T', 'Position', [1 1 4 2], ...
+                'Content', 'x');
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+            testCase.addTeardown(@() d.stopLive());
+
+            testCase.verifyNotEmpty(d.Toolbar.hLivePanel);
+
+            themeStruct = d.getCachedTheme();
+
+            % OFF → border matches toolbar background (invisible)
+            offColor = get(d.Toolbar.hLivePanel, 'HighlightColor');
+            testCase.verifyEqual(offColor, themeStruct.ToolbarBackground, ...
+                'AbsTol', 1e-6);
+
+            % Simulate toolbar click toggling live ON
+            set(d.Toolbar.hLiveBtn, 'Value', 1);
+            d.Toolbar.onLiveToggle(d.Toolbar.hLiveBtn);
+
+            onColor = get(d.Toolbar.hLivePanel, 'HighlightColor');
+            testCase.verifyEqual(onColor, themeStruct.InfoColor, ...
+                'AbsTol', 1e-6);
         end
     end
 end

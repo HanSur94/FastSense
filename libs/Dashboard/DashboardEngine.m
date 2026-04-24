@@ -20,11 +20,12 @@ classdef DashboardEngine < handle
 %   see FastSenseGrid.
 
     properties (Access = public)
-        Name         = ''
-        Theme        = 'light'
-        LiveInterval = 5
-        InfoFile     = ''
-        ProgressMode = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
+        Name          = ''
+        Theme         = 'light'
+        LiveInterval  = 5
+        InfoFile      = ''
+        ProgressMode  = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
+        ShowTimePanel = true     % hide the bottom time slider panel
     end
 
     properties (SetAccess = private)
@@ -58,6 +59,12 @@ classdef DashboardEngine < handle
         hTimeEnd        = []
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
         Progress_           = []   % DashboardProgress instance (active during render)
+        % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
+        hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
+        hStaleBannerText     = []  % uicontrol text child of hStaleBanner
+        hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
+        LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
+        StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
     end
 
     methods (Access = public)
@@ -268,9 +275,13 @@ classdef DashboardEngine < handle
             % Create time control panel at bottom
             obj.createTimePanel(themeStruct);
 
-            % Content area between toolbar and time panel
-            obj.Layout.ContentArea = [0, obj.TimePanelHeight, ...
-                1, 1 - toolbarH - pageBarH - obj.TimePanelHeight];
+            % Create the stale-data banner (hidden by default; toggled by live tick)
+            obj.createStaleBanner(themeStruct, toolbarH);
+
+            % Apply visibility flags + compute content area based on effective heights
+            [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
+            obj.Layout.ContentArea = [0, effTimeH, ...
+                1, 1 - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
@@ -316,6 +327,22 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.IsLive = true;
+            % Baseline per-widget tMax so the first tick has a reference.
+            obj.LastTMaxPerWidget_ = containers.Map( ...
+                'KeyType', 'char', 'ValueType', 'double');
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
+                [~, tMax] = ws{i}.getTimeRange();
+                if ~isfinite(tMax), continue; end
+                if ~isempty(ws{i}.Title)
+                    key = ws{i}.Title;
+                else
+                    key = sprintf('Widget %d', i);
+                end
+                obj.LastTMaxPerWidget_(key) = tMax;
+            end
+            obj.StaleBannerDismissed_ = false;
+            obj.hideStaleBanner();
             obj.LiveTimer = timer('ExecutionMode', 'fixedRate', ...
                 'Period', obj.LiveInterval, ...
                 'TimerFcn', @(~,~) obj.onLiveTick(), ...
@@ -330,6 +357,9 @@ classdef DashboardEngine < handle
             % testTimerContinuesAfterError). Then stop/delete the timer with
             % isvalid + try/catch guards, matching LiveTagPipeline.stop().
             obj.IsLive = false;
+            obj.hideStaleBanner();
+            obj.LastTMaxPerWidget_ = [];
+            obj.StaleBannerDismissed_ = false;
             if ~isempty(obj.LiveTimer)
                 try
                     if isvalid(obj.LiveTimer)
@@ -669,7 +699,13 @@ classdef DashboardEngine < handle
 
         function showInfo(obj)
         %SHOWINFO Display the linked Markdown info file in a browser.
+        %   When InfoFile is empty, displays a built-in placeholder page
+        %   describing how to attach a custom info file.
             if isempty(obj.InfoFile)
+                mdText = obj.buildPlaceholderInfoMarkdown();
+                mdDir = pwd;
+                html = MarkdownRenderer.render(mdText, obj.Theme, mdDir);
+                obj.writeAndOpenInfoHtml(html);
                 return;
             end
 
@@ -715,7 +751,11 @@ classdef DashboardEngine < handle
             mdDir = fileparts(mdPath);
             html = MarkdownRenderer.render(mdText, obj.Theme, mdDir);
 
-            % Write temp file (reuse path)
+            obj.writeAndOpenInfoHtml(html);
+        end
+
+        function writeAndOpenInfoHtml(obj, html)
+        %WRITEANDOPENINFOHTML Write rendered HTML to the cached temp file and open it.
             if isempty(obj.InfoTempFile)
                 obj.InfoTempFile = [tempname '.html'];
             end
@@ -728,7 +768,6 @@ classdef DashboardEngine < handle
             fwrite(fid, html);
             fclose(fid);
 
-            % Display
             if exist('OCTAVE_VERSION', 'builtin')
                 if ismac
                     system(['open "' obj.InfoTempFile '"']);
@@ -740,6 +779,29 @@ classdef DashboardEngine < handle
             else
                 web(obj.InfoTempFile, '-new');
             end
+        end
+
+        function md = buildPlaceholderInfoMarkdown(obj)
+        %BUILDPLACEHOLDERINFOMARKDOWN Default info page shown when no InfoFile is set.
+            name = obj.Name;
+            if isempty(name)
+                name = 'Dashboard';
+            end
+            md = sprintf([ ...
+                '# %s\n\n' ...
+                'No info page has been configured for this dashboard.\n\n' ...
+                '## Add your own info page\n\n' ...
+                'Attach a Markdown file at construction:\n\n' ...
+                '```matlab\n' ...
+                'd = DashboardEngine(''%s'', ''InfoFile'', ''notes.md'');\n' ...
+                '```\n\n' ...
+                'Or set it after construction:\n\n' ...
+                '```matlab\n' ...
+                'd.InfoFile = ''notes.md'';\n' ...
+                '```\n\n' ...
+                'Relative paths resolve against the loaded dashboard JSON ' ...
+                'directory (or `pwd` for unsaved dashboards).\n'], ...
+                name, name);
         end
 
         function cleanupInfoTempFile(obj)
@@ -861,6 +923,119 @@ classdef DashboardEngine < handle
             obj.Layout.ContentArea = contentArea;
         end
 
+        function [effToolbarH, effPageBarH, effTimeH] = applyChromeVisibility(obj, toolbarH, pageBarH)
+        %APPLYCHROMEVISIBILITY Set chrome Visible state + return effective heights.
+        %   Respects ShowToolbar and ShowTimePanel flags. Returns the heights
+        %   that should be used for the content-area calculation (0 when the
+        %   corresponding chrome element is hidden).
+            if nargin < 2 || isempty(toolbarH)
+                if ~isempty(obj.Toolbar), toolbarH = obj.Toolbar.Height; else, toolbarH = 0; end
+            end
+            if nargin < 3 || isempty(pageBarH)
+                if numel(obj.Pages) > 1, pageBarH = obj.PageBarHeight; else, pageBarH = 0; end
+            end
+            timeH = obj.TimePanelHeight;
+
+            effToolbarH = toolbarH;  % toolbar is always visible (config lives there)
+            if obj.ShowTimePanel
+                tpVis = 'on';  effTimeH = timeH;
+            else
+                tpVis = 'off'; effTimeH = 0;
+            end
+            effPageBarH = pageBarH;  % page bar follows multi-page state, not a flag
+
+            if ~isempty(obj.hTimePanel) && ishandle(obj.hTimePanel)
+                set(obj.hTimePanel, 'Visible', tpVis);
+            end
+        end
+
+        function applyVisibilityAndRelayout(obj)
+        %APPLYVISIBILITYANDRELAYOUT Re-apply ShowToolbar/ShowTimePanel + re-layout widgets.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure) || isempty(obj.Layout)
+                return;
+            end
+            [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility();
+            obj.Layout.ContentArea = [0, effTimeH, ...
+                1, 1 - effToolbarH - effPageBarH - effTimeH];
+            try
+                obj.rerenderWidgets();
+            catch
+                % best-effort: layout requires active widgets
+            end
+        end
+
+        function applyThemeToChrome(obj)
+        %APPLYTHEMETOCHROME Restyle figure + non-widget chrome using the current Theme.
+        %   Widget panels are NOT touched here — call rerenderWidgets() after
+        %   this method to recreate widget content with the new theme.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            theme = obj.getCachedTheme();
+
+            set(obj.hFigure, 'Color', theme.DashboardBackground);
+
+            % Content-area viewport + canvas
+            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hViewport) && ...
+                    ishandle(obj.Layout.hViewport)
+                set(obj.Layout.hViewport, ...
+                    'BackgroundColor', theme.DashboardBackground);
+            end
+            if ~isempty(obj.Layout) && ~isempty(obj.Layout.hCanvas) && ...
+                    ishandle(obj.Layout.hCanvas)
+                set(obj.Layout.hCanvas, ...
+                    'BackgroundColor', theme.DashboardBackground);
+            end
+
+            % Toolbar panel + title + last-update label
+            if ~isempty(obj.Toolbar)
+                tb = obj.Toolbar;
+                if ~isempty(tb.hPanel) && ishandle(tb.hPanel)
+                    set(tb.hPanel, 'BackgroundColor', theme.ToolbarBackground);
+                end
+                if ~isempty(tb.hTitleText) && ishandle(tb.hTitleText)
+                    set(tb.hTitleText, ...
+                        'BackgroundColor', theme.ToolbarBackground, ...
+                        'ForegroundColor', theme.ToolbarFontColor);
+                end
+                if ~isempty(tb.hLastUpdate) && ishandle(tb.hLastUpdate)
+                    fadedFg = theme.ToolbarFontColor * 0.6 + ...
+                        theme.ToolbarBackground * 0.4;
+                    set(tb.hLastUpdate, ...
+                        'BackgroundColor', theme.ToolbarBackground, ...
+                        'ForegroundColor', fadedFg);
+                end
+                if ~isempty(tb.hLivePanel) && ishandle(tb.hLivePanel)
+                    set(tb.hLivePanel, 'BackgroundColor', theme.ToolbarBackground);
+                    % Preserve blue accent when live is active; otherwise blend in.
+                    if obj.IsLive
+                        set(tb.hLivePanel, 'HighlightColor', theme.InfoColor);
+                    else
+                        set(tb.hLivePanel, 'HighlightColor', theme.ToolbarBackground);
+                    end
+                end
+            end
+
+            % Time control panel + its labels
+            if ~isempty(obj.hTimePanel) && ishandle(obj.hTimePanel)
+                set(obj.hTimePanel, ...
+                    'BackgroundColor', theme.ToolbarBackground, ...
+                    'ForegroundColor', theme.WidgetBorderColor);
+            end
+            for h = [obj.hTimeStart, obj.hTimeEnd]
+                if ~isempty(h) && ishandle(h)
+                    set(h, ...
+                        'BackgroundColor', theme.ToolbarBackground, ...
+                        'ForegroundColor', theme.ToolbarFontColor);
+                end
+            end
+
+            % Page bar (visible or placeholder)
+            if ~isempty(obj.hPageBar) && ishandle(obj.hPageBar)
+                set(obj.hPageBar, 'BackgroundColor', theme.ToolbarBackground);
+            end
+        end
+
         function rerenderWidgets(obj)
         %RERENDERWIDGETS Delete all widget panels and recreate them.
             theme = obj.getCachedTheme();
@@ -925,9 +1100,10 @@ classdef DashboardEngine < handle
             obj.DataTimeRange = [tMin, tMax];
         end
 
-        function updateLiveTimeRangeFrom(obj, ws)
+        function newTMax = updateLiveTimeRangeFrom(obj, ws)
         %UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
         %   Like updateLiveTimeRange but accepts ws to avoid re-fetching activePageWidgets().
+        %   Returns the new tMax (or NaN when no widget has finite time data).
             tMin = inf; tMax = -inf;
             for i = 1:numel(ws)
                 [wMin, wMax] = ws{i}.getTimeRange();
@@ -935,9 +1111,147 @@ classdef DashboardEngine < handle
                 if wMax > tMax, tMax = wMax; end
             end
             if isinf(tMin) || isinf(tMax)
+                newTMax = NaN;
                 return;
             end
             obj.DataTimeRange = [tMin, tMax];
+            newTMax = tMax;
+        end
+
+        function createStaleBanner(obj, theme, toolbarH)
+        %CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
+        %   A uipanel strip below the toolbar containing a message label and
+        %   a close button. Hidden by default; shown when staleness is detected
+        %   and not previously dismissed by the user.
+            if ~isempty(obj.hStaleBanner) && ishandle(obj.hStaleBanner)
+                return;
+            end
+            bannerH = 0.035;
+            warnColor = theme.StatusWarnColor;
+            fgColor   = [0.15 0.10 0.02];
+
+            obj.hStaleBanner = uipanel('Parent', obj.hFigure, ...
+                'Units', 'normalized', ...
+                'Position', [0, 1 - toolbarH - bannerH, 1, bannerH], ...
+                'BorderType', 'none', ...
+                'BackgroundColor', warnColor, ...
+                'Visible', 'off');
+
+            obj.hStaleBannerText = uicontrol('Parent', obj.hStaleBanner, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.01, 0.1, 0.94, 0.8], ...
+                'String', '', ...
+                'FontWeight', 'bold', ...
+                'FontSize', 10, ...
+                'HorizontalAlignment', 'left', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', warnColor);
+
+            obj.hStaleBannerClose = uicontrol('Parent', obj.hStaleBanner, ...
+                'Style', 'pushbutton', ...
+                'Units', 'normalized', ...
+                'Position', [0.96, 0.15, 0.03, 0.7], ...
+                'String', 'X', ...
+                'FontWeight', 'bold', ...
+                'TooltipString', 'Dismiss this warning (reappears when data resumes then stops again)', ...
+                'Callback', @(~,~) obj.onStaleBannerClose());
+        end
+
+        function showStaleBanner(obj, staleTitles)
+        %SHOWSTALEBANNER Display the warning listing the widgets without new data.
+        %   staleTitles is a cell array of widget Title strings whose tMax
+        %   did not advance on the last live tick.
+            if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
+                return;
+            end
+            secs = obj.LiveInterval;
+            if secs >= 10
+                intervalStr = sprintf('%.0fs', secs);
+            else
+                intervalStr = sprintf('%.1fs', secs);
+            end
+            msg = obj.buildStaleMessage(staleTitles, intervalStr);
+            set(obj.hStaleBannerText, 'String', msg);
+            set(obj.hStaleBanner, 'Visible', 'on');
+            % Widget panels are created after the banner, so they render on top
+            % by default. Raise the banner to the front so it is actually seen.
+            try
+                uistack(obj.hStaleBanner, 'top');
+            catch
+                % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+            end
+        end
+
+        function hideStaleBanner(obj)
+        %HIDESTALEBANNER Clear the stale-data warning overlay.
+            if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
+                return;
+            end
+            set(obj.hStaleBanner, 'Visible', 'off');
+        end
+
+        function onStaleBannerClose(obj)
+        %ONSTALEBANNERCLOSE User dismissed the warning; stay hidden until data resumes.
+            obj.StaleBannerDismissed_ = true;
+            obj.hideStaleBanner();
+        end
+
+        function msg = buildStaleMessage(obj, staleTitles, intervalStr) %#ok<INUSL>
+        %BUILDSTALEMESSAGE Compose the banner text listing stale widgets.
+            if exist('OCTAVE_VERSION', 'builtin')
+                % Octave's default char() range is 8-bit; use an ASCII marker
+                % to avoid the "range error for conversion" warning.
+                warnChar = '[!]';
+            else
+                warnChar = char(hex2dec('26A0'));
+            end
+            n = numel(staleTitles);
+            if n == 0
+                msg = sprintf('%s  No new data in the last %s', warnChar, intervalStr);
+                return;
+            end
+            shownMax = 3;
+            if n <= shownMax
+                listStr = strjoin(staleTitles, ', ');
+            else
+                head = strjoin(staleTitles(1:shownMax), ', ');
+                listStr = sprintf('%s (+%d more)', head, n - shownMax);
+            end
+            if n == 1
+                msg = sprintf('%s  No new data (%s) from: %s', ...
+                    warnChar, intervalStr, listStr);
+            else
+                msg = sprintf('%s  %d widgets have no new data (%s): %s', ...
+                    warnChar, n, intervalStr, listStr);
+            end
+        end
+
+        function staleTitles = detectStaleWidgets(obj, ws)
+        %DETECTSTALEWIDGETS Return titles of widgets whose tMax did not advance.
+        %   Updates LastTMaxPerWidget_ with the current observation.
+            staleTitles = {};
+            if isempty(obj.LastTMaxPerWidget_)
+                obj.LastTMaxPerWidget_ = containers.Map('KeyType', 'char', 'ValueType', 'double');
+            end
+            for i = 1:numel(ws)
+                w = ws{i};
+                [~, tMax] = w.getTimeRange();
+                if ~isfinite(tMax)
+                    continue;  % no time-series data to compare
+                end
+                if ~isempty(w.Title)
+                    key = w.Title;
+                else
+                    key = sprintf('Widget %d', i);
+                end
+                if obj.LastTMaxPerWidget_.isKey(key)
+                    if tMax <= obj.LastTMaxPerWidget_(key)
+                        staleTitles{end+1} = key; %#ok<AGROW>
+                    end
+                end
+                obj.LastTMaxPerWidget_(key) = tMax;
+            end
         end
 
         function broadcastTimeRange(obj, tStart, tEnd)
@@ -1025,6 +1339,17 @@ classdef DashboardEngine < handle
             % Update global time range from pre-fetched list
             obj.updateLiveTimeRangeFrom(ws);
 
+            % Per-widget staleness detection — which widgets' tMax did not advance?
+            staleTitles = obj.detectStaleWidgets(ws);
+            if isempty(staleTitles)
+                % Fresh data somewhere → reset the user's dismissal so the
+                % banner can re-appear next time things go stale.
+                obj.StaleBannerDismissed_ = false;
+                obj.hideStaleBanner();
+            elseif ~obj.StaleBannerDismissed_
+                obj.showStaleBanner(staleTitles);
+            end
+
             % Single pass: mark sensor-bound or Tag-bound widgets dirty, then refresh
             % if dirty+realized+visible. Base-class Tag property ensures all widgets
             % expose w.Tag (Plan 1009-02); no isprop guard needed.
@@ -1048,8 +1373,8 @@ classdef DashboardEngine < handle
                     w.markUnrealized();
                     continue;
                 end
-                if w.Dirty && w.Realized && ~isempty(w.hPanel) && ishandle(w.hPanel) ...
-                        && obj.Layout.isWidgetVisible(w.Position)
+                if w.Dirty && w.Realized && ~isempty(w.hPanel) && ishandle(w.hPanel) && ...
+                        obj.Layout.isWidgetVisible(w.Position)
                     try
                         if isa(w, 'FastSenseWidget')
                             w.update();

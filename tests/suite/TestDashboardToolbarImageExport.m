@@ -97,13 +97,13 @@ classdef TestDashboardToolbarImageExport < matlab.unittest.TestCase
                 'Save dashboard as image (PNG/JPEG)', ...
                 'testButtonPresent: tooltip should match CONTEXT.md');
 
-            % Horizontal order check: Image button sits between Save and Export
+            % Horizontal order check: Image button sits between Config and Export
             % (smaller x-Position => further left in normalized coords).
             posImage  = get(d.Toolbar.hImageBtn,  'Position');
-            posSave   = get(d.Toolbar.hSaveBtn,   'Position');
+            posConfig = get(d.Toolbar.hConfigBtn, 'Position');
             posExport = get(d.Toolbar.hExportBtn, 'Position');
-            testCase.verifyGreaterThan(posImage(1), posSave(1), ...
-                'Image should be right of Save');
+            testCase.verifyGreaterThan(posImage(1), posConfig(1), ...
+                'Image should be right of Config');
             testCase.verifyLessThan(posImage(1), posExport(1), ...
                 'Image should be left of Export');
         end
