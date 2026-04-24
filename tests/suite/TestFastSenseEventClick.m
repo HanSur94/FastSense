@@ -10,40 +10,49 @@ classdef TestFastSenseEventClick < matlab.unittest.TestCase
 
     methods (Test)
         function testPerMarkerButtonDownFcnIsSet(tc)
-            [fp, ~] = TestFastSenseEventClick.makeFixture(false);
-            markers = fp.EventMarkerHandles_;
+            [fp, ~, fig] = TestFastSenseEventClick.makeFixture(false);
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
             tc.verifyGreaterThanOrEqual(numel(markers), 1);
             bd = get(markers{1}, 'ButtonDownFcn');
             tc.verifyClass(bd, 'function_handle');
+            delete(fig);
         end
 
         function testUserDataHoldsEventId(tc)
-            [fp, ev] = TestFastSenseEventClick.makeFixture(false);
-            markers = fp.EventMarkerHandles_;
+            [~, ev, fig] = TestFastSenseEventClick.makeFixture(false);
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
+            tc.verifyGreaterThanOrEqual(numel(markers), 1);
             ud = get(markers{1}, 'UserData');
             tc.verifyTrue(isstruct(ud));
             tc.verifyTrue(isfield(ud, 'eventId'));
             tc.verifyEqual(ud.eventId, ev.Id);
+            delete(fig);
         end
 
         function testOpenEventMarkerIsHollow(tc)
-            [fp, ~] = TestFastSenseEventClick.makeFixture(true);   % IsOpen=true
-            markers = fp.EventMarkerHandles_;
+            [~, ~, fig] = TestFastSenseEventClick.makeFixture(true);   % IsOpen=true
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
+            tc.verifyGreaterThanOrEqual(numel(markers), 1);
             faceColor = get(markers{1}, 'MarkerFaceColor');
             tc.verifyEqual(faceColor, 'none');
+            delete(fig);
         end
 
         function testClosedEventMarkerIsFilled(tc)
-            [fp, ~] = TestFastSenseEventClick.makeFixture(false);  % IsOpen=false
-            markers = fp.EventMarkerHandles_;
+            [~, ~, fig] = TestFastSenseEventClick.makeFixture(false);  % IsOpen=false
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
+            tc.verifyGreaterThanOrEqual(numel(markers), 1);
             faceColor = get(markers{1}, 'MarkerFaceColor');
             tc.verifyNotEqual(faceColor, 'none');   % RGB triplet expected
+            delete(fig);
         end
 
         function testClickOpensDetailsPanel(tc)
             if ~usejava('jvm'), tc.assumeFail('JVM required for figure-level callback simulation'); end
-            [fp, ~] = TestFastSenseEventClick.makeFixture(false);
-            fp.onEventMarkerClick_(fp.EventMarkerHandles_{1}, []);  % direct dispatch
+            [fp, ~, fig] = TestFastSenseEventClick.makeFixture(false);
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
+            tc.verifyGreaterThanOrEqual(numel(markers), 1);
+            fp.onEventMarkerClick_(markers{1}, []);  % direct dispatch
             tc.verifyFalse(isempty(fp.hEventDetails_));
             tc.verifyTrue(ishandle(fp.hEventDetails_));
             delete(fp.hFigure);
@@ -51,8 +60,10 @@ classdef TestFastSenseEventClick < matlab.unittest.TestCase
 
         function testEscDismissesDetailsPanel(tc)
             if ~usejava('jvm'), tc.assumeFail('JVM required'); end
-            [fp, ~] = TestFastSenseEventClick.makeFixture(false);
-            fp.onEventMarkerClick_(fp.EventMarkerHandles_{1}, []);
+            [fp, ~, fig] = TestFastSenseEventClick.makeFixture(false);
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
+            tc.verifyGreaterThanOrEqual(numel(markers), 1);
+            fp.onEventMarkerClick_(markers{1}, []);
             fp.onKeyPressForDetailsDismiss_(struct('Key', 'escape'));
             tc.verifyTrue(isempty(fp.hEventDetails_));
             delete(fp.hFigure);
@@ -60,8 +71,10 @@ classdef TestFastSenseEventClick < matlab.unittest.TestCase
 
         function testXButtonDismissesDetailsPanel(tc)
             if ~usejava('jvm'), tc.assumeFail('JVM required'); end
-            [fp, ~] = TestFastSenseEventClick.makeFixture(false);
-            fp.onEventMarkerClick_(fp.EventMarkerHandles_{1}, []);
+            [fp, ~, fig] = TestFastSenseEventClick.makeFixture(false);
+            markers = TestFastSenseEventClick.findRoundMarkers(fig);
+            tc.verifyGreaterThanOrEqual(numel(markers), 1);
+            fp.onEventMarkerClick_(markers{1}, []);
             fp.closeEventDetails_();       % simulate X-button Callback
             tc.verifyTrue(isempty(fp.hEventDetails_));
             delete(fp.hFigure);
@@ -77,9 +90,26 @@ classdef TestFastSenseEventClick < matlab.unittest.TestCase
     end
 
     methods (Static)
-        function [fp, ev] = makeFixture(isOpen)
-            f = figure('Visible', 'off');
-            ax = axes('Parent', f);
+        function handles = findRoundMarkers(fig)
+            %FINDROUNDMARKERS Find all round (Marker='o', LineStyle='none') line handles.
+            %   Uses findall to avoid private-property access (Octave compat).
+            allLines = findall(fig, 'Type', 'line');
+            handles = {};
+            for ci = 1:numel(allLines)
+                try
+                    mk = get(allLines(ci), 'Marker');
+                    ls = get(allLines(ci), 'LineStyle');
+                    if strcmp(mk, 'o') && strcmp(ls, 'none')
+                        handles{end+1} = allLines(ci); %#ok<AGROW>
+                    end
+                catch
+                end
+            end
+        end
+
+        function [fp, ev, fig] = makeFixture(isOpen)
+            fig = figure('Visible', 'off');
+            ax = axes('Parent', fig);
             parent = SensorTag('p');
             parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
             es = EventStore('');

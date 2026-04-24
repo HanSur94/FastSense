@@ -3,16 +3,35 @@ function test_fastsense_event_click
     addpath(root); install();
     nPassed = 0; nFailed = 0;
 
-    % --- Build fixture inline (no nested functions - Octave SIGILL safety) ---
+    % --- Helper: find round marker handles (Octave-compat via findall on figure) ---
+    % (EventMarkerHandles_ is private; use findall for Octave compat)
+    function handles = findRoundMarkers(fig)
+        allLines = findall(fig, 'Type', 'line');
+        handles = {};
+        for ci = 1:numel(allLines)
+            try
+                mk = get(allLines(ci), 'Marker');
+                ls = get(allLines(ci), 'LineStyle');
+                if strcmp(mk, 'o') && strcmp(ls, 'none')
+                    handles{end+1} = allLines(ci); %#ok<AGROW>
+                end
+            catch
+            end
+        end
+    end
 
-    % testPerMarkerButtonDownFcnIsSet
-    try
-        f = figure('Visible', 'off');
-        ax = axes('Parent', f);
+    % --- Build fixture ---
+    function [fp_, ev_, fig_] = mkFixture(isOpen)
+        fig_ = figure('Visible', 'off');
+        ax = axes('Parent', fig_);
         parent = SensorTag('p');
         parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
         es = EventStore('');
-        ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
+        if isOpen
+            ev_ = Event(3, NaN, 'p', 'hi', 5, 'upper'); ev_.IsOpen = true;
+        else
+            ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
+        end
         ev_.Severity = 2;
         es.append(ev_);
         ev_.TagKeys = {'p'};
@@ -22,11 +41,16 @@ function test_fastsense_event_click
         fp_.ShowEventMarkers = true;
         fp_.EventStore = es;
         fp_.render();
-        markers = fp_.EventMarkerHandles_;
-        assert(numel(markers) >= 1);
+    end
+
+    % testPerMarkerButtonDownFcnIsSet
+    try
+        [fp, ~, fig] = mkFixture(false);
+        markers = findRoundMarkers(fig);
+        assert(numel(markers) >= 1, 'Expected at least 1 round marker, got 0');
         bd = get(markers{1}, 'ButtonDownFcn');
-        assert(isa(bd, 'function_handle'));
-        delete(f);
+        assert(isa(bd, 'function_handle'), 'ButtonDownFcn must be a function_handle');
+        delete(fig);
         nPassed = nPassed + 1;
     catch err
         fprintf('    FAIL testPerMarkerButtonDownFcnIsSet: %s\n', err.message); nFailed = nFailed + 1;
@@ -34,26 +58,14 @@ function test_fastsense_event_click
 
     % testUserDataHoldsEventId
     try
-        f = figure('Visible', 'off');
-        ax = axes('Parent', f);
-        parent = SensorTag('p');
-        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
-        es = EventStore('');
-        ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
-        ev_.Severity = 2;
-        es.append(ev_);
-        ev_.TagKeys = {'p'};
-        EventBinding.attach(ev_.Id, 'p');
-        fp_ = FastSense('Parent', ax);
-        fp_.addTag(parent);
-        fp_.ShowEventMarkers = true;
-        fp_.EventStore = es;
-        fp_.render();
-        markers = fp_.EventMarkerHandles_;
+        [fp, ev, fig] = mkFixture(false);
+        markers = findRoundMarkers(fig);
+        assert(numel(markers) >= 1, 'Expected at least 1 round marker');
         ud = get(markers{1}, 'UserData');
-        assert(isstruct(ud));
-        assert(strcmp(ud.eventId, ev_.Id));
-        delete(f);
+        assert(isstruct(ud), 'UserData must be a struct');
+        assert(isfield(ud, 'eventId'), 'UserData must have eventId field');
+        assert(strcmp(ud.eventId, ev.Id), 'UserData.eventId must match Event.Id');
+        delete(fig);
         nPassed = nPassed + 1;
     catch err
         fprintf('    FAIL testUserDataHoldsEventId: %s\n', err.message); nFailed = nFailed + 1;
@@ -61,25 +73,12 @@ function test_fastsense_event_click
 
     % testOpenEventMarkerIsHollow
     try
-        f = figure('Visible', 'off');
-        ax = axes('Parent', f);
-        parent = SensorTag('p');
-        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
-        es = EventStore('');
-        ev_ = Event(3, NaN, 'p', 'hi', 5, 'upper'); ev_.IsOpen = true;
-        ev_.Severity = 2;
-        es.append(ev_);
-        ev_.TagKeys = {'p'};
-        EventBinding.attach(ev_.Id, 'p');
-        fp_ = FastSense('Parent', ax);
-        fp_.addTag(parent);
-        fp_.ShowEventMarkers = true;
-        fp_.EventStore = es;
-        fp_.render();
-        markers = fp_.EventMarkerHandles_;
+        [fp, ~, fig] = mkFixture(true);
+        markers = findRoundMarkers(fig);
+        assert(numel(markers) >= 1, 'Expected at least 1 round marker');
         faceColor = get(markers{1}, 'MarkerFaceColor');
-        assert(strcmp(faceColor, 'none'));
-        delete(f);
+        assert(strcmp(faceColor, 'none'), 'Open event marker must be hollow (MarkerFaceColor=none)');
+        delete(fig);
         nPassed = nPassed + 1;
     catch err
         fprintf('    FAIL testOpenEventMarkerIsHollow: %s\n', err.message); nFailed = nFailed + 1;
@@ -87,25 +86,13 @@ function test_fastsense_event_click
 
     % testClosedEventMarkerIsFilled
     try
-        f = figure('Visible', 'off');
-        ax = axes('Parent', f);
-        parent = SensorTag('p');
-        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
-        es = EventStore('');
-        ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
-        ev_.Severity = 2;
-        es.append(ev_);
-        ev_.TagKeys = {'p'};
-        EventBinding.attach(ev_.Id, 'p');
-        fp_ = FastSense('Parent', ax);
-        fp_.addTag(parent);
-        fp_.ShowEventMarkers = true;
-        fp_.EventStore = es;
-        fp_.render();
-        markers = fp_.EventMarkerHandles_;
+        [fp, ~, fig] = mkFixture(false);
+        markers = findRoundMarkers(fig);
+        assert(numel(markers) >= 1, 'Expected at least 1 round marker');
         faceColor = get(markers{1}, 'MarkerFaceColor');
-        assert(~ischar(faceColor) || ~strcmp(faceColor, 'none'));
-        delete(f);
+        assert(~ischar(faceColor) || ~strcmp(faceColor, 'none'), ...
+            'Closed event marker must be filled (MarkerFaceColor != none)');
+        delete(fig);
         nPassed = nPassed + 1;
     catch err
         fprintf('    FAIL testClosedEventMarkerIsFilled: %s\n', err.message); nFailed = nFailed + 1;
