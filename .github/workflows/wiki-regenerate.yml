@@ -1,0 +1,102 @@
+name: Regenerate Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'libs/**/*.m'
+      - 'examples/**/*.m'
+      - 'scripts/generate_wiki.py'
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Generation mode'
+        type: choice
+        options: [all, changed]
+        default: all
+      dry_run:
+        description: 'Dry run (no PR)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: wiki-regen-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic
+
+      - name: Determine changed files
+        id: changed
+        run: |
+          set -euo pipefail
+          MODE="${{ inputs.mode || (github.event_name == 'schedule' && 'all' || 'changed') }}"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+          if [ "$MODE" = "all" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          FILES=$(git diff --name-only HEAD^ HEAD -- 'libs/**/*.m' 'examples/**/*.m' 'scripts/generate_wiki.py' | tr '\n' ' ')
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "Changed files: $FILES"
+
+      - name: Generate wiki (all)
+        if: steps.changed.outputs.mode == 'all'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 scripts/generate_wiki.py --all
+
+      - name: Generate wiki (changed)
+        if: steps.changed.outputs.mode == 'changed' && steps.changed.outputs.files != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 scripts/generate_wiki.py --changed-files ${{ steps.changed.outputs.files }}
+
+      - name: Check for wiki changes
+        id: diff
+        run: |
+          if git diff --quiet wiki/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No wiki changes — exiting."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update PR
+        if: steps.diff.outputs.changed == 'true' && inputs.dry_run != true
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: wiki-update/${{ github.sha }}
+          commit-message: 'docs: regenerate wiki pages'
+          title: 'docs: regenerate wiki pages'
+          body: |
+            Auto-regenerated wiki pages.
+
+            - Trigger: `${{ github.event_name }}`
+            - Mode: `${{ steps.changed.outputs.mode }}`
+            - Source commit: ${{ github.sha }}
+
+            Merging this PR triggers `sync-wiki.yml`, which pushes `wiki/` to the `FastSense.wiki` repo.
+          labels: |
+            docs
+            auto-generated
