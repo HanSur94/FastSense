@@ -134,6 +134,15 @@ classdef DashboardWidget < handle
             tMin = inf; tMax = -inf;
         end
 
+        function series = getPreviewSeries(~, ~)
+        %GETPREVIEWSERIES Optional preview data for the time-range envelope.
+        %   series = getPreviewSeries(obj, nBuckets) returns a struct with
+        %   fields xCenters, yMin, yMax — each a 1xnBuckets row vector;
+        %   yMin/yMax MUST be normalized to [0,1] within the widget's own
+        %   y-range. Base returns [] to opt out of the preview envelope.
+            series = [];
+        end
+
         function lines = asciiRender(obj, width, height)
         %ASCIIRENDER Return ASCII representation of this widget.
         %   lines = asciiRender(obj, width, height) returns a cell array

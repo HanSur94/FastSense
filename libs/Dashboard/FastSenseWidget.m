@@ -327,6 +327,121 @@ classdef FastSenseWidget < DashboardWidget
             end
         end
 
+        function series = getPreviewSeries(obj, nBuckets)
+        %GETPREVIEWSERIES Per-bucket min/max preview for the dashboard envelope.
+        %   series = getPreviewSeries(obj, nBuckets) returns a struct with
+        %   fields xCenters, yMin, yMax — each a 1xnBuckets row vector; yMin
+        %   and yMax are normalized into [0,1] across the widget's own
+        %   current y-range. Returns [] when no data is bound or when the
+        %   sample count is too low to downsample meaningfully.
+        %
+        %   Uses minmax_core_mex (or a pure-MATLAB fallback) for the same
+        %   downsampling strategy FastSense rendering uses.
+            series = [];
+            try
+                if nargin < 2 || isempty(nBuckets) || ~isfinite(nBuckets) || nBuckets < 1
+                    return;
+                end
+                nBuckets = double(floor(nBuckets));
+
+                % Fetch raw [x, y] from Tag, or from XData/YData.
+                x = []; y = [];
+                if ~isempty(obj.Tag)
+                    try
+                        [x, y] = obj.Tag.getXY();
+                    catch
+                        x = []; y = [];
+                    end
+                elseif ~isempty(obj.XData) && ~isempty(obj.YData)
+                    x = obj.XData;
+                    y = obj.YData;
+                end
+
+                if isempty(x) || isempty(y) || numel(x) ~= numel(y)
+                    return;
+                end
+                if numel(x) < nBuckets
+                    % Not enough points to downsample into this many buckets.
+                    return;
+                end
+
+                % Ensure row vectors of doubles (minmax_core_mex requires double).
+                x = double(x(:).');
+                y = double(y(:).');
+
+                % Drop NaN pairs (the preview is best-effort, no segmenting).
+                nanMask = isnan(x) | isnan(y);
+                if any(nanMask)
+                    x = x(~nanMask);
+                    y = y(~nanMask);
+                    if numel(x) < nBuckets
+                        return;
+                    end
+                end
+
+                % Call MEX when available; otherwise compute per-bucket
+                % min/max inline (pure-MATLAB fallback identical in shape).
+                useMex = (exist('minmax_core_mex', 'file') == 3);
+                if useMex
+                    try
+                        [xOut, yOut] = minmax_core_mex(x, y, nBuckets);
+                    catch
+                        useMex = false;
+                    end
+                end
+                if ~useMex
+                    [xOut, yOut] = localMinMaxBuckets_(x, y, nBuckets);
+                end
+
+                if numel(xOut) ~= 2 * nBuckets || numel(yOut) ~= 2 * nBuckets
+                    return;
+                end
+
+                % Interleaved (min,max) or (max,min) pairs per bucket.
+                xPairs = reshape(xOut, 2, nBuckets);
+                yPairs = reshape(yOut, 2, nBuckets);
+                yMinB  = min(yPairs, [], 1);
+                yMaxB  = max(yPairs, [], 1);
+                xCenters = (xPairs(1, :) + xPairs(2, :)) / 2;
+
+                % Determine y-range: prefer current axes YLim; fallback to data.
+                yRange = [];
+                if ~isempty(obj.FastSenseObj) && ~isempty(obj.FastSenseObj.hAxes) ...
+                        && ishandle(obj.FastSenseObj.hAxes)
+                    try
+                        yl = get(obj.FastSenseObj.hAxes, 'YLim');
+                        if numel(yl) == 2 && all(isfinite(yl)) && yl(2) > yl(1)
+                            yRange = [yl(1), yl(2)];
+                        end
+                    catch
+                    end
+                end
+                if isempty(yRange)
+                    yMn = min(y); yMx = max(y);
+                    if isfinite(yMn) && isfinite(yMx) && yMx > yMn
+                        yRange = [yMn, yMx];
+                    end
+                end
+                if isempty(yRange) || (yRange(2) - yRange(1)) == 0
+                    return;
+                end
+
+                denom = yRange(2) - yRange(1);
+                yMinN = (yMinB - yRange(1)) / denom;
+                yMaxN = (yMaxB - yRange(1)) / denom;
+                % Clamp to [0, 1].
+                yMinN = max(0, min(1, yMinN));
+                yMaxN = max(0, min(1, yMaxN));
+
+                series = struct('xCenters', xCenters, ...
+                                'yMin',     yMinN, ...
+                                'yMax',     yMaxN);
+            catch
+                % Best-effort: swallow any error and opt out of envelope.
+                series = [];
+            end
+        end
+
         function t = getType(~)
             t = 'fastsense';
         end
@@ -614,4 +729,61 @@ function applyThresholds_(fp, spec)
             end
         end
     end
+end
+
+function [xOut, yOut] = localMinMaxBuckets_(x, y, nb)
+    %LOCALMINMAXBUCKETS_ Pure-MATLAB fallback for minmax_core_mex.
+    %   Returns [xOut, yOut] of length 2*nb interleaved as (min, max) or
+    %   (max, min) per bucket, preserving X monotonicity. This mirrors the
+    %   behavior of FastSense's private minmax_core without depending on
+    %   its private folder.
+    n = numel(y);
+    bucketSize = floor(n / nb);
+    if bucketSize < 1
+        xOut = [];
+        yOut = [];
+        return;
+    end
+    usable = bucketSize * nb;
+    yMat = reshape(y(1:usable), bucketSize, nb);
+
+    [yMinVals, iMin] = min(yMat, [], 1);
+    [yMaxVals, iMax] = max(yMat, [], 1);
+
+    offsets = (0:nb-1) * bucketSize;
+    gMin = iMin + offsets;
+    gMax = iMax + offsets;
+
+    if usable < n
+        remY = y(usable+1:end);
+        [remMinVal, remMinIdx] = min(remY);
+        [remMaxVal, remMaxIdx] = max(remY);
+        if remMinVal < yMinVals(nb)
+            yMinVals(nb) = remMinVal;
+            gMin(nb) = remMinIdx + usable;
+        end
+        if remMaxVal > yMaxVals(nb)
+            yMaxVals(nb) = remMaxVal;
+            gMax(nb) = remMaxIdx + usable;
+        end
+    end
+
+    xMinVals = x(gMin);
+    xMaxVals = x(gMax);
+    minFirst = gMin <= gMax;
+
+    xOut = zeros(1, 2 * nb);
+    yOut = zeros(1, 2 * nb);
+    odd  = 1:2:2*nb;
+    even = 2:2:2*nb;
+
+    xOut(odd(minFirst))   = xMinVals(minFirst);
+    yOut(odd(minFirst))   = yMinVals(minFirst);
+    xOut(even(minFirst))  = xMaxVals(minFirst);
+    yOut(even(minFirst))  = yMaxVals(minFirst);
+
+    xOut(odd(~minFirst))  = xMaxVals(~minFirst);
+    yOut(odd(~minFirst))  = yMaxVals(~minFirst);
+    xOut(even(~minFirst)) = xMinVals(~minFirst);
+    yOut(even(~minFirst)) = yMinVals(~minFirst);
 end
