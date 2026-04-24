@@ -26,49 +26,56 @@ FastPlot/
 │   │   ├── build_mex.m               # MEX compilation script
 │   │   └── private/                  # Internal algorithms + MEX sources
 │   ├── SensorThreshold/              # Sensor and threshold system
-│   │   ├── Sensor.m
-│   │   ├── StateChannel.m
-│   │   ├── ThresholdRule.m
-│   │   ├── SensorRegistry.m
-│   │   ├── ExternalSensorRegistry.m
+│   │   ├── Tag.m                     # Abstract tag base class
+│   │   ├── SensorTag.m               # Concrete sensor data carrier
+│   │   ├── StateTag.m                # Discrete state signals
+│   │   ├── MonitorTag.m              # Binary alarm/ok derived signals
+│   │   ├── CompositeTag.m            # Aggregate multiple tags
+│   │   ├── TagRegistry.m             # Singleton catalog
+│   │   ├── BatchTagPipeline.m        # Raw data to per-tag .mat
+│   │   ├── LiveTagPipeline.m         # Timer-driven tag pipeline
 │   │   └── private/                  # Resolution algorithms
 │   ├── EventDetection/               # Event detection and viewer
-│   │   ├── Event.m
-│   │   ├── EventDetector.m
-│   │   ├── EventViewer.m
-│   │   ├── LiveEventPipeline.m
-│   │   ├── NotificationService.m
-│   │   ├── EventStore.m
-│   │   ├── EventConfig.m
-│   │   ├── IncrementalEventDetector.m
+│   │   ├── Event.m                   # Event data structure
+│   │   ├── EventDetector.m           # Core detection logic
+│   │   ├── EventViewer.m             # Interactive Gantt chart
+│   │   ├── LiveEventPipeline.m       # Live monitoring orchestration
+│   │   ├── NotificationService.m     # Email alerts
+│   │   ├── EventStore.m              # .mat file persistence
+│   │   ├── EventConfig.m             # Configuration
+│   │   ├── IncrementalEventDetector.m# Stateful incremental detection
 │   │   ├── DataSource.m              # Abstract data source
 │   │   ├── MatFileDataSource.m       # File-based data source
 │   │   ├── MockDataSource.m          # Test data generation
 │   │   ├── NotificationRule.m        # Email notification rules
 │   │   └── private/                  # Event grouping algorithms
 │   ├── Dashboard/                    # Dashboard engine (serializable)
-│   │   ├── DashboardEngine.m
-│   │   ├── DashboardBuilder.m
-│   │   ├── DashboardLayout.m
-│   │   ├── DashboardSerializer.m
-│   │   ├── DashboardTheme.m
-│   │   ├── DashboardToolbar.m
+│   │   ├── DashboardEngine.m         # Top-level orchestrator
+│   │   ├── DashboardBuilder.m        # Edit mode overlay
+│   │   ├── DashboardLayout.m         # 24-column responsive grid
+│   │   ├── DashboardSerializer.m     # JSON save/load and .m export
+│   │   ├── DashboardTheme.m          # Theme system
+│   │   ├── DashboardToolbar.m        # Global toolbar
 │   │   ├── DashboardWidget.m         # Abstract widget base
-│   │   ├── FastSenseWidget.m
-│   │   ├── GaugeWidget.m
-│   │   ├── NumberWidget.m
-│   │   ├── StatusWidget.m
-│   │   ├── TextWidget.m
-│   │   ├── TableWidget.m
-│   │   ├── RawAxesWidget.m
-│   │   ├── EventTimelineWidget.m
-│   │   ├── GroupWidget.m             # Collapsible/tabbed widget groups
+│   │   ├── FastSenseWidget.m         # FastSense wrapper widget
+│   │   ├── GaugeWidget.m             # Arc/donut/bar/thermometer gauge
+│   │   ├── NumberWidget.m            # Big number display
+│   │   ├── StatusWidget.m            # Colored dot indicator
+│   │   ├── TextWidget.m              # Static text label
+│   │   ├── DividerWidget.m           # Horizontal divider line
+│   │   ├── TableWidget.m             # Tabular data display
+│   │   ├── RawAxesWidget.m           # User plot function wrapper
+│   │   ├── EventTimelineWidget.m     # Colored event bars
+│   │   ├── GroupWidget.m             # Collapsible/tabbed containers
 │   │   ├── MultiStatusWidget.m       # Grid of status indicators
-│   │   ├── BarChartWidget.m
-│   │   ├── ScatterWidget.m
-│   │   ├── HeatmapWidget.m
-│   │   ├── HistogramWidget.m
-│   │   ├── ImageWidget.m
+│   │   ├── BarChartWidget.m          # Bar chart display
+│   │   ├── ScatterWidget.m           # Scatter plot
+│   │   ├── HeatmapWidget.m           # 2D heatmap
+│   │   ├── HistogramWidget.m         # Histogram display
+│   │   ├── ImageWidget.m             # Image display
+│   │   ├── IconCardWidget.m          # Compact card with icon
+│   │   ├── ChipBarWidget.m           # Horizontal status chips
+│   │   ├── SparklineCardWidget.m     # KPI with mini chart
 │   │   └── MarkdownRenderer.m        # HTML conversion for info panels
 │   └── WebBridge/                    # TCP server for web visualization
 │       ├── WebBridge.m
@@ -171,18 +178,67 @@ Interactive Display
 - **Disk mode**: Data chunked into SQLite database via `FastSenseDataStore`
 - **Auto mode**: Switches to disk when data exceeds `MemoryLimit` (default 500MB)
 
-## Sensor Threshold Resolution
+## Tag System Architecture
 
-The `Sensor.resolve()` algorithm is segment-based:
+The v2.0 Tag system provides a unified domain model for sensor data, state signals, and derived monitoring:
 
-1. Collect all state-change timestamps from all StateChannels
-2. For each segment between state changes:
-   - Evaluate which ThresholdRules match the current state
-   - Group rules with identical conditions
-3. Assign threshold values per segment
-4. Detect violations using SIMD-accelerated comparison
+### Tag Hierarchy
+```
+Tag (abstract base)
+├── SensorTag       — time-series sensor data
+├── StateTag        — discrete state signals with ZOH lookup
+├── MonitorTag      — binary alarm/ok derived from parent tags
+└── CompositeTag    — aggregates multiple tags (AND/OR/MAJORITY/etc.)
+```
 
-Complexity: O(S × R) where S = state segments and R = rules, instead of O(N × R) per-point evaluation.
+### Tag Registry
+- **TagRegistry**: Singleton catalog managing all Tag instances
+- Key-based lookup with hard-error on duplicates (unlike ThresholdRegistry)
+- Two-phase deserialization for complex references (CompositeTag children)
+- Supports finding by label, kind, or custom predicate
+
+### Data Pipelines
+- **BatchTagPipeline**: Synchronous raw-data → per-tag .mat conversion
+- **LiveTagPipeline**: Timer-driven polling with incremental updates
+- Shared parsers for CSV/TSV/DAT files with automatic delimiter detection
+
+## Event Detection Architecture
+
+The event detection system provides real-time threshold violation monitoring with configurable notifications and data persistence.
+
+### Core Components
+
+```
+LiveEventPipeline
+├── MonitorTargets           — containers.Map of key → MonitorTag
+├── DataSourceMap            — Maps sensor keys to data sources
+├── EventStore              — Thread-safe .mat file persistence
+├── NotificationService     — Rule-based email alerts
+└── EventViewer            — Interactive Gantt chart + filterable table
+```
+
+### Data Sources
+
+- **MatFileDataSource**: Polls .mat files for new data
+- **MockDataSource**: Generates realistic test signals with violations
+- **Custom sources**: Implement `DataSource.fetchNew()` interface
+
+### Event Detection Flow
+
+1. `LiveEventPipeline.runCycle()` polls all data sources
+2. New data triggers `MonitorTag.appendData()` for streaming incremental processing
+3. MonitorTag evaluates condition functions on parent tag data
+4. Violations are grouped into events with debouncing (`MinDuration`)
+5. Events are stored via `EventStore.append()` (atomic .mat writes)
+6. `NotificationService` sends rule-based email alerts with plot snapshots
+7. Active `EventViewer` instances auto-refresh to show new events
+
+### Escalation Logic
+
+When `EscalateSeverity` is enabled, events are promoted to the highest violated threshold:
+- A violation starts at "Warning" level
+- If "Alarm" threshold is also crossed, the event is escalated to "Alarm"
+- The event retains the highest severity level encountered
 
 ## Disk-Backed Data Storage
 
@@ -196,14 +252,6 @@ For datasets exceeding available memory (100M+ points), `FastSenseDataStore` pro
 The bulk write path uses `build_store_mex` — a single C call that writes all chunks with SIMD-accelerated Y min/max computation, replacing ~20K mksqlite round-trips.
 
 If SQLite is unavailable, a binary file fallback is used automatically.
-
-## Theme Inheritance
-
-```
-Element override  >  Tile theme  >  Figure theme  >  'default' preset
-```
-
-Each level fills in only the fields it specifies; unspecified fields cascade from the next level.
 
 ## Dashboard Architecture
 
@@ -222,11 +270,15 @@ DashboardEngine
 ├── DashboardBuilder      — Edit mode overlay (drag/resize, palette, properties)
 ├── DashboardSerializer   — JSON save/load and .m script export
 └── Widgets (DashboardWidget subclasses)
-    ├── FastSenseWidget         — FastSense instance (Sensor/DataStore/inline)
+    ├── FastSenseWidget         — FastSense instance (Tag/DataStore/inline)
     ├── GaugeWidget            — Arc/donut/bar/thermometer gauge
     ├── NumberWidget            — Big number with trend arrow
     ├── StatusWidget           — Colored dot indicator
+    ├── IconCardWidget         — Compact card with colored icon
+    ├── ChipBarWidget          — Horizontal status chip row
+    ├── SparklineCardWidget    — KPI with mini sparkline chart
     ├── TextWidget             — Static label or header
+    ├── DividerWidget          — Horizontal divider line
     ├── TableWidget            — uitable display
     ├── RawAxesWidget          — User-supplied plot function
     ├── EventTimelineWidget    — Colored event bars on timeline
@@ -248,7 +300,7 @@ DashboardEngine
 
 When `startLive()` is called, a timer fires at `LiveInterval` seconds:
 1. `updateLiveTimeRange()` expands time bounds from new data
-2. Each widget's `refresh()` is called (sensor-bound widgets re-read `Sensor.Y(end)`)
+2. Each widget's `refresh()` is called (sensor-bound widgets re-read latest data)
 3. The toolbar timestamp label is updated
 4. Current slider positions are re-applied to the updated time range
 
@@ -266,46 +318,16 @@ Clicking "Edit" in the toolbar creates a `DashboardBuilder` instance:
 
 `DashboardSerializer` handles round-trip serialization:
 - **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually (MATLAB's `jsonencode` cannot handle cell arrays of mixed structs).
-- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method. An optional `SensorResolver` function handle re-binds Sensor objects by name.
+- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method.
 - **Export script:** generates a `.m` file with `DashboardEngine` constructor calls and `addWidget` calls for each widget.
 
-## Event Detection Architecture
-
-The event detection system provides real-time threshold violation monitoring with configurable notifications and data persistence.
-
-### Core Components
+## Theme Inheritance
 
 ```
-LiveEventPipeline
-├── DataSourceMap          — Maps sensor keys to data sources
-├── IncrementalEventDetector — Tracks per-sensor state and open events
-├── EventStore            — Thread-safe .mat file persistence
-├── NotificationService   — Rule-based email alerts
-└── EventViewer          — Interactive Gantt chart + filterable table
+Element override  >  Tile theme  >  Figure theme  >  'default' preset
 ```
 
-### Data Sources
-
-- **MatFileDataSource**: Polls .mat files for new data
-- **MockDataSource**: Generates realistic test signals with violations
-- **Custom sources**: Implement `DataSource.fetchNew()` interface
-
-### Event Detection Flow
-
-1. `LiveEventPipeline.runCycle()` polls all data sources
-2. New data is passed to `IncrementalEventDetector.process()`
-3. Sensor state is evaluated via `Sensor.resolve()`
-4. Violations are grouped into events with debouncing (`MinDuration`)
-5. Events are stored via `EventStore.append()` (atomic .mat writes)
-6. `NotificationService` sends rule-based email alerts with plot snapshots
-7. Active `EventViewer` instances auto-refresh to show new events
-
-### Escalation Logic
-
-When `EscalateSeverity` is enabled, events are promoted to the highest violated threshold:
-- A violation starts at "Warning" level
-- If "Alarm" threshold is also crossed, the event is escalated to "Alarm"
-- The event retains the highest severity level encountered
+Each level fills in only the fields it specifies; unspecified fields cascade from the next level.
 
 ## Progress Indication
 

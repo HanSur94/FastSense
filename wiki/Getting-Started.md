@@ -29,7 +29,7 @@ fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-Available presets: 'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'. See [[API Reference: Themes]] for customization options.
+Available presets: 'light', 'dark'. Legacy names ('default', 'industrial', 'scientific', 'ocean') are aliased to 'light'. See [[Themes|API Reference: Themes]] for customization options.
 
 ## 3. Thresholds and Violations
 
@@ -46,7 +46,7 @@ Red circles appear where data exceeds the threshold.
 ## 4. Multiple Lines
 
 ```matlab
-fp = FastSense('Theme', 'scientific');
+fp = FastSense('Theme', 'dark');
 fp.addLine(x, sin(x), 'DisplayName', 'Channel A');
 fp.addLine(x, cos(x), 'DisplayName', 'Channel B');
 fp.addLine(x, sin(2*x) * 0.5, 'DisplayName', 'Channel C');
@@ -105,7 +105,7 @@ fig.renderAll();
 tb = FastSenseToolbar(fig);
 ```
 
-Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Refresh, Live Mode, Metadata, Violations.
+Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Export Data, Refresh, Live Mode, Metadata, Violations.
 
 ## 8. Linked Axes
 
@@ -142,13 +142,15 @@ n2 = 1e6;
 x2 = linspace(1, 1000, n2);
 y2 = exp(x2 / 200) .* (1 + 0.1 * randn(1, n2));
 
-fp2 = FastSense();
+fp2 = FastSense('YScale', 'log');
 fp2.addLine(x2, y2, 'DisplayName', 'Exponential Growth');
-fp2.setScale('YScale', 'log');
 fp2.render();
 ```
 
-Use `setScale('XScale', 'log')` for logarithmic X-axis or both together.
+Use `setScale('XScale', 'log')` for logarithmic X-axis or both together:
+```matlab
+fp.setScale('XScale', 'log', 'YScale', 'log');
+```
 
 ## 11. Updating Data
 
@@ -193,10 +195,52 @@ FastSense.distFig();
 FastSense.distFig('Rows', 2, 'Cols', 3);
 ```
 
+## 15. Dashboard Tabs
+
+```matlab
+% Create a tabbed dock with multiple dashboards
+dock = FastSenseDock('Theme', 'dark', 'Name', 'Control Room');
+
+% First dashboard - Overview
+fig1 = FastSenseGrid(2, 2, 'ParentFigure', dock.hFigure);
+fig1.tile(1).addLine(x, sin(x), 'DisplayName', 'Pressure');
+fig1.tile(2).addLine(x, cos(x), 'DisplayName', 'Temperature');
+dock.addTab(fig1, 'Overview');
+
+% Second dashboard - Diagnostics  
+fig2 = FastSenseGrid(1, 1, 'ParentFigure', dock.hFigure);
+fig2.tile(1).addLine(x, randn(size(x)), 'DisplayName', 'Vibration');
+dock.addTab(fig2, 'Diagnostics');
+
+dock.render();
+```
+
+## 16. Mixed Tile Types
+
+```matlab
+% Combine FastSense plots with raw MATLAB axes
+fig = FastSenseGrid(2, 2, 'Theme', 'dark');
+
+% FastSense tile (optimized for large data)
+fig.tile(1).addLine(x, y, 'DisplayName', 'Time Series');
+
+% Raw axes for bar chart
+ax = fig.axes(2); 
+bar(ax, 1:10, randn(10,1));
+ax.Title.String = 'Bar Chart';
+
+% Raw axes for scatter plot
+ax = fig.axes(3);
+scatter(ax, randn(100,1), randn(100,1));
+ax.Title.String = 'Scatter';
+
+fig.renderAll();
+```
+
 ## Next Steps
 
 - [[FastPlot|API Reference: FastPlot]] — full constructor options, properties, methods
-- [[Dashboard|API Reference: Dashboard]] — tiled and tabbed layouts
+- [[Dashboard|API Reference: Dashboard]] — tiled and tabbed layouts  
 - [[Sensors|API Reference: Sensors]] — state-dependent thresholds
 - [[Event Detection|API Reference: Event Detection]] — event detection and viewer
 - [[Live Mode Guide]] — live data polling

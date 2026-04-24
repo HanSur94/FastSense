@@ -73,7 +73,7 @@ fp.startLive('data.mat', @updateFcn, 'Interval', 5);     % Poll every 5 seconds
 
 ## Live Dashboard
 
-FastSenseGrid supports live mode across all tiles:
+[[Dashboard|API Reference: Dashboard]] supports live mode across all tiles:
 
 ```matlab
 fig = FastSenseGrid(2, 2, 'Theme', 'dark');
@@ -123,32 +123,26 @@ fig.MetadataTileIndex = 1;   % which tile to attach to
 
 ---
 
-## Live Event Detection
+## Tabbed Dock Live Mode
 
-Combine live mode with event detection for real-time monitoring using the LiveEventPipeline:
+[[FastSenseDock]] supports live mode across all tabs in the dock:
 
 ```matlab
-% Create sensors with thresholds
-tempSensor = Sensor('temperature', 'Name', 'Temperature');
-tempSensor.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
-tempSensor.addThresholdRule(struct(), 82, 'Direction', 'upper', 'Label', 'Hi Alarm');
-tempSensor.resolve();
+dock = FastSenseDock('Theme', 'dark', 'Name', 'Live Dashboard');
 
-sensors = containers.Map();
-sensors('temperature') = tempSensor;
+fig1 = FastSenseGrid(2, 1, 'ParentFigure', dock.hFigure);
+fig1.tile(1).addLine(x, y1); fig1.tile(2).addLine(x, y2);
+dock.addTab(fig1, 'Temperature');
 
-% Configure data sources
-dsMap = DataSourceMap();
-dsMap.add('temperature', MockDataSource('BaseValue', 70, 'NoiseStd', 2));
+fig2 = FastSenseGrid(1, 1, 'ParentFigure', dock.hFigure);
+fig2.tile(1).addLine(x, y3);
+dock.addTab(fig2, 'Pressure');
 
-% Set up pipeline with event store
-pipeline = LiveEventPipeline(sensors, dsMap, ...
-    'EventFile', 'events.mat', ...
-    'Interval', 15, ...
-    'MinDuration', 0.5);
+dock.render();
 
-% Start live event detection
-pipeline.start();
+% Each tab can have its own live source and update function
+fig1.startLive('temp_data.mat', @updateTempDashboard);
+fig2.startLive('pressure_data.mat', @updatePressureDashboard);
 ```
 
 ---
@@ -189,7 +183,7 @@ fig.refresh();
 
 ## Toolbar Integration
 
-The [[FastSenseToolbar|API Reference: FastSenseToolbar]] provides a Live Mode button:
+The [[API Reference: Utilities|FastSenseToolbar]] provides a Live Mode button:
 
 ```matlab
 tb = FastSenseToolbar(fp);

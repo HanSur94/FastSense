@@ -42,8 +42,6 @@ FastPlot consists of five integrated libraries:
 ## Quick Start
 
 ```matlab
-install;
-
 % Basic plot with 10M points
 fp = FastSense('Theme', 'dark');
 x = linspace(0, 100, 1e7);
@@ -71,19 +69,19 @@ fig.renderAll();
 ```
 
 ```matlab
-% Sensor with state-dependent thresholds
-s = Sensor('pressure', 'Name', 'Chamber Pressure');
-s.X = linspace(0, 100, 1e6);
-s.Y = randn(1, 1e6) * 10 + 50;
+% Tag-based sensor with monitoring
+st = SensorTag('pressure', 'Name', 'Chamber Pressure');
+st.load('pressure_data.mat');  % loads X, Y arrays
 
-sc = StateChannel('machine');
-sc.X = [0 30 60 80]; sc.Y = [0 1 2 1];
-s.addStateChannel(sc);
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.resolve();
+% Create a monitor that triggers when pressure > 70
+m = MonitorTag('press_hi', st, @(x, y) y > 70);
+TagRegistry.register('pressure', st);
+TagRegistry.register('press_hi', m);
 
+% Plot with threshold visualization
 fp = FastSense('Theme', 'industrial');
-fp.addSensor(s, 'ShowThresholds', true);
+fp.addTag(st);
+fp.addTag(m);
 fp.render();
 ```
 

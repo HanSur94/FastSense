@@ -93,6 +93,10 @@ event.MaxValue       % maximum value during violation
 event.MeanValue      % mean value during violation
 event.RmsValue       % RMS value during violation
 event.StdValue       % standard deviation during violation
+
+% Phase 1012 properties
+event.IsOpen         % logical: true for ongoing events
+event.Notes          % char: free-form user annotation
 ```
 
 ## Live Event Detection
@@ -121,7 +125,7 @@ The [[Event Detection|LiveEventPipeline]] orchestrates continuous monitoring:
 
 ```matlab
 % Create pipeline
-pipeline = LiveEventPipeline(sensors, dsMap, ...
+pipeline = LiveEventPipeline(monitors, dsMap, ...
     'EventFile', 'live_events.mat', ...
     'Interval', 15, ...              % 15-second polling
     'MinDuration', 5, ...            % 5-second minimum events
@@ -136,22 +140,16 @@ pipeline.start();   % begins timer-driven cycles
 pipeline.stop();    % stops timer
 ```
 
-### Incremental Detection
+### Event Detection from Tags
 
-For live scenarios, use [[Event Detection|IncrementalEventDetector]] to maintain state between updates:
+The modern approach uses MonitorTag for event detection:
 
 ```matlab
-detector = IncrementalEventDetector('MinDuration', 2, ...
-    'EscalateSeverity', true);
+% Create a detector for tags/thresholds
+detector = EventDetector('MinDuration', 2, 'EscalateSeverity', true);
 
-% Process incremental updates
-newEvents = detector.process('temp_01', sensor, newX, newY, [], []);
-
-% Check for ongoing events
-if detector.hasOpenEvent('temp_01')
-    state = detector.getSensorState('temp_01');
-    fprintf('Open event since %.2f\n', state.openEventStart);
-end
+% Detect events from tag and threshold
+events = detector.detect(tag, threshold);
 ```
 
 ## Event Storage and Persistence
@@ -174,6 +172,22 @@ store.save();
 
 % Load from file (static method)
 [events, metadata, changed] = EventStore.loadFile('events.mat');
+```
+
+### Event-Tag Binding
+
+Events can be bound to tags using the EventBinding system:
+
+```matlab
+% Bind event to tag (many-to-many)
+EventBinding.attach(event.Id, tagKey);
+
+% Query bindings
+tagKeys = EventBinding.getTagKeysForEvent(event.Id);
+events = EventBinding.getEventsForTag(tagKey, eventStore);
+
+% Get events for tag from store (includes binding + fallback)
+events = store.getEventsForTag(tagKey);
 ```
 
 ### Auto-Save Configuration
@@ -315,6 +329,18 @@ sensor.addThresholdRule(struct(), 95, 'Label', 'HH Alarm');
 events = detectEventsFromSensor(sensor, detector);
 ```
 
+## Event Categories and Metadata
+
+Events support additional categorization and metadata:
+
+```matlab
+% Event categories
+event.Category = 'alarm';  % alarm|maintenance|process_change|manual_annotation
+event.Severity = 3;        % 1=ok/info, 2=warn, 3=alarm
+event.Id = 'evt_001';      % unique identifier
+event.TagKeys = {'zone_a', 'critical'};  % bound tag keys
+```
+
 ## Utility Functions
 
 ### Event Logging
@@ -338,14 +364,32 @@ printEventSummary(events);
 % Start | End | Duration | Sensor | Threshold | Dir | Peak | #Pts | Mean | Std
 ```
 
-### Bridging with Sensors
+## Data Source Types
 
-Convert from sensor violations to events:
+### MockDataSource
+
+Generate realistic test data with violations:
 
 ```matlab
-% Uses sensor.ResolvedViolations and sensor.ResolvedThresholds
-events = detectEventsFromSensor(sensor);
-events = detectEventsFromSensor(sensor, customDetector);
+mock = MockDataSource(...
+    'BaseValue', 100, ...
+    'NoiseStd', 1, ...
+    'DriftRate', 0, ...
+    'ViolationProbability', 0.005, ...
+    'ViolationAmplitude', 20, ...
+    'ViolationDuration', 60);
+```
+
+### MatFileDataSource
+
+Monitor live .mat files:
+
+```matlab
+fileDS = MatFileDataSource('data/sensor.mat', ...
+    'XVar', 'timestamps', ...
+    'YVar', 'values', ...
+    'StateXVar', 'state_times', ...
+    'StateYVar', 'state_values');
 ```
 
 ## Performance Considerations
@@ -353,7 +397,6 @@ events = detectEventsFromSensor(sensor, customDetector);
 - **MinDuration**: Use appropriate debounce times to filter noise
 - **MaxCallsPerEvent**: Limit callback overhead in high-frequency scenarios  
 - **Backup rotation**: Configure MaxBackups to manage disk usage
-- **Incremental detection**: Use IncrementalEventDetector for live scenarios to avoid reprocessing
 - **File polling**: Balance refresh intervals with system load
 - **Snapshot generation**: PNG creation can be expensive; use sparingly
 
@@ -377,7 +420,7 @@ events = cfg.runDetection();
 
 ```matlab
 % Set up complete live pipeline
-pipeline = LiveEventPipeline(sensors, dataSourceMap, ...
+pipeline = LiveEventPipeline(monitors, dataSourceMap, ...
     'EventFile', 'monitoring.mat', ...
     'Interval', 30);
 
@@ -401,6 +444,15 @@ criticalEvents = events(strcmp({events.ThresholdLabel}, 'critical'));
 
 printEventSummary(criticalEvents);
 ```
+
+## Migration Notes
+
+Several components have been updated in recent phases:
+
+- **Phase 1011**: `EventConfig.addSensor()` and `IncrementalEventDetector.process()` are no longer functional
+- **Phase 1007**: Use MonitorTag.appendData() for incremental detection
+- **Phase 1010**: Event-Tag binding system replaces direct sensor references
+- **Phase 1012**: Added IsOpen status and Notes for ongoing events
 
 ## See Also
 

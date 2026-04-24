@@ -35,7 +35,7 @@ fp.addLine(dt, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-The `XType` is set automatically to 'datenum' and `IsDatetime` becomes true.
+The `XType` is set automatically to 'datenum' and datetime detection triggers automatic formatting.
 
 ---
 
@@ -126,30 +126,6 @@ The [[API Reference: FastPlot|FastSenseToolbar]] provides `formatX()` for consis
 
 ---
 
-## Sensor Data with Datetime
-
-Sensor X data is typically in datenum format:
-
-```matlab
-s = Sensor('pressure', 'Name', 'Chamber Pressure');
-s.X = datenum(2024, 1, 1) + (0:999999) / 86400;
-s.Y = randn(1, 1000000) * 10 + 50;
-
-sc = StateChannel('machine');
-sc.X = datenum(2024, 1, 1) + [0 3 7 10];  % Day boundaries
-sc.Y = [0 1 2 1];
-s.addStateChannel(sc);
-
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.resolve();
-
-fp = FastSense('Theme', 'dark');
-fp.addSensor(s, 'ShowThresholds', true);
-fp.render();
-```
-
----
-
 ## SensorDetailPlot with Datetime
 
 The `SensorDetailPlot` component supports datetime X-axes through the `'XType'` parameter:
@@ -161,13 +137,8 @@ tEnd = datetime(2024, 3, 11, 10, 0, 0);
 tDatetime = linspace(tStart, tEnd, 72000);
 tNum = datenum(tDatetime);
 
-s = Sensor('pressure', 'Name', 'Line Pressure');
-s.X = tNum;
-s.Y = 4.2 + 0.6*sin(2*pi*tNum*24/1.5) + 0.15*randn(1, 72000);
-s.resolve();
-
 % Create detail plot with datetime formatting
-sdp = SensorDetailPlot(s, 'XType', 'datenum', 'Theme', 'light');
+sdp = SensorDetailPlot(tag, 'XType', 'datenum', 'Theme', 'light');
 sdp.render();
 ```
 
@@ -219,5 +190,5 @@ fp.render();
 ## See Also
 
 - [[API Reference: FastPlot]] — addLine() with XType parameter
-- [[API Reference: Sensors]] — Sensor X data
+- [[API Reference: Dashboard]] — FastSenseGrid with datetime
 - [[Examples]] — example_datetime.m, example_sensor_detail_datetime.m
