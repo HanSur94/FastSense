@@ -40,6 +40,39 @@ classdef EventStore < handle
             events = obj.events_;
         end
 
+        function closeEvent(obj, eventId, endTime, finalStats)
+            %CLOSEEVENT Close an open event in place.
+            %   es.closeEvent(eventId, endTime, finalStats) locates an open
+            %   Event by Id, delegates to ev.close(endTime, finalStats) for
+            %   the in-place mutation, and returns. finalStats may be []
+            %   (empty) to skip stats update. Does NOT call save() — consumers
+            %   decide when to persist (Pitfall 2).
+            %
+            %   Errors:
+            %     EventStore:unknownEventId — eventId not in store
+            %     EventStore:alreadyClosed  — forwarded from Event:closedOpenEvent
+            if nargin < 4, finalStats = []; end
+            if isempty(obj.events_)
+                error('EventStore:unknownEventId', ...
+                    'No events in store; id ''%s'' not found.', eventId);
+            end
+            eventId = char(eventId);
+            for i = 1:numel(obj.events_)
+                ev = obj.events_(i);
+                if isa(ev, 'Event') && strcmp(ev.Id, eventId)
+                    if ~ev.IsOpen
+                        error('EventStore:alreadyClosed', ...
+                            'Event ''%s'' is not open.', eventId);
+                    end
+                    % Delegate in-place mutation to Event.close (SSOT at D1).
+                    ev.close(endTime, finalStats);
+                    return;
+                end
+            end
+            error('EventStore:unknownEventId', ...
+                'Event id ''%s'' not found in store.', eventId);
+        end
+
         function events = getEventsForTag(obj, tagKey)
         %GETEVENTSFORTAG Return events bound to tagKey via EventBinding + carrier fallback.
         %   Primary path: uses EventBinding.getEventsForTag for events
