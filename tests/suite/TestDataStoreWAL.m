@@ -5,13 +5,21 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
             install();
         end
     end
+    methods (TestMethodSetup)
+        function requireMksqlite(testCase)
+            % WAL is a SQLite journal mode — without mksqlite there is no
+            % DB to toggle. Skip gracefully on runners that lack the MEX.
+            testCase.assumeTrue(exist('mksqlite') == 3, ...
+                'mksqlite MEX not available on this runner.'); %#ok<EXIST>
+        end
+    end
     methods (Test)
         function testEnableWAL(testCase)
             x = 1:1000; y = sin(x);
             ds = FastSenseDataStore(x, y);
             testCase.addTeardown(@() delete(ds));
             ds.enableWAL();
-            ds.ensureOpen();
+            ds.ensureOpenForTest();
             result = mksqlite(ds.DbId, 'PRAGMA journal_mode');
             testCase.verifyEqual(lower(result.journal_mode), 'wal');
         end
@@ -21,7 +29,7 @@ classdef TestDataStoreWAL < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(ds));
             ds.enableWAL();
             ds.disableWAL();
-            ds.ensureOpen();
+            ds.ensureOpenForTest();
             result = mksqlite(ds.DbId, 'PRAGMA journal_mode');
             testCase.verifyEqual(lower(result.journal_mode), 'delete');
         end

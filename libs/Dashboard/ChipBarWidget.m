@@ -54,6 +54,8 @@ classdef ChipBarWidget < DashboardWidget
         function render(obj, parentPanel)
         %RENDER Draw all chips in a single shared axes inside parentPanel.
             obj.hPanel = parentPanel;
+            % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
+            try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme();
 
             nChips = numel(obj.Chips);
@@ -224,6 +226,14 @@ classdef ChipBarWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function relayout_(obj)
+        %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
+            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            obj.render(obj.hPanel);
+        end
+
         function chipColor = resolveChipColor(~, chip, theme)
         %RESOLVECHIPCOLOR Map chip struct to an [r g b] color triple.
         %

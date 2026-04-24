@@ -130,6 +130,10 @@ classdef FastSenseWidget < DashboardWidget
 
             fp.render();
 
+            % Reformat time-axis ticks to HH:MM:SS / MM:SS for readability
+            % (main branch addition from #66 / datetime axis migration).
+            try obj.formatTimeAxis_(ax); catch, end
+
             % Apply fixed Y-axis limits if configured; otherwise expand the
             % auto-computed range so threshold lines stay visible even when
             % the initial data range is narrower than the threshold value.
@@ -186,6 +190,7 @@ classdef FastSenseWidget < DashboardWidget
                     obj.FastSenseObj.updateData(1, x, y);
                     obj.autoScaleY_(y);
                     obj.updateTimeRangeCache();
+                    obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
                     return;
                 catch
                     % fall through to full teardown/rebuild
@@ -208,6 +213,7 @@ classdef FastSenseWidget < DashboardWidget
                     obj.FastSenseObj.updateData(1, x, y);
                     obj.autoScaleY_(y);
                     obj.updateTimeRangeCache();
+                    obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
                     return;
                 catch
                     % fall through to refresh()
@@ -391,6 +397,29 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function formatTimeAxis_(~, ax)
+        %FORMATTIMEAXIS_ Replace numeric-seconds x-ticks with HH:MM:SS labels.
+        %   No-op when range <= 300s (raw seconds readable) or ax invalid.
+            if isempty(ax) || ~ishandle(ax), return; end
+            xl = get(ax, 'XLim');
+            rangeSec = xl(2) - xl(1);
+            if rangeSec <= 300, return; end
+            xt = get(ax, 'XTick');
+            if isempty(xt), return; end
+            if rangeSec >= 3600
+                fmt = 'HH:MM:SS';
+            else
+                fmt = 'MM:SS';
+            end
+            lbl = cell(1, numel(xt));
+            for i = 1:numel(xt)
+                % xt(i) is seconds; serial-date day = seconds / 86400
+                lbl{i} = datestr(xt(i) / 86400, fmt);
+            end
+            set(ax, 'XTickMode', 'manual', 'XTickLabelMode', 'manual', ...
+                'XTickLabel', lbl);
+        end
+
         function updateTimeRangeCache(obj)
         %UPDATETIMERANGECACHE Maintain CachedXMin/CachedXMax incrementally.
         %   For sorted time arrays (the common case) the last element is the
@@ -463,6 +492,9 @@ classdef FastSenseWidget < DashboardWidget
 
             fp.render();
 
+            % Reformat time-axis ticks to HH:MM:SS / MM:SS for readability.
+            obj.formatTimeAxis_(ax);
+
             if ~isempty(obj.YLimits) && numel(obj.YLimits) == 2
                 ylim(ax, obj.YLimits);
             end
@@ -520,8 +552,8 @@ classdef FastSenseWidget < DashboardWidget
                         obj.XVar = s.source.xVar;
                         obj.YVar = s.source.yVar;
                     case 'data'
-                        obj.XData = s.source.x;
-                        obj.YData = s.source.y;
+                        obj.XData = s.source.x(:).';
+                        obj.YData = s.source.y(:).';
                 end
             end
 

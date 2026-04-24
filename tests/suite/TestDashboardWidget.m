@@ -81,5 +81,53 @@ classdef TestDashboardWidget < matlab.unittest.TestCase
             s = w.toStruct();
             testCase.verifyEqual(s.description, 'Info text');
         end
+
+        function testClearPanelControlsPreservesInjectedTags(testCase)
+            % clearPanelControls (shared helper used by every widget's
+            % relayout_) must keep InfoIconButton and DetachButton while
+            % wiping widget-owned uicontrols. Regression guard for the
+            % bug where SizeChangedFcn-triggered relayout wiped the
+            % icons DashboardLayout had just injected.
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+
+            % Widget content (should be wiped)
+            uicontrol('Parent', hp, 'Style', 'text', ...
+                'Tag', 'widget-owned-label');
+            uicontrol('Parent', hp, 'Style', 'edit', ...
+                'Tag', 'widget-owned-edit');
+
+            % Injected by DashboardLayout (must survive)
+            uicontrol('Parent', hp, 'Style', 'pushbutton', ...
+                'Tag', 'InfoIconButton');
+            uicontrol('Parent', hp, 'Style', 'pushbutton', ...
+                'Tag', 'DetachButton');
+
+            MockDashboardWidget.invokeClearPanelControls(hp);
+
+            testCase.verifyEmpty( ...
+                findobj(hp, 'Tag', 'widget-owned-label'), ...
+                'widget-owned controls should be deleted');
+            testCase.verifyEmpty( ...
+                findobj(hp, 'Tag', 'widget-owned-edit'), ...
+                'widget-owned controls should be deleted');
+            testCase.verifyNotEmpty( ...
+                findobj(hp, 'Tag', 'InfoIconButton'), ...
+                'InfoIconButton must survive a relayout');
+            testCase.verifyNotEmpty( ...
+                findobj(hp, 'Tag', 'DetachButton'), ...
+                'DetachButton must survive a relayout');
+        end
+
+        function testClearPanelControlsHandlesInvalidHandle(testCase)
+            % Helper must no-op on empty/invalid handles (relayout_ is
+            % called unconditionally on SizeChangedFcn, sometimes after
+            % the panel is already gone).
+            MockDashboardWidget.invokeClearPanelControls([]);
+            fakeHandle = matlab.graphics.GraphicsPlaceholder;
+            MockDashboardWidget.invokeClearPanelControls(fakeHandle);
+            testCase.verifyTrue(true, 'no-op path completed without error');
+        end
     end
 end

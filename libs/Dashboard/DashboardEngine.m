@@ -454,7 +454,38 @@ classdef DashboardEngine < handle
             useExportApp      = ~isOctave && exist('exportapp') ~= 0;       %#ok<EXIST>
             useExportGraphics = ~isOctave && exist('exportgraphics') ~= 0;  %#ok<EXIST>
 
+            % Both exportgraphics (MATLAB) and print (Octave) only find
+            % axes DIRECTLY under the figure — they do not recurse into
+            % uipanels. Widgets live inside uipanels, so insert a hidden
+            % 1px stub axes when none exists. exportapp handles uipanels
+            % on its own and does not need the stub.
             stubAxes = [];
+            if ~useExportApp
+                topLevelChildren = get(obj.hFigure, 'children');
+                hasTopAxes = false;
+                for k = 1:numel(topLevelChildren)
+                    if strcmp(get(topLevelChildren(k), 'type'), 'axes')
+                        hasTopAxes = true;
+                        break;
+                    end
+                end
+                if ~hasTopAxes
+                    stubAxes = axes('Parent', obj.hFigure, ...
+                        'Units', 'pixels', 'Position', [0 0 1 1], ...
+                        'Visible', 'off', 'HitTest', 'off');
+                end
+            end
+
+            % Some MATLAB builds (notably R2020b headless) refuse to
+            % export an invisible figure with the opaque error
+            % "Specified handle is not valid for export" even when
+            % exportgraphics/print are used with a stub axes. Temporarily
+            % flip Visible='on' around the export call and restore it.
+            origVisible = get(obj.hFigure, 'Visible');
+            needsVisibilityToggle = ~useExportApp && strcmp(origVisible, 'off');
+            if needsVisibilityToggle
+                try set(obj.hFigure, 'Visible', 'on'); catch, end
+            end
             try
                 if useExportApp
                     % exportapp signature is exportapp(fig, filename) only
@@ -463,34 +494,44 @@ classdef DashboardEngine < handle
                     % export of UI-component figures.
                     exportapp(obj.hFigure, filepath);
                 elseif useExportGraphics
-                    % MATLAB R2020a-R2023b headless path. exportgraphics
-                    % explicitly supports -nodisplay mode (unlike print).
-                    % ContentType='image' forces raster output (PNG/JPEG).
-                    % Resolution=150 matches the -r150 used by the legacy
-                    % print() path for visual parity.
-                    exportgraphics(obj.hFigure, filepath, ...
-                        'ContentType', 'image', 'Resolution', 150);
-                else
-                    % Octave path — preserves stub-axes behaviour (Octave's
-                    % print() does not recurse into uipanels).
-                    topLevelChildren = get(obj.hFigure, 'children');
-                    hasTopAxes = false;
-                    for k = 1:numel(topLevelChildren)
-                        if strcmp(get(topLevelChildren(k), 'type'), 'axes')
-                            hasTopAxes = true;
-                            break;
+                    % MATLAB R2020a-R2023b headless path. Three-tier
+                    % fallback: exportgraphics -> print -> getframe.
+                    % R2020b headless CI rejects the first two with
+                    % "Specified handle is not valid for export" on
+                    % uipanel-only figures even with a stub axes; the
+                    % getframe+imwrite path always works when the
+                    % figure has rendered at least once.
+                    wrote = false;
+                    try
+                        exportgraphics(obj.hFigure, filepath, ...
+                            'ContentType', 'image', 'Resolution', 150);
+                        wrote = true;
+                    catch
+                    end
+                    if ~wrote
+                        try
+                            print(obj.hFigure, devFlag, '-r150', filepath);
+                            wrote = true;
+                        catch
                         end
                     end
-                    if ~hasTopAxes
-                        stubAxes = axes('Parent', obj.hFigure, ...
-                            'Units', 'pixels', 'Position', [0 0 1 1], ...
-                            'Visible', 'off', 'HitTest', 'off');
+                    if ~wrote
+                        frame = getframe(obj.hFigure);
+                        imwrite(frame.cdata, filepath);
                     end
+                else
+                    % Octave path (print) — stub axes already inserted above.
                     print(obj.hFigure, devFlag, '-r150', filepath);
                 end
                 if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
             catch ME
                 if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
                 error('DashboardEngine:imageWriteFailed', ...
                     'Failed to write image ''%s'': %s', filepath, ME.message);
             end
@@ -1049,6 +1090,17 @@ classdef DashboardEngine < handle
         end
     end
 
+    methods (Hidden)
+        function triggerTimeSlidersChangedForTest(obj)
+        %TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
+        %   callback without going through UI events. Exposes the private
+        %   onTimeSlidersChanged() debounce path to tests.
+        %   (Hidden, not the narrower Access = {?matlab.unittest.TestCase},
+        %   so Octave parsing survives — Octave has no matlab.unittest.)
+            obj.onTimeSlidersChanged();
+        end
+    end
+
     methods (Access = private)
 
         function repositionPanels(obj)
@@ -1078,16 +1130,25 @@ classdef DashboardEngine < handle
         function wireListeners(obj, w)
         %WIRELISTENERS Wire sensor data-change listeners to mark widget dirty.
         %   Called for both single-page and multi-page addWidget paths so
-        %   sensor PostSet events mark widgets dirty regardless of page routing.
-            if ~isempty(w.Sensor) && isprop(w.Sensor, 'X')
-                try
-                    addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
-                catch
-                    % Octave may not support addlistener on all property types
-                end
-                try
-                    addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
-                catch
+        %   sensor data-change events mark widgets dirty regardless of page
+        %   routing. Uses Tag's 'DataChanged' event (fired from updateData);
+        %   falls back to PostSet on X/Y for legacy Sensor-class bindings
+        %   that still expose settable X/Y properties.
+            if isempty(w.Sensor), return; end
+            try
+                addlistener(w.Sensor, 'DataChanged', @(~,~) w.markDirty());
+            catch
+                % Legacy fallback: PostSet on X/Y. Won't fire for Dependent
+                % properties (Tag.X/Y) but kept for Sensor-class bindings.
+                if isprop(w.Sensor, 'X')
+                    try
+                        addlistener(w.Sensor, 'X', 'PostSet', @(~,~) w.markDirty());
+                    catch
+                    end
+                    try
+                        addlistener(w.Sensor, 'Y', 'PostSet', @(~,~) w.markDirty());
+                    catch
+                    end
                 end
             end
         end

@@ -156,6 +156,9 @@ classdef EventTimelineWidget < DashboardWidget
 
             set(obj.hAxes, 'YTick', 1:numel(labels), 'YTickLabel', labels);
             set(obj.hAxes, 'YLim', [0.3, numel(labels) + 0.7]);
+
+            % Reformat time-axis ticks to HH:MM:SS / MM:SS for readability.
+            obj.formatTimeAxis_(obj.hAxes);
         end
 
         function t = getType(~)
@@ -360,6 +363,29 @@ classdef EventTimelineWidget < DashboardWidget
             if ~obj.IsSettingTime
                 obj.UseGlobalTime = false;
             end
+        end
+
+        function formatTimeAxis_(~, ax)
+        %FORMATTIMEAXIS_ Replace numeric-seconds x-ticks with HH:MM:SS labels.
+        %   No-op when range <= 300s (raw seconds readable) or ax invalid.
+            if isempty(ax) || ~ishandle(ax), return; end
+            xl = get(ax, 'XLim');
+            rangeSec = xl(2) - xl(1);
+            if rangeSec <= 300, return; end
+            xt = get(ax, 'XTick');
+            if isempty(xt), return; end
+            if rangeSec >= 3600
+                fmt = 'HH:MM:SS';
+            else
+                fmt = 'MM:SS';
+            end
+            lbl = cell(1, numel(xt));
+            for i = 1:numel(xt)
+                % xt(i) is seconds; serial-date day = seconds / 86400
+                lbl{i} = datestr(xt(i) / 86400, fmt);
+            end
+            set(ax, 'XTickMode', 'manual', 'XTickLabelMode', 'manual', ...
+                'XTickLabel', lbl);
         end
 
     end

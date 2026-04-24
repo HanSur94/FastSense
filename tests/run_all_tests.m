@@ -1,4 +1,4 @@
-function results = run_all_tests()
+function results = run_all_tests(pattern)
 %RUN_ALL_TESTS Execute all FastSense unit tests.
 %   On MATLAB: runs the class-based test suite in tests/suite/ using
 %   matlab.unittest.  On Octave: runs function-based test_*.m files.
@@ -6,21 +6,30 @@ function results = run_all_tests()
 %   results = run_all_tests() returns a struct with total/passed/failed
 %   counts (Octave) or a matlab.unittest.TestResult array (MATLAB).
 %
+%   results = run_all_tests(PATTERN) restricts the run to test files whose
+%   short name matches the regular expression PATTERN. Empty/missing
+%   PATTERN runs the full suite. CI uses this for path-filtered PR runs.
+%
 %   Example:
 %     results = run_all_tests();
+%     results = run_all_tests('Dashboard|Widget|Toolbar');
+
+    if nargin < 1 || isempty(pattern)
+        pattern = '';
+    end
 
     test_dir = fileparts(mfilename('fullpath'));
     repo_root = fileparts(test_dir);
     addpath(repo_root); install();
 
     if exist('OCTAVE_VERSION', 'builtin')
-        results = run_octave_tests(test_dir);
+        results = run_octave_tests(test_dir, pattern);
     else
-        results = run_matlab_suite(test_dir);
+        results = run_matlab_suite(test_dir, pattern);
     end
 end
 
-function results = run_matlab_suite(test_dir)
+function results = run_matlab_suite(test_dir, pattern)
 %RUN_MATLAB_SUITE Run class-based test suite using matlab.unittest.
     import matlab.unittest.TestSuite
     import matlab.unittest.TestRunner
@@ -37,6 +46,18 @@ function results = run_matlab_suite(test_dir)
         fprintf('No tests found in %s\n', suite_dir);
         results = [];
         return;
+    end
+
+    if ~isempty(pattern)
+        fprintf('Filtering tests by pattern: %s\n', pattern);
+        names = {suite.Name};
+        keep = ~cellfun(@isempty, regexp(names, pattern, 'once'));
+        suite = suite(keep);
+        if isempty(suite)
+            fprintf('No tests matched pattern; nothing to run.\n');
+            results = [];
+            return;
+        end
     end
 
     fprintf('Discovered %d test methods across %d test files.\n\n', ...
@@ -70,12 +91,27 @@ function results = run_matlab_suite(test_dir)
     end
 end
 
-function results = run_octave_tests(test_dir)
+function results = run_octave_tests(test_dir, pattern)
 %RUN_OCTAVE_TESTS Run function-based tests for Octave compatibility.
 %   Each test runs in a separate Octave subprocess to survive the known
 %   Octave 8.x crash during handle-class cleanup (break_closure_cycles).
     files = dir(fullfile(test_dir, 'test_*.m'));
     repo_root = fileparts(test_dir);
+
+    if ~isempty(pattern)
+        fprintf('Filtering tests by pattern: %s\n', pattern);
+        keep = false(1, numel(files));
+        for fi = 1:numel(files)
+            [~, name, ~] = fileparts(files(fi).name);
+            keep(fi) = ~isempty(regexp(name, pattern, 'once'));
+        end
+        files = files(keep);
+        if isempty(files)
+            fprintf('No tests matched pattern; nothing to run.\n');
+            results = struct('total', 0, 'passed', 0, 'failed', 0);
+            return;
+        end
+    end
 
     total = 0;
     passed = 0;

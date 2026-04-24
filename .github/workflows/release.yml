@@ -59,12 +59,10 @@ jobs:
           cp install.m LICENSE README.md CITATION.cff "${DIRNAME}/"
           cp -r examples "${DIRNAME}/"
 
-          # Copy libs, excluding compiled MEX binaries
+          # Copy libs including committed prebuilt MEX binaries.
+          # Binaries are refreshed by .github/workflows/refresh-mex-binaries.yml
+          # and shipped in the release archive so end users skip compilation.
           cp -r libs "${DIRNAME}/"
-          find "${DIRNAME}/libs" -type f \( \
-            -name "*.mexmaca64" -o -name "*.mexmaci64" \
-            -o -name "*.mexa64" -o -name "*.mexw64" \
-            -o -name "*.mex" \) -delete
 
           # Create archives
           tar czf "${DIRNAME}.tar.gz" "${DIRNAME}"
@@ -81,7 +79,7 @@ jobs:
 
             ## Installation
 
-            Download the archive, extract it, and run `install` in MATLAB/Octave to add libraries to path and compile MEX accelerators.
+            Download the archive, extract it, and run `install` in MATLAB/Octave. Prebuilt MEX binaries are bundled — compilation only happens on unsupported platforms.
           files: |
             FastSense-${{ steps.version.outputs.VERSION }}.tar.gz
             FastSense-${{ steps.version.outputs.VERSION }}.zip

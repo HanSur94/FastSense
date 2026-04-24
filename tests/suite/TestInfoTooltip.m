@@ -137,10 +137,10 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
                                 'Content', 'x', 'Description', 'test');
                         case 'NumberWidget'
                             w = NumberWidget('Title', 'N', 'Position', [1 1 6 2], ...
-                                'Value', 42, 'Description', 'test');
+                                'StaticValue', 42, 'Description', 'test');
                         case 'StatusWidget'
                             w = StatusWidget('Title', 'S', 'Position', [1 1 6 2], ...
-                                'Status', 'ok', 'Description', 'test');
+                                'StaticStatus', 'ok', 'Description', 'test');
                     end
                     w.ParentTheme = theme;
                     w.hPanel = hp;

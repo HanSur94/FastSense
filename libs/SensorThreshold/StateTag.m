@@ -177,6 +177,9 @@ classdef StateTag < Tag
             obj.X = X;
             obj.Y = Y;
             obj.notifyListeners_();
+            if exist('OCTAVE_VERSION', 'builtin') == 0
+                notify(obj, 'DataChanged');
+            end
         end
     end
 

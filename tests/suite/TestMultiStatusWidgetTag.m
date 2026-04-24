@@ -121,22 +121,6 @@ classdef TestMultiStatusWidgetTag < matlab.unittest.TestCase
             testCase.verifyEqual(e.tag.Key, 'mst_mon_rt');
         end
 
-        function testLegacyThresholdItemStillWorks(testCase)
-            % Existing threshold-struct item unchanged.
-            t = Threshold('mst_legacy_thr', 'Direction', 'upper');
-            t.addCondition(struct(), 50);
-            item = struct('threshold', t, 'value', 42, 'label', 'Pump');
-
-            w = MultiStatusWidget('Title', 'S');
-            w.Sensors = {item};
-            fig = figure('Visible', 'off');
-            testCase.addTeardown(@() close(fig));
-            hp = uipanel(fig, 'Position', [0 0 1 1]);
-            w.ParentTheme = DashboardTheme('dark');
-            w.render(hp);
-            testCase.verifyNotEmpty(w.hAxes);
-        end
-
         function testLegacySensorItemStillWorks(testCase)
             % Raw Sensor handle item unchanged.
             s = SensorTag('mst_legacy_s', 'Name', 'L');

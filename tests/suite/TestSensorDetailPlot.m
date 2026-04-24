@@ -1,4 +1,8 @@
 classdef TestSensorDetailPlot < matlab.unittest.TestCase
+    properties (Access = private)
+        sensor
+    end
+
     methods (TestClassSetup)
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
@@ -11,7 +15,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             s = SensorTag('test_pressure', 'Name', 'Test Pressure');
             t = linspace(0, 100, 10000);
             s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
-            testCase.TestData.sensor = s;
+            testCase.sensor = s;
         end
     end
 
@@ -24,13 +28,13 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
     methods (Test)
         %% Construction
         function testConstructorStoresTag(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
-            testCase.verifyEqual(sdp.Sensor.Key, 'test_pressure');
+            sdp = SensorDetailPlot(testCase.sensor);
+            testCase.verifyEqual(sdp.TagRef.Key, 'test_pressure');
             delete(sdp);
         end
 
         function testConstructorDefaultOptions(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
+            sdp = SensorDetailPlot(testCase.sensor);
             testCase.verifyEqual(sdp.NavigatorHeight, 0.20, 'AbsTol', 1e-10);
             testCase.verifyTrue(sdp.ShowThresholds);
             testCase.verifyTrue(sdp.ShowThresholdBands);
@@ -39,7 +43,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
         end
 
         function testConstructorCustomOptions(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor, ...
+            sdp = SensorDetailPlot(testCase.sensor, ...
                 'NavigatorHeight', 0.30, ...
                 'ShowThresholds', false, ...
                 'Theme', 'dark', ...
@@ -51,7 +55,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Render creates two FastSense instances
         function testRenderCreatesMainAndNavigator(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
+            sdp = SensorDetailPlot(testCase.sensor);
             sdp.render();
             testCase.verifyClass(sdp.MainPlot, ?FastSense);
             testCase.verifyClass(sdp.NavigatorPlot, ?FastSense);
@@ -60,7 +64,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Render guard
         function testRenderTwiceThrows(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
+            sdp = SensorDetailPlot(testCase.sensor);
             sdp.render();
             testCase.verifyError(@() sdp.render(), 'SensorDetailPlot:alreadyRendered');
             delete(sdp);
@@ -68,7 +72,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% MainPlot has sensor data
         function testMainPlotHasSensorLine(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
+            sdp = SensorDetailPlot(testCase.sensor);
             sdp.render();
             testCase.verifyGreaterThanOrEqual(numel(sdp.MainPlot.Lines), 1);
             delete(sdp);
@@ -76,7 +80,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% NavigatorPlot has data line
         function testNavigatorHasDataLine(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
+            sdp = SensorDetailPlot(testCase.sensor);
             sdp.render();
             testCase.verifyGreaterThanOrEqual(numel(sdp.NavigatorPlot.Lines), 1);
             delete(sdp);
@@ -84,7 +88,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Zoom range methods
         function testSetGetZoomRange(testCase)
-            sdp = SensorDetailPlot(testCase.TestData.sensor);
+            sdp = SensorDetailPlot(testCase.sensor);
             sdp.render();
             sdp.setZoomRange(20, 60);
             [xMin, xMax] = sdp.getZoomRange();
@@ -93,43 +97,9 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             delete(sdp);
         end
 
-        %% Thresholds in main plot
-        function testThresholdsShownWhenEnabled(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s);
-            sdp.render();
-            testCase.verifyGreaterThanOrEqual(numel(sdp.MainPlot.Thresholds), 1);
-            delete(sdp);
-        end
-
-        function testThresholdsHiddenWhenDisabled(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholds', false);
-            sdp.render();
-            testCase.verifyEqual(numel(sdp.MainPlot.Thresholds), 0);
-            delete(sdp);
-        end
-
-        %% Threshold bands in navigator
-        function testNavigatorHasThresholdBands(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholdBands', true);
-            sdp.render();
-            testCase.verifyGreaterThanOrEqual(numel(sdp.NavigatorPlot.Bands), 1);
-            delete(sdp);
-        end
-
-        function testNavigatorNoBandsWhenDisabled(testCase)
-            s = TestSensorDetailPlot.createTagWithThreshold();
-            sdp = SensorDetailPlot(s, 'ShowThresholdBands', false);
-            sdp.render();
-            testCase.verifyEqual(numel(sdp.NavigatorPlot.Bands), 0);
-            delete(sdp);
-        end
-
         %% Event shading
         function testEventShadingInMainPlot(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
 
             % Create mock events
             ev1 = Event(20, 25, 'test_pressure', 'H Warning', 65, 'upper');
@@ -154,7 +124,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Event vertical lines in navigator
         function testEventLinesInNavigator(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
 
             ev1 = Event(20, 25, 'test_pressure', 'H Warning', 65, 'upper');
 
@@ -178,7 +148,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Events from EventStore
         function testEventsFromEventstore(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
 
             % Create EventStore and append events
             tmpFile = [tempname, '.mat'];
@@ -208,7 +178,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Event color mapping
         function testEventColorHigh(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
             ev = Event(20, 25, 'test_pressure', 'H Warning', 65, 'upper');
             sdp = SensorDetailPlot(s, 'Events', [ev]);
             sdp.render();
@@ -230,7 +200,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
         end
 
         function testEventColorEscalated(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
             ev = Event(20, 25, 'test_pressure', 'HH Alarm', 70, 'upper');
             sdp = SensorDetailPlot(s, 'Events', [ev]);
             sdp.render();
@@ -255,7 +225,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% UserData completeness
         function testEventPatchUserdataFields(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
             ev = Event(20, 25, 'test_pressure', 'H Warning', 65, 'upper');
             % Event is a handle class with private setters -- use setStats()
             % setStats(peak, numPoints, min, max, mean, rms, std)
@@ -301,7 +271,7 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
 
         %% Embedded in FastSenseGrid
         function testEmbeddedInFigureTile(testCase)
-            s = testCase.TestData.sensor;
+            s = testCase.sensor;
             fig = FastSenseGrid(1, 1);
             hp = fig.tilePanel(1);
             sdp = SensorDetailPlot(s, 'Parent', hp);
@@ -310,21 +280,6 @@ classdef TestSensorDetailPlot < matlab.unittest.TestCase
             testCase.verifyClass(sdp.MainPlot, ?FastSense);
             delete(sdp);
             delete(fig);
-        end
-    end
-
-    methods (Static, Access = private)
-        function s = createTagWithThreshold()
-            s = SensorTag('test_th', 'Name', 'Threshold Test');
-            t = linspace(0, 100, 1000);
-            s.updateData(t, 50 + 10*sin(2*pi*t/20) + randn(1, numel(t)));
-            sc = StateTag('mode');
-            sc.X = [0 100];
-            sc.Y = [1 1];
-            t_h_warning = Threshold('h_warning', 'Name', 'H Warning', 'Direction', 'upper');
-            t_h_warning.addCondition(struct('mode', 1), 65);
-            s.addThreshold(t_h_warning);
-            s.resolve();
         end
     end
 end

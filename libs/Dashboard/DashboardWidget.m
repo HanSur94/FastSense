@@ -107,6 +107,23 @@ classdef DashboardWidget < handle
         end
     end
 
+    methods (Static, Access = protected)
+        function clearPanelControls(hPanel)
+        %CLEARPANELCONTROLS Delete uicontrol children of hPanel at depth 1,
+        %   preserving DashboardLayout-injected buttons (InfoIconButton,
+        %   DetachButton). Used by widget relayout_/refresh_ paths that
+        %   rebuild their own controls on resize or theme change.
+            if isempty(hPanel) || ~ishandle(hPanel), return; end
+            protectedTags = {'InfoIconButton', 'DetachButton'};
+            kids = findobj(hPanel, '-depth', 1, 'Type', 'uicontrol');
+            for i = 1:numel(kids)
+                if ~ismember(get(kids(i), 'Tag'), protectedTags)
+                    delete(kids(i));
+                end
+            end
+        end
+    end
+
     methods
         function setTimeRange(~, ~, ~)
             % Override in subclasses to respond to global time changes.

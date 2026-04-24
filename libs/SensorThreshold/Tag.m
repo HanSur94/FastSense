@@ -60,6 +60,10 @@ classdef Tag < handle
         EventStore   = []       % EventStore handle; [] disables event convenience methods
     end
 
+    events
+        DataChanged             % Fired when underlying (X, Y) data is mutated.
+    end
+
     methods
         function obj = Tag(key, varargin)
             %TAG Construct a Tag with required key and optional name-value pairs.

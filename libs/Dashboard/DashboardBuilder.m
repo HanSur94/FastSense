@@ -121,8 +121,14 @@ classdef DashboardBuilder < handle
             obj.DragMode = '';
 
             hFig = obj.Engine.hFigure;
-            set(hFig, 'WindowButtonMotionFcn', obj.OldMotionFcn);
-            set(hFig, 'WindowButtonUpFcn', obj.OldButtonUpFcn);
+            % FIX: guard first before any `set` calls. If the figure was
+            % deleted externally, downstream cleanup (safeDelete, clear*)
+            % still runs since those are handle-safe; we only skip set()
+            % on an invalid handle.
+            if ~isempty(hFig) && ishandle(hFig)
+                set(hFig, 'WindowButtonMotionFcn', obj.OldMotionFcn);
+                set(hFig, 'WindowButtonUpFcn', obj.OldButtonUpFcn);
+            end
             obj.OldMotionFcn = '';
             obj.OldButtonUpFcn = '';
 
@@ -721,6 +727,16 @@ classdef DashboardBuilder < handle
             layout = obj.Engine.Layout;
             w = obj.Engine.Widgets{widgetIdx};
             oldGrid = w.Position;
+
+            % Resolve overlap against other widgets — bump to next free
+            % row when the dropped position collides (same rule as
+            % DashboardEngine.addWidget).
+            existingPositions = {};
+            for k = 1:numel(obj.Engine.Widgets)
+                if k == widgetIdx, continue; end
+                existingPositions{end+1} = obj.Engine.Widgets{k}.Position; %#ok<AGROW>
+            end
+            newGrid = layout.resolveOverlap(newGrid, existingPositions);
             w.Position = newGrid;
 
             % Check if total rows changed (need full relayout for scroll)

@@ -20,6 +20,8 @@ classdef MultiStatusWidget < DashboardWidget
 
         function render(obj, parentPanel)
             obj.hPanel = parentPanel;
+            % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
+            try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme();
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
@@ -232,6 +234,14 @@ classdef MultiStatusWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function relayout_(obj)
+        %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
+            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            obj.render(obj.hPanel);
+        end
+
         function expandedItems = expandSensors_(obj)
         %EXPANDSENSORS_ Expand CompositeThreshold/CompositeTag items into children + summary.
         %   Non-composite items pass through unchanged.

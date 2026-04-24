@@ -94,7 +94,7 @@ classdef TestDashboardPerformance < matlab.unittest.TestCase
             d.updateGlobalTimeRange();
             % Simulate slider change
             set(d.hTimeSliderL, 'Value', 0.2);
-            d.onTimeSlidersChanged();
+            d.triggerTimeSlidersChangedForTest();
             % Debounce timer should have been created (SliderDebounceTimer is readable)
             testCase.verifyFalse(isempty(d.SliderDebounceTimer));
             % Clean up the timer via its readable handle before test teardown
