@@ -112,6 +112,8 @@ classdef TimeRangeSelector < handle
             %setDataRange  Set the full extent the user can scrub over.
             %   The current selection is rescaled proportionally so that a
             %   50%-selected window remains 50% wide after the change.
+            %   Programmatic — does NOT fire OnRangeChanged; only user
+            %   drag interactions do.
             if ~(isfinite(tMin) && isfinite(tMax)) || tMax <= tMin
                 error('TimeRangeSelector:invalidRange', ...
                       'DataRange requires finite tMax > tMin.');
@@ -125,6 +127,9 @@ classdef TimeRangeSelector < handle
             end
             obj.DataRange = [tMin tMax];
             newSpan = tMax - tMin;
+            prev = obj.OnRangeChanged;
+            obj.OnRangeChanged = [];
+            cleanupCb = onCleanup(@() obj.restoreCallback_(prev));
             obj.setSelection(tMin + frac0 * newSpan, tMin + frac1 * newSpan);
         end
 
@@ -192,6 +197,13 @@ classdef TimeRangeSelector < handle
     end
 
     methods (Access = private)
+        function restoreCallback_(obj, cb)
+            %restoreCallback_  Restore OnRangeChanged after temporary suppression.
+            if isvalid(obj)
+                obj.OnRangeChanged = cb;
+            end
+        end
+
         function buildGraphics_(obj)
             %buildGraphics_  Construct axes and graphics handles inside hPanel.
             obj.hAxes = axes('Parent', obj.hPanel, ...
