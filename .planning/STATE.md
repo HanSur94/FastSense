@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Tag-Based Domain Model
-status: executing
-stopped_at: Completed 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget-02-PLAN.md
-last_updated: "2026-04-24T08:09:02.411Z"
+status: verifying
+stopped_at: Completed 1012-03-PLAN.md
+last_updated: "2026-04-24T08:31:42.480Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 15
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 30
-  completed_plans: 29
+  completed_plans: 30
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 
 Phase: 1012 (live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-24
 
 Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
@@ -119,6 +119,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
 | Phase 1011 P05 | 22min | 2 tasks | 13 files |
 | Phase 1012 P01 | 15 | 4 tasks | 11 files |
 | Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget P02 | 17 | 3 tasks | 4 files |
+| Phase 1012 P03 | 525541 | 5 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,10 @@ Recent decisions affecting current work:
 - [Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget]: cache_ openStats_/openEventId_ seeded via isfield guard BEFORE fireEventsOnRisingEdges_ in recompute_; preserved via savedOpenEventId/savedOpenStats locals to prevent struct overwrite losing emitter-set values
 - [Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget]: fireEventsInTail_ accepts optional newY param — enables inline stats for same-chunk closed events without requiring separate accumulator path
 - [Phase 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget]: Octave test file avoids nested functions (SIGILL on handle-class cycle cleanup); all 7 tests inlined without mkFixture subfn
+- [Phase 1012]: Per-event line() rendering: each marker gets own ButtonDownFcn+UserData instead of severity-batched line() calls
+- [Phase 1012]: FastSenseWidget guarded forwarding: ShowEventMarkers forwarded to inner FastSense only when ShowEventMarkers=true or EventStore non-empty
+- [Phase 1012]: formatEventFields_ placed in methods(Access=protected) block so tests can call it from outside the class
+- [Phase 1012]: Click-details panel is floating uipanel inside same figure (not standalone figure), adapted from DashboardLayout.openInfoPopup pattern
 
 ### Roadmap Evolution
 
@@ -277,6 +282,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-24T08:09:02.389Z
-Stopped at: Completed 1012-live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget-02-PLAN.md
+Last session: 2026-04-24T08:31:42.459Z
+Stopped at: Completed 1012-03-PLAN.md
 Resume file: None
