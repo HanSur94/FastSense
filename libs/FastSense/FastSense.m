@@ -2290,6 +2290,135 @@ classdef FastSense < handle
             obj.openEventDetails_(ev);
         end
 
+        function openEventDetails_(obj, ev)
+            %OPENEVENTDETAILS_ Open a floating uipanel showing every Event field.
+            %   Models DashboardLayout.openInfoPopup pattern but uses uipanel
+            %   inside obj.hFigure instead of a standalone figure. Installs
+            %   figure-level ESC + click-outside dismiss handlers; saves and
+            %   restores the prior WindowButtonDownFcn + WindowKeyPressFcn.
+            obj.closeEventDetails_();  % idempotent guard
+            fig = obj.hFigure;
+            if isempty(fig) || ~ishandle(fig), return; end
+
+            % Save prior callbacks
+            obj.PrevWBDFcn_ = get(fig, 'WindowButtonDownFcn');
+            obj.PrevKPFcn_  = get(fig, 'WindowKeyPressFcn');
+
+            % Anchor: compute normalized figure position from the clicked data coords.
+            pos = obj.computeDetailsPanelAnchor_(ev.StartTime, ev);
+            pnl = uipanel('Parent', fig, ...
+                'Units', 'normalized', ...
+                'Position', pos, ...
+                'BorderType', 'line');
+            try
+                set(pnl, 'BackgroundColor', [0.15 0.15 0.18]);
+                set(pnl, 'ForegroundColor', [0.92 0.92 0.94]);
+            catch
+                % Octave older versions may not support these properties on uipanel
+            end
+
+            % Title (with event id)
+            titleStr = sprintf('Event %s', ev.Id);
+            uicontrol('Parent', pnl, 'Style', 'text', ...
+                'String', titleStr, ...
+                'Units', 'normalized', 'Position', [0.05 0.88 0.70 0.10], ...
+                'FontWeight', 'bold', 'HorizontalAlignment', 'left');
+
+            % X close button (top-right)
+            uicontrol('Parent', pnl, 'Style', 'pushbutton', ...
+                'String', 'X', ...
+                'Units', 'normalized', 'Position', [0.88 0.88 0.10 0.10], ...
+                'Callback', @(~,~) obj.closeEventDetails_());
+
+            % Field dump
+            txt = obj.formatEventFields_(ev);
+            uicontrol('Parent', pnl, 'Style', 'edit', ...
+                'Max', 100, 'Min', 0, ...
+                'Enable', 'inactive', ...
+                'HorizontalAlignment', 'left', ...
+                'Units', 'normalized', 'Position', [0.05 0.05 0.90 0.80], ...
+                'String', txt, ...
+                'FontName', 'Courier', 'FontSize', 10);
+
+            obj.hEventDetails_ = pnl;
+            set(fig, 'WindowButtonDownFcn', @(~,~) obj.onFigureClickForDetailsDismiss_());
+            set(fig, 'WindowKeyPressFcn',   @(~,evt) obj.onKeyPressForDetailsDismiss_(evt));
+        end
+
+        function closeEventDetails_(obj)
+            %CLOSEEVENTDETAILS_ Dismiss the floating details panel; restore prior callbacks.
+            wasOpen = ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_);
+            if wasOpen
+                delete(obj.hEventDetails_);
+            end
+            obj.hEventDetails_ = [];
+            if wasOpen && ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                set(obj.hFigure, 'WindowButtonDownFcn', obj.PrevWBDFcn_);
+                set(obj.hFigure, 'WindowKeyPressFcn',   obj.PrevKPFcn_);
+            end
+            obj.PrevWBDFcn_ = [];
+            obj.PrevKPFcn_  = [];
+        end
+
+        function onFigureClickForDetailsDismiss_(obj)
+            %ONFIGURECLICKFORDETAILSDISMISS_ Close panel when click lands outside it.
+            if isempty(obj.hEventDetails_) || ~ishandle(obj.hEventDetails_)
+                obj.closeEventDetails_();
+                return;
+            end
+            clicked = gco;
+            insidePanel = false;
+            h = clicked;
+            while ~isempty(h) && ishandle(h)
+                if h == obj.hEventDetails_
+                    insidePanel = true;
+                    break;
+                end
+                try
+                    h = get(h, 'Parent');
+                catch
+                    break;
+                end
+            end
+            if ~insidePanel
+                obj.closeEventDetails_();
+            end
+        end
+
+        function onKeyPressForDetailsDismiss_(obj, eventData)
+            %ONKEYPRESSFORDETAILSDISMISS_ Close panel on ESC key.
+            if isfield(eventData, 'Key') && strcmp(eventData.Key, 'escape')
+                obj.closeEventDetails_();
+            end
+        end
+
+        function pos = computeDetailsPanelAnchor_(obj, anchorX, ~)
+            %COMPUTEDETAILSPANELANCHOR_ Compute normalized figure coords for the panel.
+            %   Anchors near the marker's screen X; clamps to [0 0 1 1] so the
+            %   panel never renders half-off-screen (Pitfall D).
+            %
+            %   Panel size: 0.28 x 0.45 (normalized). X offset: just right of
+            %   the marker; flipped to the left if the right edge would overflow.
+            panelW = 0.28;
+            panelH = 0.45;
+            axPos = get(obj.hAxes, 'Position');  % [x y w h] normalized
+            xl = get(obj.hAxes, 'XLim');
+            % Normalize anchorX into figure space via axes position + xlim.
+            fx = axPos(1) + axPos(3) * (anchorX - xl(1)) / max(eps, xl(2) - xl(1));
+            fy = axPos(2) + axPos(4) * 0.5;  % panel vertical center - middle of axes
+            % Default: panel right of marker
+            panelX = fx + 0.01;
+            if panelX + panelW > 1.0
+                % Flip to left side of marker
+                panelX = fx - panelW - 0.01;
+            end
+            panelY = fy - panelH / 2;
+            % Clamp
+            panelX = max(0, min(1 - panelW, panelX));
+            panelY = max(0, min(1 - panelH, panelY));
+            pos = [panelX, panelY, panelW, panelH];
+        end
+
         function c = severityToColor_(obj, severity)
             %SEVERITYTOCOLOR_ Map severity level to RGB color.
             %   Uses DashboardTheme status colors if available in obj.Theme;
@@ -3604,6 +3733,61 @@ classdef FastSense < handle
                     set(figs(i), 'Position', [col*w, screenSz(4)-(row+1)*h, w, h]);
                 end
             end
+        end
+    end
+
+    % ======================== PROTECTED METHODS ===========================
+    % Access = protected for test harness only — formatEventFields_ header
+    % documents the exact test scenario that requires this visibility.
+    methods (Access = protected)
+        function txt = formatEventFields_(~, ev)
+            %FORMATEVENTFIELDS_ Produce multi-line char listing every Event field.
+            %   IsOpen==true displays "Open" for EndTime and Duration.
+            %
+            %   Access = protected for test harness only (WARNING 3 resolution):
+            %   MATLAB enforces Access = private strictly on external test calls.
+            %   TestFastSenseEventClick.testFormatEventFieldsShowsOpenForOpenEvent
+            %   invokes fp.formatEventFields_(ev) directly; protected allows
+            %   probe-via-subclass and MATLAB xUnit trusts protected in test context.
+            %
+            %   External production callers still cannot invoke this method.
+            if ev.IsOpen
+                endStr = 'Open';
+                durStr = 'Open';
+            else
+                endStr = sprintf('%g', ev.EndTime);
+                durStr = sprintf('%g', ev.Duration);
+            end
+            tagStr = '';
+            if iscell(ev.TagKeys)
+                tagStr = strjoin(ev.TagKeys, ', ');
+            end
+            pvStr  = ''; if ~isempty(ev.PeakValue),  pvStr  = sprintf('%g', ev.PeakValue);  end
+            minStr = ''; if ~isempty(ev.MinValue),   minStr  = sprintf('%g', ev.MinValue);   end
+            maxStr = ''; if ~isempty(ev.MaxValue),   maxStr  = sprintf('%g', ev.MaxValue);   end
+            meanStr= ''; if ~isempty(ev.MeanValue),  meanStr = sprintf('%g', ev.MeanValue);  end
+            rmsStr = ''; if ~isempty(ev.RmsValue),   rmsStr  = sprintf('%g', ev.RmsValue);   end
+            stdStr = ''; if ~isempty(ev.StdValue),   stdStr  = sprintf('%g', ev.StdValue);   end
+            notesStr = '';
+            if isprop(ev, 'Notes') && ~isempty(ev.Notes)
+                notesStr = ev.Notes;
+            end
+            linesCells = { ...
+                sprintf('StartTime:      %g', ev.StartTime), ...
+                sprintf('EndTime:        %s', endStr), ...
+                sprintf('Duration:       %s', durStr), ...
+                sprintf('PeakValue:      %s', pvStr), ...
+                sprintf('Min:            %s', minStr), ...
+                sprintf('Max:            %s', maxStr), ...
+                sprintf('Mean:           %s', meanStr), ...
+                sprintf('RMS:            %s', rmsStr), ...
+                sprintf('Std:            %s', stdStr), ...
+                sprintf('Severity:       %d', ev.Severity), ...
+                sprintf('Category:       %s', ev.Category), ...
+                sprintf('TagKeys:        %s', tagStr), ...
+                sprintf('ThresholdLabel: %s', ev.ThresholdLabel), ...
+                sprintf('Notes:          %s', notesStr) };
+            txt = strjoin(linesCells, char(10));  % LF
         end
     end
 end
