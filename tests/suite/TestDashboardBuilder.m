@@ -115,7 +115,6 @@ classdef TestDashboardBuilder < matlab.unittest.TestCase
             testCase.verifyEqual(numel(b.Overlays), 4);
         end
 
-
         function testGridOverlayInEditMode(testCase)
             d = DashboardEngine('Test');
             d.addWidget('kpi', 'Title', 'M', 'Position', [1 1 3 1]);

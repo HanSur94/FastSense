@@ -415,8 +415,9 @@ classdef FastSense < handle
             % raw varargin here to tell them apart.
             explicitXType = false;
             for k = 1:2:numel(varargin)-1
-                if (ischar(varargin{k}) || (isstring(varargin{k}) && isscalar(varargin{k}))) ...
-                        && strcmpi(char(varargin{k}), 'XType')
+                isStrLike = ischar(varargin{k}) || ...
+                    (isstring(varargin{k}) && isscalar(varargin{k}));
+                if isStrLike && strcmpi(char(varargin{k}), 'XType')
                     explicitXType = true;
                     break;
                 end

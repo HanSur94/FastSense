@@ -1373,8 +1373,8 @@ classdef DashboardEngine < handle
                     w.markUnrealized();
                     continue;
                 end
-                if w.Dirty && w.Realized && ~isempty(w.hPanel) && ishandle(w.hPanel) ...
-                        && obj.Layout.isWidgetVisible(w.Position)
+                if w.Dirty && w.Realized && ~isempty(w.hPanel) && ishandle(w.hPanel) && ...
+                        obj.Layout.isWidgetVisible(w.Position)
                     try
                         if isa(w, 'FastSenseWidget')
                             w.update();
