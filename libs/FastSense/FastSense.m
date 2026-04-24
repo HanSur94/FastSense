@@ -2339,16 +2339,34 @@ classdef FastSense < handle
                 'CloseRequestFcn', @(~,~) obj.closeEventDetails_(), ...
                 'WindowKeyPressFcn', @(~,evt) obj.onKeyPressForDetailsDismiss_(evt));
 
-            % Read-only field list (top 60% of the popup)
-            txt = obj.formatEventFields_(ev);
-            uicontrol('Parent', popupFig, 'Style', 'edit', ...
-                'Max', 100, 'Min', 0, ...
-                'Enable', 'inactive', ...
-                'HorizontalAlignment', 'left', ...
-                'Units', 'normalized', 'Position', [0.03 0.39 0.94 0.58], ...
-                'String', txt, ...
-                'FontSize', 11, ...
-                'BackgroundColor', bg, 'ForegroundColor', fg);
+            % Read-only field table (top 58% of the popup). Two columns:
+            % Field | Value. Rows skip empty statistics to keep the table
+            % compact. formatEventFields_ remains available for text-dump
+            % consumers (see test contract).
+            tblData = obj.buildEventFieldsTable_(ev);
+            try
+                uitable('Parent', popupFig, ...
+                    'Data', tblData, ...
+                    'ColumnName', {'Field', 'Value'}, ...
+                    'RowName', [], ...
+                    'ColumnEditable', [false false], ...
+                    'ColumnWidth', {120, 240}, ...
+                    'FontSize', 11, ...
+                    'Units', 'normalized', ...
+                    'Position', [0.03 0.39 0.94 0.58], ...
+                    'BackgroundColor', [1 1 1; 0.965 0.965 0.970]);
+            catch
+                % Fallback for runtimes without uitable — use a plain edit
+                txt = obj.formatEventFields_(ev);
+                uicontrol('Parent', popupFig, 'Style', 'edit', ...
+                    'Max', 100, 'Min', 0, ...
+                    'Enable', 'inactive', ...
+                    'HorizontalAlignment', 'left', ...
+                    'Units', 'normalized', 'Position', [0.03 0.39 0.94 0.58], ...
+                    'String', txt, ...
+                    'FontSize', 11, ...
+                    'BackgroundColor', bg, 'ForegroundColor', fg);
+            end
 
             % Notes label
             uicontrol('Parent', popupFig, 'Style', 'text', ...
@@ -3787,6 +3805,57 @@ classdef FastSense < handle
     % Access = protected for test harness only — formatEventFields_ header
     % documents the exact test scenario that requires this visibility.
     methods (Access = protected)
+        function tbl = buildEventFieldsTable_(~, ev)
+            %BUILDEVENTFIELDSTABLE_ Nx2 cell array for the uitable in the
+            %   details popup. Columns are {Field, Value}. Empty statistics
+            %   rows are skipped. Section separators use a blank-label row
+            %   with a bullet '·' value to maintain visual grouping without
+            %   relying on cell-level styling (not portable across MATLAB
+            %   versions).
+            if ev.IsOpen
+                endStr = 'Open';
+                durStr = 'Open';
+            else
+                endStr = sprintf('%g', ev.EndTime);
+                durStr = sprintf('%g', ev.Duration);
+            end
+            rows = {};
+            % Timing
+            rows(end+1,:) = {'Start',    sprintf('%g', ev.StartTime)};
+            rows(end+1,:) = {'End',      endStr};
+            rows(end+1,:) = {'Duration', durStr};
+            % Statistics — only non-empty
+            statRows = {};
+            if ~isempty(ev.PeakValue); statRows(end+1,:) = {'Peak', sprintf('%g', ev.PeakValue)}; end %#ok<AGROW>
+            if ~isempty(ev.MinValue);  statRows(end+1,:) = {'Min',  sprintf('%g', ev.MinValue)};  end %#ok<AGROW>
+            if ~isempty(ev.MaxValue);  statRows(end+1,:) = {'Max',  sprintf('%g', ev.MaxValue)};  end %#ok<AGROW>
+            if ~isempty(ev.MeanValue); statRows(end+1,:) = {'Mean', sprintf('%g', ev.MeanValue)}; end %#ok<AGROW>
+            if ~isempty(ev.RmsValue);  statRows(end+1,:) = {'RMS',  sprintf('%g', ev.RmsValue)};  end %#ok<AGROW>
+            if ~isempty(ev.StdValue);  statRows(end+1,:) = {'Std',  sprintf('%g', ev.StdValue)};  end %#ok<AGROW>
+            if ~isempty(statRows)
+                rows = [rows; statRows];
+            end
+            % Classification
+            sevLabels = {'info', 'warn', 'alarm'};
+            if ev.Severity >= 1 && ev.Severity <= numel(sevLabels)
+                sevStr = sprintf('%d  (%s)', ev.Severity, sevLabels{ev.Severity});
+            else
+                sevStr = sprintf('%d', ev.Severity);
+            end
+            catStr = ev.Category; if isempty(catStr); catStr = '—'; end
+            rows(end+1,:) = {'Severity', sevStr};
+            rows(end+1,:) = {'Category', catStr};
+            % Tags
+            if iscell(ev.TagKeys) && ~isempty(ev.TagKeys)
+                rows(end+1,:) = {'Tags', strjoin(ev.TagKeys, ', ')};
+            end
+            % Threshold
+            if ~isempty(ev.ThresholdLabel)
+                rows(end+1,:) = {'Threshold', ev.ThresholdLabel};
+            end
+            tbl = rows;
+        end
+
         function txt = formatEventFields_(~, ev)
             %FORMATEVENTFIELDS_ Produce a grouped, readable listing of event fields.
             %   Sections: TIMING / STATISTICS / CLASSIFICATION / TAGS / THRESHOLD.
