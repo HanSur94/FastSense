@@ -2218,7 +2218,10 @@ classdef FastSense < handle
             %RENDEREVENTLAYER_ Draw round markers per event (EVENT-07 + Phase 1012).
             %   Phase 1012 refactor: one line() per event so each marker carries
             %   its own ButtonDownFcn + UserData.eventId. Open events render
-            %   hollow; closed events render filled.
+            %   hollow; closed events render filled. scatter() is used for the
+            %   drop-shadow layer, which means we MUST enable hold on the axes
+            %   for the duration of the render pass — scatter clears axes
+            %   content when hold is off, unlike line/text.
             if ~obj.ShowEventMarkers || isempty(obj.Tags_)
                 return;
             end
@@ -2252,6 +2255,13 @@ classdef FastSense < handle
             badgeSize = sz * 2.6;                 % badge (circle) marker size
             edgeColor = [0.82 0.84 0.88];         % soft grey ring
             glyph     = '!';                       % exclamation mark — universal warning glyph, font-safe
+
+            % Turn hold ON for the duration of the render pass. scatter
+            % (used for the shadow layer) wipes the axes when hold is off —
+            % which erased the signal line. Restore prior state at the
+            % bottom of this function.
+            prevHoldWasOn = ishold(obj.hAxes);
+            hold(obj.hAxes, 'on');
 
             % One badge + glyph per event
             for i = 1:numel(obj.Tags_)
@@ -2349,6 +2359,11 @@ classdef FastSense < handle
                 catch
                     % Octave may not support uistack on line handles — ignore.
                 end
+            end
+
+            % Restore hold state (was forced on above for scatter shadow).
+            if ~prevHoldWasOn && ishandle(obj.hAxes)
+                try hold(obj.hAxes, 'off'); catch; end
             end
         end
 
