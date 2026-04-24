@@ -59,9 +59,12 @@ classdef DashboardEngine < handle
         hTimeEnd        = []
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
         Progress_           = []   % DashboardProgress instance (active during render)
-        % Stale-data banner (shown during live mode when tMax stops advancing)
-        hStaleBanner        = []   % uicontrol text overlay; hidden unless live+stale
-        LastTMax_           = []   % last observed DataTimeRange(2) for staleness check
+        % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
+        hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
+        hStaleBannerText     = []  % uicontrol text child of hStaleBanner
+        hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
+        LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
+        StaleBannerDismissed_= false  % true after user clicks X; reset when data flows again
     end
 
     methods (Access = public)
@@ -324,14 +327,21 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.IsLive = true;
-            % Baseline the staleness check: remember the current tMax so the
-            % first tick compares against what the user sees when they click Live.
-            if ~isempty(obj.DataTimeRange) && numel(obj.DataTimeRange) >= 2 ...
-                    && isfinite(obj.DataTimeRange(2))
-                obj.LastTMax_ = obj.DataTimeRange(2);
-            else
-                obj.LastTMax_ = [];
+            % Baseline per-widget tMax so the first tick has a reference.
+            obj.LastTMaxPerWidget_ = containers.Map( ...
+                'KeyType', 'char', 'ValueType', 'double');
+            ws = obj.activePageWidgets();
+            for i = 1:numel(ws)
+                [~, tMax] = ws{i}.getTimeRange();
+                if ~isfinite(tMax), continue; end
+                if ~isempty(ws{i}.Title)
+                    key = ws{i}.Title;
+                else
+                    key = sprintf('Widget %d', i);
+                end
+                obj.LastTMaxPerWidget_(key) = tMax;
             end
+            obj.StaleBannerDismissed_ = false;
             obj.hideStaleBanner();
             obj.LiveTimer = timer('ExecutionMode', 'fixedRate', ...
                 'Period', obj.LiveInterval, ...
@@ -348,7 +358,8 @@ classdef DashboardEngine < handle
             % isvalid + try/catch guards, matching LiveTagPipeline.stop().
             obj.IsLive = false;
             obj.hideStaleBanner();
-            obj.LastTMax_ = [];
+            obj.LastTMaxPerWidget_ = [];
+            obj.StaleBannerDismissed_ = false;
             if ~isempty(obj.LiveTimer)
                 try
                     if isvalid(obj.LiveTimer)
@@ -1108,25 +1119,48 @@ classdef DashboardEngine < handle
 
         function createStaleBanner(obj, theme, toolbarH)
         %CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
+        %   A uipanel strip below the toolbar containing a message label and
+        %   a close button. Hidden by default; shown when staleness is detected
+        %   and not previously dismissed by the user.
             if ~isempty(obj.hStaleBanner) && ishandle(obj.hStaleBanner)
                 return;
             end
-            bannerH = 0.032;
-            obj.hStaleBanner = uicontrol('Parent', obj.hFigure, ...
-                'Style', 'text', ...
+            bannerH = 0.035;
+            warnColor = theme.StatusWarnColor;
+            fgColor   = [0.15 0.10 0.02];
+
+            obj.hStaleBanner = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
                 'Position', [0, 1 - toolbarH - bannerH, 1, bannerH], ...
+                'BorderType', 'none', ...
+                'BackgroundColor', warnColor, ...
+                'Visible', 'off');
+
+            obj.hStaleBannerText = uicontrol('Parent', obj.hStaleBanner, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.01, 0.1, 0.94, 0.8], ...
                 'String', '', ...
                 'FontWeight', 'bold', ...
                 'FontSize', 10, ...
-                'HorizontalAlignment', 'center', ...
-                'ForegroundColor', [0.15 0.10 0.02], ...
-                'BackgroundColor', theme.StatusWarnColor, ...
-                'Visible', 'off');
+                'HorizontalAlignment', 'left', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', warnColor);
+
+            obj.hStaleBannerClose = uicontrol('Parent', obj.hStaleBanner, ...
+                'Style', 'pushbutton', ...
+                'Units', 'normalized', ...
+                'Position', [0.96, 0.15, 0.03, 0.7], ...
+                'String', 'X', ...
+                'FontWeight', 'bold', ...
+                'TooltipString', 'Dismiss this warning (reappears when data resumes then stops again)', ...
+                'Callback', @(~,~) obj.onStaleBannerClose());
         end
 
-        function showStaleBanner(obj)
-        %SHOWSTALEBANNER Display the warning that no new data has arrived.
+        function showStaleBanner(obj, staleTitles)
+        %SHOWSTALEBANNER Display the warning listing the widgets without new data.
+        %   staleTitles is a cell array of widget Title strings whose tMax
+        %   did not advance on the last live tick.
             if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
                 return;
             end
@@ -1136,17 +1170,15 @@ classdef DashboardEngine < handle
             else
                 intervalStr = sprintf('%.1fs', secs);
             end
-            msg = sprintf(['\x26A0  No new data received in the last %s ' ...
-                '(live tick fired, but widget data did not advance)'], ...
-                intervalStr);
-            set(obj.hStaleBanner, 'String', msg, 'Visible', 'on');
+            msg = obj.buildStaleMessage(staleTitles, intervalStr);
+            set(obj.hStaleBannerText, 'String', msg);
+            set(obj.hStaleBanner, 'Visible', 'on');
             % Widget panels are created after the banner, so they render on top
             % by default. Raise the banner to the front so it is actually seen.
             try
                 uistack(obj.hStaleBanner, 'top');
             catch
-                % uistack is MATLAB-only; Octave figures the z-order differently
-                % but keeping the banner Visible suffices for Octave's renderer.
+                % uistack is MATLAB-only; Octave's renderer handles z-order differently.
             end
         end
 
@@ -1156,6 +1188,69 @@ classdef DashboardEngine < handle
                 return;
             end
             set(obj.hStaleBanner, 'Visible', 'off');
+        end
+
+        function onStaleBannerClose(obj)
+        %ONSTALEBANNERCLOSE User dismissed the warning; stay hidden until data resumes.
+            obj.StaleBannerDismissed_ = true;
+            obj.hideStaleBanner();
+        end
+
+        function msg = buildStaleMessage(obj, staleTitles, intervalStr) %#ok<INUSL>
+        %BUILDSTALEMESSAGE Compose the banner text listing stale widgets.
+            if exist('OCTAVE_VERSION', 'builtin')
+                % Octave's default char() range is 8-bit; use an ASCII marker
+                % to avoid the "range error for conversion" warning.
+                warnChar = '[!]';
+            else
+                warnChar = char(hex2dec('26A0'));
+            end
+            n = numel(staleTitles);
+            if n == 0
+                msg = sprintf('%s  No new data in the last %s', warnChar, intervalStr);
+                return;
+            end
+            shownMax = 3;
+            if n <= shownMax
+                listStr = strjoin(staleTitles, ', ');
+            else
+                head = strjoin(staleTitles(1:shownMax), ', ');
+                listStr = sprintf('%s (+%d more)', head, n - shownMax);
+            end
+            if n == 1
+                msg = sprintf('%s  No new data (%s) from: %s', ...
+                    warnChar, intervalStr, listStr);
+            else
+                msg = sprintf('%s  %d widgets have no new data (%s): %s', ...
+                    warnChar, n, intervalStr, listStr);
+            end
+        end
+
+        function staleTitles = detectStaleWidgets(obj, ws)
+        %DETECTSTALEWIDGETS Return titles of widgets whose tMax did not advance.
+        %   Updates LastTMaxPerWidget_ with the current observation.
+            staleTitles = {};
+            if isempty(obj.LastTMaxPerWidget_)
+                obj.LastTMaxPerWidget_ = containers.Map('KeyType', 'char', 'ValueType', 'double');
+            end
+            for i = 1:numel(ws)
+                w = ws{i};
+                [~, tMax] = w.getTimeRange();
+                if ~isfinite(tMax)
+                    continue;  % no time-series data to compare
+                end
+                if ~isempty(w.Title)
+                    key = w.Title;
+                else
+                    key = sprintf('Widget %d', i);
+                end
+                if obj.LastTMaxPerWidget_.isKey(key)
+                    if tMax <= obj.LastTMaxPerWidget_(key)
+                        staleTitles{end+1} = key; %#ok<AGROW>
+                    end
+                end
+                obj.LastTMaxPerWidget_(key) = tMax;
+            end
         end
 
         function broadcastTimeRange(obj, tStart, tEnd)
@@ -1240,15 +1335,18 @@ classdef DashboardEngine < handle
             % Fetch active page widgets ONCE
             ws = obj.activePageWidgets();
 
-            % Update global time range from pre-fetched list; compare tMax for stale detection
-            newTMax = obj.updateLiveTimeRangeFrom(ws);
-            if ~isnan(newTMax)
-                if ~isempty(obj.LastTMax_) && newTMax <= obj.LastTMax_
-                    obj.showStaleBanner();
-                else
-                    obj.hideStaleBanner();
-                end
-                obj.LastTMax_ = newTMax;
+            % Update global time range from pre-fetched list
+            obj.updateLiveTimeRangeFrom(ws);
+
+            % Per-widget staleness detection — which widgets' tMax did not advance?
+            staleTitles = obj.detectStaleWidgets(ws);
+            if isempty(staleTitles)
+                % Fresh data somewhere → reset the user's dismissal so the
+                % banner can re-appear next time things go stale.
+                obj.StaleBannerDismissed_ = false;
+                obj.hideStaleBanner();
+            elseif ~obj.StaleBannerDismissed_
+                obj.showStaleBanner(staleTitles);
             end
 
             % Single pass: mark sensor-bound or Tag-bound widgets dirty, then refresh
