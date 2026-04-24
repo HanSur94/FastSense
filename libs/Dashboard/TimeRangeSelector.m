@@ -59,7 +59,8 @@ classdef TimeRangeSelector < handle
         hPanel      = []   % parent uipanel
         hFigure     = []   % ancestor figure
         hAxes       = []
-        hEnvelope   = []   % single patch for aggregate min/max envelope
+        hEnvelope   = []   % single patch for aggregate min/max envelope (legacy)
+        hPreviewLines = []  % array of line handles, one per widget preview
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
@@ -192,9 +193,9 @@ classdef TimeRangeSelector < handle
         end
 
         function setEnvelope(obj, xC, yMin, yMax)
-            %setEnvelope  Draw the aggregate min/max preview envelope.
-            %   xC, yMin, yMax must be equal-length vectors. Passing any empty
-            %   vector hides the envelope patch.
+            %setEnvelope  (Legacy) Draw the aggregate min/max preview envelope.
+            %   Kept for backward compat with tests. New code should prefer
+            %   setPreviewLines for per-widget line previews.
             if isempty(xC) || isempty(yMin) || isempty(yMax)
                 set(obj.hEnvelope, 'Visible', 'off');
                 return;
@@ -203,6 +204,56 @@ classdef TimeRangeSelector < handle
             xv = [xC, fliplr(xC)];
             yv = [yMin, fliplr(yMax)];
             set(obj.hEnvelope, 'XData', xv, 'YData', yv, 'Visible', 'on');
+        end
+
+        function setPreviewLines(obj, lines)
+            %setPreviewLines  Draw one downsampled line per widget preview.
+            %   lines is a cell array of structs, each with fields x and y
+            %   (equal-length row vectors; y already normalized to [0,1]).
+            %   Each line is rendered with a distinct color from a fixed
+            %   palette, placed behind the selection rectangle so drag
+            %   interactions remain unaffected.
+            % Clear previous preview lines.
+            for k = 1:numel(obj.hPreviewLines)
+                if ishandle(obj.hPreviewLines(k))
+                    delete(obj.hPreviewLines(k));
+                end
+            end
+            obj.hPreviewLines = [];
+            % Hide the legacy envelope patch.
+            set(obj.hEnvelope, 'Visible', 'off');
+            if isempty(lines), return; end
+            palette = [ ...
+                0.00 0.45 0.70;    % blue
+                0.90 0.40 0.20;    % orange
+                0.20 0.60 0.20;    % green
+                0.70 0.20 0.50;    % purple
+                0.85 0.70 0.20;    % mustard
+                0.30 0.70 0.70;    % teal
+                0.70 0.30 0.30];   % brick
+            handles = [];
+            for i = 1:numel(lines)
+                L = lines{i};
+                if ~isstruct(L) || ~isfield(L, 'x') || ~isfield(L, 'y'), continue; end
+                if isempty(L.x) || isempty(L.y) || numel(L.x) ~= numel(L.y), continue; end
+                c = palette(mod(i - 1, size(palette, 1)) + 1, :);
+                h = line(obj.hAxes, L.x(:).', L.y(:).', ...
+                    'Color', c, 'LineWidth', 1, ...
+                    'HitTest', 'off', 'PickableParts', 'none');
+                handles(end + 1) = h; %#ok<AGROW>
+            end
+            obj.hPreviewLines = handles;
+            % Send preview lines to the BACK so the selection patch, edges,
+            % and labels stay on top. Works in MATLAB and Octave.
+            if ~isempty(handles) && ishandle(obj.hAxes)
+                ch = get(obj.hAxes, 'Children');
+                mask = true(size(ch));
+                for k = 1:numel(handles)
+                    mask(ch == handles(k)) = false;
+                end
+                others = ch(mask);
+                set(obj.hAxes, 'Children', [others(:); handles(:)]);
+            end
         end
 
         function delete(obj)

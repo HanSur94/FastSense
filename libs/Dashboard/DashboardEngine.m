@@ -1459,13 +1459,14 @@ classdef DashboardEngine < handle
             end
             ws = obj.activePageWidgets();
             if isempty(ws)
-                obj.TimeRangeSelector_.setEnvelope([], [], []);
+                obj.TimeRangeSelector_.setPreviewLines({});
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
                 return;
             end
             aggMin = inf(1, nBuckets);
             aggMax = -inf(1, nBuckets);
             xCenters = [];
+            linesList = {};
             for i = 1:numel(ws)
                 try
                     s = ws{i}.getPreviewSeries(nBuckets);
@@ -1480,17 +1481,23 @@ classdef DashboardEngine < handle
                     continue;
                 end
                 if isempty(xCenters), xCenters = s.xCenters; end
+                % Aggregate min/max kept so computePreviewEnvelopeForTest
+                % can still return an envelope struct for existing tests.
                 aggMin = min(aggMin, s.yMin);
                 aggMax = max(aggMax, s.yMax);
+                % Per-widget line: midpoint of bucket, already normalized
+                % to [0,1] by the widget (D-08).
+                yMid = (s.yMin + s.yMax) / 2;
+                linesList{end + 1} = struct('x', s.xCenters, 'y', yMid); %#ok<AGROW>
             end
             if isempty(xCenters) || ~any(isfinite(aggMin))
-                obj.TimeRangeSelector_.setEnvelope([], [], []);
+                obj.TimeRangeSelector_.setPreviewLines({});
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
                 return;
             end
             aggMin(~isfinite(aggMin)) = 0;
             aggMax(~isfinite(aggMax)) = 0;
-            obj.TimeRangeSelector_.setEnvelope(xCenters, aggMin, aggMax);
+            obj.TimeRangeSelector_.setPreviewLines(linesList);
             env = struct('xCenters', xCenters, 'yMin', aggMin, 'yMax', aggMax);
         end
 
