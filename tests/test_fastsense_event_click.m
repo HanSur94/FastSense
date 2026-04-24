@@ -1,15 +1,136 @@
 function test_fastsense_event_click
     root = fileparts(fileparts(mfilename('fullpath')));
     addpath(root); install();
-    skipped = { ...
-        'testPerMarkerButtonDownFcnIsSet: Plan 1012-03 will wire.', ...
-        'testUserDataHoldsEventId: Plan 1012-03 will wire.', ...
-        'testOpenEventMarkerIsHollow: Plan 1012-03 will wire.', ...
-        'testClosedEventMarkerIsFilled: Plan 1012-03 will wire.', ...
-        'testClickOpensDetailsPanel: Plan 1012-03 + GUI environment required.', ...
-        'testEscDismissesDetailsPanel: Plan 1012-03 + GUI environment required.', ...
-        'testXButtonDismissesDetailsPanel: Plan 1012-03 + GUI environment required.', ...
-        'testClickOutsideDismissesDetailsPanel: Plan 1012-03 + GUI environment required.' };
-    for i = 1:numel(skipped), fprintf('    SKIP %s\n', skipped{i}); end
-    fprintf('    All 0 tests passed (%d skipped pending Plan 1012-03).\n', numel(skipped));
+    nPassed = 0; nFailed = 0;
+
+    % --- Build fixture inline (no nested functions - Octave SIGILL safety) ---
+
+    % testPerMarkerButtonDownFcnIsSet
+    try
+        f = figure('Visible', 'off');
+        ax = axes('Parent', f);
+        parent = SensorTag('p');
+        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
+        es = EventStore('');
+        ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
+        ev_.Severity = 2;
+        es.append(ev_);
+        ev_.TagKeys = {'p'};
+        EventBinding.attach(ev_.Id, 'p');
+        fp_ = FastSense('Parent', ax);
+        fp_.addTag(parent);
+        fp_.ShowEventMarkers = true;
+        fp_.EventStore = es;
+        fp_.render();
+        markers = fp_.EventMarkerHandles_;
+        assert(numel(markers) >= 1);
+        bd = get(markers{1}, 'ButtonDownFcn');
+        assert(isa(bd, 'function_handle'));
+        delete(f);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testPerMarkerButtonDownFcnIsSet: %s\n', err.message); nFailed = nFailed + 1;
+    end
+
+    % testUserDataHoldsEventId
+    try
+        f = figure('Visible', 'off');
+        ax = axes('Parent', f);
+        parent = SensorTag('p');
+        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
+        es = EventStore('');
+        ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
+        ev_.Severity = 2;
+        es.append(ev_);
+        ev_.TagKeys = {'p'};
+        EventBinding.attach(ev_.Id, 'p');
+        fp_ = FastSense('Parent', ax);
+        fp_.addTag(parent);
+        fp_.ShowEventMarkers = true;
+        fp_.EventStore = es;
+        fp_.render();
+        markers = fp_.EventMarkerHandles_;
+        ud = get(markers{1}, 'UserData');
+        assert(isstruct(ud));
+        assert(strcmp(ud.eventId, ev_.Id));
+        delete(f);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testUserDataHoldsEventId: %s\n', err.message); nFailed = nFailed + 1;
+    end
+
+    % testOpenEventMarkerIsHollow
+    try
+        f = figure('Visible', 'off');
+        ax = axes('Parent', f);
+        parent = SensorTag('p');
+        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
+        es = EventStore('');
+        ev_ = Event(3, NaN, 'p', 'hi', 5, 'upper'); ev_.IsOpen = true;
+        ev_.Severity = 2;
+        es.append(ev_);
+        ev_.TagKeys = {'p'};
+        EventBinding.attach(ev_.Id, 'p');
+        fp_ = FastSense('Parent', ax);
+        fp_.addTag(parent);
+        fp_.ShowEventMarkers = true;
+        fp_.EventStore = es;
+        fp_.render();
+        markers = fp_.EventMarkerHandles_;
+        faceColor = get(markers{1}, 'MarkerFaceColor');
+        assert(strcmp(faceColor, 'none'));
+        delete(f);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testOpenEventMarkerIsHollow: %s\n', err.message); nFailed = nFailed + 1;
+    end
+
+    % testClosedEventMarkerIsFilled
+    try
+        f = figure('Visible', 'off');
+        ax = axes('Parent', f);
+        parent = SensorTag('p');
+        parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
+        es = EventStore('');
+        ev_ = Event(3, 4, 'p', 'hi', 5, 'upper');
+        ev_.Severity = 2;
+        es.append(ev_);
+        ev_.TagKeys = {'p'};
+        EventBinding.attach(ev_.Id, 'p');
+        fp_ = FastSense('Parent', ax);
+        fp_.addTag(parent);
+        fp_.ShowEventMarkers = true;
+        fp_.EventStore = es;
+        fp_.render();
+        markers = fp_.EventMarkerHandles_;
+        faceColor = get(markers{1}, 'MarkerFaceColor');
+        assert(~ischar(faceColor) || ~strcmp(faceColor, 'none'));
+        delete(f);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testClosedEventMarkerIsFilled: %s\n', err.message); nFailed = nFailed + 1;
+    end
+
+    % testFormatEventFieldsShowsOpenForOpenEvent
+    if ~exist('OCTAVE_VERSION', 'builtin')
+        try
+            ev = Event(5, NaN, 's1', 'hi', 5, 'upper'); ev.IsOpen = true;
+            fp = FastSense();
+            txt = fp.formatEventFields_(ev);
+            assert(~isempty(strfind(txt, 'EndTime:        Open')));
+            assert(~isempty(strfind(txt, 'Duration:       Open')));
+            nPassed = nPassed + 1;
+        catch err
+            fprintf('    FAIL testFormatEventFieldsShowsOpenForOpenEvent: %s\n', err.message); nFailed = nFailed + 1;
+        end
+    else
+        fprintf('    SKIP testFormatEventFieldsShowsOpenForOpenEvent: Octave private-access enforcement.\n');
+    end
+
+    fprintf('    SKIP testClickOpensDetailsPanel: GUI + JVM required.\n');
+    fprintf('    SKIP testEscDismissesDetailsPanel: GUI + JVM required.\n');
+    fprintf('    SKIP testXButtonDismissesDetailsPanel: GUI + JVM required.\n');
+
+    fprintf('    %d passed, %d failed (3 GUI skipped).\n', nPassed, nFailed);
+    if nFailed > 0, error('test_fastsense_event_click:failures', '%d failed', nFailed); end
 end
