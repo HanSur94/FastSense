@@ -19,10 +19,12 @@ classdef TestDashboardLayout < matlab.unittest.TestCase
             pos = layout.computePosition([1 1 6 1]);
 
             testCase.verifyLength(pos, 4);
-            testCase.verifyGreaterThan(pos(1), 0);
-            testCase.verifyGreaterThan(pos(2), 0);
-            testCase.verifyGreaterThan(pos(3), 0);
-            testCase.verifyGreaterThan(pos(4), 0);
+            % With zero padding, column-1 widgets sit exactly at x=0 (flush left).
+            testCase.verifyEqual(pos(1), 0, 'AbsTol', 1e-12);
+            % y depends on TotalRows/RowHeight; after zeroing padding it may be 0 too.
+            testCase.verifyGreaterThanOrEqual(pos(2), 0);
+            testCase.verifyGreaterThan(pos(3), 0);   % width still strictly positive
+            testCase.verifyGreaterThan(pos(4), 0);   % height still strictly positive
         end
 
         function testFullWidthWidget(testCase)
