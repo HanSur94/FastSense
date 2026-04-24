@@ -371,3 +371,18 @@ Plans:
 - [x] 1006-02-PLAN.md — mksqlite diagnostic-first + fix branch (A/B/C) for TestMksqliteEdgeCases + TestMksqliteTypes (MATLABFIX-A; wave 2)
 - [x] 1006-03-PLAN.md — Stale test expectations E1-E9 cluster + E10 grid-snap diagnostic+fix (MATLABFIX-E; wave 2)
 - [x] 1006-04-PLAN.md — DashboardEngine.exportImage → exportgraphics() for headless MATLAB CI (MATLABFIX-F; wave 2)
+
+### Phase 1012: Live event markers and click-to-details on FastSense and FastSenseWidget
+
+**Goal:** Extend Phase 1010's Event-↔-Tag overlay with three orthogonal capabilities: (1) open-event visibility (events become visible as hollow markers the moment they are detected, not only once closed), (2) per-marker click-to-details (floating uipanel showing every Event field with ESC + click-outside + X-button dismiss), and (3) dashboard-widget-level wiring (FastSenseWidget exposes ShowEventMarkers + EventStore so dashboard users get the overlay without dropping to the bare FastSense core class). EventStore remains the single source of truth (D1 locked during brainstorm).
+
+**Requirements**: (no REQ-IDs — extension of Phase 1010's shipped EVENT-01..EVENT-07 set; no new requirement block)
+**Depends on:** Phase 1010 (Event.TagKeys, EventBinding, EventStore.eventsForTag, FastSense.renderEventLayer_ all shipped), Phase 1011 (legacy cleanup complete — clean Tag-only codebase)
+**Plans:** 3 plans
+
+Plans:
+- [ ] 1012-01-PLAN.md — Event.IsOpen + EventStore.closeEvent + Wave 0 test scaffolding + Pitfall-10 bench harness
+- [ ] 1012-02-PLAN.md — MonitorTag rising-edge open emission + running stats accumulator + falling-edge closeEvent
+- [ ] 1012-03-PLAN.md — DashboardTheme.EventMarkerSize + renderEventLayer_ per-event refactor + click-details uipanel + FastSenseWidget.ShowEventMarkers/EventStore wiring + serializer + bench gate + example
+
+**UI hint**: yes

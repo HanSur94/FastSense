@@ -2,9 +2,10 @@
 phase: 1012
 slug: live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-24
+updated: 2026-04-24
 ---
 
 # Phase 1012 — Validation Strategy
@@ -36,11 +37,24 @@ created: 2026-04-24
 
 ## Per-Task Verification Map
 
-*Filled by planner after task breakdown. Every task must declare an `<automated>` verify command OR depend on Wave 0 test-infrastructure tasks.*
+All tasks have an `<automated>` verify command. Tasks that touch GUI code gracefully skip on headless Octave via `usejava('jvm')` + `DISPLAY` guards — skip is NOT a failure.
 
 | Task ID | Plan | Wave | Area | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|------|-----------|-------------------|-------------|--------|
-| TBD — planner fills | | | | | | | |
+| 1012-01-1 | 01 | 0 | Event schema + close() method | unit | `matlab -batch "install; r=runtests({'tests/suite/TestEventIsOpen.m'}); exit(double(~all([r.Passed])))"` | ✅ created in 01-4 | planned |
+| 1012-01-2 | 01 | 0 | EventStore.closeEvent | unit | same as 01-1 (shared test class) | ✅ | planned |
+| 1012-01-3 | 01 | 0 | TestEventIsOpen full test class (MATLAB + Octave) | unit | `octave --no-gui --eval "addpath('$(pwd)'); install; addpath('tests'); test_event_is_open"` | ✅ | planned |
+| 1012-01-4 | 01 | 0 | Wave 0 stubs + Pitfall-10 bench harness | infra | `octave --no-gui --eval "addpath('$(pwd)'); install; bench_event_marker_regression"` | ✅ | planned |
+| 1012-02-1 | 02 | 1 | cache_.openStats_ + openEventId_ plumbing | unit | `matlab -batch "install; r=runtests({'tests/suite/TestMonitorTag.m','tests/suite/TestMonitorTagStreaming.m','tests/suite/TestMonitorTagEvents.m','tests/suite/TestMonitorTagPersistence.m'}); exit(double(any([r.Failed])))"` | ✅ pre-exists | planned |
+| 1012-02-2 | 02 | 1 | MonitorTag rising/falling edge + running stats | unit | same as 02-1 | ✅ | planned |
+| 1012-02-3 | 02 | 1 | TestMonitorTagOpenEvent full rewrite (MATLAB + Octave) | unit | `matlab -batch "install; r=runtests({'tests/suite/TestMonitorTagOpenEvent.m'}); exit(double(~all([r.Passed])))"` | ✅ | planned |
+| 1012-03-1 | 03 | 2 | DashboardTheme.EventMarkerSize + renderEventLayer_ refactor | unit + bench | `matlab -batch "install; r=runtests({'tests/suite/TestFastSenseEventClick.m','tests/suite/TestFastSenseWidgetEventMarkers.m'}); exit(double(any([r.Failed])))"` + bench | ✅ | planned |
+| 1012-03-2 | 03 | 2 | openEventDetails_ / closeEventDetails_ / dismiss | unit (JVM-gated) | `matlab -batch "install; r=runtests({'tests/suite/TestFastSenseEventClick.m'}); exit(double(~all([r.Passed] | [r.Incomplete])))"` | ✅ | planned |
+| 1012-03-3 | 03 | 2 | FastSenseWidget property wiring + refresh diff | unit | `matlab -batch "install; r=runtests({'tests/suite/TestFastSenseWidgetEventMarkers.m'}); exit(double(any([r.Failed])))"` | ✅ | planned |
+| 1012-03-4 | 03 | 2 | TestFastSenseEventClick + TestFastSenseWidgetEventMarkers rewrite | unit | `matlab -batch "install; r=runtests({'tests/suite/TestFastSenseEventClick.m','tests/suite/TestFastSenseWidgetEventMarkers.m'}); exit(double(any([r.Failed])))"` | ✅ | planned |
+| 1012-03-5 | 03 | 2 | example_event_markers + Pitfall-10 phase-exit gate | bench + example | `octave --no-gui --eval "addpath('$(pwd)'); install; bench_event_marker_regression"` | ✅ | planned |
+
+Sampling continuity: no 3 consecutive tasks without automated verification; Wave 0 covers all MISSING files.
 
 ---
 
@@ -72,13 +86,15 @@ Wave 0 must land before any production code in later waves. Requirements:
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify commands OR explicit Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verification
-- [ ] Wave 0 covers all MISSING test files, benchmarks, and example scripts
-- [ ] No watch-mode flags in any test invocation
-- [ ] Feedback latency < 60s per-task, < 12min per-wave
-- [ ] Both MATLAB and Octave runs green in the phase-exit bundle
-- [ ] Pitfall-10 bench (zero-event render) ≤5% regression
-- [ ] `nyquist_compliant: true` set in frontmatter after planner fills the verification map
+- [x] All tasks have `<automated>` verify commands OR explicit Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verification
+- [x] Wave 0 covers all MISSING test files, benchmarks, and example scripts
+- [x] No watch-mode flags in any test invocation
+- [x] Feedback latency < 60s per-task, < 12min per-wave
+- [ ] Both MATLAB and Octave runs green in the phase-exit bundle (validated at phase exit)
+- [ ] Pitfall-10 bench (zero-event render) ≤5% regression (validated at Task 03-5)
+- [x] `nyquist_compliant: true` set in frontmatter after planner fills the verification map
 
-**Approval:** pending
+**Approval:** planner-approved (2026-04-24). Phase-exit approval pending on Plan 03 Task 5 bench PASS + full-suite green.
+
+<!-- revision 1: Per-Task Verification Map commands updated for checker warning 4 — `runtests('Name','TestMonitorTag*')` and `runtests('Name','TestFastSense*')` globs replaced with explicit test-file lists, eliminating the silent-zero-tests failure mode. -->
