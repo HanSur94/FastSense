@@ -15,9 +15,9 @@ classdef DashboardLayout < handle
         Columns         = 24
         TotalRows       = 4
         ContentArea     = [0 0 1 1]
-        Padding         = [0.02 0.02 0.02 0.02]
-        GapH            = 0.008
-        GapV            = 0.015
+        Padding         = [0 0 0 0]
+        GapH            = 0
+        GapV            = 0
         RowHeight       = 0.22
         ScrollbarWidth  = 0.015
         OnScrollCallback = []       % function handle: @(topRow, bottomRow)
