@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Tag-Based Domain Model
-status: verifying
-stopped_at: Completed 1012-03-PLAN.md
-last_updated: "2026-04-24T09:32:30.987Z"
+milestone: v2.1
+milestone_name: "(planning — run /gsd:new-milestone)"
+status: between_milestones
+stopped_at: v2.0 shipped 2026-04-24
+last_updated: "2026-04-24T11:20:00.000Z"
 last_activity: 2026-04-24
 progress:
-  total_phases: 15
-  completed_phases: 9
-  total_plans: 30
-  completed_plans: 30
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -21,16 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** Phase 1012 — live-event-markers-and-click-to-details-on-fastsense-and-fastsensewidget
+**Current focus:** Between milestones — v2.0 shipped, v2.1 not yet planned.
 
 ## Current Position
 
-Phase: 1012
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: —
+Plan: —
+Status: v2.0 Tag-Based Domain Model shipped (9/9 phases, 45/45 requirements, tech_debt)
 Last activity: 2026-04-24
 
-Progress: [░░░░░░░░░░] 0% (0/8 v2.0 phases complete)
+Progress: [██████████] 100% of v2.0 shipped (9/9 phases)
+
+## Next Steps
+
+- `/gsd:new-milestone` — start v2.1 questioning → research → requirements → roadmap
+- `/gsd:cleanup` — archive stale phase directories from pre-v2.0 milestones still sitting in `.planning/phases/`
+- `/gsd:pr-branch` — produce a clean PR branch ready for code review/merge
+
+---
 
 ## Performance Metrics
 

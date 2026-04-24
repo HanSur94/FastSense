@@ -1,5 +1,26 @@
 # Milestones
 
+## v2.0 Tag-Based Domain Model (Shipped: 2026-04-24)
+
+**Phases completed:** 9 phases (1004-1011 + 1012 extension), 30 plans, ~45 tasks
+**Status:** `tech_debt` — 45/45 requirements satisfied, 9/9 flows complete, 7 non-blocking debt items tracked
+
+**Key accomplishments:**
+
+- **Tag hierarchy established** (Phase 1004): abstract `Tag` base + `TagRegistry` with two-phase loader + golden integration test guarding the rewrite
+- **SensorTag + StateTag** (Phase 1005): legacy `Sensor`/`StateChannel` ported to Tag subclasses; `FastSense.addTag()` dispatches by `getKind()` without `isa` branches
+- **MonitorTag** (Phases 1006-1008): lazy-by-default derived binary signals with debounce + hysteresis (1006), `appendData` streaming + opt-in `FastSenseDataStore` persistence (1007), cycle-detected `CompositeTag` with AND/OR/MAJORITY/COUNT/WORST aggregation via merge-sort streaming (1008)
+- **Consumer migration** (Phase 1009): 9 widgets + `EventDetection` pipeline migrated to Tag API across 4 wave-ordered plans; zero `isa` branches shipped on hot paths
+- **Event ↔ Tag binding** (Phase 1010): many-to-many `EventBinding` registry + `Event.TagKeys` denormalization removed + `FastSense.renderEventLayer_` toggleable round-marker overlay with Pitfall-10 zero-event regression gate PASSED
+- **Legacy cleanup** (Phase 1011): 8 legacy classes deleted (`Sensor`, `Threshold`, `ThresholdRule`, `CompositeThreshold`, `StateChannel`, `SensorRegistry`, `ThresholdRegistry`, `ExternalSensorRegistry`); golden test rewritten to Tag API; full suite green
+- **Live event markers + click-to-details** (Phase 1012 extension): `Event.IsOpen`/`closeEvent` open-event schema, `MonitorTag` rising-edge emission with running stats, per-event per-marker `ButtonDownFcn`, standalone-figure click-details popup with editable persistent `Notes`, severity-colored badge markers with drop shadow + section-grouped `uitable` field listing
+
+**Tech debt tracked for v2.1 or cleanup phase:** 3 items from Phase 1011 (dead `EventDetector.detect` API, `DashboardSerializer .m` export for Tag widgets, 93 `Threshold(` refs in MATLAB-only test files) + 4 items from Phase 1012 (unused private props after popup refit, `formatEventFields_` back-compat footer, deferred UI surfaces, `autoscaleY` → public widget method).
+
+Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) · Audit: [milestones/v2.0-MILESTONE-AUDIT.md](milestones/v2.0-MILESTONE-AUDIT.md)
+
+---
+
 ## v1.0 Dashboard Performance Optimization (Shipped: 2026-04-04)
 
 **Phases completed:** 1 phases, 3 plans, 2 tasks
