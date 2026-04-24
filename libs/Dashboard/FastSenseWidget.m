@@ -30,8 +30,9 @@ classdef FastSenseWidget < DashboardWidget
         CachedXMin    = inf    % cached minimum of X data for O(1) getTimeRange()
         CachedXMax    = -inf   % cached maximum of X data for O(1) getTimeRange()
         LastTagRef    = []     % Tag handle snapshot for cache-invalidation
-        LastEventIds_  = {}    % Phase 1012 — cell of event Ids at last refresh
-        LastEventOpen_ = []    % Phase 1012 — logical array parallel to LastEventIds_
+        LastEventIds_      = {}    % Phase 1012 — cell of event Ids at last refresh
+        LastEventOpen_     = []    % Phase 1012 — logical array parallel to LastEventIds_
+        LastEventSeverity_ = []    % Phase 1012 — numeric array parallel to LastEventIds_
     end
 
     methods
@@ -302,9 +303,11 @@ classdef FastSenseWidget < DashboardWidget
             nE = numel(events);
             ids = cell(1, nE);
             openFlags = false(1, nE);
+            sevs      = zeros(1, nE);
             for k = 1:nE
                 ids{k} = events(k).Id;
                 openFlags(k) = logical(events(k).IsOpen);
+                sevs(k)      = double(events(k).Severity);
             end
             changed = false;
             if numel(ids) ~= numel(obj.LastEventIds_)
@@ -315,16 +318,23 @@ classdef FastSenseWidget < DashboardWidget
                         changed = true; break;
                     end
                     idx = find(strcmp(ids{k}, obj.LastEventIds_), 1);
-                    if ~isempty(idx) && obj.LastEventOpen_(idx) ~= openFlags(k)
+                    if isempty(idx); continue; end
+                    if obj.LastEventOpen_(idx) ~= openFlags(k)
                         changed = true; break;   % open <-> closed transition
+                    end
+                    if ~isempty(obj.LastEventSeverity_) && ...
+                            idx <= numel(obj.LastEventSeverity_) && ...
+                            obj.LastEventSeverity_(idx) ~= sevs(k)
+                        changed = true; break;   % severity bumped -> re-color
                     end
                 end
             end
             if changed
                 obj.FastSenseObj.refreshEventLayer();
             end
-            obj.LastEventIds_  = ids;
-            obj.LastEventOpen_ = openFlags;
+            obj.LastEventIds_      = ids;
+            obj.LastEventOpen_     = openFlags;
+            obj.LastEventSeverity_ = sevs;
         end
 
         function updateTimeRangeCache(obj)
