@@ -77,6 +77,12 @@ If AVX2 compilation fails on x86_64, the build script automatically retries with
 - **Used by**: DataStore, disk-backed sensor resolution
 - **Features**: Serializes MATLAB arrays preserving type and shape
 
+### Step Function Conversion
+
+**to_step_function_mex** — SIMD step-function conversion for thresholds
+- **Speedup**: Significant over pure MATLAB threshold expansion
+- **Used by**: Time-varying threshold processing
+
 ## Fallback Behavior
 
 When MEX files are unavailable:
@@ -97,6 +103,35 @@ The `build_mex()` function:
 5. **Handles failures** — automatically retries x86_64 builds with SSE2 if AVX2 fails
 6. **Copies shared files** — distributes MEX binaries to other library directories
 
+The build system includes intelligent caching:
+- Files with existing MEX binaries are skipped during compilation
+- A global build stamp tracks source file changes to avoid unnecessary rebuilds
+- Compilation is automatically triggered only when sources have changed
+
+## Platform-Specific Details
+
+### Octave Support
+
+On Octave, MEX files are compiled into platform-specific subdirectories:
+- `private/octave-macos-arm64/` — Apple Silicon
+- `private/octave-macos-x86_64/` — Intel Mac  
+- `private/octave-linux-x86_64/` — Linux x86_64
+- `private/octave-windows-x86_64/` — Windows x86_64
+
+This allows the same repository to work across multiple Octave installations.
+
+### Compiler Selection
+
+The build script automatically chooses the best compiler:
+
+**Octave**: Searches for real GCC (not Apple Clang) in Homebrew paths:
+```matlab
+% Checks /opt/homebrew/bin/gcc-15 down to gcc-10
+% Falls back to system gcc if it's real GCC
+```
+
+**MATLAB**: Always uses the configured default compiler to avoid linker incompatibilities.
+
 ## Verifying Installation
 
 Test that MEX functions produce identical results to MATLAB fallbacks:
@@ -109,3 +144,30 @@ test_mex_edge_cases;  % Test edge cases (empty arrays, NaN, etc.)
 ```
 
 The test suite validates numerical accuracy across all MEX functions and handles edge cases like empty arrays, single points, and NaN values.
+
+## Debugging Build Issues
+
+If compilation fails:
+
+1. **Check architecture detection**:
+   ```matlab
+   fprintf('Architecture: %s\n', computer('arch'));
+   ```
+
+2. **Verify compiler availability**:
+   ```matlab
+   % On macOS: xcode-select --install
+   % On Linux: sudo apt install build-essential
+   % On Windows: install Visual Studio with C++ support
+   ```
+
+3. **Check for AVX2 support** — older CPUs may need SSE2 fallback:
+   ```matlab
+   % The script automatically retries with SSE2 on AVX2 failure
+   ```
+
+4. **Manual MEX compilation**:
+   ```matlab
+   % Example for debugging a specific file
+   mex -O -v libs/FastSense/private/mex_src/binary_search_mex.c
+   ```

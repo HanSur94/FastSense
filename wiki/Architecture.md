@@ -26,50 +26,63 @@ FastPlot/
 │   │   ├── build_mex.m               # MEX compilation script
 │   │   └── private/                  # Internal algorithms + MEX sources
 │   ├── SensorThreshold/              # Sensor and threshold system
-│   │   ├── Sensor.m
-│   │   ├── StateChannel.m
-│   │   ├── ThresholdRule.m
-│   │   ├── SensorRegistry.m
-│   │   ├── ExternalSensorRegistry.m
+│   │   ├── Tag.m                     # Abstract base for unified domain model
+│   │   ├── SensorTag.m               # Time-series data carriers
+│   │   ├── StateTag.m                # Discrete state signals with ZOH lookup
+│   │   ├── MonitorTag.m              # Derived 0/1 binary threshold monitors
+│   │   ├── CompositeTag.m            # Aggregate monitors via AND/OR/majority
+│   │   ├── TagRegistry.m             # Singleton catalog of named Tag entities
+│   │   ├── BatchTagPipeline.m        # Synchronous raw-data to per-tag .mat
+│   │   ├── LiveTagPipeline.m         # Timer-driven raw-data pipeline
 │   │   └── private/                  # Resolution algorithms
 │   ├── EventDetection/               # Event detection and viewer
-│   │   ├── Event.m
-│   │   ├── EventDetector.m
-│   │   ├── EventViewer.m
-│   │   ├── LiveEventPipeline.m
-│   │   ├── NotificationService.m
-│   │   ├── EventStore.m
-│   │   ├── EventConfig.m
-│   │   ├── IncrementalEventDetector.m
-│   │   ├── DataSource.m              # Abstract data source
-│   │   ├── MatFileDataSource.m       # File-based data source
-│   │   ├── MockDataSource.m          # Test data generation
-│   │   ├── NotificationRule.m        # Email notification rules
+│   │   ├── Event.m                   # Single threshold violation events
+│   │   ├── EventDetector.m           # Detects events from violations
+│   │   ├── EventViewer.m             # Gantt chart + filterable table
+│   │   ├── LiveEventPipeline.m       # Orchestrates live event detection
+│   │   ├── EventStore.m              # Atomic read/write to .mat files
+│   │   ├── EventConfig.m             # Detection system configuration
+│   │   ├── EventBinding.m            # Many-to-many Event-Tag registry
+│   │   ├── IncrementalEventDetector.m # Incremental state wrapper
+│   │   ├── DataSource.m              # Abstract data fetching interface
+│   │   ├── MatFileDataSource.m       # Polls .mat files for changes
+│   │   ├── MockDataSource.m          # Realistic test signal generation
+│   │   ├── NotificationService.m     # Rule-based email alerts
+│   │   ├── NotificationRule.m        # Email notification configuration
 │   │   └── private/                  # Event grouping algorithms
 │   ├── Dashboard/                    # Dashboard engine (serializable)
-│   │   ├── DashboardEngine.m
-│   │   ├── DashboardBuilder.m
-│   │   ├── DashboardLayout.m
-│   │   ├── DashboardSerializer.m
-│   │   ├── DashboardTheme.m
-│   │   ├── DashboardToolbar.m
+│   │   ├── DashboardEngine.m         # Top-level dashboard orchestrator
+│   │   ├── DashboardBuilder.m        # Edit mode overlay for GUI
+│   │   ├── DashboardLayout.m         # 24-column responsive grid
+│   │   ├── DashboardSerializer.m     # JSON load/save and .m export
+│   │   ├── DashboardTheme.m          # FastSenseTheme + dashboard fields
+│   │   ├── DashboardToolbar.m        # Global toolbar controls
 │   │   ├── DashboardWidget.m         # Abstract widget base
-│   │   ├── FastSenseWidget.m
-│   │   ├── GaugeWidget.m
-│   │   ├── NumberWidget.m
-│   │   ├── StatusWidget.m
-│   │   ├── TextWidget.m
-│   │   ├── TableWidget.m
-│   │   ├── RawAxesWidget.m
-│   │   ├── EventTimelineWidget.m
-│   │   ├── GroupWidget.m             # Collapsible/tabbed widget groups
+│   │   ├── DashboardPage.m           # Named page container for multi-page
+│   │   ├── DashboardProgress.m       # Progress bar for render passes
+│   │   ├── DashboardConfigDialog.m   # Config editor figure
+│   │   ├── DetachedMirror.m          # Standalone live-mirrored windows
+│   │   ├── TimeRangeSelector.m       # Dual-slider time range control
+│   │   ├── FastSenseWidget.m         # FastSense instance wrapper
+│   │   ├── GaugeWidget.m             # Arc/donut/bar/thermometer gauges
+│   │   ├── NumberWidget.m            # Big number with trend arrow
+│   │   ├── StatusWidget.m            # Colored dot indicators
+│   │   ├── TextWidget.m              # Static labels/headers
+│   │   ├── TableWidget.m             # uitable display
+│   │   ├── RawAxesWidget.m           # User-supplied plot functions
+│   │   ├── EventTimelineWidget.m     # Colored event bars on timeline
+│   │   ├── GroupWidget.m             # Collapsible/tabbed containers
 │   │   ├── MultiStatusWidget.m       # Grid of status indicators
-│   │   ├── BarChartWidget.m
-│   │   ├── ScatterWidget.m
-│   │   ├── HeatmapWidget.m
-│   │   ├── HistogramWidget.m
-│   │   ├── ImageWidget.m
-│   │   └── MarkdownRenderer.m        # HTML conversion for info panels
+│   │   ├── IconCardWidget.m          # Compact card with icon and value
+│   │   ├── SparklineCardWidget.m     # KPI card with mini chart
+│   │   ├── ChipBarWidget.m           # Horizontal row of status chips
+│   │   ├── DividerWidget.m           # Visual section separators
+│   │   ├── BarChartWidget.m          # Vertical/horizontal bar charts
+│   │   ├── ScatterWidget.m           # X/Y scatter plots
+│   │   ├── HeatmapWidget.m           # 2D color-mapped data
+│   │   ├── HistogramWidget.m         # Distribution plots
+│   │   ├── ImageWidget.m             # PNG/JPEG display
+│   │   └── MarkdownRenderer.m        # Lightweight Markdown to HTML
 │   └── WebBridge/                    # TCP server for web visualization
 │       ├── WebBridge.m
 │       └── WebBridgeProtocol.m
@@ -171,18 +184,151 @@ Interactive Display
 - **Disk mode**: Data chunked into SQLite database via `FastSenseDataStore`
 - **Auto mode**: Switches to disk when data exceeds `MemoryLimit` (default 500MB)
 
-## Sensor Threshold Resolution
+## Tag-Based Domain Model
 
-The `Sensor.resolve()` algorithm is segment-based:
+FastPlot v2.0 introduces a unified Tag hierarchy for sensor data and derived signals:
 
-1. Collect all state-change timestamps from all StateChannels
-2. For each segment between state changes:
-   - Evaluate which ThresholdRules match the current state
-   - Group rules with identical conditions
-3. Assign threshold values per segment
-4. Detect violations using SIMD-accelerated comparison
+```
+Tag (abstract base)
+├── SensorTag      — time-series data carriers with disk/memory modes
+├── StateTag       — discrete state signals with zero-order hold lookup
+├── MonitorTag     — derived 0/1 binary threshold monitors
+└── CompositeTag   — aggregate multiple monitors via AND/OR/majority
+```
 
-Complexity: O(S × R) where S = state segments and R = rules, instead of O(N × R) per-point evaluation.
+### TagRegistry
+Singleton catalog providing centralized CRUD operations:
+- **Hard-error on duplicate keys** (unlike ThresholdRegistry's silent overwrite)
+- **Two-phase deserialization** for circular references
+- **Order-insensitive loading** from JSON configurations
+
+### Tag Pipeline Architecture
+Raw text files → per-tag .mat files via configurable pipelines:
+
+```
+BatchTagPipeline    — synchronous processing for initial data loads
+LiveTagPipeline     — timer-driven incremental updates for live data
+```
+
+Both share common parsing/selection/writing logic with file-level deduplication.
+
+## Event Detection Architecture
+
+The event detection system provides real-time threshold violation monitoring:
+
+### Core Components
+
+```
+LiveEventPipeline
+├── MonitorTargets        — containers.Map of key → MonitorTag
+├── DataSourceMap         — Maps sensor keys to data sources  
+├── EventStore           — Thread-safe .mat file persistence
+├── NotificationService  — Rule-based email alerts
+└── EventViewer         — Interactive Gantt chart + filterable table
+```
+
+### Data Sources
+
+- **MatFileDataSource**: Polls .mat files for new data
+- **MockDataSource**: Generates realistic test signals with violations
+- **Custom sources**: Implement `DataSource.fetchNew()` interface
+
+### Event Detection Flow
+
+1. `LiveEventPipeline.runCycle()` polls all data sources
+2. New data is passed to parent tags via `updateData()`
+3. MonitorTag instances receive `appendData()` for streaming tail extension
+4. Threshold conditions are evaluated incrementally with hysteresis support
+5. Events are grouped with debouncing (`MinDuration`) and escalation logic
+6. Events are stored via `EventStore.append()` (atomic .mat writes)
+7. `NotificationService` sends rule-based email alerts with plot snapshots
+8. Active `EventViewer` instances auto-refresh to show new events
+
+### MonitorTag Streaming Architecture
+
+MonitorTag supports incremental processing via `appendData()`:
+- Preserves hysteresis FSM state across append boundaries
+- Maintains MinDuration bookkeeping for debouncing
+- Falls back to full recompute when cache is cold
+- Optional persistence via FastSenseDataStore with staleness detection
+
+## Dashboard Architecture
+
+### FastSenseGrid vs DashboardEngine
+
+- **[[Dashboard|FastSenseGrid]]**: Simple tiled grid of FastSense instances with synchronized live mode
+- **[[Dashboard Engine Guide|DashboardEngine]]**: Full widget-based dashboard with gauges, numbers, status indicators, tables, timelines, and edit mode
+
+### DashboardEngine Components
+
+```
+DashboardEngine
+├── DashboardToolbar      — Top toolbar (Live, Config, Export, Info)
+├── DashboardLayout       — 24-column responsive grid with scrollable canvas
+├── DashboardTheme        — FastSenseTheme + dashboard-specific fields
+├── DashboardBuilder      — Edit mode overlay (drag/resize, palette, properties)
+├── DashboardSerializer   — JSON save/load and .m script export
+├── TimeRangeSelector     — Dual-slider time control with data preview
+└── Widgets (DashboardWidget subclasses)
+    ├── FastSenseWidget         — FastSense instance (Tag/DataStore/inline)
+    ├── GaugeWidget            — Arc/donut/bar/thermometer gauge
+    ├── NumberWidget           — Big number with trend arrow
+    ├── StatusWidget           — Colored dot indicator
+    ├── TextWidget             — Static label or header
+    ├── TableWidget            — uitable display
+    ├── RawAxesWidget          — User-supplied plot function
+    ├── EventTimelineWidget    — Colored event bars on timeline
+    ├── GroupWidget            — Collapsible panels, tabbed containers
+    ├── MultiStatusWidget      — Grid of sensor status dots
+    ├── IconCardWidget         — Compact card with colored icon and value
+    ├── SparklineCardWidget    — KPI card with mini sparkline chart
+    ├── ChipBarWidget          — Horizontal row of status chips
+    └── DividerWidget          — Visual section separators
+```
+
+### Render Flow
+
+1. `DashboardEngine.render()` creates the figure
+2. `DashboardTheme(preset)` generates the full theme struct
+3. `DashboardToolbar` creates the top toolbar panel
+4. Time control panel (dual sliders) is created at the bottom
+5. `DashboardLayout.createPanels()` computes grid positions, creates viewport/canvas/scrollbar, and creates a uipanel per widget
+6. Each widget's `render(parentPanel)` is called to populate its panel
+7. `updateGlobalTimeRange()` scans widgets for data bounds and configures the time sliders
+
+### Live Mode
+
+When `startLive()` is called, a timer fires at `LiveInterval` seconds:
+1. `updateLiveTimeRange()` expands time bounds from new data
+2. Each widget's `refresh()` is called (tag-bound widgets re-read current values)
+3. The toolbar timestamp label is updated
+4. Current slider positions are re-applied to the updated time range
+5. Stale widget detection warns when data stops updating
+
+### Edit Mode
+
+Clicking "Edit" in the toolbar creates a `DashboardBuilder` instance:
+1. A palette sidebar (left) shows widget type buttons
+2. A properties panel (right) shows selected widget settings
+3. Drag/resize overlays are added on top of each widget panel
+4. The content area narrows to accommodate sidebars
+5. Mouse move/up callbacks handle drag and resize interactions
+6. Grid snap rounds positions to the nearest column/row
+
+### JSON Persistence
+
+`DashboardSerializer` handles round-trip serialization:
+- **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually.
+- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method.
+- **Export script:** generates a `.m` file with `DashboardEngine` constructor calls and `addWidget` calls for each widget.
+
+### Multi-Page Support
+
+DashboardEngine supports named pages via `DashboardPage` containers:
+- Pages are stored in a `Pages` cell array with an `ActivePage` index
+- `addWidget()` routes to the active page when pages exist
+- Page switching uses panel visibility toggling for performance
+- Each page maintains its own widget list and layout state
 
 ## Disk-Backed Data Storage
 
@@ -205,108 +351,6 @@ Element override  >  Tile theme  >  Figure theme  >  'default' preset
 
 Each level fills in only the fields it specifies; unspecified fields cascade from the next level.
 
-## Dashboard Architecture
-
-### FastSenseGrid vs DashboardEngine
-
-- **[[Dashboard|FastSenseGrid]]**: Simple tiled grid of FastSense instances with synchronized live mode
-- **[[Dashboard Engine Guide|DashboardEngine]]**: Full widget-based dashboard with gauges, numbers, status indicators, tables, timelines, and edit mode
-
-### DashboardEngine Components
-
-```
-DashboardEngine
-├── DashboardToolbar      — Top toolbar (Live, Edit, Save, Export, Sync)
-├── DashboardLayout       — 24-column responsive grid with scrollable canvas
-├── DashboardTheme        — FastSenseTheme + dashboard-specific fields
-├── DashboardBuilder      — Edit mode overlay (drag/resize, palette, properties)
-├── DashboardSerializer   — JSON save/load and .m script export
-└── Widgets (DashboardWidget subclasses)
-    ├── FastSenseWidget         — FastSense instance (Sensor/DataStore/inline)
-    ├── GaugeWidget            — Arc/donut/bar/thermometer gauge
-    ├── NumberWidget            — Big number with trend arrow
-    ├── StatusWidget           — Colored dot indicator
-    ├── TextWidget             — Static label or header
-    ├── TableWidget            — uitable display
-    ├── RawAxesWidget          — User-supplied plot function
-    ├── EventTimelineWidget    — Colored event bars on timeline
-    ├── GroupWidget            — Collapsible panels, tabbed containers
-    └── MultiStatusWidget      — Grid of sensor status dots
-```
-
-### Render Flow
-
-1. `DashboardEngine.render()` creates the figure
-2. `DashboardTheme(preset)` generates the full theme struct
-3. `DashboardToolbar` creates the top toolbar panel
-4. Time control panel (dual sliders) is created at the bottom
-5. `DashboardLayout.createPanels()` computes grid positions, creates viewport/canvas/scrollbar, and creates a uipanel per widget
-6. Each widget's `render(parentPanel)` is called to populate its panel
-7. `updateGlobalTimeRange()` scans widgets for data bounds and configures the time sliders
-
-### Live Mode
-
-When `startLive()` is called, a timer fires at `LiveInterval` seconds:
-1. `updateLiveTimeRange()` expands time bounds from new data
-2. Each widget's `refresh()` is called (sensor-bound widgets re-read `Sensor.Y(end)`)
-3. The toolbar timestamp label is updated
-4. Current slider positions are re-applied to the updated time range
-
-### Edit Mode
-
-Clicking "Edit" in the toolbar creates a `DashboardBuilder` instance:
-1. A palette sidebar (left) shows widget type buttons
-2. A properties panel (right) shows selected widget settings
-3. Drag/resize overlays are added on top of each widget panel
-4. The content area narrows to accommodate sidebars
-5. Mouse move/up callbacks handle drag and resize interactions
-6. Grid snap rounds positions to the nearest column/row
-
-### JSON Persistence
-
-`DashboardSerializer` handles round-trip serialization:
-- **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually (MATLAB's `jsonencode` cannot handle cell arrays of mixed structs).
-- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method. An optional `SensorResolver` function handle re-binds Sensor objects by name.
-- **Export script:** generates a `.m` file with `DashboardEngine` constructor calls and `addWidget` calls for each widget.
-
-## Event Detection Architecture
-
-The event detection system provides real-time threshold violation monitoring with configurable notifications and data persistence.
-
-### Core Components
-
-```
-LiveEventPipeline
-├── DataSourceMap          — Maps sensor keys to data sources
-├── IncrementalEventDetector — Tracks per-sensor state and open events
-├── EventStore            — Thread-safe .mat file persistence
-├── NotificationService   — Rule-based email alerts
-└── EventViewer          — Interactive Gantt chart + filterable table
-```
-
-### Data Sources
-
-- **MatFileDataSource**: Polls .mat files for new data
-- **MockDataSource**: Generates realistic test signals with violations
-- **Custom sources**: Implement `DataSource.fetchNew()` interface
-
-### Event Detection Flow
-
-1. `LiveEventPipeline.runCycle()` polls all data sources
-2. New data is passed to `IncrementalEventDetector.process()`
-3. Sensor state is evaluated via `Sensor.resolve()`
-4. Violations are grouped into events with debouncing (`MinDuration`)
-5. Events are stored via `EventStore.append()` (atomic .mat writes)
-6. `NotificationService` sends rule-based email alerts with plot snapshots
-7. Active `EventViewer` instances auto-refresh to show new events
-
-### Escalation Logic
-
-When `EscalateSeverity` is enabled, events are promoted to the highest violated threshold:
-- A violation starts at "Warning" level
-- If "Alarm" threshold is also crossed, the event is escalated to "Alarm"
-- The event retains the highest severity level encountered
-
 ## Progress Indication
 
 `ConsoleProgressBar` provides hierarchical progress feedback:
@@ -318,8 +362,16 @@ When `EscalateSeverity` is enabled, events are promoted to the highest violated 
 
 ### Toolbars and Navigation
 - **[[API Reference: FastPlot|FastSenseToolbar]]**: Data cursor, crosshair, grid toggle, autoscale, export, live mode
-- **DashboardToolbar**: Live toggle, edit mode, save/export, name editing
+- **DashboardToolbar**: Live toggle, config editor, save/export, info display
 - **NavigatorOverlay**: Minimap with draggable zoom rectangle for `SensorDetailPlot`
 
 ### Link Groups
 Multiple FastSense instances can share synchronized zoom/pan via `LinkGroup` strings. When one plot's XLim changes, all plots in the same group update automatically.
+
+## Octave Compatibility
+
+FastPlot maintains full compatibility with GNU Octave 7+:
+- MEX files use platform-tagged subdirectories (`octave-<platform>/`)
+- Timer-based features fall back to blocking poll loops
+- Theme systems avoid MATLAB-specific graphics properties
+- All widgets use core uicontrol/uipanel primitives
