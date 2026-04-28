@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777382419345,
+  "lastUpdate": 1777382707913,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -50139,6 +50139,310 @@ window.BENCHMARK_DATA = {
           {
             "name": "Dashboard broadcastTimeRange stdmean",
             "value": 0.026,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dbc2c738d1b99a15424ade25a18626e303076b54",
+          "message": "fix(mex): unblock multi-platform auto-PR pipeline (2 bugs) (#93)\n\nBug 1: aggregator never opens the auto-PR\n  refresh-mex-binaries.yml's `actions/upload-artifact` trims the LCA of\n  the supplied paths to `libs/`, so each artifact's internal root is\n  `FastSense/...` not `libs/FastSense/...`. With `merge-multiple: true`\n  and no `path:` set, files extract under workspace root — outside\n  `libs/`. The aggregator's `find libs` step finds nothing new,\n  `peter-evans/create-pull-request` sees no diff, exits silently. The\n  auto-PR has never actually opened — PR #65's binaries were committed\n  by hand. Fix: add `path: libs` to the download-artifact step so the\n  trimmed-LCA contents reassemble under libs/.\n\nBug 2: Windows MATLAB silently emits no .mexw64\n  needs_build()'s probe 2 (bare `binary_search_mex.mex`) was meant as\n  an Octave fallback but on MATLAB it falsely matches stale bare-.mex\n  files left over from before the octave-<tag>/ subdir convention.\n  Probe 2 trips → core_ok=true → stamp matches → needs_build returns\n  false → first_run skipped → no current-platform binary produced →\n  upload-artifact errors with \"no files found\". Linux/macOS MATLAB\n  happened to dodge this in CI run 25051632929 by stamp-drift luck;\n  Windows MATLAB hit it cleanly. Fix: guard probe 2 with an\n  isOctave check so the bare-.mex fallback only fires when the\n  current runtime is Octave.\n\nTogether these two fixes make the multi-platform refresh truly\nautomatic: trigger refresh-mex-binaries.yml, all 7 platforms compile,\nthe aggregator opens an auto-PR with the full binary set, merging\nthat PR makes the next release archive ship multi-platform binaries\nwithout manual intervention.\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-28T15:17:42+02:00",
+          "tree_id": "07f0488e84956f8ff0ccc3981fb192bb98450e8f",
+          "url": "https://github.com/HanSur94/FastSense/commit/dbc2c738d1b99a15424ade25a18626e303076b54"
+        },
+        "date": 1777382705841,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.183,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.012,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 152.501,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 1.447,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 250.698,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 3.701,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 15.915,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.711,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.834,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.047,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 174.321,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 0.159,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 252.289,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 2.379,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 16,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.31,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 15.888,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.272,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 200.549,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 2.727,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 256.787,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 2.662,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 15.717,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.383,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 79.649,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 1.067,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1252.398,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 1.528,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 247.364,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 2.201,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 15.633,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.824,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 159.393,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.448,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2490.395,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 198.369,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 250.256,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 7.164,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 15.296,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.583,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 783.76,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 4.616,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22703.66,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 399.335,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 312.632,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 56.262,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 16.215,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.406,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 284.106,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 18.601,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 2.449,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.121,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 0.111,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.822,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.118,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.028,
             "unit": "ms"
           }
         ]
