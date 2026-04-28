@@ -462,6 +462,10 @@ def generate_page_with_llm(ctx: dict) -> str:
 
     user_message = "\n".join(user_parts)
 
+    # Pin provider routing for deepseek/deepseek-v4-pro: the deepseek provider
+    # is disabled on this account and OpenRouter's default list points at
+    # deepinfra (which doesn't host the model). List the providers that
+    # actually serve it, ordered by preference.
     response = client.chat.completions.create(
         model="deepseek/deepseek-v4-pro",
         max_tokens=8192,
@@ -469,6 +473,12 @@ def generate_page_with_llm(ctx: dict) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
+        extra_body={
+            "provider": {
+                "order": ["novita", "together", "siliconflow", "gmicloud"],
+                "allow_fallbacks": True,
+            }
+        },
     )
 
     choice = response.choices[0]
