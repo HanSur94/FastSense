@@ -16,6 +16,10 @@ function example_event_markers
     root = fileparts(fileparts(mfilename('fullpath')));
     addpath(root); install();
 
+    % Phase 1017: reset registry singletons to prevent pollution from prior runs.
+    TagRegistry.clear();
+    EventBinding.clear();
+
     % --- Shared EventStore with disk persistence for notes ---
     storePath = fullfile(tempdir, 'phase1012_demo_events.mat');
     es = EventStore(storePath);
@@ -28,24 +32,33 @@ function example_event_markers
         end
     end
 
+    % Phase 1017: register as registry default — every MonitorTag and
+    % every dashboard widget below auto-discovers this store via the
+    % constructor / render-time fallback (TagRegistry.getEventStore).
+    TagRegistry.setEventStore(es);
+
     % --- Sensor 1: pump_a_pressure — one sustained violation (open -> closed) ---
     pump = SensorTag('pump_a_pressure');
     pump.updateData([0 1 2 3 4 5], [1 1 1 1 1 1]);
-    monPump = MonitorTag('pump_a_high', pump, @(x, y) y > 5, 'EventStore', es);
+    TagRegistry.register('pump_a_pressure', pump);
+    monPump = MonitorTag('pump_a_high', pump, @(x, y) y > 5);
+    TagRegistry.register('pump_a_high', monPump);
 
     % --- Sensor 2: motor_b_temperature — multiple short spikes over threshold 85 ---
     motor = SensorTag('motor_b_temperature');
     motor.updateData(0:5, [72 71 73 70 72 71]);   % cool baseline
-    monMotor = MonitorTag('motor_b_overheat', motor, @(x, y) y > 85, 'EventStore', es);
+    TagRegistry.register('motor_b_temperature', motor);
+    monMotor = MonitorTag('motor_b_overheat', motor, @(x, y) y > 85);
+    TagRegistry.register('motor_b_overheat', monMotor);
 
     % --- Dashboard with two FastSense widgets sharing the EventStore ---
     d = DashboardEngine('Phase 1012 demo');
     d.addWidget('fastsense', 'Title', 'Pump A Pressure', ...
         'Tag', pump, 'Position', [1 1 12 4], ...
-        'ShowEventMarkers', true, 'EventStore', es);
+        'ShowEventMarkers', true);
     d.addWidget('fastsense', 'Title', 'Motor B Temperature', ...
         'Tag', motor, 'Position', [1 5 12 4], ...
-        'ShowEventMarkers', true, 'EventStore', es);
+        'ShowEventMarkers', true);
     d.render();
 
     % --- Overlay threshold reference lines on both widgets ---
