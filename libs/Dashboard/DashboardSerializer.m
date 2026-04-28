@@ -36,10 +36,18 @@ classdef DashboardSerializer
                     case 'fastsense'
                         if isfield(ws, 'source')
                             switch ws.source.type
-                                case 'sensor'
+                                case 'tag'
+                                    % Try/catch guard around TagRegistry.get rethrows with the
+                                    % serializer's own error ID (TagRegistry has no .has() method
+                                    % on the public API; see CONTEXT Lookup Strategy).
+                                    lines{end+1} = sprintf('    try');
+                                    lines{end+1} = sprintf('        tag_%s = TagRegistry.get(''%s'');', ws.source.key, ws.source.key);
+                                    lines{end+1} = sprintf('    catch');
+                                    lines{end+1} = sprintf('        error(''DashboardSerializer:tagNotRegistered'', ''Tag ''''%s'''' must be registered in TagRegistry before running this script'');', ws.source.key);
+                                    lines{end+1} = sprintf('    end');
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.name);
+                                    lines{end+1} = sprintf('        ''Tag'', tag_%s);', ws.source.key);
                                 case 'file'
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
