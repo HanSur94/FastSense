@@ -42,7 +42,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install anthropic
+        run: pip install openai
 
       - name: Determine changed files
         id: changed

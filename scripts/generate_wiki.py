@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Generate wiki pages from MATLAB source code using Claude.
+"""Generate wiki pages from MATLAB source code via OpenRouter.
 
 Maps source file changes to wiki pages, assembles context from MATLAB
-sources and examples, calls the Anthropic API to generate/update markdown.
+sources and examples, calls an OpenRouter-hosted model to generate/update
+markdown.
 
 Usage:
     python3 scripts/generate_wiki.py --changed-files libs/FastSense/FastSense.m libs/Dashboard/DashboardEngine.m
@@ -390,7 +391,7 @@ def assemble_context(page: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def generate_page_with_llm(ctx: dict) -> str:
-    """Call Claude to generate a wiki page.
+    """Call the configured LLM to generate a wiki page.
 
     Args:
         ctx: Context dict from assemble_context() with keys:
@@ -401,14 +402,14 @@ def generate_page_with_llm(ctx: dict) -> str:
         Generated markdown content as a string.
     """
     import os
-    import anthropic
+    from openai import OpenAI
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
-    client = anthropic.Anthropic(
+    client = OpenAI(
         api_key=api_key,
-        base_url="https://openrouter.ai/api",
+        base_url="https://openrouter.ai/api/v1",
     )
 
     system_prompt = PROMPTS.get(ctx["page_type"], PROMPTS["guide"])
@@ -444,25 +445,26 @@ def generate_page_with_llm(ctx: dict) -> str:
 
     user_message = "\n".join(user_parts)
 
-    response = client.messages.create(
-        model="anthropic/claude-sonnet-4",
+    response = client.chat.completions.create(
+        model="deepseek/deepseek-v4-pro",
         max_tokens=8192,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
     )
 
-    # Extract text content
-    text_blocks = [b for b in response.content if b.type == "text"]
-    if not text_blocks:
+    choice = response.choices[0]
+    content = choice.message.content
+    if not content:
         raise ValueError(
-            f"Claude returned no text content (stop_reason={response.stop_reason!r})"
+            f"Model returned no text content (finish_reason={choice.finish_reason!r})"
         )
-    if response.stop_reason == "max_tokens":
+    if choice.finish_reason == "length":
         print("  WARNING: response hit max_tokens limit, output may be truncated",
               file=sys.stderr)
-    content = text_blocks[0].text
 
-    # Strip any markdown code fence wrapper (Claude sometimes wraps output)
+    # Strip any markdown code fence wrapper (models sometimes wrap output)
     stripped_fence = False
     if content.startswith("```markdown"):
         content = content[len("```markdown"):].strip()
@@ -514,7 +516,7 @@ def validate_wiki_links(content: str, existing_pages: set[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generate wiki pages using Claude")
+    parser = argparse.ArgumentParser(description="Generate wiki pages via OpenRouter")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "--changed-files",
