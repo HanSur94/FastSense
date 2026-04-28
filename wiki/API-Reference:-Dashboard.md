@@ -1230,6 +1230,11 @@ CHIPBARWIDGET Construct a ChipBarWidget with optional name-value pairs.
 #### `render(obj, parentPanel)`
 
 RENDER Draw all chips in a single shared axes inside parentPanel.
+Re-entrancy guard: parenting an axes to parentPanel and
+toggling its Units below can synchronously fire the panel's
+SizeChangedFcn -> relayout_ -> render. Without this lock the
+nested call deletes the axes the outer render is populating
+and the outer render then crashes on text(obj.hAx, ...).
 
 #### `refresh(obj)`
 
