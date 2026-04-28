@@ -1,14 +1,13 @@
 name: Regenerate Wiki
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches: [main]
     paths:
       - 'libs/**/*.m'
       - 'examples/**/*.m'
       - 'scripts/generate_wiki.py'
-  schedule:
-    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -31,10 +30,17 @@ permissions:
 
 jobs:
   regenerate:
+    # On `pull_request: closed`, fire only when the PR was actually merged
+    # (closed-without-merge would trigger otherwise). workflow_dispatch is
+    # always allowed for manual recovery.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
+          # `pull_request` events default to checking out the PR's merge ref.
+          # We want the post-merge state of main so HEAD^ HEAD diffs the PR.
+          ref: main
           fetch-depth: 2
 
       - uses: actions/setup-python@v5
@@ -46,9 +52,21 @@ jobs:
 
       - name: Determine changed files
         id: changed
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          MODE="${{ inputs.mode || (github.event_name == 'schedule' && 'all' || 'changed') }}"
+          # `inputs.mode` can arrive empty (e.g. `gh workflow run` without --field),
+          # so the workflow `default:` does not always apply. Manual dispatch
+          # defaults to a full regen; PR-merge events scope to the PR's diff.
+          if [ -n "${INPUT_MODE:-}" ]; then
+            MODE="$INPUT_MODE"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            MODE="all"
+          else
+            MODE="changed"
+          fi
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
 
           if [ "$MODE" = "all" ]; then
