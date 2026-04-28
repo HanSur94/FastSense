@@ -91,20 +91,43 @@ jobs:
         with:
           command: "assert(strcmp(mexext(), '${{ matrix.mexext }}'), sprintf('Expected %s, got %s', '${{ matrix.mexext }}', mexext()));"
 
-      # Compile via `matlab -batch`, NOT matlab-actions/run-command. On
-      # Windows the run-command wrapper does not pipe MATLAB stdout back
-      # to the workflow log — the step looks like it succeeds in 5s
-      # with zero output, then upload-artifact errors out because no
-      # binaries were produced. -batch streams stdout/stderr cleanly
-      # and propagates a non-zero exit if MATLAB throws.
+      # Compile via build_mex() (NOT install() — install() applies a
+      # needs_build cache that's a user-facing convenience; CI should
+      # compile unconditionally).
       #
-      # Also: build_mex() directly instead of install(). install()
-      # applies a needs_build cache that's a user-facing convenience;
-      # CI should compile unconditionally.
+      # We MUST use matlab-actions/run-command for licensing — calling
+      # `matlab -batch` directly fails with "Activation cannot proceed"
+      # because the just-in-time license is provided by the action.
+      # Tradeoff: on Windows, run-command does not pipe MATLAB stdout
+      # back to the workflow log. We work around that by writing a
+      # diary file inside the workspace, then cat-ing it in a follow-up
+      # `Show build log` step so the diagnostics + compile output are
+      # visible regardless of platform.
       - name: Compile via build_mex()
+        uses: matlab-actions/run-command@v3
+        with:
+          command: |
+            diary(fullfile(pwd, 'build_mex.log'));
+            cleanup_ = onCleanup(@() diary('off'));
+            fprintf('--- runner diagnostics ---\n');
+            fprintf('cwd:     %s\n', pwd);
+            fprintf('mexext:  %s\n', mexext());
+            fprintf('arch:    %s\n', computer('arch'));
+            fprintf('isOctave:%d\n', exist('OCTAVE_VERSION', 'builtin'));
+            addpath(fullfile(pwd, 'libs', 'FastSense'));
+            fprintf('build_mex on path: %s\n', which('build_mex'));
+            fprintf('--- compiling ---\n');
+            build_mex();
+
+      - name: Show build log (workaround for missing stdout on Windows)
+        if: always()
         shell: bash
         run: |
-          matlab -batch "fprintf('--- runner diagnostics ---\n'); fprintf('cwd:     %s\n', pwd); fprintf('mexext:  %s\n', mexext()); fprintf('arch:    %s\n', computer('arch')); addpath(fullfile(pwd, 'libs', 'FastSense')); fprintf('build_mex on path: %s\n', which('build_mex')); fprintf('--- compiling ---\n'); build_mex();"
+          if [ -f build_mex.log ]; then
+            cat build_mex.log
+          else
+            echo "No build_mex.log produced — MATLAB likely exited before diary() ran."
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
