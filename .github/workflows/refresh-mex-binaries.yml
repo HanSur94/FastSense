@@ -91,10 +91,23 @@ jobs:
         with:
           command: "assert(strcmp(mexext(), '${{ matrix.mexext }}'), sprintf('Expected %s, got %s', '${{ matrix.mexext }}', mexext()));"
 
-      - name: Compile via install()
+      # Compile via build_mex() directly, NOT install(). install() applies
+      # a needs_build cache check that has bitten us on Windows MATLAB:
+      # if any probe path matches (or path resolution gets weird in the
+      # run-matlab-command temp cwd), install() exits before compiling
+      # and produces an empty artifact. build_mex() is unconditional.
+      - name: Compile via build_mex()
         uses: matlab-actions/run-command@v3
         with:
-          command: "install();"
+          command: |
+            fprintf('--- runner diagnostics ---\n');
+            fprintf('cwd:     %s\n', pwd);
+            fprintf('mexext:  %s\n', mexext());
+            fprintf('arch:    %s\n', computer('arch'));
+            addpath(fullfile(pwd, 'libs', 'FastSense'));
+            fprintf('build_mex on path: %s\n', which('build_mex'));
+            fprintf('--- compiling ---\n');
+            build_mex();
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -317,20 +330,10 @@ jobs:
 
             Merging this PR does NOT retrigger the workflow (binaries and
             the stamp are excluded from the workflow's `paths` filter).
-          add-paths: |
-            libs/FastSense/private/*.mexmaca64
-            libs/FastSense/private/*.mexmaci64
-            libs/FastSense/private/*.mexa64
-            libs/FastSense/private/*.mexw64
-            libs/FastSense/mksqlite.mexmaca64
-            libs/FastSense/mksqlite.mexmaci64
-            libs/FastSense/mksqlite.mexa64
-            libs/FastSense/mksqlite.mexw64
-            libs/SensorThreshold/private/*.mexmaca64
-            libs/SensorThreshold/private/*.mexmaci64
-            libs/SensorThreshold/private/*.mexa64
-            libs/SensorThreshold/private/*.mexw64
-            libs/FastSense/private/octave-*/**
-            libs/FastSense/octave-*/**
-            libs/SensorThreshold/private/octave-*/**
-            libs/FastSense/private/.mex-version
+          # No `add-paths` filter: the prior nested-glob patterns
+          # (e.g. `libs/FastSense/private/octave-*/**`) didn't match
+          # reliably and resulted in "no changes added to commit"
+          # followed by an opaque "Unexpected error" from the action.
+          # The aggregator's working tree only contains the committed
+          # repo plus extracted MEX artifacts and the regenerated stamp,
+          # so staging all changes is correct here.
