@@ -2311,6 +2311,10 @@ classdef FastSense < handle
                     end
                 end
             end
+            % Phase 1017: registry-default fallback (tail of existing chain).
+            if isempty(es)
+                es = TagRegistry.getEventStore();
+            end
             if isempty(es), return; end
 
             % Delete old markers (idempotent rebuild)

@@ -98,9 +98,18 @@ classdef FastSenseWidget < DashboardWidget
             % widget level). Otherwise we leave the inner FastSense's own
             % properties untouched — preserving the Phase-1010 default-true
             % behaviour for consumers that bypassed the widget API.
-            if obj.ShowEventMarkers || ~isempty(obj.EventStore)
+            % Phase 1017: resolve EventStore via registry default if no
+            % explicit per-widget handle was provided. This ensures the
+            % inner FastSense receives the registry-default store at
+            % render time even when ShowEventMarkers was not explicitly
+            % set true on the widget.
+            esForward = obj.EventStore;
+            if isempty(esForward)
+                esForward = TagRegistry.getEventStore();
+            end
+            if obj.ShowEventMarkers || ~isempty(esForward)
                 fp.ShowEventMarkers = obj.ShowEventMarkers;
-                fp.EventStore       = obj.EventStore;
+                fp.EventStore       = esForward;
             end
 
             % Slide the X window as new samples arrive on updateData().
@@ -729,9 +738,14 @@ classdef FastSenseWidget < DashboardWidget
             obj.FastSenseObj = fp;
             fp.ShowThresholdLabels = obj.ShowThresholdLabels;
             % Phase 1012 — guarded forwarding (see render() comment above).
-            if obj.ShowEventMarkers || ~isempty(obj.EventStore)
+            % Phase 1017: resolve EventStore via registry default if not explicitly set.
+            esForward = obj.EventStore;
+            if isempty(esForward)
+                esForward = TagRegistry.getEventStore();
+            end
+            if obj.ShowEventMarkers || ~isempty(esForward)
                 fp.ShowEventMarkers = obj.ShowEventMarkers;
-                fp.EventStore       = obj.EventStore;
+                fp.EventStore       = esForward;
             end
             fp.addTag(obj.Tag);
 
