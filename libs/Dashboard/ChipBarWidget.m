@@ -42,6 +42,15 @@ classdef ChipBarWidget < DashboardWidget
         hChipLabels  = {}   % Cell array of text handles, one per chip
     end
 
+    properties (Access = private)
+        % Re-entrancy lock for render/relayout_. Setting properties on
+        % parentPanel (e.g. Units) and parenting an axes to the panel can
+        % synchronously fire the panel's SizeChangedFcn -> relayout_, which
+        % deletes the axes the in-flight render() call is still populating.
+        % This flag short-circuits relayout_ while render is on the stack.
+        inRender_ = false
+    end
+
     methods
         function obj = ChipBarWidget(varargin)
         %CHIPBARWIDGET Construct a ChipBarWidget with optional name-value pairs.
@@ -53,6 +62,15 @@ classdef ChipBarWidget < DashboardWidget
 
         function render(obj, parentPanel)
         %RENDER Draw all chips in a single shared axes inside parentPanel.
+            % Re-entrancy guard: parenting an axes to parentPanel and
+            % toggling its Units below can synchronously fire the panel's
+            % SizeChangedFcn -> relayout_ -> render. Without this lock the
+            % nested call deletes the axes the outer render is populating
+            % and the outer render then crashes on text(obj.hAx, ...).
+            if obj.inRender_, return; end
+            obj.inRender_ = true;
+            cleanup = onCleanup(@() obj.clearRenderLock_());
+
             obj.hPanel = parentPanel;
             % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
             try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
@@ -228,10 +246,29 @@ classdef ChipBarWidget < DashboardWidget
     methods (Access = private)
         function relayout_(obj)
         %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
-            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            % Re-entrancy short-circuit: SizeChangedFcn can fire while
+            % render() is still on the stack (axes parenting / panel Units
+            % flip). Re-entering here would delete the in-flight axes and
+            % crash the outer render. The outer render will leave the
+            % panel in a consistent state when it returns.
+            if obj.inRender_, return; end
+            % Use isvalid (not just ishandle) so we bail when the panel
+            % handle is mid-destruction during dashboard teardown.
+            if isempty(obj.hPanel) || ~isvalid(obj.hPanel) || ~ishandle(obj.hPanel)
+                return;
+            end
             try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
             try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
             obj.render(obj.hPanel);
+        end
+
+        function clearRenderLock_(obj)
+        %CLEARRENDERLOCK_ onCleanup helper: drop the re-entrancy flag.
+        %   Wrapped in isvalid() so a teardown that destroys the widget
+        %   while render is on the stack doesn't itself error.
+            if isvalid(obj)
+                obj.inRender_ = false;
+            end
         end
 
         function chipColor = resolveChipColor(~, chip, theme)
