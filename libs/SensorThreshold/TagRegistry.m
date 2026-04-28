@@ -113,6 +113,42 @@ classdef TagRegistry
             for i = 1:numel(k)
                 map.remove(k{i});
             end
+            % Phase 1017: also reset the registry-default EventStore slot.
+            ref = TagRegistry.eventStoreRef_();
+            if ref.isKey('store')
+                ref.remove('store');
+            end
+        end
+
+        function setEventStore(store)
+            %SETEVENTSTORE Register the default EventStore for the registry.
+            %   TagRegistry.setEventStore(store) sets the global default used
+            %   by FastSense, FastSenseWidget, EventTimelineWidget, and
+            %   TableWidget(events) when no per-instance EventStore is
+            %   configured.  Pass [] to clear the default.
+            %
+            %   See also TagRegistry.getEventStore.
+            ref = TagRegistry.eventStoreRef_();
+            if isempty(store)
+                if ref.isKey('store')
+                    ref.remove('store');
+                end
+            else
+                ref('store') = store;
+            end
+        end
+
+        function store = getEventStore()
+            %GETEVENTSTORE Return the registry-default EventStore, or [] if unset.
+            %   Safe to call before any store has been registered -- returns [].
+            %
+            %   See also TagRegistry.setEventStore.
+            ref = TagRegistry.eventStoreRef_();
+            if ref.isKey('store')
+                store = ref('store');
+            else
+                store = [];
+            end
         end
 
         function ts = find(predicateFn)
@@ -381,6 +417,17 @@ classdef TagRegistry
                 cache = containers.Map();
             end
             map = cache;
+        end
+
+        function m = eventStoreRef_()
+            %EVENTSTOREREF_ Persistent containers.Map for the registry EventStore.
+            %   Handle-class Map so mutations propagate through the returned ref.
+            %   Stores at most one entry under key 'store'; absent key == unset.
+            persistent mapRef;
+            if isempty(mapRef)
+                mapRef = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            end
+            m = mapRef;
         end
 
     end
