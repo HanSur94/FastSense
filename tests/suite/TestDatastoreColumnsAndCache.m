@@ -17,8 +17,11 @@ classdef TestDatastoreColumnsAndCache < matlab.unittest.TestCase
         function requireMksqlite(testCase)
             % Most of the surface under test is SQLite-only; binary-fallback
             % tests are tagged separately below. Skip-class strategy avoids
-            % failing on bare runners.
-            testCase.assumeTrue(exist('mksqlite', 'file') == 3, ...
+            % failing on bare runners. Match the existing TestDataStoreWAL
+            % convention: `exist('mksqlite') == 3` returns 3 for MEX files,
+            % whereas `exist('mksqlite', 'file')` returns 2 for any file
+            % (would silently filter every test).
+            testCase.assumeTrue(exist('mksqlite') == 3, ...
                 'mksqlite MEX not available; skipping SQLite-only tests.'); %#ok<EXIST>
         end
     end
