@@ -255,21 +255,29 @@ classdef EventTimelineWidget < DashboardWidget
         end
     end
 
-    methods (Access = private)
+    methods (Access = public)
         function evts = resolveEvents(obj)
         %RESOLVEEVENTS Get events from the best available source.
-        %   Priority: EventStoreObj > EventFcn > Events (static/Event objects).
-        %   When FilterTagKey is set AND an EventStore is bound, events are
-        %   pulled via EventStore.getEventsForTag(tagKey) using the
-        %   MONITOR-05 carrier pattern (SensorName OR ThresholdLabel match).
-        %   Phase 1010 (EVENT-01) may migrate to Event.TagKeys.
+        %   Priority: EventStoreObj > TagRegistry default > EventFcn > Events
+        %   (static / Event objects). When FilterTagKey is set AND an
+        %   EventStore is bound (explicit or registry-default), events are
+        %   pulled via EventStore.getEventsForTag(tagKey) using the dual-key
+        %   pattern from Phase 1010 + the registry-default fallback from
+        %   Phase 1017.
             evts = [];
-            if ~isempty(obj.EventStoreObj)
+            % Phase 1017: resolve EventStore via explicit slot first, then
+            % registry default. Local var prevents obj-mutation re-entrancy
+            % (RESEARCH Pitfall 6).
+            esObj = obj.EventStoreObj;
+            if isempty(esObj)
+                esObj = TagRegistry.getEventStore();
+            end
+            if ~isempty(esObj)
                 if ~isempty(obj.FilterTagKey)
-                    raw = obj.EventStoreObj.getEventsForTag(obj.FilterTagKey);
+                    raw  = esObj.getEventsForTag(obj.FilterTagKey);
                     evts = obj.eventObjectsToStructs(raw);
                 else
-                    evts = obj.eventStoreToStructs();
+                    evts = obj.eventStoreToStructsFrom_(esObj);
                 end
             elseif ~isempty(obj.EventFcn)
                 evts = obj.EventFcn();
@@ -296,12 +304,50 @@ classdef EventTimelineWidget < DashboardWidget
                 evts = evts(mask);
             end
         end
+    end
 
+    methods (Access = private)
         function evts = eventStoreToStructs(obj)
         %EVENTSTORETOSTRUCTS Convert Event objects from EventStore to
         %   the struct format used for rendering (startTime, endTime, label, color).
             evts = struct('startTime', {}, 'endTime', {}, 'label', {}, 'color', {});
             raw = obj.EventStoreObj.getEvents();
+            if isempty(raw), return; end
+
+            theme = obj.getTheme();
+            alarmColor = theme.StatusAlarmColor;
+            warnColor  = theme.StatusWarnColor;
+
+            for i = 1:numel(raw)
+                ev = raw(i);
+                lbl = ev.SensorName;
+                if ~isempty(ev.ThresholdLabel)
+                    lbl = [ev.SensorName ' — ' ev.ThresholdLabel];
+                end
+                % Colour routing is driven by the numeric Severity field
+                % (1=ok/info, 2=warn, 3=alarm; see Event.m EVENT-04) with
+                % a ThresholdLabel keyword fallback for events authored
+                % before Severity existed.
+                clr = warnColor;
+                if isfield(ev, 'Severity') && ~isempty(ev.Severity) && ev.Severity >= 3
+                    clr = alarmColor;
+                elseif ~isfield(ev, 'Severity') && ~isempty(ev.ThresholdLabel) && ...
+                        ~isempty(strfind(lower(ev.ThresholdLabel), 'alarm'))
+                    clr = alarmColor;
+                end
+                evts(end+1) = struct('startTime', ev.StartTime, ...
+                    'endTime', ev.EndTime, 'label', lbl, 'color', clr); %#ok<AGROW>
+            end
+        end
+
+        function evts = eventStoreToStructsFrom_(obj, esObj)
+        %EVENTSTORETOSTRUCTSFROM_ Phase 1017 variant of eventStoreToStructs.
+        %   Same conversion logic, but reads from the supplied esObj rather
+        %   than obj.EventStoreObj. Lets resolveEvents() use the registry-
+        %   default store without temporarily mutating obj.EventStoreObj
+        %   (avoids re-entrancy risk per RESEARCH Pitfall 6).
+            evts = struct('startTime', {}, 'endTime', {}, 'label', {}, 'color', {});
+            raw = esObj.getEvents();
             if isempty(raw), return; end
 
             theme = obj.getTheme();

@@ -83,26 +83,34 @@ classdef TableWidget < DashboardWidget
                     if isempty(colNames)
                         colNames = {'Time', obj.Sensor.Name};
                     end
-                elseif strcmp(obj.Mode, 'events') && ~isempty(obj.EventStoreObj)
-                    evts = obj.EventStoreObj.getEvents();
-                    if ~isempty(evts)
-                        sName = obj.Sensor.Name;
-                        mask = arrayfun(@(e) contains(e.SensorName, sName), evts);
-                        evts = evts(mask);
-                        n = min(obj.N, numel(evts));
-                        if n > 0
-                            evts = evts(end-n+1:end);
-                            data = cell(n, 4);
-                            for i = 1:n
-                                data{i,1} = datestr(evts(i).StartTime, 'HH:MM:SS');
-                                data{i,2} = datestr(evts(i).EndTime, 'HH:MM:SS');
-                                data{i,3} = evts(i).ThresholdLabel;
-                                data{i,4} = sprintf('%.1fs', (evts(i).EndTime - evts(i).StartTime)*86400);
+                elseif strcmp(obj.Mode, 'events')
+                    % Phase 1017: registry-default fallback. Local esObj prevents
+                    % obj-mutation re-entrancy (RESEARCH Pitfall 6).
+                    esObj = obj.EventStoreObj;
+                    if isempty(esObj)
+                        esObj = TagRegistry.getEventStore();
+                    end
+                    if ~isempty(esObj)
+                        evts = esObj.getEvents();
+                        if ~isempty(evts)
+                            sName = obj.Sensor.Name;
+                            mask = arrayfun(@(e) contains(e.SensorName, sName), evts);
+                            evts = evts(mask);
+                            n = min(obj.N, numel(evts));
+                            if n > 0
+                                evts = evts(end-n+1:end);
+                                data = cell(n, 4);
+                                for i = 1:n
+                                    data{i,1} = datestr(evts(i).StartTime, 'HH:MM:SS');
+                                    data{i,2} = datestr(evts(i).EndTime, 'HH:MM:SS');
+                                    data{i,3} = evts(i).ThresholdLabel;
+                                    data{i,4} = sprintf('%.1fs', (evts(i).EndTime - evts(i).StartTime)*86400);
+                                end
                             end
                         end
-                    end
-                    if isempty(colNames)
-                        colNames = {'Start', 'End', 'Label', 'Duration'};
+                        if isempty(colNames)
+                            colNames = {'Start', 'End', 'Label', 'Duration'};
+                        end
                     end
                 end
             elseif ~isempty(obj.DataFcn)
