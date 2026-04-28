@@ -103,21 +103,20 @@ jobs:
       # diary file inside the workspace, then cat-ing it in a follow-up
       # `Show build log` step so the diagnostics + compile output are
       # visible regardless of platform.
+      # IMPORTANT: command must be a SINGLE LINE on Windows.
+      # matlab-actions/run-command@v3 mis-handles multi-line YAML
+      # block-scalar commands on Windows runners — MATLAB exits
+      # without executing anything. Verified by round-4: a `diary()`
+      # call as the very first statement produced no log file on
+      # Windows, while the same workflow on Linux ran the full
+      # command. Single-line commands (e.g. the Verify mexext assert)
+      # always work. So everything below is a single semicolon-
+      # separated MATLAB statement, with `try/catch` around build_mex
+      # to print the error message into the diary even on failure.
       - name: Compile via build_mex()
         uses: matlab-actions/run-command@v3
         with:
-          command: |
-            diary(fullfile(pwd, 'build_mex.log'));
-            cleanup_ = onCleanup(@() diary('off'));
-            fprintf('--- runner diagnostics ---\n');
-            fprintf('cwd:     %s\n', pwd);
-            fprintf('mexext:  %s\n', mexext());
-            fprintf('arch:    %s\n', computer('arch'));
-            fprintf('isOctave:%d\n', exist('OCTAVE_VERSION', 'builtin'));
-            addpath(fullfile(pwd, 'libs', 'FastSense'));
-            fprintf('build_mex on path: %s\n', which('build_mex'));
-            fprintf('--- compiling ---\n');
-            build_mex();
+          command: "diary(fullfile(pwd, 'build_mex.log')); fprintf('cwd=%s\\nmexext=%s\\narch=%s\\nisOctave=%d\\n', pwd, mexext(), computer('arch'), exist('OCTAVE_VERSION','builtin')); addpath(fullfile(pwd, 'libs', 'FastSense')); fprintf('build_mex_on_path=%s\\n', which('build_mex')); try; build_mex(); catch e; fprintf('BUILD_ERROR: %s\\n%s\\n', e.message, getReport(e, 'extended')); diary('off'); rethrow(e); end; diary('off');"
 
       - name: Show build log (workaround for missing stdout on Windows)
         if: always()
