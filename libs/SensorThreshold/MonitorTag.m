@@ -557,8 +557,8 @@ classdef MonitorTag < Tag
         function [bin, ongoingRunStart] = applyDebounce_(obj, px, bin, carryStartX)
             %APPLYDEBOUNCE_ Zero out contiguous runs of 1s shorter than MinDuration.
             %   Durations are in native parent-X units (same convention as
-            %   EventDetector.MinDuration). Uses strict less-than, matching
-            %   EventDetector.m:52 convention.
+            %   legacy detector MinDuration). Uses strict less-than, matching
+            %   the legacy detector convention.
             %
             %   Phase 1007 (MONITOR-08): accepts `carryStartX` — the
             %   X-native start timestamp of an open run that crosses into

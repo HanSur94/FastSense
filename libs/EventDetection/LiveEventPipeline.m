@@ -27,7 +27,6 @@ classdef LiveEventPipeline < handle
 
     properties (Access = private)
         timer_
-        detector_       % IncrementalEventDetector
         cycleCount_     = 0
     end
 
@@ -66,12 +65,6 @@ classdef LiveEventPipeline < handle
                 obj.EventStore = EventStore(opts.EventFile, ...
                     'MaxBackups', opts.MaxBackups);
             end
-
-            obj.detector_ = IncrementalEventDetector( ...
-                'MinDuration', obj.MinDuration, ...
-                'EscalateSeverity', obj.EscalateSeverity, ...
-                'MaxCallsPerEvent', obj.MaxCallsPerEvent, ...
-                'OnEventStart', obj.OnEventStart);
 
             obj.NotificationService = NotificationService('DryRun', true);
         end

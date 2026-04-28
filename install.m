@@ -195,7 +195,7 @@ function verify_installation(root)
     n_warn = 0;
 
     % Check core classes
-    core_classes = {'FastSense', 'SensorTag', 'EventDetector', ...
+    core_classes = {'FastSense', 'SensorTag', 'MonitorTag', ...
                     'DashboardEngine', 'WebBridge'};
     for i = 1:numel(core_classes)
         if exist(core_classes{i}, 'class') == 8 || exist(core_classes{i}, 'file') == 2

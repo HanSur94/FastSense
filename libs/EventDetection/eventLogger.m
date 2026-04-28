@@ -1,7 +1,7 @@
 function fn = eventLogger()
 %EVENTLOGGER Factory that returns a function handle for live event logging.
 %   logger = eventLogger()
-%   det = EventDetector('OnEventStart', eventLogger());
+%   monitor = MonitorTag('k', parent, '<', 5, 'OnEventStart', eventLogger());
 %
 %   Each call to the returned function prints a one-line log message.
 
