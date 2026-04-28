@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777370147332,
+  "lastUpdate": 1777370620047,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -46815,6 +46815,310 @@ window.BENCHMARK_DATA = {
           {
             "name": "Dashboard broadcastTimeRange stdmean",
             "value": 0.163,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9be2ab4d7e8829398c250336b9c6bcd2218ea4a9",
+          "message": "fix(ci): repair wiki regeneration end-to-end (#86)\n\n* fix(ci): wiki-regenerate now actually runs on dispatch and script edits\n\nTwo bugs caused recent runs to finish in ~20s without calling the LLM:\n\n1. detect_affected_pages() did not map scripts/generate_wiki.py to any\n   page, so the workflow's own path trigger produced \"no affected pages\"\n   and exited 0. Treat a change to the generator as a full regen.\n\n2. workflow_dispatch via `gh workflow run` arrives with `inputs.mode`\n   empty, bypassing the `default: all` and falling through to \"changed\".\n   Resolve MODE in shell so manual dispatches default to --all.\n\nAdds scripts/test_generate_wiki.py covering the regression and the\nexisting mapping rules.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* fix(ci): pin OpenRouter provider order for deepseek-v4-pro\n\nAccount routing defaults to deepinfra, which does not host\ndeepseek/deepseek-v4-pro and the deepseek provider itself is\ndisabled — every request 404'd with \"No allowed providers are\navailable for the selected model\". Pin provider.order to the\nones that actually serve this model.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* fix(ci): use provider.only to lock routing to providers that serve v4-pro\n\n`provider.order` + `allow_fallbacks` let OpenRouter fall back to a\nnon-serving provider (deepinfra), which 404'd. The verified curl test\nshowed `provider.only=[novita,together,siliconflow]` routes successfully.\nSwitch to that list (gmicloud is blocked on this account, deepseek too).\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* ci(wiki): trigger only on merged PRs (drop cron + direct push)\n\nThe wiki regen used to run on every push to main and on a daily cron.\nRestrict it to merged-PR events so docs are produced exactly once per\nshipped change, with no spurious regens from direct pushes or off-hour\ncron runs. workflow_dispatch is preserved for manual recovery.\n\n- Switch trigger from `push: branches:[main]` to `pull_request: closed`\n- Gate the job with `pull_request.merged == true`\n- Remove the daily `schedule` block\n- Pin checkout to `ref: main` so HEAD^..HEAD diffs the merged PR\n- Drop dead `schedule` branch from MODE resolution\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-28T11:57:12+02:00",
+          "tree_id": "272533abfb162845f5ab4d15d37e38db2c7c181a",
+          "url": "https://github.com/HanSur94/FastSense/commit/9be2ab4d7e8829398c250336b9c6bcd2218ea4a9"
+        },
+        "date": 1777370618504,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.82,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.036,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 150.477,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 2.33,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 245.783,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 1.363,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 14.56,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.474,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 9.41,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.143,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 170.537,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 2.328,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 255.059,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 1.014,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 13.646,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.7,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 18.477,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.098,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 189.643,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 1.066,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 260.221,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 2.457,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 13.657,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.962,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 93.174,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.17,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1127.122,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 11.39,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 260.034,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 1.332,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 13.778,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.732,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 189.5,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 5.234,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2098.348,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 25.823,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 266.277,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 1.842,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 13.568,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.764,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 945.071,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 57.101,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22523.146,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 2537.645,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 694.882,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 674.254,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 14.412,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.411,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 324.196,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 98.999,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 2.432,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.047,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 0.18,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.05,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.139,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.027,
             "unit": "ms"
           }
         ]
