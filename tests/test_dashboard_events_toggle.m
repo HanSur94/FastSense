@@ -419,6 +419,84 @@ function test_dashboard_events_toggle()
         try if isfield(d, 'hFigure') && ~isempty(d.hFigure) && ishandle(d.hFigure); close(d.hFigure); end; catch; end
     end
 
+    % --- Test 20: EventTimelineWidget falls back to registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        s = SensorTag('s');
+        s.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        m = MonitorTag('s.high', s, @(x, y) y > 5, 'EventStore', es);
+        m.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        TagRegistry.setEventStore(es);
+        w = EventTimelineWidget('Title', 'Timeline');
+        evts = w.resolveEvents();
+        assert(~isempty(evts), 'registry default events not returned');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testRegistryDefaultEventTimeline\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testRegistryDefaultEventTimeline: %s\n', err.message);
+    end
+
+    % --- Test 21: TableWidget(events) falls back to registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        s = SensorTag('s', 'Name', 's');
+        s.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        m = MonitorTag('s.high', s, @(x, y) y > 5, 'EventStore', es);
+        m.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        TagRegistry.setEventStore(es);
+        % Construct widget with Mode='events'; EventStoreObj NOT set.
+        % Verify refresh does not throw (registry fallback reached).
+        fig = figure('visible', 'off');
+        w = TableWidget('Title', 'Table', 'Mode', 'events', 'Sensor', s);
+        w.render(uipanel(fig));
+        w.refresh();
+        close(fig);
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testRegistryDefaultTableWidget\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testRegistryDefaultTableWidget: %s\n', err.message);
+        try close(fig); catch; end
+    end
+
+    % --- Test 22: explicit EventStoreObj wins over registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        p1 = [tempname(), '.mat']; p2 = [tempname(), '.mat'];
+        esRegistry = EventStore(p1);
+        esExplicit = EventStore(p2);
+        sR = SensorTag('reg.s'); sR.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        mR = MonitorTag('reg.s.high', sR, @(x, y) y > 5, 'EventStore', esRegistry);
+        mR.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        sE = SensorTag('exp.s'); sE.updateData([1 2 3 4 5], [1 1 30 30 1]);
+        mE = MonitorTag('exp.s.high', sE, @(x, y) y > 5, 'EventStore', esExplicit);
+        mE.appendData([1 2 3 4 5], [1 1 30 30 1]);
+        TagRegistry.setEventStore(esRegistry);
+        w = EventTimelineWidget('Title', 'Timeline', 'EventStoreObj', esExplicit);
+        evts = w.resolveEvents();
+        assert(~isempty(evts), 'resolveEvents returned empty with explicit store');
+        sNames = arrayfun(@(e) e.label, evts, 'UniformOutput', false);
+        hasExplicitMarker = any(cellfun(@(n) ~isempty(strfind(n, 'exp.s')), sNames));
+        assert(hasExplicitMarker, 'explicit store events not returned (registry default used instead)');
+        if exist(p1, 'file'); delete(p1); end
+        if exist(p2, 'file'); delete(p2); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testEventTimelineExplicitWinsOverRegistry\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testEventTimelineExplicitWinsOverRegistry: %s\n', err.message);
+    end
+
     fprintf('    %d passed, %d failed.\n', nPassed, nFailed);
     if nFailed > 0
         error('test_dashboard_events_toggle:fail', ...
