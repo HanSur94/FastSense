@@ -2,255 +2,253 @@
 
 # Event Detection Guide
 
-The Event Detection system in FastSense provides comprehensive threshold-based monitoring with live detection, notification services, and visual event management. It bridges the [[Sensors]] library for threshold analysis with real-time event pipelines, storage, and notifications.
+The Event Detection system provides threshold‑based monitoring, live detection pipelines, persistent storage, interactive visualisation, and notification services. It integrates with the [[Sensors]] library for threshold configuration and with the MonitorTag infrastructure for streaming, incremental alerting.
 
 ## When to Use Event Detection
 
-- **Real-time monitoring**: Detect threshold violations as they occur in live data streams
-- **Historical analysis**: Analyze events from recorded sensor data with statistical summaries
-- **Alert systems**: Configure rule-based notifications with email and snapshot generation
-- **Event visualization**: View events in Gantt timelines and filterable tables
-- **Data archival**: Store events with automatic backup rotation and atomic file operations
+- **Real‑time monitoring** – detect threshold violations in live data streams
+- **Historical analysis** – review events from recorded sensor data with statistical summaries
+- **Alerting** – configure rule‑based notifications with email and graphical snapshots
+- **Visualisation** – view events in a Gantt timeline and filterable table
+- **Data archival** – store events with automatic backup rotation and atomic file operations
 
-## Core Workflow
+## Core Workflow (Modern Approach)
 
-The event detection workflow follows these steps:
+1. **Create MonitorTag** objects with thresholds (see [[Sensors]] for threshold setup).
+2. **Connect data sources** (`DataSource`) that supply new timestamps and values.
+3. **Configure a pipeline** (`LiveEventPipeline`) that polls data, feeds `MonitorTag.appendData`, and detects events via `EventDetector`.
+4. **Persist events** with `EventStore` (atomic saves, backups).
+5. **Visualise and alert** with `EventViewer` and `NotificationService`.
 
-1. **Configure sensors** with thresholds using the [[Sensors]] library
-2. **Set up data sources** to fetch new sensor data (live files, mock data, etc.)
-3. **Configure event detection** with minimum duration, callbacks, and escalation
-4. **Run detection** to find threshold violations and generate Event objects
-5. **Store and visualize** events using EventStore and EventViewer
+For batch processing of already‑resolved `Sensor` data, the legacy `EventConfig` class can still be used by directly populating its `Sensors` property.
 
-## Basic Event Detection
+## Basic Event Detection (Batch with Sensors)
 
-### Quick Start Example
+`EventConfig` runs detection across an array of `Sensor` objects that already hold data and thresholds.  The deprecated `addSensor` method is a no‑op; assign the `Sensors` property directly.
 
 ```matlab
-% Create a sensor with threshold
+% Create a sensor with data and a threshold
 sensor = Sensor('temperature');
 sensor.X = 1:100;
 sensor.Y = 70 + 10*sin((1:100)/10) + randn(1,100);
 sensor.addThresholdRule(struct(), 85, 'Direction', 'upper', 'Label', 'temp high');
 
-% Configure and run detection
+% Configure batch detection
 cfg = EventConfig();
-cfg.MinDuration = 2;  % 2-second minimum
-cfg.addSensor(sensor);
+cfg.Sensors = {sensor};        % <-- direct assignment (do NOT use cfg.addSensor)
+cfg.MinDuration = 2;           % ignore violations shorter than 2 seconds
+cfg.EscalateSeverity = true;   % promote to higher thresholds if peak exceeds
+
 events = cfg.runDetection();
 
-% Print summary
+% Quick summary
 printEventSummary(events);
 ```
 
-### EventConfig - Central Configuration
+### EventConfig Properties
 
-The [[Event Detection|EventConfig]] class orchestrates all event detection:
+| Property | Purpose |
+|----------|---------|
+| `Sensors` | Cell array of `Sensor` objects (set directly). |
+| `MinDuration` | Minimum event duration in seconds. |
+| `MaxCallsPerEvent` | Limit callback invocations per event. |
+| `OnEventStart` | Function handle called on each new event. |
+| `ThresholdColors` | `containers.Map` from threshold label to RGB triple. |
+| `AutoOpenViewer` | Open `EventViewer` automatically after detection. |
+| `EscalateSeverity` | Escalate events to higher thresholds if peak exceeds (default `true`). |
+| `EventFile` | Path for automatic event storage (empty = disabled). |
+| `MaxBackups` | Number of backup files to keep (default 5). |
 
-```matlab
-cfg = EventConfig();
-cfg.MinDuration = 1.5;              % Debounce short violations
-cfg.MaxCallsPerEvent = 2;           % Limit callback invocations
-cfg.EscalateSeverity = true;        % H -> HH when peak exceeds
-cfg.AutoOpenViewer = true;          % Open EventViewer after detection
-cfg.OnEventStart = eventLogger();   % Console logging callback
+## Event Objects
 
-% Auto-save events to file with backup rotation
-cfg.EventFile = 'my_events.mat';
-cfg.MaxBackups = 5;
-
-% Add sensors
-cfg.addSensor(temperatureSensor);
-cfg.addSensor(pressureSensor);
-
-% Set threshold colors for visualization
-cfg.setColor('temp warning', [1 0.8 0]);
-cfg.setColor('temp critical', [1 0.2 0]);
-
-% Run detection
-events = cfg.runDetection();
-```
-
-### Event Objects
-
-Each detected event is represented by an [[Event Detection|Event]] object:
+Each detected event is represented by an `Event` object:
 
 ```matlab
-% Event properties (read-only after creation)
-event.StartTime       % datenum of violation start
-event.EndTime         % datenum of violation end  
-event.Duration        % duration in days
-event.SensorName      % sensor identifier
-event.ThresholdLabel  % threshold name
-event.ThresholdValue  % threshold numeric value
-event.Direction       % 'upper' or 'lower'
-
-% Statistical properties (set by detector)
-event.PeakValue      % most extreme value during violation
-event.NumPoints      % number of data points in violation
-event.MinValue       % minimum value during violation
-event.MaxValue       % maximum value during violation
-event.MeanValue      % mean value during violation
-event.RmsValue       % RMS value during violation
-event.StdValue       % standard deviation during violation
+e = Event(startTime, endTime, 'temperature', 'temp high', 85, 'upper');
+e.setStats(peakValue, numPoints, minVal, maxVal, meanVal, rmsVal, stdVal);
 ```
+
+**Core properties** (set at construction, read‑only):
+
+- `StartTime`, `EndTime`, `Duration` (days)
+- `SensorName`, `ThresholdLabel`, `ThresholdValue`, `Direction` (`'upper'` or `'lower'`)
+
+**Statistics** (populated by `setStats` or the detector):
+
+- `PeakValue`, `NumPoints`, `MinValue`, `MaxValue`, `MeanValue`, `RmsValue`, `StdValue`
+
+**Open/close lifecycle** (`IsOpen` flag, `close()` method):
+
+```matlab
+e.IsOpen = true;   % event still in progress
+e.close(endTime, finalStats);   % finalises event (EndTime, Duration, stats)
+```
+
+**Severity escalation** (`escalateTo`):
+
+```matlab
+e.escalateTo('HH Alarm', 95)  % changes label & threshold value in place
+```
+
+**Tag‑binding** (`TagKeys`, `EventBinding`): events can be linked to any number of tags for advanced filtering.
 
 ## Live Event Detection
 
 ### Data Sources
 
-Data sources provide the interface between your data and the event detection system:
+Data sources implement the abstract `DataSource` interface; they return new data since the last call.
 
 ```matlab
-% Mock data source for testing
+% Test‑data generator
 mockDS = MockDataSource('BaseValue', 100, 'NoiseStd', 2, ...
     'ViolationProbability', 0.001, 'ViolationAmplitude', 25);
 
-% File-based data source for live monitoring
-fileDS = MatFileDataSource('sensors/temp.mat', 'XVar', 'time', 'YVar', 'temp');
+% File‑based source for a continuously‑updated .mat file
+fileDS = MatFileDataSource('sensors/temp.mat', ...
+    'XVar', 'time', 'YVar', 'temp');
+```
 
-% Map sensors to data sources
+A `DataSourceMap` binds keys (sensor names) to data sources:
+
+```matlab
 dsMap = DataSourceMap();
 dsMap.add('temperature', mockDS);
 dsMap.add('pressure', fileDS);
 ```
 
-### Live Pipeline
+### LiveEventPipeline
 
-The [[Event Detection|LiveEventPipeline]] orchestrates continuous monitoring:
-
-```matlab
-% Create pipeline
-pipeline = LiveEventPipeline(sensors, dsMap, ...
-    'EventFile', 'live_events.mat', ...
-    'Interval', 15, ...              % 15-second polling
-    'MinDuration', 5, ...            % 5-second minimum events
-    'EscalateSeverity', true);       % H -> HH escalation
-
-% Configure notifications
-notifService = NotificationService('DryRun', true);
-pipeline.NotificationService = notifService;
-
-% Start/stop live monitoring
-pipeline.start();   % begins timer-driven cycles
-pipeline.stop();    % stops timer
-```
-
-### Incremental Detection
-
-For live scenarios, use [[Event Detection|IncrementalEventDetector]] to maintain state between updates:
+`LiveEventPipeline` orchestrates continuous monitoring. It expects a `containers.Map` of tag keys to `MonitorTag` objects and a `DataSourceMap`.
 
 ```matlab
-detector = IncrementalEventDetector('MinDuration', 2, ...
+% Suppose 'monitors' is a containers.Map with keys -> MonitorTag instances
+pipeline = LiveEventPipeline(monitors, dsMap, ...
+    'Interval', 15, ...              % poll every 15 seconds
+    'MinDuration', 5, ...            % 5‑second minimum events
     'EscalateSeverity', true);
 
-% Process incremental updates
-newEvents = detector.process('temp_01', sensor, newX, newY, [], []);
+% Attach optional storage and notification
+pipeline.EventStore = EventStore('live_events.mat', 'MaxBackups', 3);
+pipeline.NotificationService = NotificationService('DryRun', true);
 
-% Check for ongoing events
-if detector.hasOpenEvent('temp_01')
-    state = detector.getSensorState('temp_01');
-    fprintf('Open event since %.2f\n', state.openEventStart);
-end
+% Start / stop
+pipeline.start();   % begins timer‑driven cycles
+pipeline.stop();    % halts timer
 ```
+
+During each `runCycle()`, the pipeline:
+
+1. Fetches new data from every `DataSource`.
+2. Calls `MonitorTag.Parent.updateData(newX, newY)` then `MonitorTag.appendData(newX, newY)` (order matters – see Pitfall Y in source comments).
+3. Uses an internal `EventDetector` to find events from threshold crossings.
+4. Appends new events to the `EventStore` and dispatches notifications.
+
+> **Legacy Note:** `IncrementalEventDetector.process` is a stub. For incremental detection use `MonitorTag.appendData` via `LiveEventPipeline`.
 
 ## Event Storage and Persistence
 
-### EventStore - Atomic File Operations
+### EventStore
 
-The [[Event Detection|EventStore]] provides thread-safe event persistence:
-
-```matlab
-% Create event store
-store = EventStore('events.mat', 'MaxBackups', 3);
-
-% Configure metadata for EventViewer
-store.SensorData = cfg.SensorData;           % for click-to-plot
-store.ThresholdColors = cfg.ThresholdColors; % for color consistency
-
-% Append new events (atomic operation)
-store.append(newEvents);
-store.save();
-
-% Load from file (static method)
-[events, metadata, changed] = EventStore.loadFile('events.mat');
-```
-
-### Auto-Save Configuration
-
-EventConfig can automatically save events to a file:
+`EventStore` provides atomic read/write of events to a shared `.mat` file with backup rotation.
 
 ```matlab
-cfg.EventFile = 'auto_events.mat';  % Enable auto-save
-cfg.MaxBackups = 5;                  % Backup rotation
+store = EventStore('events.mat', 'MaxBackups', 5);
+store.append(newEvents);   % atomic file operation
+store.save();              % or call explicitly
 
-% Events saved automatically after cfg.runDetection()
-events = cfg.runDetection();
+% Attach metadata for EventViewer
+store.SensorData = cfg.SensorData;
+store.ThresholdColors = cfg.ThresholdColors;
+
+% Load events from file later
+[events, meta, changed] = EventStore.loadFile('events.mat');
 ```
 
-## Event Visualization
+**Key methods:**
 
-### EventViewer - Interactive Timeline
+- `append(newEvents)` – appends events, auto‑assigns unique `Id`, updates timestamp.
+- `getEvents()` – returns all events in memory.
+- `closeEvent(eventId, endTime, finalStats)` – closes an open event (does **not** auto‑save).
+- `save()` – writes to disk.
+- `static loadFile(filePath)` – returns events, metadata, and a `changed` flag.
 
-The [[Event Detection|EventViewer]] provides a Gantt timeline and filterable table:
+### Auto‑save in EventConfig
+
+Set `EventFile` and `MaxBackups`; `runDetection()` will save automatically.
+
+```matlab
+cfg.EventFile = 'auto_events.mat';
+cfg.MaxBackups = 5;
+events = cfg.runDetection();   % events saved, backups rotated
+```
+
+## Event Visualization – EventViewer
+
+`EventViewer` displays a Gantt timeline and a filterable table.
 
 ```matlab
 % Create viewer with full context
 viewer = EventViewer(events, sensorData, thresholdColors);
 
-% Or load from saved file
+% Or open from a saved EventStore file
 viewer = EventViewer.fromFile('events.mat');
 
-% Auto-refresh from file
-viewer.startAutoRefresh(10);  % refresh every 10 seconds
+% Auto‑refresh from the same file (e.g., every 10 seconds)
+viewer.startAutoRefresh(10);
 viewer.stopAutoRefresh();
 
-% Manual refresh
-viewer.refreshFromFile();
-
-% Update with new events
+% Update with new events programmatically
 viewer.update(newEvents);
 ```
 
-The EventViewer features:
-- **Gantt timeline**: Visual event bars colored by threshold
-- **Filterable table**: Filter by sensor, threshold, date range
-- **Click interaction**: Click Gantt bars to highlight table rows
-- **Auto-refresh**: Polls the source file for live updates
-- **Export**: Context menu options for data export
+**Features:**
+
+- **Gantt timeline** – coloured bars, one row per sensor, bar width = event duration.
+- **Filterable table** – filter by sensor name, threshold label, date range.
+- **Click‑to‑highlight** – clicking a bar highlights the corresponding table row.
+- **Auto‑refresh** – polls the source file for changes.
+- **Export** – context menu options for data export.
 
 ## Notification System
 
 ### Notification Rules
 
-Configure rule-based notifications with priority matching:
+`NotificationRule` defines a matching condition, template, and delivery options.  Rules are scored: 3 = exact match (sensor + threshold), 2 = sensor match only, 1 = default.
 
 ```matlab
-% Default rule (catches all events)
+% Default rule (catches anything)
 defaultRule = NotificationRule('Recipients', {{'ops@company.com'}}, ...
     'Subject', 'Event: {sensor} - {threshold}', ...
     'IncludeSnapshot', false);
 
-% Sensor-specific rule (higher priority)
+% Sensor‑specific rule
 tempRule = NotificationRule('SensorKey', 'temperature', ...
     'Recipients', {{'thermal@company.com'}}, ...
     'Subject', 'Temperature Event: {threshold}', ...
     'IncludeSnapshot', true, ...
     'ContextHours', 2);
 
-% Exact match rule (highest priority)  
+% Exact match (sensor + threshold)
 criticalRule = NotificationRule('SensorKey', 'temperature', ...
     'ThresholdLabel', 'critical', ...
-    'Recipients', {{'safety@company.com', 'manager@company.com'}}, ...
+    'Recipients', {{'safety@company.com','manager@company.com'}}, ...
     'Subject', 'CRITICAL: {sensor} {threshold}!');
 ```
 
+### Template Variables
+
+Use curly‑brace placeholders in `Subject` and `Message`:
+
+- `{sensor}`, `{threshold}`, `{direction}`, `{peak}`
+- `{startTime}`, `{endTime}`, `{duration}`
+- `{mean}`, `{std}`, `{min}`, `{max}`, `{rms}`
+
 ### NotificationService
 
-The [[Event Detection|NotificationService]] manages rule-based notifications:
+The `NotificationService` holds rules, handles snapshot generation, and sends emails.
 
 ```matlab
-notif = NotificationService('DryRun', true, ... % test mode
+notif = NotificationService('DryRun', true, ...   % test mode
     'SnapshotDir', 'snapshots/', ...
     'SmtpServer', 'mail.company.com');
 
@@ -258,153 +256,96 @@ notif.setDefaultRule(defaultRule);
 notif.addRule(tempRule);
 notif.addRule(criticalRule);
 
-% Notify on event (called by pipeline)
+% On each event (called by pipeline)
 notif.notify(event, sensorData);
 ```
 
-### Email Templates
-
-Notification templates support variable substitution:
-
-```matlab
-rule = NotificationRule( ...
-    'Subject', 'Alert: {sensor} exceeded {threshold}', ...
-    'Message', ['Sensor: {sensor}\n' ...
-               'Threshold: {threshold} ({direction})\n' ...
-               'Time: {startTime} to {endTime}\n' ...
-               'Duration: {duration}\n' ...
-               'Peak: {peak}\n' ...
-               'Statistics: mean={mean}, std={std}']);
-```
-
-Available template variables:
-- `{sensor}`, `{threshold}`, `{direction}`, `{peak}`
-- `{startTime}`, `{endTime}`, `{duration}`
-- `{mean}`, `{std}`, `{min}`, `{max}`, `{rms}`
-
-### Event Snapshots
-
-Generate PNG snapshots showing event context:
-
-```matlab
-% Generate detail and context plots
-files = generateEventSnapshot(event, sensorData, ...
-    'OutputDir', 'snapshots/', ...
-    'SnapshotSize', [800, 400], ...
-    'Padding', 0.1, ...          % 10% padding around event
-    'ContextHours', 2);          % 2 hours before event
-
-% Returns: {detailFile, contextFile}
-```
+**Snapshots** are generated by `generateEventSnapshot` – two PNG files per event (detail and context).
 
 ## Severity Escalation
 
-Events can escalate to higher severity levels when peaks exceed multiple thresholds:
+When a sensor has multiple thresholds (e.g., `'Warning'` at 85, `'Alarm'` at 95), enabling `EscalateSeverity` causes an event that starts at a lower threshold but peaks above a higher one to be escalated **in place**.  The original time span is kept, but label and value change to the higher threshold.
 
 ```matlab
-% Configure escalation
-detector = EventDetector('EscalateSeverity', true);
-
-% Sensor with multiple thresholds
-sensor.addThresholdRule(struct(), 85, 'Label', 'H Warning');
-sensor.addThresholdRule(struct(), 95, 'Label', 'HH Alarm');
-
-% If violation starts at 87 (H Warning) but peaks at 97:
-% 1. Initial event: "H Warning" 
-% 2. Escalated event: "HH Alarm" (same time span, higher severity)
-events = detectEventsFromSensor(sensor, detector);
+det = EventDetector('EscalateSeverity', true);
+% … event starts at 87 (Warning) but peak is 97 → escalated to Alarm
 ```
+
+This behaviour can be controlled via `EventConfig.EscalateSeverity` or `EventDetector` constructor.
 
 ## Utility Functions
 
-### Event Logging
+### `eventLogger()` – Console callback
 
-Simple console logging for development:
+Returns a function handle that prints a one‑line log:
 
 ```matlab
 cfg.OnEventStart = eventLogger();
-
-% Logs: [EVENT] Temperature | temp high | UPPER | 123.45 -> 125.67 (dur=0.02) | peak=126.83
+% Prints: [EVENT] Temperature | temp high | UPPER | 123.45 -> 125.67 (dur=0.02) | peak=126.83
 ```
 
-### Event Summary
-
-Formatted console output for analysis:
+### `printEventSummary(events)` – Tabular summary
 
 ```matlab
 printEventSummary(events);
+% Outputs a formatted table with Start, End, Duration, Sensor, Threshold, Dir, Peak, #Pts, Mean, Std
+```
 
-% Outputs table with columns:
-% Start | End | Duration | Sensor | Threshold | Dir | Peak | #Pts | Mean | Std
+### `generateEventSnapshot(event, sensorData)` – Graphical snapshots
+
+```matlab
+files = generateEventSnapshot(event, sensorData, ...
+    'OutputDir', 'snapshots/', ...
+    'ContextHours', 2);
+% Returns {detailFile, contextFile}
 ```
 
 ### Bridging with Sensors
 
-Convert from sensor violations to events:
-
-```matlab
-% Uses sensor.ResolvedViolations and sensor.ResolvedThresholds
-events = detectEventsFromSensor(sensor);
-events = detectEventsFromSensor(sensor, customDetector);
-```
+If you have a `Sensor` with `ResolvedViolations` and `ResolvedThresholds`, the function `detectEventsFromSensor` (from the [[Sensors]] library) converts them directly to `Event` objects.
 
 ## Performance Considerations
 
-- **MinDuration**: Use appropriate debounce times to filter noise
-- **MaxCallsPerEvent**: Limit callback overhead in high-frequency scenarios  
-- **Backup rotation**: Configure MaxBackups to manage disk usage
-- **Incremental detection**: Use IncrementalEventDetector for live scenarios to avoid reprocessing
-- **File polling**: Balance refresh intervals with system load
-- **Snapshot generation**: PNG creation can be expensive; use sparingly
+- **MinDuration** – debounce noise with a reasonable minimum (seconds).
+- **MaxCallsPerEvent** – limit callback overhead in high‑frequency streams.
+- **MaxBackups** – control disk usage.
+- **EventStore** – atomic writes, but only as often as needed; call `save()` sparingly.
+- **Snapshot generation** – PNG creation is expensive; use only for high‑severity events or throttled intervals.
+- **Live pipeline** – balance polling interval (`Interval`) against system load.
 
 ## Common Patterns
 
-### Multi-Sensor Dashboard with Events
+### Multi‑sensor batch analysis
 
 ```matlab
-% Configure multiple sensors
 cfg = EventConfig();
-cfg.addSensor(temperatureSensor);
-cfg.addSensor(pressureSensor);  
-cfg.addSensor(vibrationSensor);
+cfg.Sensors = {tempSensor, pressSensor, vibSensor};
 cfg.AutoOpenViewer = true;
-
-% Run detection and view results
 events = cfg.runDetection();
 ```
 
-### Live Monitoring with Notifications
+### Live monitoring with persistence and alerts
 
 ```matlab
-% Set up complete live pipeline
-pipeline = LiveEventPipeline(sensors, dataSourceMap, ...
-    'EventFile', 'monitoring.mat', ...
-    'Interval', 30);
-
-% Configure notifications
+pipeline = LiveEventPipeline(monitors, dsMap, ...
+    'Interval', 30, 'EventStore', store);
 pipeline.NotificationService = notificationService;
-
-% Start monitoring
 pipeline.start();
 ```
 
-### Event Analysis Workflow
+### Retrospective analysis from saved store
 
 ```matlab
-% Load saved events
 viewer = EventViewer.fromFile('historical_events.mat');
-
-% Analyze programmatically
 [events, meta] = EventStore.loadFile('historical_events.mat');
-tempEvents = events(strcmp({events.SensorName}, 'Temperature'));
-criticalEvents = events(strcmp({events.ThresholdLabel}, 'critical'));
-
-printEventSummary(criticalEvents);
+% programmatic filtering
+criticals = events(strcmp({events.ThresholdLabel}, 'critical'));
 ```
 
 ## See Also
 
-- [[Sensors]] - Configure thresholds and violations
-- [[Live Mode Guide]] - Real-time data streaming patterns
-- [[Dashboard Engine Guide]] - Multi-plot coordination
-- [[Examples]] - Complete working examples
+- [[Sensors]] – Configure thresholds and violations
+- [[Live Mode Guide]] – Real‑time data streaming patterns
+- [[Dashboard Engine Guide]] – Multi‑plot coordination
+- [[Event Detection|API Reference: Event Detection]] – Detailed class and method documentation
+- [[Examples]] – Complete working examples

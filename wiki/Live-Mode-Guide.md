@@ -2,15 +2,16 @@
 
 # Live Mode Guide
 
-FastSense supports live data visualization by polling a .mat file for updates and auto-refreshing the display. Live mode works with single plots, tiled dashboards, and tabbed docks.
+FastSense supports live data visualization by continuously polling a `.mat` file for new data and auto-refreshing the display. Live mode works with single plots, tiled dashboards ([[Dashboard|API Reference: Dashboard]]), and tabbed docks ([[FastSenseDock|API Reference: FastSenseDock]]). It can also update per‑point metadata from a companion file.
 
 ---
 
 ## Basic Live Plot
 
-```matlab
-install;
+1. **Create a plot** (add lines, thresholds, etc.) and call `render()`.  
+2. **Start live polling** with `startLive()`, providing a `.mat` file path and a callback that handles the newly loaded data.
 
+```matlab
 % Create initial plot
 fp = FastSense('Theme', 'dark');
 x = linspace(0, 10, 1e5);
@@ -23,10 +24,12 @@ fp.render();
 fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
 ```
 
-The callback `@(fp, s) fp.updateData(1, s.x, s.y)` is called every poll cycle:
-- `fp` — the FastSense instance
-- `s` — struct loaded from the .mat file
-- `fp.updateData(lineIdx, newX, newY)` — replaces line data and re-renders
+The callback receives:
+
+- `fp` – the FastSense instance  
+- `s` – struct loaded from the `.mat` file  
+
+In the callback you typically call `fp.updateData(lineIdx, newX, newY)` to replace the line data and re‑render.
 
 ### Stopping Live Mode
 
@@ -34,25 +37,29 @@ The callback `@(fp, s) fp.updateData(1, s.x, s.y)` is called every poll cycle:
 fp.stopLive();
 ```
 
-Or use the Live Mode button in the toolbar.
+The live timer stops immediately. You can also use the **Live Mode** toggle button in the [[FastSenseToolbar|API Reference: FastSenseToolbar]].
 
 ---
 
 ## View Modes
 
-Control how the view updates when new data arrives:
+Control how the X‑axis reacts when new data arrives:
 
-| Mode | Behavior |
-|------|----------|
-| `'preserve'` | Keep current zoom/pan position. User's view is not disturbed |
-| `'follow'` | Scroll X-axis to show the latest data. Good for monitoring |
-| `'reset'` | Zoom to show all data. Good for overview |
+| Mode        | Behavior |
+|-------------|----------|
+| `'preserve'` | Keep the user’s current zoom/pan position. The view is not disturbed. |
+| `'follow'`   | Scroll the X‑axis to show the latest data. Ideal for monitoring. |
+| `'reset'`    | Zoom out to show all data. Good for occasional overviews. |
+| `''` (empty) | No automatic view adjustment. Equivalent to avoid changing limits. |
+
+Set the view mode at startup:
 
 ```matlab
 fp.startLive('data.mat', @updateFcn, 'ViewMode', 'follow');
 ```
 
-Change view mode while running:
+Change it while live mode is running:
+
 ```matlab
 fp.setViewMode('follow');
 fp.setViewMode('preserve');
@@ -62,18 +69,32 @@ fp.setViewMode('preserve');
 
 ## Polling Interval
 
-Default is 2 seconds. Adjust with the 'Interval' option:
+The default polling interval is **2 seconds**. Adjust with the `'Interval'` parameter (in seconds):
 
 ```matlab
-fp.startLive('data.mat', @updateFcn, 'Interval', 0.5);  % Poll every 500ms
-fp.startLive('data.mat', @updateFcn, 'Interval', 5);     % Poll every 5 seconds
+fp.startLive('data.mat', @updateFcn, 'Interval', 0.5);   % every half‑second
+fp.startLive('data.mat', @updateFcn, 'Interval', 5);      % every 5 seconds
 ```
 
 ---
 
-## Live Dashboard
+## Manual Refresh
 
-FastSenseGrid supports live mode across all tiles:
+Trigger a one‑shot data reload without starting a timer:
+
+```matlab
+fp.refresh();
+```
+
+This loads the file set in `LiveFile`, calls `LiveUpdateFcn`, reloads metadata if configured, and updates the display once. The timestamp `LiveFileDate` is updated so that the next `refresh()` only pulls new data when the file has actually changed.
+
+---
+
+## Live Dashboard (FastSenseGrid)
+
+[[FastSenseGrid|API Reference: Dashboard]] orchestrates live mode across all tiles of a dashboard.
+
+### Setting Up
 
 ```matlab
 fig = FastSenseGrid(2, 2, 'Theme', 'dark');
@@ -85,12 +106,13 @@ fp4 = fig.tile(4); fp4.addLine(x, y4, 'DisplayName', 'Vibration');
 
 fig.renderAll();
 
-% Start live mode on the entire dashboard
+% Start live mode on the whole dashboard
 fig.startLive('sensors.mat', @(fig, s) updateDashboard(fig, s), ...
     'Interval', 2, 'ViewMode', 'follow');
 ```
 
-Update callback for dashboard:
+The update callback needs to push data to each tile:
+
 ```matlab
 function updateDashboard(fig, s)
     fig.tile(1).updateData(1, s.t, s.pressure);
@@ -100,73 +122,62 @@ function updateDashboard(fig, s)
 end
 ```
 
+`fig.startLive()` sets `LiveFile`, `LiveUpdateFcn`, and `LiveInterval` on the grid, starts a timer that calls the callback, and propagates `ViewMode` to all tiles.
+
+### Controlling the Dashboard
+
+- `fig.stopLive()` stops the timer.  
+- `fig.refresh()` – manual one‑shot update.  
+- `fig.setViewMode('follow')` – sets the view mode on every tile.  
+
 ---
 
 ## Live Mode with Metadata
 
-Attach metadata that updates on each poll:
+You can attach metadata (e.g., sensor units, calibration info) that updates together with the data. The metadata is loaded from a *separate* `.mat` file.
+
+### Per‑Plot Metadata
 
 ```matlab
-fp.startLive('data.mat', @updateFcn, ...
-    'MetadataFile', 'meta.mat', ...
-    'MetadataVars', {'units', 'calibration'});
+fp.LiveFile      = 'data.mat';
+fp.LiveUpdateFcn = @updateFcn;
+fp.MetadataFile  = 'meta.mat';
+fp.MetadataVars  = {'units', 'calibration'};   % variable names to extract
+fp.MetadataLineIndex = 1;                      % which line to attach to
+
+fp.startLive();
 ```
 
-The metadata is loaded from a separate file and attached to the specified line and tile:
+The metadata is attached to the specified line as a `struct` and can be queried with `fp.lookupMetadata()`. When a metadata file is configured, `refresh()` reloads it automatically.
+
+### Dashboard Metadata
+
+For a grid dashboard, set the properties before calling `startLive`:
 
 ```matlab
 fig.MetadataFile = 'metadata.mat';
 fig.MetadataVars = {'sensor_id', 'location', 'units'};
-fig.MetadataLineIndex = 1;   % which line within the tile
-fig.MetadataTileIndex = 1;   % which tile to attach to
+fig.MetadataLineIndex = 1;   % which line within the target tile
+fig.MetadataTileIndex = 1;   % which tile receives the metadata
 ```
 
----
-
-## Live Event Detection
-
-Combine live mode with event detection for real-time monitoring using the LiveEventPipeline:
-
-```matlab
-% Create sensors with thresholds
-tempSensor = Sensor('temperature', 'Name', 'Temperature');
-tempSensor.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
-tempSensor.addThresholdRule(struct(), 82, 'Direction', 'upper', 'Label', 'Hi Alarm');
-tempSensor.resolve();
-
-sensors = containers.Map();
-sensors('temperature') = tempSensor;
-
-% Configure data sources
-dsMap = DataSourceMap();
-dsMap.add('temperature', MockDataSource('BaseValue', 70, 'NoiseStd', 2));
-
-% Set up pipeline with event store
-pipeline = LiveEventPipeline(sensors, dsMap, ...
-    'EventFile', 'events.mat', ...
-    'Interval', 15, ...
-    'MinDuration', 0.5);
-
-% Start live event detection
-pipeline.start();
-```
+The metadata is forwarded to the tile’s `setLineMetadata()` on each poll.
 
 ---
 
 ## Octave Compatibility
 
-GNU Octave does not support MATLAB timers. Use `runLive()` for a blocking poll loop:
+GNU Octave does not support MATLAB `timer` objects. Use `runLive()` as a blocking alternative:
 
 ```matlab
 fp.render();
-
-% Blocking loop — press Ctrl+C to stop
 fp.LiveFile = 'data.mat';
 fp.LiveUpdateFcn = @(fp, s) fp.updateData(1, s.x, s.y);
-fp.runLive();
+fp.runLive();          % blocks until Ctrl+C or LiveIsActive becomes false
 ```
 
 For dashboards:
+
 ```matlab
 fig.renderAll();
 fig.LiveFile = 'data.mat';
@@ -174,22 +185,13 @@ fig.LiveUpdateFcn = @myUpdateFcn;
 fig.runLive();
 ```
 
----
-
-## Manual Refresh
-
-Trigger a one-shot data reload without starting continuous polling:
-
-```matlab
-fp.refresh();
-fig.refresh();
-```
+`runLive()` loops internally at the configured `LiveInterval`, stopping when the figure is closed or `stopLive()` is called.
 
 ---
 
 ## Toolbar Integration
 
-The [[FastSenseToolbar|API Reference: FastSenseToolbar]] provides a Live Mode button:
+[[FastSenseToolbar|API Reference: FastSenseToolbar]] provides toolbar buttons for live mode:
 
 ```matlab
 tb = FastSenseToolbar(fp);
@@ -198,43 +200,41 @@ tb = FastSenseToolbar(fp);
 tb.toggleLive();
 ```
 
-The Refresh button triggers a manual one-shot reload:
-```matlab
-tb.refresh();
-```
+The **Refresh** button calls `tb.refresh()`, triggering a manual one‑shot reload of data and metadata.
 
 ---
 
 ## Console Progress Bars
 
-Use ConsoleProgressBar for visual feedback during long operations:
+During long render operations you may see a console progress bar. You can also use `ConsoleProgressBar` manually for feedback in custom loops:
 
 ```matlab
-pb = ConsoleProgressBar(2);   % 2-space indent
+pb = ConsoleProgressBar(2);   % 2‑space indent
 pb.start();
 for k = 1:8
     pb.update(k, 8, 'Tile 1');
     pause(0.1);
 end
-pb.freeze();   % becomes permanent line
+pb.freeze();   % leave the final bar on the console
 ```
 
 ---
 
 ## Tips
 
-- Set `'ViewMode', 'follow'` for monitoring use cases where you always want to see the latest data
-- Use `'preserve'` when users need to zoom into historical data while live updates continue
-- Keep polling interval reasonable (1-5 seconds) to avoid overwhelming the file system
-- The .mat file should be written atomically (write to temp file, then rename) to avoid partial reads
-- Live mode works with linked axes — all linked plots update together
-- Use `DeferDraw = true` to skip drawnow during batch render for better performance
+- **Polling interval** – Keep it reasonable (1–5 s) to avoid filesystem stress.  
+- **Atomic writes** – Write the `.mat` file atomically (write to a temp file, then rename) to prevent partial reads.  
+- **View mode** – Use `'follow'` for real‑time monitoring, `'preserve'` when users are inspecting historical data while live updates continue.  
+- **Deferred rendering** – Set `DeferDraw = true` on the plot or grid to skip `drawnow` during batch updates, improving performance.  
+- **Metadata** – Metadata files can be updated independently from the main data file; they are reloaded on every poll or manual refresh.  
+- **Linked axes** – Live mode works with linked axes – all linked plots update together.  
 
 ---
 
 ## See Also
 
-- [[API Reference: FastPlot]] — startLive(), stopLive(), updateData() methods
-- [[API Reference: Dashboard]] — Dashboard live mode
-- [[API Reference: Event Detection]] — Live event detection
-- [[Examples]] — example_dashboard_live.m, example_live_pipeline.m
+- [[API Reference: FastPlot]] – `startLive()`, `stopLive()`, `refresh()`, `updateData()`, `setViewMode()`
+- [[API Reference: Dashboard]] – dashboard live mode (`FastSenseGrid.startLive`)
+- [[API Reference: FastSenseDock]] – tabbed dock live mode
+- [[API Reference: FastSenseToolbar]] – Live Mode toggle and Refresh buttons
+- [[Examples]] – `example_dashboard_live.m`, `example_live_pipeline.m`

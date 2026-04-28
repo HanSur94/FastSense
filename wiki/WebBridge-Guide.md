@@ -2,106 +2,119 @@
 
 # WebBridge Guide
 
-WebBridge provides a powerful system for integrating FastPlot with web applications through a TCP-based communication protocol. It enables real-time data streaming, dashboard configuration synchronization, and remote control capabilities.
+WebBridge provides a connectivity layer between MATLAB/FastPlot dashboards and external web applications. It streams signal data, synchronizes dashboard configuration, and allows remote code execution via a TCP-based protocol using NDJSON messages.
 
 ## Overview
 
-WebBridge serves as a communication bridge between MATLAB/FastPlot and web clients, using NDJSON (Newline Delimited JSON) messages over TCP. This architecture allows:
+WebBridge is a pure data relay – it does not render any UI. It exposes a TCP server inside MATLAB and launches a companion Python‑based bridge that translates the TCP stream into HTTP and WebSocket for web clients.
 
-- Real-time streaming of sensor data to web applications
-- Bidirectional dashboard configuration synchronization
-- Remote action execution from web interfaces
-- Multiple concurrent client connections
+**When to use WebBridge**
+- You need a live dashboard view in a web browser.
+- You want to trigger MATLAB functions from a web interface.
+- You need to stream sensor data to multiple remote consumers.
 
 ## Basic Usage
 
-### Setting Up WebBridge
+### Creating a Bridge and Starting the Server
 
 ```matlab
-% Create a dashboard with some data
+% Build a dashboard with one sensor
 dashboard = Dashboard();
-dashboard.addSensor('temperature', randn(1000, 1), 'units', '°C');
+dashboard.addSensor('temperature', randn(1000,1), 'units', '°C');
 
-% Create and start WebBridge
+% Create the bridge and start all services
 bridge = WebBridge(dashboard);
-bridge.serve();  % Starts both TCP server and data polling
+bridge.serve();   % TCP server + Python HTTP/WS bridge on port 8080
 ```
 
-### Configuration Options
+The call to `serve()` is blocking only in the sense that it keeps the TCP server alive; you can continue to execute MATLAB commands in the same session while the bridge runs.
+
+### Stopping the Bridge
 
 ```matlab
-% Customize polling interval for configuration changes
-bridge = WebBridge(dashboard, 'ConfigPollInterval', 0.5);  % Poll every 500ms
-
-% Manual control over TCP server
-bridge = WebBridge(dashboard);
-bridge.startTcp();  % Start TCP server only
-% ... later ...
-bridge.stop();      % Stop all services
+bridge.stop();   % clean shutdown of TCP server and Python bridge
 ```
 
 ## Protocol Messages
 
-WebBridge uses a structured message protocol for communication:
+WebBridge uses **NDJSON** (Newline Delimited JSON). Internally the `WebBridgeProtocol` class encodes and decodes the following message types.
 
-### Initialization Messages
+### Initialization (`init`)
 
-When a client connects, WebBridge sends initialization data:
+Sent when a client first connects. It contains the list of signals (name, units, data type, …), the current dashboard configuration, and all registered actions.
+
+### Data Update (`data_changed`)
+
+Broadcast when data for one or more signals has changed. The message carries the identifiers of the affected signals.
 
 ```matlab
-% The bridge automatically sends:
-% - Signal definitions (names, units, data types)
-% - Dashboard configuration (layouts, themes, etc.)
-% - Available actions list
+bridge.notifyDataChanged('temperature');                % single signal
+bridge.notifyDataChanged({'temp','pressure','hum'});   % batch
 ```
 
-### Data Update Messages
+### Action Change (`actions_changed`)
 
-As data changes, WebBridge streams updates:
+Sent whenever an action is registered or removed. The message lists the currently available action names.
 
-```matlab
-% Manually trigger data change notifications
-bridge.notifyDataChanged('temperature');  % Single signal
-bridge.notifyDataChanged({'temp', 'pressure'});  % Multiple signals
-```
+### Action Result (`action_result`)
 
-### Configuration Synchronization
+Sent as a response after a client requests the execution of an action. It includes the request ID, the action name, a success flag, and any returned data or error message.
 
-Dashboard configuration changes are automatically detected and broadcast:
+### Shutdown (`shutdown`)
 
-```matlab
-% Any changes to dashboard properties trigger config updates
-dashboard.Title = 'Updated Dashboard';
-% WebBridge automatically detects and broadcasts this change
+Indicates the bridge is about to close.
+
+**Example JSON messages (client view)**
+```json
+// init:
+{"type":"init","signals":[...],"dashboard":{...},"actions":["reset","recalc"]}
+
+// data_changed:
+{"type":"data_changed","signalIds":["temp","pressure"]}
+
+// action_result (success):
+{"type":"action_result","requestId":"42","name":"recalc","ok":true,"data":{"mean":23.4}}
+
+// action_result (error):
+{"type":"action_result","requestId":"42","name":"recalc","ok":false,"error":"Something went wrong"}
 ```
 
 ## Remote Actions
 
-### Registering Actions
+Actions are MATLAB callbacks that web clients can invoke. They are registered on the bridge and immediately broadcast to all connected clients.
 
-Register callback functions that can be invoked from web clients:
+### Registering an Action
 
 ```matlab
-% Register a simple action
-bridge.registerAction('reset_data', @() resetSensorData());
+% Simple action without parameters
+bridge.registerAction('reset', @() resetSensorData());
 
-% Register an action with parameters
-bridge.registerAction('set_threshold', @(params) setThreshold(params.value));
+% Action with a parameters struct
+bridge.registerAction('set_threshold', @(p) setThreshold(p.value));
 
-% Register an action that returns results
-bridge.registerAction('get_stats', @() struct('mean', mean(data), 'std', std(data)));
+% Action that returns a result
+bridge.registerAction('stats', @() struct('mean', mean(data), 'std', std(data)));
 ```
 
-### Action Management
+The callback can accept zero or one argument. If a client sends a JSON payload, it is passed as a MATLAB struct.
+
+### Checking for an Action
 
 ```matlab
-% Check if an action exists
-if bridge.hasAction('reset_data')
+if bridge.hasAction('reset')
     disp('Reset action is available');
 end
-
-% Actions are automatically broadcast to clients when registered
 ```
+
+### Error Handling in Actions
+
+If an action throws an error, the bridge automatically catches it and sends a failure response to the client:
+
+```matlab
+bridge.registerAction('failing', @() error('Something went wrong'));
+```
+
+The client will receive `{"ok":false, "error":"Something went wrong"}`.
 
 ## Advanced Integration Patterns
 
@@ -109,134 +122,66 @@ end
 
 ```matlab
 dashboard = Dashboard();
-sensor = dashboard.addSensor('live_data', []);
+sensor = dashboard.addSensor('live', []);
 bridge = WebBridge(dashboard);
 bridge.serve();
 
-% Simulate live data updates
-timer_obj = timer('ExecutionMode', 'fixedRate', 'Period', 0.1, ...
-    'TimerFcn', @(~,~) updateLiveData());
+% Update data periodically
+t = timer('ExecutionMode','fixedRate','Period',0.1, ...
+          'TimerFcn',@(~,~) liveUpdate());
+start(t);
 
-    function updateLiveData()
-        new_data = randn(10, 1);
-        sensor.appendData(new_data);
-        bridge.notifyDataChanged('live_data');
-    end
-
-start(timer_obj);
-```
-
-### Multi-Dashboard Broadcasting
-
-```matlab
-% WebBridge can handle complex dashboard configurations
-dashboard = Dashboard();
-dashboard.addSensor('sensor1', data1);
-dashboard.addSensor('sensor2', data2);
-
-% All sensors and their configurations are automatically synchronized
-bridge = WebBridge(dashboard);
-bridge.serve();
-```
-
-### Custom Action Handlers
-
-```matlab
-% Register actions with error handling
-bridge.registerAction('process_data', @processDataHandler);
-
-function result = processDataHandler(params)
-    try
-        % Process the request
-        result = struct('success', true, 'data', processedData);
-    catch ME
-        result = struct('success', false, 'error', ME.message);
-    end
+function liveUpdate()
+    newChunk = randn(10,1);
+    sensor.appendData(newChunk);
+    bridge.notifyDataChanged('live');
 end
 ```
 
-## Protocol Details
+### Multiple Connected Clients
 
-### Message Format
+WebBridge can serve an arbitrary number of clients simultaneously. Every client receives the same set of signals and actions, and any action request is executed once on the MATLAB side regardless of the number of clients.
 
-All messages use NDJSON format (one JSON object per line):
+### Dashboards with Multiple Sensors
+
+All sensors added to the `Dashboard` are automatically discovered and exposed via the bridge:
 
 ```matlab
-% Example message types sent by WebBridge:
-% {"type": "init", "signals": [...], "dashboard": {...}, "actions": [...]}
-% {"type": "data_changed", "signalIds": ["sensor1", "sensor2"]}
-% {"type": "config_changed", "dashboard": {...}}
-% {"type": "actions_changed", "actionNames": ["action1", "action2"]}
-% {"type": "action_result", "requestId": "123", "name": "action1", "ok": true, "data": {...}}
+dashboard = Dashboard();
+dashboard.addSensor('vibration', dataVib, 'units', 'g');
+dashboard.addSensor('pressure', dataPress, 'units', 'psi');
+bridge = WebBridge(dashboard);
+bridge.serve();
 ```
 
-### Client Integration
-
-Web clients should handle these message types:
-
-- `init`: Initial data and configuration
-- `data_changed`: Signal data updates
-- `config_changed`: Dashboard configuration updates
-- `actions_changed`: Available actions list updates
-- `action_result`: Results from action execution
+No additional registration is needed for sensors.
 
 ## Performance Considerations
 
-### Efficient Data Updates
-
-```matlab
-% Batch multiple signal updates
-bridge.notifyDataChanged({'temp', 'pressure', 'humidity'});
-
-% Rather than individual notifications:
-% bridge.notifyDataChanged('temp');
-% bridge.notifyDataChanged('pressure');
-% bridge.notifyDataChanged('humidity');
-```
-
-### Configuration Polling
-
-```matlab
-% Adjust polling frequency based on needs
-bridge.ConfigPollInterval = 2.0;  % Less frequent for stable configurations
-bridge.ConfigPollInterval = 0.1;  % More frequent for dynamic dashboards
-```
-
-## Error Handling
-
-### Connection Management
-
-```matlab
-% WebBridge handles client connections automatically
-% Multiple clients can connect simultaneously
-% Disconnected clients are automatically cleaned up
-```
-
-### Action Error Reporting
-
-```matlab
-% Action errors are automatically captured and sent to clients
-bridge.registerAction('failing_action', @() error('Something went wrong'));
-% Client receives: {"ok": false, "error": "Something went wrong"}
-```
+- **Batch data notifications** – use `notifyDataChanged` with a cell array of signal names instead of calling it multiple times in a loop.
+- **Avoid excessive action calls** – Keep action handlers lightweight; heavy computation should be performed asynchronously inside MATLAB and only the result pushed to clients.
 
 ## Integration with Dashboard Engine
 
-WebBridge works seamlessly with the [[Dashboard Engine Guide]]:
+WebBridge automatically picks up changes to the `Dashboard` object (e.g., layout, theme, sensor list) and broadcasts them to connected clients. For more information on dashboard configuration see [[Dashboard Engine Guide]].
 
-```matlab
-% Dashboard engine changes are automatically synchronized
-dashboard.Theme = 'dark';
-dashboard.Layout = 'grid';
-% WebBridge detects and broadcasts these changes
-```
+## Error Handling
+
+- **Disconnected clients** are cleaned up automatically.
+- **Action errors** are captured and returned to the requesting client with `ok = false`.
+- **Stop gracefully** – always call `bridge.stop()` before clearing the dashboard or exiting MATLAB to ensure the TCP server and Python process are terminated.
 
 ## Best Practices
 
-1. **Register all actions before starting the server** to ensure clients receive the complete actions list
-2. **Use batch notifications** for multiple simultaneous data updates
-3. **Handle action errors gracefully** with try-catch blocks
-4. **Set appropriate polling intervals** based on configuration change frequency
-5. **Clean up resources** by calling `stop()` when shutting down
+1. **Register all actions before calling `serve()`** so that the `init` message includes the complete action list.
+2. **Batch data change notifications** when updating multiple signals at once.
+3. **Wrap complex action callbacks** in try–catch blocks when you need custom error messages.
+4. **Do not block the MATLAB command window** from inside an action – use `timer` or `afterEach` for long‑running tasks.
+5. **Keep the Python bridge** at the same version as the MATLAB WebBridge; they are tightly coupled.
 
-For more information on dashboard configuration, see the [[Dashboard|API Reference: Dashboard]] page.
+## See Also
+
+- [[Dashboard|API Reference: Dashboard]]
+- [[Sensors|API Reference: Sensors]]
+- [[Dashboard Engine Guide]]
+- `WebBridgeProtocol` (internal message encoding/decoding)
