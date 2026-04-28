@@ -179,6 +179,57 @@ classdef TestDashboardEventsToggle < matlab.unittest.TestCase
             TagRegistry.setEventStore([]);
             testCase.verifyEmpty(TagRegistry.getEventStore());
         end
+
+        function testMonitorTagRegistryDefaultFallback(testCase)
+            % Phase 1017: MonitorTag constructor falls back to registry default.
+            TagRegistry.clear();
+            EventBinding.clear();
+            tempPath = [tempname, '.mat'];
+            cleanup = onCleanup(@() deleteIfExists(tempPath)); %#ok<NASGU>
+            es = EventStore(tempPath);
+            TagRegistry.setEventStore(es);
+            parent = SensorTag('p');
+            parent.updateData([1 2 3], [1 1 1]);
+            m = MonitorTag('p.high', parent, @(x, y) y > 5);
+            testCase.verifyTrue(isequal(m.EventStore, es));
+        end
+
+        function testMonitorTagExplicitOverridesRegistry(testCase)
+            % Phase 1017: explicit 'EventStore' NV-pair wins over registry default.
+            TagRegistry.clear();
+            EventBinding.clear();
+            p1 = [tempname, '.mat']; p2 = [tempname, '.mat'];
+            cleanup = onCleanup(@() cellfun(@deleteIfExists, {p1, p2})); %#ok<NASGU>
+            esRegistry = EventStore(p1);
+            esExplicit = EventStore(p2);
+            TagRegistry.setEventStore(esRegistry);
+            parent = SensorTag('p');
+            parent.updateData([1 2 3], [1 1 1]);
+            m = MonitorTag('p.high', parent, @(x, y) y > 5, 'EventStore', esExplicit);
+            testCase.verifyTrue(isequal(m.EventStore, esExplicit));
+            testCase.verifyFalse(isequal(m.EventStore, esRegistry));
+        end
+
+        function testMonitorTagDualKeyEmission(testCase)
+            % Phase 1017: events emitted by MonitorTag are reachable by parent.Key
+            % AND monitor.Key via EventStore.getEventsForTag.
+            TagRegistry.clear();
+            EventBinding.clear();
+            tempPath = [tempname, '.mat'];
+            cleanup = onCleanup(@() deleteIfExists(tempPath)); %#ok<NASGU>
+            es = EventStore(tempPath);
+            TagRegistry.setEventStore(es);
+            parent = SensorTag('reactor.pressure');
+            parent.updateData([1 2 3], [1 1 1]);
+            m = MonitorTag('reactor.pressure.critical', parent, @(x, y) y > 18);
+            % Drive a closed event: append violating then non-violating Y.
+            parent.updateData([1 2 3 4 5 6], [1 1 1 20 20 1]);
+            m.appendData([4 5 6], [20 20 1]);
+            byParent = es.getEventsForTag('reactor.pressure');
+            byMonitor = es.getEventsForTag('reactor.pressure.critical');
+            testCase.verifyNotEmpty(byParent);
+            testCase.verifyNotEmpty(byMonitor);
+        end
     end
 end
 

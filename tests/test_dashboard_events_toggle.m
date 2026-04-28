@@ -273,6 +273,71 @@ function test_dashboard_events_toggle()
         fprintf('    FAIL testTagRegistryEventStoreSetEmptyClears: %s\n', err.message);
     end
 
+    % --- Test 14: MonitorTag constructor falls back to registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        TagRegistry.setEventStore(es);
+        parent = SensorTag('p');
+        parent.updateData([1 2 3], [1 1 1]);
+        m = MonitorTag('p.high', parent, @(x, y) y > 5);
+        assert(isequal(m.EventStore, es), 'EventStore should equal registry default');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testMonitorTagRegistryDefaultFallback\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testMonitorTagRegistryDefaultFallback: %s\n', err.message);
+    end
+
+    % --- Test 15: explicit 'EventStore' NV-pair wins over registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        p1 = [tempname(), '.mat']; p2 = [tempname(), '.mat'];
+        esRegistry = EventStore(p1);
+        esExplicit = EventStore(p2);
+        TagRegistry.setEventStore(esRegistry);
+        parent = SensorTag('p');
+        parent.updateData([1 2 3], [1 1 1]);
+        m = MonitorTag('p.high', parent, @(x, y) y > 5, 'EventStore', esExplicit);
+        assert(isequal(m.EventStore, esExplicit), 'explicit EventStore should win over registry');
+        assert(~isequal(m.EventStore, esRegistry), 'registry default should NOT override explicit');
+        if exist(p1, 'file'); delete(p1); end
+        if exist(p2, 'file'); delete(p2); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testMonitorTagExplicitOverridesRegistry\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testMonitorTagExplicitOverridesRegistry: %s\n', err.message);
+    end
+
+    % --- Test 16: dual-key emission — events reachable by parent.Key AND monitor.Key ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        TagRegistry.setEventStore(es);
+        parent = SensorTag('reactor.pressure');
+        parent.updateData([1 2 3], [1 1 1]);
+        m = MonitorTag('reactor.pressure.critical', parent, @(x, y) y > 18);
+        parent.updateData([1 2 3 4 5 6], [1 1 1 20 20 1]);
+        m.appendData([4 5 6], [20 20 1]);
+        byParent = es.getEventsForTag('reactor.pressure');
+        byMonitor = es.getEventsForTag('reactor.pressure.critical');
+        assert(~isempty(byParent), 'parent.Key lookup returned empty');
+        assert(~isempty(byMonitor), 'monitor.Key lookup returned empty');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testMonitorTagDualKeyEmission\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testMonitorTagDualKeyEmission: %s\n', err.message);
+    end
+
     fprintf('    %d passed, %d failed.\n', nPassed, nFailed);
     if nFailed > 0
         error('test_dashboard_events_toggle:fail', ...
