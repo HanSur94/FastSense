@@ -400,9 +400,16 @@ def generate_page_with_llm(ctx: dict) -> str:
     Returns:
         Generated markdown content as a string.
     """
+    import os
     import anthropic
 
-    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+    client = anthropic.Anthropic(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api",
+    )
 
     system_prompt = PROMPTS.get(ctx["page_type"], PROMPTS["guide"])
 
@@ -438,7 +445,7 @@ def generate_page_with_llm(ctx: dict) -> str:
     user_message = "\n".join(user_parts)
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="anthropic/claude-sonnet-4",
         max_tokens=8192,
         system=system_prompt,
         messages=[{"role": "user", "content": user_message}],
