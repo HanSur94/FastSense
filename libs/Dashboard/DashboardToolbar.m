@@ -19,6 +19,8 @@ classdef DashboardToolbar < handle
         hExportBtn   = []
         hImageBtn    = []
         hSyncBtn     = []
+        hEventsBtn   = []
+        hEventsPanel = []
         hTitleText   = []
         hLastUpdate  = []
         hInfoBtn     = []
@@ -120,6 +122,26 @@ classdef DashboardToolbar < handle
                 'TooltipString', 'Reset all widgets to global time range', ...
                 'Callback', @(~,~) obj.Engine.resetGlobalTime());
 
+            % Events toggle — globally show/hide event markers across all
+            % widgets. Wrapped in a thin panel so we can show a blue
+            % border when active (matches the Live-button visual treatment).
+            rightEdge = rightEdge - btnW - 0.005;
+            obj.hEventsPanel = uipanel('Parent', obj.hPanel, ...
+                'Units', 'normalized', ...
+                'Position', [rightEdge btnY btnW btnH], ...
+                'BorderType', 'line', ...
+                'HighlightColor', theme.InfoColor, ...
+                'BorderWidth', 2, ...
+                'BackgroundColor', theme.ToolbarBackground);
+            obj.hEventsBtn = uicontrol('Parent', obj.hEventsPanel, ...
+                'Style', 'togglebutton', ...
+                'Units', 'normalized', ...
+                'Position', [0 0 1 1], ...
+                'String', 'Events', ...
+                'Value', 1, ...
+                'TooltipString', 'Toggle event markers across all widgets', ...
+                'Callback', @(src,~) obj.onEventsToggle(src));
+
             % Last update timestamp label
             labelW = 0.12;
             obj.hLastUpdate = uicontrol('Parent', obj.hPanel, ...
@@ -167,6 +189,40 @@ classdef DashboardToolbar < handle
                 set(obj.hLivePanel, 'HighlightColor', obj.Theme_.InfoColor);
             else
                 set(obj.hLivePanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+            end
+        end
+
+        function onEventsToggle(obj, src)
+        %ONEVENTSTOGGLE Fire engine-level event-marker toggle from button state.
+        %   Engine.setEventMarkersVisible already calls back into
+        %   setEventsActiveIndicator, but call it directly here too in
+        %   case the engine's call path skips the toolbar (e.g. tests
+        %   that temporarily reassign Engine.Toolbar).
+            isOn = logical(get(src, 'Value'));
+            obj.Engine.setEventMarkersVisible(isOn);
+            obj.setEventsActiveIndicator(isOn);
+        end
+
+        function setEventsActiveIndicator(obj, isActive)
+        %SETEVENTSACTIVEINDICATOR Blue border when event markers are visible.
+        %   Matches the Live button's visual treatment so the toolbar
+        %   reads consistently. Keeps the button label constant — the
+        %   border colour is the active indicator; the tooltip explains
+        %   the function.
+            if isempty(obj.hEventsPanel) || ~ishandle(obj.hEventsPanel)
+                return;
+            end
+            if isActive
+                set(obj.hEventsPanel, 'HighlightColor', obj.Theme_.InfoColor);
+            else
+                set(obj.hEventsPanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+            end
+            if ~isempty(obj.hEventsBtn) && ishandle(obj.hEventsBtn)
+                if isActive
+                    set(obj.hEventsBtn, 'String', 'Events', 'Value', 1);
+                else
+                    set(obj.hEventsBtn, 'String', 'Events', 'Value', 0);
+                end
             end
         end
 

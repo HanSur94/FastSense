@@ -26,6 +26,7 @@ classdef DashboardEngine < handle
         InfoFile      = ''
         ProgressMode  = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
         ShowTimePanel = true     % hide the bottom time slider panel
+        EventMarkersVisible = true  % global toggle for event markers across all widgets (runtime UI state, not serialized)
     end
 
     properties (SetAccess = private)
@@ -114,6 +115,33 @@ classdef DashboardEngine < handle
             % Refresh the preview envelope (D-07). Safe before render():
             % computePreviewEnvelope guards on TimeRangeSelector_ presence.
             try obj.computePreviewEnvelope(); catch, end
+        end
+
+        function setEventMarkersVisible(obj, tf)
+            %SETEVENTMARKERSVISIBLE Globally show/hide event markers on every widget.
+            %   Iterates every widget (across all pages in multi-page mode)
+            %   and calls setEventMarkersVisible(tf) on any widget that
+            %   implements it. Unsupported widgets are silently skipped.
+            %   Also updates the toolbar indicator if a Toolbar is present.
+            %   Default state on dashboard create is true so existing
+            %   scripts are unaffected.
+            tf = logical(tf);
+            obj.EventMarkersVisible = tf;
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if ismethod(w, 'setEventMarkersVisible')
+                    try
+                        w.setEventMarkersVisible(tf);
+                    catch ME
+                        warning('DashboardEngine:eventToggleWidgetFailed', ...
+                            'Widget "%s" failed event toggle: %s', w.Title, ME.message);
+                    end
+                end
+            end
+            if ~isempty(obj.Toolbar) && ismethod(obj.Toolbar, 'setEventsActiveIndicator')
+                obj.Toolbar.setEventsActiveIndicator(tf);
+            end
         end
 
         function switchPage(obj, pageIdx)

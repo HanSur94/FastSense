@@ -257,6 +257,22 @@ classdef FastSenseWidget < DashboardWidget
             obj.refresh();
         end
 
+        function setEventMarkersVisible(obj, tf)
+            %SETEVENTMARKERSVISIBLE Pass-through to FastSense event-marker toggle.
+            %   No-op when no FastSense instance exists yet (pre-render).
+            %   When rendered, delegates to FastSense.setShowEventMarkers
+            %   which re-draws the overlay in place without disturbing
+            %   zoom state or live refresh cadence.
+            if ~isempty(obj.FastSenseObj)
+                try
+                    obj.FastSenseObj.setShowEventMarkers(tf);
+                catch ME
+                    warning('FastSenseWidget:eventMarkerToggleFailed', ...
+                        'Failed to toggle event markers: %s', ME.message);
+                end
+            end
+        end
+
         function autoScaleY_(obj, y)
         %AUTOSCALEY_ Rescale the Y axis to cover current data + thresholds.
         %   FastSense locks YLim to manual mode at first render, so new
