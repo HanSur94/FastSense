@@ -596,10 +596,18 @@ classdef DashboardSerializer
                 case 'fastsense'
                     if isfield(ws, 'source')
                         switch ws.source.type
-                            case 'sensor'
+                            case 'tag'
+                                % Local var name in the emitted script — keys in this codebase are
+                                % alphanumeric+underscore (verified across Phase 1009/1010 fixtures),
+                                % so using ws.source.key directly produces a valid MATLAB identifier.
+                                wLines{end+1} = sprintf('%stry', indent);
+                                wLines{end+1} = sprintf('%s    tag_%s = TagRegistry.get(''%s'');', indent, ws.source.key, ws.source.key);
+                                wLines{end+1} = sprintf('%scatch', indent);
+                                wLines{end+1} = sprintf('%s    error(''DashboardSerializer:tagNotRegistered'', ''Tag ''''%s'''' must be registered in TagRegistry before running this script'');', indent, ws.source.key);
+                                wLines{end+1} = sprintf('%send', indent);
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
-                                wLines{end+1} = sprintf('%s    ''Tag'', TagRegistry.get(''%s''));', indent, ws.source.name);
+                                wLines{end+1} = sprintf('%s    ''Tag'', tag_%s);', indent, ws.source.key);
                             case 'file'
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
