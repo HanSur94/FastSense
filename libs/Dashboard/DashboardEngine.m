@@ -1836,6 +1836,10 @@ classdef DashboardEngine < handle
         %   Mirrors computePreviewEnvelope's guard + iteration pattern: no-op
         %   before render or when no widgets expose events. A failing widget
         %   does not block siblings (each call is wrapped in try/catch).
+            % Guard mirrors computePreviewEnvelopeReturning_ for parity.
+            % We deliberately do NOT use isvalid() here because Octave 7+11
+            % does not implement isvalid() for non-timer handle objects;
+            % adding it would silently drop markers via the outer try/catch.
             if isempty(obj.TimeRangeSelector_) || ...
                     ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
                 return;
@@ -1857,7 +1861,9 @@ classdef DashboardEngine < handle
             end
             if ~isempty(allTimes)
                 allTimes = allTimes(isfinite(allTimes));
-                allTimes = unique(sort(allTimes));
+                % unique() returns a sorted ascending row in both MATLAB and
+                % Octave 7+, so an explicit sort() is redundant here.
+                allTimes = unique(allTimes);
             end
             obj.TimeRangeSelector_.setEventMarkers(allTimes);
         end

@@ -274,6 +274,15 @@ classdef TimeRangeSelector < handle
             %   Color (Octave 7 support is inconsistent). Instead the marker
             %   colour is blended toward the theme's AxesColor to produce a
             %   near-background shade that reads as translucent.
+            %
+            %   Z-order note: this method (and setPreviewLines) both push their
+            %   handles to the BACK of hAxes.Children. Whichever is called
+            %   *last* ends up furthest back. DashboardEngine calls
+            %   computePreviewEnvelope BEFORE computeEventMarkers at every
+            %   hook site, so markers sit behind preview lines, and both sit
+            %   behind the selection patch + edges + labels. If you swap that
+            %   order in DashboardEngine, markers will appear in front of the
+            %   preview envelope.
             % Clear previous marker handles.
             for k = 1:numel(obj.hEventMarkers)
                 if ishandle(obj.hEventMarkers(k))

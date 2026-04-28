@@ -64,6 +64,10 @@ function case_switch_page()
     assert(isequal(markerXData(d.TimeRangeSelector_), [5 15]));
     d.switchPage(2);
     assert(isequal(markerXData(d.TimeRangeSelector_), [100 200 300]));
+    % Reverse navigation must restore P1 markers, not leak P2's events.
+    d.switchPage(1);
+    assert(isequal(markerXData(d.TimeRangeSelector_), [5 15]), ...
+        'reverse switch must reset to active page widgets');
 end
 
 function case_update_global_time_range()

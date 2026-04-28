@@ -21,6 +21,7 @@ function test_time_range_selector_event_markers()
     nPassed = nPassed + runCase(@() case_timeline_filter(),                'timeline_filter');
     nPassed = nPassed + runCase(@() case_fastsense_no_store(hFig),         'fastsense_no_store');
     nPassed = nPassed + runCase(@() case_fastsense_never_throws(),         'fastsense_never_throws');
+    nPassed = nPassed + runCase(@() case_fastsense_with_store(hFig),       'fastsense_with_store');
 
     fprintf('    All %d tests passed.\n', nPassed);
 end
@@ -149,6 +150,43 @@ function case_fastsense_never_throws()
         'XData', 1:5, 'YData', 1:5);
     t = w.getEventTimes();
     assert(isempty(t));
+end
+
+function case_fastsense_with_store(hFig)
+    % Live round-trip: bind a real EventStore to the rendered FastSense
+    % and confirm getEventTimes() returns the StartTime values
+    % (PascalCase path) and surfaces appends on the next call.
+    clf(hFig);
+    hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+    w = FastSenseWidget('Title', 'WithStore', ...
+        'XData', 1:10, 'YData', rand(1, 10));
+    w.render(hp);
+    store = EventStore('');
+    store.append(struct( ...
+        'StartTime',      {10, 25, 40}, ...
+        'EndTime',        {12, 27, 42}, ...
+        'SensorName',     {'s1', 's1', 's2'}, ...
+        'ThresholdLabel', {'high', 'high', 'low'}, ...
+        'Severity',       {'warn', 'warn', 'crit'}));
+    % Extract local handle: Octave forbids dot-chain assignment
+    % through a SetAccess=private parent. Mutating through a local
+    % handle still updates the same FastSense instance.
+    fp = w.FastSenseObj;
+    fp.EventStore = store;
+    t = w.getEventTimes();
+    assert(isequal(sort(t), [10 25 40]), ...
+        'FastSenseWidget must read StartTime (PascalCase) from EventStore.getEvents');
+    assert(size(t, 1) == 1, 'must be a row vector');
+    % Live append surfaces in the next call.
+    store.append(struct( ...
+        'StartTime',      55, ...
+        'EndTime',        57, ...
+        'SensorName',     's1', ...
+        'ThresholdLabel', 'high', ...
+        'Severity',       'warn'));
+    t2 = w.getEventTimes();
+    assert(isequal(sort(t2), [10 25 40 55]), ...
+        'live append must surface in the next getEventTimes call');
 end
 
 function xs = markerX(sel)

@@ -43,6 +43,11 @@ classdef TestDashboardEngineEventMarkers < matlab.unittest.TestCase
             testCase.verifyEqual(markerXData(d.TimeRangeSelector_), [5 15]);
             d.switchPage(2);
             testCase.verifyEqual(markerXData(d.TimeRangeSelector_), [100 200 300]);
+            % Reverse navigation must restore the previous page's markers,
+            % not leak P2's events back onto P1.
+            d.switchPage(1);
+            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), [5 15], ...
+                'Reverse page switch must reset markers to the active page''s widgets.');
         end
 
         function testEventMarkersUpdateOnUpdateGlobalTimeRange(testCase)
