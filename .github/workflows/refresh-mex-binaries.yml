@@ -259,13 +259,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Download ALL artifacts into the workspace; merge-multiple preserves
-      # the repo-relative paths each artifact was uploaded with, dropping
-      # them back into libs/.../{,octave-<tag>/}.
+      # Download ALL artifacts and overlay them onto libs/.
+      # IMPORTANT: actions/upload-artifact trims the least-common-ancestor of
+      # the supplied paths, so each artifact's internal root is `FastSense/`
+      # (or `SensorThreshold/`) — NOT `libs/FastSense/`. We MUST set
+      # `path: libs` here so merge-multiple extracts under libs/, not the
+      # workspace root. Without `path: libs`, files land at workspace
+      # `FastSense/.../*.mex*`, the aggregator's `find libs` step sees
+      # nothing new, create-pull-request finds no diff, and the auto-PR
+      # silently fails to open.
       - uses: actions/download-artifact@v8
         with:
           pattern: mex-*
           merge-multiple: true
+          path: libs
 
       - name: Regenerate .mex-version stamp
         shell: bash

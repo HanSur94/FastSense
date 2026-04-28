@@ -126,12 +126,24 @@ function yes = needs_build(root)
     % NOT yet on path (e.g., when __probe_needs_build__ is called after a
     % fresh addpath in the shim but before the candidates loop would run).
     octTag = get_octave_platform_tag();
+    isOctave = exist('OCTAVE_VERSION', 'builtin');
     probes = {
         fullfile(mex_dir, ['binary_search_mex.' mexext()])
-        fullfile(mex_dir, 'binary_search_mex.mex')
     };
-    if ~isempty(octTag)
-        probes{end+1} = fullfile(mex_dir, ['octave-' octTag], 'binary_search_mex.mex');
+    if isOctave
+        % On Octave, mexext() may be 'mex' already (covered by probe 1
+        % above) but legacy installs may also have a bare .mex file —
+        % keep that as a fallback. On MATLAB this probe is dangerous:
+        % stale Octave .mex files from before the octave-<tag>/ subdir
+        % convention sit alongside platform-specific binaries and
+        % falsely satisfy the "MEX present" check, causing
+        % FASTSENSE_SKIP_BUILD-like behaviour and an empty release
+        % artifact on platforms with no committed binary (e.g.
+        % Windows MATLAB).
+        probes{end+1} = fullfile(mex_dir, 'binary_search_mex.mex');
+        if ~isempty(octTag)
+            probes{end+1} = fullfile(mex_dir, ['octave-' octTag], 'binary_search_mex.mex');
+        end
     end
     core_ok = false;
     for pi = 1:numel(probes)
