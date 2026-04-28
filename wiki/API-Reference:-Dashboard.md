@@ -408,6 +408,14 @@ GETPREVIEWSERIES Optional preview data for the time-range envelope.
   yMin/yMax MUST be normalized to [0,1] within the widget's own
   y-range. Base returns [] to opt out of the preview envelope.
 
+#### `t = getEventTimes(~)`
+
+GETEVENTTIMES Optional list of event times for the time-slider overlay.
+  t = getEventTimes(obj) returns a row vector of event start times
+  in the dashboard's time axis. Override to expose events to the
+  TimeRangeSelector event-marker overlay; base returns [] so
+  widgets without events contribute nothing.
+
 #### `lines = asciiRender(obj, width, height)`
 
 ASCIIRENDER Return ASCII representation of this widget.
@@ -518,6 +526,12 @@ GETPREVIEWSERIES Per-bucket min/max preview for the dashboard envelope.
   and yMax are normalized into [0,1] across the widget's own
   current y-range. Returns [] when no data is bound or when the
   sample count is too low to downsample meaningfully.
+
+#### `t = getEventTimes(obj)`
+
+GETEVENTTIMES Event start times from the wrapped FastSense.EventStore.
+  Returns [] when the FastSense instance is absent, has no
+  EventStore, or when any access raises. Never throws.
 
 #### `t = getType(~)`
 
@@ -834,6 +848,13 @@ obj = EventTimelineWidget(varargin)
 #### `setTimeRange(obj, tStart, tEnd)`
 
 #### `[tMin, tMax] = getTimeRange(obj)`
+
+#### `t = getEventTimes(obj)`
+
+GETEVENTTIMES Event start times from resolveEvents (override).
+  Mirrors the same filtering pipeline the widget uses to draw
+  bars, so the time-slider overlay always matches what the
+  widget itself renders.
 
 #### `refresh(obj)`
 
@@ -1909,4 +1930,12 @@ setPreviewLines  Draw one downsampled line per widget preview.
   palette, placed behind the selection rectangle so drag
   interactions remain unaffected.
 Clear previous preview lines.
+
+#### `setEventMarkers(obj, times)`
+
+setEventMarkers  Draw a faint full-height line per event time.
+  setEventMarkers(times) clears any existing markers and draws
+  one vertical line per finite time in `times`. Non-finite
+  values (NaN, +/-Inf) are silently dropped. Empty input just
+  clears the markers.
 
