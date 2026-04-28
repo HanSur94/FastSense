@@ -1,5 +1,15 @@
 name: Release
 
+# When a v* tag is pushed:
+#   1. Gate Tests (Octave Linux) must pass.
+#   2. The full 7-platform MEX matrix builds in parallel.
+#   3. The release job downloads every platform's artifacts, overlays them
+#      into libs/, packages tar.gz + zip, and uploads to the GitHub release.
+#
+# This guarantees every release ships fresh multi-platform binaries built
+# from the exact tagged source — independent of whether the
+# refresh-mex-binaries auto-PR has been merged on main.
+
 on:
   push:
     tags:
@@ -23,9 +33,200 @@ jobs:
           octave --eval "install();"
           xvfb-run octave --eval "install(); cd('tests'); r = run_all_tests(); if r.failed > 0; exit(1); end"
 
+  build-matlab:
+    name: MATLAB MEX ${{ matrix.label }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-arm64
+            os: macos-14
+            release: R2023b
+            mexext: mexmaca64
+          - label: macos-x86_64
+            os: macos-15-intel
+            release: R2023b
+            mexext: mexmaci64
+          - label: linux-x86_64
+            os: ubuntu-22.04
+            release: R2020b
+            mexext: mexa64
+          - label: windows-x86_64
+            os: windows-latest
+            release: R2020b
+            mexext: mexw64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Allow paths with colons (Windows NTFS)
+        if: runner.os == 'Windows'
+        run: git config --global core.protectNTFS false
+
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            libs
+            install.m
+          sparse-checkout-cone-mode: false
+
+      - uses: matlab-actions/setup-matlab@v3
+        with:
+          release: ${{ matrix.release }}
+          cache: true
+
+      - name: Verify mexext on runner
+        uses: matlab-actions/run-command@v3
+        with:
+          command: "assert(strcmp(mexext(), '${{ matrix.mexext }}'), sprintf('Expected %s, got %s', '${{ matrix.mexext }}', mexext()));"
+
+      - name: Compile via install()
+        uses: matlab-actions/run-command@v3
+        with:
+          command: "install();"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mex-matlab-${{ matrix.label }}
+          path: |
+            libs/FastSense/private/*.${{ matrix.mexext }}
+            libs/FastSense/mksqlite.${{ matrix.mexext }}
+            libs/SensorThreshold/private/*.${{ matrix.mexext }}
+          if-no-files-found: error
+          retention-days: 3
+
+  build-octave-linux:
+    name: Octave MEX linux-x86_64
+    timeout-minutes: 30
+    runs-on: ubuntu-22.04
+    container: gnuoctave/octave:11.1.0
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compile via install()
+        run: octave --eval "install();"
+
+      - name: Verify subdir output
+        run: |
+          test -f libs/FastSense/private/octave-linux-x86_64/binary_search_mex.mex
+          test -f libs/FastSense/octave-linux-x86_64/mksqlite.mex
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mex-octave-linux-x86_64
+          path: |
+            libs/FastSense/private/octave-linux-x86_64/*.mex
+            libs/FastSense/octave-linux-x86_64/*.mex
+            libs/SensorThreshold/private/octave-linux-x86_64/*.mex
+          if-no-files-found: error
+          retention-days: 3
+
+  build-octave-macos:
+    name: Octave MEX macos-arm64
+    timeout-minutes: 30
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Octave
+        run: brew install octave
+
+      - name: Compile via install()
+        run: octave --eval "install();"
+
+      - name: Verify subdir output
+        run: |
+          test -f libs/FastSense/private/octave-macos-arm64/binary_search_mex.mex
+          test -f libs/FastSense/octave-macos-arm64/mksqlite.mex
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mex-octave-macos-arm64
+          path: |
+            libs/FastSense/private/octave-macos-arm64/*.mex
+            libs/FastSense/octave-macos-arm64/*.mex
+            libs/SensorThreshold/private/octave-macos-arm64/*.mex
+          if-no-files-found: error
+          retention-days: 3
+
+  build-octave-windows:
+    name: Octave MEX windows-x86_64
+    timeout-minutes: 45
+    runs-on: windows-latest
+    steps:
+      - name: Allow paths with colons (Windows NTFS)
+        run: git config --global core.protectNTFS false
+
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            libs
+            install.m
+          sparse-checkout-cone-mode: false
+
+      - name: Install Octave
+        shell: pwsh
+        run: |
+          # Try Chocolatey first
+          choco install octave.portable --yes --version=9.2.0 --no-progress 2>$null
+          $octExe = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\octave.portable\tools" -Recurse -Filter "octave-cli.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($octExe) {
+            Write-Host "Octave installed via Chocolatey at: $($octExe.FullName)"
+            echo "OCTAVE_EXE=$($octExe.FullName)" >> $env:GITHUB_ENV
+            exit 0
+          }
+          # Fallback: direct download from mirror
+          $LASTEXITCODE = 0
+          $global:LASTEXITCODE = 0
+          Write-Host "::warning::Chocolatey install failed (ftp.gnu.org may be down). Downloading from mirror..."
+          $url = "https://mirrors.kernel.org/gnu/octave/windows/octave-9.2.0-w64.zip"
+          $zip = "$env:TEMP\octave.zip"
+          $dest = "C:\octave"
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          $octExe = Get-ChildItem -Path $dest -Recurse -Filter "octave-cli.exe" | Select-Object -First 1
+          if (-not $octExe) {
+            Write-Error "Failed to find octave-cli.exe after direct download"
+            exit 1
+          }
+          Write-Host "Octave installed via direct download at: $($octExe.FullName)"
+          echo "OCTAVE_EXE=$($octExe.FullName)" >> $env:GITHUB_ENV
+        timeout-minutes: 15
+
+      - name: Compile via install()
+        shell: pwsh
+        run: |
+          $octExe = $env:OCTAVE_EXE
+          if (-not $octExe -or -not (Test-Path $octExe)) {
+            Write-Error "OCTAVE_EXE not set or not found: $octExe"
+            exit 1
+          }
+          & $octExe --no-window-system --eval "install();"
+
+      - name: Verify subdir output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'libs/FastSense/private/octave-windows-x86_64/binary_search_mex.mex')) { throw "kernel missing under libs/FastSense/private/octave-windows-x86_64/" }
+          if (-not (Test-Path 'libs/FastSense/octave-windows-x86_64/mksqlite.mex'))              { throw "mksqlite missing under libs/FastSense/octave-windows-x86_64/" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mex-octave-windows-x86_64
+          path: |
+            libs/FastSense/private/octave-windows-x86_64/*.mex
+            libs/FastSense/octave-windows-x86_64/*.mex
+            libs/SensorThreshold/private/octave-windows-x86_64/*.mex
+          if-no-files-found: error
+          retention-days: 3
+
   release:
     name: Create Release
-    needs: test
+    needs:
+      - test
+      - build-matlab
+      - build-octave-linux
+      - build-octave-macos
+      - build-octave-windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -49,29 +250,46 @@ jobs:
           echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      # Download every platform's artifacts. merge-multiple: true preserves
+      # the repo-relative paths each artifact was uploaded with, so the
+      # binaries land directly back into libs/.../{,octave-<tag>/}.
+      - name: Download MEX artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: mex-*
+          merge-multiple: true
+
+      - name: Show bundled binaries
+        run: |
+          find libs -type f \( \
+            -name '*.mexmaca64' -o -name '*.mexmaci64' -o \
+            -name '*.mexa64'    -o -name '*.mexw64'    -o \
+            -name '*.mex' \
+            \) | sort
+
       - name: Package release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           DIRNAME="FastSense-${VERSION}"
           mkdir -p "${DIRNAME}"
 
-          # Copy release contents (allowlist — excludes tests/, benchmarks/, docs/, bridge/, private/, .git/)
+          # Allowlist: ship the install entry point, license, top-level
+          # docs, examples, and libs (now containing all 7 platforms'
+          # MEX binaries from the build matrix above).
           cp install.m LICENSE README.md CITATION.cff "${DIRNAME}/"
           cp -r examples "${DIRNAME}/"
-
-          # Copy libs including committed prebuilt MEX binaries.
-          # Binaries are refreshed by .github/workflows/refresh-mex-binaries.yml
-          # and shipped in the release archive so end users skip compilation.
           cp -r libs "${DIRNAME}/"
 
-          # Create archives
           tar czf "${DIRNAME}.tar.gz" "${DIRNAME}"
-          zip -r "${DIRNAME}.zip" "${DIRNAME}"
+          zip -rq "${DIRNAME}.zip" "${DIRNAME}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           name: ${{ steps.version.outputs.VERSION }}
+          # Append-only: do NOT overwrite a body the release author may
+          # have authored manually before the tag was pushed.
+          append_body: true
           body: |
             ## What's Changed
 
@@ -79,7 +297,7 @@ jobs:
 
             ## Installation
 
-            Download the archive, extract it, and run `install` in MATLAB/Octave. Prebuilt MEX binaries are bundled — compilation only happens on unsupported platforms.
+            Download the archive, extract it, and run `install` in MATLAB/Octave. Prebuilt MEX binaries for all 7 supported platform/runtime combinations are bundled — compilation only happens on unsupported platforms.
           files: |
             FastSense-${{ steps.version.outputs.VERSION }}.tar.gz
             FastSense-${{ steps.version.outputs.VERSION }}.zip

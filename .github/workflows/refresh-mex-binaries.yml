@@ -65,7 +65,16 @@ jobs:
             mexext: mexw64
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Allow paths with colons (Windows NTFS)
+        if: runner.os == 'Windows'
+        run: git config --global core.protectNTFS false
+
       - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            libs
+            install.m
+          sparse-checkout-cone-mode: false
 
       - uses: matlab-actions/setup-matlab@v3
         with:
