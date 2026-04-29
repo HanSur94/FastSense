@@ -21,6 +21,7 @@ function varargout = install(varargin)
 %     libs/EventDetection     — violation detection & live pipeline
 %     libs/Dashboard          — widget-based dashboard engine
 %     libs/WebBridge          — browser-based visualization bridge
+%     libs/FastSenseCompanion — companion navigator app
 %     examples/               — runnable example scripts
 %     benchmarks/             — performance benchmarks
 %     tests/                  — test suites
@@ -53,6 +54,7 @@ function varargout = install(varargin)
     addpath(fullfile(root, 'libs', 'EventDetection'));
     addpath(fullfile(root, 'libs', 'Dashboard'));
     addpath(fullfile(root, 'libs', 'WebBridge'));
+    addpath(fullfile(root, 'libs', 'FastSenseCompanion'));
 
     % Demo workspaces (Phase 1015+): add each demo dir so the entry-point
     % function (e.g. run_demo) is callable without manual addpath.
