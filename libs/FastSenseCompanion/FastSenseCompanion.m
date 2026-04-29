@@ -18,6 +18,7 @@ classdef FastSenseCompanion < handle
 %
 %   Public methods:
 %     setProject(dashboards, registry) — rebuild against new project
+%     refreshCatalog()                 — re-snapshot tags and rebuild catalog
 %     close()                          — idempotent teardown
 %
 %   See also DashboardEngine, TagRegistry, CompanionTheme.
@@ -143,7 +144,7 @@ classdef FastSenseCompanion < handle
             obj.CatalogPane_   = TagCatalogPane();
             obj.ListPane_      = DashboardListPane();
             obj.InspectorPane_ = InspectorPane();
-            obj.CatalogPane_.attach(obj.hLeftPanel_);
+            obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
             obj.ListPane_.attach(obj.hMidPanel_);
             obj.InspectorPane_.attach(obj.hRightPanel_);
             obj.applyPlaceholderColors_();
@@ -216,10 +217,21 @@ classdef FastSenseCompanion < handle
             obj.CatalogPane_.detach();
             obj.ListPane_.detach();
             obj.InspectorPane_.detach();
-            obj.CatalogPane_.attach(obj.hLeftPanel_);
+            obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
             obj.ListPane_.attach(obj.hMidPanel_);
             obj.InspectorPane_.attach(obj.hRightPanel_);
             obj.applyPlaceholderColors_();
+        end
+
+        function refreshCatalog(obj)
+        %REFRESHCATALOG Re-snapshot tags from registry and rebuild the tag catalog.
+        %   Call after externally mutating TagRegistry to update the visible catalog.
+        %   Prior to this call, the catalog shows the snapshot taken at construction
+        %   or last setProject() call (no listener-leak risk on the static registry).
+            if isempty(obj.CatalogPane_) || ~isvalid(obj.CatalogPane_)
+                return;
+            end
+            obj.CatalogPane_.refresh();
         end
 
     end
