@@ -213,5 +213,77 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             end
         end
 
+        % ---- Phase 1020 BROWSER-05: addDashboard / removeDashboard ----
+
+        function testAddDashboardAppendsToBrowser(testCase)
+        %TESTADDDASHBOARDAPPENDSTOBROWSER BROWSER-05: addDashboard adds engine to public list.
+            d1 = DashboardEngine('Fixture1');
+            d2 = DashboardEngine('Fixture2');
+            app = FastSenseCompanion('Dashboards', {d1, d2}, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            nBefore = numel(app.Dashboards);
+            d = DashboardEngine('NewBoard');
+            app.addDashboard(d);
+            testCase.verifyEqual(numel(app.Dashboards), nBefore + 1, ...
+                'addDashboard: Dashboards count must be nBefore + 1');
+            % Stronger: verify the new engine handle appears in the list
+            found = false;
+            for i = 1:numel(app.Dashboards)
+                if app.Dashboards{i} == d
+                    found = true;
+                    break;
+                end
+            end
+            testCase.verifyTrue(found, ...
+                'BROWSER-05: appended DashboardEngine must be present in app.Dashboards');
+        end
+
+        function testAddDashboardRejectsNonDashboardEngine(testCase)
+        %TESTADDDASHBOARDREJECTSNONDASHBOARDENGINE BROWSER-05: addDashboard validates type.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError(@() app.addDashboard(struct('Name', 'x')), ...
+                'FastSenseCompanion:invalidDashboard');
+        end
+
+        function testAddDashboardRejectsDuplicateHandle(testCase)
+        %TESTADDDASHBOARDREJECTSDUPLICATEHANDLE BROWSER-05: addDashboard rejects same handle twice.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            d = DashboardEngine('OnceOnly');
+            app.addDashboard(d);
+            testCase.verifyError(@() app.addDashboard(d), ...
+                'FastSenseCompanion:duplicateDashboard');
+        end
+
+        function testRemoveDashboardDropsByName(testCase)
+        %TESTREMOVEDASHBOARDDROPSBYNAME BROWSER-05: removeDashboard drops engine by Name match.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            d = DashboardEngine('ToRemove');
+            app.addDashboard(d);
+            nBefore = numel(app.Dashboards);
+            app.removeDashboard('ToRemove');
+            nAfter = numel(app.Dashboards);
+            testCase.verifyEqual(nAfter, nBefore - 1, ...
+                'BROWSER-05: removeDashboard must reduce Dashboards count by 1');
+        end
+
+        function testRemoveDashboardThrowsOnUnknown(testCase)
+        %TESTREMOVEDASHBOARDTHROWSONUNKNOWN BROWSER-05: removeDashboard throws on missing key.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError(@() app.removeDashboard('NoSuchKey'), ...
+                'FastSenseCompanion:dashboardNotFound');
+        end
+
+        function testRemoveDashboardThrowsOnNonChar(testCase)
+        %TESTREMOVEDASHBOARDTHROWSONNONCHAR BROWSER-05: removeDashboard rejects non-char input.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError(@() app.removeDashboard(42), ...
+                'FastSenseCompanion:dashboardNotFound');
+        end
+
     end
 end
