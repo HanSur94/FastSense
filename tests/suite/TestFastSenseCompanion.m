@@ -1,0 +1,217 @@
+classdef TestFastSenseCompanion < matlab.unittest.TestCase
+%TESTFASTSENSECOMPANION Class-based tests for FastSenseCompanion shell (Phase 1018).
+%   Covers COMPSHELL-01 through COMPSHELL-06.
+%   All uifigure windows are created with default visibility; addTeardown
+%   ensures cleanup even on failure.
+%
+%   See also FastSenseCompanion, run_all_tests.
+
+    methods (TestClassSetup)
+        function addPaths(testCase)
+            addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
+            install();
+        end
+    end
+
+    methods (TestMethodSetup)
+        function skipOnOctave(testCase)
+            % FastSenseCompanion is MATLAB-only. Skip entire suite on Octave.
+            testCase.assumeFalse( ...
+                exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion: skipped on Octave (uifigure not available)');
+        end
+    end
+
+    methods (Test)
+
+        % ---- COMPSHELL-01: Constructor argument handling ----
+
+        function testConstructorNoArgs(testCase)
+            %TESTCONSTRUCTORNOARGS Default construction succeeds; IsOpen is true.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyTrue(isvalid(app), ...
+                'testConstructorNoArgs: app must be valid after construction');
+            testCase.verifyTrue(app.IsOpen, ...
+                'testConstructorNoArgs: IsOpen must be true after construction');
+        end
+
+        function testConstructorWithDashboards(testCase)
+            %TESTCONSTRUCTORWITHDASHBOARDS Two valid DashboardEngine entries are stored.
+            d1 = DashboardEngine('Test1');
+            d2 = DashboardEngine('Test2');
+            app = FastSenseCompanion('Dashboards', {d1, d2}, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEqual(numel(app.Dashboards), 2, ...
+                'testConstructorWithDashboards: expected 2 dashboards stored');
+        end
+
+        function testConstructorThemeLightPreset(testCase)
+            %TESTCONSTRUCTORTHMELIGHTPRESET Theme property reflects the supplied preset.
+            app = FastSenseCompanion('Theme', 'light');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEqual(app.Theme, 'light', ...
+                'testConstructorThemeLightPreset: Theme property must reflect light preset');
+        end
+
+        function testUnknownOptionThrows(testCase)
+            %TESTUNKNOWNOPTIONTHROWS Unknown key -> FastSenseCompanion:unknownOption
+            % COMPSHELL-01
+            testCase.verifyError( ...
+                @() FastSenseCompanion('NotAKey', 'value'), ...
+                'FastSenseCompanion:unknownOption', ...
+                'testUnknownOptionThrows: wrong error ID for unknown key');
+        end
+
+        function testInvalidDashboardThrows(testCase)
+            %TESTINVALIDDASHBOARDTHROWS Non-DashboardEngine -> FastSenseCompanion:invalidDashboard
+            % COMPSHELL-01
+            testCase.verifyError( ...
+                @() FastSenseCompanion('Dashboards', {struct('x', 1)}), ...
+                'FastSenseCompanion:invalidDashboard', ...
+                'testInvalidDashboardThrows: wrong error ID for invalid dashboard');
+        end
+
+        function testInvalidDashboardIndexInMessage(testCase)
+            %TESTINVALIDDASHBOARDINDEXINMESSAGE Offending index appears in error message.
+            % COMPSHELL-01
+            try
+                FastSenseCompanion('Dashboards', {DashboardEngine('ok'), 42});
+                testCase.verifyFail('testInvalidDashboardIndexInMessage: should have thrown');
+            catch e
+                testCase.verifyEqual(e.identifier, 'FastSenseCompanion:invalidDashboard', ...
+                    'testInvalidDashboardIndexInMessage: wrong error ID');
+                testCase.verifyTrue( ...
+                    ~isempty(strfind(e.message, '2')), ...
+                    'testInvalidDashboardIndexInMessage: message must contain offending index 2');
+            end
+        end
+
+        % ---- COMPSHELL-02: uifigure opens immediately ----
+
+        function testUifigureCreatedImmediately(testCase)
+            %TESTUIFIGURECREATEDIMMEDIATELY No separate render() call required; IsOpen true.
+            % COMPSHELL-02
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyTrue(app.IsOpen, ...
+                'testUifigureCreatedImmediately: IsOpen must be true right after construction');
+        end
+
+        function testThreePanelsExist(testCase)
+            %TESTTHREEPANELSEXIST Three pane panels exist and are valid after construction.
+            % COMPSHELL-02: three panes created immediately
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            % Access private fields via struct() — standard MATLAB unittest practice
+            s = struct(app);
+            testCase.verifyTrue(isvalid(s.hLeftPanel_), ...
+                'testThreePanelsExist: hLeftPanel_ must be valid');
+            testCase.verifyTrue(isvalid(s.hMidPanel_), ...
+                'testThreePanelsExist: hMidPanel_ must be valid');
+            testCase.verifyTrue(isvalid(s.hRightPanel_), ...
+                'testThreePanelsExist: hRightPanel_ must be valid');
+        end
+
+        % ---- COMPSHELL-03: close() lifecycle ----
+
+        function testCloseCleanup(testCase)
+            %TESTCLOSECLEANUP close() sets IsOpen false; timer count unchanged.
+            % COMPSHELL-03
+            timersBefore = numel(timerfindall);
+            app = FastSenseCompanion();
+            app.close();
+            testCase.verifyFalse(app.IsOpen, ...
+                'testCloseCleanup: IsOpen must be false after close()');
+            testCase.verifyEqual(numel(timerfindall), timersBefore, ...
+                'testCloseCleanup: timerfindall count must be unchanged after close()');
+        end
+
+        function testCloseIdempotent(testCase)
+            %TESTCLOSEIDEMPOTENT Second close() call must not throw.
+            % COMPSHELL-03
+            app = FastSenseCompanion();
+            app.close();
+            % Second call must be a no-op, not an error
+            app.close();
+            testCase.verifyFalse(app.IsOpen, ...
+                'testCloseIdempotent: IsOpen should remain false after double close');
+        end
+
+        function testCloseDoesNotAffectDashboards(testCase)
+            %TESTCLOSEDOESNOTAFFECTDASHBOARDS Closing companion does NOT close dashboard figures.
+            % COMPSHELL-03: companion close() must not affect DashboardEngine figures
+            d = DashboardEngine('CloseTest');
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+            app = FastSenseCompanion('Dashboards', {d});
+            app.close();
+            % Dashboard figure must still be open and valid
+            testCase.verifyTrue(isvalid(d.hFigure), ...
+                'testCloseDoesNotAffectDashboards: dashboard figure must survive companion close');
+        end
+
+        % ---- COMPSHELL-04: Octave guard code is present ----
+
+        function testOctaveGuardCodePresent(testCase)
+            %TESTOCTAVEGUARDCODEPRESENT Octave guard code exists in FastSenseCompanion source.
+            % COMPSHELL-04: we cannot execute the guard on MATLAB, so verify textually
+            src = fileread(which('FastSenseCompanion'));
+            testCase.verifyTrue( ...
+                ~isempty(strfind(src, 'OCTAVE_VERSION')), ...
+                'testOctaveGuardCodePresent: OCTAVE_VERSION check missing from source');
+            testCase.verifyTrue( ...
+                ~isempty(strfind(src, 'FastSenseCompanion:notSupported')), ...
+                'testOctaveGuardCodePresent: notSupported error ID missing from source');
+        end
+
+        % ---- COMPSHELL-05: setProject replaces state without uifigure recreation ----
+
+        function testSetProjectReplacesState(testCase)
+            %TESTSETPROJECTREPLACESSTATE setProject replaces internal state; uifigure survives.
+            % COMPSHELL-05
+            d1 = DashboardEngine('Original');
+            d2 = DashboardEngine('Replacement');
+            app = FastSenseCompanion('Dashboards', {d1});
+            testCase.addTeardown(@() app.close());
+            s = struct(app);
+            figBefore = s.hFig_;
+            app.setProject({d2}, TagRegistry);
+            testCase.verifyEqual(numel(app.Dashboards), 1, ...
+                'testSetProjectReplacesState: should have 1 dashboard after setProject');
+            testCase.verifyEqual(app.Dashboards{1}.Name, 'Replacement', ...
+                'testSetProjectReplacesState: Dashboards should contain the new engine');
+            % uifigure must NOT have been recreated — same handle
+            s2 = struct(app);
+            testCase.verifyEqual(s.hFig_, s2.hFig_, ...
+                'testSetProjectReplacesState: uifigure handle must be the same object after setProject');
+        end
+
+        function testSetProjectInvalidDashboardThrows(testCase)
+            %TESTSETPROJECTINVALIDDASHBOARDTHROWS setProject validates dashboards same as constructor.
+            % COMPSHELL-05
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError( ...
+                @() app.setProject({99}, TagRegistry), ...
+                'FastSenseCompanion:invalidDashboard', ...
+                'testSetProjectInvalidDashboardThrows: wrong error ID for invalid dashboard in setProject');
+        end
+
+        % ---- COMPSHELL-06: no gcf/gca in source files ----
+
+        function testNoGcfGcaInSource(testCase)
+            %TESTNOGCFGCAINSOURCE No gcf or gca present in any FastSenseCompanion source file.
+            % COMPSHELL-06: companion must reference obj.hFig_ exclusively, never gcf/gca
+            companionDir = fileparts(which('FastSenseCompanion'));
+            files = dir(fullfile(companionDir, '*.m'));
+            for i = 1:numel(files)
+                src = fileread(fullfile(companionDir, files(i).name));
+                testCase.verifyTrue( ...
+                    isempty(regexp(src, '\bgcf\b|\bgca\b', 'once')), ...
+                    sprintf('testNoGcfGcaInSource: gcf or gca found in %s', files(i).name));
+            end
+        end
+
+    end
+end
