@@ -102,7 +102,7 @@ jobs:
 
       - name: Open or update PR
         if: steps.diff.outputs.changed == 'true' && inputs.dry_run != true
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: wiki-update/${{ github.sha }}
           commit-message: 'docs: regenerate wiki pages'
