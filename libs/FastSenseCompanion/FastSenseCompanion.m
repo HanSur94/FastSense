@@ -18,6 +18,8 @@ classdef FastSenseCompanion < handle
 %
 %   Public methods:
 %     setProject(dashboards, registry) — rebuild against new project
+%     addDashboard(d)                  - append a DashboardEngine; refresh browser
+%     removeDashboard(key)             - remove by Name; reset inspector if it was selected
 %     refreshCatalog()                 — re-snapshot tags and rebuild catalog
 %     close()                          — idempotent teardown
 %
@@ -47,6 +49,8 @@ classdef FastSenseCompanion < handle
         InspectorPane_ = []   % InspectorPane instance
         Engines_       = {}   % internal copy of Dashboards cell (DashboardEngine handles)
         Registry_      = []   % internal Registry_ reference
+        SelectedDashboardIdx_ = 0    % 1-based; 0 = nothing selected (Phase 1020)
+        LastInteraction_      = ''   % '' | 'tags' | 'dashboard' (Phase 1020 sets 'dashboard'; Phase 1021 sets 'tags')
     end
 
     methods (Access = public)
@@ -145,8 +149,13 @@ classdef FastSenseCompanion < handle
             obj.ListPane_      = DashboardListPane();
             obj.InspectorPane_ = InspectorPane();
             obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
-            obj.ListPane_.attach(obj.hMidPanel_);
+            obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
             obj.InspectorPane_.attach(obj.hRightPanel_);
+            % Wire pane event listeners (append to Listeners_)
+            obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
+                @(s, e) obj.onDashboardSelected_(s, e));
+            obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'OpenDashboardRequested', ...
+                @(s, e) obj.onOpenDashboardRequested_(s, e));
             obj.applyPlaceholderColors_();
 
             % Step 11 — Wire CloseRequestFcn
@@ -213,14 +222,87 @@ classdef FastSenseCompanion < handle
             obj.Dashboards = dashboards;
             obj.Registry_  = registry;
             obj.Registry   = registry;
+            % Reset selection tracking on project switch
+            obj.SelectedDashboardIdx_ = 0;
+            obj.LastInteraction_      = '';
             % Rebuild pane placeholders (detach + reattach clears children and re-creates labels)
             obj.CatalogPane_.detach();
             obj.ListPane_.detach();
             obj.InspectorPane_.detach();
             obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
-            obj.ListPane_.attach(obj.hMidPanel_);
+            obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
             obj.InspectorPane_.attach(obj.hRightPanel_);
+            % Re-wire pane event listeners (detach cleared them)
+            obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
+                @(s, e) obj.onDashboardSelected_(s, e));
+            obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'OpenDashboardRequested', ...
+                @(s, e) obj.onOpenDashboardRequested_(s, e));
             obj.applyPlaceholderColors_();
+        end
+
+        function addDashboard(obj, d)
+        %ADDDASHBOARD Append a DashboardEngine to the browser; refresh the list.
+        %   Throws FastSenseCompanion:invalidDashboard if d is not a DashboardEngine.
+        %   Throws FastSenseCompanion:duplicateDashboard if d (by handle identity)
+        %   already exists in Engines_.
+            if ~isa(d, 'DashboardEngine')
+                error('FastSenseCompanion:invalidDashboard', ...
+                    'addDashboard requires a DashboardEngine instance.');
+            end
+            % Duplicate detection by handle identity (== compares handles)
+            for i = 1:numel(obj.Engines_)
+                if obj.Engines_{i} == d
+                    error('FastSenseCompanion:duplicateDashboard', ...
+                        'Dashboard already present in browser.');
+                end
+            end
+            obj.Engines_{end+1} = d;
+            obj.Dashboards       = obj.Engines_;
+            if ~isempty(obj.ListPane_) && isvalid(obj.ListPane_)
+                obj.ListPane_.refresh(obj.Engines_);
+            end
+        end
+
+        function removeDashboard(obj, key)
+        %REMOVEDASHBOARD Remove a dashboard by Name match.
+        %   key — char; matches DashboardEngine.Name (case-sensitive).
+        %   Throws FastSenseCompanion:dashboardNotFound if no engine has Name == key.
+        %   If the removed dashboard was the currently inspected one, the inspector
+        %   is reset to its placeholder/welcome state.
+            if ~ischar(key)
+                error('FastSenseCompanion:dashboardNotFound', ...
+                    'removeDashboard requires a char Name key.');
+            end
+            idx = 0;
+            for i = 1:numel(obj.Engines_)
+                if strcmp(obj.Engines_{i}.Name, key)
+                    idx = i;
+                    break;
+                end
+            end
+            if idx == 0
+                error('FastSenseCompanion:dashboardNotFound', ...
+                    'No dashboard with Name "%s".', key);
+            end
+            wasSelected = (obj.SelectedDashboardIdx_ == idx);
+            obj.Engines_(idx) = [];
+            obj.Dashboards    = obj.Engines_;
+            if wasSelected
+                obj.SelectedDashboardIdx_ = 0;
+                obj.LastInteraction_      = '';
+                % Reset inspector to placeholder
+                if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
+                    obj.InspectorPane_.detach();
+                    obj.InspectorPane_.attach(obj.hRightPanel_);
+                    obj.applyPlaceholderColors_();
+                end
+            elseif obj.SelectedDashboardIdx_ > idx
+                % Shift index down since the removed entry was earlier in the cell
+                obj.SelectedDashboardIdx_ = obj.SelectedDashboardIdx_ - 1;
+            end
+            if ~isempty(obj.ListPane_) && isvalid(obj.ListPane_)
+                obj.ListPane_.refresh(obj.Engines_);
+            end
         end
 
         function refreshCatalog(obj)
@@ -250,6 +332,31 @@ classdef FastSenseCompanion < handle
                         kids(j).FontColor = color;
                     end
                 end
+            end
+        end
+
+        function onDashboardSelected_(obj, ~, ed)
+        %ONDASHBOARDSELECTED_ Listener for DashboardListPane.DashboardSelected.
+        %   ed — DashboardEventData with Engine + Index. Records selection state.
+        %   Phase 1021 will replace the inspector content; Phase 1020 just tracks state.
+            try
+                obj.SelectedDashboardIdx_ = ed.Index;
+                obj.LastInteraction_      = 'dashboard';
+            catch err
+                uialert(obj.hFig_, err.message, 'FastSense Companion');
+            end
+        end
+
+        function onOpenDashboardRequested_(obj, ~, ed)
+        %ONOPENDASHBOARDREQUESTED_ Listener for DashboardListPane.OpenDashboardRequested.
+        %   The pane already calls engine.render() with try/catch + uialert. The
+        %   orchestrator just records that this dashboard is now the most-recent
+        %   interaction (matches BROWSER-03 behavior).
+            try
+                obj.SelectedDashboardIdx_ = ed.Index;
+                obj.LastInteraction_      = 'dashboard';
+            catch err
+                uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
         end
 
