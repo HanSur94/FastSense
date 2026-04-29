@@ -335,7 +335,7 @@ jobs:
           echo "--- stamp ---"
           cat libs/FastSense/private/.mex-version
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/refresh-mex-binaries
           delete-branch: true
