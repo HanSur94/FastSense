@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Tag-API Tech Debt Cleanup
-status: in_progress
-stopped_at: Phases 1013 + 1014 complete; resuming autonomously from Phase 1015
-last_updated: "2026-04-30T00:00:00.000Z"
+status: executing
+stopped_at: Completed 1015-01-PLAN.md
+last_updated: "2026-04-30T07:54:21.783Z"
 last_activity: 2026-04-30
 progress:
-  total_phases: 4
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 14
+  completed_phases: 11
+  total_plans: 42
+  completed_plans: 40
   percent: 50
 ---
 
@@ -21,19 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-22)
 
 **Core value:** Users can organize complex dashboards into navigable sections and pop out any widget for detailed analysis without losing the dashboard context.
-**Current focus:** v2.1 Tag-API Tech Debt Cleanup — Phase 1013 (dead-code deletion) is the entry point; phases 1013-1016 mapped, 0/4 complete.
+**Current focus:** Phase 1015 — Test suite cleanup (delete zombies + migrate Threshold( refs to Tag API)
 
 ## Current Position
 
 Milestone: v2.1 Tag-API Tech Debt Cleanup
-Phase: 1015 (Test suite cleanup) — next
-Plan: — (resuming autonomously)
-Status: Phases 1013 + 1014 ✅ complete; ready to plan Phase 1015
-Last activity: 2026-04-30 — Recovery from worktree turbulence; Phase 1014 commits cherry-picked; reconstructed CONTEXT/PLAN/SUMMARY from git for both phases
+Phase: 1015 (Test suite cleanup (delete zombies + migrate Threshold( refs to Tag API)) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-30
 
 Progress: [█████░░░░░] 50% (2/4 phases complete)
 
 **Phase queue (v2.1):**
+
 - [x] Phase 1013 — Dead-code deletion (DEAD-01..06 + DIFF-03) — ✅ complete (5 commits on origin/main)
 - [x] Phase 1014 — DashboardSerializer .m export Tag (MEXP-01..05) — ✅ complete (3 commits on this branch)
 - [ ] Phase 1015 — Test suite cleanup (TEST-01..12 + DIFF-02 + DIFF-04) — depends on Phase 1013 (satisfied)
@@ -125,6 +126,7 @@ Progress: [█████░░░░░] 50% (2/4 phases complete)
 | Phase 1011 P04 | 962 | 2 tasks | 100 files |
 | Phase 1011 P05 | 22min | 2 tasks | 13 files |
 | Phase 1012-migrate-examples-to-tag-api P01 | 8min | 2 tasks | 2 files |
+| Phase 1015 P01 | 3min | 4 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -250,6 +252,10 @@ Recent decisions affecting current work:
 - [Phase 1012-migrate-examples-to-tag-api]: Plan 01: Skip-list block in test_examples_smoke.m and run_all_examples.m is parity-checked byte-for-byte via awk-extracted diff; 0 lines required
 - [Phase 1012-migrate-examples-to-tag-api]: Plan 01: run_all_examples default mode changed from 'interactive' to 'auto' so CI can shell-invoke with exit=1 on failure; interactive preserved for human walk-through
 - [Phase 1012-migrate-examples-to-tag-api]: Plan 01: MATLAB-only widget skip set (chipbar/divider/iconcard/sparkline) derived by cross-reference against .github/workflows/examples.yml lines 181-195 curated Octave widget list
+- [Phase 1015]: [Phase 1015]: Three already-absent zombies (TestIncrementalDetector/TestEventDetector/TestCompositeThreshold suite versions) skipped cleanly per plan; only the 5 still-present zombies deleted in 1015-01
+- [Phase 1015]: [Phase 1015]: MakeV21Fixtures docstring scrubbed of Threshold(-shaped text — Gate C grep is regex-strict and matches comments; rephrased to 'legacy threshold-API' / 'legacy threshold construct' to keep helper file Gate C-clean
+- [Phase 1015]: [Phase 1015]: scripts/check_skip_list_parity.sh ships with vacuous-pass when smoke harness file absent — wires CI guard before Phase 1012 P02 lands smoke harness on this branch
+- [Phase 1015]: [Phase 1015]: Per-file commit discipline split Task 4 into 4a (script) + 4b (CI wire) so each non-deletion commit touches at most 1 file (bisect-localizable)
 
 ### Roadmap Evolution
 
@@ -284,6 +290,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T13:58:27.937Z
-Stopped at: Completed 1012-01-PLAN.md
+Last session: 2026-04-30T07:54:11.087Z
+Stopped at: Completed 1015-01-PLAN.md
 Resume file: None
