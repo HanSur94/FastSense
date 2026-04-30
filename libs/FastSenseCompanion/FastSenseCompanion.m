@@ -51,6 +51,8 @@ classdef FastSenseCompanion < handle
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
+        hLogPanel_     = []   % bottom log uipanel (full-width)
+        hLogText_      = []   % uitextarea inside hLogPanel_ (newest line first)
         Theme_         = []   % resolved CompanionTheme struct
         Listeners_     = {}   % all addlistener return values; deleted on close
         CatalogPane_   = []   % TagCatalogPane instance
@@ -132,27 +134,35 @@ classdef FastSenseCompanion < handle
                 'Visible',            'off');
             obj.hFig_.Color = obj.Theme_.DashboardBackground;
 
-            % Step 8 — Root grid
-            obj.hLayout_ = uigridlayout(obj.hFig_, [1 3]);
+            % Step 8 — Root grid (2 rows: top = 3 panes, bottom = log strip)
+            obj.hLayout_ = uigridlayout(obj.hFig_, [2 3]);
             obj.hLayout_.ColumnWidth   = {220, '1x', 280};
-            obj.hLayout_.RowHeight     = {'1x'};
+            obj.hLayout_.RowHeight     = {'1x', 140};
             obj.hLayout_.Padding       = [24 24 24 24];
             obj.hLayout_.ColumnSpacing = 16;
-            obj.hLayout_.RowSpacing    = 0;
+            obj.hLayout_.RowSpacing    = 12;
             obj.hLayout_.BackgroundColor = obj.Theme_.DashboardBackground;
 
-            % Step 9 — Three uipanels (order matters: grid assigns col 1, 2, 3)
+            % Step 9 — Three uipanels in row 1 + log panel spanning row 2.
             obj.hLeftPanel_  = uipanel(obj.hLayout_);
+            obj.hLeftPanel_.Layout.Row = 1; obj.hLeftPanel_.Layout.Column = 1;
             obj.hMidPanel_   = uipanel(obj.hLayout_);
+            obj.hMidPanel_.Layout.Row = 1; obj.hMidPanel_.Layout.Column = 2;
             obj.hRightPanel_ = uipanel(obj.hLayout_);
+            obj.hRightPanel_.Layout.Row = 1; obj.hRightPanel_.Layout.Column = 3;
+            obj.hLogPanel_ = uipanel(obj.hLayout_);
+            obj.hLogPanel_.Layout.Row = 2; obj.hLogPanel_.Layout.Column = [1 3];
 
             % Apply panel styling from theme
-            for hp = {obj.hLeftPanel_, obj.hMidPanel_, obj.hRightPanel_}
+            for hp = {obj.hLeftPanel_, obj.hMidPanel_, obj.hRightPanel_, obj.hLogPanel_}
                 hp{1}.BackgroundColor = obj.Theme_.WidgetBackground;
                 hp{1}.BorderColor     = obj.Theme_.WidgetBorderColor;
                 hp{1}.BorderType      = 'line';
                 hp{1}.BorderWidth     = 1;
             end
+
+            % Build log strip (Header + uitextarea in a 2-row inner grid)
+            obj.buildLogStrip_();
 
             % Step 10 — Instantiate pane objects and attach
             obj.CatalogPane_   = TagCatalogPane();
@@ -376,6 +386,31 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function addLogEntry(obj, level, msg)
+        %ADDLOGENTRY Append a timestamped log line to the bottom log strip.
+        %   level — 'info' | 'warn' | 'error' (any short tag accepted)
+        %   msg   — char/string. Anything else is sprintf'd through %s.
+        %   Newest line is at the top so the user always sees the latest
+        %   without scrolling. Buffer capped at 500 lines.
+            if isempty(obj.hLogText_) || ~isvalid(obj.hLogText_); return; end
+            try
+                ts = char(datetime('now', 'Format', 'HH:mm:ss'));
+                if isstring(msg) && isscalar(msg); msg = char(msg); end
+                if ~ischar(msg); msg = sprintf('%s', msg); end
+                line = sprintf('[%s] %-5s  %s', ts, upper(char(level)), msg);
+                cur = obj.hLogText_.Value;
+                if isempty(cur) || (iscell(cur) && numel(cur)==1 && isempty(cur{1}))
+                    cur = {};
+                end
+                if ~iscell(cur); cur = {cur}; end
+                cur = [{line}, reshape(cur, 1, [])];
+                if numel(cur) > 500; cur = cur(1:500); end
+                obj.hLogText_.Value = cur;
+            catch
+                % Logging must never crash the UI.
+            end
+        end
+
         function refreshCatalog(obj)
         %REFRESHCATALOG Re-snapshot tags from registry and rebuild the tag catalog.
         %   Call after externally mutating TagRegistry to update the visible catalog.
@@ -390,6 +425,31 @@ classdef FastSenseCompanion < handle
     end
 
     methods (Access = private)
+
+        function buildLogStrip_(obj)
+        %BUILDLOGSTRIP_ Construct header label + uitextarea inside hLogPanel_.
+            t = obj.Theme_;
+            g = uigridlayout(obj.hLogPanel_, [2 1]);
+            g.RowHeight = {18, '1x'};
+            g.ColumnWidth = {'1x'};
+            g.Padding = [8 4 8 4];
+            g.RowSpacing = 4;
+            g.BackgroundColor = t.WidgetBackground;
+            hLbl = uilabel(g);
+            hLbl.Layout.Row = 1; hLbl.Layout.Column = 1;
+            hLbl.Text = 'Log'; hLbl.FontWeight = 'bold'; hLbl.FontSize = 11;
+            hLbl.FontColor = t.ForegroundColor;
+            hLbl.HorizontalAlignment = 'left'; hLbl.VerticalAlignment = 'center';
+            obj.hLogText_ = uitextarea(g);
+            obj.hLogText_.Layout.Row = 2; obj.hLogText_.Layout.Column = 1;
+            obj.hLogText_.Editable = 'off';
+            obj.hLogText_.FontName = 'Menlo';
+            obj.hLogText_.FontSize = 10;
+            obj.hLogText_.BackgroundColor = t.DashboardBackground;
+            obj.hLogText_.FontColor = t.ForegroundColor;
+            obj.hLogText_.Value = {sprintf('[%s] INFO   Companion ready.', ...
+                char(datetime('now', 'Format', 'HH:mm:ss')))};
+        end
 
         function applyPlaceholderColors_(obj)
         %APPLYPLACEHOLDERCOLORS_ Set FontColor on all placeholder uilabels.
@@ -414,7 +474,10 @@ classdef FastSenseCompanion < handle
                 obj.SelectedDashboardIdx_ = ed.Index;
                 obj.LastInteraction_      = 'dashboard';
                 obj.resolveInspectorState_();
+                obj.addLogEntry('info', sprintf('Selected dashboard: %s', ...
+                    char(ed.Engine.Name)));
             catch err
+                obj.addLogEntry('error', sprintf('Dashboard select failed: %s', err.message));
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
         end
@@ -428,7 +491,10 @@ classdef FastSenseCompanion < handle
                 obj.SelectedDashboardIdx_ = ed.Index;
                 obj.LastInteraction_      = 'dashboard';
                 obj.resolveInspectorState_();
+                obj.addLogEntry('info', sprintf('Opened dashboard: %s', ...
+                    char(ed.Engine.Name)));
             catch err
+                obj.addLogEntry('error', sprintf('Open dashboard failed: %s', err.message));
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
         end
@@ -441,7 +507,18 @@ classdef FastSenseCompanion < handle
                 obj.SelectedTagKeys_ = obj.CatalogPane_.getSelectedKeys();
                 obj.LastInteraction_ = 'tags';
                 obj.resolveInspectorState_();
+                if isempty(obj.SelectedTagKeys_)
+                    obj.addLogEntry('info', 'Tag selection cleared');
+                elseif numel(obj.SelectedTagKeys_) == 1
+                    obj.addLogEntry('info', sprintf('Selected tag: %s', ...
+                        char(obj.SelectedTagKeys_{1})));
+                else
+                    obj.addLogEntry('info', sprintf('Selected %d tags: %s', ...
+                        numel(obj.SelectedTagKeys_), ...
+                        strjoin(obj.SelectedTagKeys_, ', ')));
+                end
             catch err
+                obj.addLogEntry('error', sprintf('Tag select failed: %s', err.message));
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
         end
@@ -530,7 +607,13 @@ classdef FastSenseCompanion < handle
                     end
                 end
                 [~, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                obj.addLogEntry('info', sprintf( ...
+                    'Opened ad-hoc plot: %d tag(s) [%s]', ...
+                    numel(tags), char(mode)));
                 if ~isempty(skipped)
+                    obj.addLogEntry('warn', sprintf( ...
+                        'Ad-hoc plot skipped %d tag(s): %s', ...
+                        numel(skipped), strjoin(skipped, ', ')));
                     msg = sprintf( ...
                         'Plot opened, but some tags were skipped:\n  - %s', ...
                         strjoin(skipped, sprintf('\n  - ')));
@@ -538,6 +621,7 @@ classdef FastSenseCompanion < handle
                         'Icon', 'warning');
                 end
             catch ME
+                obj.addLogEntry('error', sprintf('Ad-hoc plot failed: %s', ME.message));
                 if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
                     uialert(obj.hFig_, ...
                         sprintf('Failed to open plot: %s', ME.message), ...
