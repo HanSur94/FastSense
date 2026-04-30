@@ -74,12 +74,22 @@ function test_tag_ok_state()
 end
 
 function test_tag_precedence()
-    st = MakePhase1009Fixtures.makeSensorTag('icw_f_pr_src', 'X', 1:5, 'Y', [1 1 1 1 20]);
-    m  = MakePhase1009Fixtures.makeMonitorTag('icw_f_pr_mon', st);
-    t = Threshold('icw_f_pr_thr', 'Direction', 'upper');
-    t.addCondition(struct(), 10);
+    %TEST_TAG_PRECEDENCE Tag NV pair clears the Threshold NV pair.
+    %   Phase 1015 Plan 02 migration: the legacy Threshold class was
+    %   deleted in Phase 1011. The 'Threshold' NV pair on IconCardWidget
+    %   survives as a TagRegistry-resolvable alias (any Tag-kind handle
+    %   or registered key string). We pass a registered MonitorTag key
+    %   string as the 'Threshold' NV pair to exercise the same precedence
+    %   contract: when a Tag handle is also supplied, IconCardWidget
+    %   clears Threshold ([]) and keeps Tag.
+    st_src = MakePhase1009Fixtures.makeSensorTag('icw_f_pr_src', 'X', 1:5, 'Y', [1 1 1 1 20]);
+    m  = MakePhase1009Fixtures.makeMonitorTag('icw_f_pr_mon', st_src);
+    % Second MonitorTag registered separately so we have a key string
+    % to pass through the legacy 'Threshold' NV alias.
+    st_thr = MakePhase1009Fixtures.makeSensorTag('icw_f_pr_thr_src', 'X', 1:5, 'Y', [1 1 1 1 20]);
+    MakeV21Fixtures.makeThresholdMonitor('icw_f_pr_thr', st_thr, 10, 'upper');
 
-    w = IconCardWidget('Title', 'P', 'Tag', m, 'Threshold', t);
+    w = IconCardWidget('Title', 'P', 'Tag', m, 'Threshold', 'icw_f_pr_thr');
     assert(isempty(w.Threshold), 'Tag precedence clears Threshold');
     assert(~isempty(w.Tag));
 end
@@ -99,9 +109,19 @@ function test_tag_round_trip()
 end
 
 function test_legacy_threshold_path()
-    t = Threshold('icw_f_legacy_thr', 'Direction', 'upper');
-    t.addCondition(struct(), 10);
-    w = IconCardWidget('Title', 'L', 'Threshold', t, 'StaticValue', 42);
+    %TEST_LEGACY_THRESHOLD_PATH Threshold-NV-pair branch fires alarm via MonitorTag.
+    %   Phase 1015 Plan 02 migration: with the Threshold class deleted in
+    %   Phase 1011, the surviving 'Threshold' NV pair on IconCardWidget
+    %   accepts any Tag-kind handle (typically a MonitorTag). The
+    %   IconCardWidget.deriveStateFromThreshold path branches via
+    %   thresholdIsMonitorKind_ for monitor-kind tags: it reads the
+    %   tag's last getXY() Y value and emits 'alarm' when y(end) > 0.5.
+    %   We bind a MonitorTag to a parent SensorTag whose Y exceeds the
+    %   threshold value so the binary signal is 1 → CurrentState='alarm'.
+    %   StaticValue=42 is preserved verbatim — display value, not state input.
+    st = MakePhase1009Fixtures.makeSensorTag('icw_f_legacy_src', 'X', 1:5, 'Y', [1 1 1 1 20]);
+    m = MakeV21Fixtures.makeThresholdMonitor('icw_f_legacy_thr', st, 10, 'upper');
+    w = IconCardWidget('Title', 'L', 'Threshold', m, 'StaticValue', 42);
     fig = figure('Visible', 'off');
     cleanup = onCleanup(@() close(fig));  %#ok<NASGU>
     hp = uipanel(fig, 'Position', [0 0 1 1]);
