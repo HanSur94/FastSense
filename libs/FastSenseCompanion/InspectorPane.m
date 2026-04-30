@@ -59,12 +59,18 @@ classdef InspectorPane < handle
             obj.ComposerMode_   = 'Overlay';
             obj.CurrentTagKeys_ = {};
             delete(obj.hPanel_.Children);
-            obj.hContent_ = uipanel(obj.hPanel_);
-            obj.hContent_.Units           = 'normalized';
-            obj.hContent_.Position        = [0 0 1 1];
-            obj.hContent_.Scrollable      = 'on';
-            obj.hContent_.BorderType      = 'none';
+            % hContent_ is a uigridlayout (NOT a Scrollable uipanel) so its
+            % child grid is naturally top-aligned. Earlier iterations used
+            % uipanel(Scrollable='on') which centered or bottom-aligned
+            % fixed-height content, leaving the top of the right pane
+            % blank. The uigridlayout outer-wrapper guarantees content sits
+            % at the top.
+            obj.hContent_ = uigridlayout(obj.hPanel_, [1 1]);
+            obj.hContent_.Padding         = [0 0 0 0];
+            obj.hContent_.RowHeight       = {'1x'};
+            obj.hContent_.ColumnWidth     = {'1x'};
             obj.hContent_.BackgroundColor = obj.Theme_.WidgetBackground;
+            obj.hContent_.Scrollable      = 'on';  % R2020b+ supports this on uigridlayout
             obj.renderState_();
         end
 
