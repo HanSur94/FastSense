@@ -27,6 +27,7 @@ classdef InspectorPane < handle
         hRangeLbl_      = []   % "Range: last X min (max. 30 min)" label under sparkline
         SparkWindowSec_ = 1800 % sparkline horizon — last 30 minutes of data
         ThresholdsCache_ = []  % containers.Map(tagKey -> rules cell); built lazily
+        IsRendering_     = false  % re-entrance guard — refreshLive no-ops while true
         hTagTable_      = []   % uitable in tag state (live mode updates Data only)
         hTagTitle_      = []   % uilabel for the tag-name title (in-place update)
         hDashTable_     = []   % uitable in dashboard state (live mode updates Data only)
@@ -115,9 +116,12 @@ classdef InspectorPane < handle
         %   Called by the orchestrator's live timer at LivePeriod_.
         %     - tag state:       update uitable Data + sparkline XData/YData
         %     - dashboard state: update uitable Data
+        %     - multitag state:  update each card's sparkline in place
         %     - other states:    no-op
         %   Falls back to a full renderState_() if the cached handles are
-        %   stale (e.g., setState swapped state but the timer ticked first).
+        %   stale. No-ops while a render is in progress to avoid
+        %   re-entering and accessing half-built widgets.
+            if obj.IsRendering_; return; end
             try
                 switch obj.State_
                     case 'tag'
@@ -259,6 +263,11 @@ classdef InspectorPane < handle
             end
         end
 
+        function clearIsRendering_(obj)
+        %CLEARISRENDERING_ Reset the re-entrance guard (called by onCleanup).
+            obj.IsRendering_ = false;
+        end
+
         function alertOrLog_(obj, err)
         %ALERTORLOG_ Best-effort error surface that won't crash on invisible figures.
         %   Use this instead of raw uialert in catch blocks: uialert refuses
@@ -291,21 +300,28 @@ classdef InspectorPane < handle
 
         function renderState_(obj)
         %RENDERSTATE_ Clear hContent_.Children and dispatch to per-state renderer.
+            wasInvisible = false;
+            obj.IsRendering_ = true;
+            cleanupGuard = onCleanup(@() obj.clearIsRendering_());
             try
                 if isempty(obj.hContent_) || ~isvalid(obj.hContent_); return; end
-                % Hide hContent_ before deleting children. Without this,
-                % the delete cascade fires position-update events against
-                % freshly-stale panel handles; if a DashboardEngine live
-                % timer happens to drawnow during our delete, it dispatches
-                % those events on invalid handles ('Value must be a handle'
-                % errors). Visibility=off suppresses position events for
-                % the subtree being torn down.
-                try; obj.hContent_.Visible = 'off'; catch; end
+                % Hide hContent_ for the ENTIRE delete + build cycle.
+                % Without this, MATLAB dispatches position-update events
+                % during widget creation/deletion. A DashboardEngine live
+                % timer firing drawnow during this dispatches those events
+                % against half-built or freshly-stale handles, producing
+                % 'Value must be a handle' / 'Invalid or deleted object'
+                % errors — most visible on multitag renders that build
+                % several axes back-to-back.
+                try
+                    obj.hContent_.Visible = 'off';
+                    wasInvisible = true;
+                catch
+                end
                 kids = obj.hContent_.Children;
                 for i = numel(kids):-1:1
                     try; delete(kids(i)); catch; end
                 end
-                try; obj.hContent_.Visible = 'on'; catch; end
                 obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hSparkLine_ = [];
                 obj.hRangeLbl_  = [];
                 obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
@@ -325,7 +341,13 @@ classdef InspectorPane < handle
                         error('FastSenseCompanion:invalidState', ...
                             'Unknown inspector state: ''%s''.', obj.State_);
                 end
+                if wasInvisible
+                    try; obj.hContent_.Visible = 'on'; catch; end
+                end
             catch err
+                if wasInvisible
+                    try; obj.hContent_.Visible = 'on'; catch; end
+                end
                 obj.alertOrLog_(err);
             end
         end
