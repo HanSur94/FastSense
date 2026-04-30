@@ -143,6 +143,9 @@ jobs:
       - name: Run complexity metrics
         run: mh_metric --ci libs/ tests/ examples/
 
+      - name: Skip-list parity gate (DIFF-04)
+        run: bash scripts/check_skip_list_parity.sh
+
   build-mex:
     name: Build MEX (Linux)
     needs: changes
