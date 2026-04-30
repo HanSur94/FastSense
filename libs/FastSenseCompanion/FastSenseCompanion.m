@@ -23,7 +23,16 @@ classdef FastSenseCompanion < handle
 %     refreshCatalog()                 — re-snapshot tags and rebuild catalog
 %     close()                          — idempotent teardown
 %
+%   Events fired:
+%     InspectorStateChanged    payload: InspectorStateEventData(state, payload)
+%     OpenAdHocPlotRequested   payload: AdHocPlotEventData(tagKeys, mode) — fired by InspectorPane
+%
 %   See also DashboardEngine, TagRegistry, CompanionTheme.
+
+    events
+        InspectorStateChanged
+        OpenAdHocPlotRequested
+    end
 
     properties (Access = public)
         % (intentionally empty — all user-observable state is SetAccess=private)
@@ -51,6 +60,7 @@ classdef FastSenseCompanion < handle
         Registry_      = []   % internal Registry_ reference
         SelectedDashboardIdx_ = 0    % 1-based; 0 = nothing selected (Phase 1020)
         LastInteraction_      = ''   % '' | 'tags' | 'dashboard' (Phase 1020 sets 'dashboard'; Phase 1021 sets 'tags')
+        SelectedTagKeys_      = {}   % cellstr cache mirrored from CatalogPane.getSelectedKeys() (Phase 1021)
     end
 
     methods (Access = public)
@@ -150,12 +160,16 @@ classdef FastSenseCompanion < handle
             obj.InspectorPane_ = InspectorPane();
             obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
             obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
-            obj.InspectorPane_.attach(obj.hRightPanel_);
+            obj.InspectorPane_.attach(obj.hRightPanel_, obj.hFig_, obj.CatalogPane_, obj, obj.Theme_);
             % Wire pane event listeners (append to Listeners_)
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
                 @(s, e) obj.onDashboardSelected_(s, e));
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'OpenDashboardRequested', ...
                 @(s, e) obj.onOpenDashboardRequested_(s, e));
+            obj.Listeners_{end+1} = addlistener(obj.CatalogPane_, 'TagSelectionChanged', ...
+                @(s, e) obj.onTagSelectionChanged_(s, e));
+            obj.Listeners_{end+1} = addlistener(obj, 'InspectorStateChanged', ...
+                @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
             obj.applyPlaceholderColors_();
 
             % Step 11 — Wire CloseRequestFcn
@@ -225,18 +239,23 @@ classdef FastSenseCompanion < handle
             % Reset selection tracking on project switch
             obj.SelectedDashboardIdx_ = 0;
             obj.LastInteraction_      = '';
+            obj.SelectedTagKeys_      = {};
             % Rebuild pane placeholders (detach + reattach clears children and re-creates labels)
             obj.CatalogPane_.detach();
             obj.ListPane_.detach();
             obj.InspectorPane_.detach();
             obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
             obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
-            obj.InspectorPane_.attach(obj.hRightPanel_);
+            obj.InspectorPane_.attach(obj.hRightPanel_, obj.hFig_, obj.CatalogPane_, obj, obj.Theme_);
             % Re-wire pane event listeners (detach cleared them)
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
                 @(s, e) obj.onDashboardSelected_(s, e));
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'OpenDashboardRequested', ...
                 @(s, e) obj.onOpenDashboardRequested_(s, e));
+            obj.Listeners_{end+1} = addlistener(obj.CatalogPane_, 'TagSelectionChanged', ...
+                @(s, e) obj.onTagSelectionChanged_(s, e));
+            obj.Listeners_{end+1} = addlistener(obj, 'InspectorStateChanged', ...
+                @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
             obj.applyPlaceholderColors_();
         end
 
@@ -290,12 +309,11 @@ classdef FastSenseCompanion < handle
             if wasSelected
                 obj.SelectedDashboardIdx_ = 0;
                 obj.LastInteraction_      = '';
-                % Reset inspector to placeholder
-                if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
-                    obj.InspectorPane_.detach();
-                    obj.InspectorPane_.attach(obj.hRightPanel_);
-                    obj.applyPlaceholderColors_();
-                end
+                obj.resolveInspectorState_();
+                % Note: we no longer detach + reattach the inspector; the listener on
+                % InspectorStateChanged drives the inspector content. This avoids tearing
+                % down listeners mid-flow. (Phase 1018 detach-and-reattach was correct
+                % when the inspector was a placeholder; Phase 1021 makes it event-driven.)
             elseif obj.SelectedDashboardIdx_ > idx
                 % Shift index down since the removed entry was earlier in the cell
                 obj.SelectedDashboardIdx_ = obj.SelectedDashboardIdx_ - 1;
@@ -337,11 +355,12 @@ classdef FastSenseCompanion < handle
 
         function onDashboardSelected_(obj, ~, ed)
         %ONDASHBOARDSELECTED_ Listener for DashboardListPane.DashboardSelected.
-        %   ed — DashboardEventData with Engine + Index. Records selection state.
-        %   Phase 1021 will replace the inspector content; Phase 1020 just tracks state.
+        %   ed — DashboardEventData with Engine + Index. Records selection state
+        %   and asks the resolver to fire InspectorStateChanged.
             try
                 obj.SelectedDashboardIdx_ = ed.Index;
                 obj.LastInteraction_      = 'dashboard';
+                obj.resolveInspectorState_();
             catch err
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
@@ -350,11 +369,43 @@ classdef FastSenseCompanion < handle
         function onOpenDashboardRequested_(obj, ~, ed)
         %ONOPENDASHBOARDREQUESTED_ Listener for DashboardListPane.OpenDashboardRequested.
         %   The pane already calls engine.render() with try/catch + uialert. The
-        %   orchestrator just records that this dashboard is now the most-recent
-        %   interaction (matches BROWSER-03 behavior).
+        %   orchestrator records most-recent interaction and refreshes the inspector
+        %   so the dashboard state shows for the just-opened engine.
             try
                 obj.SelectedDashboardIdx_ = ed.Index;
                 obj.LastInteraction_      = 'dashboard';
+                obj.resolveInspectorState_();
+            catch err
+                uialert(obj.hFig_, err.message, 'FastSense Companion');
+            end
+        end
+
+        function onTagSelectionChanged_(obj, ~, ~)
+        %ONTAGSELECTIONCHANGED_ Listener for TagCatalogPane.TagSelectionChanged.
+        %   Pulls the current selection cellstr from the pane (event payload-less,
+        %   per Phase 1019 contract) and asks the resolver to fire InspectorStateChanged.
+            try
+                obj.SelectedTagKeys_ = obj.CatalogPane_.getSelectedKeys();
+                obj.LastInteraction_ = 'tags';
+                obj.resolveInspectorState_();
+            catch err
+                uialert(obj.hFig_, err.message, 'FastSense Companion');
+            end
+        end
+
+        function resolveInspectorState_(obj)
+        %RESOLVEINSPECTORSTATE_ Compute (state, payload) and fire InspectorStateChanged.
+        %   Single notify point for the inspector. Inspector subscribes via the
+        %   InspectorStateChanged listener wired in the constructor / setProject.
+            try
+                [state, payload] = inspectorResolveState( ...
+                    obj.LastInteraction_, ...
+                    obj.SelectedTagKeys_, ...
+                    obj.SelectedDashboardIdx_, ...
+                    obj.Engines_, ...
+                    obj.Registry_);
+                ed = InspectorStateEventData(state, payload);
+                notify(obj, 'InspectorStateChanged', ed);
             catch err
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
