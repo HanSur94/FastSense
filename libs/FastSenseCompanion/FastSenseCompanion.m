@@ -43,6 +43,7 @@ classdef FastSenseCompanion < handle
         Registry   = []       % TagRegistry reference
         Theme      = 'dark'   % preset string ('dark' | 'light')
         IsOpen     = false    % true while uifigure is valid
+        IsLive     = false    % true while LiveTimer_ is running (refreshes inspector)
     end
 
     properties (Access = private)
@@ -53,6 +54,9 @@ classdef FastSenseCompanion < handle
         hRightPanel_   = []   % right pane uipanel
         hLogPanel_     = []   % bottom log uipanel (full-width)
         hLogText_      = []   % uitextarea inside hLogPanel_ (newest line first)
+        hLiveBtn_      = []   % Live mode toggle button (in log strip header)
+        LiveTimer_     = []   % MATLAB timer driving inspector refresh
+        LivePeriod_    = 1.0  % seconds between live refreshes
         Theme_         = []   % resolved CompanionTheme struct
         Listeners_     = {}   % all addlistener return values; deleted on close
         CatalogPane_   = []   % TagCatalogPane instance
@@ -191,6 +195,9 @@ classdef FastSenseCompanion < handle
             movegui(obj.hFig_, 'center');
             obj.hFig_.Visible = 'on';
             obj.IsOpen = true;
+
+            % Step 13 — Default to Live mode ON (refreshes inspector at LivePeriod_).
+            obj.startLiveMode();
         end
 
         function close(obj)
@@ -211,6 +218,19 @@ classdef FastSenseCompanion < handle
             end
             % Diagnostic — confirms the X click reached close().
             fprintf('[FastSenseCompanion] close() invoked, tearing down...\n');
+            % Stop and delete live timer first so no tick fires mid-teardown.
+            try
+                if ~isempty(obj.LiveTimer_) && isvalid(obj.LiveTimer_)
+                    if strcmp(obj.LiveTimer_.Running, 'on')
+                        stop(obj.LiveTimer_);
+                    end
+                    delete(obj.LiveTimer_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] LiveTimer cleanup failed: %s\n', err.message);
+            end
+            obj.LiveTimer_ = [];
+            obj.IsLive = false;
             % Detach panes (releases their listeners + debounce timers).
             try
                 if ~isempty(obj.CatalogPane_) && isvalid(obj.CatalogPane_)
@@ -386,6 +406,54 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function startLiveMode(obj)
+        %STARTLIVEMODE Start (or resume) the inspector refresh timer.
+        %   Idempotent. Companion launches with live mode already ON.
+            if obj.IsLive; return; end
+            try
+                if isempty(obj.LiveTimer_) || ~isvalid(obj.LiveTimer_)
+                    obj.LiveTimer_ = timer( ...
+                        'ExecutionMode', 'fixedRate', ...
+                        'Period',        obj.LivePeriod_, ...
+                        'BusyMode',      'drop', ...
+                        'TimerFcn',      @(~,~) obj.onLiveTick_(), ...
+                        'ErrorFcn',      @(~,~) []);
+                end
+                if strcmp(obj.LiveTimer_.Running, 'off')
+                    start(obj.LiveTimer_);
+                end
+                obj.IsLive = true;
+                obj.updateLiveButton_();
+                obj.addLogEntry('info', sprintf('Live mode ON (period %gs)', obj.LivePeriod_));
+            catch err
+                obj.addLogEntry('error', sprintf('Live start failed: %s', err.message));
+            end
+        end
+
+        function stopLiveMode(obj)
+        %STOPLIVEMODE Stop the inspector refresh timer (timer object kept for reuse).
+            if ~obj.IsLive; return; end
+            try
+                if ~isempty(obj.LiveTimer_) && isvalid(obj.LiveTimer_) ...
+                        && strcmp(obj.LiveTimer_.Running, 'on')
+                    stop(obj.LiveTimer_);
+                end
+            catch
+            end
+            obj.IsLive = false;
+            obj.updateLiveButton_();
+            obj.addLogEntry('info', 'Live mode OFF');
+        end
+
+        function toggleLiveMode(obj)
+        %TOGGLELIVEMODE Flip live mode on/off — bound to the toolbar button.
+            if obj.IsLive
+                obj.stopLiveMode();
+            else
+                obj.startLiveMode();
+            end
+        end
+
         function addLogEntry(obj, level, msg)
         %ADDLOGENTRY Append a timestamped log line to the bottom log strip.
         %   level — 'info' | 'warn' | 'error' (any short tag accepted)
@@ -427,19 +495,38 @@ classdef FastSenseCompanion < handle
     methods (Access = private)
 
         function buildLogStrip_(obj)
-        %BUILDLOGSTRIP_ Construct header label + uitextarea inside hLogPanel_.
+        %BUILDLOGSTRIP_ Construct header (label + Live toggle) + uitextarea.
             t = obj.Theme_;
             g = uigridlayout(obj.hLogPanel_, [2 1]);
-            g.RowHeight = {18, '1x'};
+            g.RowHeight = {24, '1x'};
             g.ColumnWidth = {'1x'};
             g.Padding = [8 4 8 4];
             g.RowSpacing = 4;
             g.BackgroundColor = t.WidgetBackground;
-            hLbl = uilabel(g);
+
+            % Header row: label on the left, Live toggle on the right.
+            gHdr = uigridlayout(g, [1 2]);
+            gHdr.Layout.Row = 1; gHdr.Layout.Column = 1;
+            gHdr.ColumnWidth = {'1x', 110};
+            gHdr.RowHeight = {'1x'};
+            gHdr.Padding = [0 0 0 0];
+            gHdr.ColumnSpacing = 8;
+            gHdr.BackgroundColor = t.WidgetBackground;
+
+            hLbl = uilabel(gHdr);
             hLbl.Layout.Row = 1; hLbl.Layout.Column = 1;
             hLbl.Text = 'Log'; hLbl.FontWeight = 'bold'; hLbl.FontSize = 11;
             hLbl.FontColor = t.ForegroundColor;
             hLbl.HorizontalAlignment = 'left'; hLbl.VerticalAlignment = 'center';
+
+            obj.hLiveBtn_ = uibutton(gHdr, 'push');
+            obj.hLiveBtn_.Layout.Row = 1; obj.hLiveBtn_.Layout.Column = 2;
+            obj.hLiveBtn_.Text = 'Live: OFF';
+            obj.hLiveBtn_.FontSize = 11; obj.hLiveBtn_.FontWeight = 'bold';
+            obj.hLiveBtn_.Tooltip = 'Toggle live refresh of the inspector';
+            obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
+            obj.updateLiveButton_();
+
             obj.hLogText_ = uitextarea(g);
             obj.hLogText_.Layout.Row = 2; obj.hLogText_.Layout.Column = 1;
             obj.hLogText_.Editable = 'off';
@@ -449,6 +536,38 @@ classdef FastSenseCompanion < handle
             obj.hLogText_.FontColor = t.ForegroundColor;
             obj.hLogText_.Value = {sprintf('[%s] INFO   Companion ready.', ...
                 char(datetime('now', 'Format', 'HH:mm:ss')))};
+        end
+
+        function updateLiveButton_(obj)
+        %UPDATELIVEBUTTON_ Reflect IsLive in the toolbar button text/colors.
+            if isempty(obj.hLiveBtn_) || ~isvalid(obj.hLiveBtn_); return; end
+            t = obj.Theme_;
+            if obj.IsLive
+                obj.hLiveBtn_.Text            = [char(9679) ' Live: ON'];
+                obj.hLiveBtn_.BackgroundColor = t.Accent;
+                obj.hLiveBtn_.FontColor       = t.DashboardBackground;
+            else
+                obj.hLiveBtn_.Text            = 'Live: OFF';
+                obj.hLiveBtn_.BackgroundColor = t.WidgetBorderColor;
+                obj.hLiveBtn_.FontColor       = t.ForegroundColor;
+            end
+        end
+
+        function onLiveTick_(obj)
+        %ONLIVETICK_ Periodic in-place refresh: tag sample count + X range +
+        %   sparkline; or dashboard status. Uses InspectorPane.refreshLive
+        %   (updates Data/XData/YData on existing widgets) to avoid layout
+        %   teardown/rebuild flicker. The catalog and dashboard list are
+        %   intentionally NOT refreshed (they would lose selection/scroll).
+            if ~obj.IsLive || isempty(obj.hFig_) || ~isvalid(obj.hFig_); return; end
+            try
+                if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_) ...
+                        && ismethod(obj.InspectorPane_, 'refreshLive')
+                    obj.InspectorPane_.refreshLive();
+                end
+            catch
+                % Live ticks must never crash the timer.
+            end
         end
 
         function applyPlaceholderColors_(obj)
