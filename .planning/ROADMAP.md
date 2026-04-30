@@ -61,7 +61,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 1019: Tag Catalog** — `TagCatalogPane` with debounced search, filter pills, label grouping, multi-select with persistence, count badge, `refreshCatalog()` (completed 2026-04-29)
 - [x] **Phase 1020: Dashboard Browser** — `DashboardListPane` with name search, Open button, `addDashboard`/`removeDashboard`, dashboard inspector routing (completed 2026-04-29)
 - [x] **Phase 1021: Inspector** — `InspectorPane` with four states (welcome / single-tag / dashboard / multi-tag composer routing), sparkline preview, `SensorDetailPlot` integration, per-dashboard play/pause (completed 2026-04-30)
-- [ ] **Phase 1022: Ad-Hoc Plot Composer** — `FastSense` overlay and `FastSenseGrid` linked grid spawning from selected tags, independent figure lifecycle, figure-close cleanup
+- [x] **Phase 1022: Ad-Hoc Plot Composer** — `FastSense` overlay and `FastSenseGrid` linked grid spawning from selected tags, independent figure lifecycle, figure-close cleanup (completed 2026-04-30)
 - [ ] **Phase 1023: Industrial Plant Demo Integration** — extend `demo/industrial_plant/run_demo.m` to launch a `FastSenseCompanion` over the demo's populated `TagRegistry` + the 6-page `DashboardEngine`; demo doubles as the milestone canary
 
 ## Phase Details
@@ -150,7 +150,7 @@ Plans:
 Plans:
 - [x] 1022-01-PLAN.md — openAdHocPlot private helper: Overlay + LinkedGrid figure factory with per-tag failure tolerance
 - [x] 1022-02-PLAN.md — FastSenseCompanion orchestrator: onOpenAdHocPlotRequested_ listener + addlistener wiring in constructor + setProject
-- [ ] 1022-03-PLAN.md — Tests: helper unit suite (runOpenAdHocPlotTests) + MockPlottableTag fixture + TestFastSenseCompanion ADHOC end-to-end (lifecycle + orphan-timer)
+- [x] 1022-03-PLAN.md — Tests: helper unit suite (runOpenAdHocPlotTests) + MockPlottableTag fixture + TestFastSenseCompanion ADHOC end-to-end (lifecycle + orphan-timer)
 **UI hint**: yes
 
 ### Phase 1023: Industrial Plant Demo Integration
@@ -189,4 +189,4 @@ Plans:
 | 1019. Tag Catalog | v3.0 | 3/3 | Complete    | 2026-04-29 |
 | 1020. Dashboard Browser | v3.0 | 3/3 | Complete   | 2026-04-29 |
 | 1021. Inspector | v3.0 | 4/4 | Complete   | 2026-04-30 |
-| 1022. Ad-Hoc Plot Composer | v3.0 | 2/3 | In Progress|  |
+| 1022. Ad-Hoc Plot Composer | v3.0 | 3/3 | Complete   | 2026-04-30 |
