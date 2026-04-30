@@ -135,21 +135,21 @@ classdef InspectorPane < handle
             l1 = uilabel(g); l1.Layout.Row = 1; l1.Layout.Column = 1;
             l1.Text = obj.hFig_.Name; l1.FontSize = 14; l1.FontWeight = 'bold';
             l1.FontColor = t.ForegroundColor; l1.HorizontalAlignment = 'left';
-            l1.VerticalAlignment = 'middle';
+            l1.VerticalAlignment = 'center';
             nT = 0; nD = 0;
             if isfield(obj.Payload_, 'nTags');       nT = obj.Payload_.nTags;       end
             if isfield(obj.Payload_, 'nDashboards'); nD = obj.Payload_.nDashboards; end
             l3 = uilabel(g); l3.Layout.Row = 3; l3.Layout.Column = 1;
             l3.Text = sprintf('%d tags %s %d dashboards', nT, char(183), nD);
             l3.FontSize = 11; l3.FontColor = t.PlaceholderTextColor;
-            l3.HorizontalAlignment = 'left'; l3.VerticalAlignment = 'middle';
+            l3.HorizontalAlignment = 'left'; l3.VerticalAlignment = 'center';
             hints = {'Select a tag for details', 'Click a dashboard row for summary', ...
                      'Select 2+ tags to compose a plot'};
             for i = 1:3
                 lh = uilabel(g); lh.Layout.Row = 4 + i; lh.Layout.Column = 1;
                 lh.Text = hints{i}; lh.FontSize = 11;
                 lh.FontColor = t.PlaceholderTextColor;
-                lh.HorizontalAlignment = 'left'; lh.VerticalAlignment = 'middle';
+                lh.HorizontalAlignment = 'left'; lh.VerticalAlignment = 'center';
             end
         end
 
@@ -185,7 +185,7 @@ classdef InspectorPane < handle
             if isempty(rules)
                 lb = uilabel(hTh); lb.Text = 'No thresholds defined'; lb.FontSize = 11;
                 lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'left';
-                lb.VerticalAlignment = 'middle'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
+                lb.VerticalAlignment = 'center'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
             else
                 rg = uigridlayout(hTh, [numel(rules) 1]);
                 rg.RowHeight = repmat({20}, 1, numel(rules)); rg.ColumnWidth = {'1x'};
@@ -243,7 +243,7 @@ classdef InspectorPane < handle
             t = obj.Theme_;
             lb = uilabel(obj.hSparkPanel_); lb.Text = msgText; lb.FontSize = 11;
             lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
-            lb.VerticalAlignment = 'middle'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
+            lb.VerticalAlignment = 'center'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
         end
 
         function onOpenDetail_(obj, tag)
@@ -269,7 +269,7 @@ classdef InspectorPane < handle
             lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
             lt.Text = db.Name; lt.FontSize = 14; lt.FontWeight = 'bold';
             lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
-            lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'middle';
+            lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
             wc = numel(db.Widgets);
             for pp = 1:numel(db.Pages); wc = wc + numel(db.Pages{pp}.Widgets); end
             obj.buildMetaRow_(g, 3, 'Widgets',       sprintf('%d', wc));
@@ -284,7 +284,7 @@ classdef InspectorPane < handle
             if isempty(bindings)
                 lb = uilabel(hTg); lb.Text = 'No tag bindings'; lb.FontSize = 11;
                 lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
-                lb.VerticalAlignment = 'middle'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
+                lb.VerticalAlignment = 'center'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
             else
                 tg = uigridlayout(hTg, [numel(bindings) 1]);
                 tg.RowHeight = repmat({20}, 1, numel(bindings)); tg.ColumnWidth = {'1x'};
@@ -387,7 +387,7 @@ classdef InspectorPane < handle
                 cr.Padding = [4 0 4 0]; cr.ColumnSpacing = 4; cr.BackgroundColor = t.WidgetBackground;
                 ln = uilabel(cr); ln.Layout.Row = 1; ln.Layout.Column = 1;
                 ln.Text = tg.Name; ln.FontSize = 11; ln.FontColor = t.ForegroundColor;
-                ln.HorizontalAlignment = 'left'; ln.VerticalAlignment = 'middle';
+                ln.HorizontalAlignment = 'left'; ln.VerticalAlignment = 'center';
                 ln.Tooltip = tg.Key;
                 bx = uibutton(cr, 'push'); bx.Layout.Row = 1; bx.Layout.Column = 2;
                 bx.Text = char(215); bx.FontSize = 11; bx.FontColor = t.ToolbarFontColor;
@@ -480,10 +480,10 @@ classdef InspectorPane < handle
             lk = uilabel(hr); lk.Layout.Row = 1; lk.Layout.Column = 1;
             lk.Text = keyTxt; lk.FontSize = 11; lk.FontWeight = 'bold';
             lk.FontColor = t.PlaceholderTextColor; lk.HorizontalAlignment = 'left';
-            lk.VerticalAlignment = 'middle';
+            lk.VerticalAlignment = 'center';
             lv = uilabel(hr); lv.Layout.Row = 1; lv.Layout.Column = 2;
             lv.Text = valTxt; lv.FontSize = 11; lv.FontColor = t.ForegroundColor;
-            lv.HorizontalAlignment = 'left'; lv.VerticalAlignment = 'middle';
+            lv.HorizontalAlignment = 'left'; lv.VerticalAlignment = 'center';
         end
 
     end
