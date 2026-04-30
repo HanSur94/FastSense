@@ -104,6 +104,37 @@ function ctx = run_demo(varargin)
     else
         ctx.companion = [];
     end
+
+    % Phase 1023.1 cross-phase fix: re-bind the dashboard figure's
+    % CloseRequestFcn with the now-complete ctx. buildDashboard set the
+    % callback when ctx.companion was still [], so the closure captured
+    % an empty companion handle and never cascaded close. Re-set the
+    % callback here so dashboard X-button → demoClose_ → ctx.companion.close()
+    % cascade works (COMPDEMO-04).
+    if ~isempty(ctx.engine) && ~isempty(ctx.engine.hFigure) && ishandle(ctx.engine.hFigure)
+        set(ctx.engine.hFigure, 'CloseRequestFcn', @(src, ~) demoClose_(src, ctx));
+    end
+end
+
+function demoClose_(fig, ctx)
+%DEMOCLOSE_ Re-exposed from buildDashboard for run_demo's CloseRequestFcn rebind.
+%   Identical contract to buildDashboard's nested demoClose_ — closes companion
+%   first (if valid), then teardownDemo, then deletes the figure.
+    if isfield(ctx, 'companion') && ~isempty(ctx.companion) && isvalid(ctx.companion)
+        try
+            ctx.companion.close();
+        catch
+            % Best-effort.
+        end
+    end
+    try
+        teardownDemo(ctx);
+    catch
+    end
+    try
+        delete(fig);
+    catch
+    end
 end
 
 function waitForFirstSample_(tagKey, maxSeconds)
