@@ -1,3 +1,4 @@
+% DO NOT REWRITE — golden test, see PROJECT.md
 function test_golden_integration()
 % GOLDEN INTEGRATION TEST -- v2.0 Tag API (rewritten from legacy Sensor API in Phase 1011).
 %
