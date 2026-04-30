@@ -55,6 +55,7 @@ classdef FastSenseCompanion < handle
         hLogPanel_     = []   % bottom log uipanel (full-width)
         hLogText_      = []   % uitextarea inside hLogPanel_ (newest line first)
         hLiveBtn_      = []   % Live mode toggle button (in log strip header)
+        hLastUpdateLbl_ = []  % "Updated 12:34:56" label next to live button
         LiveTimer_     = []   % MATLAB timer driving inspector refresh
         LivePeriod_    = 1.0  % seconds between live refreshes
         Theme_         = []   % resolved CompanionTheme struct
@@ -504,10 +505,10 @@ classdef FastSenseCompanion < handle
             g.RowSpacing = 4;
             g.BackgroundColor = t.WidgetBackground;
 
-            % Header row: label on the left, Live toggle on the right.
-            gHdr = uigridlayout(g, [1 2]);
+            % Header row: log label | last-update timestamp | Live toggle.
+            gHdr = uigridlayout(g, [1 3]);
             gHdr.Layout.Row = 1; gHdr.Layout.Column = 1;
-            gHdr.ColumnWidth = {'1x', 110};
+            gHdr.ColumnWidth = {'1x', 160, 110};
             gHdr.RowHeight = {'1x'};
             gHdr.Padding = [0 0 0 0];
             gHdr.ColumnSpacing = 8;
@@ -519,8 +520,17 @@ classdef FastSenseCompanion < handle
             hLbl.FontColor = t.ForegroundColor;
             hLbl.HorizontalAlignment = 'left'; hLbl.VerticalAlignment = 'center';
 
+            obj.hLastUpdateLbl_ = uilabel(gHdr);
+            obj.hLastUpdateLbl_.Layout.Row = 1; obj.hLastUpdateLbl_.Layout.Column = 2;
+            obj.hLastUpdateLbl_.Text = 'Updated: --:--:--';
+            obj.hLastUpdateLbl_.FontSize = 11; obj.hLastUpdateLbl_.FontName = 'Menlo';
+            obj.hLastUpdateLbl_.FontColor = t.PlaceholderTextColor;
+            obj.hLastUpdateLbl_.HorizontalAlignment = 'right';
+            obj.hLastUpdateLbl_.VerticalAlignment = 'center';
+            obj.hLastUpdateLbl_.Tooltip = 'Time of the last successful live refresh';
+
             obj.hLiveBtn_ = uibutton(gHdr, 'push');
-            obj.hLiveBtn_.Layout.Row = 1; obj.hLiveBtn_.Layout.Column = 2;
+            obj.hLiveBtn_.Layout.Row = 1; obj.hLiveBtn_.Layout.Column = 3;
             obj.hLiveBtn_.Text = 'Live: OFF';
             obj.hLiveBtn_.FontSize = 11; obj.hLiveBtn_.FontWeight = 'bold';
             obj.hLiveBtn_.Tooltip = 'Toggle live refresh of the inspector';
@@ -564,6 +574,10 @@ classdef FastSenseCompanion < handle
                 if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_) ...
                         && ismethod(obj.InspectorPane_, 'refreshLive')
                     obj.InspectorPane_.refreshLive();
+                end
+                if ~isempty(obj.hLastUpdateLbl_) && isvalid(obj.hLastUpdateLbl_)
+                    obj.hLastUpdateLbl_.Text = sprintf('Updated: %s', ...
+                        char(datetime('now', 'Format', 'HH:mm:ss')));
                 end
             catch
                 % Live ticks must never crash the timer.
