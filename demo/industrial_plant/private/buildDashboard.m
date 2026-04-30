@@ -61,20 +61,30 @@ function engine = buildDashboard(ctx)
 end
 
 function demoClose_(fig, ctx)
-%DEMOCLOSE_ Figure CloseRequestFcn callback -- closes companion (if any), tears down timers, deletes fig.
-    % Phase 1023 -- close the companion BEFORE teardownDemo so the close()
-    % deletes the uifigure cleanly via the public API. teardownDemo's own
-    % companion sweep is a belt-and-braces fallback.
-    if isfield(ctx, 'companion') && ~isempty(ctx.companion) && isvalid(ctx.companion)
+%DEMOCLOSE_ Figure CloseRequestFcn callback for dashboard X-button.
+%   Independent lifecycles: closing the dashboard does NOT close the
+%   companion. If the companion is alive, only the dashboard is torn
+%   down (writer + pipeline keep running so the companion's catalog
+%   stays live). If the companion is already closed or absent, a full
+%   teardownDemo runs so the writer + pipeline don't leak.
+    companionAlive = isfield(ctx, 'companion') && ~isempty(ctx.companion) ...
+        && isvalid(ctx.companion) && ctx.companion.IsOpen;
+    if companionAlive
+        % Stop dashboard's live timer; leave writer/pipeline running.
         try
-            ctx.companion.close();
+            if ~isempty(ctx.engine) && isvalid(ctx.engine) ...
+                    && ismethod(ctx.engine, 'stopLive')
+                ctx.engine.stopLive();
+            end
         catch
             % Best-effort.
         end
-    end
-    try
-        teardownDemo(ctx);
-    catch
+    else
+        % Companion is gone — full teardown so writer/pipeline don't leak.
+        try
+            teardownDemo(ctx);
+        catch
+        end
     end
     try
         delete(fig);
