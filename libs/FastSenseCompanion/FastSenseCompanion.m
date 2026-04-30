@@ -53,7 +53,7 @@ classdef FastSenseCompanion < handle
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
         hLogPanel_     = []   % bottom log uipanel (full-width)
-        hLogText_      = []   % uitextarea inside hLogPanel_ (newest line first)
+        hLogTable_     = []   % uitable inside hLogPanel_ (alternating row colors)
         hLiveBtn_      = []   % Live mode toggle button (in log strip header)
         hLastUpdateLbl_ = []  % "Updated 12:34:56" label next to live button
         LiveTimer_     = []   % MATLAB timer driving inspector refresh
@@ -456,25 +456,21 @@ classdef FastSenseCompanion < handle
         end
 
         function addLogEntry(obj, level, msg)
-        %ADDLOGENTRY Append a timestamped log line to the bottom log strip.
+        %ADDLOGENTRY Append a timestamped log line to the bottom log table.
         %   level — 'info' | 'warn' | 'error' (any short tag accepted)
         %   msg   — char/string. Anything else is sprintf'd through %s.
-        %   Newest line is at the top so the user always sees the latest
-        %   without scrolling. Buffer capped at 500 lines.
-            if isempty(obj.hLogText_) || ~isvalid(obj.hLogText_); return; end
+        %   Newest row is at the top so the user always sees the latest
+        %   without scrolling. Buffer capped at 500 rows.
+            if isempty(obj.hLogTable_) || ~isvalid(obj.hLogTable_); return; end
             try
                 ts = char(datetime('now', 'Format', 'HH:mm:ss'));
                 if isstring(msg) && isscalar(msg); msg = char(msg); end
                 if ~ischar(msg); msg = sprintf('%s', msg); end
-                line = sprintf('[%s] %-5s  %s', ts, upper(char(level)), msg);
-                cur = obj.hLogText_.Value;
-                if isempty(cur) || (iscell(cur) && numel(cur)==1 && isempty(cur{1}))
-                    cur = {};
-                end
-                if ~iscell(cur); cur = {cur}; end
-                cur = [{line}, reshape(cur, 1, [])];
-                if numel(cur) > 500; cur = cur(1:500); end
-                obj.hLogText_.Value = cur;
+                cur = obj.hLogTable_.Data;
+                if isempty(cur); cur = cell(0, 3); end
+                cur = [{ts, upper(char(level)), msg}; cur];
+                if size(cur, 1) > 500; cur = cur(1:500, :); end
+                obj.hLogTable_.Data = cur;
             catch
                 % Logging must never crash the UI.
             end
@@ -537,15 +533,23 @@ classdef FastSenseCompanion < handle
             obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
             obj.updateLiveButton_();
 
-            obj.hLogText_ = uitextarea(g);
-            obj.hLogText_.Layout.Row = 2; obj.hLogText_.Layout.Column = 1;
-            obj.hLogText_.Editable = 'off';
-            obj.hLogText_.FontName = 'Menlo';
-            obj.hLogText_.FontSize = 10;
-            obj.hLogText_.BackgroundColor = t.DashboardBackground;
-            obj.hLogText_.FontColor = t.ForegroundColor;
-            obj.hLogText_.Value = {sprintf('[%s] INFO   Companion ready.', ...
-                char(datetime('now', 'Format', 'HH:mm:ss')))};
+            obj.hLogTable_ = uitable(g);
+            obj.hLogTable_.Layout.Row = 2; obj.hLogTable_.Layout.Column = 1;
+            obj.hLogTable_.ColumnName     = {'Time', 'Level', 'Message'};
+            obj.hLogTable_.ColumnWidth    = {65, 55, 'auto'};
+            obj.hLogTable_.ColumnEditable = [false false false];
+            obj.hLogTable_.RowName        = {};
+            obj.hLogTable_.FontSize       = 10;
+            obj.hLogTable_.FontName       = 'Menlo';
+            obj.hLogTable_.ForegroundColor = t.ForegroundColor;
+            % 2-row colormap: uitable cycles through these for odd/even rows.
+            if strcmp(obj.Theme, 'dark')
+                obj.hLogTable_.BackgroundColor = [0.13 0.13 0.13; 0.20 0.20 0.20];
+            else
+                obj.hLogTable_.BackgroundColor = [1.00 1.00 1.00; 0.94 0.94 0.94];
+            end
+            obj.hLogTable_.Data = { ...
+                char(datetime('now', 'Format', 'HH:mm:ss')), 'INFO', 'Companion ready.'};
         end
 
         function updateLiveButton_(obj)
