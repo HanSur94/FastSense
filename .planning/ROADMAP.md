@@ -60,7 +60,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 1018: Companion Shell + Project Handoff** — `uifigure` skeleton, `CompanionTheme`, constructor API, Octave guard, `close()` lifecycle, `setProject()`, figure/uifigure boundary discipline (completed 2026-04-29)
 - [x] **Phase 1019: Tag Catalog** — `TagCatalogPane` with debounced search, filter pills, label grouping, multi-select with persistence, count badge, `refreshCatalog()` (completed 2026-04-29)
 - [x] **Phase 1020: Dashboard Browser** — `DashboardListPane` with name search, Open button, `addDashboard`/`removeDashboard`, dashboard inspector routing (completed 2026-04-29)
-- [ ] **Phase 1021: Inspector** — `InspectorPane` with four states (welcome / single-tag / dashboard / multi-tag composer routing), sparkline preview, `SensorDetailPlot` integration, per-dashboard play/pause
+- [x] **Phase 1021: Inspector** — `InspectorPane` with four states (welcome / single-tag / dashboard / multi-tag composer routing), sparkline preview, `SensorDetailPlot` integration, per-dashboard play/pause (completed 2026-04-30)
 - [ ] **Phase 1022: Ad-Hoc Plot Composer** — `FastSense` overlay and `FastSenseGrid` linked grid spawning from selected tags, independent figure lifecycle, figure-close cleanup
 - [ ] **Phase 1023: Industrial Plant Demo Integration** — extend `demo/industrial_plant/run_demo.m` to launch a `FastSenseCompanion` over the demo's populated `TagRegistry` + the 6-page `DashboardEngine`; demo doubles as the milestone canary
 
@@ -133,7 +133,7 @@ Plans:
 - [x] 1021-01-PLAN.md — Pure helper inspectorResolveState + InspectorStateEventData + AdHocPlotEventData payload classes + unit tests
 - [x] 1021-02-PLAN.md — TagCatalogPane public-API additions (getSelectedKeys, deselectKey) + FastSenseCompanion events/cache/resolveInspectorState_ + listener wiring + extended InspectorPane.attach signature
 - [x] 1021-03-PLAN.md — Full InspectorPane implementation: 4-state machine (welcome/tag/dashboard/multitag), sparkline via axes(uipanel), threshold list, referenced-tags walker, Play/Pause, chip list, mode toggle, Plot CTA
-- [ ] 1021-04-PLAN.md — Class-based test suites: TestInspectorPane (INSPECT-01..06) + augment TestFastSenseCompanion (event firing tests) + augment TestTagCatalogPane (getSelectedKeys/deselectKey)
+- [x] 1021-04-PLAN.md — Class-based test suites: TestInspectorPane (INSPECT-01..06) + augment TestFastSenseCompanion (event firing tests) + augment TestTagCatalogPane (getSelectedKeys/deselectKey)
 **UI hint**: yes
 
 ### Phase 1022: Ad-Hoc Plot Composer
@@ -184,5 +184,5 @@ Plans:
 | 1018. Companion Shell + Project Handoff | v3.0 | 3/3 | Complete    | 2026-04-29 |
 | 1019. Tag Catalog | v3.0 | 3/3 | Complete    | 2026-04-29 |
 | 1020. Dashboard Browser | v3.0 | 3/3 | Complete   | 2026-04-29 |
-| 1021. Inspector | v3.0 | 3/4 | In Progress|  |
+| 1021. Inspector | v3.0 | 4/4 | Complete   | 2026-04-30 |
 | 1022. Ad-Hoc Plot Composer | v3.0 | 0/? | Not started | — |
