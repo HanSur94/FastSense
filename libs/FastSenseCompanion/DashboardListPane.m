@@ -305,8 +305,9 @@ classdef DashboardListPane < handle
             lbl.FontColor           = obj.Theme_.PlaceholderTextColor;
             lbl.HorizontalAlignment = 'center';
             lbl.VerticalAlignment   = 'center';
-            lbl.Units               = 'normalized';
-            lbl.Position            = [0 0 1 1];
+            % Note: uilabel has no Units/Position properties (uicontrol-only).
+            % Default placement inside the parent uipanel is acceptable for
+            % the empty-state placeholder.
         end
 
         function onSearchChanged_(obj)
