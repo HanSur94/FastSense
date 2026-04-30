@@ -176,9 +176,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 1016-01-PLAN.md — Rewrite example_event_detection_live.m + example_event_viewer_from_file.m as full Tag-API demos with bounded timer + NotificationService(DryRun=true) + EventViewer.fromFile (DEMO-01..03, DEMO-05..07, DEMO-09)
-- [ ] 1016-02-PLAN.md — Rebuild example_live_pipeline.m monitors map with MonitorTag values + add SKIP_LIST_BEGIN/END block to examples/run_all_examples.m (DEMO-04..09)
-- [ ] 1016-03-PLAN.md — Add Phase-1011 deleted-class regression grep seal to .github/workflows/tests.yml lint job (DIFF-01)
+- [x] 1016-01-PLAN.md — Rewrite example_event_detection_live.m + example_event_viewer_from_file.m as full Tag-API demos with bounded timer + NotificationService(DryRun=true) + EventViewer.fromFile (DEMO-01..03, DEMO-05..07, DEMO-09)
+- [x] 1016-02-PLAN.md — Rebuild example_live_pipeline.m monitors map with MonitorTag values + add SKIP_LIST_BEGIN/END block to examples/run_all_examples.m (DEMO-04..09)
+- [x] 1016-03-PLAN.md — Add Phase-1011 deleted-class regression grep seal to .github/workflows/tests.yml lint job (DIFF-01)
 
 **UI hint**: no
 
@@ -202,7 +202,7 @@ Plans:
 | 1013. Dead-code deletion | v2.1 | 0/1 | Not started | - |
 | 1014. DashboardSerializer .m export Tag | v2.1 | 0/1 | Not started | - |
 | 1015. Test suite cleanup | v2.1 | 4/3 | Complete    | 2026-04-30 |
-| 1016. Examples 05-events rewrite | v2.1 | 0/3 | Planned | - |
+| 1016. Examples 05-events rewrite | v2.1 | 4/3 | Complete   | 2026-04-30 |
 
 ## Backlog
 

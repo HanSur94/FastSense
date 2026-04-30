@@ -43,19 +43,19 @@ Categories derived from research scope (4 audit items + cross-cutting differenti
 
 ### Examples 05-events Rewrite
 
-- [ ] **DEMO-01**: User runs `examples/05-events/example_event_detection_live.m` and observes a 3-sensor live-data demo using `SensorTag + MonitorTag + EventStore + LiveEventPipeline + DashboardEngine` with timer bounded to `TasksToExecute=5` and `onCleanup` cleanup wrapper
-- [ ] **DEMO-02**: `example_event_detection_live.m` wires `NotificationService(DryRun=true)` to demonstrate event → notification pedagogical parity with `example_live_pipeline.m`
-- [ ] **DEMO-03**: User runs `examples/05-events/example_event_viewer_from_file.m` and observes a batch-build → `EventStore.save` → `EventViewer.fromFile` → click-to-plot detail flow with no live timer (persistence narrative)
-- [ ] **DEMO-04**: `examples/05-events/example_live_pipeline.m` orphan comment blocks are removed and the `monitors` map is rebuilt with `MonitorTag` (not `SensorTag`) values so `pipeline.runCycle()` actually fires events
-- [ ] **DEMO-05**: All three `examples/05-events/*.m` scripts call `TagRegistry.clear(); EventBinding.clear();` at top to prevent cross-example singleton pollution
-- [ ] **DEMO-06**: All three scripts use only Octave-portable APIs (no `datetime` / `table` / `categorical` / `duration`) — match `example_sensor_threshold.m` `linspace` pattern
-- [ ] **DEMO-07**: Each rewritten demo's file header documents its distinct pedagogical purpose (live-detection vs viewer-from-file vs full-pipeline-cycle) — no duplication of `example_sensor_threshold.m`
-- [ ] **DEMO-08**: `tests/test_examples_smoke.m` skip list and `examples/run_all_examples.m` skip list maintain byte-identical entries for these 3 demos (parity-preserved)
-- [ ] **DEMO-09**: No `persistent` variables and no unbounded MATLAB timers remain in any rewritten demo (timer leak gate)
+- [x] **DEMO-01**: User runs `examples/05-events/example_event_detection_live.m` and observes a 3-sensor live-data demo using `SensorTag + MonitorTag + EventStore + LiveEventPipeline + DashboardEngine` with timer bounded to `TasksToExecute=5` and `onCleanup` cleanup wrapper
+- [x] **DEMO-02**: `example_event_detection_live.m` wires `NotificationService(DryRun=true)` to demonstrate event → notification pedagogical parity with `example_live_pipeline.m`
+- [x] **DEMO-03**: User runs `examples/05-events/example_event_viewer_from_file.m` and observes a batch-build → `EventStore.save` → `EventViewer.fromFile` → click-to-plot detail flow with no live timer (persistence narrative)
+- [x] **DEMO-04**: `examples/05-events/example_live_pipeline.m` orphan comment blocks are removed and the `monitors` map is rebuilt with `MonitorTag` (not `SensorTag`) values so `pipeline.runCycle()` actually fires events
+- [x] **DEMO-05**: All three `examples/05-events/*.m` scripts call `TagRegistry.clear(); EventBinding.clear();` at top to prevent cross-example singleton pollution
+- [x] **DEMO-06**: All three scripts use only Octave-portable APIs (no `datetime` / `table` / `categorical` / `duration`) — match `example_sensor_threshold.m` `linspace` pattern
+- [x] **DEMO-07**: Each rewritten demo's file header documents its distinct pedagogical purpose (live-detection vs viewer-from-file vs full-pipeline-cycle) — no duplication of `example_sensor_threshold.m`
+- [x] **DEMO-08**: `tests/test_examples_smoke.m` skip list and `examples/run_all_examples.m` skip list maintain byte-identical entries for these 3 demos (parity-preserved)
+- [x] **DEMO-09**: No `persistent` variables and no unbounded MATLAB timers remain in any rewritten demo (timer leak gate)
 
 ### Differentiators (Regression Prevention)
 
-- [ ] **DIFF-01**: GitHub Actions `.github/workflows/tests.yml` `lint` job includes a grep gate that fails CI on any new reference to the 8 classes deleted in Phase 1011 (`Threshold`, `CompositeThreshold`, `StateChannel`, `ThresholdRule`, `Sensor`, `SensorRegistry`, `ThresholdRegistry`, `ExternalSensorRegistry`) scoped to `libs/ tests/ examples/ benchmarks/` — `fp.addThreshold(` and `obj.addThreshold(` surviving API explicitly allow-listed
+- [x] **DIFF-01**: GitHub Actions `.github/workflows/tests.yml` `lint` job includes a grep gate that fails CI on any new reference to the 8 classes deleted in Phase 1011 (`Threshold`, `CompositeThreshold`, `StateChannel`, `ThresholdRule`, `Sensor`, `SensorRegistry`, `ThresholdRegistry`, `ExternalSensorRegistry`) scoped to `libs/ tests/ examples/ benchmarks/` — `fp.addThreshold(` and `obj.addThreshold(` surviving API explicitly allow-listed
 - [x] **DIFF-02**: `tests/suite/TestGoldenIntegration.m` and `tests/test_golden_integration.m` have a `% DO NOT REWRITE — golden test, see PROJECT.md` file-header banner enforcing Pitfall 3 in-file (currently only documented in STATE.md)
 - [ ] **DIFF-03**: New `tests/suite/TestLegacyClassesRemoved.m` asserts `exist('EventDetector','class') == 0`, `exist('IncrementalEventDetector','class') == 0`, `exist('EventConfig','class') == 0`, plus the 8 Phase-1011 deleted classes — a single focused contract test guarding against accidental re-introduction
 - [x] **DIFF-04**: `scripts/check_skip_list_parity.sh` callable from CI compares skip-list blocks in `tests/test_examples_smoke.m` and `examples/run_all_examples.m`, exiting non-zero on diff (script-enforce parity that's currently only comment-enforced)
@@ -126,16 +126,16 @@ Populated by `gsd-roadmapper` during ROADMAP.md creation (2026-04-22).
 | TEST-10 | Phase 1015 | Complete |
 | TEST-11 | Phase 1015 | Complete |
 | TEST-12 | Phase 1015 | Complete |
-| DEMO-01 | Phase 1016 | Pending |
-| DEMO-02 | Phase 1016 | Pending |
-| DEMO-03 | Phase 1016 | Pending |
-| DEMO-04 | Phase 1016 | Pending |
-| DEMO-05 | Phase 1016 | Pending |
-| DEMO-06 | Phase 1016 | Pending |
-| DEMO-07 | Phase 1016 | Pending |
-| DEMO-08 | Phase 1016 | Pending |
-| DEMO-09 | Phase 1016 | Pending |
-| DIFF-01 | Phase 1016 | Pending |
+| DEMO-01 | Phase 1016 | Complete |
+| DEMO-02 | Phase 1016 | Complete |
+| DEMO-03 | Phase 1016 | Complete |
+| DEMO-04 | Phase 1016 | Complete |
+| DEMO-05 | Phase 1016 | Complete |
+| DEMO-06 | Phase 1016 | Complete |
+| DEMO-07 | Phase 1016 | Complete |
+| DEMO-08 | Phase 1016 | Complete |
+| DEMO-09 | Phase 1016 | Complete |
+| DIFF-01 | Phase 1016 | Complete |
 | DIFF-02 | Phase 1015 | Complete |
 | DIFF-03 | Phase 1013 | Pending |
 | DIFF-04 | Phase 1015 | Complete |

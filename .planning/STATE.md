@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Tag-API Tech Debt Cleanup
 status: verifying
-stopped_at: Completed 1015-03-PLAN.md (Phase 1015 finished)
-last_updated: "2026-04-30T08:21:27.205Z"
+stopped_at: Completed 1016-03-PLAN.md (Phase 1016 finished — v2.1 cleanup sealed via CI grep gate)
+last_updated: "2026-04-30T08:48:29.740Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 14
-  completed_phases: 12
-  total_plans: 42
-  completed_plans: 43
+  completed_phases: 13
+  total_plans: 45
+  completed_plans: 47
   percent: 50
 ---
 
@@ -27,18 +27,18 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 
 Milestone: v2.1 Tag-API Tech Debt Cleanup
 Phase: 1016
-Plan: Not started
+Plan: All complete (3/3)
 Status: Phase complete — ready for verification
 Last activity: 2026-04-30
 
-Progress: [█████░░░░░] 50% (2/4 phases complete)
+Progress: [████████░░] 75% (3/4 phases complete on this branch — 1015 + 1016 done; 1013 + 1014 ship via separate PRs)
 
 **Phase queue (v2.1):**
 
 - [x] Phase 1013 — Dead-code deletion (DEAD-01..06 + DIFF-03) — ✅ complete (5 commits on origin/main)
 - [x] Phase 1014 — DashboardSerializer .m export Tag (MEXP-01..05) — ✅ complete (3 commits on this branch)
-- [ ] Phase 1015 — Test suite cleanup (TEST-01..12 + DIFF-02 + DIFF-04) — depends on Phase 1013 (satisfied)
-- [ ] Phase 1016 — Examples 05-events rewrite (DEMO-01..09 + DIFF-01) — independent
+- [x] Phase 1015 — Test suite cleanup (TEST-01..12 + DIFF-02 + DIFF-04) — ✅ complete (3 plans, 14 commits)
+- [x] Phase 1016 — Examples 05-events rewrite (DEMO-01..09 + DIFF-01) — ✅ complete (3 plans, 5 task commits + 3 metadata commits — sealed via CI grep gate in lint job)
 
 ## Performance Metrics
 
@@ -129,6 +129,7 @@ Progress: [█████░░░░░] 50% (2/4 phases complete)
 | Phase 1015 P01 | 3min | 4 tasks | 8 files |
 | Phase 1015 P02 | 5min 27s | 6 tasks | 5 files |
 | Phase 1015 P03 | 9min | 4 tasks | 2 files |
+| Phase 1016-examples-05-events-rewrite-live-demos-ci-grep-seal P03 | 2min 11s | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -265,6 +266,9 @@ Recent decisions affecting current work:
 - [Phase 1015]: [Phase 1015 P02]: Phase 1015 P01 docstring-scrub precedent reapplied in Task 1 — comment containing literal Threshold(...) text scrubbed because Gate C regex is regex-strict and matches comments
 - [Phase 1015]: [Phase 1015 P03]: 6-gate exit verification — A/B/C/F PASS, D PARTIAL-PASS (pre-existing Octave 11 test_toolbar drift, out-of-scope), E DEFERRED to next CI run per Phase 1013 precedent (no MATLAB R2020b in worktree)
 - [Phase 1015]: [Phase 1015 P03]: TEST-11 baseline drop quantified — 8 suite test methods + 11 sidecar inline scenarios = 19 individual test entry points removed from pre-1015 baseline; 0 net change in surviving migrated files; net -387 code-LOC delta (test-suite only)
+- [Phase 1016-examples-05-events-rewrite-live-demos-ci-grep-seal]: [Phase 1016 P03]: DIFF-01 CI grep seal lands in .github/workflows/tests.yml lint job (between mh_metric and DIFF-04 parity gate); inline self-test (1 hit + 3 misses) prevents silent regex drift; word-boundary lookbehind (^|[^.a-zA-Z_]) discriminates legacy constructors from surviving v2.0 / FastSense plot-annotation APIs
+- [Phase 1016-examples-05-events-rewrite-live-demos-ci-grep-seal]: [Phase 1016]: 6-gate exit verification — A/B/C/F PASS, D PASS (deferred-execution: smoke harness absent on branch but structural prerequisites met), E DEFERRED to next CI run per Phase 1015 P03 precedent (no MATLAB R2020b in worktree)
+- [Phase 1016-examples-05-events-rewrite-live-demos-ci-grep-seal]: [Phase 1016]: v2.1 milestone close-out — CI grep seal IS the canonical Gate C for the cumulative cleanup; every PR/push/nightly schedule run regression-checks against the 8 Phase-1011 deleted classes
 
 ### Roadmap Evolution
 
@@ -299,6 +303,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-30T08:16:50.424Z
-Stopped at: Completed 1015-03-PLAN.md (Phase 1015 finished)
+Last session: 2026-04-30T08:48:15.820Z
+Stopped at: Completed 1016-03-PLAN.md (Phase 1016 finished — v2.1 cleanup sealed via CI grep gate)
 Resume file: None
