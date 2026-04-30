@@ -185,7 +185,9 @@ classdef InspectorPane < handle
             if isempty(rules)
                 lb = uilabel(hTh); lb.Text = 'No thresholds defined'; lb.FontSize = 11;
                 lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'left';
-                lb.VerticalAlignment = 'center'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
+                lb.VerticalAlignment = 'center';
+                % Note: uilabel has no Units/Position — those are uicontrol
+                % properties. Default placement inside the parent uipanel.
             else
                 rg = uigridlayout(hTh, [numel(rules) 1]);
                 rg.RowHeight = repmat({20}, 1, numel(rules)); rg.ColumnWidth = {'1x'};
@@ -243,7 +245,9 @@ classdef InspectorPane < handle
             t = obj.Theme_;
             lb = uilabel(obj.hSparkPanel_); lb.Text = msgText; lb.FontSize = 11;
             lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
-            lb.VerticalAlignment = 'center'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
+            lb.VerticalAlignment = 'center';
+                % Note: uilabel has no Units/Position — those are uicontrol
+                % properties. Default placement inside the parent uipanel.
         end
 
         function onOpenDetail_(obj, tag)
@@ -284,7 +288,9 @@ classdef InspectorPane < handle
             if isempty(bindings)
                 lb = uilabel(hTg); lb.Text = 'No tag bindings'; lb.FontSize = 11;
                 lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
-                lb.VerticalAlignment = 'center'; lb.Units = 'normalized'; lb.Position = [0 0 1 1];
+                lb.VerticalAlignment = 'center';
+                % Note: uilabel has no Units/Position — those are uicontrol
+                % properties. Default placement inside the parent uipanel.
             else
                 tg = uigridlayout(hTg, [numel(bindings) 1]);
                 tg.RowHeight = repmat({20}, 1, numel(bindings)); tg.ColumnWidth = {'1x'};
