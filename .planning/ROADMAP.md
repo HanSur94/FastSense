@@ -162,7 +162,10 @@ Plans:
   2. Companion window opens by default but can be suppressed with `run_demo('Companion', false)`; closing the dashboard via its `CloseRequestFcn` also closes the companion (and vice versa is OK — closing the companion does NOT close the dashboard, matching ADHOC-04 lifecycle rules)
   3. Companion's tag catalog visibly groups the plant's tags by their `Tag.Labels` categories (`area:reactor`, `area:feed_line`, `area:cooling`, etc. — whatever `registerPlantTags` actually sets); the user can multi-select tags from across areas and ad-hoc plot them in a fresh figure that lives independently of dashboard + companion
   4. `teardownDemo(ctx)` is updated to also call `ctx.companion.close()` if the companion handle is still valid; running the demo + closing both windows leaves zero orphan timers in `timerfindall` (verifiable by an integration test or a documented manual smoke step)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 1023-01-PLAN.md — Wire-in: buildCompanion private helper + run_demo Companion name-value option + teardownDemo close cascade + buildDashboard demoClose_ cascade
+- [ ] 1023-02-PLAN.md — TestIndustrialPlantDemoCompanion class-based suite covering COMPDEMO-01..04 against real demo
 **UI hint**: yes — demo is a runtime UI smoke test of the whole companion against real plant tags + a real dashboard
 
 ## Progress
