@@ -171,7 +171,7 @@ classdef TagCatalogPane < handle
             obj.hCountLabel_.FontSize            = 11;
             obj.hCountLabel_.FontColor           = obj.Theme_.PlaceholderTextColor;
             obj.hCountLabel_.HorizontalAlignment = 'left';
-            obj.hCountLabel_.VerticalAlignment   = 'middle';
+            obj.hCountLabel_.VerticalAlignment   = 'center';
             obj.hCountLabel_.BackgroundColor     = obj.Theme_.WidgetBackground;
 
             % Build initial listbox content
