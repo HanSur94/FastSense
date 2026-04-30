@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Tag-API Tech Debt Cleanup
 status: executing
-stopped_at: Completed 1015-01-PLAN.md
-last_updated: "2026-04-30T07:54:21.783Z"
+stopped_at: Completed 1015-02-PLAN.md
+last_updated: "2026-04-30T08:04:04.764Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 42
-  completed_plans: 40
+  completed_plans: 41
   percent: 50
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 
 Milestone: v2.1 Tag-API Tech Debt Cleanup
 Phase: 1015 (Test suite cleanup (delete zombies + migrate Threshold( refs to Tag API)) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-30
 
@@ -127,6 +127,7 @@ Progress: [█████░░░░░] 50% (2/4 phases complete)
 | Phase 1011 P05 | 22min | 2 tasks | 13 files |
 | Phase 1012-migrate-examples-to-tag-api P01 | 8min | 2 tasks | 2 files |
 | Phase 1015 P01 | 3min | 4 tasks | 8 files |
+| Phase 1015 P02 | 5min 27s | 6 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -256,6 +257,11 @@ Recent decisions affecting current work:
 - [Phase 1015]: [Phase 1015]: MakeV21Fixtures docstring scrubbed of Threshold(-shaped text — Gate C grep is regex-strict and matches comments; rephrased to 'legacy threshold-API' / 'legacy threshold construct' to keep helper file Gate C-clean
 - [Phase 1015]: [Phase 1015]: scripts/check_skip_list_parity.sh ships with vacuous-pass when smoke harness file absent — wires CI guard before Phase 1012 P02 lands smoke harness on this branch
 - [Phase 1015]: [Phase 1015]: Per-file commit discipline split Task 4 into 4a (script) + 4b (CI wire) so each non-deletion commit touches at most 1 file (bisect-localizable)
+- [Phase 1015]: [Phase 1015 P02]: Task 2 took the deletion branch — test_event_store.m deleted as zombie sidecar (EventConfig.runDetection deleted in Phase 1013); coverage preserved via tests/suite/TestEventStore + TestEventStoreRw + TestEventViewer + TestEventViewerExtras
+- [Phase 1015]: [Phase 1015 P02]: Task 1 renamed 4 test_SensorDetailPlot.m methods with _legacy_threshold_skipped_phase_1015 suffix + early-return — they asserted on sdp.MainPlot.Thresholds derived from the Phase-1011-stubbed Sensor.Thresholds field (always {}); SensorDetailPlot Tag-API threshold rendering deferred per Phase 1009 P01 deferred-items.md
+- [Phase 1015]: [Phase 1015 P02]: Task 3 chose Option B for test_gauge_widget.m — assertion isequal(w2.Range, [40 60]) (Y-data fallback) replaces [30 80] (legacy threshold values) since GaugeWidget.deriveRange reads Phase-1011-stubbed Sensor.Thresholds; test preserved as Y-data fallback regression gate
+- [Phase 1015]: [Phase 1015 P02]: Tasks 4 & 5 confirmed Threshold-NV-pair (IconCardWidget) and .threshold-field-shape (MultiStatusWidget) survive post-Phase-1011 as TagRegistry-resolvable aliases — pure construction-site swaps, no test renames
+- [Phase 1015]: [Phase 1015 P02]: Phase 1015 P01 docstring-scrub precedent reapplied in Task 1 — comment containing literal Threshold(...) text scrubbed because Gate C regex is regex-strict and matches comments
 
 ### Roadmap Evolution
 
@@ -290,6 +296,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-30T07:54:11.087Z
-Stopped at: Completed 1015-01-PLAN.md
+Last session: 2026-04-30T08:03:49.265Z
+Stopped at: Completed 1015-02-PLAN.md
 Resume file: None
