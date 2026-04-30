@@ -135,8 +135,8 @@ classdef InspectorPane < handle
         function renderWelcome_(obj)
         %RENDERWELCOME_ Render welcome-state content.
             t = obj.Theme_;
-            g = uigridlayout(obj.hContent_, [7 1]);
-            g.RowHeight = {20, 4, 20, 8, 20, 20, 20};
+            g = uigridlayout(obj.hContent_, [8 1]);
+            g.RowHeight = {20, 4, 20, 8, 20, 20, 20, '1x'};
             g.ColumnWidth = {'1x'}; g.Padding = [16 16 16 16];
             g.RowSpacing = 0; g.BackgroundColor = t.WidgetBackground;
             l1 = uilabel(g); l1.Layout.Row = 1; l1.Layout.Column = 1;
@@ -192,7 +192,7 @@ classdef InspectorPane < handle
             % Compose grid: 7 base meta rows + N extra + threshold + sparkline + button
             nMeta  = 7;
             nExtra = numel(extraRows);
-            nRows  = nMeta + nExtra + 6;  % +gap +threshold-hdr +threshold-content +gap +spark +gap +button
+            nRows  = nMeta + nExtra + 6 + 1;  % +gap +threshold-hdr +threshold-content +gap +spark +gap +button +bottom-spacer
             rowH   = cell(1, nRows);
             for r = 1:(nMeta + nExtra); rowH{r} = 20; end
             r = nMeta + nExtra + 1; rowH{r} = 8;       % gap
@@ -201,6 +201,7 @@ classdef InspectorPane < handle
             r = r + 1; rowH{r} = 8;                     % gap
             r = r + 1; rowH{r} = 84;                    % sparkline
             r = r + 1; rowH{r} = 32;                    % open detail button
+            r = r + 1; rowH{r} = '1x';                  % bottom spacer (pins content to top)
 
             g = uigridlayout(obj.hContent_, [nRows 1]);
             g.RowHeight = rowH; g.ColumnWidth = {'1x'};
@@ -432,7 +433,7 @@ classdef InspectorPane < handle
 
             % Compose grid (variable rows depending on bindings count)
             nMeta = 7;  % Title, gap, Widgets, Pages, Theme, Live interval, Live
-            nRows = nMeta + 4;  % +Tags hdr +Tags content +gap +button row
+            nRows = nMeta + 4 + 1;  % +Tags hdr +Tags content +gap +button row +bottom spacer
             rowH = cell(1, nRows);
             rowH{1} = 28;       % Title
             rowH{2} = 8;        % gap
@@ -441,6 +442,7 @@ classdef InspectorPane < handle
             rowH{9} = 'fit';    % Tags content
             rowH{10} = 8;       % gap
             rowH{11} = 32;      % action buttons (Play / Pause / Open)
+            rowH{12} = '1x';    % bottom spacer (pins content to top)
 
             g = uigridlayout(obj.hContent_, [nRows 1]);
             g.RowHeight = rowH; g.ColumnWidth = {'1x'};
@@ -601,8 +603,8 @@ classdef InspectorPane < handle
             if ~isfield(obj.Payload_, 'tags') || ~isfield(obj.Payload_, 'tagKeys'); return; end
             tags = obj.Payload_.tags;
             obj.CurrentTagKeys_ = obj.Payload_.tagKeys;
-            g = uigridlayout(obj.hContent_, [7 1]);
-            g.RowHeight = {16, 'fit', 8, 16, 28, 8, 32};
+            g = uigridlayout(obj.hContent_, [8 1]);
+            g.RowHeight = {16, 'fit', 8, 16, 28, 8, 32, '1x'};  % trailing 1x pins content to top
             g.ColumnWidth = {'1x'}; g.Padding = [16 16 16 16];
             g.RowSpacing = 0; g.BackgroundColor = t.WidgetBackground;
             hHdr = uilabel(g); hHdr.Layout.Row = 1; hHdr.Layout.Column = 1;
