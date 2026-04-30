@@ -23,6 +23,11 @@ classdef InspectorPane < handle
         hContent_       = []   % scrollable inner panel; cleared on every state change
         hSparkAxes_     = []   % axes handle (tag state only)
         hSparkPanel_    = []   % sparkline container uipanel (tag state only)
+        hSparkLine_     = []   % line handle inside hSparkAxes_ (live updates XData/YData)
+        hTagTable_      = []   % uitable in tag state (live mode updates Data only)
+        hDashTable_     = []   % uitable in dashboard state (live mode updates Data only)
+        RenderedTagKey_   = '' % key of tag last full-rendered (live skips when matches)
+        RenderedDashName_ = '' % name of dashboard last full-rendered
         hOpenDetail_    = []   % "Open Detail" button (tag state only)
         hPlayBtn_       = []   % Play button (dashboard state only)
         hPauseBtn_      = []   % Pause button (dashboard state only)
@@ -90,6 +95,44 @@ classdef InspectorPane < handle
             obj.hModeOverlay_ = []; obj.hModeLinked_ = []; obj.hPlotBtn_   = [];
         end
 
+        function refreshLive(obj)
+        %REFRESHLIVE Update dynamic content in place without rebuilding the layout.
+        %   Called by the orchestrator's live timer at LivePeriod_.
+        %     - tag state:       update uitable Data + sparkline XData/YData
+        %     - dashboard state: update uitable Data
+        %     - other states:    no-op
+        %   Falls back to a full renderState_() if the cached handles are
+        %   stale (e.g., setState swapped state but the timer ticked first).
+            try
+                switch obj.State_
+                    case 'tag'
+                        if ~isfield(obj.Payload_, 'tag'); return; end
+                        tag = obj.Payload_.tag;
+                        if ~isobject(tag) || ~isvalid(tag); return; end
+                        if isempty(obj.hTagTable_) || ~isvalid(obj.hTagTable_) ...
+                                || ~strcmp(obj.RenderedTagKey_, char(tag.Key))
+                            obj.renderState_();
+                            return;
+                        end
+                        obj.hTagTable_.Data = obj.buildTagTableData_(tag);
+                        obj.refreshSparklineInPlace_(tag);
+
+                    case 'dashboard'
+                        if ~isfield(obj.Payload_, 'dashboard'); return; end
+                        db = obj.Payload_.dashboard;
+                        if ~isobject(db) || ~isvalid(db); return; end
+                        if isempty(obj.hDashTable_) || ~isvalid(obj.hDashTable_) ...
+                                || ~strcmp(obj.RenderedDashName_, char(db.Name))
+                            obj.renderState_();
+                            return;
+                        end
+                        obj.hDashTable_.Data = obj.buildDashTableData_(db);
+                end
+            catch
+                % Live ticks must never throw.
+            end
+        end
+
         function setState(obj, state, payload)
         %SETSTATE Public mutator called by InspectorStateChanged listener.
         %   state   - char ('welcome'|'tag'|'multitag'|'dashboard')
@@ -119,9 +162,11 @@ classdef InspectorPane < handle
             try
                 if isempty(obj.hContent_) || ~isvalid(obj.hContent_); return; end
                 delete(obj.hContent_.Children);
-                obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hOpenDetail_ = [];
-                obj.hPlayBtn_   = []; obj.hPauseBtn_   = []; obj.hChipsGrid_  = [];
-                obj.hModeOverlay_ = []; obj.hModeLinked_ = []; obj.hPlotBtn_   = [];
+                obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hSparkLine_ = [];
+                obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
+                obj.hChipsGrid_  = []; obj.hModeOverlay_ = []; obj.hModeLinked_ = [];
+                obj.hPlotBtn_    = []; obj.hTagTable_ = []; obj.hDashTable_ = [];
+                obj.RenderedTagKey_ = ''; obj.RenderedDashName_ = '';
                 switch obj.State_
                     case 'welcome';   obj.renderWelcome_();
                     case 'tag';       obj.renderTag_();
@@ -169,84 +214,13 @@ classdef InspectorPane < handle
         function renderTag_(obj)
         %RENDERTAG_ Render single-tag detail using a uitable for fast updates.
         %   Layout: Title (28) + uitable ('1x') + sparkline (84) + button (32).
-        %   The uitable holds all base meta rows + type-specific rows + thresholds
-        %   inline so we build one widget instead of a dozen nested uigridlayouts.
+        %   Live mode reuses this scaffold and only updates the table Data
+        %   and sparkline XData/YData — see refreshLive().
             t = obj.Theme_;
             if ~isfield(obj.Payload_, 'tag'); return; end
             tag = obj.Payload_.tag;
 
-            % Identify tag kind (Sensor / State / Monitor / Composite / Tag).
-            kindTxt = obj.tagKindLabel_(tag);
-
-            uTxt = char(8212);
-            if isprop(tag, 'Units') && ~isempty(tag.Units); uTxt = char(tag.Units); end
-            dTxt = char(8212);
-            if isprop(tag, 'Description') && ~isempty(tag.Description); dTxt = char(tag.Description); end
-            cTxt = char(8212);
-            if isprop(tag, 'Criticality') && ~isempty(tag.Criticality); cTxt = char(tag.Criticality); end
-            lblTxt = char(8212);
-            if isprop(tag, 'Labels') && ~isempty(tag.Labels)
-                try
-                    lblTxt = strjoin(cellfun(@char, tag.Labels(:), 'UniformOutput', false), ', ');
-                catch
-                    lblTxt = char(8212);
-                end
-            end
-
-            extraRows = obj.tagTypeSpecificRows_(tag);
-
-            % v2.0 thresholds = MonitorTags whose Parent.Key matches the
-            % selected sensor. SensorTag.Thresholds is a back-compat stub
-            % returning {}; the canonical lookup walks TagRegistry.
-            rules = {};
-            if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
-                try
-                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
-                        && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
-                        && strcmp(tt.Parent.Key, tag.Key));
-                catch
-                    rules = {};
-                end
-            elseif isa(tag, 'MonitorTag')
-                rules = {tag};
-            end
-
-            % Build table data: {Field, Value} cell.
-            data = { ...
-                'Key',         char(tag.Key); ...
-                'Type',        kindTxt; ...
-                'Units',       uTxt; ...
-                'Criticality', cTxt; ...
-                'Labels',      lblTxt; ...
-                'Description', dTxt};
-            for k = 1:numel(extraRows)
-                data(end+1, :) = extraRows{k}; %#ok<AGROW>
-            end
-            if isempty(rules)
-                data(end+1, :) = {'Thresholds', 'None'}; %#ok<AGROW>
-            else
-                data(end+1, :) = {'Thresholds', sprintf('%d', numel(rules))}; %#ok<AGROW>
-                for i = 1:numel(rules)
-                    rule = rules{i};
-                    label = sprintf('  %s', char(8226));  % bullet
-                    try
-                        if isa(rule, 'MonitorTag')
-                            critTxt = char(8212);
-                            if isprop(rule, 'Criticality') && ~isempty(rule.Criticality)
-                                critTxt = char(rule.Criticality);
-                            end
-                            nameTxt = char(rule.Key);
-                            if isprop(rule, 'Name') && ~isempty(rule.Name); nameTxt = char(rule.Name); end
-                            valTxt = sprintf('%s (%s)', nameTxt, critTxt);
-                        else
-                            valTxt = sprintf('%s: %s (%s)', char(rule.Name), char(rule.Condition), char(rule.Criticality));
-                        end
-                    catch
-                        valTxt = char(8212);
-                    end
-                    data(end+1, :) = {label, valTxt}; %#ok<AGROW>
-                end
-            end
+            data = obj.buildTagTableData_(tag);
 
             % Outer 4-row grid: title + table + sparkline + button.
             g = uigridlayout(obj.hContent_, [4 1]);
@@ -270,6 +244,8 @@ classdef InspectorPane < handle
             tbl.BackgroundColor = t.WidgetBackground;
             tbl.ForegroundColor = t.ForegroundColor;
             tbl.FontSize = 11;
+            obj.hTagTable_     = tbl;
+            obj.RenderedTagKey_ = char(tag.Key);
 
             obj.hSparkPanel_ = uipanel(g);
             obj.hSparkPanel_.Layout.Row = 3; obj.hSparkPanel_.Layout.Column = 1;
@@ -362,6 +338,7 @@ classdef InspectorPane < handle
 
         function renderSparkline_(obj, tag)
         %RENDERSPARKLINE_ Render last-200-sample sparkline via axes('Parent', uipanel).
+        %   Stores hSparkLine_ so live mode can update XData/YData in place.
             t = obj.Theme_;
             try
                 if ~ismethod(tag, 'getXY'); obj.renderNoData_('No data'); return; end
@@ -372,15 +349,117 @@ classdef InspectorPane < handle
                     'Units', 'normalized', 'Position', [0 0 1 1], ...
                     'Color', t.WidgetBackground, 'XColor', t.WidgetBackground, ...
                     'YColor', t.WidgetBackground, 'Box', 'off', 'XTick', [], 'YTick', []);
-                plot(obj.hSparkAxes_, tv, y, '-', 'Color', t.LineColors{1}, 'LineWidth', 1);
-                axis(obj.hSparkAxes_, 'tight');
-                xl = obj.hSparkAxes_.XLim; yl = obj.hSparkAxes_.YLim;
-                px = (xl(2) - xl(1)) * 0.02; if px > 0; obj.hSparkAxes_.XLim = xl + [-px, px]; end
-                py = (yl(2) - yl(1)) * 0.05; if py > 0; obj.hSparkAxes_.YLim = yl + [-py, py]; end
+                obj.hSparkLine_ = plot(obj.hSparkAxes_, tv, y, '-', ...
+                    'Color', t.LineColors{1}, 'LineWidth', 1);
+                obj.fitSparkAxes_();
                 try; obj.hSparkAxes_.Toolbar.Visible = 'off'; catch; end
                 try; obj.hSparkAxes_.Interactions = []; catch; end
             catch
                 obj.renderNoData_('Sparkline unavailable');
+            end
+        end
+
+        function refreshSparklineInPlace_(obj, tag)
+        %REFRESHSPARKLINEINPLACE_ Update sparkline XData/YData without rebuilding axes.
+        %   Falls back to full renderSparkline_ when the stored line handle is stale
+        %   (e.g., axes was deleted, or previous render hit the No-data branch).
+            try
+                if ~ismethod(tag, 'getXY'); return; end
+                [tv, y] = tag.getXY();
+                if isempty(tv) || isempty(y); return; end
+                if numel(tv) > 200; tv = tv(end-199:end); y = y(end-199:end); end
+                if isempty(obj.hSparkLine_) || ~isvalid(obj.hSparkLine_)
+                    if ~isempty(obj.hSparkPanel_) && isvalid(obj.hSparkPanel_)
+                        delete(obj.hSparkPanel_.Children);
+                        obj.hSparkAxes_ = [];
+                        obj.renderSparkline_(tag);
+                    end
+                    return;
+                end
+                obj.hSparkLine_.XData = tv;
+                obj.hSparkLine_.YData = y;
+                obj.fitSparkAxes_();
+            catch
+            end
+        end
+
+        function fitSparkAxes_(obj)
+        %FITSPARKAXES_ Tight axis with small padding.
+            if isempty(obj.hSparkAxes_) || ~isvalid(obj.hSparkAxes_); return; end
+            try
+                axis(obj.hSparkAxes_, 'tight');
+                xl = obj.hSparkAxes_.XLim; yl = obj.hSparkAxes_.YLim;
+                px = (xl(2) - xl(1)) * 0.02;
+                if px > 0; obj.hSparkAxes_.XLim = xl + [-px, px]; end
+                py = (yl(2) - yl(1)) * 0.05;
+                if py > 0; obj.hSparkAxes_.YLim = yl + [-py, py]; end
+            catch
+            end
+        end
+
+        function data = buildTagTableData_(obj, tag)
+        %BUILDTAGTABLEDATA_ Build N×2 cell of {Field, Value} rows for a Tag.
+        %   Used by both renderTag_ (initial render) and refreshLive (live ticks).
+            kindTxt = obj.tagKindLabel_(tag);
+            uTxt = char(8212);
+            if isprop(tag, 'Units') && ~isempty(tag.Units); uTxt = char(tag.Units); end
+            dTxt = char(8212);
+            if isprop(tag, 'Description') && ~isempty(tag.Description); dTxt = char(tag.Description); end
+            cTxt = char(8212);
+            if isprop(tag, 'Criticality') && ~isempty(tag.Criticality); cTxt = char(tag.Criticality); end
+            lblTxt = char(8212);
+            if isprop(tag, 'Labels') && ~isempty(tag.Labels)
+                try
+                    lblTxt = strjoin(cellfun(@char, tag.Labels(:), 'UniformOutput', false), ', ');
+                catch
+                end
+            end
+            extraRows = obj.tagTypeSpecificRows_(tag);
+            rules = {};
+            if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
+                try
+                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
+                        && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
+                        && strcmp(tt.Parent.Key, tag.Key));
+                catch
+                end
+            elseif isa(tag, 'MonitorTag')
+                rules = {tag};
+            end
+            data = { ...
+                'Key',         char(tag.Key); ...
+                'Type',        kindTxt; ...
+                'Units',       uTxt; ...
+                'Criticality', cTxt; ...
+                'Labels',      lblTxt; ...
+                'Description', dTxt};
+            for k = 1:numel(extraRows)
+                data(end+1, :) = extraRows{k}; %#ok<AGROW>
+            end
+            if isempty(rules)
+                data(end+1, :) = {'Thresholds', 'None'}; %#ok<AGROW>
+            else
+                data(end+1, :) = {'Thresholds', sprintf('%d', numel(rules))}; %#ok<AGROW>
+                for i = 1:numel(rules)
+                    rule = rules{i};
+                    label = sprintf('  %s', char(8226));
+                    try
+                        if isa(rule, 'MonitorTag')
+                            critTxt = char(8212);
+                            if isprop(rule, 'Criticality') && ~isempty(rule.Criticality)
+                                critTxt = char(rule.Criticality);
+                            end
+                            nameTxt = char(rule.Key);
+                            if isprop(rule, 'Name') && ~isempty(rule.Name); nameTxt = char(rule.Name); end
+                            valTxt = sprintf('%s (%s)', nameTxt, critTxt);
+                        else
+                            valTxt = sprintf('%s: %s (%s)', char(rule.Name), char(rule.Condition), char(rule.Criticality));
+                        end
+                    catch
+                        valTxt = char(8212);
+                    end
+                    data(end+1, :) = {label, valTxt}; %#ok<AGROW>
+                end
             end
         end
 
@@ -432,48 +511,7 @@ classdef InspectorPane < handle
             if ~isfield(obj.Payload_, 'dashboard'); return; end
             db = obj.Payload_.dashboard;
 
-            wcRoot = numel(db.Widgets);
-            wcPages = 0;
-            for pp = 1:numel(db.Pages); wcPages = wcPages + numel(db.Pages{pp}.Widgets); end
-            wcTotal = wcRoot + wcPages;
-
-            pageLabel = char(8212);
-            if ~isempty(db.Pages)
-                pageNames = cell(1, numel(db.Pages));
-                for pp = 1:numel(db.Pages)
-                    p = db.Pages{pp};
-                    if isprop(p, 'Name') && ~isempty(p.Name)
-                        pageNames{pp} = char(p.Name);
-                    else
-                        pageNames{pp} = sprintf('Page %d', pp);
-                    end
-                end
-                pageLabel = sprintf('%d (%s)', numel(db.Pages), strjoin(pageNames, ', '));
-            end
-
-            themeLabel = char(8212);
-            if isprop(db, 'Theme'); themeLabel = char(string(db.Theme)); end
-
-            renderedLabel = 'No';
-            if ~isempty(db.hFigure) && ishandle(db.hFigure); renderedLabel = 'Yes'; end
-
-            bindings = obj.collectDashboardTagBindings_(db);
-
-            statusTxt = sprintf('Idle %s rendered: %s', char(183), renderedLabel);
-            if db.IsLive
-                statusTxt = sprintf('Live %s rendered: %s', char(183), renderedLabel);
-            end
-
-            data = { ...
-                'Widgets',       sprintf('%d (root: %d, paged: %d)', wcTotal, wcRoot, wcPages); ...
-                'Pages',         pageLabel; ...
-                'Theme',         themeLabel; ...
-                'Live interval', sprintf('%g s', db.LiveInterval); ...
-                'Status',        statusTxt};
-            data(end+1, :) = {sprintf('Tags (%d)', numel(bindings)), ''};
-            for i = 1:numel(bindings)
-                data(end+1, :) = {sprintf('  %s', char(8226)), char(bindings{i})}; %#ok<AGROW>
-            end
+            data = obj.buildDashTableData_(db);
 
             % Outer 3-row grid: title + table + action row.
             g = uigridlayout(obj.hContent_, [3 1]);
@@ -497,6 +535,8 @@ classdef InspectorPane < handle
             tbl.BackgroundColor = t.WidgetBackground;
             tbl.ForegroundColor = t.ForegroundColor;
             tbl.FontSize = 11;
+            obj.hDashTable_      = tbl;
+            obj.RenderedDashName_ = char(db.Name);
 
             % Action button row (Play | Pause | Open)
             bg = uigridlayout(g, [1 3]); bg.Layout.Row = 3; bg.Layout.Column = 1;
@@ -593,6 +633,46 @@ classdef InspectorPane < handle
             bindings = {};
             for i = 1:numel(collected)
                 if ~any(strcmp(bindings, collected{i})); bindings{end+1} = collected{i}; end %#ok<AGROW>
+            end
+        end
+
+        function data = buildDashTableData_(obj, db)
+        %BUILDDASHTABLEDATA_ Build N×2 cell of {Field, Value} rows for a DashboardEngine.
+            wcRoot = numel(db.Widgets);
+            wcPages = 0;
+            for pp = 1:numel(db.Pages); wcPages = wcPages + numel(db.Pages{pp}.Widgets); end
+            wcTotal = wcRoot + wcPages;
+            pageLabel = char(8212);
+            if ~isempty(db.Pages)
+                pageNames = cell(1, numel(db.Pages));
+                for pp = 1:numel(db.Pages)
+                    p = db.Pages{pp};
+                    if isprop(p, 'Name') && ~isempty(p.Name)
+                        pageNames{pp} = char(p.Name);
+                    else
+                        pageNames{pp} = sprintf('Page %d', pp);
+                    end
+                end
+                pageLabel = sprintf('%d (%s)', numel(db.Pages), strjoin(pageNames, ', '));
+            end
+            themeLabel = char(8212);
+            if isprop(db, 'Theme'); themeLabel = char(string(db.Theme)); end
+            renderedLabel = 'No';
+            if ~isempty(db.hFigure) && ishandle(db.hFigure); renderedLabel = 'Yes'; end
+            bindings = obj.collectDashboardTagBindings_(db);
+            statusTxt = sprintf('Idle %s rendered: %s', char(183), renderedLabel);
+            if db.IsLive
+                statusTxt = sprintf('Live %s rendered: %s', char(183), renderedLabel);
+            end
+            data = { ...
+                'Widgets',       sprintf('%d (root: %d, paged: %d)', wcTotal, wcRoot, wcPages); ...
+                'Pages',         pageLabel; ...
+                'Theme',         themeLabel; ...
+                'Live interval', sprintf('%g s', db.LiveInterval); ...
+                'Status',        statusTxt};
+            data(end+1, :) = {sprintf('Tags (%d)', numel(bindings)), ''};
+            for i = 1:numel(bindings)
+                data(end+1, :) = {sprintf('  %s', char(8226)), char(bindings{i})}; %#ok<AGROW>
             end
         end
 
