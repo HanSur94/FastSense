@@ -24,6 +24,8 @@ classdef InspectorPane < handle
         hSparkAxes_     = []   % axes handle (tag state only)
         hSparkPanel_    = []   % sparkline container uipanel (tag state only)
         hSparkLine_     = []   % line handle inside hSparkAxes_ (live updates XData/YData)
+        hRangeLbl_      = []   % "Range: last X min (max. 30 min)" label under sparkline
+        SparkWindowSec_ = 1800 % sparkline horizon — last 30 minutes of data
         hTagTable_      = []   % uitable in tag state (live mode updates Data only)
         hDashTable_     = []   % uitable in dashboard state (live mode updates Data only)
         RenderedTagKey_   = '' % key of tag last full-rendered (live skips when matches)
@@ -163,6 +165,7 @@ classdef InspectorPane < handle
                 if isempty(obj.hContent_) || ~isvalid(obj.hContent_); return; end
                 delete(obj.hContent_.Children);
                 obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hSparkLine_ = [];
+                obj.hRangeLbl_  = [];
                 obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
                 obj.hChipsGrid_  = []; obj.hModeOverlay_ = []; obj.hModeLinked_ = [];
                 obj.hPlotBtn_    = []; obj.hTagTable_ = []; obj.hDashTable_ = [];
@@ -222,11 +225,11 @@ classdef InspectorPane < handle
 
             data = obj.buildTagTableData_(tag);
 
-            % Outer 4-row grid: title + table + sparkline + button.
-            g = uigridlayout(obj.hContent_, [4 1]);
-            g.RowHeight   = {28, '1x', 84, 32};
+            % Outer 5-row grid: title + table + sparkline + range-label + button.
+            g = uigridlayout(obj.hContent_, [5 1]);
+            g.RowHeight   = {28, '1x', 78, 14, 32};
             g.ColumnWidth = {'1x'};
-            g.Padding     = [16 16 16 16]; g.RowSpacing = 8;
+            g.Padding     = [16 16 16 16]; g.RowSpacing = 6;
             g.BackgroundColor = t.WidgetBackground;
 
             lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
@@ -251,13 +254,22 @@ classdef InspectorPane < handle
             obj.hSparkPanel_.Layout.Row = 3; obj.hSparkPanel_.Layout.Column = 1;
             obj.hSparkPanel_.BackgroundColor = t.WidgetBackground;
             obj.hSparkPanel_.BorderColor = t.WidgetBorderColor; obj.hSparkPanel_.BorderType = 'line';
+
+            obj.hRangeLbl_ = uilabel(g);
+            obj.hRangeLbl_.Layout.Row = 4; obj.hRangeLbl_.Layout.Column = 1;
+            obj.hRangeLbl_.Text = sprintf('Range: %s (max. %.0f min)', char(8212), obj.SparkWindowSec_/60);
+            obj.hRangeLbl_.FontSize = 10;
+            obj.hRangeLbl_.FontColor = t.PlaceholderTextColor;
+            obj.hRangeLbl_.HorizontalAlignment = 'left';
+            obj.hRangeLbl_.VerticalAlignment = 'center';
+
             % Flush so the table paints immediately; axes-based sparkline
             % construction is the slowest part of this render.
             drawnow limitrate;
             obj.renderSparkline_(tag);
 
             obj.hOpenDetail_ = uibutton(g, 'push');
-            obj.hOpenDetail_.Layout.Row = 4; obj.hOpenDetail_.Layout.Column = 1;
+            obj.hOpenDetail_.Layout.Row = 5; obj.hOpenDetail_.Layout.Column = 1;
             obj.hOpenDetail_.Text = 'Open Detail'; obj.hOpenDetail_.FontSize = 11;
             obj.hOpenDetail_.FontWeight = 'normal'; obj.hOpenDetail_.FontColor = t.ForegroundColor;
             obj.hOpenDetail_.BackgroundColor = t.WidgetBorderColor;
@@ -337,14 +349,15 @@ classdef InspectorPane < handle
         end
 
         function renderSparkline_(obj, tag)
-        %RENDERSPARKLINE_ Render last-200-sample sparkline via axes('Parent', uipanel).
-        %   Stores hSparkLine_ so live mode can update XData/YData in place.
+        %RENDERSPARKLINE_ Render the trailing SparkWindowSec_ window of (X,Y).
+        %   Filters samples to the last 30 minutes, then plots. Stores
+        %   hSparkLine_ so refreshSparklineInPlace_ can update in place.
             t = obj.Theme_;
             try
                 if ~ismethod(tag, 'getXY'); obj.renderNoData_('No data'); return; end
                 [tv, y] = tag.getXY();
                 if isempty(tv) || isempty(y); obj.renderNoData_('No data'); return; end
-                if numel(tv) > 200; tv = tv(end-199:end); y = y(end-199:end); end
+                [tv, y] = obj.windowSparkData_(tv, y);
                 obj.hSparkAxes_ = axes('Parent', obj.hSparkPanel_, ...
                     'Units', 'normalized', 'Position', [0 0 1 1], ...
                     'Color', t.WidgetBackground, 'XColor', t.WidgetBackground, ...
@@ -354,20 +367,63 @@ classdef InspectorPane < handle
                 obj.fitSparkAxes_();
                 try; obj.hSparkAxes_.Toolbar.Visible = 'off'; catch; end
                 try; obj.hSparkAxes_.Interactions = []; catch; end
+                obj.updateRangeLabel_(tv);
             catch
                 obj.renderNoData_('Sparkline unavailable');
             end
         end
 
+        function [tv, y] = windowSparkData_(obj, tv, y)
+        %WINDOWSPARKDATA_ Filter (X,Y) to the trailing SparkWindowSec_ horizon.
+        %   Assumes X is in seconds (datenum-day fallback handled below by
+        %   converting day-fractions to seconds when the span looks tiny).
+            if isempty(tv); return; end
+            xMax = tv(end);
+            xMin = xMax - obj.SparkWindowSec_;
+            % Detect MATLAB datenum (units = days) — span < 0.1 means seconds-as-time
+            % won't work; convert window to days for the comparison.
+            if (xMax - tv(1)) < 1 && (xMax > 7e5)  % datenum heuristic: epoch ~7e5
+                xMin = xMax - (obj.SparkWindowSec_ / 86400);
+            end
+            mask = tv >= xMin;
+            tv = tv(mask); y = y(mask);
+            % Cap to ~500 points for plot perf without distorting shape.
+            if numel(tv) > 500
+                idx = round(linspace(1, numel(tv), 500));
+                tv = tv(idx); y = y(idx);
+            end
+        end
+
+        function updateRangeLabel_(obj, tv)
+        %UPDATERANGELABEL_ Refresh the "Range: last X (max. 30 min)" label.
+            if isempty(obj.hRangeLbl_) || ~isvalid(obj.hRangeLbl_); return; end
+            maxMin = obj.SparkWindowSec_ / 60;
+            if isempty(tv) || numel(tv) < 1
+                obj.hRangeLbl_.Text = sprintf('Range: %s (max. %.0f min)', char(8212), maxMin);
+                return;
+            end
+            spanSec = tv(end) - tv(1);
+            % datenum heuristic: if X looks like days, convert to seconds.
+            if spanSec > 0 && spanSec < 1 && tv(end) > 7e5
+                spanSec = spanSec * 86400;
+            end
+            if spanSec < 60
+                obj.hRangeLbl_.Text = sprintf('Range: last %.0f s (max. %.0f min)', spanSec, maxMin);
+            else
+                obj.hRangeLbl_.Text = sprintf('Range: last %.1f min (max. %.0f min)', spanSec/60, maxMin);
+            end
+        end
+
         function refreshSparklineInPlace_(obj, tag)
         %REFRESHSPARKLINEINPLACE_ Update sparkline XData/YData without rebuilding axes.
-        %   Falls back to full renderSparkline_ when the stored line handle is stale
-        %   (e.g., axes was deleted, or previous render hit the No-data branch).
+        %   Filters to the trailing SparkWindowSec_ window. Falls back to
+        %   full renderSparkline_ when the stored line handle is stale
+        %   (e.g., axes was deleted, or previous render hit No-data).
             try
                 if ~ismethod(tag, 'getXY'); return; end
                 [tv, y] = tag.getXY();
                 if isempty(tv) || isempty(y); return; end
-                if numel(tv) > 200; tv = tv(end-199:end); y = y(end-199:end); end
+                [tv, y] = obj.windowSparkData_(tv, y);
                 if isempty(obj.hSparkLine_) || ~isvalid(obj.hSparkLine_)
                     if ~isempty(obj.hSparkPanel_) && isvalid(obj.hSparkPanel_)
                         delete(obj.hSparkPanel_.Children);
@@ -379,6 +435,7 @@ classdef InspectorPane < handle
                 obj.hSparkLine_.XData = tv;
                 obj.hSparkLine_.YData = y;
                 obj.fitSparkAxes_();
+                obj.updateRangeLabel_(tv);
             catch
             end
         end
