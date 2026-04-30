@@ -285,5 +285,125 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'FastSenseCompanion:dashboardNotFound');
         end
 
+        % ---- Phase 1021: InspectorStateChanged event firing tests ----
+
+        function testInspectorStateChangedFiresOnDashboardClick(testCase)
+        %TESTINSPECTORSTATECHANGEDFIRESONDASBOARDCLICK Phase 1021: event fires on dashboard click.
+            d = DashboardEngine('TestDash1021');
+            app = FastSenseCompanion('Dashboards', {d}, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            drawnow;
+            received = struct('Fired', false, 'State', '');
+            cb = @(~, ed) assignField(ed);
+            function assignField(ed)
+                received.State = ed.State;
+                received.Fired = true;
+            end
+            lh = addlistener(app, 'InspectorStateChanged', cb);
+            cleanupL = onCleanup(@() delete(lh));
+            % Drive a dashboard row click via struct hack
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            ls = struct(s.ListPane_);
+            testCase.assertNotEmpty(ls.hRowButtons_, ...
+                'Phase 1021: no row buttons found in ListPane_');
+            feval(ls.hRowButtons_{1}.ButtonPushedFcn, [], []);
+            drawnow;
+            testCase.verifyTrue(received.Fired, ...
+                'Phase 1021: InspectorStateChanged must fire on dashboard click');
+            testCase.verifyEqual(received.State, 'dashboard', ...
+                'Phase 1021: dashboard click must produce state=dashboard');
+        end
+
+        function testInspectorStateChangedFiresWelcomeOnNothing(testCase)
+        %TESTINSPECTORSTATECHANGEDFIRESWEOLCOMEONNOTHING Phase 1021: welcome state on remove.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            received = struct('Fired', false, 'State', '');
+            cb = @(~, ed) assignField(ed);
+            function assignField(ed)
+                received.State = ed.State;
+                received.Fired = true;
+            end
+            lh = addlistener(app, 'InspectorStateChanged', cb);
+            cleanupL = onCleanup(@() delete(lh));
+            % Add a dashboard and select it via row click
+            d = DashboardEngine('Tmp1021');
+            app.addDashboard(d);
+            drawnow;
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            ls = struct(s.ListPane_);
+            % Click the row to select the dashboard
+            feval(ls.hRowButtons_{end}.ButtonPushedFcn, [], []);
+            drawnow;
+            % Reset flag so we capture the post-remove fire
+            received.Fired = false;
+            received.State = '';
+            app.removeDashboard('Tmp1021');
+            drawnow;
+            testCase.verifyTrue(received.Fired, ...
+                'Phase 1021: removeDashboard of selected must fire InspectorStateChanged');
+            testCase.verifyEqual(received.State, 'welcome', ...
+                'Phase 1021: removing the selected dashboard must produce state=welcome');
+        end
+
+        function testOpenAdHocPlotRequestedEventFires(testCase)
+        %TESTOPENADHOCPLOTREQUESTEDEVENTFIRES Phase 1021: Plot click fires OpenAdHocPlotRequested.
+            TagRegistry.clear();
+            t1 = SensorTag('ta1021', 'Name', 'Tag A', 'X', 1:3, 'Y', 1:3, ...
+                'Labels', {'L'}, 'Criticality', 'low');
+            TagRegistry.register('ta1021', t1);
+            t2 = SensorTag('tb1021', 'Name', 'Tag B', 'X', 1:3, 'Y', 1:3, ...
+                'Labels', {'L'}, 'Criticality', 'low');
+            TagRegistry.register('tb1021', t2);
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.addTeardown(@() TagRegistry.clear());
+            drawnow;
+            received = struct('TagKeys', {{}}, 'Mode', '', 'Fired', false);
+            cb = @(~, ed) assignField(ed);
+            function assignField(ed)
+                received.TagKeys = ed.TagKeys;
+                received.Mode    = ed.Mode;
+                received.Fired   = true;
+            end
+            lh = addlistener(app, 'OpenAdHocPlotRequested', cb);
+            cleanupL = onCleanup(@() delete(lh));
+            % Drive 2-tag selection via catalog listbox struct hack
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            cs = struct(s.CatalogPane_);
+            cs.hListbox_.Value = {'ta1021', 'tb1021'};
+            feval(cs.hListbox_.ValueChangedFcn, [], []);
+            drawnow;
+            % Find Plot button and click
+            hFig = findobj(groot, 'Type', 'figure', 'Name', 'FastSense Companion');
+            if isempty(hFig)
+                hFig = findobj(groot, '-regexp', 'Name', 'FastSense Companion');
+            end
+            testCase.assertNotEmpty(hFig, 'Phase 1021: companion figure not found');
+            allBtns = findall(hFig(1), '-isa', 'matlab.ui.control.Button');
+            plotBtn = [];
+            for i = 1:numel(allBtns)
+                if strcmp(allBtns(i).Text, 'Plot')
+                    plotBtn = allBtns(i);
+                    break;
+                end
+            end
+            testCase.assertNotEmpty(plotBtn, 'Phase 1021: Plot button not found in multitag state');
+            feval(plotBtn.ButtonPushedFcn, [], []);
+            drawnow;
+            testCase.verifyTrue(received.Fired, ...
+                'Phase 1021: Plot click must fire OpenAdHocPlotRequested');
+            testCase.verifyEqual(numel(received.TagKeys), 2, ...
+                'Phase 1021: payload must carry 2 tag keys');
+            testCase.verifyEqual(received.Mode, 'Overlay', ...
+                'Phase 1021: default mode must be Overlay');
+        end
+
     end
 end
