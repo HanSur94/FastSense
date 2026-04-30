@@ -249,6 +249,13 @@ classdef FastSenseCompanion < handle
             obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
             obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
             obj.InspectorPane_.attach(obj.hRightPanel_, obj.hFig_, obj.CatalogPane_, obj, obj.Theme_);
+            % Phase 1023.1 cross-phase fix: clear orchestrator-owned listeners
+            % before re-registering. Without this, every setProject() call
+            % doubles the handler count for InspectorStateChanged,
+            % OpenAdHocPlotRequested, and the three pane event listeners
+            % (COMPSHELL-05).
+            delete(obj.Listeners_);
+            obj.Listeners_ = {};
             % Re-wire pane event listeners (detach cleared them)
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
                 @(s, e) obj.onDashboardSelected_(s, e));
