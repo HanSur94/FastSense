@@ -128,7 +128,12 @@ Plans:
   4. User selects 2+ tags and inspector routes to the plot composer state (ADHOC-01 rendering — tag chip list, mode toggle, Plot button); the state tracks the selection so adding or removing a checked tag updates the chip list in place
   5. Selecting tags after clicking a dashboard row moves inspector back to tag-detail state; `LastInteraction` is the routing rule and flips correctly in both directions
   6. An exception thrown inside any inspector callback (sparkline render, dashboard accessor, etc.) is caught, surfaced via non-blocking `uialert`, and does not crash the companion or any open figure
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [x] 1021-01-PLAN.md — Pure helper inspectorResolveState + InspectorStateEventData + AdHocPlotEventData payload classes + unit tests
+- [ ] 1021-02-PLAN.md — TagCatalogPane public-API additions (getSelectedKeys, deselectKey) + FastSenseCompanion events/cache/resolveInspectorState_ + listener wiring + extended InspectorPane.attach signature
+- [ ] 1021-03-PLAN.md — Full InspectorPane implementation: 4-state machine (welcome/tag/dashboard/multitag), sparkline via axes(uipanel), threshold list, referenced-tags walker, Play/Pause, chip list, mode toggle, Plot CTA
+- [ ] 1021-04-PLAN.md — Class-based test suites: TestInspectorPane (INSPECT-01..06) + augment TestFastSenseCompanion (event firing tests) + augment TestTagCatalogPane (getSelectedKeys/deselectKey)
 **UI hint**: yes
 
 ### Phase 1022: Ad-Hoc Plot Composer
@@ -179,5 +184,5 @@ Plans:
 | 1018. Companion Shell + Project Handoff | v3.0 | 3/3 | Complete    | 2026-04-29 |
 | 1019. Tag Catalog | v3.0 | 3/3 | Complete    | 2026-04-29 |
 | 1020. Dashboard Browser | v3.0 | 3/3 | Complete   | 2026-04-29 |
-| 1021. Inspector | v3.0 | 0/? | Not started | — |
+| 1021. Inspector | v3.0 | 1/4 | In Progress|  |
 | 1022. Ad-Hoc Plot Composer | v3.0 | 0/? | Not started | — |
