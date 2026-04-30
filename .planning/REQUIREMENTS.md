@@ -47,10 +47,10 @@ Categories derived from the four research dimensions (Stack / Features / Archite
 ### Ad-Hoc Plot Composer
 
 - [ ] **ADHOC-01**: With ≥2 tags selected, the composer shows a tag chip list, an "Overlay / Linked grid" mode toggle, and a "Plot" CTA button
-- [ ] **ADHOC-02**: User picks "Overlay" + Plot → companion opens a classical figure containing a single `FastSense` instance with one `addLine` per selected tag; line colors come from `CompanionTheme`
-- [ ] **ADHOC-03**: User picks "Linked grid" + Plot → companion opens a classical figure containing a `FastSenseGrid` with one tile per selected tag; tiles share the figure but `LinkGroup` wiring is deferred to a future milestone (tiles render with independent x-axes for v3.0)
+- [x] **ADHOC-02**: User picks "Overlay" + Plot → companion opens a classical figure containing a single `FastSense` instance with one `addLine` per selected tag; line colors come from `CompanionTheme`
+- [x] **ADHOC-03**: User picks "Linked grid" + Plot → companion opens a classical figure containing a `FastSenseGrid` with one tile per selected tag; tiles share the figure but `LinkGroup` wiring is deferred to a future milestone (tiles render with independent x-axes for v3.0)
 - [ ] **ADHOC-04**: Spawned ad-hoc plot figures are independent of the companion — closing a plot figure does not affect the companion or other plots; closing the companion does not auto-close ad-hoc plots already open
-- [ ] **ADHOC-05**: Ad-hoc plots render the full available range of each tag (no time-range presets in v3.0); user can zoom/pan in the figure for sub-range exploration
+- [x] **ADHOC-05**: Ad-hoc plots render the full available range of each tag (no time-range presets in v3.0); user can zoom/pan in the figure for sub-range exploration
 
 ### Industrial Plant Demo Integration
 

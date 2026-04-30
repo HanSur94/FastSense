@@ -146,7 +146,11 @@ Plans:
   3. User picks Linked grid + Plot and a classical `figure` opens with a `FastSenseGrid` containing one tile per selected tag; tiles render with independent x-axes (LinkGroup wiring deferred to v3.x per ADHOC-08)
   4. After spawning plots, user closes one plot figure — the companion is unaffected and the remaining plots stay open; after closing the companion, previously-spawned plot figures remain open and fully functional
   5. Ad-hoc plots render the full available range of each tag; user can zoom/pan in the figure for sub-range exploration; `timerfindall` after closing all spawned figures shows no orphan companion-owned timers
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 1022-01-PLAN.md — openAdHocPlot private helper: Overlay + LinkedGrid figure factory with per-tag failure tolerance
+- [ ] 1022-02-PLAN.md — FastSenseCompanion orchestrator: onOpenAdHocPlotRequested_ listener + addlistener wiring in constructor + setProject
+- [ ] 1022-03-PLAN.md — Tests: helper unit suite (runOpenAdHocPlotTests) + MockPlottableTag fixture + TestFastSenseCompanion ADHOC end-to-end (lifecycle + orphan-timer)
 **UI hint**: yes
 
 ### Phase 1023: Industrial Plant Demo Integration
@@ -185,4 +189,4 @@ Plans:
 | 1019. Tag Catalog | v3.0 | 3/3 | Complete    | 2026-04-29 |
 | 1020. Dashboard Browser | v3.0 | 3/3 | Complete   | 2026-04-29 |
 | 1021. Inspector | v3.0 | 4/4 | Complete   | 2026-04-30 |
-| 1022. Ad-Hoc Plot Composer | v3.0 | 0/? | Not started | — |
+| 1022. Ad-Hoc Plot Composer | v3.0 | 1/3 | In Progress|  |
