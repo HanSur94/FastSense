@@ -26,6 +26,7 @@ classdef InspectorPane < handle
         hSparkLine_     = []   % line handle inside hSparkAxes_ (live updates XData/YData)
         hRangeLbl_      = []   % "Range: last X min (max. 30 min)" label under sparkline
         SparkWindowSec_ = 1800 % sparkline horizon — last 30 minutes of data
+        ThresholdsCache_ = []  % containers.Map(tagKey -> rules cell); built lazily
         hTagTable_      = []   % uitable in tag state (live mode updates Data only)
         hTagTitle_      = []   % uilabel for the tag-name title (in-place update)
         hDashTable_     = []   % uitable in dashboard state (live mode updates Data only)
@@ -72,6 +73,7 @@ classdef InspectorPane < handle
             obj.Payload_        = struct('nTags', 0, 'nDashboards', 0);
             obj.ComposerMode_   = 'Overlay';
             obj.CurrentTagKeys_ = {};
+            obj.ThresholdsCache_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
             delete(obj.hPanel_.Children);
             % hContent_ is a uigridlayout (NOT a Scrollable uipanel) so its
             % child grid is naturally top-aligned. Earlier iterations used
@@ -291,15 +293,19 @@ classdef InspectorPane < handle
         %RENDERSTATE_ Clear hContent_.Children and dispatch to per-state renderer.
             try
                 if isempty(obj.hContent_) || ~isvalid(obj.hContent_); return; end
-                % Defensive iterate-and-delete. delete(arrayOfHandles) is
-                % normally fine, but if the live tick re-entered renderState_
-                % mid-build (via drawnow processing callbacks), an orphan
-                % grid could survive a single batched delete. Iterate
-                % reverse to keep indices stable as siblings drop off.
+                % Hide hContent_ before deleting children. Without this,
+                % the delete cascade fires position-update events against
+                % freshly-stale panel handles; if a DashboardEngine live
+                % timer happens to drawnow during our delete, it dispatches
+                % those events on invalid handles ('Value must be a handle'
+                % errors). Visibility=off suppresses position events for
+                % the subtree being torn down.
+                try; obj.hContent_.Visible = 'off'; catch; end
                 kids = obj.hContent_.Children;
                 for i = numel(kids):-1:1
                     try; delete(kids(i)); catch; end
                 end
+                try; obj.hContent_.Visible = 'on'; catch; end
                 obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hSparkLine_ = [];
                 obj.hRangeLbl_  = [];
                 obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
@@ -402,13 +408,6 @@ classdef InspectorPane < handle
             obj.hRangeLbl_.HorizontalAlignment = 'left';
             obj.hRangeLbl_.VerticalAlignment = 'center';
 
-            % Flush so the table paints immediately; axes-based sparkline
-            % construction is the slowest part of this render.
-            % Use 'nocallbacks' (NOT 'limitrate') — limitrate processes
-            % queued timer callbacks, which lets the live tick re-enter
-            % renderState_ mid-build and produce a duplicate inspector
-            % card (visible bug). 'nocallbacks' just flushes paint.
-            drawnow nocallbacks;
             obj.renderSparkline_(tag);
 
             obj.hOpenDetail_ = uibutton(g, 'push');
@@ -567,6 +566,34 @@ classdef InspectorPane < handle
             end
         end
 
+        function rules = lookupThresholds_(obj, tag)
+        %LOOKUPTHRESHOLDS_ Return MonitorTags monitoring `tag` (cached).
+        %   Walking TagRegistry on every live tick is expensive; this caches
+        %   per tag.Key inside the InspectorPane. Cache is reset on attach.
+            rules = {};
+            try
+                key = char(tag.Key);
+                if isempty(obj.ThresholdsCache_)
+                    obj.ThresholdsCache_ = containers.Map( ...
+                        'KeyType', 'char', 'ValueType', 'any');
+                end
+                if obj.ThresholdsCache_.isKey(key)
+                    rules = obj.ThresholdsCache_(key);
+                    return;
+                end
+                if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
+                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
+                        && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
+                        && strcmp(tt.Parent.Key, key));
+                elseif isa(tag, 'MonitorTag')
+                    rules = {tag};
+                end
+                obj.ThresholdsCache_(key) = rules;
+            catch
+                rules = {};
+            end
+        end
+
         function txt = formatYTick_(~, y)
         %FORMATYTICK_ Compact numeric format for the Y min/max ticks.
             a = abs(y);
@@ -701,17 +728,7 @@ classdef InspectorPane < handle
                 end
             end
             extraRows = obj.tagTypeSpecificRows_(tag);
-            rules = {};
-            if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
-                try
-                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
-                        && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
-                        && strcmp(tt.Parent.Key, tag.Key));
-                catch
-                end
-            elseif isa(tag, 'MonitorTag')
-                rules = {tag};
-            end
+            rules = obj.lookupThresholds_(tag);
             data = { ...
                 'Key',         char(tag.Key); ...
                 'Type',        kindTxt; ...
