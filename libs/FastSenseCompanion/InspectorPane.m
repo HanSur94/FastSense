@@ -227,7 +227,7 @@ classdef InspectorPane < handle
 
             % Outer 5-row grid: title + table + sparkline + range-label + button.
             g = uigridlayout(obj.hContent_, [5 1]);
-            g.RowHeight   = {28, '1x', 78, 14, 32};
+            g.RowHeight   = {28, '1x', 92, 14, 32};
             g.ColumnWidth = {'1x'};
             g.Padding     = [16 16 16 16]; g.RowSpacing = 6;
             g.BackgroundColor = t.WidgetBackground;
@@ -350,8 +350,9 @@ classdef InspectorPane < handle
 
         function renderSparkline_(obj, tag)
         %RENDERSPARKLINE_ Render the trailing SparkWindowSec_ window of (X,Y).
-        %   Filters samples to the last 30 minutes, then plots. Stores
-        %   hSparkLine_ so refreshSparklineInPlace_ can update in place.
+        %   Shows 2-point X-axis ticks (start / end time) and 2-point Y-axis
+        %   ticks (min / max value). Stores hSparkLine_ so refreshSparklineInPlace_
+        %   can update XData/YData and tick labels in place.
             t = obj.Theme_;
             try
                 if ~ismethod(tag, 'getXY'); obj.renderNoData_('No data'); return; end
@@ -359,17 +360,81 @@ classdef InspectorPane < handle
                 if isempty(tv) || isempty(y); obj.renderNoData_('No data'); return; end
                 [tv, y] = obj.windowSparkData_(tv, y);
                 obj.hSparkAxes_ = axes('Parent', obj.hSparkPanel_, ...
-                    'Units', 'normalized', 'Position', [0 0 1 1], ...
-                    'Color', t.WidgetBackground, 'XColor', t.WidgetBackground, ...
-                    'YColor', t.WidgetBackground, 'Box', 'off', 'XTick', [], 'YTick', []);
+                    'Units', 'normalized', 'Position', [0.22 0.26 0.75 0.70], ...
+                    'Color', t.WidgetBackground, ...
+                    'XColor', t.PlaceholderTextColor, ...
+                    'YColor', t.PlaceholderTextColor, ...
+                    'Box', 'off', 'FontSize', 8, ...
+                    'TickLength', [0.005 0.005], ...
+                    'TickDir', 'out');
                 obj.hSparkLine_ = plot(obj.hSparkAxes_, tv, y, '-', ...
                     'Color', t.LineColors{1}, 'LineWidth', 1);
                 obj.fitSparkAxes_();
+                obj.updateSparkTicks_(tv, y);
                 try; obj.hSparkAxes_.Toolbar.Visible = 'off'; catch; end
                 try; obj.hSparkAxes_.Interactions = []; catch; end
                 obj.updateRangeLabel_(tv);
             catch
                 obj.renderNoData_('Sparkline unavailable');
+            end
+        end
+
+        function updateSparkTicks_(obj, tv, y)
+        %UPDATESPARKTICKS_ Set 2-point X (start/end time) and Y (min/max) ticks.
+            if isempty(obj.hSparkAxes_) || ~isvalid(obj.hSparkAxes_); return; end
+            if isempty(tv) || isempty(y); return; end
+            try
+                if numel(tv) >= 2 && tv(1) ~= tv(end)
+                    obj.hSparkAxes_.XTick      = [tv(1), tv(end)];
+                    obj.hSparkAxes_.XTickLabel = {obj.formatXTick_(tv(1)), obj.formatXTick_(tv(end))};
+                else
+                    obj.hSparkAxes_.XTick      = tv(1);
+                    obj.hSparkAxes_.XTickLabel = {obj.formatXTick_(tv(1))};
+                end
+                yMin = min(y); yMax = max(y);
+                if yMin < yMax
+                    obj.hSparkAxes_.YTick      = [yMin, yMax];
+                    obj.hSparkAxes_.YTickLabel = {obj.formatYTick_(yMin), obj.formatYTick_(yMax)};
+                else
+                    obj.hSparkAxes_.YTick      = yMin;
+                    obj.hSparkAxes_.YTickLabel = {obj.formatYTick_(yMin)};
+                end
+            catch
+            end
+        end
+
+        function txt = formatXTick_(~, x)
+        %FORMATXTICK_ Time-format an X value (posixtime / datenum / seconds).
+            try
+                if x > 1e9          % posixtime (Unix epoch seconds)
+                    txt = char(datetime(x, 'ConvertFrom', 'posixtime', ...
+                        'Format', 'HH:mm:ss'));
+                elseif x > 7e5      % MATLAB datenum (days since 0000-01-01)
+                    txt = datestr(x, 'HH:MM:SS');
+                elseif x >= 60
+                    mm = floor(x/60); ss = mod(x, 60);
+                    txt = sprintf('%d:%05.2f', mm, ss);
+                else
+                    txt = sprintf('%.1fs', x);
+                end
+            catch
+                txt = sprintf('%g', x);
+            end
+        end
+
+        function txt = formatYTick_(~, y)
+        %FORMATYTICK_ Compact numeric format for the Y min/max ticks.
+            a = abs(y);
+            if a == 0
+                txt = '0';
+            elseif a >= 1000 || a < 0.01
+                txt = sprintf('%.2g', y);
+            elseif a >= 100
+                txt = sprintf('%.0f', y);
+            elseif a >= 10
+                txt = sprintf('%.1f', y);
+            else
+                txt = sprintf('%.2f', y);
             end
         end
 
@@ -435,6 +500,7 @@ classdef InspectorPane < handle
                 obj.hSparkLine_.XData = tv;
                 obj.hSparkLine_.YData = y;
                 obj.fitSparkAxes_();
+                obj.updateSparkTicks_(tv, y);
                 obj.updateRangeLabel_(tv);
             catch
             end
