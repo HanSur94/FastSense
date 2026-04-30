@@ -1,4 +1,4 @@
-function ctx = run_demo()
+function ctx = run_demo(varargin)
 %RUN_DEMO Industrial plant live demo entry point (plan-01 scaffold).
 %   ctx = run_demo() bootstraps the synthetic data generator, the live
 %   TagRegistry wiring, and the LiveTagPipeline -- the non-UI plumbing
@@ -6,11 +6,18 @@ function ctx = run_demo()
 %   the multi-page dashboard; for now the returned ctx carries all the
 %   handles a caller (or a test) needs to observe the pipeline.
 %
+%   Options (name-value pairs):
+%     'Companion' (logical, default true) -- when true, run_demo also
+%       constructs a FastSenseCompanion window over the demo's
+%       DashboardEngine + populated TagRegistry. Pass false to suppress
+%       (e.g., for headless tests that only need the dashboard).
+%
 %   Returns:
 %     ctx - struct with fields:
 %       writerTimer    - IndustrialPlantDataGen MATLAB timer (running)
 %       pipeline       - LiveTagPipeline (running)
 %       engine         - [] (plan 02 populates this with a DashboardEngine)
+%       companion      - FastSenseCompanion handle (or [] when 'Companion'=false)
 %       store          - EventStore wired into every MonitorTag
 %       plantHealthKey - 'plant.health' (top-level rollup)
 %       rawDir         - absolute path to demo/industrial_plant/data/raw
@@ -26,10 +33,30 @@ function ctx = run_demo()
 %     [x, y] = TagRegistry.get('reactor.pressure').getXY();
 %     teardownDemo(ctx);
 %
+%     % Suppress the companion window (dashboard only):
+%     ctx = run_demo('Companion', false);
+%
+%     % Tear down both windows when done:
+%     teardownDemo(ctx);
+%
 %   See also: plantConfig, registerPlantTags, makeDataGenerator,
 %             startLivePipeline, teardownDemo, TagRegistry, LiveTagPipeline.
 
     here    = fileparts(mfilename('fullpath'));
+
+    % Parse name-value options (matches FastSenseCompanion's varargin parser convention).
+    useCompanion = true;
+    for k = 1:2:numel(varargin)
+        key = varargin{k};
+        switch key
+            case 'Companion'
+                useCompanion = logical(varargin{k+1});
+            otherwise
+                error('run_demo:unknownOption', ...
+                    'Unknown option ''%s''. Valid options: Companion.', key);
+        end
+    end
+
     rawDir  = fullfile(here, 'data', 'raw');
     tagsDir = fullfile(here, 'data', 'tags');
 
@@ -58,6 +85,7 @@ function ctx = run_demo()
         'writerTimer',    writerTimer, ...
         'pipeline',       pipeline, ...
         'engine',         [], ...
+        'companion',      [], ...
         'store',          store, ...
         'plantHealthKey', plantHealthKey, ...
         'rawDir',         rawDir, ...
@@ -68,6 +96,14 @@ function ctx = run_demo()
     % starts the live timer, and wires a CloseRequestFcn that calls
     % teardownDemo(ctx).
     ctx.engine = buildDashboard(ctx);
+
+    % Phase 1023 -- opt-in companion window (built AFTER buildDashboard so
+    % ctx.engine is a live handle the companion can wrap).
+    if useCompanion
+        ctx.companion = buildCompanion(ctx);
+    else
+        ctx.companion = [];
+    end
 end
 
 function waitForFirstSample_(tagKey, maxSeconds)
