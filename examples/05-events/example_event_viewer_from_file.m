@@ -1,191 +1,111 @@
-function example_event_viewer_from_file()
-%EXAMPLE_EVENT_VIEWER_FROM_FILE Demonstrates saving events to file and viewing them later.
+% example_event_viewer_from_file  Batch event detection -> EventStore.save -> EventViewer.fromFile.
 %
-%   Part 1: Detect events from 6 industrial sensors and auto-save to .mat
-%   Part 2: Open EventViewer from the saved file with refresh controls
-%   Part 3: Backup creation on re-detection
-%   Part 4: Live refresh — background process updates file, viewer polls it
+%   Pedagogical purpose: demonstrates the PERSISTENCE narrative —
+%     batch-build (synthetic data with known violations) ->
+%     MonitorTag computes events ->
+%     EventStore.save writes to .mat file ->
+%     EventViewer.fromFile reopens it ->
+%     click-to-plot detail flow on the Gantt timeline.
 %
-%   Run:  example_event_viewer_from_file()
-%   Stop: Close the Event Viewer figure to stop the background timer.
+%   This is distinct from:
+%     - example_event_detection_live.m (live timer-driven detection)
+%     - example_live_pipeline.m (notification rules, manual cycles)
+%     - example_sensor_threshold.m (single sensor, no events)
+%
+%   No live timer, no script-scope state retained between runs; uses
+%   POSIX seconds + numeric arrays only (DEMO-03, DEMO-06, DEMO-09).
+%
+%   Run:  example_event_viewer_from_file
+%   Stop: close the EventViewer figure.
 
-    projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
-    run(fullfile(projectRoot, 'install.m'));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
+run(fullfile(projectRoot, 'install.m'));
 
-    persistent sensors;
+TagRegistry.clear();
+EventBinding.clear();
 
-    eventFile = fullfile(tempdir, 'demo_event_store.mat');
-    fprintf('\n=== Event Store Demo (6 sensors) ===\n\n');
+fprintf('\n=== Event Viewer From File Demo (Tag-API) ===\n\n');
 
-    % --- Part 1: Detect events and auto-save ---
-    fprintf('--- Part 1: Detecting events and saving to file ---\n');
-    fprintf('  File: %s\n\n', eventFile);
+%% ========================================================================
+%  1. SYNTHETIC DATA WITH PLANTED VIOLATIONS (POSIX seconds)
+%  ========================================================================
 
-    N = 500;
-    dt = 0.1;
-    t = (0:N-1) * dt;
+N  = 1000;
+dt = 1.0;
+t  = (0:N-1) * dt;
 
-    % Temperature: baseline 70 C, ramps and spikes
-    temp = 70 + 5*sin(t/5) + 2*randn(1, N);
-    temp(t >= 20 & t <= 30) = temp(t >= 20 & t <= 30) + linspace(0, 25, sum(t >= 20 & t <= 30));
-    temp(t >= 40 & t <= 42) = temp(t >= 40 & t <= 42) + 30;
+% Pressure: baseline 80 psi, two planted violation windows (> 100)
+pres = 80 + 5*sin(t/20) + 1.5*randn(1, N);
+pres(t >= 100 & t <= 130) = pres(t >= 100 & t <= 130) + 30;
+pres(t >= 600 & t <= 640) = pres(t >= 600 & t <= 640) + 35;
 
-    % Pressure: baseline 6 bar, dips
-    pressure = 6 + 0.5*sin(t/3) + 0.3*randn(1, N);
-    pressure(t >= 15 & t <= 18) = pressure(t >= 15 & t <= 18) - 4;
+% Temperature: baseline 65 degC, one ramp violation (> 80)
+temp = 65 + 3*sin(t/30) + 1*randn(1, N);
+ramp = t >= 300 & t <= 380;
+temp(ramp) = temp(ramp) + linspace(0, 25, sum(ramp));
 
-    % Vibration: baseline 2 mm/s, oscillation bursts
-    vibration = 2 + 0.3*randn(1, N);
-    vibration(t >= 35 & t <= 45) = vibration(t >= 35 & t <= 45) + 4*abs(sin((t(t >= 35 & t <= 45)-35)*3));
-
-    % Flow Rate: baseline 120 L/min, drops
-    flow = 120 + 8*sin(t/4) + 3*randn(1, N);
-    flow(t >= 10 & t <= 14) = flow(t >= 10 & t <= 14) - 40;
-    flow(t >= 38 & t <= 40) = flow(t >= 38 & t <= 40) - 50;
-
-    % Humidity: baseline 45%, spikes
-    humidity = 45 + 3*sin(t/6) + 1.5*randn(1, N);
-    humidity(t >= 25 & t <= 32) = humidity(t >= 25 & t <= 32) + 20;
-
-    % Current: baseline 15 A, overloads
-    current = 15 + 2*sin(t/7) + randn(1, N);
-    current(t >= 5 & t <= 8) = current(t >= 5 & t <= 8) + 12;
-    current(t >= 42 & t <= 46) = current(t >= 42 & t <= 46) + 15;
-
-    % --- Create Sensor objects ---
-    sTemp = SensorTag('temperature', 'Name', 'Temperature');
-    sTemp.updateData(t, temp);
-
-    sPres = SensorTag('pressure', 'Name', 'Pressure');
-    sPres.updateData(t, pressure);
-
-    sVib = SensorTag('vibration', 'Name', 'Vibration');
-    sVib.updateData(t, vibration);
-
-    sFlow = SensorTag('flow', 'Name', 'Flow Rate');
-    sFlow.updateData(t, flow);
-
-    sHum = SensorTag('humidity', 'Name', 'Humidity');
-    sHum.updateData(t, humidity);
-
-    sCur = SensorTag('current', 'Name', 'Current');
-    sCur.updateData(t, current);
-
-    sensors = {sTemp, sPres, sVib, sFlow, sHum, sCur};
-
-    % --- Configure detection with auto-save ---
-    cfg = EventConfig();
-    cfg.MinDuration = 0.5;
-    cfg.EventFile = eventFile;
-    cfg.MaxBackups = 3;
-
-    for i = 1:numel(sensors)
-        cfg.addSensor(sensors{i});
-    end
-
-    cfg.setColor('temp warning',     [1.0 0.8 0.0]);
-    cfg.setColor('temp critical',    [1.0 0.2 0.0]);
-    cfg.setColor('pressure low',     [0.2 0.5 1.0]);
-    cfg.setColor('vibration high',   [0.8 0.3 0.8]);
-    cfg.setColor('flow low',         [0.3 0.7 0.5]);
-    cfg.setColor('humidity high',    [0.0 0.8 0.8]);
-    cfg.setColor('current warning',  [1.0 0.6 0.2]);
-    cfg.setColor('current overload', [0.9 0.1 0.1]);
-
-    events = cfg.runDetection();
-    fprintf('  Detected %d events across 6 sensors, saved to file.\n\n', numel(events));
-
-    % --- Part 2: Open viewer from file ---
-    fprintf('--- Part 2: Opening EventViewer from saved file ---\n');
-    viewer = EventViewer.fromFile(eventFile);
-    fprintf('  Viewer opened with %d events.\n', numel(viewer.Events));
-    fprintf('  Refresh controls: [Refresh] button, [Auto] checkbox, interval input.\n\n');
-
-    % --- Part 3: Run detection again to demonstrate backup ---
-    fprintf('--- Part 3: Running detection again (backup created) ---\n');
-    tNew = (N:N+99) * dt;
-    for i = 1:numel(sensors)
-        s = sensors{i};
-        newY = s.Y(end) + randn(1, 100) * 2;
-        s.updateData([s.X, tNew], [s.Y, newY]);
-        cfg.SensorData(i).t = s.X;
-        cfg.SensorData(i).y = s.Y;
-    end
-    events2 = cfg.runDetection();
-    fprintf('  Detected %d events, saved (previous version backed up).\n', numel(events2));
-
-    [fDir, fName, fExt] = fileparts(eventFile);
-    backups = dir(fullfile(fDir, [fName, '_*', fExt]));
-    fprintf('  Backup files:\n');
-    for i = 1:numel(backups)
-        fprintf('    %s\n', backups(i).name);
-    end
-
-    % --- Part 4: Simulate background process ---
-    fprintf('\n--- Part 4: Simulating background data updates ---\n');
-    fprintf('  A timer will update the .mat file every 3 seconds.\n');
-    fprintf('  Click [Refresh] or enable [Auto] in the viewer to see updates.\n');
-    fprintf('  Close the Event Viewer figure to stop.\n\n');
-
-    bgTimer = timer('ExecutionMode', 'fixedRate', 'Period', 3.0, ...
-        'TimerFcn', @(~,~) backgroundUpdate(cfg, sensors, dt));
-
-    existingDeleteFcn = get(viewer.hFigure, 'DeleteFcn');
-    set(viewer.hFigure, 'DeleteFcn', @(src, evt) cleanupAll(src, evt, bgTimer, existingDeleteFcn));
-
-    start(bgTimer);
-    fprintf('  Background timer started. Close Event Viewer to stop.\n');
+% Vibration: baseline 30 Hz, multiple short violations (> 50)
+vib = 30 + 2*sin(t/10) + 0.8*randn(1, N);
+for vstart = [50, 250, 500, 800]
+    idx = t >= vstart & t <= vstart + 8;
+    vib(idx) = vib(idx) + 25;
 end
 
-function backgroundUpdate(cfg, sensors, dt)
-    try
-        nOld = numel(sensors{1}.X);
-        nNew = 30;
-        tNew = (nOld:nOld+nNew-1) * dt;
+%% ========================================================================
+%  2. SENSOR PARENTS
+%  ========================================================================
 
-        for i = 1:numel(sensors)
-            s = sensors{i};
-            baseVal = mean(s.Y(max(1,end-50):end));
-            newY = baseVal + randn(1, nNew) * 2;
+sPres = SensorTag('pressure',    'Name', 'Pressure (psi)');
+sTemp = SensorTag('temperature', 'Name', 'Temperature (degC)');
+sVib  = SensorTag('vibration',   'Name', 'Vibration (Hz)');
+sPres.updateData(t, pres);
+sTemp.updateData(t, temp);
+sVib.updateData( t, vib);
 
-            % Random violations per sensor
-            if rand() < 0.25
-                vi = randi(nNew); span = min(vi+8, nNew);
-                switch s.Key
-                    case 'temperature'
-                        newY(vi:span) = newY(vi:span) + 25;
-                    case 'pressure'
-                        newY(vi:span) = newY(vi:span) - 4;
-                    case 'vibration'
-                        newY(vi:span) = newY(vi:span) + 5;
-                    case 'flow'
-                        newY(vi:span) = newY(vi:span) - 40;
-                    case 'humidity'
-                        newY(vi:span) = newY(vi:span) + 20;
-                    case 'current'
-                        newY(vi:span) = newY(vi:span) + 15;
-                end
-            end
+TagRegistry.register('pressure',    sPres);
+TagRegistry.register('temperature', sTemp);
+TagRegistry.register('vibration',   sVib);
 
-            s.updateData([s.X, tNew], [s.Y, newY]);
-            cfg.SensorData(i).t = s.X;
-            cfg.SensorData(i).y = s.Y;
-        end
+%% ========================================================================
+%  3. EVENT STORE + 3 MONITOR TAGS WIRED TO IT
+%  ========================================================================
 
-        cfg.runDetection();
-        fprintf('  [BG] Updated at t=%.1f (%d total points)\n', tNew(end), numel(sensors{1}.X));
-    catch err
-        fprintf('  [BG] Error: %s\n', err.message);
-    end
-end
+eventFile = fullfile(tempdir, 'fastsense_phase1016_viewer.mat');
+if exist(eventFile, 'file'); delete(eventFile); end
+store = EventStore(eventFile, 'MaxBackups', 3);
 
-function cleanupAll(src, evt, bgTimer, existingDeleteFcn)
-    if ~isempty(bgTimer) && isvalid(bgTimer)
-        stop(bgTimer);
-        delete(bgTimer);
-    end
-    if ~isempty(existingDeleteFcn) && isa(existingDeleteFcn, 'function_handle')
-        existingDeleteFcn(src, evt);
-    end
-    fprintf('\n  Background timer stopped.\n');
-end
+mPres = MonitorTag('pressure_high',    sPres, @(x, y) y > 100, 'EventStore', store);
+mTemp = MonitorTag('temperature_high', sTemp, @(x, y) y > 80,  'EventStore', store);
+mVib  = MonitorTag('vibration_high',   sVib,  @(x, y) y > 50,  'EventStore', store);
+TagRegistry.register('pressure_high',    mPres);
+TagRegistry.register('temperature_high', mTemp);
+TagRegistry.register('vibration_high',   mVib);
+
+%% ========================================================================
+%  4. TRIGGER EVENT COMPUTATION (lazy MonitorTag)
+%  ========================================================================
+%  getXY runs the pipeline on the parent's grid and emits events into
+%  the bound EventStore via fireEventsOnRisingEdges_.
+
+fprintf('Computing events for 3 sensors...\n');
+mPres.getXY();
+mTemp.getXY();
+mVib.getXY();
+
+fprintf('  Detected %d events.\n', store.numEvents());
+
+%% ========================================================================
+%  5. SAVE TO DISK
+%  ========================================================================
+
+store.save();
+fprintf('Events saved to: %s\n', eventFile);
+
+%% ========================================================================
+%  6. REOPEN VIA EventViewer.fromFile (DEMO-03)
+%  ========================================================================
+
+fprintf('Opening EventViewer.fromFile(...)...\n');
+viewer = EventViewer.fromFile(eventFile);   %#ok<NASGU>
+fprintf('Viewer opened. Click any Gantt bar or list row to inspect an event.\n');
+fprintf('(Click-to-plot detail flow — see EventViewer.openEventPlot.)\n');
