@@ -161,29 +161,74 @@ classdef InspectorPane < handle
         end
 
         function renderTag_(obj)
-        %RENDERTAG_ Render single-tag detail (metadata, thresholds, sparkline, Open Detail).
+        %RENDERTAG_ Render single-tag detail with type-aware metadata,
+        %   thresholds, sparkline, and Open Detail button.
             t = obj.Theme_;
             if ~isfield(obj.Payload_, 'tag'); return; end
             tag = obj.Payload_.tag;
-            g = uigridlayout(obj.hContent_, [12 1]);
-            g.RowHeight = {20, 20, 20, 20, 20, 8, 16, 'fit', 8, 84, 8, 32};
-            g.ColumnWidth = {'1x'}; g.Padding = [16 16 16 16];
-            g.RowSpacing = 0; g.BackgroundColor = t.WidgetBackground;
+
+            % Identify tag kind (Sensor / State / Monitor / Composite / Tag).
+            kindTxt = obj.tagKindLabel_(tag);
+
+            % Common metadata rows
             uTxt = char(8212);
-            if isprop(tag, 'Units') && ~isempty(tag.Units); uTxt = tag.Units; end
+            if isprop(tag, 'Units') && ~isempty(tag.Units); uTxt = char(tag.Units); end
             dTxt = char(8212);
-            if isprop(tag, 'Description') && ~isempty(tag.Description); dTxt = tag.Description; end
+            if isprop(tag, 'Description') && ~isempty(tag.Description); dTxt = char(tag.Description); end
             cTxt = char(8212);
-            if isprop(tag, 'Criticality') && ~isempty(tag.Criticality); cTxt = tag.Criticality; end
-            obj.buildMetaRow_(g, 1, 'Key',         tag.Key);
-            obj.buildMetaRow_(g, 2, 'Name',        tag.Name);
-            obj.buildMetaRow_(g, 3, 'Units',       uTxt);
-            obj.buildMetaRow_(g, 4, 'Description', dTxt);
+            if isprop(tag, 'Criticality') && ~isempty(tag.Criticality); cTxt = char(tag.Criticality); end
+            lblTxt = char(8212);
+            if isprop(tag, 'Labels') && ~isempty(tag.Labels)
+                try
+                    lblTxt = strjoin(cellfun(@char, tag.Labels(:), 'UniformOutput', false), ', ');
+                catch
+                    lblTxt = char(8212);
+                end
+            end
+
+            % Type-specific rows (cell of {label, value} pairs)
+            extraRows = obj.tagTypeSpecificRows_(tag);
+
+            % Compose grid: 7 base meta rows + N extra + threshold + sparkline + button
+            nMeta  = 7;
+            nExtra = numel(extraRows);
+            nRows  = nMeta + nExtra + 6;  % +gap +threshold-hdr +threshold-content +gap +spark +gap +button
+            rowH   = cell(1, nRows);
+            for r = 1:(nMeta + nExtra); rowH{r} = 20; end
+            r = nMeta + nExtra + 1; rowH{r} = 8;       % gap
+            r = r + 1; rowH{r} = 16;                    % threshold header
+            r = r + 1; rowH{r} = 'fit';                 % threshold content
+            r = r + 1; rowH{r} = 8;                     % gap
+            r = r + 1; rowH{r} = 84;                    % sparkline
+            r = r + 1; rowH{r} = 32;                    % open detail button
+
+            g = uigridlayout(obj.hContent_, [nRows 1]);
+            g.RowHeight = rowH; g.ColumnWidth = {'1x'};
+            g.Padding = [16 16 16 16]; g.RowSpacing = 4;
+            g.BackgroundColor = t.WidgetBackground;
+
+            % Base meta rows (always shown)
+            obj.buildMetaRow_(g, 1, 'Key',         char(tag.Key));
+            obj.buildMetaRow_(g, 2, 'Name',        char(tag.Name));
+            obj.buildMetaRow_(g, 3, 'Type',        kindTxt);
+            obj.buildMetaRow_(g, 4, 'Units',       uTxt);
             obj.buildMetaRow_(g, 5, 'Criticality', cTxt);
-            hHdr = uilabel(g); hHdr.Layout.Row = 7; hHdr.Layout.Column = 1;
+            obj.buildMetaRow_(g, 6, 'Labels',      lblTxt);
+            obj.buildMetaRow_(g, 7, 'Description', dTxt);
+
+            % Type-specific rows (CompositeTag children, MonitorTag trip, etc.)
+            for k = 1:nExtra
+                obj.buildMetaRow_(g, nMeta + k, extraRows{k}{1}, extraRows{k}{2});
+            end
+
+            % Thresholds section
+            rThdr = nMeta + nExtra + 2;  % skip the gap row
+            hHdr = uilabel(g); hHdr.Layout.Row = rThdr; hHdr.Layout.Column = 1;
             hHdr.Text = 'Thresholds'; hHdr.FontSize = 11; hHdr.FontWeight = 'bold';
             hHdr.FontColor = t.ForegroundColor;
-            hTh = uipanel(g); hTh.Layout.Row = 8; hTh.Layout.Column = 1;
+
+            rTcontent = rThdr + 1;
+            hTh = uipanel(g); hTh.Layout.Row = rTcontent; hTh.Layout.Column = 1;
             hTh.BorderType = 'none'; hTh.BackgroundColor = t.WidgetBackground;
             rules = {};
             if isa(tag, 'SensorTag') || isa(tag, 'MonitorTag')
@@ -193,8 +238,6 @@ classdef InspectorPane < handle
                 lb = uilabel(hTh); lb.Text = 'No thresholds defined'; lb.FontSize = 11;
                 lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'left';
                 lb.VerticalAlignment = 'center';
-                % Note: uilabel has no Units/Position — those are uicontrol
-                % properties. Default placement inside the parent uipanel.
             else
                 rg = uigridlayout(hTh, [numel(rules) 1]);
                 rg.RowHeight = repmat({20}, 1, numel(rules)); rg.ColumnWidth = {'1x'};
@@ -202,22 +245,103 @@ classdef InspectorPane < handle
                 for i = 1:numel(rules)
                     rule = rules{i};
                     lb = uilabel(rg); lb.Layout.Row = i; lb.Layout.Column = 1;
-                    lb.Text = sprintf('%s: %s (%s)', rule.Name, rule.Condition, rule.Criticality);
+                    try
+                        lb.Text = sprintf('%s: %s (%s)', char(rule.Name), char(rule.Condition), char(rule.Criticality));
+                    catch
+                        lb.Text = char(8212);
+                    end
                     lb.FontSize = 11; lb.FontColor = t.ForegroundColor; lb.WordWrap = 'on';
                 end
             end
+
+            % Sparkline (skips its row gracefully via 'No data' fallback)
+            rSpark = rTcontent + 2;  % skip gap
             obj.hSparkPanel_ = uipanel(g);
-            obj.hSparkPanel_.Layout.Row = 10; obj.hSparkPanel_.Layout.Column = 1;
+            obj.hSparkPanel_.Layout.Row = rSpark; obj.hSparkPanel_.Layout.Column = 1;
             obj.hSparkPanel_.BackgroundColor = t.WidgetBackground;
             obj.hSparkPanel_.BorderColor = t.WidgetBorderColor; obj.hSparkPanel_.BorderType = 'line';
             obj.renderSparkline_(tag);
+
+            % Open Detail button
+            rBtn = rSpark + 1;
             obj.hOpenDetail_ = uibutton(g, 'push');
-            obj.hOpenDetail_.Layout.Row = 12; obj.hOpenDetail_.Layout.Column = 1;
+            obj.hOpenDetail_.Layout.Row = rBtn; obj.hOpenDetail_.Layout.Column = 1;
             obj.hOpenDetail_.Text = 'Open Detail'; obj.hOpenDetail_.FontSize = 11;
             obj.hOpenDetail_.FontWeight = 'normal'; obj.hOpenDetail_.FontColor = t.ForegroundColor;
             obj.hOpenDetail_.BackgroundColor = t.WidgetBorderColor;
-            obj.hOpenDetail_.Tooltip = sprintf('Open SensorDetailPlot for "%s"', tag.Name);
+            obj.hOpenDetail_.Tooltip = sprintf('Open SensorDetailPlot for "%s"', char(tag.Name));
             obj.hOpenDetail_.ButtonPushedFcn = @(~,~) obj.onOpenDetail_(tag);
+        end
+
+        function kind = tagKindLabel_(~, tag)
+        %TAGKINDLABEL_ Return human-readable tag kind (Sensor / State / Monitor / Composite / Tag).
+            if     isa(tag, 'SensorTag');    kind = 'Sensor';
+            elseif isa(tag, 'StateTag');     kind = 'State';
+            elseif isa(tag, 'MonitorTag');   kind = 'Monitor';
+            elseif isa(tag, 'CompositeTag'); kind = 'Composite';
+            elseif isa(tag, 'Tag');          kind = 'Tag';
+            else;                            kind = class(tag);
+            end
+        end
+
+        function rows = tagTypeSpecificRows_(~, tag)
+        %TAGTYPESPECIFICROWS_ Return cell of {label, value} pairs specific
+        %   to the tag's class. Defensive — any failure yields {} so the
+        %   inspector still renders the base metadata.
+            rows = {};
+            try
+                if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
+                    % Sample count + range
+                    try
+                        [x, ~] = tag.getXY();
+                        if isempty(x)
+                            rows{end+1} = {'Samples', '0'};
+                        else
+                            rows{end+1} = {'Samples', sprintf('%d', numel(x))};
+                            try
+                                rows{end+1} = {'X range', sprintf('%.4g .. %.4g', min(x), max(x))};
+                            catch
+                            end
+                        end
+                    catch
+                        rows{end+1} = {'Samples', char(8212)};
+                    end
+                end
+                if isa(tag, 'MonitorTag')
+                    % Trip / release conditions if exposed
+                    if isprop(tag, 'TripCondition') && ~isempty(tag.TripCondition)
+                        rows{end+1} = {'Trip', char(string(tag.TripCondition))};
+                    end
+                    if isprop(tag, 'ReleaseCondition') && ~isempty(tag.ReleaseCondition)
+                        rows{end+1} = {'Release', char(string(tag.ReleaseCondition))};
+                    end
+                    if isprop(tag, 'SourceTagKey') && ~isempty(tag.SourceTagKey)
+                        rows{end+1} = {'Source tag', char(tag.SourceTagKey)};
+                    end
+                end
+                if isa(tag, 'CompositeTag')
+                    if isprop(tag, 'AggregateMode')
+                        rows{end+1} = {'Aggregate', char(tag.AggregateMode)};
+                    end
+                    % Child keys via the public getChildKeys() accessor
+                    if ismethod(tag, 'getChildKeys')
+                        try
+                            childKeys = tag.getChildKeys();
+                            nChild = numel(childKeys);
+                            if nChild == 0
+                                rows{end+1} = {'Children', '0'};
+                            else
+                                rows{end+1} = {'Children', sprintf('%d (%s)', nChild, ...
+                                    strjoin(cellfun(@char, childKeys(:), 'UniformOutput', false), ', '))};
+                            end
+                        catch
+                            rows{end+1} = {'Children', char(8212)};
+                        end
+                    end
+                end
+            catch
+                rows = {};
+            end
         end
 
         function renderSparkline_(obj, tag)
@@ -258,10 +382,13 @@ classdef InspectorPane < handle
         end
 
         function onOpenDetail_(obj, tag)
-        %ONOPENDETAIL_ Open SensorDetailPlot in a fresh classical figure.
+        %ONOPENDETAIL_ Open SensorDetailPlot in its own classical figure.
+        %   SensorDetailPlot's render() creates its own figure when no
+        %   ParentPanel is supplied — do NOT pre-create one with figure(),
+        %   that would leave an empty extra window. Just construct + render.
             try
-                figure();
-                SensorDetailPlot(tag);
+                sd = SensorDetailPlot(tag);
+                sd.render();
             catch ME
                 uialert(obj.hFig_, sprintf('Failed to open detail: %s', ME.message), ...
                     'FastSense Companion', 'Icon', 'error');
@@ -269,47 +396,99 @@ classdef InspectorPane < handle
         end
 
         function renderDashboard_(obj)
-        %RENDERDASHBOARD_ Render dashboard summary + Play/Pause buttons.
+        %RENDERDASHBOARD_ Render dashboard summary with full metadata, page
+        %   list, referenced tags, Play/Pause buttons, and Open Dashboard CTA.
             t = obj.Theme_;
             if ~isfield(obj.Payload_, 'dashboard'); return; end
             db = obj.Payload_.dashboard;
-            g = uigridlayout(obj.hContent_, [10 1]);
-            g.RowHeight = {28, 8, 20, 20, 20, 8, 16, 'fit', 8, 28};
-            g.ColumnWidth = {'1x'}; g.Padding = [16 16 16 16];
-            g.RowSpacing = 0; g.BackgroundColor = t.WidgetBackground;
+
+            % Compute meta values
+            wcRoot = numel(db.Widgets);
+            wcPages = 0;
+            for pp = 1:numel(db.Pages); wcPages = wcPages + numel(db.Pages{pp}.Widgets); end
+            wcTotal = wcRoot + wcPages;
+
+            pageLabel = char(8212);
+            if ~isempty(db.Pages)
+                pageNames = cell(1, numel(db.Pages));
+                for pp = 1:numel(db.Pages)
+                    p = db.Pages{pp};
+                    if isprop(p, 'Name') && ~isempty(p.Name)
+                        pageNames{pp} = char(p.Name);
+                    else
+                        pageNames{pp} = sprintf('Page %d', pp);
+                    end
+                end
+                pageLabel = sprintf('%d (%s)', numel(db.Pages), strjoin(pageNames, ', '));
+            end
+
+            themeLabel = char(8212);
+            if isprop(db, 'Theme'); themeLabel = char(string(db.Theme)); end
+
+            renderedLabel = 'No';
+            if ~isempty(db.hFigure) && ishandle(db.hFigure); renderedLabel = 'Yes'; end
+
+            bindings = obj.collectDashboardTagBindings_(db);
+
+            % Compose grid (variable rows depending on bindings count)
+            nMeta = 7;  % Title, gap, Widgets, Pages, Theme, Live interval, Live
+            nRows = nMeta + 4;  % +Tags hdr +Tags content +gap +button row
+            rowH = cell(1, nRows);
+            rowH{1} = 28;       % Title
+            rowH{2} = 8;        % gap
+            for r = 3:7; rowH{r} = 20; end
+            rowH{8} = 16;       % Tags header
+            rowH{9} = 'fit';    % Tags content
+            rowH{10} = 8;       % gap
+            rowH{11} = 32;      % action buttons (Play / Pause / Open)
+
+            g = uigridlayout(obj.hContent_, [nRows 1]);
+            g.RowHeight = rowH; g.ColumnWidth = {'1x'};
+            g.Padding = [16 16 16 16]; g.RowSpacing = 4;
+            g.BackgroundColor = t.WidgetBackground;
+
+            % Title
             lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
-            lt.Text = db.Name; lt.FontSize = 14; lt.FontWeight = 'bold';
+            lt.Text = char(db.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
             lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
             lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
-            wc = numel(db.Widgets);
-            for pp = 1:numel(db.Pages); wc = wc + numel(db.Pages{pp}.Widgets); end
-            obj.buildMetaRow_(g, 3, 'Widgets',       sprintf('%d', wc));
-            obj.buildMetaRow_(g, 4, 'Live interval', sprintf('%g s', db.LiveInterval));
-            if db.IsLive; obj.buildMetaRow_(g, 5, 'Live', 'Yes');
-            else;         obj.buildMetaRow_(g, 5, 'Live', 'No'); end
-            lh = uilabel(g); lh.Layout.Row = 7; lh.Layout.Column = 1;
-            lh.Text = 'Tags'; lh.FontSize = 11; lh.FontWeight = 'bold'; lh.FontColor = t.ForegroundColor;
-            hTg = uipanel(g); hTg.Layout.Row = 8; hTg.Layout.Column = 1;
+
+            % Meta rows
+            obj.buildMetaRow_(g, 3, 'Widgets',       sprintf('%d (root: %d, paged: %d)', wcTotal, wcRoot, wcPages));
+            obj.buildMetaRow_(g, 4, 'Pages',         pageLabel);
+            obj.buildMetaRow_(g, 5, 'Theme',         themeLabel);
+            obj.buildMetaRow_(g, 6, 'Live interval', sprintf('%g s', db.LiveInterval));
+            if db.IsLive
+                obj.buildMetaRow_(g, 7, 'Status', sprintf('Live %s rendered: %s', char(183), renderedLabel));
+            else
+                obj.buildMetaRow_(g, 7, 'Status', sprintf('Idle %s rendered: %s', char(183), renderedLabel));
+            end
+
+            % Tags section
+            lh = uilabel(g); lh.Layout.Row = 8; lh.Layout.Column = 1;
+            lh.Text = sprintf('Tags (%d)', numel(bindings));
+            lh.FontSize = 11; lh.FontWeight = 'bold'; lh.FontColor = t.ForegroundColor;
+            hTg = uipanel(g); hTg.Layout.Row = 9; hTg.Layout.Column = 1;
             hTg.BorderType = 'none'; hTg.BackgroundColor = t.WidgetBackground;
-            bindings = obj.collectDashboardTagBindings_(db);
             if isempty(bindings)
                 lb = uilabel(hTg); lb.Text = 'No tag bindings'; lb.FontSize = 11;
                 lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
                 lb.VerticalAlignment = 'center';
-                % Note: uilabel has no Units/Position — those are uicontrol
-                % properties. Default placement inside the parent uipanel.
             else
                 tg = uigridlayout(hTg, [numel(bindings) 1]);
                 tg.RowHeight = repmat({20}, 1, numel(bindings)); tg.ColumnWidth = {'1x'};
                 tg.Padding = [0 0 0 0]; tg.RowSpacing = 4; tg.BackgroundColor = t.WidgetBackground;
                 for i = 1:numel(bindings)
                     lb = uilabel(tg); lb.Layout.Row = i; lb.Layout.Column = 1;
-                    lb.Text = bindings{i}; lb.FontSize = 11; lb.FontColor = t.ForegroundColor;
+                    lb.Text = char(bindings{i}); lb.FontSize = 11; lb.FontColor = t.ForegroundColor;
                 end
             end
-            bg = uigridlayout(g, [1 2]); bg.Layout.Row = 10; bg.Layout.Column = 1;
-            bg.ColumnWidth = {'1x', '1x'}; bg.RowHeight = {'1x'};
+
+            % Action button row (Play | Pause | Open Dashboard)
+            bg = uigridlayout(g, [1 3]); bg.Layout.Row = 11; bg.Layout.Column = 1;
+            bg.ColumnWidth = {'1x', '1x', '1x'}; bg.RowHeight = {'1x'};
             bg.Padding = [0 0 0 0]; bg.ColumnSpacing = 8; bg.BackgroundColor = t.WidgetBackground;
+
             obj.hPlayBtn_ = uibutton(bg, 'push');
             obj.hPlayBtn_.Layout.Row = 1; obj.hPlayBtn_.Layout.Column = 1;
             obj.hPlayBtn_.Text = [char(9654) ' Play']; obj.hPlayBtn_.FontSize = 11;
@@ -318,6 +497,7 @@ classdef InspectorPane < handle
             obj.hPlayBtn_.Tooltip = 'Start live refresh for this dashboard';
             if db.IsLive; obj.hPlayBtn_.Enable = 'off'; else; obj.hPlayBtn_.Enable = 'on'; end
             obj.hPlayBtn_.ButtonPushedFcn = @(~,~) obj.onPlay_(db);
+
             obj.hPauseBtn_ = uibutton(bg, 'push');
             obj.hPauseBtn_.Layout.Row = 1; obj.hPauseBtn_.Layout.Column = 2;
             obj.hPauseBtn_.Text = [char(9646) char(9646) ' Pause']; obj.hPauseBtn_.FontSize = 11;
@@ -326,6 +506,34 @@ classdef InspectorPane < handle
             obj.hPauseBtn_.Tooltip = 'Stop live refresh for this dashboard';
             if db.IsLive; obj.hPauseBtn_.Enable = 'on'; else; obj.hPauseBtn_.Enable = 'off'; end
             obj.hPauseBtn_.ButtonPushedFcn = @(~,~) obj.onPause_(db);
+
+            % Open Dashboard button — brings figure to front (or renders if needed).
+            obj.hOpenDetail_ = uibutton(bg, 'push');
+            obj.hOpenDetail_.Layout.Row = 1; obj.hOpenDetail_.Layout.Column = 3;
+            obj.hOpenDetail_.Text = 'Open'; obj.hOpenDetail_.FontSize = 11;
+            obj.hOpenDetail_.FontWeight = 'bold'; obj.hOpenDetail_.FontColor = t.ForegroundColor;
+            obj.hOpenDetail_.BackgroundColor = t.WidgetBorderColor;
+            obj.hOpenDetail_.Tooltip = sprintf('Open / focus the "%s" figure window', char(db.Name));
+            obj.hOpenDetail_.ButtonPushedFcn = @(~,~) obj.onOpenDashboard_(db);
+        end
+
+        function onOpenDashboard_(obj, db)
+        %ONOPENDASHBOARD_ Render the dashboard if not yet rendered, then bring its
+        %   figure to front. Mirrors DashboardListPane.onOpenClicked_ behavior so
+        %   the inspector's Open works identically to the row's Open button.
+            try
+                if isempty(db.hFigure) || ~ishandle(db.hFigure)
+                    db.render();
+                end
+                if ~isempty(db.hFigure) && ishandle(db.hFigure)
+                    figure(db.hFigure);  % bring to front / focus
+                end
+                obj.renderState_();  % refresh the "rendered: Yes/No" status row
+            catch ME
+                uialert(obj.hFig_, ...
+                    sprintf('Failed to open dashboard "%s": %s', char(db.Name), ME.message), ...
+                    'FastSense Companion', 'Icon', 'error');
+            end
         end
 
         function bindings = collectDashboardTagBindings_(obj, dashboard) %#ok<INUSL>
@@ -501,17 +709,28 @@ classdef InspectorPane < handle
         function buildMetaRow_(obj, parentGrid, rowIdx, keyTxt, valTxt)
         %BUILDMETAROW_ Build a key/value metadata row inside parentGrid at rowIdx.
             t = obj.Theme_;
+            % Coerce non-char values defensively (handles strings, numbers).
+            try
+                if isstring(valTxt) && isscalar(valTxt); valTxt = char(valTxt);
+                elseif ~ischar(valTxt) && ~isstring(valTxt)
+                    valTxt = sprintf('%s', valTxt);
+                end
+            catch
+                valTxt = char(8212);
+            end
             hr = uigridlayout(parentGrid, [1 2]);
             hr.Layout.Row = rowIdx; hr.Layout.Column = 1;
             hr.ColumnWidth = {80, '1x'}; hr.RowHeight = {'1x'};
             hr.Padding = [0 0 0 0]; hr.ColumnSpacing = 4; hr.BackgroundColor = t.WidgetBackground;
             lk = uilabel(hr); lk.Layout.Row = 1; lk.Layout.Column = 1;
-            lk.Text = keyTxt; lk.FontSize = 11; lk.FontWeight = 'bold';
+            lk.Text = char(keyTxt); lk.FontSize = 11; lk.FontWeight = 'bold';
             lk.FontColor = t.PlaceholderTextColor; lk.HorizontalAlignment = 'left';
             lk.VerticalAlignment = 'center';
             lv = uilabel(hr); lv.Layout.Row = 1; lv.Layout.Column = 2;
             lv.Text = valTxt; lv.FontSize = 11; lv.FontColor = t.ForegroundColor;
             lv.HorizontalAlignment = 'left'; lv.VerticalAlignment = 'center';
+            lv.WordWrap = 'on';
+            lv.Tooltip = valTxt;  % full value visible on hover even if visually clipped
         end
 
     end

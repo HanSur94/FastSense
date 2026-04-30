@@ -378,16 +378,26 @@ classdef DashboardListPane < handle
         end
 
         function onOpenClicked_(obj, engineIdx)
-        %ONOPENCLICKED_ Handle Open button press — fire event and call engine.render().
+        %ONOPENCLICKED_ Handle Open button press — fire event, then bring
+        %   the dashboard figure forward (rendering it first if it doesn't
+        %   exist yet, or focusing the existing one if it does).
+        %
+        %   DashboardEngine.render() is idempotent (early-returns when the
+        %   figure is already valid). To "open" an already-rendered
+        %   dashboard the user expects the figure to be brought to front.
             try
                 obj.SelectedIdx_ = engineIdx;
                 % Fire OpenDashboardRequested
                 notify(obj, 'OpenDashboardRequested', ...
                     DashboardEventData(obj.Engines_{engineIdx}, engineIdx));
                 engine = obj.Engines_{engineIdx};
-                % Attempt render in inner try/catch so companion stays alive on error
                 try
-                    engine.render();
+                    if isempty(engine.hFigure) || ~ishandle(engine.hFigure)
+                        engine.render();
+                    end
+                    if ~isempty(engine.hFigure) && ishandle(engine.hFigure)
+                        figure(engine.hFigure);  % bring to front / focus
+                    end
                 catch ME
                     uialert(obj.hFig_, ...
                         sprintf('Failed to open dashboard "%s": %s', engine.Name, ME.message), ...
