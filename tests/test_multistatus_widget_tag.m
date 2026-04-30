@@ -130,9 +130,18 @@ function test_tag_round_trip()
 end
 
 function test_legacy_threshold_item()
-    t = Threshold('mst_f_legacy_thr', 'Direction', 'upper');
-    t.addCondition(struct(), 50);
-    item = struct('threshold', t, 'value', 42, 'label', 'Pump');
+    %TEST_LEGACY_THRESHOLD_ITEM Legacy `.threshold` item field renders via MonitorTag.
+    %   Phase 1015 Plan 02 migration: with the Threshold class deleted in
+    %   Phase 1011, the surviving MultiStatusWidget item shape's
+    %   `.threshold` field accepts any Tag-kind handle (typically a
+    %   MonitorTag) OR a registered TagRegistry key string —
+    %   deriveColorFromThreshold resolves the key/handle and dispatches
+    %   polymorphically. We bind a MonitorTag to a parent SensorTag and
+    %   pass the MonitorTag handle as `.threshold`. The render contract
+    %   is unchanged: w.hAxes is non-empty after render(hp).
+    st = MakePhase1009Fixtures.makeSensorTag('mst_f_legacy_src', 'X', 1:5, 'Y', [1 1 1 1 60]);
+    m = MakeV21Fixtures.makeThresholdMonitor('mst_f_legacy_thr', st, 50, 'upper');
+    item = struct('threshold', m, 'value', 42, 'label', 'Pump');
 
     w = MultiStatusWidget('Title', 'S');
     w.Sensors = {item};
