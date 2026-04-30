@@ -42,7 +42,7 @@ Categories derived from the four research dimensions (Stack / Features / Archite
 - [ ] **INSPECT-03**: User selects exactly one dashboard in the browser (without clicking Open) and the inspector switches to dashboard inspector showing `Title`, widget count, referenced tags, current `LiveInterval`, and per-dashboard `▶ Play` / `⏸ Pause` buttons that call `d.startLive()` / `d.stopLive()`
 - [x] **INSPECT-04**: User selects ≥2 tags in the catalog and the inspector switches to the plot composer state (specified under ADHOC); checking/unchecking tags updates the composer's tag list in place
 - [x] **INSPECT-05**: Inspector mode flips by most-recent click — selecting tags after a dashboard click moves the inspector back to tag detail; `LastInteraction` is the routing rule
-- [ ] **INSPECT-06**: An exception thrown inside any inspector callback (sparkline render error, dashboard accessor failure, etc.) is caught, surfaced via non-blocking `uialert(obj.hFig_, ...)`, and does not crash the companion or any open figure
+- [x] **INSPECT-06**: An exception thrown inside any inspector callback (sparkline render error, dashboard accessor failure, etc.) is caught, surfaced via non-blocking `uialert(obj.hFig_, ...)`, and does not crash the companion or any open figure
 
 ### Ad-Hoc Plot Composer
 
