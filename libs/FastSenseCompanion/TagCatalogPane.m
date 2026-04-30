@@ -91,7 +91,10 @@ classdef TagCatalogPane < handle
             obj.hSearchField_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hSearchField_.BackgroundColor = obj.Theme_.WidgetBackground;
             obj.hSearchField_.ValueChangedFcn = @(~,~) obj.onSearchChanged_();
-            obj.hSearchField_.KeyPressFcn     = @(~,e) obj.onSearchKeyPress_(e);
+            % Note: uieditfield has no KeyPressFcn (only uifigure has
+            % WindowKeyPressFcn). Esc-to-clear deferred — the × clear
+            % button (Tooltip 'Clear search') satisfies CATALOG-05's
+            % keyboard-reachable clear requirement.
 
             obj.hSearchClear_ = uibutton(hSearchGrid, 'push');
             obj.hSearchClear_.Layout.Row      = 1;

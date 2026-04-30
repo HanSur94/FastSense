@@ -88,7 +88,9 @@ classdef DashboardListPane < handle
             obj.hSearchField_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hSearchField_.BackgroundColor = obj.Theme_.WidgetBackground;
             obj.hSearchField_.ValueChangedFcn = @(~,~) obj.onSearchChanged_();
-            obj.hSearchField_.KeyPressFcn     = @(~,e) obj.onSearchKeyPress_(e);
+            % Note: uieditfield has no KeyPressFcn (only uifigure has
+            % WindowKeyPressFcn). Esc-to-clear deferred — the × clear
+            % button satisfies BROWSER-04's keyboard-reachable clear.
 
             obj.hSearchClear_ = uibutton(hSearchGrid, 'push');
             obj.hSearchClear_.Layout.Row       = 1;
