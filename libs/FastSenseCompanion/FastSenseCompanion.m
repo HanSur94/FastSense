@@ -170,6 +170,8 @@ classdef FastSenseCompanion < handle
                 @(s, e) obj.onTagSelectionChanged_(s, e));
             obj.Listeners_{end+1} = addlistener(obj, 'InspectorStateChanged', ...
                 @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
+            obj.Listeners_{end+1} = addlistener(obj, 'OpenAdHocPlotRequested', ...
+                @(s, e) obj.onOpenAdHocPlotRequested_(s, e));
             obj.applyPlaceholderColors_();
 
             % Step 11 — Wire CloseRequestFcn
@@ -256,6 +258,8 @@ classdef FastSenseCompanion < handle
                 @(s, e) obj.onTagSelectionChanged_(s, e));
             obj.Listeners_{end+1} = addlistener(obj, 'InspectorStateChanged', ...
                 @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
+            obj.Listeners_{end+1} = addlistener(obj, 'OpenAdHocPlotRequested', ...
+                @(s, e) obj.onOpenAdHocPlotRequested_(s, e));
             obj.applyPlaceholderColors_();
         end
 
@@ -408,6 +412,40 @@ classdef FastSenseCompanion < handle
                 notify(obj, 'InspectorStateChanged', ed);
             catch err
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
+            end
+        end
+
+        function onOpenAdHocPlotRequested_(obj, ~, evt)
+        %ONOPENADHOCPLOTREQUESTED_ Listener for OpenAdHocPlotRequested event.
+        %   Resolves AdHocPlotEventData.TagKeys to Tag handles via Registry_,
+        %   delegates to openAdHocPlot for actual figure spawn. The companion
+        %   does NOT track the spawned figure — closing it does not affect the
+        %   companion (ADHOC-04 lifecycle independence is structural).
+        %
+        %   Partial-success (some tags failed): figure spawns AND uialert lists
+        %   the skipped tag names. All-fail and resolution errors raise uialert
+        %   without a spawned figure; companion stays alive.
+            try
+                keys = evt.TagKeys;
+                mode = evt.Mode;
+                tags = cell(1, numel(keys));
+                for k = 1:numel(keys)
+                    tags{k} = obj.Registry_.get(keys{k});
+                end
+                [~, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                if ~isempty(skipped)
+                    msg = sprintf( ...
+                        'Plot opened, but some tags were skipped:\n  - %s', ...
+                        strjoin(skipped, sprintf('\n  - ')));
+                    uialert(obj.hFig_, msg, 'FastSense Companion', ...
+                        'Icon', 'warning');
+                end
+            catch ME
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, ...
+                        sprintf('Failed to open plot: %s', ME.message), ...
+                        'FastSense Companion', 'Icon', 'error');
+                end
             end
         end
 
