@@ -405,5 +405,200 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'Phase 1021: default mode must be Overlay');
         end
 
+        % ---- Phase 1022: ADHOC end-to-end Plot button tests ----
+
+        function testADHOC02_overlayPlotSpawnsClassicalFigure(testCase)
+        %TESTADHOC02_OVERLAYPLOTSPAWNSCLASSICALFIGURE ADHOC-02: Overlay mode spawns classical figure.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('mk1', MockPlottableTag('mk1', 'Name', 'M1', ...
+                'X', 1:50, 'Y', sin((1:50)/3)));
+            TagRegistry.register('mk2', MockPlottableTag('mk2', 'Name', 'M2', ...
+                'X', 1:50, 'Y', cos((1:50)/3)));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() isvalid(app) && app.IsOpen && app.close());
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'mk1', 'mk2'}, 'Overlay');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, ...
+                'ADHOC-02: Overlay Plot click must spawn a FastSense Companion figure');
+            testCase.verifyEqual(get(adhocFig, 'Type'), 'figure', ...
+                'ADHOC-02: spawned must be classical figure (Type=figure)');
+            testCase.addTeardown(@() testCase.cleanupAdHoc_(adhocFig));
+        end
+
+        function testADHOC03_linkedGridPlotSpawnsClassicalFigure(testCase)
+        %TESTADHOC03_LINKEDGRIDPLOTSPAWNSCLASSICALFIGURE ADHOC-03: LinkedGrid mode spawns tiled figure.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            for i = 1:4
+                k = sprintf('lg%d', i);
+                TagRegistry.register(k, MockPlottableTag(k, ...
+                    'Name', sprintf('LG%d', i), 'X', 1:30, 'Y', (1:30) + i));
+            end
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() isvalid(app) && app.IsOpen && app.close());
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'lg1', 'lg2', 'lg3', 'lg4'}, 'LinkedGrid');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, ...
+                'ADHOC-03: LinkedGrid Plot click must spawn a FastSense Companion figure');
+            testCase.verifyEqual(get(adhocFig, 'Type'), 'figure', ...
+                'ADHOC-03: spawned must be classical figure');
+            testCase.addTeardown(@() testCase.cleanupAdHoc_(adhocFig));
+        end
+
+        function testADHOC04_companionCloseDoesNotCloseSpawnedFigure(testCase)
+        %TESTADHOC04_COMPANIONCLOSEDOESNOTCLOSESPAWNEDFIGURE ADHOC-04: spawned figure outlives companion.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('a4', MockPlottableTag('a4', 'Name', 'A4', ...
+                'X', 1:20, 'Y', 1:20));
+            TagRegistry.register('b4', MockPlottableTag('b4', 'Name', 'B4', ...
+                'X', 1:20, 'Y', 20:-1:1));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() isvalid(app) && app.IsOpen && app.close());
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'a4', 'b4'}, 'Overlay');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, 'ADHOC-04 precondition: spawned figure must exist');
+            app.close();
+            drawnow;
+            testCase.verifyTrue(ishandle(adhocFig), ...
+                'ADHOC-04: spawned figure handle must remain valid after companion.close()');
+            testCase.verifyTrue(strcmp(get(adhocFig, 'Visible'), 'on'), ...
+                'ADHOC-04: spawned figure must remain Visible=on after companion.close()');
+            testCase.addTeardown(@() testCase.cleanupAdHoc_(adhocFig));
+        end
+
+        function testADHOC04_closingSpawnedFigureDoesNotCloseCompanion(testCase)
+        %TESTADHOC04_CLOSINGSPAWNEDFIGUREDOESNOTCLOSECOMPANION ADHOC-04 reverse: closing spawned does not affect companion.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('r1', MockPlottableTag('r1', 'Name', 'R1', ...
+                'X', 1:20, 'Y', 1:20));
+            TagRegistry.register('r2', MockPlottableTag('r2', 'Name', 'R2', ...
+                'X', 1:20, 'Y', 20:-1:1));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() isvalid(app) && app.IsOpen && app.close());
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'r1', 'r2'}, 'Overlay');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, 'precondition: spawned figure must exist');
+            delete(adhocFig);
+            drawnow;
+            testCase.verifyTrue(app.IsOpen, ...
+                'ADHOC-04 reverse: companion.IsOpen must remain true after spawned figure closed');
+        end
+
+        function testADHOC05_noOrphanTimersAfterPlotAndClose(testCase)
+        %TESTADHOC05_NOORPHANTIMERSAFTERPLOTANDCLOSE ADHOC-05: timerfindall delta is empty after spawn+close cycle.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('t1', MockPlottableTag('t1', 'Name', 'T1', ...
+                'X', 1:20, 'Y', 1:20));
+            TagRegistry.register('t2', MockPlottableTag('t2', 'Name', 'T2', ...
+                'X', 1:20, 'Y', 20:-1:1));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() isvalid(app) && app.IsOpen && app.close());
+            app.refreshCatalog();
+            drawnow;
+            preTimers = timerfindall();
+            preFigs   = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'t1', 't2'}, 'Overlay');
+            drawnow;
+            postFigs  = findobj(groot, 'Type', 'figure');
+            newFigs   = setdiff(postFigs, preFigs);
+            for i = 1:numel(newFigs)
+                if ishandle(newFigs(i))
+                    delete(newFigs(i));
+                end
+            end
+            app.close();
+            drawnow;
+            postTimers = timerfindall();
+            newTimers  = setdiff(postTimers, preTimers);
+            testCase.verifyEmpty(newTimers, ...
+                'ADHOC-05: spawn+close cycle must leave no orphan companion-owned timers');
+        end
+
+    end
+
+    methods (Access = private)
+
+        function driveSelectAndPlot_(testCase, app, keys, mode) %#ok<INUSL>
+        %DRIVESELECTANDPLOT_ Helper: drive catalog selection then click Plot in mode.
+        %   app: the FastSenseCompanion instance (passed in by each test method).
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            cs = struct(s.CatalogPane_);
+            cs.hListbox_.Value = keys;
+            feval(cs.hListbox_.ValueChangedFcn, [], []);
+            drawnow;
+            ps = struct(s.InspectorPane_);
+            if strcmp(mode, 'Overlay')
+                feval(ps.hModeOverlay_.ButtonPushedFcn, [], []);
+            else
+                feval(ps.hModeLinked_.ButtonPushedFcn, [], []);
+            end
+            drawnow;
+            feval(ps.hPlotBtn_.ButtonPushedFcn, [], []);
+            drawnow;
+        end
+
+        function adhocFig = findCompanionAdHocFigure_(~, candidateFigs)
+        %FINDCOMPANIONADHOCFIGURE_ Pick the figure whose Name starts with 'FastSense Companion'.
+            adhocFig = matlab.ui.Figure.empty;
+            for i = 1:numel(candidateFigs)
+                try
+                    nm = candidateFigs(i).Name;
+                    if ~isempty(strfind(nm, 'FastSense Companion'))
+                        adhocFig = candidateFigs(i);
+                        return;
+                    end
+                catch
+                    continue;
+                end
+            end
+        end
+
+        function cleanupAdHoc_(testCase, adhocFig) %#ok<INUSL>
+        %CLEANUPADHOC_ Close one spawned ad-hoc figure + clear registry.
+            if ~isempty(adhocFig) && ishandle(adhocFig)
+                try
+                    delete(adhocFig);
+                catch
+                    % swallow — best-effort
+                end
+            end
+            TagRegistry.clear();
+        end
+
     end
 end
