@@ -195,7 +195,7 @@ Plans:
 | 1012. Migrate examples to Tag API | v2.0 | 10/10 | Complete | 2026-04-17 |
 | 1013. Dead-code deletion | v2.1 | 0/1 | Not started | - |
 | 1014. DashboardSerializer .m export Tag | v2.1 | 0/1 | Not started | - |
-| 1015. Test suite cleanup | v2.1 | 4/3 | Complete   | 2026-04-30 |
+| 1015. Test suite cleanup | v2.1 | 4/3 | Complete    | 2026-04-30 |
 | 1016. Examples 05-events rewrite | v2.1 | 0/1 | Not started | - |
 
 ## Backlog

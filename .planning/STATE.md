@@ -4,7 +4,7 @@ milestone: v2.1
 milestone_name: Tag-API Tech Debt Cleanup
 status: verifying
 stopped_at: Completed 1015-03-PLAN.md (Phase 1015 finished)
-last_updated: "2026-04-30T08:16:59.873Z"
+last_updated: "2026-04-30T08:21:27.205Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 14
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 ## Current Position
 
 Milestone: v2.1 Tag-API Tech Debt Cleanup
-Phase: 1015 (Test suite cleanup (delete zombies + migrate Threshold( refs to Tag API)) — EXECUTING
-Plan: 3 of 3
+Phase: 1016
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-30
 
