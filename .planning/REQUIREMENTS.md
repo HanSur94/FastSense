@@ -56,7 +56,7 @@ Categories derived from the four research dimensions (Stack / Features / Archite
 
 - [x] **COMPDEMO-01**: User runs `install(); ctx = run_demo();` from a clean MATLAB session and the returned `ctx` includes a `companion` field — a live `FastSenseCompanion` handle wrapping the demo's `TagRegistry` (populated by `registerPlantTags`) and the demo's `DashboardEngine` (built by `buildDashboard`); the companion window opens alongside the existing 6-page dashboard
 - [x] **COMPDEMO-02**: User invokes `run_demo('Companion', false)` and the demo runs as before with no companion window; this preserves backward-compatibility for callers / tests that only need the dashboard
-- [ ] **COMPDEMO-03**: Companion's tag catalog visibly groups plant tags by their `Tag.Labels` (e.g., `area:reactor`, `area:feed_line`, `area:cooling`); user can multi-select across areas and spawn an ad-hoc plot figure that lives independently of dashboard + companion
+- [x] **COMPDEMO-03**: Companion's tag catalog visibly groups plant tags by their `Tag.Labels` (e.g., `area:reactor`, `area:feed_line`, `area:cooling`); user can multi-select across areas and spawn an ad-hoc plot figure that lives independently of dashboard + companion
 - [x] **COMPDEMO-04**: `teardownDemo(ctx)` closes the companion if its handle is still valid; running the demo and then closing both dashboard + companion leaves zero orphan companion-owned timers in `timerfindall` (verifiable via integration test or a documented manual smoke step)
 
 ## Future Requirements

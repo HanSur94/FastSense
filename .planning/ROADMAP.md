@@ -62,7 +62,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 1020: Dashboard Browser** — `DashboardListPane` with name search, Open button, `addDashboard`/`removeDashboard`, dashboard inspector routing (completed 2026-04-29)
 - [x] **Phase 1021: Inspector** — `InspectorPane` with four states (welcome / single-tag / dashboard / multi-tag composer routing), sparkline preview, `SensorDetailPlot` integration, per-dashboard play/pause (completed 2026-04-30)
 - [x] **Phase 1022: Ad-Hoc Plot Composer** — `FastSense` overlay and `FastSenseGrid` linked grid spawning from selected tags, independent figure lifecycle, figure-close cleanup (completed 2026-04-30)
-- [ ] **Phase 1023: Industrial Plant Demo Integration** — extend `demo/industrial_plant/run_demo.m` to launch a `FastSenseCompanion` over the demo's populated `TagRegistry` + the 6-page `DashboardEngine`; demo doubles as the milestone canary
+- [x] **Phase 1023: Industrial Plant Demo Integration** — extend `demo/industrial_plant/run_demo.m` to launch a `FastSenseCompanion` over the demo's populated `TagRegistry` + the 6-page `DashboardEngine`; demo doubles as the milestone canary (completed 2026-04-30)
 
 ## Phase Details
 
@@ -165,7 +165,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 1023-01-PLAN.md — Wire-in: buildCompanion private helper + run_demo Companion name-value option + teardownDemo close cascade + buildDashboard demoClose_ cascade
-- [ ] 1023-02-PLAN.md — TestIndustrialPlantDemoCompanion class-based suite covering COMPDEMO-01..04 against real demo
+- [x] 1023-02-PLAN.md — TestIndustrialPlantDemoCompanion class-based suite covering COMPDEMO-01..04 against real demo
 **UI hint**: yes — demo is a runtime UI smoke test of the whole companion against real plant tags + a real dashboard
 
 ## Progress
