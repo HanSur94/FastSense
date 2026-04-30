@@ -278,6 +278,204 @@ FROMSTRUCT Pass-1 reconstruction from a toStruct output.
 
 ---
 
+## `DerivedTag` --- Continuous (X, Y) signal derived from N parent Tags via compute fn.
+
+> Inherits from: `Tag`
+
+DerivedTag is the 5th concrete Tag class in the FastPlot Tag
+  hierarchy — the continuous-output counterpart to MonitorTag
+  (1 parent → 0/1) and CompositeTag (N children → 0/1). It produces
+  a full (X, Y) time series by applying a user-supplied compute
+  function (or compute object) to its parents' data. Output is
+  lazy-memoized on the first getXY() call and recomputed only when
+  invalidate() fires (directly or via a parent's DataChanged
+  listener notification — see addListener wiring in the constructor).
+
+  This Phase 1008-r2b implementation is lazy-by-default and in-memory
+  only — no DataStore persistence, no streaming appendData, no
+  debouncing. Future v2 features (Persist, appendData, MinDuration,
+  OnDataAvailable, multi-output, alignParentsZOH) are documented in
+  docs/DerivedTag-spec.md §11 (out of scope here).
+
+  Lifecycle / cycle note (Pitfall 3 — Octave SIGILL):
+    Parents hold strong refs to DerivedTag via listeners_; DerivedTag
+    holds strong refs to Parents. This is intentional but creates a
+    handle cycle. ALL handle equality MUST use strcmp(a.Key, b.Key)
+    (TagRegistry guarantees globally-unique keys, so Key equality is
+    semantically equivalent to handle equality within a registry
+    session). Never use isequal/== on Tag handles — Octave SIGILLs
+    when recursing through listener cycles.
+
+  Properties (public):
+    Parents     — 1×N cell of Tag handles (required at construction)
+    ComputeFn   — function_handle @(parents)->[X,Y], OR a handle
+                  object with a method [X,Y] = compute(obj, parents).
+                  Detected via ismethod(compute, 'compute').
+    MinDuration — scalar double; reserved for v2 debouncing (default 0)
+    EventStore  — EventStore handle; inherited from Tag base
+
+  Tag-contract methods:
+    getXY        — lazy-memoized; recomputes on dirty
+    valueAt(t)   — ZOH lookup into the cached (X, Y) via binary_search
+    getTimeRange — [X(1), X(end)] or [NaN NaN] if empty
+    getKind      — returns 'derived'
+    toStruct     — serialize state. Function-handle ComputeFn stores
+                   a func2str string but cannot round-trip — see §3.6
+                   of the spec; the user must reattach the real handle
+                   after fromStruct or invocation raises
+                   DerivedTag:computeNotRehydrated. Object-form
+                   ComputeFn stores class name + (optional) toStruct
+                   state and DOES round-trip.
+    fromStruct   — Static Pass-1 reconstruction; stashes parentkeys
+                   in ParentKeys_ for Pass-2 resolveRefs.
+    resolveRefs  — Pass-2: bind real Parents from the registry and
+                   register self as listener on each.
+
+  DerivedTag-specific methods:
+    invalidate         — clear cache, mark dirty, cascade to listeners
+    addListener(l)     — register a downstream listener
+    notifyListeners_   — internal observer fan-out
+
+  Error IDs (locked — see SPEC §4):
+    DerivedTag:invalidParents              parents empty or non-Tag
+    DerivedTag:invalidCompute              compute not fn handle / no compute()
+    DerivedTag:unknownOption               unrecognized NV key
+    DerivedTag:invalidListener             addListener target lacks invalidate()
+    DerivedTag:computeReturnedNonNumeric   compute result non-numeric
+    DerivedTag:computeShapeMismatch        X, Y length mismatch
+    DerivedTag:dataMismatch                fromStruct missing required fields
+    DerivedTag:unresolvedParent            resolveRefs missing key in registry
+    DerivedTag:cycleDetected               cyclic parent graph (direct or transitive)
+    DerivedTag:nonSerializableCompute      toStruct on opaque non-fn / non-object compute
+    DerivedTag:computeNotRehydrated        deserialized invoked without ComputeFn rehydration
+
+  Cycle detection:
+    The constructor runs a depth-first traversal over the parents'
+    ancestry chain. If newKey appears anywhere in any parent's
+    parents (transitively), DerivedTag:cycleDetected is raised at
+    construction time. The DFS uses strcmp(a.Key, b.Key) — never
+    handle equality — for Octave compatibility (see Pitfall 3 above).
+
+  Compute strategy contract:
+    1. Function handle: signature [X, Y] = fn(parents) where parents
+       is the same 1×N cell array passed to the constructor.
+    2. Object: handle class instance with method
+       [X, Y] = compute(obj, parents). Detected at construction via
+       ismethod(compute, 'compute'). For round-tripping through
+       toStruct/fromStruct, the class SHOULD also implement a
+       toStruct() instance method and a fromStruct(s) static method
+       (mirrors the Tag pattern). Otherwise default-construction is
+       attempted at deserialization time.
+
+  Recompute pipeline:
+    1. Dispatch on isa(ComputeFn, 'function_handle') vs.
+       isobject(ComputeFn) && ismethod(ComputeFn, 'compute').
+    2. Validate result: numeric X and Y, equal length.
+    3. Reshape both to row vectors and store in cache_.
+    4. Clear dirty_ flag.
+
+  Listener / observer:
+    The constructor calls parent.addListener(obj) for every parent
+    that exposes addListener (SensorTag, StateTag, MonitorTag,
+    CompositeTag, DerivedTag all qualify; MockTag does too in
+    tests). Subsequent parent.updateData(...) → parent.invalidate
+    fan-out → DerivedTag.invalidate → notifyListeners_ cascades to
+    any downstream MonitorTag/DerivedTag wrapping this one. This
+    mirrors MonitorTag's listener wiring exactly.
+
+  No DataChanged event in invalidate (Pitfall 5):
+    Cache invalidation does NOT fire `notify(obj, 'DataChanged')` —
+    only SensorTag.updateData and StateTag mutators do. DerivedTag
+    fires events implicitly via downstream consumers pulling getXY.
+    This avoids flap loops in deeply-chained derivation graphs.
+
+### Constructor
+
+```matlab
+obj = DerivedTag(key, parents, compute, varargin)
+```
+
+DERIVEDTAG Construct a DerivedTag with N parents and a compute strategy.
+  d = DerivedTag(key, parents, compute) creates a DerivedTag
+  whose output is compute(parents) lazy-evaluated on first
+  getXY() and recomputed automatically when any parent's
+  updateData fires.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Parents | `{}` | 1×N cell of Tag handles (required at construction) |
+| ComputeFn | `[]` | function_handle, OR object with compute() method |
+| MinDuration | `0` | reserved for v2 debouncing; unused in v1 |
+
+### Methods
+
+#### `[X, Y] = getXY(obj)`
+
+GETXY Return lazy-memoized (X, Y) — recomputes on dirty.
+
+#### `v = valueAt(obj, t)`
+
+VALUEAT Right-biased ZOH lookup into the cached (X, Y).
+  Mirrors StateTag.valueAt structure exactly: scalar branch
+  uses a single binary_search call; vector branch loops one
+  binary_search per query. Returns NaN-filled output if the
+  compute returned an empty series.
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+GETTIMERANGE Return [X(1), X(end)] from getXY; [NaN NaN] if empty.
+
+#### `k = getKind(~)`
+
+GETKIND Return the literal kind identifier 'derived'.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize state to a plain struct.
+  Function-handle ComputeFn cannot round-trip cleanly
+  (closures, anonymous fns) — toStruct stores
+  s.computekind = 'function_handle' and s.computestr =
+  func2str(...). fromStruct leaves a sentinel that errors
+  with DerivedTag:computeNotRehydrated until the user
+  reattaches the real handle.
+
+#### `resolveRefs(obj, registry)`
+
+RESOLVEREFS Pass-2 hook to bind Parents from registry by key.
+  Iterates ParentKeys_ (stashed by fromStruct), fetches each
+  real handle from the registry, registers self as a listener
+  on each, and clears ParentKeys_. Forces dirty_ = true so
+  the next getXY() recomputes against the real parent data.
+
+#### `invalidate(obj)`
+
+INVALIDATE Clear cache + mark dirty; cascade to downstream listeners.
+  Called automatically when a parent's listener fan-out
+  reaches this DerivedTag (parent.updateData →
+  parent.notifyListeners_ → invalidate). Also called
+  directly by user code when ComputeFn semantics change.
+
+#### `addListener(obj, l)`
+
+ADDLISTENER Register a downstream listener.
+  l must implement an invalidate() method (any Tag in the
+  FastPlot domain qualifies; struct/handle objects with a
+  bespoke invalidate also work). Listeners are held by
+  strong reference — caller manages lifecycle.
+
+### Static Methods
+
+#### `DerivedTag.obj = fromStruct(s)`
+
+FROMSTRUCT Pass-1 reconstruction with sentinel parents + stashed keys.
+  Required fields: s.key (non-empty char), s.parentkeys
+  (cellstr of length ≥ 1). Pass-2 resolveRefs(registry) is
+  responsible for swapping in real Parent handles.
+
+---
+
 ## `LiveTagPipeline` --- Timer-driven raw-data -> per-tag .mat pipeline.
 
 > Inherits from: `handle`
