@@ -61,7 +61,17 @@ function engine = buildDashboard(ctx)
 end
 
 function demoClose_(fig, ctx)
-%DEMOCLOSE_ Figure CloseRequestFcn callback -- tears down timers then deletes fig.
+%DEMOCLOSE_ Figure CloseRequestFcn callback -- closes companion (if any), tears down timers, deletes fig.
+    % Phase 1023 -- close the companion BEFORE teardownDemo so the close()
+    % deletes the uifigure cleanly via the public API. teardownDemo's own
+    % companion sweep is a belt-and-braces fallback.
+    if isfield(ctx, 'companion') && ~isempty(ctx.companion) && isvalid(ctx.companion)
+        try
+            ctx.companion.close();
+        catch
+            % Best-effort.
+        end
+    end
     try
         teardownDemo(ctx);
     catch

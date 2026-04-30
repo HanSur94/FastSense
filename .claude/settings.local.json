@@ -18,7 +18,9 @@
       "Skill(gsd:quick)",
       "Skill(gsd:debug)",
       "Skill(gsd:research-phase)",
-      "WebSearch"
+      "WebSearch",
+      "Skill(gsd:ui-phase)",
+      "Skill(gsd:ui-phase:*)"
     ]
   }
 }
