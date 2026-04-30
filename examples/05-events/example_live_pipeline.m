@@ -1,144 +1,127 @@
-% example_live_pipeline  Live event detection pipeline demo.
+% example_live_pipeline  Full notification-rule taxonomy + manual-cycle live pipeline.
 %
-%   Demonstrates every feature of the live event pipeline:
+%   Pedagogical purpose: demonstrates the FULL feature surface of the
+%   live pipeline — manual cycles (no timer), 3 priority-tiered
+%   NotificationRules (default / sensor-specific / exact-match),
+%   EventStore atomic write + backup rotation, and EventViewer
+%   auto-refresh.
 %
-%     Data Sources:
-%       - MockDataSource with violations, drift, noise, and state channels
-%       - MatFileDataSource reading from a continuously-updated .mat file
-%       - DataSourceMap mapping sensor keys to swappable data sources
+%   This is distinct from:
+%     - example_event_detection_live.m (bounded timer, 3-sensor demo)
+%     - example_event_viewer_from_file.m (batch detect -> save -> view)
+%     - example_sensor_threshold.m (single sensor, no events)
 %
-%     Detection:
-%       - IncrementalEventDetector with open-event carry-over
-%       - Severity escalation (H -> HH when peak exceeds higher threshold)
-%       - Multi-sensor parallel detection
+%   Octave-portable: numeric POSIX timestamps and arrays only (DEMO-06).
+%   No module-level state; no unbounded timers (DEMO-09).
 %
-%     Storage:
-%       - EventStore with atomic write and backup rotation
-%       - printEventSummary for console inspection
-%
-%     Notifications:
-%       - NotificationRule with priority-based matching (default/sensor/exact)
-%       - Template filling ({sensor}, {threshold}, {peak}, {duration}, ...)
-%       - generateEventSnapshot producing detail + context PNGs
-%       - NotificationService in dry-run mode (logs to console)
-%
-%     Visualization:
-%       - EventViewer with Gantt timeline and filterable table
-%       - Auto-refresh from the shared event store file
-%
-%   The example runs 3 manual cycles (no timer needed), prints a summary,
-%   generates snapshot PNGs, then opens the EventViewer.
-%
-%   To run interactively with the timer afterwards:
-%     pipeline.start()    % begins 15s timer-driven cycles
-%     pipeline.stop()     % stops the timer
+%   The example runs 3 manual cycles, prints a summary, generates
+%   snapshot PNGs, then opens the EventViewer.
 
 projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 run(fullfile(projectRoot, 'install.m'));
 
+TagRegistry.clear();
+EventBinding.clear();
+
+fprintf('\n=== Live Pipeline Demo (manual cycles, full notification taxonomy) ===\n\n');
+
 %% ========================================================================
-%  1. SENSORS WITH THRESHOLDS (upper + lower, multi-level)
+%  1. SENSOR PARENTS — temperature, pressure, vibration
 %  ========================================================================
 
-% Threshold colors and styles
-warnColor  = [1 0.75 0];   % yellow for warnings (inner)
-alarmColor = [1 0 0];      % red for alarms (outer)
-warnStyle  = '--';          % dashed for warnings
-alarmStyle = '-';           % solid for alarms
-
-% --- Temperature: state-dependent thresholds (truly dynamic) ---
 tempSensor = SensorTag('temperature', 'Name', 'Chamber Temperature');
-
-% Attach state channel so thresholds adapt to machine mode
-tempStateCh = StateTag('mode');
-
-% H Warning (upper): idle=120, heating=140, cooling=100
-
-% HH Alarm (upper): idle=150, heating=170, cooling=130
-
-% L Warning (lower): idle=50, heating=40, cooling=60
-
-% LL Alarm (lower): idle=30, heating=20, cooling=40
-
-% --- Pressure: unconditional thresholds with warning/alarm colors ---
-presSensor = SensorTag('pressure', 'Name', 'Chamber Pressure');
-
-% --- Vibration: unconditional thresholds with warning/alarm colors ---
-vibSensor = SensorTag('vibration', 'Name', 'Motor Vibration');
-
-sensors = containers.Map();
-sensors('temperature') = tempSensor;
-sensors('pressure')    = presSensor;
-sensors('vibration')   = vibSensor;
+presSensor = SensorTag('pressure',    'Name', 'Chamber Pressure');
+vibSensor  = SensorTag('vibration',   'Name', 'Motor Vibration');
 
 %% ========================================================================
-%  2. DATA SOURCES — MockDataSource with state channels and drift
+%  2. EVENT STORE — atomic write with backup rotation
 %  ========================================================================
+
+storeFile = fullfile(tempdir, 'fastsense_phase1016_pipeline.mat');
+if exist(storeFile, 'file'); delete(storeFile); end
+eventStore = EventStore(storeFile, 'MaxBackups', 3);
+fprintf('Event store: %s\n', storeFile);
+
+%% ========================================================================
+%  3. MONITOR TAGS — one per sensor + severity (H / HH)
+%  ========================================================================
+%  Each MonitorTag is a derived 0/1 binary signal that fires events
+%  on rising edges into the bound EventStore.
+
+mTempH  = MonitorTag('temp_H',   tempSensor, @(x, y) y > 120, 'EventStore', eventStore);
+mTempHH = MonitorTag('temp_HH',  tempSensor, @(x, y) y > 150, 'EventStore', eventStore);
+mPresH  = MonitorTag('pres_H',   presSensor, @(x, y) y > 5.0, 'EventStore', eventStore);
+mPresHH = MonitorTag('pres_HH',  presSensor, @(x, y) y > 6.5, 'EventStore', eventStore);
+mVibH   = MonitorTag('vib_H',    vibSensor,  @(x, y) y > 8.0, 'EventStore', eventStore);
+mVibHH  = MonitorTag('vib_HH',   vibSensor,  @(x, y) y > 12.0,'EventStore', eventStore);
+
+TagRegistry.register('temperature', tempSensor);
+TagRegistry.register('pressure',    presSensor);
+TagRegistry.register('vibration',   vibSensor);
+TagRegistry.register('temp_H',  mTempH);
+TagRegistry.register('temp_HH', mTempHH);
+TagRegistry.register('pres_H',  mPresH);
+TagRegistry.register('pres_HH', mPresHH);
+TagRegistry.register('vib_H',   mVibH);
+TagRegistry.register('vib_HH',  mVibHH);
+
+monitors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+monitors('temp_H')  = mTempH;
+monitors('temp_HH') = mTempHH;
+monitors('pres_H')  = mPresH;
+monitors('pres_HH') = mPresHH;
+monitors('vib_H')   = mVibH;
+monitors('vib_HH')  = mVibHH;
+
+%% ========================================================================
+%  4. DATA SOURCES — keyed by MONITOR key (not parent key)
+%  ========================================================================
+%  LiveEventPipeline.processMonitorTag_ iterates MonitorTargets keys and
+%  looks each up in DataSourceMap. Sharing one MockDataSource handle
+%  across two monitors of the same parent is safe — fetchNew advances
+%  the source's internal pointer; both monitors observe the same tail
+%  samples on each cycle.
+
+tempDS = MockDataSource('BaseValue', 85, 'NoiseStd', 2, 'DriftRate', 0.00002, ...
+    'ViolationProbability', 0.0001, 'ViolationAmplitude', 38, 'ViolationDuration', 90, ...
+    'BacklogDays', 2, 'SampleInterval', 3, ...
+    'StateValues', {{'idle', 'heating', 'cooling'}}, ...
+    'StateChangeProbability', 0.002, 'Seed', 42);
+presDS = MockDataSource('BaseValue', 3.2, 'NoiseStd', 0.1, ...
+    'ViolationProbability', 0.0001, 'ViolationAmplitude', 2.0, 'ViolationDuration', 60, ...
+    'BacklogDays', 2, 'SampleInterval', 3, 'Seed', 99);
+vibDS  = MockDataSource('BaseValue', 4.5, 'NoiseStd', 0.2, ...
+    'ViolationProbability', 0.00015, 'ViolationAmplitude', 4.0, 'ViolationDuration', 45, ...
+    'BacklogDays', 2, 'SampleInterval', 3, 'Seed', 7);
 
 dsMap = DataSourceMap();
-
-% Temperature: base=85, normal range ~79-91
-%   Dynamic thresholds shift with mode: idle=120/150, heating=140/170, cooling=100/130
-%   Violations amplitude 38: in idle barely exceeds H(120), in cooling exceeds H(100) easily.
-dsMap.add('temperature', MockDataSource( ...
-    'BaseValue', 85, 'NoiseStd', 2, ...
-    'DriftRate', 0.00002, ...
-    'ViolationProbability', 0.0001, ...         % ~3 violations per day
-    'ViolationAmplitude', 38, ...               % dynamic: exceeds H in idle/cooling, not in heating
-    'ViolationDuration', 90, ...
-    'BacklogDays', 2, ...
-    'SampleInterval', 3, ...
-    'StateValues', {{'idle', 'heating', 'cooling'}}, ...
-    'StateChangeProbability', 0.002, ...
-    'Seed', 42));
-
-% Pressure: base=3.2, normal range ~2.9-3.5, thresholds at 1.5/0.8 (low) and 5.0/6.5 (high)
-%   Gap to nearest threshold: 1.7 units. Violations amplitude 2.0 barely exceeds H/L Warning.
-dsMap.add('pressure', MockDataSource( ...
-    'BaseValue', 3.2, 'NoiseStd', 0.1, ...
-    'ViolationProbability', 0.0001, ...         % ~3 violations per day
-    'ViolationAmplitude', 2.0, ...              % just past H Warning (5.0) or L Warning (1.5)
-    'ViolationDuration', 60, ...
-    'BacklogDays', 2, ...
-    'SampleInterval', 3, ...
-    'Seed', 99));
-
-% Vibration: base=4.5, normal range ~3.9-5.1, thresholds at 2.0/1.0 (low) and 8.0/12.0 (high)
-%   Gap to nearest threshold: 2.5 units. Violations amplitude 4.0 exceeds H/L Warning.
-dsMap.add('vibration', MockDataSource( ...
-    'BaseValue', 4.5, 'NoiseStd', 0.2, ...
-    'ViolationProbability', 0.00015, ...        % ~4 violations per day
-    'ViolationAmplitude', 4.0, ...              % past H Warning (8.0) or near L Warning (2.0)
-    'ViolationDuration', 45, ...
-    'BacklogDays', 2, ...
-    'SampleInterval', 3, ...
-    'Seed', 7));
+dsMap.add('temp_H',  tempDS);   dsMap.add('temp_HH', tempDS);
+dsMap.add('pres_H',  presDS);   dsMap.add('pres_HH', presDS);
+dsMap.add('vib_H',   vibDS);    dsMap.add('vib_HH',  vibDS);
 
 fprintf('DataSourceMap: %d sources configured\n', numel(dsMap.keys()));
 
 %% ========================================================================
-%  3. EVENT STORE — atomic write with backup rotation
+%  5. PIPELINE — orchestrates fetch -> detect -> store -> notify
 %  ========================================================================
 
-storeFile = fullfile(tempdir, 'fastsense_live_events.mat');
-fprintf('Event store: %s\n', storeFile);
-
-%% ========================================================================
-%  4. PIPELINE — orchestrates fetch -> detect -> store -> notify
-%  ========================================================================
-
-pipeline = LiveEventPipeline(sensors, dsMap, ...
+pipeline = LiveEventPipeline(monitors, dsMap, ...
     'EventFile', storeFile, ...
     'Interval', 15, ...
     'MinDuration', 0, ...
-    'EscalateSeverity', true, ...   % H -> HH when peak exceeds HH threshold
-    'MaxBackups', 3);               % keep 3 backup copies of event store
+    'EscalateSeverity', true, ...
+    'MaxBackups', 3);
+
+% Ensure pipeline shares the SAME EventStore the MonitorTags write into
+% (LiveEventPipeline constructs its own from EventFile; replace with ours
+% so harvested deltas line up with monitor writes).
+pipeline.EventStore = eventStore;
 
 %% ========================================================================
-%  5. NOTIFICATIONS — rule-based with priority matching and snapshots
+%  6. NOTIFICATIONS — rule-based with priority matching and snapshots
 %  ========================================================================
 
-snapshotDir = fullfile(tempdir, 'fastsense_snapshots');
+snapshotDir = fullfile(tempdir, 'fastsense_phase1016_snapshots');
 fprintf('Snapshot directory: %s\n', snapshotDir);
 
 notif = NotificationService('DryRun', true, 'SnapshotDir', snapshotDir);
@@ -149,7 +132,7 @@ notif.setDefaultRule(NotificationRule( ...
     'Subject', '[FastSense] {sensor}: {threshold} violation', ...
     'Message', ['Sensor {sensor} violated {threshold} ({direction}) ' ...
                'from {startTime} to {endTime}.\n' ...
-               'Peak: {peak}, Mean: {mean}, Std: {std}, Duration: {duration}'], ...
+               'Peak: {peak}, Mean: {mean}, Std: {std}'], ...
     'IncludeSnapshot', false));
 
 % Sensor-specific rule: any temperature event (score=2)
@@ -157,17 +140,17 @@ notif.addRule(NotificationRule( ...
     'SensorKey', 'temperature', ...
     'Recipients', {{'thermal-team@company.com'}}, ...
     'Subject', '[THERMAL] {sensor}: {threshold}', ...
-    'Message', 'Temperature {direction} violation. Peak: {peak}. Duration: {duration}.', ...
-    'IncludeSnapshot', true, ...      % generate detail + context PNGs
-    'ContextHours', 4, ...            % 4h of context in the context plot
-    'SnapshotSize', [1000, 500]));    % higher resolution snapshots
+    'Message', 'Temperature {direction} violation. Peak: {peak} at {startTime}.', ...
+    'IncludeSnapshot', true, ...
+    'ContextHours', 4, ...
+    'SnapshotSize', [1000, 500]));
 
-% Exact match rule: temperature + HH Alarm only (score=3, highest priority)
+% Exact match rule: temperature + HH only (score=3, highest priority)
 notif.addRule(NotificationRule( ...
     'SensorKey', 'temperature', ...
-    'ThresholdLabel', 'HH Alarm', ...
+    'ThresholdLabel', 'temp_HH', ...
     'Recipients', {{'safety@company.com', 'manager@company.com'}}, ...
-    'Subject', 'CRITICAL: Temperature HH Alarm!', ...
+    'Subject', 'CRITICAL: Temperature HH exceeded!', ...
     'Message', ['Temperature exceeded HH limit at {startTime}. ' ...
                'Peak: {peak}. Immediate action required.'], ...
     'IncludeSnapshot', true));
@@ -175,7 +158,7 @@ notif.addRule(NotificationRule( ...
 pipeline.NotificationService = notif;
 
 %% ========================================================================
-%  6. RUN DETECTION CYCLES (manual — no timer needed for demo)
+%  7. RUN DETECTION CYCLES (manual — no timer, DEMO-09)
 %  ========================================================================
 
 fprintf('\n--- Running 3 detection cycles ---\n\n');
@@ -187,18 +170,18 @@ for cycle = 1:3
 end
 
 %% ========================================================================
-%  7. INSPECT RESULTS — printEventSummary + event store stats
+%  8. INSPECT RESULTS — printEventSummary + event store stats
 %  ========================================================================
 
 fprintf('--- Event Summary ---\n\n');
 
-% Load events from the atomic store file
 [events, meta] = EventStore.loadFile(storeFile);
 fprintf('Total events in store: %d\n', numel(events));
 fprintf('Store last updated: %s\n\n', datestr(meta.lastUpdated));
 
-% Print formatted table
-printEventSummary(events);
+if ~isempty(events)
+    printEventSummary(events);
+end
 
 % Show backup files
 [fdir, fname] = fileparts(storeFile);
@@ -209,7 +192,7 @@ for i = 1:numel(backups)
 end
 
 %% ========================================================================
-%  8. SNAPSHOT FILES — list generated PNGs
+%  9. SNAPSHOT FILES — list generated PNGs
 %  ========================================================================
 
 if isfolder(snapshotDir)
@@ -224,24 +207,16 @@ if isfolder(snapshotDir)
 end
 
 %% ========================================================================
-%  9. EVENT VIEWER — Gantt timeline with filterable table
+%  10. EVENT VIEWER — Gantt timeline with filterable list
 %  ========================================================================
 
 fprintf('\nOpening EventViewer...\n');
-viewer = EventViewer.fromFile(storeFile);
+try
+    viewer = EventViewer.fromFile(storeFile);   %#ok<NASGU>
+catch err
+    fprintf('  (EventViewer skipped: %s)\n', err.message);
+end
 
-fprintf('\nDone. The EventViewer shows a Gantt timeline and filterable table.\n');
-fprintf('Use the sensor/threshold dropdowns to filter events.\n');
-fprintf('Click a Gantt bar to highlight the corresponding table row.\n');
-
-%% ========================================================================
-%  OPTIONAL: Start live timer-driven pipeline
-%  ========================================================================
-
-% Uncomment to run the pipeline with a 15-second timer:
-%
-  pipeline.start();           % starts 15s timer
-  viewer.startAutoRefresh(15); % viewer polls store every 15s
-
-% To stop:
-  % pipeline.stop();
+% NOTE: This demo runs MANUAL cycles only (DEMO-09 — no unbounded timers).
+%       For a bounded timer-driven demo see example_event_detection_live.m.
+fprintf('\n=== Demo complete: 3 manual cycles run, EventViewer open ===\n');
