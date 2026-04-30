@@ -38,7 +38,7 @@ Categories derived from research scope (4 audit items + cross-cutting differenti
 - [x] **TEST-08**: New-API tests with stray refs (`TestLiveEventPipelineTag.m`, `TestIconCardWidgetTag.m`, `TestMultiStatusWidgetTag.m`) have stray `Threshold(` refs replaced with `MonitorTag` fixtures
 - [x] **TEST-09**: `tests/suite/makePhase1009Fixtures.m` (or extension `makeV21Fixtures.m`) gains a `makeThresholdMonitor(parentSensor, threshold, direction, label)` helper used by all migrated widget tests
 - [x] **TEST-10**: After cleanup, `grep -rE '(^|[^.a-zA-Z_])(Threshold|CompositeThreshold|StateChannel|ThresholdRule)\(' tests/` returns zero hits — `fp.addThreshold(...)` (surviving FastSense plot-annotation API) explicitly excluded
-- [ ] **TEST-11**: MATLAB R2020b CI passes after cleanup with documented test-count baseline drop (deleted-test count from TEST-01..05) — no surviving regression
+- [x] **TEST-11**: MATLAB R2020b CI passes after cleanup with documented test-count baseline drop (deleted-test count from TEST-01..05) — no surviving regression
 - [x] **TEST-12**: `tests/suite/TestGoldenIntegration.m` and `tests/test_golden_integration.m` have **zero diff** across the v2.1 milestone (golden-test creep prevention)
 
 ### Examples 05-events Rewrite
@@ -124,7 +124,7 @@ Populated by `gsd-roadmapper` during ROADMAP.md creation (2026-04-22).
 | TEST-08 | Phase 1015 | Complete |
 | TEST-09 | Phase 1015 | Complete |
 | TEST-10 | Phase 1015 | Complete |
-| TEST-11 | Phase 1015 | Pending |
+| TEST-11 | Phase 1015 | Complete |
 | TEST-12 | Phase 1015 | Complete |
 | DEMO-01 | Phase 1016 | Pending |
 | DEMO-02 | Phase 1016 | Pending |
