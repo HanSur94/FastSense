@@ -1,220 +1,158 @@
-function example_event_detection_live()
-%EXAMPLE_EVENT_DETECTION_LIVE Live event detection demo with industrial sensors.
-%   Demonstrates the EventDetection library with 3 mock industrial sensors,
-%   threshold-based event detection, console logging, EventViewer UI,
-%   and a live FastSense dashboard using startLive for real-time plotting.
+% example_event_detection_live  Live event detection with bounded timer + dry-run notifications.
 %
-%   Run:  example_event_detection_live()
-%   Stop: Close the Event Viewer or Live Plot figure to stop.
+%   Pedagogical purpose: demonstrates the Tag-API LIVE pipeline —
+%     SensorTag parent -> MonitorTag alarm -> EventStore storage ->
+%     LiveEventPipeline (orchestrator) -> NotificationService (dry-run sink) ->
+%     DashboardEngine (visualization).
+%
+%   This is distinct from:
+%     - example_sensor_threshold.m (single-sensor static threshold,
+%                                   no live data, no events)
+%     - example_event_viewer_from_file.m (batch detection +
+%                                         persistence + viewer)
+%     - example_live_pipeline.m (full notification-rule taxonomy
+%                                with manual cycles, no timer)
+%
+%   Bounded timer: TasksToExecute=5, onCleanup wrapper (DEMO-09).
+%   Octave-portable: POSIX timestamps and numeric arrays only (DEMO-06).
+%
+%   Run:  example_event_detection_live
+%   Stop: completes automatically after 5 ticks (~5 seconds).
 
-    projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
-    run(fullfile(projectRoot, 'install.m'));
+projectRoot = fileparts(fileparts(fileparts(mfilename('fullpath'))));
+run(fullfile(projectRoot, 'install.m'));
 
-    persistent dataTimer liveViewer liveCfg liveN fpTemp fpPres fpVib hPlotFig;
-    persistent tempFile presFile vibFile;
+TagRegistry.clear();
+EventBinding.clear();
 
-    fprintf('\n=== Event Detection Live Demo ===\n\n');
+fprintf('\n=== Event Detection Live Demo (Tag-API) ===\n\n');
 
-    % --- 1. Create mock sensor data ---
-    N = 500;  % initial data points
-    dt = 0.1; % sample interval (seconds)
-    t = (0:N-1) * dt;
+%% ========================================================================
+%  1. SENSOR PARENTS — pressure, temperature, vibration
+%  ========================================================================
 
-    % Temperature: baseline 70 C, with ramps and spikes
-    temp = 70 + 5*sin(t/5) + 2*randn(1, N);
-    rampIdx = t >= 20 & t <= 30;
-    temp(rampIdx) = temp(rampIdx) + linspace(0, 25, sum(rampIdx));
-    spikeIdx = t >= 40 & t <= 42;
-    temp(spikeIdx) = temp(spikeIdx) + 30;
+N0  = 200;
+dt  = 1.0;            % 1-second sample interval
+t0  = (0:N0-1) * dt;  % POSIX seconds since epoch (numeric, Octave-safe)
 
-    % Pressure: baseline 6 bar, with dips
-    pressure = 6 + 0.5*sin(t/3) + 0.3*randn(1, N);
-    lowIdx = t >= 15 & t <= 18;
-    pressure(lowIdx) = pressure(lowIdx) - 4;
+sPres = SensorTag('pressure',    'Name', 'Pressure (psi)');
+sTemp = SensorTag('temperature', 'Name', 'Temperature (degC)');
+sVib  = SensorTag('vibration',   'Name', 'Vibration (Hz)');
 
-    % Vibration: baseline 2 mm/s, with oscillation bursts
-    vibration = 2 + 0.3*randn(1, N);
-    burstIdx = t >= 35 & t <= 45;
-    vibration(burstIdx) = vibration(burstIdx) + 4 * abs(sin((t(burstIdx)-35)*3));
+sPres.updateData(t0, 80 + 8*sin(t0/10) + 2*randn(1, N0));
+sTemp.updateData(t0, 65 + 3*sin(t0/15) + 1.5*randn(1, N0));
+sVib.updateData( t0, 30 + 4*sin(t0/8)  + 1*randn(1, N0));
 
-    % --- 2. Create Sensor objects ---
-    sTemp = SensorTag('temperature', 'Name', 'Temperature');
-    sTemp.updateData(t, temp);
+TagRegistry.register('pressure',    sPres);
+TagRegistry.register('temperature', sTemp);
+TagRegistry.register('vibration',   sVib);
 
-    sPres = SensorTag('pressure', 'Name', 'Pressure');
-    sPres.updateData(t, pressure);
+%% ========================================================================
+%  2. SHARED EVENT STORE
+%  ========================================================================
 
-    sVib = SensorTag('vibration', 'Name', 'Vibration');
-    sVib.updateData(t, vibration);
+eventFile = fullfile(tempdir, 'fastsense_phase1016_live.mat');
+if exist(eventFile, 'file'); delete(eventFile); end
+store = EventStore(eventFile, 'MaxBackups', 3);
 
-    % --- 3. Configure event detection ---
-    cfg = EventConfig();
-    cfg.MinDuration = 0.5;
-    cfg.OnEventStart = eventLogger();
-    cfg.MaxCallsPerEvent = 2;
+%% ========================================================================
+%  3. MONITOR TAGS — pressure>100, temperature>80, vibration>50
+%  ========================================================================
 
-    cfg.addSensor(sTemp);
-    cfg.addSensor(sPres);
-    cfg.addSensor(sVib);
+mPres = MonitorTag('pressure_high',    sPres, @(x, y) y > 100, 'EventStore', store);
+mTemp = MonitorTag('temperature_high', sTemp, @(x, y) y > 80,  'EventStore', store);
+mVib  = MonitorTag('vibration_high',   sVib,  @(x, y) y > 50,  'EventStore', store);
 
-    cfg.setColor('temp warning',  [1.0 0.8 0.0]);
-    cfg.setColor('temp critical', [1.0 0.2 0.0]);
-    cfg.setColor('pressure low',  [0.2 0.5 1.0]);
-    cfg.setColor('vibration high',[0.8 0.3 0.8]);
+TagRegistry.register('pressure_high',    mPres);
+TagRegistry.register('temperature_high', mTemp);
+TagRegistry.register('vibration_high',   mVib);
 
-    % --- 4. Initial detection ---
-    fprintf('--- Initial Detection ---\n');
-    events = cfg.runDetection();
+monitors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+monitors('pressure_high')    = mPres;
+monitors('temperature_high') = mTemp;
+monitors('vibration_high')   = mVib;
 
-    fprintf('\n--- Event Summary ---\n');
-    printEventSummary(events);
+%% ========================================================================
+%  4. DATA SOURCES — keyed by MONITOR key (not parent key)
+%  ========================================================================
+%  LiveEventPipeline.processMonitorTag_ iterates MonitorTargets keys and
+%  looks up the same key in DataSourceMap, so the map MUST be keyed by
+%  monitor key, not parent sensor key.
 
-    % --- 5. Open EventViewer ---
-    liveViewer = EventViewer(events, cfg.SensorData, cfg.ThresholdColors);
-    liveCfg = cfg;
-    liveN = N;
+dsMap = DataSourceMap();
+dsMap.add('pressure_high',    MockDataSource('BaseValue', 80, 'NoiseStd', 2, ...
+    'ViolationProbability', 0.4, 'ViolationAmplitude', 30, 'ViolationDuration', 5, ...
+    'SampleInterval', dt, 'BacklogDays', 0, 'Seed', 42));
+dsMap.add('temperature_high', MockDataSource('BaseValue', 65, 'NoiseStd', 1.5, ...
+    'ViolationProbability', 0.4, 'ViolationAmplitude', 25, 'ViolationDuration', 4, ...
+    'SampleInterval', dt, 'BacklogDays', 0, 'Seed', 99));
+dsMap.add('vibration_high',   MockDataSource('BaseValue', 30, 'NoiseStd', 1, ...
+    'ViolationProbability', 0.4, 'ViolationAmplitude', 30, 'ViolationDuration', 4, ...
+    'SampleInterval', dt, 'BacklogDays', 0, 'Seed', 7));
 
-    % --- 6. Write initial .mat files for live plotting ---
-    liveDir = fullfile(tempdir, 'fastsense_event_live');
-    if ~exist(liveDir, 'dir'); mkdir(liveDir); end
+%% ========================================================================
+%  5. LIVE PIPELINE + DRY-RUN NOTIFICATION SERVICE
+%  ========================================================================
 
-    tempFile = fullfile(liveDir, 'temperature.mat');
-    presFile = fullfile(liveDir, 'pressure.mat');
-    vibFile  = fullfile(liveDir, 'vibration.mat');
+pipeline = LiveEventPipeline(monitors, dsMap, ...
+    'EventFile', eventFile, 'Interval', 1, 'MinDuration', 0, 'MaxBackups', 3);
 
-    x = t; y = temp;      save(tempFile, 'x', 'y');
-    x = t; y = pressure;  save(presFile, 'x', 'y');
-    x = t; y = vibration; save(vibFile,  'x', 'y');
+pipeline.NotificationService = NotificationService('DryRun', true, ...
+    'SnapshotDir', fullfile(tempdir, 'fastsense_phase1016_snapshots'));
 
-    % --- 7. Open live FastSense dashboard ---
-    hPlotFig = figure('Name', 'Live Sensor Dashboard', ...
-        'NumberTitle', 'off', 'Position', [150 50 1200 700]);
+pipeline.NotificationService.setDefaultRule(NotificationRule( ...
+    'Recipients',      {{'ops@example.com'}}, ...
+    'Subject',         '[FastSense] {sensor}: {threshold} violation', ...
+    'Message',         'Sensor {sensor} violated {threshold} ({direction}) at {startTime}.', ...
+    'IncludeSnapshot', false));
 
-    % Temperature plot
-    ax1 = subplot(3,1,1, 'Parent', hPlotFig);
-    fpTemp = FastSense('Parent', ax1, 'LinkGroup', 'live_demo');
-    fpTemp.addLine(t, temp, 'DisplayName', 'Temperature', 'Color', [0.8 0.2 0.1]);
-    fpTemp.addThreshold(85, 'Direction', 'upper', 'ShowViolations', true, ...
-        'Color', [1 0.8 0], 'LineStyle', '--', 'Label', 'temp warning');
-    fpTemp.addThreshold(95, 'Direction', 'upper', 'ShowViolations', true, ...
-        'Color', [1 0.2 0], 'LineStyle', '-', 'Label', 'temp critical');
-    fpTemp.render();
-    title(ax1, 'Temperature (C)');
-    ylabel(ax1, 'C');
+%% ========================================================================
+%  6. DASHBOARD VISUALIZATION
+%  ========================================================================
 
-    % Pressure plot
-    ax2 = subplot(3,1,2, 'Parent', hPlotFig);
-    fpPres = FastSense('Parent', ax2, 'LinkGroup', 'live_demo');
-    fpPres.addLine(t, pressure, 'DisplayName', 'Pressure', 'Color', [0.2 0.5 1]);
-    fpPres.addThreshold(4, 'Direction', 'lower', 'ShowViolations', true, ...
-        'Color', [0.2 0.5 1], 'LineStyle', '--', 'Label', 'pressure low');
-    fpPres.render();
-    title(ax2, 'Pressure (bar)');
-    ylabel(ax2, 'bar');
+d = DashboardEngine('Live Event Detection (3 sensors)');
+d.addWidget('fastsense', 'Position', [1  1 24 7], 'Tag', sPres);
+d.addWidget('fastsense', 'Position', [1  8 24 7], 'Tag', sTemp);
+d.addWidget('fastsense', 'Position', [1 15 24 7], 'Tag', sVib);
+try
+    d.render();
+catch err
+    fprintf('  (Dashboard render skipped: %s)\n', err.message);
+end
 
-    % Vibration plot
-    ax3 = subplot(3,1,3, 'Parent', hPlotFig);
-    fpVib = FastSense('Parent', ax3, 'LinkGroup', 'live_demo');
-    fpVib.addLine(t, vibration, 'DisplayName', 'Vibration', 'Color', [0.8 0.3 0.8]);
-    fpVib.addThreshold(5, 'Direction', 'upper', 'ShowViolations', true, ...
-        'Color', [0.8 0.3 0.8], 'LineStyle', '--', 'Label', 'vibration high');
-    fpVib.render();
-    title(ax3, 'Vibration (mm/s)');
-    ylabel(ax3, 'mm/s');
-    xlabel(ax3, 'Time (s)');
+%% ========================================================================
+%  7. BOUNDED LIVE TIMER — TasksToExecute=5, onCleanup wrapper
+%  ========================================================================
 
-    % --- 8. Start FastSense live mode (polls .mat files, auto-scrolls) ---
-    fpTemp.startLive(tempFile, @(fp, d) fp.updateData(1, d.x, d.y), ...
-        'Interval', 2, 'ViewMode', 'follow');
-    fpPres.startLive(presFile, @(fp, d) fp.updateData(1, d.x, d.y), ...
-        'Interval', 2, 'ViewMode', 'follow');
-    fpVib.startLive(vibFile,  @(fp, d) fp.updateData(1, d.x, d.y), ...
-        'Interval', 2, 'ViewMode', 'follow');
+fprintf('Starting bounded live demo (5 ticks at 1s spacing)...\n');
+liveTimer = timer( ...
+    'ExecutionMode',   'fixedSpacing', ...
+    'Period',          1.0, ...
+    'TasksToExecute',  5, ...
+    'TimerFcn',        @(~,~) pipeline.runCycle(), ...
+    'StopFcn',         @(~,~) fprintf('Live demo stopped (5 ticks complete).\n'));
 
-    % --- 9. Start data generation timer ---
-    fprintf('Starting live mode (new data every 2 seconds)...\n');
-    fprintf('Close the Event Viewer or Live Plot figure to stop.\n\n');
+cleanup = onCleanup(@() cleanupTimer(liveTimer));   %#ok<NASGU>
+start(liveTimer);
+wait(liveTimer);   % blocks until TasksToExecute=5 completes
 
-    dataTimer = timer('ExecutionMode', 'fixedRate', ...
-        'Period', 2.0, ...
-        'TimerFcn', @(~,~) generateData());
+%% ========================================================================
+%  8. SUMMARY
+%  ========================================================================
 
-    % Stop when EventViewer is closed
-    set(liveViewer.hFigure, 'DeleteFcn', @(~,~) stopAll());
+evts = store.getEvents();
+fprintf('\n=== Demo complete: %d events in store ===\n', numel(evts));
 
-    start(dataTimer);
+%% ------------------------------------------------------------------------
+%  Local function — bounded-timer cleanup helper (DEMO-09)
+%  ------------------------------------------------------------------------
 
-    function generateData()
-        try
-            % Append 50 new data points
-            nNew = 50;
-            liveN = liveN + nNew;
-            tNew = ((liveN - nNew):(liveN - 1)) * dt;
-
-            % Generate new data with occasional violations
-            newTemp = 70 + 5*sin(tNew/5) + 2*randn(1, nNew);
-            newPres = 6 + 0.5*sin(tNew/3) + 0.3*randn(1, nNew);
-            newVib  = 2 + 0.3*randn(1, nNew);
-
-            % Random chance of violations
-            if rand() < 0.3
-                vi = randi(nNew);
-                span = min(vi+10, nNew);
-                newTemp(vi:span) = newTemp(vi:span) + 20;
-            end
-            if rand() < 0.2
-                vi = randi(nNew);
-                span = min(vi+8, nNew);
-                newPres(vi:span) = newPres(vi:span) - 4;
-            end
-
-            % Update sensor objects
-            for i = 1:numel(liveCfg.Sensors)
-                s = liveCfg.Sensors{i};
-                switch s.Key
-                    case 'temperature'
-                        s.updateData([s.X, tNew], [s.Y, newTemp]);
-                    case 'pressure'
-                        s.updateData([s.X, tNew], [s.Y, newPres]);
-                    case 'vibration'
-                        s.updateData([s.X, tNew], [s.Y, newVib]);
-                end
-                liveCfg.SensorData(i).t = s.X;
-                liveCfg.SensorData(i).y = s.Y;
-            end
-
-            % Write updated data to .mat files — FastSense startLive picks them up
-            sT = liveCfg.Sensors{1}; x = sT.X; y = sT.Y; save(tempFile, 'x', 'y');
-            sP = liveCfg.Sensors{2}; x = sP.X; y = sP.Y; save(presFile, 'x', 'y');
-            sV = liveCfg.Sensors{3}; x = sV.X; y = sV.Y; save(vibFile,  'x', 'y');
-
-            % Re-detect events
-            fprintf('--- Live Update (t=%.1f) ---\n', tNew(end));
-            events = liveCfg.runDetection();
-
-            % Update EventViewer
-            if isvalid(liveViewer) && ishandle(liveViewer.hFigure)
-                liveViewer.update(events);
-            end
-        catch err
-            fprintf('Live update error: %s\n', err.message);
+function cleanupTimer(t)
+    try
+        if isvalid(t)
+            stop(t);
+            delete(t);
         end
-    end
-
-    function stopAll()
-        % Stop data generation timer
-        if ~isempty(dataTimer) && isvalid(dataTimer)
-            stop(dataTimer);
-            delete(dataTimer);
-        end
-        % Stop FastSense live timers
-        try fpTemp.stopLive(); catch; end
-        try fpPres.stopLive(); catch; end
-        try fpVib.stopLive();  catch; end
-        % Clean up temp files
-        try delete(tempFile); catch; end
-        try delete(presFile); catch; end
-        try delete(vibFile);  catch; end
-        fprintf('\nLive mode stopped.\n');
+    catch
     end
 end
