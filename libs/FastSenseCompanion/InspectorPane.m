@@ -325,10 +325,25 @@ classdef InspectorPane < handle
                 for pn = {'Tag', 'TagKey', 'Sensor'}
                     pnm = pn{1};
                     if isprop(wid, pnm)
-                        val = wid.(pnm); str = '';
-                        if ischar(val); str = val;
-                        elseif isobject(val) && isprop(val, 'Key'); str = val.Key;
-                        elseif isobject(val) && isprop(val, 'Name'); str = val.Name; end
+                        % Defensive read: some widget property getters
+                        % internally call TagRegistry.get() which throws
+                        % when a tag key has been unregistered or is
+                        % stale. The inspector must never crash from a
+                        % single widget's bad binding — skip silently.
+                        try
+                            val = wid.(pnm);
+                        catch
+                            continue;
+                        end
+                        str = '';
+                        try
+                            if ischar(val); str = val;
+                            elseif isstring(val) && isscalar(val); str = char(val);
+                            elseif isobject(val) && isprop(val, 'Key'); str = val.Key;
+                            elseif isobject(val) && isprop(val, 'Name'); str = val.Name; end
+                        catch
+                            str = '';
+                        end
                         if ~isempty(str); collected{end+1} = str; end %#ok<AGROW>
                     end
                 end
