@@ -223,11 +223,18 @@ classdef FastSenseCompanion < handle
             catch err
                 fprintf(2, '[FastSenseCompanion] InspectorPane.detach failed: %s\n', err.message);
             end
-            % Release orchestrator-level listeners.
-            try
-                delete(obj.Listeners_);
-            catch err
-                fprintf(2, '[FastSenseCompanion] Listeners delete failed: %s\n', err.message);
+            % Release orchestrator-level listeners. delete(cellArray) is
+            % interpreted as filename-delete by MATLAB ("Name must be a
+            % text scalar"). Iterate explicitly.
+            for ii = 1:numel(obj.Listeners_)
+                try
+                    lh = obj.Listeners_{ii};
+                    if isobject(lh) && isvalid(lh)
+                        delete(lh);
+                    end
+                catch err
+                    fprintf(2, '[FastSenseCompanion] Listener[%d] delete failed: %s\n', ii, err.message);
+                end
             end
             obj.Listeners_ = {};
             % Always delete the uifigure last and unconditionally — this is
@@ -282,8 +289,14 @@ classdef FastSenseCompanion < handle
             % before re-registering. Without this, every setProject() call
             % doubles the handler count for InspectorStateChanged,
             % OpenAdHocPlotRequested, and the three pane event listeners
-            % (COMPSHELL-05).
-            delete(obj.Listeners_);
+            % (COMPSHELL-05). Iterate cell explicitly because
+            % delete(cellArray) is interpreted as filename-delete by MATLAB.
+            for ii = 1:numel(obj.Listeners_)
+                lh = obj.Listeners_{ii};
+                if isobject(lh) && isvalid(lh)
+                    delete(lh);
+                end
+            end
             obj.Listeners_ = {};
             % Re-wire pane event listeners (detach cleared them)
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...

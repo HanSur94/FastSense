@@ -70,7 +70,14 @@ classdef InspectorPane < handle
 
         function detach(obj)
         %DETACH Release listeners and clear per-state handles.
-            delete(obj.Listeners_);
+            % delete(cellArray) is interpreted as filename-delete by MATLAB
+            % ("Name must be a text scalar"). Iterate explicitly.
+            for ii = 1:numel(obj.Listeners_)
+                lh = obj.Listeners_{ii};
+                if isobject(lh) && isvalid(lh)
+                    delete(lh);
+                end
+            end
             obj.Listeners_ = {};
             obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hOpenDetail_ = [];
             obj.hPlayBtn_   = []; obj.hPauseBtn_   = []; obj.hChipsGrid_  = [];
