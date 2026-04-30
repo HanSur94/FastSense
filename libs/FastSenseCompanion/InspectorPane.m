@@ -495,22 +495,39 @@ classdef InspectorPane < handle
 
         function [tv, y] = windowSparkData_(obj, tv, y)
         %WINDOWSPARKDATA_ Filter (X,Y) to the trailing SparkWindowSec_ horizon.
-        %   Assumes X is in seconds (datenum-day fallback handled below by
-        %   converting day-fractions to seconds when the span looks tiny).
+        %   Also coerces non-numeric Y (e.g. StateTag cellstr) to numeric
+        %   state-indices so plot() can render it.
             if isempty(tv); return; end
+            % Coerce Y first so the windowing code below is uniform.
+            y = obj.coerceSparkY_(y);
             xMax = tv(end);
             xMin = xMax - obj.SparkWindowSec_;
-            % Detect MATLAB datenum (units = days) — span < 0.1 means seconds-as-time
-            % won't work; convert window to days for the comparison.
-            if (xMax - tv(1)) < 1 && (xMax > 7e5)  % datenum heuristic: epoch ~7e5
+            % datenum (days) heuristic: epoch ~7e5, tiny span.
+            if (xMax - tv(1)) < 1 && (xMax > 7e5)
                 xMin = xMax - (obj.SparkWindowSec_ / 86400);
             end
             mask = tv >= xMin;
             tv = tv(mask); y = y(mask);
-            % Cap to ~500 points for plot perf without distorting shape.
             if numel(tv) > 500
                 idx = round(linspace(1, numel(tv), 500));
                 tv = tv(idx); y = y(idx);
+            end
+        end
+
+        function y = coerceSparkY_(~, y)
+        %COERCESPARKY_ Convert StateTag cellstr / logical Y into plottable numerics.
+        %   StateTag.Y can be a cellstr of state names; plot() rejects that.
+        %   Map each unique label to its first-seen index so the sparkline
+        %   shows state transitions as a step-shaped numeric line.
+            try
+                if iscell(y)
+                    [~, ~, idx] = unique(y, 'stable');
+                    y = double(reshape(idx, 1, []));
+                elseif islogical(y)
+                    y = double(y);
+                end
+            catch
+                y = [];
             end
         end
 
@@ -644,15 +661,22 @@ classdef InspectorPane < handle
 
         function renderNoData_(obj, msgText)
         %RENDERNODATA_ Replace sparkline area with a centered placeholder label.
-            if ~isempty(obj.hSparkAxes_) && isvalid(obj.hSparkAxes_)
-                delete(obj.hSparkAxes_); obj.hSparkAxes_ = [];
-            end
+        %   Wrap in a 1×1 uigridlayout so the uilabel is properly centered
+        %   (uilabel has no Position; without a layout it pins to (0,0) and
+        %   can be invisible inside the panel).
+            if isempty(obj.hSparkPanel_) || ~isvalid(obj.hSparkPanel_); return; end
+            % Clear any prior axes/children so we don't stack placeholders.
+            try; delete(obj.hSparkPanel_.Children); catch; end
+            obj.hSparkAxes_ = []; obj.hSparkLine_ = [];
             t = obj.Theme_;
-            lb = uilabel(obj.hSparkPanel_); lb.Text = msgText; lb.FontSize = 11;
-            lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
+            g = uigridlayout(obj.hSparkPanel_, [1 1]);
+            g.RowHeight = {'1x'}; g.ColumnWidth = {'1x'};
+            g.Padding = [0 0 0 0]; g.BackgroundColor = t.WidgetBackground;
+            lb = uilabel(g);
+            lb.Text = msgText; lb.FontSize = 11;
+            lb.FontColor = t.PlaceholderTextColor;
+            lb.HorizontalAlignment = 'center';
             lb.VerticalAlignment = 'center';
-                % Note: uilabel has no Units/Position — those are uicontrol
-                % properties. Default placement inside the parent uipanel.
         end
 
         function onOpenDetail_(obj, tag)
@@ -1028,11 +1052,16 @@ classdef InspectorPane < handle
         end
 
         function renderMultiNoData_(obj, idx, msgText)
-        %RENDERMULTINODATA_ Show a placeholder label when a tag has no data.
+        %RENDERMULTINODATA_ Show a centered placeholder when a card has no data.
             sp = obj.hMultiSparkPanels_{idx};
             if isempty(sp) || ~isvalid(sp); return; end
+            try; delete(sp.Children); catch; end
             t = obj.Theme_;
-            lb = uilabel(sp); lb.Text = msgText; lb.FontSize = 10;
+            g = uigridlayout(sp, [1 1]);
+            g.RowHeight = {'1x'}; g.ColumnWidth = {'1x'};
+            g.Padding = [0 0 0 0]; g.BackgroundColor = t.WidgetBackground;
+            lb = uilabel(g);
+            lb.Text = msgText; lb.FontSize = 10;
             lb.FontColor = t.PlaceholderTextColor;
             lb.HorizontalAlignment = 'center';
             lb.VerticalAlignment = 'center';
