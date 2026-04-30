@@ -82,7 +82,11 @@ classdef InspectorPane < handle
             obj.hContent_.RowHeight       = {'1x'};
             obj.hContent_.ColumnWidth     = {'1x'};
             obj.hContent_.BackgroundColor = obj.Theme_.WidgetBackground;
-            obj.hContent_.Scrollable      = 'on';  % R2020b+ supports this on uigridlayout
+            % Note: per-renderer outer grids set Scrollable='on' themselves
+            % so they scroll when their fixed rows overflow the panel
+            % (e.g. multitag with many preview cards). Setting Scrollable
+            % here too is harmless but redundant.
+            obj.hContent_.Scrollable      = 'on';
             obj.renderState_();
         end
 
@@ -916,21 +920,23 @@ classdef InspectorPane < handle
             nT = numel(tags);
 
             % Per-card height: 16 (name row) + 60 (sparkline) + 14 (range) +
-            % 4 spacing = ~94. Use 94 to give the sparkline some breathing.
+            % spacing ≈ 94. The grid uses Scrollable='on' so 11 cards
+            % spilling past the panel height will scroll instead of
+            % squashing.
             cardH = 94;
-            nRows = nT + 4;          % header + N cards + mode + plot + spacer
+            nRows = nT + 3;          % header + N cards + mode + plot
             rowH  = cell(1, nRows);
             rowH{1} = 24;
             for k = 1:nT; rowH{1 + k} = cardH; end
             rowH{nT + 2} = 28;       % mode toggle row
             rowH{nT + 3} = 32;       % plot button
-            rowH{nT + 4} = '1x';     % bottom spacer
 
             g = uigridlayout(obj.hContent_, [nRows 1]);
             g.RowHeight   = rowH;
             g.ColumnWidth = {'1x'};
             g.Padding = [16 16 16 16]; g.RowSpacing = 6;
             g.BackgroundColor = t.WidgetBackground;
+            g.Scrollable = 'on';
 
             hHdr = uilabel(g); hHdr.Layout.Row = 1; hHdr.Layout.Column = 1;
             hHdr.Text = sprintf('%d tags selected', nT);
