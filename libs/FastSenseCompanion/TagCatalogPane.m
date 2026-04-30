@@ -210,6 +210,26 @@ classdef TagCatalogPane < handle
             keys = obj.SelectedKeys_;
         end
 
+        function tags = getSelectedTags(obj)
+        %GETSELECTEDTAGS Return the current selection as a cell of Tag handles.
+        %   Resolved against the catalog's own snapshot (AllTags_) — does NOT
+        %   round-trip through TagRegistry.get(), so the inspector is robust
+        %   against registry state changes (clear/re-register/etc.) that can
+        %   happen between catalog snapshot and click. Keys not present in
+        %   AllTags_ are silently skipped (defensive).
+            tags = {};
+            for k = 1:numel(obj.SelectedKeys_)
+                key = obj.SelectedKeys_{k};
+                for j = 1:numel(obj.AllTags_)
+                    t = obj.AllTags_{j};
+                    if strcmp(t.Key, key)
+                        tags{end+1} = t; %#ok<AGROW>
+                        break;
+                    end
+                end
+            end
+        end
+
         function deselectKey(obj, key)
         %DESELECTKEY Remove a single key from the selection set and fire TagSelectionChanged.
         %   key — char tag key (e.g., 'pressure_a')

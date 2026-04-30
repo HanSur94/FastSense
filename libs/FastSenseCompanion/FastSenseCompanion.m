@@ -408,13 +408,43 @@ classdef FastSenseCompanion < handle
         %RESOLVEINSPECTORSTATE_ Compute (state, payload) and fire InspectorStateChanged.
         %   Single notify point for the inspector. Inspector subscribes via the
         %   InspectorStateChanged listener wired in the constructor / setProject.
+        %
+        %   Resolution strategy: prefer tag HANDLES from the catalog snapshot
+        %   (CatalogPane_.getSelectedTags()) over a TagRegistry.get() round
+        %   trip. The catalog already has resolved Tag handles; using them
+        %   directly bypasses any drift between the catalog snapshot and
+        %   the TagRegistry singleton's current state (e.g. cooling.health
+        %   visible in catalog but missing from get() — a real bug seen in
+        %   the industrial plant demo). Keys without a matching handle in
+        %   the catalog snapshot are silently dropped.
             try
-                [state, payload] = inspectorResolveState( ...
-                    obj.LastInteraction_, ...
-                    obj.SelectedTagKeys_, ...
-                    obj.SelectedDashboardIdx_, ...
-                    obj.Engines_, ...
-                    obj.Registry_);
+                state   = '';
+                payload = struct();
+                tags = obj.CatalogPane_.getSelectedTags();
+                nTags = numel(tags);
+
+                if nTags == 1
+                    state   = 'tag';
+                    payload = struct('tag', tags{1}, ...
+                                     'tagKeys', {obj.SelectedTagKeys_});
+                elseif nTags >= 2
+                    state   = 'multitag';
+                    payload = struct('tags', {tags}, ...
+                                     'tagKeys', {obj.SelectedTagKeys_});
+                elseif strcmp(obj.LastInteraction_, 'dashboard') ...
+                        && isnumeric(obj.SelectedDashboardIdx_) ...
+                        && isscalar(obj.SelectedDashboardIdx_) ...
+                        && obj.SelectedDashboardIdx_ > 0 ...
+                        && obj.SelectedDashboardIdx_ <= numel(obj.Engines_)
+                    state   = 'dashboard';
+                    payload = struct('dashboard', ...
+                                     obj.Engines_{obj.SelectedDashboardIdx_});
+                else
+                    state   = 'welcome';
+                    payload = struct('nTags', nTags, ...
+                                     'nDashboards', numel(obj.Engines_));
+                end
+
                 ed = InspectorStateEventData(state, payload);
                 notify(obj, 'InspectorStateChanged', ed);
             catch err
@@ -435,9 +465,27 @@ classdef FastSenseCompanion < handle
             try
                 keys = evt.TagKeys;
                 mode = evt.Mode;
-                tags = cell(1, numel(keys));
+                % Prefer the catalog snapshot's already-resolved Tag handles
+                % over a TagRegistry.get() round-trip (catalog/registry can
+                % drift; see resolveInspectorState_).
+                allTags  = obj.CatalogPane_.getSelectedTags();
+                allKeys  = obj.SelectedTagKeys_;
+                tags     = {};
                 for k = 1:numel(keys)
-                    tags{k} = obj.Registry_.get(keys{k});
+                    matched = false;
+                    for j = 1:numel(allTags)
+                        if strcmp(allKeys{j}, keys{k})
+                            tags{end+1} = allTags{j}; %#ok<AGROW>
+                            matched = true;
+                            break;
+                        end
+                    end
+                    if ~matched
+                        % Last-resort registry fallback (still wrapped in
+                        % the outer try/catch so a missing key surfaces as
+                        % uialert instead of crashing the figure callback).
+                        tags{end+1} = obj.Registry_.get(keys{k}); %#ok<AGROW>
+                    end
                 end
                 [~, skipped] = openAdHocPlot(tags, mode, obj.Theme);
                 if ~isempty(skipped)
