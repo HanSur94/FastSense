@@ -200,6 +200,38 @@ classdef TagCatalogPane < handle
             obj.applyFilter_();
         end
 
+        function keys = getSelectedKeys(obj)
+        %GETSELECTEDKEYS Return the current selection as a cellstr of tag keys.
+        %   Used by FastSenseCompanion's TagSelectionChanged listener to read the
+        %   selection set (the event itself carries no payload).
+            keys = obj.SelectedKeys_;
+        end
+
+        function deselectKey(obj, key)
+        %DESELECTKEY Remove a single key from the selection set and fire TagSelectionChanged.
+        %   key — char tag key (e.g., 'pressure_a')
+        %   Used by InspectorPane's composer chip-deselect button to remove one tag
+        %   from the catalog's selection. Triggers the orchestrator's routing logic
+        %   and causes the inspector to re-render its chip list in place.
+        %
+        %   Throws FastSenseCompanion:invalidArgument if key is not a char.
+            try
+                if ~ischar(key)
+                    error('FastSenseCompanion:invalidArgument', ...
+                        'deselectKey: key must be char.');
+                end
+                obj.SelectedKeys_ = obj.SelectedKeys_(~strcmp(obj.SelectedKeys_, key));
+                obj.applyFilter_();
+                notify(obj, 'TagSelectionChanged');
+            catch err
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, err.message, 'FastSense Companion');
+                else
+                    rethrow(err);
+                end
+            end
+        end
+
     end
 
     methods (Access = private)
