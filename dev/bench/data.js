@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777532877383,
+  "lastUpdate": 1777538678945,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -54663,6 +54663,310 @@ window.BENCHMARK_DATA = {
           {
             "name": "Dashboard broadcastTimeRange stdmean",
             "value": 0.012,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a922abacb077a797019549ce32c7db4c3b83aae4",
+          "message": "feat(SensorThreshold): add DerivedTag — continuous (X,Y) signal from N parents (#104)\n\nImplements the 5th concrete Tag class — DerivedTag — closing the documented\ngap in the Tag hierarchy: continuous-output derivation from N parent Tags\nvia a function-handle or compute-object strategy. Mirrors MonitorTag for\nlistener wiring, lazy cache invalidation, and two-phase serialization,\ngeneralized to N parents and continuous output.\n\nPer SPEC §10 acceptance criteria 1–10:\n\n- libs/SensorThreshold/DerivedTag.m (622 lines): full implementation,\n  lazy-memoized getXY, valueAt with right-biased binary_search ZOH\n  (mirrors StateTag exactly — replaces SPEC §8 skeleton's naive\n  find(...,'last')), DFS cycle detection at construction time using\n  strcmp(Key, Key) for Octave SIGILL safety (Pitfall 3), all 11 SPEC §4\n  error IDs.\n- libs/SensorThreshold/TagRegistry.m: case 'derived' added to\n  instantiateByKind dispatch + valid-kinds error message.\n- tests/suite/TestDerivedTag.m (484 lines, 35 test methods): construction\n  (10) / computation (6) / compute-validation (2) / observer (4) /\n  serialization (6) / integration (4) / grep gates (3).\n- tests/suite/ComputeAddStub.m (54 lines): test-only object-compute\n  helper exercising the toStruct/fromStruct round-trip path.\n- docs/DerivedTag-spec.md: full specification (audience: implementer).\n\nOctave-specific fixes vs. SPEC §8 skeleton:\n- addListener: ismethod() throws on plain struct() in Octave (unlike\n  MATLAB which returns false). Guard with isobject||class-exists check\n  before ismethod to catch DerivedTag:invalidListener correctly.\n- fromStruct object-compute path: Octave does not accept\n  feval('Class.method', ...) — replaced with str2func([cls '.fromStruct']).\n  Both runtimes accept the str2func form on static methods.\n\nCross-cutting audit findings (no edits applied):\n- DashboardSerializer.m dispatches on widget-type and source-type,\n  never on Tag-kind. DerivedTag-bound widgets flow through the existing\n  'fastsense' / source.type='sensor' path transparently via\n  TagRegistry.get(name). No code change needed.\n- LiveTagPipeline.m:315 + BatchTagPipeline.m:153 narrow\n  isa(SensorTag)||isa(StateTag) checks gate raw-data ingestion via\n  RawSource. DerivedTag has no RawSource (computes from parents), so it\n  correctly does NOT participate in raw-data ingestion. Narrow-by-design;\n  not modified.\n\nVerification:\n- Full Octave 11.1.0 repo suite: 96/96 tests pass (zero regressions).\n- TestDerivedTag flat-driver on Octave: 35/35 test methods pass.\n- MISS_HIT mh_style + mh_lint: 4 file(s) analysed, everything seems fine.\n- Grep gates: 0 `methods (Abstract)` blocks, 1 `classdef DerivedTag < Tag`,\n  all 11 error IDs match SPEC §4 locked list.\n- Line-length ≤160 across all new/modified files.\n\nOut of scope (deferred to v2 per SPEC §11): Persist + DataStore caching,\nappendData streaming-tail, MinDuration debouncing logic, OnDataAvailable\ncallback, multi-output, alignParentsZOH helper.",
+          "timestamp": "2026-04-30T10:37:21+02:00",
+          "tree_id": "ac5c69458cb70b4bd8c9114e91d29a00ad4dc9e8",
+          "url": "https://github.com/HanSur94/FastSense/commit/a922abacb077a797019549ce32c7db4c3b83aae4"
+        },
+        "date": 1777538677563,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.193,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.117,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 153.169,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 1.101,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 243.508,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 1.133,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 14.591,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.994,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.965,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.179,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 174.731,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 2.004,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 250.031,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 3.72,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 14.05,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.992,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 15.408,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.221,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 195.375,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 1.239,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 254.397,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 4.064,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 14.701,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.425,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 80.239,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.678,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1275.565,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 4.2,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 246.244,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 2.911,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 14.894,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.511,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 154.695,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 6.972,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2302.507,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 82.899,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 248.943,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 1.872,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 15.028,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.785,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 789.195,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 5.867,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22084.885,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 71.039,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 285.219,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 9.162,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 15.239,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.658,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 264.28,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 22.047,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 2.568,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.364,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 0.102,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.081,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.131,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.115,
             "unit": "ms"
           }
         ]
