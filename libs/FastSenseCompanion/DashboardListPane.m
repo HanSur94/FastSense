@@ -131,7 +131,14 @@ classdef DashboardListPane < handle
                 delete(obj.DebounceTimer_);
             end
             obj.DebounceTimer_ = [];
-            delete(obj.Listeners_);
+            % delete(cellArray) is interpreted as filename-delete by
+            % MATLAB ("Name must be a text scalar"). Iterate explicitly.
+            for ii = 1:numel(obj.Listeners_)
+                lh = obj.Listeners_{ii};
+                if isobject(lh) && isvalid(lh)
+                    delete(lh);
+                end
+            end
             obj.Listeners_ = {};
         end
 
