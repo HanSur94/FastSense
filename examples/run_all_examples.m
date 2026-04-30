@@ -22,6 +22,17 @@ function run_all_examples(mode)
     addpath(fullfile(exDir, '06-webbridge'));
     addpath(fullfile(exDir, '07-advanced'));
 
+    % ====================================================================
+    % Curated CI skip-list (Phase 1015 DIFF-04 — parity-checked by
+    % scripts/check_skip_list_parity.sh against tests/test_examples_smoke.m).
+    % Format: one example name per line between the markers, sorted
+    % alphabetically. Currently empty — populated by Phase 1012 P02
+    % once tests/test_examples_smoke.m lands on this branch.
+    % --------------------------------------------------------------------
+    % SKIP_LIST_BEGIN
+    % SKIP_LIST_END
+    % ====================================================================
+
     examples = {
         'example_basic',            '10M pts, thresholds, setScale, updateData'
         'example_multi',            '5 sensors x 1M pts, resetColorIndex'
