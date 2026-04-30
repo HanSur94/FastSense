@@ -57,6 +57,9 @@ classdef FastSenseCompanion < handle
         hLogSearch_    = []   % uieditfield ('text') search box for the log
         hLogLevelDD_   = []   % uidropdown level filter ('All' | 'INFO' | 'WARN' | 'ERROR')
         LogBuffer_     = cell(0, 3)  % full {Time, Level, Message} buffer (newest first)
+        hLiveLogTable_ = []   % uitable for the live data-update log (below the events log)
+        LiveLogBuffer_ = cell(0, 4)  % {Time, Tag, +Samples, Latest} buffer (newest first)
+        LiveSampleCount_ = []  % containers.Map(tagKey -> last seen sample count)
         hLiveBtn_      = []   % Live mode toggle button (in log strip header)
         hLastUpdateLbl_ = []  % "Updated 12:34:56" label next to live button
         LiveTimer_     = []   % MATLAB timer driving inspector refresh
@@ -145,7 +148,7 @@ classdef FastSenseCompanion < handle
             % Step 8 — Root grid (2 rows: top = 3 panes, bottom = log strip)
             obj.hLayout_ = uigridlayout(obj.hFig_, [2 3]);
             obj.hLayout_.ColumnWidth   = {220, '1x', 360};
-            obj.hLayout_.RowHeight     = {'1x', 240};
+            obj.hLayout_.RowHeight     = {'1x', 360};
             obj.hLayout_.Padding       = [24 24 24 24];
             obj.hLayout_.ColumnSpacing = 16;
             obj.hLayout_.RowSpacing    = 12;
@@ -497,11 +500,14 @@ classdef FastSenseCompanion < handle
     methods (Access = private)
 
         function buildLogStrip_(obj)
-        %BUILDLOGSTRIP_ Construct header (search + level filter + updated +
-        %   live toggle) and the uitable below it.
+        %BUILDLOGSTRIP_ Construct two stacked logs: events (top) + live updates (bottom).
+        %   Events: search + level filter + updated label + live toggle in
+        %   the header, table below.
+        %   Live updates: 'Live updates' label + Clear button in header,
+        %   table {Time, Tag, +Samples, Latest} below.
             t = obj.Theme_;
-            g = uigridlayout(obj.hLogPanel_, [2 1]);
-            g.RowHeight = {28, '1x'};
+            g = uigridlayout(obj.hLogPanel_, [4 1]);
+            g.RowHeight   = {28, 150, 28, '1x'};
             g.ColumnWidth = {'1x'};
             g.Padding = [8 4 8 4];
             g.RowSpacing = 4;
@@ -572,6 +578,118 @@ classdef FastSenseCompanion < handle
             obj.LogBuffer_ = { ...
                 char(datetime('now', 'Format', 'HH:mm:ss')), 'INFO', 'Companion ready.'};
             obj.applyLogFilter_();
+
+            % --- Live updates header (label + Clear button) ---
+            gLive = uigridlayout(g, [1 2]);
+            gLive.Layout.Row = 3; gLive.Layout.Column = 1;
+            gLive.ColumnWidth = {'1x', 80};
+            gLive.RowHeight = {'1x'};
+            gLive.Padding = [0 0 0 0]; gLive.ColumnSpacing = 8;
+            gLive.BackgroundColor = t.WidgetBackground;
+
+            hLiveLbl = uilabel(gLive);
+            hLiveLbl.Layout.Row = 1; hLiveLbl.Layout.Column = 1;
+            hLiveLbl.Text = 'Live updates'; hLiveLbl.FontWeight = 'bold'; hLiveLbl.FontSize = 11;
+            hLiveLbl.FontColor = t.ForegroundColor;
+            hLiveLbl.HorizontalAlignment = 'left'; hLiveLbl.VerticalAlignment = 'center';
+
+            hLiveClear = uibutton(gLive, 'push');
+            hLiveClear.Layout.Row = 1; hLiveClear.Layout.Column = 2;
+            hLiveClear.Text = 'Clear'; hLiveClear.FontSize = 11;
+            hLiveClear.Tooltip = 'Clear the live updates log';
+            hLiveClear.ButtonPushedFcn = @(~,~) obj.clearLiveLog_();
+
+            % --- Live updates table ---
+            obj.hLiveLogTable_ = uitable(g);
+            obj.hLiveLogTable_.Layout.Row = 4; obj.hLiveLogTable_.Layout.Column = 1;
+            obj.hLiveLogTable_.ColumnName     = {'Time', 'Tag', char([8710, ' samples']), 'Latest'};
+            obj.hLiveLogTable_.ColumnWidth    = {65, 'auto', 90, 90};
+            obj.hLiveLogTable_.ColumnEditable = [false false false false];
+            obj.hLiveLogTable_.RowName        = {};
+            obj.hLiveLogTable_.FontSize       = 10;
+            obj.hLiveLogTable_.FontName       = 'Menlo';
+            obj.hLiveLogTable_.ForegroundColor = t.ForegroundColor;
+            if strcmp(obj.Theme, 'dark')
+                obj.hLiveLogTable_.BackgroundColor = [0.13 0.13 0.13; 0.20 0.20 0.20];
+            else
+                obj.hLiveLogTable_.BackgroundColor = [1.00 1.00 1.00; 0.94 0.94 0.94];
+            end
+            obj.hLiveLogTable_.Data = cell(0, 4);
+
+            % Per-tag last-seen sample count map (for delta detection).
+            obj.LiveSampleCount_ = containers.Map( ...
+                'KeyType', 'char', 'ValueType', 'double');
+        end
+
+        function clearLiveLog_(obj)
+        %CLEARLIVELOG_ Wipe the live-updates buffer + table.
+            obj.LiveLogBuffer_ = cell(0, 4);
+            if ~isempty(obj.hLiveLogTable_) && isvalid(obj.hLiveLogTable_)
+                obj.hLiveLogTable_.Data = cell(0, 4);
+            end
+        end
+
+        function addLiveLogEntry_(obj, tagKey, deltaSamples, latestY)
+        %ADDLIVELOGENTRY_ Push a row into the live-updates log.
+            if isempty(obj.hLiveLogTable_) || ~isvalid(obj.hLiveLogTable_); return; end
+            try
+                ts = char(datetime('now', 'Format', 'HH:mm:ss'));
+                latestTxt = '—';
+                if ~isempty(latestY) && isnumeric(latestY) && isfinite(latestY)
+                    a = abs(latestY);
+                    if a == 0;       latestTxt = '0';
+                    elseif a >= 1000 || a < 0.01; latestTxt = sprintf('%.3g', latestY);
+                    elseif a >= 100;  latestTxt = sprintf('%.0f', latestY);
+                    elseif a >= 10;   latestTxt = sprintf('%.2f', latestY);
+                    else;             latestTxt = sprintf('%.3f', latestY);
+                    end
+                elseif ischar(latestY) || (isstring(latestY) && isscalar(latestY))
+                    latestTxt = char(latestY);
+                end
+                row = {ts, char(tagKey), sprintf('+%d', deltaSamples), latestTxt};
+                obj.LiveLogBuffer_ = [row; obj.LiveLogBuffer_];
+                if size(obj.LiveLogBuffer_, 1) > 500
+                    obj.LiveLogBuffer_ = obj.LiveLogBuffer_(1:500, :);
+                end
+                obj.hLiveLogTable_.Data = obj.LiveLogBuffer_;
+            catch
+            end
+        end
+
+        function scanLiveTagUpdates_(obj)
+        %SCANLIVETAGUPDATES_ Walk SensorTag/StateTag in TagRegistry; log size deltas.
+            if isempty(obj.LiveSampleCount_); return; end
+            try
+                tags = TagRegistry.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'));
+            catch
+                return;
+            end
+            for k = 1:numel(tags)
+                tg = tags{k};
+                try
+                    if ~isobject(tg) || ~isvalid(tg); continue; end
+                    key = char(tg.Key);
+                    [tv, y] = tg.getXY();
+                    n = numel(tv);
+                    last = 0;
+                    if obj.LiveSampleCount_.isKey(key)
+                        last = obj.LiveSampleCount_(key);
+                    end
+                    if n > last
+                        delta = n - last;
+                        % Pull latest Y; for cellstr Y, use the label.
+                        latestY = [];
+                        if ~isempty(y)
+                            if iscell(y); latestY = y{end}; else; latestY = y(end); end
+                        end
+                        if last > 0  % skip the first-seen baseline log
+                            obj.addLiveLogEntry_(key, delta, latestY);
+                        end
+                        obj.LiveSampleCount_(key) = n;
+                    end
+                catch
+                end
+            end
         end
 
         function applyLogFilter_(obj)
@@ -637,6 +755,7 @@ classdef FastSenseCompanion < handle
                         && ismethod(obj.InspectorPane_, 'refreshLive')
                     obj.InspectorPane_.refreshLive();
                 end
+                obj.scanLiveTagUpdates_();
                 if ~isempty(obj.hLastUpdateLbl_) && isvalid(obj.hLastUpdateLbl_)
                     obj.hLastUpdateLbl_.Text = sprintf('Updated: %s', ...
                         char(datetime('now', 'Format', 'HH:mm:ss')));
