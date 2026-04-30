@@ -173,7 +173,13 @@ Plans:
   - **Gate D — Octave smoke (Pitfalls 10, 12):** `tests/test_examples_smoke.m` passes with the 3 demos either still skip-listed (initial commit) or executed (post-rewrite); `timerfindall()` empty between examples (DEMO-09); no `datetime`/`table`/`categorical`/`duration` in rewritten demos (DEMO-06)
   - **Gate E — MATLAB CI:** `run_all_tests.m` green on MATLAB R2020b; `examples.yml` matrix runs the rewritten demos green on the curated Octave widget list
   - **Gate F — skip-list parity (Pitfall 18):** `scripts/check_skip_list_parity.sh` (added in Phase 1015 via DIFF-04) returns 0 over the rewritten demos' skip-list state (DEMO-08)
-**Plans**: 1 plan (may grow to 2 if the rewrite splits naturally into "live-detection demo + viewer-from-file demo" vs. "CI grep gate + smoke parity finalization")
+**Plans**: 3 plans
+
+Plans:
+- [ ] 1016-01-PLAN.md — Rewrite example_event_detection_live.m + example_event_viewer_from_file.m as full Tag-API demos with bounded timer + NotificationService(DryRun=true) + EventViewer.fromFile (DEMO-01..03, DEMO-05..07, DEMO-09)
+- [ ] 1016-02-PLAN.md — Rebuild example_live_pipeline.m monitors map with MonitorTag values + add SKIP_LIST_BEGIN/END block to examples/run_all_examples.m (DEMO-04..09)
+- [ ] 1016-03-PLAN.md — Add Phase-1011 deleted-class regression grep seal to .github/workflows/tests.yml lint job (DIFF-01)
+
 **UI hint**: no
 
 ## Progress
@@ -196,7 +202,7 @@ Plans:
 | 1013. Dead-code deletion | v2.1 | 0/1 | Not started | - |
 | 1014. DashboardSerializer .m export Tag | v2.1 | 0/1 | Not started | - |
 | 1015. Test suite cleanup | v2.1 | 4/3 | Complete    | 2026-04-30 |
-| 1016. Examples 05-events rewrite | v2.1 | 0/1 | Not started | - |
+| 1016. Examples 05-events rewrite | v2.1 | 0/3 | Planned | - |
 
 ## Backlog
 
