@@ -143,6 +143,65 @@ jobs:
       - name: Run complexity metrics
         run: mh_metric --ci libs/ tests/ examples/
 
+      - name: Phase-1011 deleted-class regression seal (DIFF-01)
+        run: |
+          # DIFF-01 — fail CI on any new reference to the 8 classes deleted in
+          # Phase 1011 within libs/ tests/ examples/ benchmarks/. The regex uses
+          # word-boundary lookbehind so:
+          #   - `Sensor(`, `Threshold(`, etc. (legacy constructors) HIT and fail
+          #   - `SensorTag(`, `MonitorTag(`, `EventStore(`, `StateTag(`,
+          #     `CompositeTag(` (surviving v2.0 API) DO NOT hit
+          #   - `fp.addThreshold(` and `obj.addThreshold(` (surviving
+          #     FastSense plot-annotation API) DO NOT hit (`.` and `d` in
+          #     the lookbehind position are both rejected)
+          #
+          # Self-test below matches the Phase 1015 P01 idiom for the test-suite
+          # cleanup grep gate (TEST-10).
+          set -euo pipefail
+          PATTERN='(^|[^.a-zA-Z_])(Threshold|CompositeThreshold|StateChannel|ThresholdRule|Sensor|SensorRegistry|ThresholdRegistry|ExternalSensorRegistry)\('
+          echo "Searching for Phase-1011 deleted-class references..."
+          echo "Pattern: ${PATTERN}"
+          echo "Scope:   libs/ tests/ examples/ benchmarks/"
+          echo ""
+
+          # Self-test (sanity): write a temp file with a known hit + known
+          # misses and confirm the regex's discrimination before scanning the
+          # repo. Prevents silent regex drift over time.
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "${tmpdir}"' EXIT
+          printf 's = Sensor(...);\n'           > "${tmpdir}/should_hit.m"
+          printf 'fp.addThreshold(50);\n'        > "${tmpdir}/should_miss_addThreshold.m"
+          printf 's = SensorTag(...);\n'         > "${tmpdir}/should_miss_sensortag.m"
+          printf 'm = MonitorTag(...);\n'        > "${tmpdir}/should_miss_monitortag.m"
+
+          if ! grep -rE "${PATTERN}" "${tmpdir}/should_hit.m" > /dev/null; then
+              echo "REGEX SELF-TEST FAILED: should_hit.m did NOT match — regex is broken."
+              exit 2
+          fi
+          for f in should_miss_addThreshold should_miss_sensortag should_miss_monitortag; do
+              if grep -rE "${PATTERN}" "${tmpdir}/${f}.m" > /dev/null; then
+                  echo "REGEX SELF-TEST FAILED: ${f}.m DID match — false positive on surviving API."
+                  grep -rE "${PATTERN}" "${tmpdir}/${f}.m" || true
+                  exit 2
+              fi
+          done
+          echo "Regex self-test passed (1 hit + 3 misses)."
+          echo ""
+
+          # Real scan
+          if grep -rE "${PATTERN}" libs tests examples benchmarks; then
+              echo ""
+              echo "DIFF-01 GATE FAILED: re-introduction of a Phase-1011 deleted class."
+              echo "Allowed APIs: SensorTag, MonitorTag, StateTag, CompositeTag, EventStore,"
+              echo "              fp.addThreshold(...), obj.addThreshold(...)"
+              echo "Re-introducing any of: Threshold, CompositeThreshold, StateChannel,"
+              echo "                       ThresholdRule, Sensor, SensorRegistry,"
+              echo "                       ThresholdRegistry, ExternalSensorRegistry"
+              echo "is a DIFF-01 regression. Migrate to the v2.0 Tag API."
+              exit 1
+          fi
+          echo "DIFF-01 GATE PASSED: no Phase-1011 deleted-class re-introductions."
+
       - name: Skip-list parity gate (DIFF-04)
         run: bash scripts/check_skip_list_parity.sh
 
