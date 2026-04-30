@@ -167,8 +167,10 @@ classdef InspectorPane < handle
         end
 
         function renderTag_(obj)
-        %RENDERTAG_ Render single-tag detail with type-aware metadata,
-        %   thresholds, sparkline, and Open Detail button.
+        %RENDERTAG_ Render single-tag detail using a uitable for fast updates.
+        %   Layout: Title (28) + uitable ('1x') + sparkline (84) + button (32).
+        %   The uitable holds all base meta rows + type-specific rows + thresholds
+        %   inline so we build one widget instead of a dozen nested uigridlayouts.
             t = obj.Theme_;
             if ~isfield(obj.Payload_, 'tag'); return; end
             tag = obj.Payload_.tag;
@@ -176,7 +178,6 @@ classdef InspectorPane < handle
             % Identify tag kind (Sensor / State / Monitor / Composite / Tag).
             kindTxt = obj.tagKindLabel_(tag);
 
-            % Common metadata rows
             uTxt = char(8212);
             if isprop(tag, 'Units') && ~isempty(tag.Units); uTxt = char(tag.Units); end
             dTxt = char(8212);
@@ -192,87 +193,95 @@ classdef InspectorPane < handle
                 end
             end
 
-            % Type-specific rows (cell of {label, value} pairs)
             extraRows = obj.tagTypeSpecificRows_(tag);
 
-            % Compose grid: 7 base meta rows + N extra + threshold + sparkline + button
-            nMeta  = 7;
-            nExtra = numel(extraRows);
-            nRows  = nMeta + nExtra + 6 + 1;  % +gap +threshold-hdr +threshold-content +gap +spark +gap +button +bottom-spacer
-            rowH   = cell(1, nRows);
-            for r = 1:(nMeta + nExtra); rowH{r} = 20; end
-            r = nMeta + nExtra + 1; rowH{r} = 8;       % gap
-            r = r + 1; rowH{r} = 16;                    % threshold header
-            r = r + 1; rowH{r} = 'fit';                 % threshold content
-            r = r + 1; rowH{r} = 8;                     % gap
-            r = r + 1; rowH{r} = 84;                    % sparkline
-            r = r + 1; rowH{r} = 32;                    % open detail button
-            r = r + 1; rowH{r} = '1x';                  % bottom spacer (pins content to top)
-
-            g = uigridlayout(obj.hContent_, [nRows 1]);
-            g.RowHeight = rowH; g.ColumnWidth = {'1x'};
-            g.Padding = [16 16 16 16]; g.RowSpacing = 4;
-            g.BackgroundColor = t.WidgetBackground;
-
-            % Base meta rows (always shown)
-            obj.buildMetaRow_(g, 1, 'Key',         char(tag.Key));
-            obj.buildMetaRow_(g, 2, 'Name',        char(tag.Name));
-            obj.buildMetaRow_(g, 3, 'Type',        kindTxt);
-            obj.buildMetaRow_(g, 4, 'Units',       uTxt);
-            obj.buildMetaRow_(g, 5, 'Criticality', cTxt);
-            obj.buildMetaRow_(g, 6, 'Labels',      lblTxt);
-            obj.buildMetaRow_(g, 7, 'Description', dTxt);
-
-            % Type-specific rows (CompositeTag children, MonitorTag trip, etc.)
-            for k = 1:nExtra
-                obj.buildMetaRow_(g, nMeta + k, extraRows{k}{1}, extraRows{k}{2});
+            % v2.0 thresholds = MonitorTags whose Parent.Key matches the
+            % selected sensor. SensorTag.Thresholds is a back-compat stub
+            % returning {}; the canonical lookup walks TagRegistry.
+            rules = {};
+            if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
+                try
+                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
+                        && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
+                        && strcmp(tt.Parent.Key, tag.Key));
+                catch
+                    rules = {};
+                end
+            elseif isa(tag, 'MonitorTag')
+                rules = {tag};
             end
 
-            % Thresholds section
-            rThdr = nMeta + nExtra + 2;  % skip the gap row
-            hHdr = uilabel(g); hHdr.Layout.Row = rThdr; hHdr.Layout.Column = 1;
-            hHdr.Text = 'Thresholds'; hHdr.FontSize = 11; hHdr.FontWeight = 'bold';
-            hHdr.FontColor = t.ForegroundColor;
-
-            rTcontent = rThdr + 1;
-            hTh = uipanel(g); hTh.Layout.Row = rTcontent; hTh.Layout.Column = 1;
-            hTh.BorderType = 'none'; hTh.BackgroundColor = t.WidgetBackground;
-            rules = {};
-            if isa(tag, 'SensorTag') || isa(tag, 'MonitorTag')
-                if isprop(tag, 'Thresholds'); rules = tag.Thresholds; end
+            % Build table data: {Field, Value} cell.
+            data = { ...
+                'Key',         char(tag.Key); ...
+                'Type',        kindTxt; ...
+                'Units',       uTxt; ...
+                'Criticality', cTxt; ...
+                'Labels',      lblTxt; ...
+                'Description', dTxt};
+            for k = 1:numel(extraRows)
+                data(end+1, :) = extraRows{k}; %#ok<AGROW>
             end
             if isempty(rules)
-                lb = uilabel(hTh); lb.Text = 'No thresholds defined'; lb.FontSize = 11;
-                lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'left';
-                lb.VerticalAlignment = 'center';
+                data(end+1, :) = {'Thresholds', 'None'}; %#ok<AGROW>
             else
-                rg = uigridlayout(hTh, [numel(rules) 1]);
-                rg.RowHeight = repmat({20}, 1, numel(rules)); rg.ColumnWidth = {'1x'};
-                rg.Padding = [0 0 0 0]; rg.RowSpacing = 4; rg.BackgroundColor = t.WidgetBackground;
+                data(end+1, :) = {'Thresholds', sprintf('%d', numel(rules))}; %#ok<AGROW>
                 for i = 1:numel(rules)
                     rule = rules{i};
-                    lb = uilabel(rg); lb.Layout.Row = i; lb.Layout.Column = 1;
+                    label = sprintf('  %s', char(8226));  % bullet
                     try
-                        lb.Text = sprintf('%s: %s (%s)', char(rule.Name), char(rule.Condition), char(rule.Criticality));
+                        if isa(rule, 'MonitorTag')
+                            critTxt = char(8212);
+                            if isprop(rule, 'Criticality') && ~isempty(rule.Criticality)
+                                critTxt = char(rule.Criticality);
+                            end
+                            nameTxt = char(rule.Key);
+                            if isprop(rule, 'Name') && ~isempty(rule.Name); nameTxt = char(rule.Name); end
+                            valTxt = sprintf('%s (%s)', nameTxt, critTxt);
+                        else
+                            valTxt = sprintf('%s: %s (%s)', char(rule.Name), char(rule.Condition), char(rule.Criticality));
+                        end
                     catch
-                        lb.Text = char(8212);
+                        valTxt = char(8212);
                     end
-                    lb.FontSize = 11; lb.FontColor = t.ForegroundColor; lb.WordWrap = 'on';
+                    data(end+1, :) = {label, valTxt}; %#ok<AGROW>
                 end
             end
 
-            % Sparkline (skips its row gracefully via 'No data' fallback)
-            rSpark = rTcontent + 2;  % skip gap
+            % Outer 4-row grid: title + table + sparkline + button.
+            g = uigridlayout(obj.hContent_, [4 1]);
+            g.RowHeight   = {28, '1x', 84, 32};
+            g.ColumnWidth = {'1x'};
+            g.Padding     = [16 16 16 16]; g.RowSpacing = 8;
+            g.BackgroundColor = t.WidgetBackground;
+
+            lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
+            lt.Text = char(tag.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
+            lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
+            lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
+
+            tbl = uitable(g);
+            tbl.Layout.Row = 2; tbl.Layout.Column = 1;
+            tbl.Data = data;
+            tbl.ColumnName = {'Field', 'Value'};
+            tbl.RowName    = {};
+            tbl.ColumnWidth = {110, 'auto'};
+            tbl.ColumnEditable = [false false];
+            tbl.BackgroundColor = t.WidgetBackground;
+            tbl.ForegroundColor = t.ForegroundColor;
+            tbl.FontSize = 11;
+
             obj.hSparkPanel_ = uipanel(g);
-            obj.hSparkPanel_.Layout.Row = rSpark; obj.hSparkPanel_.Layout.Column = 1;
+            obj.hSparkPanel_.Layout.Row = 3; obj.hSparkPanel_.Layout.Column = 1;
             obj.hSparkPanel_.BackgroundColor = t.WidgetBackground;
             obj.hSparkPanel_.BorderColor = t.WidgetBorderColor; obj.hSparkPanel_.BorderType = 'line';
+            % Flush so the table paints immediately; axes-based sparkline
+            % construction is the slowest part of this render.
+            drawnow limitrate;
             obj.renderSparkline_(tag);
 
-            % Open Detail button
-            rBtn = rSpark + 1;
             obj.hOpenDetail_ = uibutton(g, 'push');
-            obj.hOpenDetail_.Layout.Row = rBtn; obj.hOpenDetail_.Layout.Column = 1;
+            obj.hOpenDetail_.Layout.Row = 4; obj.hOpenDetail_.Layout.Column = 1;
             obj.hOpenDetail_.Text = 'Open Detail'; obj.hOpenDetail_.FontSize = 11;
             obj.hOpenDetail_.FontWeight = 'normal'; obj.hOpenDetail_.FontColor = t.ForegroundColor;
             obj.hOpenDetail_.BackgroundColor = t.WidgetBorderColor;
@@ -396,20 +405,33 @@ classdef InspectorPane < handle
             try
                 sd = SensorDetailPlot(tag);
                 sd.render();
+                obj.log_('info', sprintf('Opened detail plot: %s', char(tag.Key)));
             catch ME
+                obj.log_('error', sprintf('Open detail failed (%s): %s', char(tag.Key), ME.message));
                 uialert(obj.hFig_, sprintf('Failed to open detail: %s', ME.message), ...
                     'FastSense Companion', 'Icon', 'error');
             end
         end
 
+        function log_(obj, level, msg)
+        %LOG_ Forward to orchestrator's log strip; safe if orchestrator is gone.
+            try
+                if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) ...
+                        && ismethod(obj.Orchestrator_, 'addLogEntry')
+                    obj.Orchestrator_.addLogEntry(level, msg);
+                end
+            catch
+            end
+        end
+
         function renderDashboard_(obj)
-        %RENDERDASHBOARD_ Render dashboard summary with full metadata, page
-        %   list, referenced tags, Play/Pause buttons, and Open Dashboard CTA.
+        %RENDERDASHBOARD_ Render dashboard summary using a uitable for fast updates.
+        %   Layout: Title (28) + uitable ('1x') + action button row (32).
+        %   Meta rows + Tags list are inlined into the same uitable.
             t = obj.Theme_;
             if ~isfield(obj.Payload_, 'dashboard'); return; end
             db = obj.Payload_.dashboard;
 
-            % Compute meta values
             wcRoot = numel(db.Widgets);
             wcPages = 0;
             for pp = 1:numel(db.Pages); wcPages = wcPages + numel(db.Pages{pp}.Widgets); end
@@ -437,63 +459,47 @@ classdef InspectorPane < handle
 
             bindings = obj.collectDashboardTagBindings_(db);
 
-            % Compose grid (variable rows depending on bindings count)
-            nMeta = 7;  % Title, gap, Widgets, Pages, Theme, Live interval, Live
-            nRows = nMeta + 4 + 1;  % +Tags hdr +Tags content +gap +button row +bottom spacer
-            rowH = cell(1, nRows);
-            rowH{1} = 28;       % Title
-            rowH{2} = 8;        % gap
-            for r = 3:7; rowH{r} = 20; end
-            rowH{8} = 16;       % Tags header
-            rowH{9} = 'fit';    % Tags content
-            rowH{10} = 8;       % gap
-            rowH{11} = 32;      % action buttons (Play / Pause / Open)
-            rowH{12} = '1x';    % bottom spacer (pins content to top)
+            statusTxt = sprintf('Idle %s rendered: %s', char(183), renderedLabel);
+            if db.IsLive
+                statusTxt = sprintf('Live %s rendered: %s', char(183), renderedLabel);
+            end
 
-            g = uigridlayout(obj.hContent_, [nRows 1]);
-            g.RowHeight = rowH; g.ColumnWidth = {'1x'};
-            g.Padding = [16 16 16 16]; g.RowSpacing = 4;
+            data = { ...
+                'Widgets',       sprintf('%d (root: %d, paged: %d)', wcTotal, wcRoot, wcPages); ...
+                'Pages',         pageLabel; ...
+                'Theme',         themeLabel; ...
+                'Live interval', sprintf('%g s', db.LiveInterval); ...
+                'Status',        statusTxt};
+            data(end+1, :) = {sprintf('Tags (%d)', numel(bindings)), ''};
+            for i = 1:numel(bindings)
+                data(end+1, :) = {sprintf('  %s', char(8226)), char(bindings{i})}; %#ok<AGROW>
+            end
+
+            % Outer 3-row grid: title + table + action row.
+            g = uigridlayout(obj.hContent_, [3 1]);
+            g.RowHeight   = {28, '1x', 32};
+            g.ColumnWidth = {'1x'};
+            g.Padding     = [16 16 16 16]; g.RowSpacing = 8;
             g.BackgroundColor = t.WidgetBackground;
 
-            % Title
             lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
             lt.Text = char(db.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
             lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
             lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
 
-            % Meta rows
-            obj.buildMetaRow_(g, 3, 'Widgets',       sprintf('%d (root: %d, paged: %d)', wcTotal, wcRoot, wcPages));
-            obj.buildMetaRow_(g, 4, 'Pages',         pageLabel);
-            obj.buildMetaRow_(g, 5, 'Theme',         themeLabel);
-            obj.buildMetaRow_(g, 6, 'Live interval', sprintf('%g s', db.LiveInterval));
-            if db.IsLive
-                obj.buildMetaRow_(g, 7, 'Status', sprintf('Live %s rendered: %s', char(183), renderedLabel));
-            else
-                obj.buildMetaRow_(g, 7, 'Status', sprintf('Idle %s rendered: %s', char(183), renderedLabel));
-            end
+            tbl = uitable(g);
+            tbl.Layout.Row = 2; tbl.Layout.Column = 1;
+            tbl.Data = data;
+            tbl.ColumnName = {'Field', 'Value'};
+            tbl.RowName    = {};
+            tbl.ColumnWidth = {110, 'auto'};
+            tbl.ColumnEditable = [false false];
+            tbl.BackgroundColor = t.WidgetBackground;
+            tbl.ForegroundColor = t.ForegroundColor;
+            tbl.FontSize = 11;
 
-            % Tags section
-            lh = uilabel(g); lh.Layout.Row = 8; lh.Layout.Column = 1;
-            lh.Text = sprintf('Tags (%d)', numel(bindings));
-            lh.FontSize = 11; lh.FontWeight = 'bold'; lh.FontColor = t.ForegroundColor;
-            hTg = uipanel(g); hTg.Layout.Row = 9; hTg.Layout.Column = 1;
-            hTg.BorderType = 'none'; hTg.BackgroundColor = t.WidgetBackground;
-            if isempty(bindings)
-                lb = uilabel(hTg); lb.Text = 'No tag bindings'; lb.FontSize = 11;
-                lb.FontColor = t.PlaceholderTextColor; lb.HorizontalAlignment = 'center';
-                lb.VerticalAlignment = 'center';
-            else
-                tg = uigridlayout(hTg, [numel(bindings) 1]);
-                tg.RowHeight = repmat({20}, 1, numel(bindings)); tg.ColumnWidth = {'1x'};
-                tg.Padding = [0 0 0 0]; tg.RowSpacing = 4; tg.BackgroundColor = t.WidgetBackground;
-                for i = 1:numel(bindings)
-                    lb = uilabel(tg); lb.Layout.Row = i; lb.Layout.Column = 1;
-                    lb.Text = char(bindings{i}); lb.FontSize = 11; lb.FontColor = t.ForegroundColor;
-                end
-            end
-
-            % Action button row (Play | Pause | Open Dashboard)
-            bg = uigridlayout(g, [1 3]); bg.Layout.Row = 11; bg.Layout.Column = 1;
+            % Action button row (Play | Pause | Open)
+            bg = uigridlayout(g, [1 3]); bg.Layout.Row = 3; bg.Layout.Column = 1;
             bg.ColumnWidth = {'1x', '1x', '1x'}; bg.RowHeight = {'1x'};
             bg.Padding = [0 0 0 0]; bg.ColumnSpacing = 8; bg.BackgroundColor = t.WidgetBackground;
 
@@ -530,14 +536,21 @@ classdef InspectorPane < handle
         %   figure to front. Mirrors DashboardListPane.onOpenClicked_ behavior so
         %   the inspector's Open works identically to the row's Open button.
             try
-                if isempty(db.hFigure) || ~ishandle(db.hFigure)
+                wasRendered = ~isempty(db.hFigure) && ishandle(db.hFigure);
+                if ~wasRendered
                     db.render();
                 end
                 if ~isempty(db.hFigure) && ishandle(db.hFigure)
-                    figure(db.hFigure);  % bring to front / focus
+                    figure(db.hFigure);
                 end
-                obj.renderState_();  % refresh the "rendered: Yes/No" status row
+                obj.renderState_();
+                if wasRendered
+                    obj.log_('info', sprintf('Focused dashboard: %s', char(db.Name)));
+                else
+                    obj.log_('info', sprintf('Rendered dashboard: %s', char(db.Name)));
+                end
             catch ME
+                obj.log_('error', sprintf('Open dashboard failed (%s): %s', char(db.Name), ME.message));
                 uialert(obj.hFig_, ...
                     sprintf('Failed to open dashboard "%s": %s', char(db.Name), ME.message), ...
                     'FastSense Companion', 'Icon', 'error');
@@ -587,7 +600,9 @@ classdef InspectorPane < handle
         %ONPLAY_ Call dashboard.startLive() then re-render to update Enable states.
             try
                 dashboard.startLive(); obj.renderState_();
+                obj.log_('info', sprintf('Live started: %s', char(dashboard.Name)));
             catch ME
+                obj.log_('error', sprintf('Start live failed: %s', ME.message));
                 uialert(obj.hFig_, sprintf('Failed to start live: %s', ME.message), ...
                     'FastSense Companion', 'Icon', 'error');
             end
@@ -597,7 +612,9 @@ classdef InspectorPane < handle
         %ONPAUSE_ Call dashboard.stopLive() then re-render to update Enable states.
             try
                 dashboard.stopLive(); obj.renderState_();
+                obj.log_('info', sprintf('Live paused: %s', char(dashboard.Name)));
             catch ME
+                obj.log_('error', sprintf('Pause failed: %s', ME.message));
                 uialert(obj.hFig_, sprintf('Failed to pause: %s', ME.message), ...
                     'FastSense Companion', 'Icon', 'error');
             end
@@ -708,7 +725,10 @@ classdef InspectorPane < handle
             try
                 ed = AdHocPlotEventData(obj.CurrentTagKeys_, obj.ComposerMode_);
                 notify(obj.Orchestrator_, 'OpenAdHocPlotRequested', ed);
+                obj.log_('info', sprintf('Plot requested: %d tag(s) [%s]', ...
+                    numel(obj.CurrentTagKeys_), obj.ComposerMode_));
             catch ME
+                obj.log_('error', sprintf('Plot request failed: %s', ME.message));
                 uialert(obj.hFig_, sprintf('Failed to request plot: %s', ME.message), ...
                     'FastSense Companion', 'Icon', 'error');
             end
