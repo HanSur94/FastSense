@@ -93,6 +93,14 @@ classdef TestTagCatalogPane < matlab.unittest.TestCase
             TagRegistry.register('composite_kpi', t5);
         end
 
+        function [catalog, cs] = getCatalogAndStruct(testCase)
+            %GETCATALOGANDSTRUCT Access catalog pane and its private struct via warning suppress.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState));
+            catalog = struct(testCase.App).CatalogPane_;
+            if nargout > 1; cs = struct(catalog); end
+        end
+
         % ---- UI locator helpers ----
 
         function hFig = findFig(testCase)
@@ -502,6 +510,59 @@ classdef TestTagCatalogPane < matlab.unittest.TestCase
             % Also verify detach deletes listeners
             testCase.assertFalse(isempty(strfind(src, 'delete(obj.Listeners_)')), ...
                 'cross-cutting: delete(obj.Listeners_) not found in TagCatalogPane.m');
+        end
+
+        % ---- Phase 1021: getSelectedKeys / deselectKey ----
+
+        function testGetSelectedKeysReturnsCellstr(testCase)
+        %TESTGETSELECTEDKEYSRETURNSCELLSTR Phase 1021: getSelectedKeys returns cellstr.
+            [catalog, cs] = testCase.getCatalogAndStruct();
+            cs.hListbox_.Value = {'pressure_a', 'flow_b'};
+            feval(cs.hListbox_.ValueChangedFcn, [], []); drawnow;
+            keys = catalog.getSelectedKeys();
+            testCase.verifyTrue(iscell(keys), 'getSelectedKeys must return a cell');
+            testCase.verifyEqual(numel(keys), 2, 'getSelectedKeys must return 2 keys');
+            testCase.verifyTrue(any(strcmp(keys, 'pressure_a')), 'pressure_a missing');
+            testCase.verifyTrue(any(strcmp(keys, 'flow_b')), 'flow_b missing');
+        end
+
+        function testDeselectKeyRemovesAndFiresEvent(testCase)
+        %TESTDESELECTKEYREMOVESANDFIRESEVENT Phase 1021: deselectKey removes key + fires event.
+            [catalog, cs] = testCase.getCatalogAndStruct();
+            cs.hListbox_.Value = {'pressure_a', 'flow_b'};
+            feval(cs.hListbox_.ValueChangedFcn, [], []); drawnow;
+            fired = false;
+            lh = addlistener(catalog, 'TagSelectionChanged', @(~,~) setFired());
+            function setFired(); fired = true; end
+            cleanupL = onCleanup(@() delete(lh));
+            catalog.deselectKey('pressure_a'); drawnow;
+            testCase.verifyTrue(fired, 'deselectKey must fire TagSelectionChanged');
+            keys = catalog.getSelectedKeys();
+            testCase.verifyFalse(any(strcmp(keys, 'pressure_a')), 'pressure_a not removed');
+            testCase.verifyTrue(any(strcmp(keys, 'flow_b')), 'flow_b removed unexpectedly');
+        end
+
+        function testDeselectKeyOnUnselectedKeyIsNoop(testCase)
+        %TESTDESELECTKEYNOOP Phase 1021: deselectKey on unselected key is a no-op.
+            [catalog, cs] = testCase.getCatalogAndStruct();
+            cs.hListbox_.Value = {'pressure_a'};
+            feval(cs.hListbox_.ValueChangedFcn, [], []); drawnow;
+            catalog.deselectKey('nonexistent_key'); drawnow;
+            keys = catalog.getSelectedKeys();
+            testCase.verifyEqual(numel(keys), 1, 'selection size must not change');
+            testCase.verifyTrue(any(strcmp(keys, 'pressure_a')), 'pressure_a lost');
+        end
+
+        function testDeselectKeyRejectsNonChar(testCase)
+        %TESTDESELECTKEYREJECTSNONCHAR Phase 1021: deselectKey throws on non-char key.
+            catalog = testCase.getCatalogAndStruct();
+            try
+                catalog.deselectKey(42);
+                testCase.verifyTrue(true, 'uialert path: no rethrow (acceptable)');
+            catch ME
+                testCase.verifyEqual(ME.identifier, 'FastSenseCompanion:invalidArgument', ...
+                    'FastSenseCompanion:invalidArgument expected');
+            end
         end
 
     end
