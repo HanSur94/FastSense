@@ -27,19 +27,40 @@ function [state, payload] = inspectorResolveState(lastInteraction, selectedTagKe
 
     % Tag-count-wins routing (BEFORE checking lastInteraction)
     if nTags == 1
-        state   = 'tag';
-        tagH    = tagRegistry.get(selectedTagKeys{1});
-        payload = struct('tag', tagH, 'tagKeys', {selectedTagKeys});
-        return;
+        try
+            tagH    = tagRegistry.get(selectedTagKeys{1});
+            state   = 'tag';
+            payload = struct('tag', tagH, 'tagKeys', {selectedTagKeys});
+            return;
+        catch lookupErr %#ok<NASGU>
+            % Diagnostic: surface key + available keys to console so the
+            % discrepancy between catalog snapshot and registry singleton
+            % becomes debuggable. Fall through to welcome with a hint.
+            fprintf(2, ['[FastSenseCompanion] inspectorResolveState: failed to ', ...
+                'resolve key ''%s''. Falling back to welcome state.\n'], ...
+                selectedTagKeys{1});
+            try
+                avail = TagRegistry.find(@(t) true);
+                fprintf(2, '  Registry has %d tags. First few keys:', numel(avail));
+                for jj = 1:min(5, numel(avail)); fprintf(2, ' ''%s''', avail{jj}.Key); end
+                fprintf(2, '\n');
+            catch
+            end
+        end
     end
     if nTags >= 2
-        state    = 'multitag';
-        tagsCell = cell(1, nTags);
-        for ii = 1:nTags
-            tagsCell{ii} = tagRegistry.get(selectedTagKeys{ii});
+        try
+            tagsCell = cell(1, nTags);
+            for ii = 1:nTags
+                tagsCell{ii} = tagRegistry.get(selectedTagKeys{ii});
+            end
+            state   = 'multitag';
+            payload = struct('tags', {tagsCell}, 'tagKeys', {selectedTagKeys});
+            return;
+        catch
+            fprintf(2, ['[FastSenseCompanion] inspectorResolveState: failed to ', ...
+                'resolve %d-tag selection. Falling back to welcome.\n'], nTags);
         end
-        payload = struct('tags', {tagsCell}, 'tagKeys', {selectedTagKeys});
-        return;
     end
 
     % Dashboard routing (only when no tags selected)
