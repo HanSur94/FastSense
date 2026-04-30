@@ -27,7 +27,9 @@ classdef InspectorPane < handle
         hRangeLbl_      = []   % "Range: last X min (max. 30 min)" label under sparkline
         SparkWindowSec_ = 1800 % sparkline horizon — last 30 minutes of data
         hTagTable_      = []   % uitable in tag state (live mode updates Data only)
+        hTagTitle_      = []   % uilabel for the tag-name title (in-place update)
         hDashTable_     = []   % uitable in dashboard state (live mode updates Data only)
+        hDashTitle_     = []   % uilabel for the dashboard-name title (in-place update)
         RenderedTagKey_   = '' % key of tag last full-rendered (live skips when matches)
         RenderedDashName_ = '' % name of dashboard last full-rendered
         hOpenDetail_    = []   % "Open Detail" button (tag state only)
@@ -161,15 +163,97 @@ classdef InspectorPane < handle
         %SETSTATE Public mutator called by InspectorStateChanged listener.
         %   state   - char ('welcome'|'tag'|'multitag'|'dashboard')
         %   payload - struct (shape per inspectorResolveState contract)
+        %
+        %   Fast path: when the state hasn't changed and the previous render's
+        %   widget scaffolding is still valid, switch tags / dashboards by
+        %   updating Data/Text/XData in place instead of tearing down and
+        %   rebuilding the layout. Roughly 5-10x faster for tag clicks.
             try
                 if ~strcmp(state, 'multitag') && strcmp(obj.State_, 'multitag')
                     obj.ComposerMode_ = 'Overlay';
                 end
+                prevState  = obj.State_;
                 obj.State_   = state;
                 obj.Payload_ = payload;
+                if obj.tryFastSwitch_(prevState, state); return; end
                 obj.renderState_();
             catch err
                 obj.alertOrLog_(err);
+            end
+        end
+
+        function ok = tryFastSwitch_(obj, prevState, state)
+        %TRYFASTSWITCH_ Update existing widgets in place if shape matches.
+        %   Returns true on success (caller skips renderState_).
+            ok = false;
+            if ~strcmp(prevState, state); return; end
+            switch state
+                case 'tag'
+                    if isempty(obj.hTagTable_) || ~isvalid(obj.hTagTable_); return; end
+                    if ~isfield(obj.Payload_, 'tag'); return; end
+                    tag = obj.Payload_.tag;
+                    if ~isobject(tag) || ~isvalid(tag); return; end
+                    obj.updateTagInPlace_(tag);
+                    ok = true;
+                case 'dashboard'
+                    if isempty(obj.hDashTable_) || ~isvalid(obj.hDashTable_); return; end
+                    if ~isfield(obj.Payload_, 'dashboard'); return; end
+                    db = obj.Payload_.dashboard;
+                    if ~isobject(db) || ~isvalid(db); return; end
+                    obj.updateDashboardInPlace_(db);
+                    ok = true;
+                % multitag: # of cards may change → fall through to full render.
+                % welcome: no dynamic content → no benefit from fast path.
+            end
+        end
+
+        function updateTagInPlace_(obj, tag)
+        %UPDATETAGINPLACE_ Mutate the existing tag-inspector widgets to a new tag.
+            try
+                if ~isempty(obj.hTagTitle_) && isvalid(obj.hTagTitle_)
+                    obj.hTagTitle_.Text = char(tag.Name);
+                end
+                if ~isempty(obj.hTagTable_) && isvalid(obj.hTagTable_)
+                    obj.hTagTable_.Data = obj.buildTagTableData_(tag);
+                end
+                obj.refreshSparklineInPlace_(tag);
+                if ~isempty(obj.hOpenDetail_) && isvalid(obj.hOpenDetail_)
+                    obj.hOpenDetail_.Tooltip = sprintf( ...
+                        'Open SensorDetailPlot for "%s"', char(tag.Name));
+                    obj.hOpenDetail_.ButtonPushedFcn = @(~,~) obj.onOpenDetail_(tag);
+                end
+                obj.RenderedTagKey_ = char(tag.Key);
+            catch
+                % Fall back to full render via the caller.
+                obj.renderState_();
+            end
+        end
+
+        function updateDashboardInPlace_(obj, db)
+        %UPDATEDASHBOARDINPLACE_ Mutate the existing dashboard-inspector widgets.
+            try
+                if ~isempty(obj.hDashTitle_) && isvalid(obj.hDashTitle_)
+                    obj.hDashTitle_.Text = char(db.Name);
+                end
+                if ~isempty(obj.hDashTable_) && isvalid(obj.hDashTable_)
+                    obj.hDashTable_.Data = obj.buildDashTableData_(db);
+                end
+                if ~isempty(obj.hPlayBtn_) && isvalid(obj.hPlayBtn_)
+                    obj.hPlayBtn_.ButtonPushedFcn = @(~,~) obj.onPlay_(db);
+                    if db.IsLive; obj.hPlayBtn_.Enable = 'off'; else; obj.hPlayBtn_.Enable = 'on'; end
+                end
+                if ~isempty(obj.hPauseBtn_) && isvalid(obj.hPauseBtn_)
+                    obj.hPauseBtn_.ButtonPushedFcn = @(~,~) obj.onPause_(db);
+                    if db.IsLive; obj.hPauseBtn_.Enable = 'on'; else; obj.hPauseBtn_.Enable = 'off'; end
+                end
+                if ~isempty(obj.hOpenDetail_) && isvalid(obj.hOpenDetail_)
+                    obj.hOpenDetail_.Tooltip = sprintf( ...
+                        'Open / focus the "%s" figure window', char(db.Name));
+                    obj.hOpenDetail_.ButtonPushedFcn = @(~,~) obj.onOpenDashboard_(db);
+                end
+                obj.RenderedDashName_ = char(db.Name);
+            catch
+                obj.renderState_();
             end
         end
 
@@ -221,6 +305,7 @@ classdef InspectorPane < handle
                 obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
                 obj.hChipsGrid_  = []; obj.hModeOverlay_ = []; obj.hModeLinked_ = [];
                 obj.hPlotBtn_    = []; obj.hTagTable_ = []; obj.hDashTable_ = [];
+                obj.hTagTitle_ = []; obj.hDashTitle_ = [];
                 obj.RenderedTagKey_ = ''; obj.RenderedDashName_ = '';
                 obj.hMultiSparkPanels_ = {}; obj.hMultiSparkAxes_ = {};
                 obj.hMultiSparkLines_  = {}; obj.hMultiRangeLbls_  = {};
@@ -289,6 +374,7 @@ classdef InspectorPane < handle
             lt.Text = char(tag.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
             lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
             lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
+            obj.hTagTitle_ = lt;
 
             tbl = uitable(g);
             tbl.Layout.Row = 2; tbl.Layout.Column = 1;
@@ -731,6 +817,7 @@ classdef InspectorPane < handle
             lt.Text = char(db.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
             lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
             lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
+            obj.hDashTitle_ = lt;
 
             tbl = uitable(g);
             tbl.Layout.Row = 2; tbl.Layout.Column = 1;
