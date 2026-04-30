@@ -163,7 +163,15 @@ classdef InspectorPane < handle
         %RENDERSTATE_ Clear hContent_.Children and dispatch to per-state renderer.
             try
                 if isempty(obj.hContent_) || ~isvalid(obj.hContent_); return; end
-                delete(obj.hContent_.Children);
+                % Defensive iterate-and-delete. delete(arrayOfHandles) is
+                % normally fine, but if the live tick re-entered renderState_
+                % mid-build (via drawnow processing callbacks), an orphan
+                % grid could survive a single batched delete. Iterate
+                % reverse to keep indices stable as siblings drop off.
+                kids = obj.hContent_.Children;
+                for i = numel(kids):-1:1
+                    try; delete(kids(i)); catch; end
+                end
                 obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hSparkLine_ = [];
                 obj.hRangeLbl_  = [];
                 obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
@@ -265,7 +273,11 @@ classdef InspectorPane < handle
 
             % Flush so the table paints immediately; axes-based sparkline
             % construction is the slowest part of this render.
-            drawnow limitrate;
+            % Use 'nocallbacks' (NOT 'limitrate') — limitrate processes
+            % queued timer callbacks, which lets the live tick re-enter
+            % renderState_ mid-build and produce a duplicate inspector
+            % card (visible bug). 'nocallbacks' just flushes paint.
+            drawnow nocallbacks;
             obj.renderSparkline_(tag);
 
             obj.hOpenDetail_ = uibutton(g, 'push');

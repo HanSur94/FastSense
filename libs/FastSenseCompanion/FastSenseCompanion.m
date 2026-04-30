@@ -54,6 +54,9 @@ classdef FastSenseCompanion < handle
         hRightPanel_   = []   % right pane uipanel
         hLogPanel_     = []   % bottom log uipanel (full-width)
         hLogTable_     = []   % uitable inside hLogPanel_ (alternating row colors)
+        hLogSearch_    = []   % uieditfield ('text') search box for the log
+        hLogLevelDD_   = []   % uidropdown level filter ('All' | 'INFO' | 'WARN' | 'ERROR')
+        LogBuffer_     = cell(0, 3)  % full {Time, Level, Message} buffer (newest first)
         hLiveBtn_      = []   % Live mode toggle button (in log strip header)
         hLastUpdateLbl_ = []  % "Updated 12:34:56" label next to live button
         LiveTimer_     = []   % MATLAB timer driving inspector refresh
@@ -142,7 +145,7 @@ classdef FastSenseCompanion < handle
             % Step 8 — Root grid (2 rows: top = 3 panes, bottom = log strip)
             obj.hLayout_ = uigridlayout(obj.hFig_, [2 3]);
             obj.hLayout_.ColumnWidth   = {220, '1x', 360};
-            obj.hLayout_.RowHeight     = {'1x', 140};
+            obj.hLayout_.RowHeight     = {'1x', 240};
             obj.hLayout_.Padding       = [24 24 24 24];
             obj.hLayout_.ColumnSpacing = 16;
             obj.hLayout_.RowSpacing    = 12;
@@ -456,21 +459,23 @@ classdef FastSenseCompanion < handle
         end
 
         function addLogEntry(obj, level, msg)
-        %ADDLOGENTRY Append a timestamped log line to the bottom log table.
+        %ADDLOGENTRY Append a timestamped log line.
         %   level — 'info' | 'warn' | 'error' (any short tag accepted)
         %   msg   — char/string. Anything else is sprintf'd through %s.
-        %   Newest row is at the top so the user always sees the latest
-        %   without scrolling. Buffer capped at 500 rows.
+        %   Pushes onto LogBuffer_ (full history, newest first, capped at
+        %   500), then re-applies the level + text filter to update the
+        %   visible uitable rows.
             if isempty(obj.hLogTable_) || ~isvalid(obj.hLogTable_); return; end
             try
                 ts = char(datetime('now', 'Format', 'HH:mm:ss'));
                 if isstring(msg) && isscalar(msg); msg = char(msg); end
                 if ~ischar(msg); msg = sprintf('%s', msg); end
-                cur = obj.hLogTable_.Data;
-                if isempty(cur); cur = cell(0, 3); end
-                cur = [{ts, upper(char(level)), msg}; cur];
-                if size(cur, 1) > 500; cur = cur(1:500, :); end
-                obj.hLogTable_.Data = cur;
+                row = {ts, upper(char(level)), msg};
+                obj.LogBuffer_ = [row; obj.LogBuffer_];
+                if size(obj.LogBuffer_, 1) > 500
+                    obj.LogBuffer_ = obj.LogBuffer_(1:500, :);
+                end
+                obj.applyLogFilter_();
             catch
                 % Logging must never crash the UI.
             end
@@ -492,19 +497,20 @@ classdef FastSenseCompanion < handle
     methods (Access = private)
 
         function buildLogStrip_(obj)
-        %BUILDLOGSTRIP_ Construct header (label + Live toggle) + uitextarea.
+        %BUILDLOGSTRIP_ Construct header (search + level filter + updated +
+        %   live toggle) and the uitable below it.
             t = obj.Theme_;
             g = uigridlayout(obj.hLogPanel_, [2 1]);
-            g.RowHeight = {24, '1x'};
+            g.RowHeight = {28, '1x'};
             g.ColumnWidth = {'1x'};
             g.Padding = [8 4 8 4];
             g.RowSpacing = 4;
             g.BackgroundColor = t.WidgetBackground;
 
-            % Header row: log label | last-update timestamp | Live toggle.
-            gHdr = uigridlayout(g, [1 3]);
+            % Header: Log label | search | level dropdown | last-update | Live toggle.
+            gHdr = uigridlayout(g, [1 5]);
             gHdr.Layout.Row = 1; gHdr.Layout.Column = 1;
-            gHdr.ColumnWidth = {'1x', 160, 110};
+            gHdr.ColumnWidth = {40, '1x', 100, 150, 110};
             gHdr.RowHeight = {'1x'};
             gHdr.Padding = [0 0 0 0];
             gHdr.ColumnSpacing = 8;
@@ -516,8 +522,22 @@ classdef FastSenseCompanion < handle
             hLbl.FontColor = t.ForegroundColor;
             hLbl.HorizontalAlignment = 'left'; hLbl.VerticalAlignment = 'center';
 
+            obj.hLogSearch_ = uieditfield(gHdr, 'text');
+            obj.hLogSearch_.Layout.Row = 1; obj.hLogSearch_.Layout.Column = 2;
+            obj.hLogSearch_.Placeholder = 'Search log…';
+            obj.hLogSearch_.FontSize = 11;
+            obj.hLogSearch_.ValueChangedFcn = @(~,~) obj.applyLogFilter_();
+
+            obj.hLogLevelDD_ = uidropdown(gHdr);
+            obj.hLogLevelDD_.Layout.Row = 1; obj.hLogLevelDD_.Layout.Column = 3;
+            obj.hLogLevelDD_.Items = {'All', 'INFO', 'WARN', 'ERROR'};
+            obj.hLogLevelDD_.Value = 'All';
+            obj.hLogLevelDD_.FontSize = 11;
+            obj.hLogLevelDD_.Tooltip = 'Filter by log level';
+            obj.hLogLevelDD_.ValueChangedFcn = @(~,~) obj.applyLogFilter_();
+
             obj.hLastUpdateLbl_ = uilabel(gHdr);
-            obj.hLastUpdateLbl_.Layout.Row = 1; obj.hLastUpdateLbl_.Layout.Column = 2;
+            obj.hLastUpdateLbl_.Layout.Row = 1; obj.hLastUpdateLbl_.Layout.Column = 4;
             obj.hLastUpdateLbl_.Text = 'Updated: --:--:--';
             obj.hLastUpdateLbl_.FontSize = 11; obj.hLastUpdateLbl_.FontName = 'Menlo';
             obj.hLastUpdateLbl_.FontColor = t.PlaceholderTextColor;
@@ -526,7 +546,7 @@ classdef FastSenseCompanion < handle
             obj.hLastUpdateLbl_.Tooltip = 'Time of the last successful live refresh';
 
             obj.hLiveBtn_ = uibutton(gHdr, 'push');
-            obj.hLiveBtn_.Layout.Row = 1; obj.hLiveBtn_.Layout.Column = 3;
+            obj.hLiveBtn_.Layout.Row = 1; obj.hLiveBtn_.Layout.Column = 5;
             obj.hLiveBtn_.Text = 'Live: OFF';
             obj.hLiveBtn_.FontSize = 11; obj.hLiveBtn_.FontWeight = 'bold';
             obj.hLiveBtn_.Tooltip = 'Toggle live refresh of the inspector';
@@ -542,14 +562,52 @@ classdef FastSenseCompanion < handle
             obj.hLogTable_.FontSize       = 10;
             obj.hLogTable_.FontName       = 'Menlo';
             obj.hLogTable_.ForegroundColor = t.ForegroundColor;
-            % 2-row colormap: uitable cycles through these for odd/even rows.
             if strcmp(obj.Theme, 'dark')
                 obj.hLogTable_.BackgroundColor = [0.13 0.13 0.13; 0.20 0.20 0.20];
             else
                 obj.hLogTable_.BackgroundColor = [1.00 1.00 1.00; 0.94 0.94 0.94];
             end
-            obj.hLogTable_.Data = { ...
+
+            % Seed buffer with one ready line and apply filter.
+            obj.LogBuffer_ = { ...
                 char(datetime('now', 'Format', 'HH:mm:ss')), 'INFO', 'Companion ready.'};
+            obj.applyLogFilter_();
+        end
+
+        function applyLogFilter_(obj)
+        %APPLYLOGFILTER_ Re-apply level + text filter to LogBuffer_ → uitable.Data.
+            if isempty(obj.hLogTable_) || ~isvalid(obj.hLogTable_); return; end
+            rows = obj.LogBuffer_;
+            if isempty(rows)
+                obj.hLogTable_.Data = cell(0, 3); return;
+            end
+            % Level filter
+            lvl = 'All';
+            if ~isempty(obj.hLogLevelDD_) && isvalid(obj.hLogLevelDD_)
+                lvl = obj.hLogLevelDD_.Value;
+            end
+            if ~strcmpi(lvl, 'All')
+                keep = false(size(rows, 1), 1);
+                for i = 1:size(rows, 1)
+                    keep(i) = strcmpi(rows{i, 2}, lvl);
+                end
+                rows = rows(keep, :);
+            end
+            % Text filter — case-insensitive substring across all 3 columns.
+            qry = '';
+            if ~isempty(obj.hLogSearch_) && isvalid(obj.hLogSearch_)
+                qry = strtrim(obj.hLogSearch_.Value);
+            end
+            if ~isempty(qry)
+                qLow = lower(qry);
+                keep = false(size(rows, 1), 1);
+                for i = 1:size(rows, 1)
+                    line = lower([rows{i, 1}, ' ', rows{i, 2}, ' ', rows{i, 3}]);
+                    keep(i) = ~isempty(strfind(line, qLow)); %#ok<STREMP>
+                end
+                rows = rows(keep, :);
+            end
+            obj.hLogTable_.Data = rows;
         end
 
         function updateLiveButton_(obj)
