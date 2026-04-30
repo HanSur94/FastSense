@@ -186,31 +186,60 @@ classdef FastSenseCompanion < handle
         function close(obj)
         %CLOSE Idempotent teardown — deletes listeners, owned timers, and the uifigure.
         %   Does NOT affect any DashboardEngine figure or ad-hoc plot figures.
+        %
+        %   Bulletproof: every cleanup step is wrapped in try/catch so a
+        %   single failure (e.g. a stale listener handle, a pane already
+        %   half-deleted) cannot prevent the uifigure itself from being
+        %   deleted. The X-button must always close the window.
             if ~isvalid(obj)
                 return;
             end
             if isempty(obj.hFig_) || ~isvalid(obj.hFig_)
+                obj.hFig_  = [];
+                obj.IsOpen = false;
                 return;
             end
-            % Detach panes (releases their listeners)
-            if ~isempty(obj.CatalogPane_) && isvalid(obj.CatalogPane_)
-                obj.CatalogPane_.detach();
+            % Diagnostic — confirms the X click reached close().
+            fprintf('[FastSenseCompanion] close() invoked, tearing down...\n');
+            % Detach panes (releases their listeners + debounce timers).
+            try
+                if ~isempty(obj.CatalogPane_) && isvalid(obj.CatalogPane_)
+                    obj.CatalogPane_.detach();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] CatalogPane.detach failed: %s\n', err.message);
             end
-            if ~isempty(obj.ListPane_) && isvalid(obj.ListPane_)
-                obj.ListPane_.detach();
+            try
+                if ~isempty(obj.ListPane_) && isvalid(obj.ListPane_)
+                    obj.ListPane_.detach();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] ListPane.detach failed: %s\n', err.message);
             end
-            if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
-                obj.InspectorPane_.detach();
+            try
+                if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
+                    obj.InspectorPane_.detach();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] InspectorPane.detach failed: %s\n', err.message);
             end
-            % Release orchestrator-level listeners
-            delete(obj.Listeners_);
+            % Release orchestrator-level listeners.
+            try
+                delete(obj.Listeners_);
+            catch err
+                fprintf(2, '[FastSenseCompanion] Listeners delete failed: %s\n', err.message);
+            end
             obj.Listeners_ = {};
-            % No companion-owned timers in Phase 1018 — pattern established for Phases 1019+:
-            %   stop(t); delete(t);  (always in this order)
-            % Close the uifigure
-            delete(obj.hFig_);
+            % Always delete the uifigure last and unconditionally — this is
+            % what makes the X click actually close the window.
+            try
+                delete(obj.hFig_);
+            catch err
+                fprintf(2, '[FastSenseCompanion] hFig delete failed: %s\n', err.message);
+            end
             obj.hFig_  = [];
             obj.IsOpen = false;
+            fprintf('[FastSenseCompanion] close() complete.\n');
         end
 
         function delete(obj)

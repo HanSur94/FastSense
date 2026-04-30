@@ -11,9 +11,10 @@ function companion = buildCompanion(ctx)
 %     - TagRegistry singleton has been populated by registerPlantTags so
 %       the companion's catalog reflects every plant tag.
 %
-%   Theme is hardcoded to 'dark' -- matching the existing dashboard's
-%   visual register and avoiding a parameterization ahead of need. If the
-%   demo gains a theme option in a later phase, lift this through ctx.
+%   Theme is hardcoded to 'light' -- matching buildDashboard.m which also
+%   renders the demo dashboard in 'light' theme. Keeping the two windows
+%   visually consistent. If the demo gains a theme option in a later
+%   phase, lift this through ctx.
 %
 %   Returns:
 %     companion - live FastSenseCompanion handle (uifigure already visible).
@@ -22,5 +23,5 @@ function companion = buildCompanion(ctx)
 
     companion = FastSenseCompanion( ...
         'Dashboards', {ctx.engine}, ...
-        'Theme',      'dark');
+        'Theme',      'light');
 end
