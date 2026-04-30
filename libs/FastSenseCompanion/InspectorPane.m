@@ -34,6 +34,11 @@ classdef InspectorPane < handle
         hPlayBtn_       = []   % Play button (dashboard state only)
         hPauseBtn_      = []   % Pause button (dashboard state only)
         hChipsGrid_     = []   % chip list inner grid (multitag state only)
+        hMultiSparkPanels_ = {}  % cell of uipanel (multitag — one per tag)
+        hMultiSparkAxes_   = {}  % cell of axes
+        hMultiSparkLines_  = {}  % cell of line handles (live updates)
+        hMultiRangeLbls_   = {}  % cell of range uilabel
+        RenderedMultiKeys_ = {}  % cellstr of keys captured at last full render
         hModeOverlay_   = []   % "Overlay" mode button (multitag state only)
         hModeLinked_    = []   % "Linked grid" mode button (multitag state only)
         hPlotBtn_       = []   % Plot CTA (multitag state only)
@@ -129,6 +134,19 @@ classdef InspectorPane < handle
                             return;
                         end
                         obj.hDashTable_.Data = obj.buildDashTableData_(db);
+
+                    case 'multitag'
+                        if ~isfield(obj.Payload_, 'tags'); return; end
+                        keys = {};
+                        if isfield(obj.Payload_, 'tagKeys')
+                            keys = obj.Payload_.tagKeys;
+                        end
+                        if numel(obj.Payload_.tags) ~= numel(obj.hMultiSparkLines_) ...
+                                || ~isequal(keys, obj.RenderedMultiKeys_)
+                            obj.renderState_();
+                            return;
+                        end
+                        obj.refreshMultiInPlace_();
                 end
             catch
                 % Live ticks must never throw.
@@ -178,6 +196,9 @@ classdef InspectorPane < handle
                 obj.hChipsGrid_  = []; obj.hModeOverlay_ = []; obj.hModeLinked_ = [];
                 obj.hPlotBtn_    = []; obj.hTagTable_ = []; obj.hDashTable_ = [];
                 obj.RenderedTagKey_ = ''; obj.RenderedDashName_ = '';
+                obj.hMultiSparkPanels_ = {}; obj.hMultiSparkAxes_ = {};
+                obj.hMultiSparkLines_  = {}; obj.hMultiRangeLbls_  = {};
+                obj.RenderedMultiKeys_ = {};
                 switch obj.State_
                     case 'welcome';   obj.renderWelcome_();
                     case 'tag';       obj.renderTag_();
@@ -391,25 +412,27 @@ classdef InspectorPane < handle
             end
         end
 
-        function updateSparkTicks_(obj, tv, y)
+        function updateSparkTicks_(obj, tv, y, ax)
         %UPDATESPARKTICKS_ Set 2-point X (start/end time) and Y (min/max) ticks.
-            if isempty(obj.hSparkAxes_) || ~isvalid(obj.hSparkAxes_); return; end
+        %   ax is optional; defaults to obj.hSparkAxes_.
+            if nargin < 4 || isempty(ax); ax = obj.hSparkAxes_; end
+            if isempty(ax) || ~isvalid(ax); return; end
             if isempty(tv) || isempty(y); return; end
             try
                 if numel(tv) >= 2 && tv(1) ~= tv(end)
-                    obj.hSparkAxes_.XTick      = [tv(1), tv(end)];
-                    obj.hSparkAxes_.XTickLabel = {obj.formatXTick_(tv(1)), obj.formatXTick_(tv(end))};
+                    ax.XTick      = [tv(1), tv(end)];
+                    ax.XTickLabel = {obj.formatXTick_(tv(1)), obj.formatXTick_(tv(end))};
                 else
-                    obj.hSparkAxes_.XTick      = tv(1);
-                    obj.hSparkAxes_.XTickLabel = {obj.formatXTick_(tv(1))};
+                    ax.XTick      = tv(1);
+                    ax.XTickLabel = {obj.formatXTick_(tv(1))};
                 end
                 yMin = min(y); yMax = max(y);
                 if yMin < yMax
-                    obj.hSparkAxes_.YTick      = [yMin, yMax];
-                    obj.hSparkAxes_.YTickLabel = {obj.formatYTick_(yMin), obj.formatYTick_(yMax)};
+                    ax.YTick      = [yMin, yMax];
+                    ax.YTickLabel = {obj.formatYTick_(yMin), obj.formatYTick_(yMax)};
                 else
-                    obj.hSparkAxes_.YTick      = yMin;
-                    obj.hSparkAxes_.YTickLabel = {obj.formatYTick_(yMin)};
+                    ax.YTick      = yMin;
+                    ax.YTickLabel = {obj.formatYTick_(yMin)};
                 end
             catch
             end
@@ -518,16 +541,17 @@ classdef InspectorPane < handle
             end
         end
 
-        function fitSparkAxes_(obj)
-        %FITSPARKAXES_ Tight axis with small padding.
-            if isempty(obj.hSparkAxes_) || ~isvalid(obj.hSparkAxes_); return; end
+        function fitSparkAxes_(obj, ax)
+        %FITSPARKAXES_ Tight axis with small padding. Defaults to obj.hSparkAxes_.
+            if nargin < 2 || isempty(ax); ax = obj.hSparkAxes_; end
+            if isempty(ax) || ~isvalid(ax); return; end
             try
-                axis(obj.hSparkAxes_, 'tight');
-                xl = obj.hSparkAxes_.XLim; yl = obj.hSparkAxes_.YLim;
+                axis(ax, 'tight');
+                xl = ax.XLim; yl = ax.YLim;
                 px = (xl(2) - xl(1)) * 0.02;
-                if px > 0; obj.hSparkAxes_.XLim = xl + [-px, px]; end
+                if px > 0; ax.XLim = xl + [-px, px]; end
                 py = (yl(2) - yl(1)) * 0.05;
-                if py > 0; obj.hSparkAxes_.YLim = yl + [-py, py]; end
+                if py > 0; ax.YLim = yl + [-py, py]; end
             catch
             end
         end
@@ -836,46 +860,101 @@ classdef InspectorPane < handle
         end
 
         function renderMultitag_(obj)
-        %RENDERMULTITAG_ Render composer shell: chips + mode toggle + Plot CTA.
+        %RENDERMULTITAG_ Render multi-tag preview cards + mode toggle + Plot CTA.
+        %   Each tag gets its own card: name + remove-X + sparkline + range
+        %   label. Live mode updates each sparkline's XData/YData in place
+        %   via refreshLive's 'multitag' branch.
             t = obj.Theme_;
             if ~isfield(obj.Payload_, 'tags') || ~isfield(obj.Payload_, 'tagKeys'); return; end
             tags = obj.Payload_.tags;
             obj.CurrentTagKeys_ = obj.Payload_.tagKeys;
-            g = uigridlayout(obj.hContent_, [8 1]);
-            g.RowHeight = {16, 'fit', 8, 16, 28, 8, 32, '1x'};  % trailing 1x pins content to top
-            g.ColumnWidth = {'1x'}; g.Padding = [16 16 16 16];
-            g.RowSpacing = 0; g.BackgroundColor = t.WidgetBackground;
-            hHdr = uilabel(g); hHdr.Layout.Row = 1; hHdr.Layout.Column = 1;
-            hHdr.Text = 'Tags'; hHdr.FontSize = 11; hHdr.FontWeight = 'bold';
-            hHdr.FontColor = t.ForegroundColor;
-            hCS = uipanel(g); hCS.Layout.Row = 2; hCS.Layout.Column = 1;
-            hCS.BorderType = 'none'; hCS.BackgroundColor = t.WidgetBackground;
+            obj.RenderedMultiKeys_ = obj.CurrentTagKeys_;
             nT = numel(tags);
-            obj.hChipsGrid_ = uigridlayout(hCS, [nT 1]);
-            obj.hChipsGrid_.RowHeight = repmat({24}, 1, nT); obj.hChipsGrid_.ColumnWidth = {'1x'};
-            obj.hChipsGrid_.Padding = [0 0 0 0]; obj.hChipsGrid_.RowSpacing = 4;
-            obj.hChipsGrid_.BackgroundColor = t.WidgetBackground;
-            for i = 1:nT
-                tg = tags{i};
-                cr = uigridlayout(obj.hChipsGrid_, [1 2]);
-                cr.Layout.Row = i; cr.Layout.Column = 1;
-                cr.ColumnWidth = {'1x', 20}; cr.RowHeight = {'1x'};
-                cr.Padding = [4 0 4 0]; cr.ColumnSpacing = 4; cr.BackgroundColor = t.WidgetBackground;
-                ln = uilabel(cr); ln.Layout.Row = 1; ln.Layout.Column = 1;
-                ln.Text = tg.Name; ln.FontSize = 11; ln.FontColor = t.ForegroundColor;
-                ln.HorizontalAlignment = 'left'; ln.VerticalAlignment = 'center';
-                ln.Tooltip = tg.Key;
-                bx = uibutton(cr, 'push'); bx.Layout.Row = 1; bx.Layout.Column = 2;
-                bx.Text = char(215); bx.FontSize = 11; bx.FontColor = t.ToolbarFontColor;
+
+            % Per-card height: 16 (name row) + 60 (sparkline) + 14 (range) +
+            % 4 spacing = ~94. Use 94 to give the sparkline some breathing.
+            cardH = 94;
+            nRows = nT + 4;          % header + N cards + mode + plot + spacer
+            rowH  = cell(1, nRows);
+            rowH{1} = 24;
+            for k = 1:nT; rowH{1 + k} = cardH; end
+            rowH{nT + 2} = 28;       % mode toggle row
+            rowH{nT + 3} = 32;       % plot button
+            rowH{nT + 4} = '1x';     % bottom spacer
+
+            g = uigridlayout(obj.hContent_, [nRows 1]);
+            g.RowHeight   = rowH;
+            g.ColumnWidth = {'1x'};
+            g.Padding = [16 16 16 16]; g.RowSpacing = 6;
+            g.BackgroundColor = t.WidgetBackground;
+
+            hHdr = uilabel(g); hHdr.Layout.Row = 1; hHdr.Layout.Column = 1;
+            hHdr.Text = sprintf('%d tags selected', nT);
+            hHdr.FontSize = 14; hHdr.FontWeight = 'bold';
+            hHdr.FontColor = t.ForegroundColor;
+            hHdr.HorizontalAlignment = 'left'; hHdr.VerticalAlignment = 'center';
+
+            obj.hMultiSparkPanels_ = cell(1, nT);
+            obj.hMultiSparkAxes_   = cell(1, nT);
+            obj.hMultiSparkLines_  = cell(1, nT);
+            obj.hMultiRangeLbls_   = cell(1, nT);
+
+            for k = 1:nT
+                tg = tags{k};
+                cardRow = 1 + k;
+
+                cg = uigridlayout(g, [3 1]);
+                cg.Layout.Row = cardRow; cg.Layout.Column = 1;
+                cg.RowHeight   = {16, '1x', 14};
+                cg.ColumnWidth = {'1x'};
+                cg.Padding = [0 0 0 0]; cg.RowSpacing = 2;
+                cg.BackgroundColor = t.WidgetBackground;
+
+                nameRow = uigridlayout(cg, [1 2]);
+                nameRow.Layout.Row = 1; nameRow.Layout.Column = 1;
+                nameRow.ColumnWidth = {'1x', 24};
+                nameRow.RowHeight = {'1x'};
+                nameRow.Padding = [0 0 0 0]; nameRow.ColumnSpacing = 4;
+                nameRow.BackgroundColor = t.WidgetBackground;
+                ln = uilabel(nameRow);
+                ln.Layout.Row = 1; ln.Layout.Column = 1;
+                nm = char(tg.Name); ky = char(tg.Key);
+                if ~strcmp(nm, ky)
+                    ln.Text = sprintf('%s  %s  %s', nm, char(183), ky);
+                else
+                    ln.Text = nm;
+                end
+                ln.FontSize = 11; ln.FontWeight = 'bold';
+                ln.FontColor = t.ForegroundColor;
+                ln.Tooltip = ky;
+                bx = uibutton(nameRow, 'push');
+                bx.Layout.Row = 1; bx.Layout.Column = 2;
+                bx.Text = char(215); bx.FontSize = 11;
                 bx.BackgroundColor = t.WidgetBackground;
-                bx.Tooltip = sprintf('Remove "%s" from selection', tg.Name);
-                bx.ButtonPushedFcn = @(~,~) obj.onChipDeselect_(tg.Key);
+                bx.Tooltip = sprintf('Remove "%s" from selection', nm);
+                bx.ButtonPushedFcn = @(~,~) obj.onChipDeselect_(ky);
+
+                sp = uipanel(cg);
+                sp.Layout.Row = 2; sp.Layout.Column = 1;
+                sp.BackgroundColor = t.WidgetBackground;
+                sp.BorderColor = t.WidgetBorderColor; sp.BorderType = 'line';
+                obj.hMultiSparkPanels_{k} = sp;
+
+                rl = uilabel(cg);
+                rl.Layout.Row = 3; rl.Layout.Column = 1;
+                rl.Text = sprintf('Range: %s (max. %.0f min)', char(8212), obj.SparkWindowSec_/60);
+                rl.FontSize = 10; rl.FontColor = t.PlaceholderTextColor;
+                rl.HorizontalAlignment = 'left'; rl.VerticalAlignment = 'center';
+                obj.hMultiRangeLbls_{k} = rl;
+
+                obj.renderMultiSparkline_(k, tg);
             end
-            mh = uilabel(g); mh.Layout.Row = 4; mh.Layout.Column = 1;
-            mh.Text = 'Mode'; mh.FontSize = 11; mh.FontWeight = 'bold'; mh.FontColor = t.ForegroundColor;
-            mg = uigridlayout(g, [1 2]); mg.Layout.Row = 5; mg.Layout.Column = 1;
+
+            mg = uigridlayout(g, [1 2]);
+            mg.Layout.Row = nT + 2; mg.Layout.Column = 1;
             mg.ColumnWidth = {'1x', '1x'}; mg.RowHeight = {'1x'};
-            mg.Padding = [0 0 0 0]; mg.ColumnSpacing = 4; mg.BackgroundColor = t.WidgetBackground;
+            mg.Padding = [0 0 0 0]; mg.ColumnSpacing = 4;
+            mg.BackgroundColor = t.WidgetBackground;
             obj.hModeOverlay_ = uibutton(mg, 'push');
             obj.hModeOverlay_.Layout.Row = 1; obj.hModeOverlay_.Layout.Column = 1;
             obj.hModeOverlay_.Text = 'Overlay'; obj.hModeOverlay_.FontSize = 11;
@@ -885,12 +964,112 @@ classdef InspectorPane < handle
             obj.hModeLinked_.Text = 'Linked grid'; obj.hModeLinked_.FontSize = 11;
             obj.hModeLinked_.ButtonPushedFcn = @(~,~) obj.onModeToggle_('LinkedGrid');
             obj.applyModeToggleStyles_();
+
             obj.hPlotBtn_ = uibutton(g, 'push');
-            obj.hPlotBtn_.Layout.Row = 7; obj.hPlotBtn_.Layout.Column = 1;
+            obj.hPlotBtn_.Layout.Row = nT + 3; obj.hPlotBtn_.Layout.Column = 1;
             obj.hPlotBtn_.Text = 'Plot'; obj.hPlotBtn_.FontSize = 11; obj.hPlotBtn_.FontWeight = 'bold';
             obj.hPlotBtn_.FontColor = t.DashboardBackground; obj.hPlotBtn_.BackgroundColor = t.Accent;
             obj.hPlotBtn_.Tooltip = 'Open an ad-hoc plot with the selected tags';
             obj.hPlotBtn_.ButtonPushedFcn = @(~,~) obj.onPlot_();
+        end
+
+        function renderMultiSparkline_(obj, idx, tag)
+        %RENDERMULTISPARKLINE_ Build the axes + line for the idx-th tag card.
+            t = obj.Theme_;
+            sp = obj.hMultiSparkPanels_{idx};
+            if isempty(sp) || ~isvalid(sp); return; end
+            try
+                if ~ismethod(tag, 'getXY')
+                    obj.renderMultiNoData_(idx, 'No data'); return;
+                end
+                [tv, y] = tag.getXY();
+                if isempty(tv) || isempty(y)
+                    obj.renderMultiNoData_(idx, 'No data'); return;
+                end
+                [tv, y] = obj.windowSparkData_(tv, y);
+                ax = axes('Parent', sp, ...
+                    'Units', 'normalized', 'Position', [0.22 0.32 0.75 0.62], ...
+                    'Color', t.WidgetBackground, ...
+                    'XColor', t.PlaceholderTextColor, ...
+                    'YColor', t.PlaceholderTextColor, ...
+                    'Box', 'off', 'FontSize', 7, ...
+                    'TickLength', [0.005 0.005], 'TickDir', 'out');
+                ln = plot(ax, tv, y, '-', 'Color', t.LineColors{1}, 'LineWidth', 1);
+                obj.hMultiSparkAxes_{idx}  = ax;
+                obj.hMultiSparkLines_{idx} = ln;
+                obj.fitSparkAxes_(ax);
+                obj.updateSparkTicks_(tv, y, ax);
+                try; ax.Toolbar.Visible = 'off'; catch; end
+                try; ax.Interactions = []; catch; end
+                obj.updateMultiRangeLabel_(idx, tv);
+            catch
+                obj.renderMultiNoData_(idx, 'Sparkline unavailable');
+            end
+        end
+
+        function renderMultiNoData_(obj, idx, msgText)
+        %RENDERMULTINODATA_ Show a placeholder label when a tag has no data.
+            sp = obj.hMultiSparkPanels_{idx};
+            if isempty(sp) || ~isvalid(sp); return; end
+            t = obj.Theme_;
+            lb = uilabel(sp); lb.Text = msgText; lb.FontSize = 10;
+            lb.FontColor = t.PlaceholderTextColor;
+            lb.HorizontalAlignment = 'center';
+            lb.VerticalAlignment = 'center';
+        end
+
+        function updateMultiRangeLabel_(obj, idx, tv)
+        %UPDATEMULTIRANGELABEL_ Refresh the per-card "Range: …" label.
+            if idx > numel(obj.hMultiRangeLbls_); return; end
+            rl = obj.hMultiRangeLbls_{idx};
+            if isempty(rl) || ~isvalid(rl); return; end
+            maxMin = obj.SparkWindowSec_ / 60;
+            if isempty(tv) || numel(tv) < 1
+                rl.Text = sprintf('Range: %s (max. %.0f min)', char(8212), maxMin);
+                return;
+            end
+            spanSec = tv(end) - tv(1);
+            if spanSec > 0 && spanSec < 1 && tv(end) > 7e5
+                spanSec = spanSec * 86400;
+            end
+            if spanSec < 60
+                rl.Text = sprintf('Range: last %.0f s (max. %.0f min)', spanSec, maxMin);
+            else
+                rl.Text = sprintf('Range: last %.1f min (max. %.0f min)', spanSec/60, maxMin);
+            end
+        end
+
+        function refreshMultiInPlace_(obj)
+        %REFRESHMULTIINPLACE_ Per-card live update: XData/YData/ticks/range.
+            if ~isfield(obj.Payload_, 'tags'); return; end
+            tags = obj.Payload_.tags;
+            for k = 1:numel(tags)
+                if k > numel(obj.hMultiSparkLines_); break; end
+                try
+                    tg = tags{k};
+                    if ~isobject(tg) || ~isvalid(tg); continue; end
+                    if ~ismethod(tg, 'getXY'); continue; end
+                    [tv, y] = tg.getXY();
+                    if isempty(tv); continue; end
+                    [tv, y] = obj.windowSparkData_(tv, y);
+                    ln = obj.hMultiSparkLines_{k};
+                    ax = obj.hMultiSparkAxes_{k};
+                    if isempty(ln) || ~isvalid(ln) || isempty(ax) || ~isvalid(ax)
+                        % Stale; try to rebuild this card's sparkline only.
+                        sp = obj.hMultiSparkPanels_{k};
+                        if ~isempty(sp) && isvalid(sp)
+                            delete(sp.Children);
+                            obj.renderMultiSparkline_(k, tg);
+                        end
+                        continue;
+                    end
+                    ln.XData = tv; ln.YData = y;
+                    obj.fitSparkAxes_(ax);
+                    obj.updateSparkTicks_(tv, y, ax);
+                    obj.updateMultiRangeLabel_(k, tv);
+                catch
+                end
+            end
         end
 
         function applyModeToggleStyles_(obj)
