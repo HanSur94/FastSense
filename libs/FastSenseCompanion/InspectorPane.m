@@ -165,11 +165,33 @@ classdef InspectorPane < handle
                 obj.Payload_ = payload;
                 obj.renderState_();
             catch err
-                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
-                    uialert(obj.hFig_, err.message, 'FastSense Companion');
-                else
-                    rethrow(err);
+                obj.alertOrLog_(err);
+            end
+        end
+
+        function alertOrLog_(obj, err)
+        %ALERTORLOG_ Best-effort error surface that won't crash on invisible figures.
+        %   Use this instead of raw uialert in catch blocks: uialert refuses
+        %   figures with Visible='off' (e.g. mid-construction during attach()).
+        %   We always print the error to stderr for diagnostics, then alert
+        %   only when the figure is up. Stack info goes to stderr too so we
+        %   never lose the original failure.
+            try
+                fprintf(2, '[InspectorPane] %s\n', err.message);
+                if ~isempty(err.stack)
+                    for k = 1:min(3, numel(err.stack))
+                        fprintf(2, '    at %s (line %d)\n', ...
+                            err.stack(k).name, err.stack(k).line);
+                    end
                 end
+            catch
+            end
+            try
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_) ...
+                        && strcmp(obj.hFig_.Visible, 'on')
+                    uialert(obj.hFig_, err.message, 'FastSense Companion');
+                end
+            catch
             end
         end
 
@@ -209,9 +231,7 @@ classdef InspectorPane < handle
                             'Unknown inspector state: ''%s''.', obj.State_);
                 end
             catch err
-                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
-                    uialert(obj.hFig_, err.message, 'FastSense Companion');
-                end
+                obj.alertOrLog_(err);
             end
         end
 
