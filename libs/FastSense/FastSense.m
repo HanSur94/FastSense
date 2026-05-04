@@ -152,6 +152,7 @@ classdef FastSense < handle
     % Phase 1012 event-details popup handle — test-readable
     properties (SetAccess = private)
         hEventDetails_ = []               % popup figure handle (empty when no popup open)
+        EventContextMenu_ = []            % cached uicontextmenu (lazy; one per FastSense)
     end
 
     % ===================== PERFORMANCE TUNING ============================
@@ -2280,13 +2281,29 @@ classdef FastSense < handle
 
         function onEventMarkerClick_(obj, src, ~)
             %ONEVENTMARKERCLICK_ ButtonDownFcn dispatcher for event markers.
-            %   Hidden public so TestFastSenseEventClick can call it for
-            %   direct-dispatch testing of the click -> details-popup path.
+            %   Hidden public so TestFastSenseEventClick can call it for direct
+            %   dispatch of the click -> details-popup path. Branches on figure
+            %   SelectionType: 'normal' -> openEventDetails_; 'alt' (right-click)
+            %   -> builds/shows uicontextmenu with quick-nav actions.
             ud = get(src, 'UserData');
             if isempty(ud) || ~isfield(ud, 'eventId'), return; end
             if isempty(obj.EventByIdMap_) || ~obj.EventByIdMap_.isKey(ud.eventId), return; end
             ev = obj.EventByIdMap_(ud.eventId);
-            obj.openEventDetails_(ev);
+
+            selType = 'normal';
+            try
+                if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                    selType = get(obj.hFigure, 'SelectionType');
+                end
+            catch
+            end
+
+            switch selType
+                case 'alt'
+                    obj.showEventContextMenu_(src, ev);
+                otherwise   % 'normal', 'extend', 'open' all fall through to details
+                    obj.openEventDetails_(ev);
+            end
         end
     end
 
@@ -2294,6 +2311,116 @@ classdef FastSense < handle
     % Internal helpers: timer callbacks, view mode, theme, listeners,
     % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
+        function showEventContextMenu_(obj, src, ev)
+            %SHOWEVENTCONTEXTMENU_ Lazy-build + bind a 4-item uicontextmenu for an event marker.
+            %   Constructs the menu on first right-click, caches it on
+            %   obj.EventContextMenu_, and rebinds every item's callback to the
+            %   currently right-clicked event id. Attaches to every existing
+            %   badge so subsequent right-clicks need no re-attach.
+            cm = obj.EventContextMenu_;
+            if isempty(cm) || ~ishandle(cm)
+                cm = uicontextmenu(obj.hFigure);
+                uimenu(cm, 'Label', 'Open details…');
+                uimenu(cm, 'Label', 'Jump to next violation');
+                uimenu(cm, 'Label', 'Jump to previous violation');
+                uimenu(cm, 'Label', 'Copy event ID');
+                obj.EventContextMenu_ = cm;
+            end
+
+            % Rebind callbacks to this event id. Locate items by Label so
+            % child-order assumptions don't break across MATLAB/Octave.
+            items = get(cm, 'Children');
+            labels = {'Open details…', 'Jump to next violation', ...
+                      'Jump to previous violation', 'Copy event ID'};
+            for k = 1:numel(labels)
+                mi = obj.findMenuByLabel_(items, labels{k});
+                if isempty(mi), continue; end
+                switch labels{k}
+                    case 'Open details…'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.openEventDetails_(ev));
+                    case 'Jump to next violation'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.jumpToAdjacentEvent_(ev, +1));
+                    case 'Jump to previous violation'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.jumpToAdjacentEvent_(ev, -1));
+                    case 'Copy event ID'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.copyEventId_(ev));
+                end
+            end
+
+            % Attach the cached menu to every existing marker so further
+            % right-clicks pop the menu directly without re-entering this branch.
+            for h = 1:numel(obj.EventMarkerHandles_)
+                hh = obj.EventMarkerHandles_{h};
+                if ishandle(hh) && strcmp(get(hh, 'Type'), 'line')
+                    try set(hh, 'UIContextMenu', cm); catch; end
+                end
+            end
+            % Also attach to the source that triggered this right-click — on
+            % this first call MATLAB has already consumed the right-click
+            % event, so no menu pops automatically; subsequent right-clicks
+            % on any marker will show the menu natively.
+            try set(src, 'UIContextMenu', cm); catch; end
+        end
+
+        function mi = findMenuByLabel_(~, items, label)
+            %FINDMENUBYLABEL_ Linear search by Label (Octave-safe; avoids dependence on order).
+            mi = [];
+            for i = 1:numel(items)
+                try
+                    if strcmp(get(items(i), 'Label'), label)
+                        mi = items(i);
+                        return;
+                    end
+                catch
+                end
+            end
+        end
+
+        function jumpToAdjacentEvent_(obj, ev, direction)
+            %JUMPTOADJACENTEVENT_ Pan x-axis to next/prev event for the same tag.
+            %   direction: +1 = next, -1 = previous. Preserves current x-span.
+            try
+                if isempty(obj.EventByIdMap_) || ~ishandle(obj.hAxes), return; end
+                tagKey = '';
+                if ~isempty(ev.TagKeys); tagKey = char(ev.TagKeys{1}); end
+                if isempty(tagKey), return; end
+
+                % Collect all events for this tag, sorted by StartTime.
+                ids = obj.EventByIdMap_.keys();
+                times = [];
+                for k = 1:numel(ids)
+                    e = obj.EventByIdMap_(ids{k});
+                    if any(strcmp(e.TagKeys, tagKey))
+                        times(end+1) = e.StartTime; %#ok<AGROW>
+                    end
+                end
+                if numel(times) < 2, return; end
+                times = sort(times);
+                if direction > 0
+                    target = times(find(times > ev.StartTime, 1, 'first'));
+                else
+                    target = times(find(times < ev.StartTime, 1, 'last'));
+                end
+                if isempty(target), return; end
+
+                xl = get(obj.hAxes, 'XLim');
+                span = xl(2) - xl(1);
+                set(obj.hAxes, 'XLim', [target - span/2, target + span/2]);
+            catch
+                % Best-effort navigation; never crash on bad event metadata.
+            end
+        end
+
+        function copyEventId_(~, ev)
+            %COPYEVENTID_ Copy ev.Id to system clipboard. Octave fallback: warn.
+            try
+                clipboard('copy', char(ev.Id));
+            catch
+                warning('FastSense:clipboardUnavailable', ...
+                    'Clipboard not available on this platform. Event ID: %s', char(ev.Id));
+            end
+        end
+
         function renderEventLayer_(obj)
             %RENDEREVENTLAYER_ Draw round markers per event (EVENT-07 + Phase 1012).
             %   Phase 1012 refactor: one line() per event so each marker carries
@@ -2402,6 +2529,9 @@ classdef FastSense < handle
                         'ButtonDownFcn', @(src, evt) obj.onEventMarkerClick_(src, evt), ...
                         'UserData', struct('eventId', ev.Id, 'tagKey', char(tag.Key)));
                     obj.EventMarkerHandles_{end+1} = h;
+                    if ~isempty(obj.EventContextMenu_) && ishandle(obj.EventContextMenu_)
+                        try set(h, 'UIContextMenu', obj.EventContextMenu_); catch; end
+                    end
                     % Glyph overlay — clicks pass through to badge beneath.
                     % Clipping='off' so the glyph isn't cut when the marker
                     % sits on the axes edge (open events at threshold peak).
