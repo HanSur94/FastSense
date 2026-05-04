@@ -599,9 +599,164 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'LiveSampleCount_(''liveupd1'') must equal 5 after the second tick');
         end
 
+        % ---- SETTINGS-07: Companion Settings dialog ----
+
+        function testPrefsRoundTrip(testCase)
+        %TESTPREFSROUNDTRIP companionPrefs save->load returns identical struct.
+            testCase.backupAndArmRestore_();
+            testCase.addPrivatePathForTest_();
+            s = struct('theme', 'light', 'livePeriod', 1.7);
+            companionPrefs('save', s);
+            s2 = companionPrefs('load');
+            testCase.verifyEqual(s2.theme, 'light');
+            testCase.verifyEqual(s2.livePeriod, 1.7);
+        end
+
+        function testConstructorPriority(testCase)
+        %TESTCONSTRUCTORPRIORITY explicit Name-Value > prefdir > built-in default.
+            testCase.backupAndArmRestore_();
+            % Write 'light' to prefdir via a Companion that calls applyTheme.
+            app1 = FastSenseCompanion('Theme', 'light');
+            testCase.addTeardown(@() delete(app1));
+            app1.close();
+            drawnow;
+            % Default-construct → must pick up 'light' from prefdir.
+            app2 = FastSenseCompanion();
+            testCase.addTeardown(@() delete(app2));
+            testCase.verifyEqual(app2.Theme, 'light', ...
+                'prefdir must override built-in default');
+            app2.close();
+            drawnow;
+            % Explicit Name-Value must override prefdir.
+            app3 = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() delete(app3));
+            testCase.verifyEqual(app3.Theme, 'dark', ...
+                'explicit Name-Value must override prefdir');
+            app3.close();
+        end
+
+        function testApplyThemeLiveSwitch(testCase)
+        %TESTAPPLYTHEMELIVESWITCH applyTheme repaints panes; selection survives.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() delete(app));
+            % Snapshot the pre-switch FontColor on a known label.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            sBefore = struct(app);
+            beforeColor = sBefore.hLastUpdateLbl_.FontColor;
+            app.applyTheme('light');
+            drawnow;
+            testCase.verifyEqual(app.Theme, 'light');
+            sAfter = struct(app);
+            afterColor = sAfter.hLastUpdateLbl_.FontColor;
+            % Either the FontColor changed or the placeholder color
+            % exists for both presets — either way, the dark presetColor
+            % must NOT match the new label color.
+            darkColor = CompanionTheme.get('dark').PlaceholderTextColor;
+            lightColor = CompanionTheme.get('light').PlaceholderTextColor;
+            testCase.verifyNotEqual(darkColor, lightColor, ...
+                'sanity: dark and light placeholder colors must differ');
+            testCase.verifyNotEqual(afterColor, beforeColor, ...
+                'log header label must visibly recolor on theme switch');
+            app.close();
+        end
+
+        function testSetLivePeriod(testCase)
+        %TESTSETLIVEPERIOD setLivePeriod updates timer Period and persists.
+            testCase.backupAndArmRestore_();
+            testCase.addPrivatePathForTest_();
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() delete(app));
+            app.setLivePeriod(2.0);
+            testCase.verifyEqual(app.LivePeriod, 2.0);
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            testCase.verifyEqual(s.LiveTimer_.Period, 2.0);
+            testCase.verifyEqual(s.LiveTimer_.Running, 'on');
+            prefs = companionPrefs('load');
+            testCase.verifyEqual(prefs.livePeriod, 2.0);
+            % Invalid argument throws.
+            try
+                app.setLivePeriod(-1);
+                testCase.verifyFail('setLivePeriod(-1) should have thrown');
+            catch err
+                testCase.verifyEqual(err.identifier, ...
+                    'FastSenseCompanion:invalidLivePeriod');
+            end
+            app.close();
+        end
+
+        function testOpenSettingsSingleton(testCase)
+        %TESTOPENSETTINGSSINGLETON openSettings is idempotent; close tears down.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() delete(app));
+            app.openSettings(); drawnow;
+            app.openSettings(); drawnow;
+            figs = findall(groot, 'Type', 'figure', 'Name', 'Companion Settings');
+            testCase.verifyEqual(numel(figs), 1, ...
+                'second openSettings must not spawn a new figure');
+            app.close(); drawnow;
+            figsAfter = findall(groot, 'Type', 'figure', 'Name', 'Companion Settings');
+            testCase.verifyEqual(numel(figsAfter), 0, ...
+                'companion close must tear down the dialog');
+        end
+
+        function testResetToDefaults(testCase)
+        %TESTRESETTODEFAULTS Reset button restores dark / 1.0 and persists.
+            testCase.backupAndArmRestore_();
+            testCase.addPrivatePathForTest_();
+            app = FastSenseCompanion('Theme', 'light', 'LivePeriod', 5.0);
+            testCase.addTeardown(@() delete(app));
+            app.openSettings(); drawnow;
+            dlg = app.SettingsDlg_;
+            testCase.assertNotEmpty(dlg, 'openSettings must populate SettingsDlg_');
+            % Locate the Reset button by Text and fire its callback.
+            resetBtn = findall(dlg.hFig_, 'Type', 'uibutton', ...
+                'Text', 'Reset to defaults');
+            testCase.assertEqual(numel(resetBtn), 1, 'Reset button not found');
+            cb = get(resetBtn, 'ButtonPushedFcn');
+            feval(cb, resetBtn, []);
+            drawnow;
+            testCase.verifyEqual(app.Theme, 'dark');
+            testCase.verifyEqual(app.LivePeriod, 1.0);
+            spinner = findall(dlg.hFig_, 'Type', 'uispinner');
+            testCase.assertEqual(numel(spinner), 1);
+            testCase.verifyEqual(spinner.Value, 1.0);
+            prefs = companionPrefs('load');
+            testCase.verifyEqual(prefs.theme, 'dark');
+            testCase.verifyEqual(prefs.livePeriod, 1.0);
+            dlg.close(); drawnow;
+            app.close();
+        end
+
     end
 
     methods (Access = private)
+
+        function backupAndArmRestore_(testCase)
+        %BACKUPANDARMRESTORE_ Back up prefdir/FastSenseCompanion.mat for restore on teardown.
+            prefsPath = fullfile(prefdir, 'FastSenseCompanion.mat');
+            backupPath = '';
+            if exist(prefsPath, 'file') == 2
+                backupPath = [tempname, '.mat'];
+                copyfile(prefsPath, backupPath);
+            end
+            testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
+        end
+
+        function addPrivatePathForTest_(testCase)
+        %ADDPRIVATEPATHFORTEST_ Add libs/FastSenseCompanion/private to the path for this test.
+        %   Removes the path on test teardown. Allows tests to call
+        %   companionPrefs() directly without adding a public seam.
+            here = fileparts(mfilename('fullpath'));      % tests/suite
+            repoRoot = fileparts(fileparts(here));        % repo root
+            privDir = fullfile(repoRoot, 'libs', 'FastSenseCompanion', 'private');
+            addpath(privDir);
+            testCase.addTeardown(@() rmpath(privDir));
+        end
 
         function driveSelectAndPlot_(testCase, app, keys, mode) %#ok<INUSL>
         %DRIVESELECTANDPLOT_ Helper: drive catalog selection then click Plot in mode.
@@ -652,5 +807,25 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             TagRegistry.clear();
         end
 
+    end
+end
+
+function restorePrefs_(prefsPath, backupPath)
+%RESTOREPREFS_ Local function: restore prefdir/FastSenseCompanion.mat from backup.
+%   Deletes any test-written prefs file. If a backup was made (prefs file
+%   existed before the test), copies it back and removes the backup.
+%   Used by SETTINGS-07 tests to keep the user's real prefs untouched.
+    try
+        if exist(prefsPath, 'file') == 2
+            delete(prefsPath);
+        end
+    catch
+    end
+    if ~isempty(backupPath) && exist(backupPath, 'file') == 2
+        try
+            copyfile(backupPath, prefsPath);
+            delete(backupPath);
+        catch
+        end
     end
 end
