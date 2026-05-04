@@ -658,7 +658,14 @@ classdef FastSenseCompanion < handle
 
         function scanLiveTagUpdates_(obj)
         %SCANLIVETAGUPDATES_ Walk SensorTag/StateTag in TagRegistry; log size deltas.
-            if isempty(obj.LiveSampleCount_); return; end
+            % Guard for the truly-uninitialized state (property default is []).
+            % Do NOT use isempty() here — isempty(containers.Map) returns true
+            % whenever the map has 0 entries, and the map only acquires keys
+            % from inside this function (chicken-and-egg). buildLogStrip_()
+            % constructs the map in the constructor before startLiveMode() runs,
+            % so by the time the timer fires, LiveSampleCount_ is always a
+            % containers.Map handle.
+            if ~isa(obj.LiveSampleCount_, 'containers.Map'); return; end
             try
                 tags = TagRegistry.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'));
             catch
