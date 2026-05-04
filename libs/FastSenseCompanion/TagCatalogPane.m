@@ -236,6 +236,37 @@ classdef TagCatalogPane < handle
             end
         end
 
+        function setTheme(obj, t)
+        %SETTHEME Live theme switch — recolor children in place, preserve selection/scroll.
+        %   t — resolved CompanionTheme struct.
+        %   Walks the pane subtree via applyThemeToChildren_, then re-applies
+        %   pane-specific accents (filter pill active state). Listbox Value,
+        %   search field text, scroll position, and SelectedKeys_ are
+        %   preserved.
+            if ~isstruct(t); return; end
+            try
+                obj.Theme_ = t;
+                if ~isempty(obj.hPanel_) && isvalid(obj.hPanel_)
+                    applyThemeToChildren_(obj.hPanel_, t);
+                end
+                % Re-apply pane-specific accents (active filter pills, etc.).
+                if ~isempty(obj.hPillsKind_)
+                    obj.applyPillStyle_(obj.hPillsKind_, obj.ActiveKindPills_);
+                end
+                if ~isempty(obj.hPillsCriticality_)
+                    obj.applyPillStyle_(obj.hPillsCriticality_, obj.ActiveCritPills_);
+                end
+                % Placeholder-color labels (count badge) — restore the
+                % subdued placeholder color the walker overwrote.
+                if ~isempty(obj.hCountLabel_) && isvalid(obj.hCountLabel_)
+                    obj.hCountLabel_.FontColor = t.PlaceholderTextColor;
+                end
+            catch err
+                warning('FastSenseCompanion:setThemeFailed', ...
+                    'TagCatalogPane.setTheme failed: %s', err.message);
+            end
+        end
+
         function deselectKey(obj, key)
         %DESELECTKEY Remove a single key from the selection set and fire TagSelectionChanged.
         %   key — char tag key (e.g., 'pressure_a')

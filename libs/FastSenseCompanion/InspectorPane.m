@@ -188,6 +188,31 @@ classdef InspectorPane < handle
             end
         end
 
+        function setTheme(obj, t)
+        %SETTHEME Live theme switch — re-render via setState(State_, Payload_).
+        %   t - resolved CompanionTheme struct.
+        %   The inspector re-renders on every state change anyway and selection
+        %   lives on the orchestrator (not the pane), so a full re-render is
+        %   safe and avoids drifting between in-place recoloring and the
+        %   per-state renderers' own theme reads.
+            if ~isstruct(t); return; end
+            try
+                obj.Theme_ = t;
+                if isempty(obj.State_); return; end
+                if ~isempty(obj.hContent_) && isvalid(obj.hContent_)
+                    obj.hContent_.BackgroundColor = t.WidgetBackground;
+                end
+                if ~isempty(obj.hPanel_) && isvalid(obj.hPanel_)
+                    obj.hPanel_.BackgroundColor = t.WidgetBackground;
+                    obj.hPanel_.BorderColor     = t.WidgetBorderColor;
+                end
+                obj.setState(obj.State_, obj.Payload_);
+            catch err
+                warning('FastSenseCompanion:setThemeFailed', ...
+                    'InspectorPane.setTheme failed: %s', err.message);
+            end
+        end
+
         function ok = tryFastSwitch_(obj, prevState, state)
         %TRYFASTSWITCH_ Update existing widgets in place if shape matches.
         %   Returns true on success (caller skips renderState_).

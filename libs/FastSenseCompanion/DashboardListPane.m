@@ -142,6 +142,32 @@ classdef DashboardListPane < handle
             obj.Listeners_ = {};
         end
 
+        function setTheme(obj, t)
+        %SETTHEME Live theme switch — recolor children in place; preserve selection.
+        %   t — resolved CompanionTheme struct.
+        %   Walks the pane subtree via applyThemeToChildren_ then calls
+        %   applyFilter_() (the single rebuild path per Phase 1020 decision)
+        %   so per-row colors and the selected-row highlight pick up the
+        %   new theme. SelectedIdx_ is preserved across the rebuild.
+            if ~isstruct(t); return; end
+            try
+                obj.Theme_ = t;
+                if ~isempty(obj.hPanel_) && isvalid(obj.hPanel_)
+                    applyThemeToChildren_(obj.hPanel_, t);
+                end
+                % Restore subdued placeholder color on the count badge.
+                if ~isempty(obj.hCountLabel_) && isvalid(obj.hCountLabel_)
+                    obj.hCountLabel_.FontColor = t.PlaceholderTextColor;
+                end
+                % Single rebuild path → re-applies per-row backgrounds,
+                % status-dot color, and selected-row highlight.
+                obj.applyFilter_();
+            catch err
+                warning('FastSenseCompanion:setThemeFailed', ...
+                    'DashboardListPane.setTheme failed: %s', err.message);
+            end
+        end
+
         function refresh(obj, engines)
         %REFRESH Rebuild row list from updated engines snapshot.
         %   engines (optional) — updated cell of DashboardEngine handles.
