@@ -250,7 +250,7 @@ classdef InspectorPane < handle
                 obj.refreshSparklineInPlace_(tag);
                 if ~isempty(obj.hOpenDetail_) && isvalid(obj.hOpenDetail_)
                     obj.hOpenDetail_.Tooltip = sprintf( ...
-                        'Open SensorDetailPlot for "%s"', char(tag.Name));
+                        'Open detail plot for "%s"', char(tag.Name));
                     obj.hOpenDetail_.ButtonPushedFcn = @(~,~) obj.onOpenDetail_(tag);
                 end
                 obj.RenderedTagKey_ = char(tag.Key);
@@ -462,7 +462,7 @@ classdef InspectorPane < handle
             obj.hOpenDetail_.Text = 'Open Detail'; obj.hOpenDetail_.FontSize = 11;
             obj.hOpenDetail_.FontWeight = 'normal'; obj.hOpenDetail_.FontColor = t.ForegroundColor;
             obj.hOpenDetail_.BackgroundColor = t.WidgetBorderColor;
-            obj.hOpenDetail_.Tooltip = sprintf('Open SensorDetailPlot for "%s"', char(tag.Name));
+            obj.hOpenDetail_.Tooltip = sprintf('Open detail plot for "%s"', char(tag.Name));
             obj.hOpenDetail_.ButtonPushedFcn = @(~,~) obj.onOpenDetail_(tag);
         end
 
@@ -834,13 +834,18 @@ classdef InspectorPane < handle
         end
 
         function onOpenDetail_(obj, tag)
-        %ONOPENDETAIL_ Open SensorDetailPlot in its own classical figure.
-        %   SensorDetailPlot's render() creates its own figure when no
-        %   ParentPanel is supplied — do NOT pre-create one with figure(),
-        %   that would leave an empty extra window. Just construct + render.
+        %ONOPENDETAIL_ Open a single-tag plot via openAdHocPlot (DashboardEngine + FastSenseWidget).
+        %   Routes through the same code path as the multi-tag composer so
+        %   event markers, threshold overlays, and live refresh behave
+        %   identically for 1..N tags.
             try
-                sd = SensorDetailPlot(tag);
-                sd.render();
+                preset = 'dark';
+                if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) ...
+                        && isprop(obj.Orchestrator_, 'Theme') ...
+                        && ~isempty(obj.Orchestrator_.Theme)
+                    preset = char(obj.Orchestrator_.Theme);
+                end
+                openAdHocPlot({tag}, 'LinkedGrid', preset);
                 obj.log_('info', sprintf('Opened detail plot: %s', char(tag.Key)));
             catch ME
                 obj.log_('error', sprintf('Open detail failed (%s): %s', char(tag.Key), ME.message));

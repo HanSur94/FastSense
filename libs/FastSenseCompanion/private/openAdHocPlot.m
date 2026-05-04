@@ -16,8 +16,11 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
 %
 %   Inputs:
 %     tags         - 1xN cell of Tag handles (already resolved by caller).
-%                    Must contain >= 2 entries.
+%                    Must contain >= 1 entry.
 %     mode         - char: 'Overlay' or 'LinkedGrid'.
+%                    When numel(tags) == 1 the mode is coerced to
+%                    'LinkedGrid' regardless of caller value (Overlay is
+%                    only meaningful for >=2 tags).
 %     themePreset  - char: 'dark' or 'light'.
 %
 %   Outputs:
@@ -25,7 +28,7 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
 %     skippedNames - 1xM cellstr of skipped tag names (may be empty).
 %
 %   Errors:
-%     FastSenseCompanion:invalidPlotMode  - mode unknown or numel(tags)<2
+%     FastSenseCompanion:invalidPlotMode  - mode unknown or numel(tags)<1
 %     FastSenseCompanion:plotSpawnFailed  - all tags failed; no figure spawned
 %
 %   Lifecycle: the engine starts its own live timer. The figure's
@@ -41,9 +44,14 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
             'openAdHocPlot: mode must be one of: %s. Got: ''%s''.', ...
             strjoin(validModes, ', '), char(mode));
     end
-    if ~iscell(tags) || numel(tags) < 2
+    if ~iscell(tags) || numel(tags) < 1
         error('FastSenseCompanion:invalidPlotMode', ...
-            'openAdHocPlot: requires a cell of >= 2 tags. Got %d.', numel(tags));
+            'openAdHocPlot: requires a cell of >= 1 tag. Got %d.', numel(tags));
+    end
+
+    % Coerce mode for single-tag case: Overlay only meaningful for >=2 tags.
+    if numel(tags) == 1 && strcmp(mode, 'Overlay')
+        mode = 'LinkedGrid';
     end
 
     % Filter tags that have data.
