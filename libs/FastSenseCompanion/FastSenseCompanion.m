@@ -49,6 +49,8 @@ classdef FastSenseCompanion < handle
     properties (Access = private)
         hFig_          = []   % uifigure handle
         hLayout_       = []   % root uigridlayout handle
+        hToolbarPanel_ = []   % top toolbar uipanel (row 1, spans cols [1 3])
+        hSettingsBtn_  = []   % gear button inside hToolbarPanel_ (right-aligned)
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
@@ -145,24 +147,47 @@ classdef FastSenseCompanion < handle
                 'Visible',            'off');
             obj.hFig_.Color = obj.Theme_.DashboardBackground;
 
-            % Step 8 — Root grid (2 rows: top = 3 panes, bottom = log strip)
-            obj.hLayout_ = uigridlayout(obj.hFig_, [2 3]);
+            % Step 8 — Root grid (3 rows: top toolbar = 32 px, panes = 1x, log strip = 360 px)
+            obj.hLayout_ = uigridlayout(obj.hFig_, [3 3]);
             obj.hLayout_.ColumnWidth   = {220, '1x', 360};
-            obj.hLayout_.RowHeight     = {'1x', 360};
+            obj.hLayout_.RowHeight     = {32, '1x', 360};
             obj.hLayout_.Padding       = [24 24 24 24];
             obj.hLayout_.ColumnSpacing = 16;
             obj.hLayout_.RowSpacing    = 12;
             obj.hLayout_.BackgroundColor = obj.Theme_.DashboardBackground;
 
-            % Step 9 — Three uipanels in row 1 + log panel spanning row 2.
+            % Step 9a — Top toolbar panel (row 1, spans all 3 columns).
+            obj.hToolbarPanel_ = uipanel(obj.hLayout_);
+            obj.hToolbarPanel_.Layout.Row    = 1;
+            obj.hToolbarPanel_.Layout.Column = [1 3];
+            obj.hToolbarPanel_.BorderType      = 'none';
+            obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
+            % Inner [1 2] grid — col 1 reserved for future toolbar items, col 2 = gear button.
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 2]);
+            hToolbarGrid.ColumnWidth     = {'1x', 36};
+            hToolbarGrid.RowHeight       = {'1x'};
+            hToolbarGrid.Padding         = [4 0 4 0];
+            hToolbarGrid.ColumnSpacing   = 4;
+            hToolbarGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+            obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hSettingsBtn_.Layout.Row    = 1;
+            obj.hSettingsBtn_.Layout.Column = 2;
+            obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
+            obj.hSettingsBtn_.FontSize      = 14;
+            obj.hSettingsBtn_.Tooltip       = 'Companion settings';
+            obj.hSettingsBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+            obj.hSettingsBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hSettingsBtn_.ButtonPushedFcn = @(~,~) obj.openSettings();
+
+            % Step 9b — Three uipanels in row 2 + log panel spanning row 3.
             obj.hLeftPanel_  = uipanel(obj.hLayout_);
-            obj.hLeftPanel_.Layout.Row = 1; obj.hLeftPanel_.Layout.Column = 1;
+            obj.hLeftPanel_.Layout.Row = 2; obj.hLeftPanel_.Layout.Column = 1;
             obj.hMidPanel_   = uipanel(obj.hLayout_);
-            obj.hMidPanel_.Layout.Row = 1; obj.hMidPanel_.Layout.Column = 2;
+            obj.hMidPanel_.Layout.Row = 2; obj.hMidPanel_.Layout.Column = 2;
             obj.hRightPanel_ = uipanel(obj.hLayout_);
-            obj.hRightPanel_.Layout.Row = 1; obj.hRightPanel_.Layout.Column = 3;
+            obj.hRightPanel_.Layout.Row = 2; obj.hRightPanel_.Layout.Column = 3;
             obj.hLogPanel_ = uipanel(obj.hLayout_);
-            obj.hLogPanel_.Layout.Row = 2; obj.hLogPanel_.Layout.Column = [1 3];
+            obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = [1 3];
 
             % Apply panel styling from theme
             for hp = {obj.hLeftPanel_, obj.hMidPanel_, obj.hRightPanel_, obj.hLogPanel_}
