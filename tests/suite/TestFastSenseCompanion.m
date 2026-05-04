@@ -604,7 +604,6 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         function testPrefsRoundTrip(testCase)
         %TESTPREFSROUNDTRIP companionPrefs save->load returns identical struct.
             testCase.backupAndArmRestore_();
-            testCase.addPrivatePathForTest_();
             s = struct('theme', 'light', 'livePeriod', 1.7);
             companionPrefs('save', s);
             s2 = companionPrefs('load');
@@ -615,9 +614,11 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         function testConstructorPriority(testCase)
         %TESTCONSTRUCTORPRIORITY explicit Name-Value > prefdir > built-in default.
             testCase.backupAndArmRestore_();
-            % Write 'light' to prefdir via a Companion that calls applyTheme.
-            app1 = FastSenseCompanion('Theme', 'light');
+            % Write 'light' to prefdir via applyTheme (constructor args alone
+            % do not persist — only dialog actions / public setters do).
+            app1 = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() delete(app1));
+            app1.applyTheme('light');
             app1.close();
             drawnow;
             % Default-construct → must pick up 'light' from prefdir.
@@ -665,7 +666,6 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         function testSetLivePeriod(testCase)
         %TESTSETLIVEPERIOD setLivePeriod updates timer Period and persists.
             testCase.backupAndArmRestore_();
-            testCase.addPrivatePathForTest_();
             app = FastSenseCompanion();
             testCase.addTeardown(@() delete(app));
             app.setLivePeriod(2.0);
@@ -707,7 +707,6 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         function testResetToDefaults(testCase)
         %TESTRESETTODEFAULTS Reset button restores dark / 1.0 and persists.
             testCase.backupAndArmRestore_();
-            testCase.addPrivatePathForTest_();
             app = FastSenseCompanion('Theme', 'light', 'LivePeriod', 5.0);
             testCase.addTeardown(@() delete(app));
             app.openSettings(); drawnow;
@@ -745,17 +744,6 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 copyfile(prefsPath, backupPath);
             end
             testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
-        end
-
-        function addPrivatePathForTest_(testCase)
-        %ADDPRIVATEPATHFORTEST_ Add libs/FastSenseCompanion/private to the path for this test.
-        %   Removes the path on test teardown. Allows tests to call
-        %   companionPrefs() directly without adding a public seam.
-            here = fileparts(mfilename('fullpath'));      % tests/suite
-            repoRoot = fileparts(fileparts(here));        % repo root
-            privDir = fullfile(repoRoot, 'libs', 'FastSenseCompanion', 'private');
-            addpath(privDir);
-            testCase.addTeardown(@() rmpath(privDir));
         end
 
         function driveSelectAndPlot_(testCase, app, keys, mode) %#ok<INUSL>

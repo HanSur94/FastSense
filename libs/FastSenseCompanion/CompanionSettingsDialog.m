@@ -45,7 +45,7 @@ classdef CompanionSettingsDialog < handle
                     'CompanionSettingsDialog requires a FastSenseCompanion handle.');
             end
             obj.App = app;
-            t = app.Theme_;
+            t = CompanionTheme.get(app.Theme);
 
             obj.hFig_ = uifigure( ...
                 'Name',                'Companion Settings', ...
@@ -137,8 +137,9 @@ classdef CompanionSettingsDialog < handle
                 obj.App.applyTheme(evt.Value);
                 % Repaint the dialog itself with the new theme.
                 if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
-                    obj.hFig_.Color = obj.App.Theme_.DashboardBackground;
-                    applyThemeToChildren_(obj.hFig_, obj.App.Theme_);
+                    tNow = CompanionTheme.get(obj.App.Theme);
+                    obj.hFig_.Color = tNow.DashboardBackground;
+                    applyThemeToChildren_(obj.hFig_, tNow);
                 end
             catch err
                 if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
@@ -170,8 +171,9 @@ classdef CompanionSettingsDialog < handle
                     obj.hPeriodSpinner_.Value = 1.0;
                 end
                 if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
-                    obj.hFig_.Color = obj.App.Theme_.DashboardBackground;
-                    applyThemeToChildren_(obj.hFig_, obj.App.Theme_);
+                    tNow = CompanionTheme.get(obj.App.Theme);
+                    obj.hFig_.Color = tNow.DashboardBackground;
+                    applyThemeToChildren_(obj.hFig_, tNow);
                 end
             catch err
                 if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
