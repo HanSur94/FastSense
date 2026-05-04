@@ -42,8 +42,13 @@ classdef FastSenseCompanion < handle
         Dashboards = {}       % cell array of DashboardEngine passed by user
         Registry   = []       % TagRegistry reference
         Theme      = 'dark'   % preset string ('dark' | 'light')
+        LivePeriod = 1.0      % seconds; user-readable mirror of LivePeriod_
         IsOpen     = false    % true while uifigure is valid
         IsLive     = false    % true while LiveTimer_ is running (refreshes inspector)
+    end
+
+    properties (GetAccess = public, SetAccess = ?CompanionSettingsDialog)
+        SettingsDlg_ = []     % CompanionSettingsDialog handle (or empty)
     end
 
     properties (Access = private)
@@ -90,13 +95,34 @@ classdef FastSenseCompanion < handle
                     'FastSenseCompanion requires MATLAB R2020b or later. Octave is not supported.');
             end
 
-            % Step 2 — Default options
+            % Step 2 — Built-in defaults
             userDashboards = {};
             userRegistry   = [];
             userName       = 'FastSense Companion';
             userTheme      = 'dark';
+            userLivePeriod = 1.0;
 
-            % Step 3 — Parse varargin (explicit switch, match project convention)
+            % Step 2b — Override with stored prefdir values (if present and well-formed).
+            % Priority: built-in default < prefdir < explicit Name-Value (Step 3).
+            stored = companionPrefs('load');
+            if isstruct(stored)
+                if isfield(stored, 'theme') && (ischar(stored.theme) || ...
+                        (isstring(stored.theme) && isscalar(stored.theme)))
+                    cand = char(stored.theme);
+                    if any(strcmp(cand, {'dark','light'}))
+                        userTheme = cand;
+                    end
+                end
+                if isfield(stored, 'livePeriod') && ...
+                        isnumeric(stored.livePeriod) && ...
+                        isscalar(stored.livePeriod) && ...
+                        isfinite(stored.livePeriod) && ...
+                        stored.livePeriod > 0
+                    userLivePeriod = double(stored.livePeriod);
+                end
+            end
+
+            % Step 3 — Parse varargin (explicit Name-Value wins over prefdir).
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 switch key
@@ -108,9 +134,17 @@ classdef FastSenseCompanion < handle
                         userName = varargin{k+1};
                     case 'Theme'
                         userTheme = varargin{k+1};
+                    case 'LivePeriod'
+                        v = varargin{k+1};
+                        if ~isnumeric(v) || ~isscalar(v) || ~isfinite(v) || v <= 0
+                            error('FastSenseCompanion:invalidLivePeriod', ...
+                                'LivePeriod must be a positive finite scalar (seconds).');
+                        end
+                        userLivePeriod = double(v);
                     otherwise
                         error('FastSenseCompanion:unknownOption', ...
-                            'Unknown option ''%s''. Valid options: Dashboards, Registry, Name, Theme.', key);
+                            ['Unknown option ''%s''. Valid options: ', ...
+                             'Dashboards, Registry, Name, Theme, LivePeriod.'], key);
                 end
             end
 
@@ -131,12 +165,14 @@ classdef FastSenseCompanion < handle
             end
 
             % Step 6 — Store on object
-            obj.Engines_   = userDashboards;
-            obj.Dashboards = userDashboards;
-            obj.Registry_  = userRegistry;
-            obj.Registry   = userRegistry;
-            obj.Theme      = userTheme;
-            obj.Theme_     = CompanionTheme.get(userTheme);
+            obj.Engines_    = userDashboards;
+            obj.Dashboards  = userDashboards;
+            obj.Registry_   = userRegistry;
+            obj.Registry    = userRegistry;
+            obj.Theme       = userTheme;
+            obj.Theme_      = CompanionTheme.get(userTheme);
+            obj.LivePeriod_ = userLivePeriod;
+            obj.LivePeriod  = userLivePeriod;
 
             % Step 7 — Build uifigure (Visible='off' while building)
             obj.hFig_ = uifigure( ...
@@ -299,6 +335,15 @@ classdef FastSenseCompanion < handle
                 end
             end
             obj.Listeners_ = {};
+            % Tear down a still-open settings dialog, if any.
+            try
+                if ~isempty(obj.SettingsDlg_) && isvalid(obj.SettingsDlg_)
+                    delete(obj.SettingsDlg_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] SettingsDlg cleanup failed: %s\n', err.message);
+            end
+            obj.SettingsDlg_ = [];
             % Always delete the uifigure last and unconditionally — this is
             % what makes the X click actually close the window.
             try
@@ -520,9 +565,113 @@ classdef FastSenseCompanion < handle
             obj.CatalogPane_.refresh();
         end
 
+        function applyTheme(obj, theme)
+        %APPLYTHEME Live theme switch — repaints all panes + log strip + toolbar; persists.
+        %   theme — 'dark' | 'light'.
+        %   On invalid input throws FastSenseCompanion:invalidTheme.
+        %   On propagation failure rolls back Theme/Theme_ to their previous
+        %   values and rethrows. After successful apply, persists via
+        %   companionPrefs('save', ...).
+            if ~ischar(theme) && ~(isstring(theme) && isscalar(theme))
+                error('FastSenseCompanion:invalidTheme', ...
+                    'Theme must be a char ''dark'' or ''light''.');
+            end
+            theme = char(theme);
+            if ~any(strcmp(theme, {'dark','light'}))
+                error('FastSenseCompanion:invalidTheme', ...
+                    'Theme must be ''dark'' or ''light'' (got ''%s'').', theme);
+            end
+            prevTheme  = obj.Theme;
+            prevTheme_ = obj.Theme_;
+            try
+                obj.Theme  = theme;
+                obj.Theme_ = CompanionTheme.get(theme);
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    obj.hFig_.Color = obj.Theme_.DashboardBackground;
+                end
+                if ~isempty(obj.hLayout_) && isvalid(obj.hLayout_)
+                    obj.hLayout_.BackgroundColor = obj.Theme_.DashboardBackground;
+                end
+                % Repaint every panel + log strip + toolbar via the recursive walker.
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    applyThemeToChildren_(obj.hFig_, obj.Theme_);
+                end
+                % Per-pane setTheme — in-place where safe; setState for inspector.
+                if ~isempty(obj.CatalogPane_) && isvalid(obj.CatalogPane_)
+                    obj.CatalogPane_.setTheme(obj.Theme_);
+                end
+                if ~isempty(obj.ListPane_) && isvalid(obj.ListPane_)
+                    obj.ListPane_.setTheme(obj.Theme_);
+                end
+                if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
+                    obj.InspectorPane_.setTheme(obj.Theme_);
+                end
+                obj.updateLiveButton_();
+                drawnow;
+            catch err
+                obj.Theme  = prevTheme;
+                obj.Theme_ = prevTheme_;
+                rethrow(err);
+            end
+            obj.savePrefs_();
+        end
+
+        function setLivePeriod(obj, seconds)
+        %SETLIVEPERIOD Change the live-mode timer Period and persist.
+        %   seconds — positive finite scalar (seconds, > 0).
+        %   On invalid input throws FastSenseCompanion:invalidLivePeriod.
+        %   Stops the LiveTimer_ if running, sets the new Period, restarts
+        %   only if it was running before. Persists to prefdir.
+            if ~isnumeric(seconds) || ~isscalar(seconds) || ...
+                    ~isfinite(seconds) || seconds <= 0
+                error('FastSenseCompanion:invalidLivePeriod', ...
+                    'LivePeriod must be a positive finite scalar (seconds).');
+            end
+            seconds = double(seconds);
+            obj.LivePeriod_ = seconds;
+            obj.LivePeriod  = seconds;
+            wasLive = obj.IsLive;
+            if ~isempty(obj.LiveTimer_) && isvalid(obj.LiveTimer_)
+                try
+                    if strcmp(obj.LiveTimer_.Running, 'on')
+                        stop(obj.LiveTimer_);
+                    end
+                    obj.LiveTimer_.Period = seconds;
+                    if wasLive
+                        start(obj.LiveTimer_);
+                    end
+                catch err
+                    obj.addLogEntry('error', ...
+                        sprintf('Live period change failed: %s', err.message));
+                end
+            end
+            obj.savePrefs_();
+        end
+
+        function openSettings(obj)
+        %OPENSETTINGS Open or focus the singleton CompanionSettingsDialog.
+        %   Idempotent: a second call brings the existing dialog forward
+        %   instead of constructing a new one.
+            if ~isempty(obj.SettingsDlg_) && isvalid(obj.SettingsDlg_) && ...
+                    ~isempty(obj.SettingsDlg_.hFig_) && ...
+                    isvalid(obj.SettingsDlg_.hFig_)
+                figure(obj.SettingsDlg_.hFig_);
+                return;
+            end
+            obj.SettingsDlg_ = CompanionSettingsDialog(obj);
+        end
+
     end
 
     methods (Access = private)
+
+        function savePrefs_(obj)
+        %SAVEPREFS_ Persist current Theme + LivePeriod to prefdir.
+        %   Companion-side wrapper around companionPrefs('save', prefs).
+        %   Never throws — companionPrefs is the safety net.
+            prefs = struct('theme', obj.Theme, 'livePeriod', obj.LivePeriod_);
+            companionPrefs('save', prefs);
+        end
 
         function buildLogStrip_(obj)
         %BUILDLOGSTRIP_ Construct two stacked logs: events (top) + live updates (bottom).
