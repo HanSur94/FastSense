@@ -282,8 +282,10 @@ LINEXRANGE Return X endpoints for line i.
 #### `onEventMarkerClick_(obj, src, ~)`
 
 ONEVENTMARKERCLICK_ ButtonDownFcn dispatcher for event markers.
-  Hidden public so TestFastSenseEventClick can call it for
-  direct-dispatch testing of the click -> details-popup path.
+  Hidden public so TestFastSenseEventClick can call it for direct
+  dispatch of the click -> details-popup path. Branches on figure
+  SelectionType: 'normal' -> openEventDetails_; 'alt' (right-click)
+  -> builds/shows uicontextmenu with quick-nav actions.
 
 #### `openEventDetails_(obj, ev)`
 
