@@ -547,6 +547,58 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'ADHOC-05: spawn+close cycle must leave no orphan companion-owned timers');
         end
 
+        % ---- QUICK-LIVEUPDATES-01: scanLiveTagUpdates_ guard regression ----
+
+        function testScanLiveTagUpdatesPopulatesTableAfterGrowth(testCase)
+        %TESTSCANLIVETAGUPDATESPOPULATESTABLEAFTERGROWTH Live updates table receives a row after a SensorTag grows between two scan ticks.
+        %   Regression test for the isempty(containers.Map) guard bug.
+        %   Before the fix: scanLiveTagUpdates_ returned on every tick because
+        %   isempty(containers.Map) is true for an empty map (chicken-and-egg).
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            % Register a SensorTag with an initial 3-sample series.
+            tag = SensorTag('liveupd1', 'Name', 'LiveUpd1', ...
+                'X', [1 2 3], 'Y', [10 20 30], ...
+                'Labels', {'L'}, 'Criticality', 'low');
+            TagRegistry.register('liveupd1', tag);
+
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            drawnow;
+
+            % Reach the private scan method via the live timer's TimerFcn,
+            % which is a closure that DOES have private access to the method.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            testCase.assertNotEmpty(s.LiveTimer_, ...
+                'Live timer must exist after construction (Live mode defaults ON)');
+            testCase.assertTrue(isa(s.LiveSampleCount_, 'containers.Map'), ...
+                'LiveSampleCount_ must be a containers.Map after constructor');
+            tickFcn = s.LiveTimer_.TimerFcn;
+
+            % Tick 1: baseline — function should record n=3 for the key but NOT log a row.
+            feval(tickFcn, s.LiveTimer_, []);
+            drawnow;
+
+            % Grow the tag by 2 samples.
+            tag.updateData([1 2 3 4 5], [10 20 30 40 50]);
+
+            % Tick 2: should see the delta and append a row.
+            feval(tickFcn, s.LiveTimer_, []);
+            drawnow;
+
+            % Assertion: at least one row in the live-updates table.
+            s2 = struct(app);
+            testCase.verifyGreaterThanOrEqual(size(s2.hLiveLogTable_.Data, 1), 1, ...
+                'Live updates table must contain at least one row after a SensorTag grows between two ticks');
+            testCase.verifyTrue(s2.LiveSampleCount_.isKey('liveupd1'), ...
+                'LiveSampleCount_ must contain the tag key after the first tick');
+            testCase.verifyEqual(s2.LiveSampleCount_('liveupd1'), 5, ...
+                'LiveSampleCount_(''liveupd1'') must equal 5 after the second tick');
+        end
+
     end
 
     methods (Access = private)
