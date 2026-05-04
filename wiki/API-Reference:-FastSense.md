@@ -145,6 +145,7 @@ ADDTAG Polymorphic dispatch — route a Tag to the correct render path.
   fp.ADDTAG(stateTag)      — routes to a staircase line (numeric Y)
   fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
   fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
+  fp.ADDTAG(derivedTag)    — routes to addLine via tag.getXY (continuous derived series)
 
 #### `addStateTagAsStaircase_(obj, tag, varargin)`
 
