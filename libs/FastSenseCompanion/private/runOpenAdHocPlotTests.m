@@ -10,12 +10,14 @@ function runOpenAdHocPlotTests()
 %
 %   Coverage:
 %     T1 — invalid mode 'Foo' throws FastSenseCompanion:invalidPlotMode
-%     T2 — too-few-tags (1 tag) throws FastSenseCompanion:invalidPlotMode
+%     T2 — invalid mode: 0 tags throws FastSenseCompanion:invalidPlotMode
 %     T3 — Overlay happy: 2 tags spawn 1 classical figure; skipped is empty
 %     T4 — LinkedGrid happy: 4 tags spawn 1 classical figure
 %     T5 — Partial-skip: 1 throwing + 2 good => figure spawns; skipped has 1 entry
 %     T6 — All-fail: every tag throws => FastSenseCompanion:plotSpawnFailed
 %     T7 — Empty-data tag => skipped marked 'no data'; figure from valid tags
+%     T8 — Single-tag LinkedGrid happy: 1 tag spawns 1 figure with exactly 1 widget
+%     T9 — Single-tag Overlay coerced: 1 tag + 'Overlay' coerces to LinkedGrid (no error)
 %
 %   See also openAdHocPlot, MockPlottableTag, runFilterDashboardsTests.
 
@@ -37,10 +39,10 @@ function runOpenAdHocPlotTests()
         nPassed = nPassed + 1;
     end
 
-    % T2 — too-few-tags
+    % T2 — zero tags
     try
-        openAdHocPlot({mk('a', 'A', 'Default')}, 'Overlay', 'dark');
-        error('T2: <2 tags must throw');
+        openAdHocPlot({}, 'Overlay', 'dark');
+        error('T2: 0 tags must throw');
     catch ME
         assert(strcmp(ME.identifier, 'FastSenseCompanion:invalidPlotMode'), ...
             sprintf('T2: expected FastSenseCompanion:invalidPlotMode, got %s', ...
@@ -105,6 +107,27 @@ function runOpenAdHocPlotTests()
         sprintf('T7: expected 1 skipped, got %d', numel(skipped)));
     assert(~isempty(strfind(skipped{1}, 'no data')), ...
         'T7: empty-data tag must be marked ''no data'' in skipped list');
+    nPassed = nPassed + 1;
+
+    % T8 — Single-tag LinkedGrid happy
+    tags = {mk('s1', 'Solo', 'Default')};
+    [hFig, skipped] = openAdHocPlot(tags, 'LinkedGrid', 'dark');
+    spawned(end+1) = hFig;
+    assert(ishandle(hFig) && strcmp(get(hFig, 'Type'), 'figure'), ...
+        'T8: single-tag must return classical figure handle');
+    assert(isempty(skipped), 'T8: single-tag happy path must have empty skipped');
+    % Verify exactly 1 axes was created (one widget == one axes in LinkedGrid).
+    axList = findall(hFig, 'Type', 'axes');
+    assert(numel(axList) == 1, ...
+        sprintf('T8: expected 1 axes for 1 widget, got %d', numel(axList)));
+    nPassed = nPassed + 1;
+
+    % T9 — Single-tag with 'Overlay' coerces to LinkedGrid
+    tags = {mk('s2', 'Solo2', 'Default')};
+    [hFig, skipped] = openAdHocPlot(tags, 'Overlay', 'dark');
+    spawned(end+1) = hFig;
+    assert(ishandle(hFig), 'T9: 1-tag Overlay must coerce to LinkedGrid and spawn figure');
+    assert(isempty(skipped), 'T9: empty skipped for valid single tag');
     nPassed = nPassed + 1;
 
     fprintf('    All %d tests passed.\n', nPassed);
