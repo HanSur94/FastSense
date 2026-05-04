@@ -939,6 +939,7 @@ classdef FastSense < handle
             %   fp.ADDTAG(stateTag)      — routes to a staircase line (numeric Y)
             %   fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
             %   fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
+            %   fp.ADDTAG(derivedTag)    — routes to addLine via tag.getXY (continuous derived series)
             %
             %   Dispatches by tag.getKind() — NO isa() subtype checks (Pitfall 1).
             %   Must be called BEFORE render() (enforced by IsRendered guard).
@@ -949,7 +950,7 @@ classdef FastSense < handle
             %     FastSense:stateTagCellstrNotSupported  — cellstr Y StateTag (deferred)
             %     FastSense:alreadyRendered              — render() already called
             %
-            %   See also addLine, addThreshold, Tag, SensorTag, StateTag.
+            %   See also addLine, addThreshold, Tag, SensorTag, StateTag, DerivedTag.
 
             if obj.IsRendered
                 error('FastSense:alreadyRendered', ...
@@ -969,6 +970,9 @@ classdef FastSense < handle
                     [x, y] = tag.getXY();
                     obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
                 case 'composite'
+                    [x, y] = tag.getXY();
+                    obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
+                case 'derived'
                     [x, y] = tag.getXY();
                     obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
                 otherwise
