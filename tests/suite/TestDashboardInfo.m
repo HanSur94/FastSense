@@ -292,8 +292,8 @@ classdef TestDashboardInfo < matlab.unittest.TestCase
         %   is still open. Tolerates already-closed handles and engines
         %   without an InfoModalFigure_ field.
             try
-                if isprop(d, 'InfoModalFigure_') && ~isempty(d.InfoModalFigure_) ...
-                        && ishandle(d.InfoModalFigure_)
+                if isprop(d, 'InfoModalFigure_') && ~isempty(d.InfoModalFigure_) && ...
+                        ishandle(d.InfoModalFigure_)
                     delete(d.InfoModalFigure_);
                 end
             catch
