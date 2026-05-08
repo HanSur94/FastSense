@@ -1,6 +1,7 @@
 """Tests for the FastAPI bridge server REST API."""
 
 import asyncio
+import logging
 import sqlite3
 import struct
 from pathlib import Path
@@ -10,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from fastsense_bridge.blob_decoder import MKSQ_MAGIC
 from fastsense_bridge.server import AppState, create_app
@@ -315,3 +317,184 @@ class TestHealth:
         resp = client.get("/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+
+class TestCORSPolicy:
+    """Tests for the CORS policy controlled by FASTSENSE_BRIDGE_CORS_ORIGINS."""
+
+    def test_default_allows_localhost(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        resp = client.get(
+            "/health", headers={"Origin": "http://localhost:5173"}
+        )
+        assert resp.status_code == 200
+        assert (
+            resp.headers.get("access-control-allow-origin")
+            == "http://localhost:5173"
+        )
+
+        resp2 = client.get(
+            "/health", headers={"Origin": "http://127.0.0.1:8080"}
+        )
+        assert resp2.status_code == 200
+        assert (
+            resp2.headers.get("access-control-allow-origin")
+            == "http://127.0.0.1:8080"
+        )
+
+    def test_default_blocks_foreign_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        resp = client.get(
+            "/health", headers={"Origin": "https://evil.example.com"}
+        )
+        # CORSMiddleware should not echo the foreign origin.
+        assert (
+            resp.headers.get("access-control-allow-origin")
+            != "https://evil.example.com"
+        )
+
+    def test_env_override_allows_listed_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.setenv(
+            "FASTSENSE_BRIDGE_CORS_ORIGINS", "https://app.example.com"
+        )
+        client = TestClient(create_app(app_state))
+
+        resp = client.get(
+            "/health", headers={"Origin": "https://app.example.com"}
+        )
+        assert resp.status_code == 200
+        assert (
+            resp.headers.get("access-control-allow-origin")
+            == "https://app.example.com"
+        )
+
+        resp2 = client.get(
+            "/health", headers={"Origin": "https://evil.example.com"}
+        )
+        assert (
+            resp2.headers.get("access-control-allow-origin")
+            != "https://evil.example.com"
+        )
+
+    def test_wildcard_logs_warning(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        app_state: AppState,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("FASTSENSE_BRIDGE_CORS_ORIGINS", "*")
+
+        with caplog.at_level(
+            logging.WARNING, logger="fastsense_bridge.server"
+        ):
+            app = create_app(app_state)
+
+        warning_records = [
+            r for r in caplog.records if r.levelno == logging.WARNING
+        ]
+        assert warning_records, "Expected a WARNING record on wildcard CORS"
+        assert any(
+            "*" in r.getMessage() or "wide open" in r.getMessage().lower()
+            for r in warning_records
+        )
+
+        client = TestClient(app)
+        resp = client.get(
+            "/health", headers={"Origin": "https://anything.example.com"}
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("access-control-allow-origin") == "*"
+
+
+class TestWebSocketOriginPolicy:
+    """Tests for the WebSocket /ws origin gate.
+
+    Mirrors TestCORSPolicy but exercises the WS upgrade path. The /ws
+    endpoint must reject disallowed origins BEFORE accepting the
+    upgrade, surfacing as WebSocketDisconnect(code=1008) on the client.
+    """
+
+    def test_default_allows_localhost_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        with client.websocket_connect(
+            "/ws", headers={"origin": "http://localhost:5173"}
+        ):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
+
+    def test_default_blocks_foreign_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(
+                "/ws", headers={"origin": "https://evil.example.com"}
+            ):
+                pass
+        assert ei.value.code == 1008
+        assert len(app_state._ws_clients) == 0
+
+    def test_default_blocks_missing_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect("/ws", headers={}):
+                pass
+        assert ei.value.code == 1008
+        assert len(app_state._ws_clients) == 0
+
+    def test_env_override_list_allows_listed_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.setenv(
+            "FASTSENSE_BRIDGE_CORS_ORIGINS", "https://app.example.com"
+        )
+        client = TestClient(create_app(app_state))
+
+        with client.websocket_connect(
+            "/ws", headers={"origin": "https://app.example.com"}
+        ):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
+
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(
+                "/ws", headers={"origin": "https://evil.example.com"}
+            ):
+                pass
+        assert ei.value.code == 1008
+
+    def test_wildcard_allows_any_origin_including_missing(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.setenv("FASTSENSE_BRIDGE_CORS_ORIGINS", "*")
+        client = TestClient(create_app(app_state))
+
+        with client.websocket_connect(
+            "/ws", headers={"origin": "https://anything.example.com"}
+        ):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
+
+        with client.websocket_connect("/ws", headers={}):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
