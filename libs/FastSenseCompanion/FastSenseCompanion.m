@@ -15,12 +15,15 @@ classdef FastSenseCompanion < handle
 %     Registry   — TagRegistry instance (default: TagRegistry singleton)
 %     Name       — window title string (default: 'FastSense Companion')
 %     Theme      — 'dark' | 'light' (default: 'dark')
+%     LivePeriod — seconds between live refreshes (default: 1.0)
+%     EventStore — EventStore handle or [] (default: auto-discover from registry)
 %
 %   Public methods:
 %     setProject(dashboards, registry) — rebuild against new project
 %     addDashboard(d)                  - append a DashboardEngine; refresh browser
 %     removeDashboard(key)             - remove by Name; reset inspector if it was selected
 %     refreshCatalog()                 — re-snapshot tags and rebuild catalog
+%     getEventStore()                  — resolved EventStore handle or []
 %     close()                          — idempotent teardown
 %
 %   Events fired:
@@ -93,7 +96,7 @@ classdef FastSenseCompanion < handle
 
         function obj = FastSenseCompanion(varargin)
         %FASTSENSECOMPANION Constructor. Opens a themed three-pane uifigure immediately.
-        %   Name-value pairs: 'Dashboards', 'Registry', 'Name', 'Theme'.
+        %   Name-value pairs: 'Dashboards', 'Registry', 'Name', 'Theme', 'LivePeriod', 'EventStore'.
 
             % Step 1 — Octave guard (FIRST, before any other work)
             if exist('OCTAVE_VERSION', 'builtin') ~= 0
