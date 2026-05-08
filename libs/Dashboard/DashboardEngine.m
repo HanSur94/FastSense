@@ -51,6 +51,7 @@ classdef DashboardEngine < handle
         LastUpdateTime = []
         FilePath        = ''
         InfoTempFile    = ''
+        InfoModalFigure_ = []  % Cached modal uifigure handle for in-app info display (260508-n8h)
         DetachedMirrors = {}   % Cell array of DetachedMirror objects
         % Theme caching
         ThemeCache_        = []  % Cached DashboardTheme struct; lazy-computed by getCachedTheme()
@@ -860,18 +861,83 @@ classdef DashboardEngine < handle
                     system(['xdg-open "' obj.InfoTempFile '"']);
                 end
             else
-                % web() launches MATLAB's Java-backed help browser. On
-                % headless CI runners (no DISPLAY, no JVM desktop) it can
-                % segfault MATLAB R2020b — observed crashing TestDashboardInfo
-                % in CI for days. Skip the browser launch in those
-                % conditions; the InfoTempFile is still written and
-                % verifiable from tests.
-                hasDisplay = ~isempty(getenv('DISPLAY')) || ispc || ismac;
-                hasDesktop = usejava('jvm') && usejava('desktop');
-                if hasDisplay && hasDesktop
-                    web(obj.InfoTempFile, '-new');
+                % Only render the in-app modal when running in an interactive
+                % desktop MATLAB session. Skip on -batch / -nodisplay so CI
+                % does not block on a uifigure that no one will ever close
+                % (and avoids the JVM segfault history that the older web()
+                % path was designed to dodge — see TestDashboardInfo failure,
+                % GitHub Actions run 25550691546).
+                % The temp HTML file is already on disk above, which is what
+                % the TestDashboardInfo suite verifies for headless runs.
+                interactive = usejava('desktop');
+                if interactive && exist('batchStartupOptionUsed', 'builtin') && ...
+                        batchStartupOptionUsed()
+                    interactive = false;
+                end
+                if interactive
+                    obj.showInfoModal_(html);
                 end
             end
+        end
+
+        function showInfoModal_(obj, html)
+        %SHOWINFOMODAL_ Render the info HTML in an in-app modal uifigure (260508-n8h).
+        %   Replaces the previous browser handoff via web(). Reuses an
+        %   existing modal if still open so repeated Info-button clicks
+        %   refocus rather than stack windows. Falls back silently on
+        %   uifigure construction errors (older MATLAB releases without
+        %   uihtml support keep the temp HTML file as the user-facing
+        %   artifact).
+            if ~isempty(obj.InfoModalFigure_) && ishandle(obj.InfoModalFigure_)
+                try
+                    set(obj.InfoModalFigure_, 'Name', ['Info — ' obj.Name]);
+                    htmlChild = findobj(obj.InfoModalFigure_, '-depth', 1, ...
+                        'Type', 'uihtml');
+                    if ~isempty(htmlChild)
+                        set(htmlChild(1), 'HTMLSource', html);
+                    end
+                    figure(obj.InfoModalFigure_);  % bring to front
+                    return;
+                catch
+                    obj.InfoModalFigure_ = [];
+                end
+            end
+
+            try
+                fig = uifigure('Name', ['Info — ' obj.Name], ...
+                    'Position', [100 100 800 600], ...
+                    'WindowStyle', 'modal', ...
+                    'Visible', 'on');
+                movegui(fig, 'center');
+                hHtml = uihtml(fig, ...
+                    'Position', [0 0 800 600], ...
+                    'HTMLSource', html);
+                % Anchor the uihtml to fill the figure on resize.
+                set(fig, 'AutoResizeChildren', 'off');
+                set(fig, 'SizeChangedFcn', @(src, ~) obj.onInfoModalResize_(src, hHtml));
+                set(fig, 'CloseRequestFcn', @(src, ~) obj.onInfoModalClose_(src));
+                obj.InfoModalFigure_ = fig;
+            catch ME
+                warning('DashboardEngine:infoModalCreateError', ...
+                    'Failed to open info modal: %s', ME.message);
+                obj.InfoModalFigure_ = [];
+            end
+        end
+
+        function onInfoModalResize_(~, src, hHtml)
+        %ONINFOMODALRESIZE_ Keep the uihtml panel filling the modal figure.
+            try
+                pos = get(src, 'Position');
+                set(hHtml, 'Position', [0 0 pos(3) pos(4)]);
+            catch
+                % Resize before children built — ignore.
+            end
+        end
+
+        function onInfoModalClose_(obj, src)
+        %ONINFOMODALCLOSE_ Clear the cached modal handle and dispose the figure.
+            try delete(src); catch, end
+            obj.InfoModalFigure_ = [];
         end
 
         function md = buildPlaceholderInfoMarkdown(obj)
@@ -1622,6 +1688,12 @@ classdef DashboardEngine < handle
                 end
             end
             obj.cleanupInfoTempFile();
+            % 260508-n8h — close the in-app info modal if still open so the
+            % engine never leaves orphan uifigures behind.
+            if ~isempty(obj.InfoModalFigure_) && ishandle(obj.InfoModalFigure_)
+                try delete(obj.InfoModalFigure_); catch, end
+            end
+            obj.InfoModalFigure_ = [];
         end
     end
 

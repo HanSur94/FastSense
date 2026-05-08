@@ -19,7 +19,8 @@
 - [x] Phase 1024: Fix companion app dark mode — closed via quick task [260508-d7k](./quick/260508-d7k-fix-companion-app-dark-mode-switching-th/) (2026-05-08)
 - [ ] Phase 1025: FastSense hover crosshair + datatip
 - [ ] Phase 1026: Dashboard time slider preview
-- [ ] Phase 1027: Companion detachable log window
+- [x] Phase 1027: Companion detachable log window — completed 2026-05-08
+- [ ] Phase 1027.1: Independent events/live log detach (gap closure)
 - [ ] Phase 1028: Tag update perf — MEX + SIMD
 
 </details>
@@ -112,7 +113,8 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1024. Fix companion app dark mode | pending | quick-task | Complete (via 260508-d7k) | 2026-05-08 |
 | 1025. FastSense hover crosshair + datatip | pending | 0/? | Not started | — |
 | 1026. Dashboard time slider preview | pending | 0/? | Not started | — |
-| 1027. Companion detachable log window | pending | 0/? | Not started | — |
+| 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
+| 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
 
 ## Phase Details (Pending Milestone)
@@ -145,11 +147,39 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 
 ### Phase 1027: Companion detachable log window
 
-**Goal:** In the FastSense Companion app, make the log panel detachable into its own draggable, resizable window — same pop-out pattern as detachable widgets in the main dashboard.
+**Goal:** In the FastSense Companion app, make the log panel detachable into its own draggable, resizable window — same pop-out pattern as detachable widgets in the main dashboard. Implementation extracts the log strip into a `LogPane` class (mirrors existing pane pattern) with an `Inline`/`Detached`/`Hidden` state machine driven by a top-toolbar dropdown.
 
 **Promoted from:** Backlog 999.4 (2026-05-08)
 **Requirements:** TBD
-**Plans:** 0 plans
+**Plans:** 5/5 plans complete
+
+Plans:
+- [x] 1027-01-create-logpane-class-PLAN.md — extract self-contained `LogPane` class (UI + buffers + filter + theme + DetachRequested event)
+- [x] 1027-02-test-logpane-PLAN.md — class-based unit suite covering attach/detach lifecycle, buffer preservation, theme switch, 500-row cap, event firing
+- [x] 1027-03-integrate-logpane-companion-PLAN.md — wire `LogPane` into `FastSenseCompanion`, add toolbar `Live` button + `Log:` dropdown, implement `setLogState_` state machine, update theme walker to skip LogPaneRoot
+- [x] 1027-04-extend-companion-tests-PLAN.md — add 10 state-machine + Live-button-relocation + theme-while-detached tests to `TestFastSenseCompanion`
+- [x] 1027-05-update-walker-test-PLAN.md — add LogPaneRoot skip-rule assertions to `test_companion_apply_theme_walker`
+
+
+### Phase 1027.1: Independent events/live log detach (gap closure)
+
+**Goal:** Make the events log and the live updates log independently detachable. Phase 1027 detached them as one unit; this phase splits the contract so each log has its own `Inline`/`Detached`/`Hidden` state, its own pop-out icon, its own detached `uifigure`, and its own toolbar dropdown. Inline strip rebalances so the still-inline log fills the row.
+
+**Source:** User feedback after Phase 1027 demo (2026-05-08) — "we have 2 logs right? I want both separately detachable."
+**Spec:** [docs/superpowers/specs/2026-05-08-independent-log-detach-design.md](../../docs/superpowers/specs/2026-05-08-independent-log-detach-design.md)
+**Requirements:** none — CONTEXT.md acceptance criteria are the contract
+**Plans:** 8/8 plans complete
+
+Plans:
+- [x] 1027.1-01-create-events-log-pane-PLAN.md — port events-half of LogPane into self-contained `EventsLogPane` class (Wave 1, parallel-safe)
+- [x] 1027.1-02-create-live-log-pane-PLAN.md — port live-half of LogPane into self-contained `LiveLogPane` class with own pop-out icon (Wave 1, parallel-safe)
+- [x] 1027.1-03-test-events-log-pane-PLAN.md — class-based unit suite for EventsLogPane (Wave 2, depends on 01)
+- [x] 1027.1-04-test-live-log-pane-PLAN.md — class-based unit suite for LiveLogPane (Wave 2, depends on 02)
+- [x] 1027.1-05-companion-integration-PLAN.md — heavy: replace LogPane with two panes, two dropdowns, two detached uifigures, parameterized `setLogState_(which, newState)`, `rebalanceLogStrip_()` (Wave 3, depends on 01+02)
+- [x] 1027.1-06-delete-old-logpane-PLAN.md — delete `libs/FastSenseCompanion/LogPane.m` and `tests/suite/TestLogPane.m` (Wave 4, depends on 05)
+- [x] 1027.1-07-update-companion-tests-PLAN.md — migrate Phase 1027 accessors and add 5 independence tests to `TestFastSenseCompanion` (Wave 4, depends on 05)
+- [x] 1027.1-08-update-walker-test-PLAN.md — assert two-panel LogPaneRoot skip-rule in walker test (Wave 4, depends on 05)
+
 
 ### Phase 1028: Tag update perf — MEX + SIMD
 

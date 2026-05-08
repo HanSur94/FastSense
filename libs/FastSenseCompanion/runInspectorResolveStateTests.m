@@ -69,38 +69,45 @@ function runInspectorResolveStateTests()
     assert(strcmp(s, 'multitag'), 'T9: 2 tags must produce multitag state even when LastInteraction=dashboard');
     nPassed = nPassed + 1;
 
-    % Test 10: InspectorStateEventData round-trip
-    stubTag = struct('Key', 'k1', 'Name', 'Tag One');
-    ed = InspectorStateEventData('tag', struct('tag', stubTag));
-    assert(strcmp(ed.State, 'tag'), 'T10: ed.State must be tag');
-    assert(strcmp(ed.Payload.tag.Key, 'k1'), 'T10: ed.Payload.tag must be the constructed struct');
-    nPassed = nPassed + 1;
+    % Tests 10-13 exercise InspectorStateEventData / AdHocPlotEventData,
+    % which inherit from MATLAB's `event.EventData`. Octave has no such
+    % class — the constructor errors with 'class not found: event.EventData'.
+    % Skip the event-class round-trips on Octave; pure-logic coverage in
+    % T1-T9 is the core contract. MATLAB CI still runs T10-T13.
+    if ~exist('OCTAVE_VERSION', 'builtin')
+        % Test 10: InspectorStateEventData round-trip
+        stubTag = struct('Key', 'k1', 'Name', 'Tag One');
+        ed = InspectorStateEventData('tag', struct('tag', stubTag));
+        assert(strcmp(ed.State, 'tag'), 'T10: ed.State must be tag');
+        assert(strcmp(ed.Payload.tag.Key, 'k1'), 'T10: ed.Payload.tag must be the constructed struct');
+        nPassed = nPassed + 1;
 
-    % Test 11: InspectorStateEventData rejects unknown state
-    threw = false;
-    try
-        InspectorStateEventData('bogus', struct());
-    catch ME
-        threw = strcmp(ME.identifier, 'FastSenseCompanion:invalidEventData');
+        % Test 11: InspectorStateEventData rejects unknown state
+        threw = false;
+        try
+            InspectorStateEventData('bogus', struct());
+        catch ME
+            threw = strcmp(ME.identifier, 'FastSenseCompanion:invalidEventData');
+        end
+        assert(threw, 'T11: unknown state must throw FastSenseCompanion:invalidEventData');
+        nPassed = nPassed + 1;
+
+        % Test 12: AdHocPlotEventData round-trip
+        ed = AdHocPlotEventData({'a','b'}, 'Overlay');
+        assert(isequal(ed.TagKeys, {'a','b'}), 'T12: TagKeys round-trip');
+        assert(strcmp(ed.Mode, 'Overlay'), 'T12: Mode round-trip');
+        nPassed = nPassed + 1;
+
+        % Test 13: AdHocPlotEventData rejects unknown mode
+        threw = false;
+        try
+            AdHocPlotEventData({'a'}, 'Bogus');
+        catch ME
+            threw = strcmp(ME.identifier, 'FastSenseCompanion:invalidEventData');
+        end
+        assert(threw, 'T13: unknown mode must throw FastSenseCompanion:invalidEventData');
+        nPassed = nPassed + 1;
     end
-    assert(threw, 'T11: unknown state must throw FastSenseCompanion:invalidEventData');
-    nPassed = nPassed + 1;
-
-    % Test 12: AdHocPlotEventData round-trip
-    ed = AdHocPlotEventData({'a','b'}, 'Overlay');
-    assert(isequal(ed.TagKeys, {'a','b'}), 'T12: TagKeys round-trip');
-    assert(strcmp(ed.Mode, 'Overlay'), 'T12: Mode round-trip');
-    nPassed = nPassed + 1;
-
-    % Test 13: AdHocPlotEventData rejects unknown mode
-    threw = false;
-    try
-        AdHocPlotEventData({'a'}, 'Bogus');
-    catch ME
-        threw = strcmp(ME.identifier, 'FastSenseCompanion:invalidEventData');
-    end
-    assert(threw, 'T13: unknown mode must throw FastSenseCompanion:invalidEventData');
-    nPassed = nPassed + 1;
 
     fprintf('    All %d tests passed.\n', nPassed);
 end

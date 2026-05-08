@@ -49,9 +49,13 @@ function runFilterDashboardsTests()
     assert(isequal(size(r), [1 0]), 'T7: no match must return zeros(1,0)');
     nPassed = nPassed + 1;
 
-    % Test 8: ordering preserved across non-contiguous matches
-    r = filterDashboards(eng, 'a');
-    assert(isequal(r, [1 3]), 'T8: ordering must be preserved (Alpha=1, Gamma=3)');
+    % Test 8: ordering preserved across non-contiguous matches.
+    % Use a 3-element fixture where only positions 1 and 3 contain the
+    % needle (Beta no longer works as a "non-match" because it shares
+    % 'a' with Alpha/Gamma; substitute names that genuinely diverge).
+    eng_oc = {mk('Apple'), mk('Cherry'), mk('Apricot')};
+    r = filterDashboards(eng_oc, 'ap');
+    assert(isequal(r, [1 3]), 'T8: ordering must be preserved (Apple=1, Apricot=3)');
     nPassed = nPassed + 1;
 
     % Test 9: engine with empty Name is NOT matched by non-empty search

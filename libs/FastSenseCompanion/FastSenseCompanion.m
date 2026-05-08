@@ -59,16 +59,9 @@ classdef FastSenseCompanion < handle
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
-        hLogPanel_     = []   % bottom log uipanel (full-width)
-        hLogTable_     = []   % uitable inside hLogPanel_ (alternating row colors)
-        hLogSearch_    = []   % uieditfield ('text') search box for the log
-        hLogLevelDD_   = []   % uidropdown level filter ('All' | 'INFO' | 'WARN' | 'ERROR')
-        LogBuffer_     = cell(0, 3)  % full {Time, Level, Message} buffer (newest first)
-        hLiveLogTable_ = []   % uitable for the live data-update log (below the events log)
-        LiveLogBuffer_ = cell(0, 4)  % {Time, Tag, +Samples, Latest} buffer (newest first)
-        LiveSampleCount_ = []  % containers.Map(tagKey -> last seen sample count)
-        hLiveBtn_      = []   % Live mode toggle button (in log strip header)
-        hLastUpdateLbl_ = []  % "Updated 12:34:56" label next to live button
+        hLogPanel_     = []   % bottom log uipanel (full-width); hosts hLogStripGrid_ with EventsLogPane and LiveLogPane sub-panels
+        LiveSampleCount_ = []  % containers.Map(tagKey -> last seen sample count); pipeline state used by scanLiveTagUpdates_, initialised in constructor
+        hLiveBtn_      = []   % Live mode toggle button (parented to top toolbar in Phase 1027)
         LiveTimer_     = []   % MATLAB timer driving inspector refresh
         LivePeriod_    = 1.0  % seconds between live refreshes
         Theme_         = []   % resolved CompanionTheme struct
@@ -81,6 +74,17 @@ classdef FastSenseCompanion < handle
         SelectedDashboardIdx_ = 0    % 1-based; 0 = nothing selected (Phase 1020)
         LastInteraction_      = ''   % '' | 'tags' | 'dashboard' (Phase 1020 sets 'dashboard'; Phase 1021 sets 'tags')
         SelectedTagKeys_      = {}   % cellstr cache mirrored from CatalogPane.getSelectedKeys() (Phase 1021)
+        % Phase 1027.1 — independent EventsLogPane + LiveLogPane integration
+        EventsLogPane_        = []     % EventsLogPane instance
+        LiveLogPane_          = []     % LiveLogPane instance
+        hEventsLogStateDD_    = []     % toolbar dropdown for events log {'Inline','Detached','Hidden'}
+        hLiveLogStateDD_      = []     % toolbar dropdown for live log   {'Inline','Detached','Hidden'}
+        hDetachedEventsFig_   = []     % uifigure when events state == 'Detached', else []
+        hDetachedLiveFig_     = []     % uifigure when live state   == 'Detached', else []
+        hLogStripGrid_        = []     % inner uigridlayout([2 1]) hosting both sub-panels in row 3
+        hEventsLogPanel_      = []     % sub-panel (LogPaneRoot-tagged) for events pane
+        hLiveLogPanel_        = []     % sub-panel (LogPaneRoot-tagged) for live pane
+        OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
     end
 
     methods (Access = public)
@@ -198,16 +202,83 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner [1 2] grid — col 1 reserved for future toolbar items, col 2 = gear button.
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 2]);
-            hToolbarGrid.ColumnWidth     = {'1x', 36};
+            % Inner 1x5 grid — col 1 reserved for future toolbar items;
+            % col 2 = Live: ON/OFF button; col 3 = Events log dropdown
+            % (Phase 1027.1); col 4 = Live log dropdown (Phase 1027.1);
+            % col 5 = gear button.
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 5]);
+            hToolbarGrid.ColumnWidth     = {'1x', 110, 150, 150, 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
-            hToolbarGrid.ColumnSpacing   = 4;
+            hToolbarGrid.ColumnSpacing   = 8;
             hToolbarGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            % Col 2 — Live: ON/OFF button (Phase 1027: moved from log header).
+            obj.hLiveBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hLiveBtn_.Layout.Row    = 1;
+            obj.hLiveBtn_.Layout.Column = 2;
+            obj.hLiveBtn_.Text          = 'Live: OFF';
+            obj.hLiveBtn_.FontSize      = 11;
+            obj.hLiveBtn_.FontWeight    = 'bold';
+            obj.hLiveBtn_.Tooltip       = 'Toggle live refresh of the inspector';
+            obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
+
+            % Phase 1027.1 — Col 3: Events log dropdown.
+            hEvtDDGrid = uigridlayout(hToolbarGrid, [1 2]);
+            hEvtDDGrid.Layout.Row     = 1;
+            hEvtDDGrid.Layout.Column  = 3;
+            hEvtDDGrid.ColumnWidth    = {72, '1x'};
+            hEvtDDGrid.RowHeight      = {'1x'};
+            hEvtDDGrid.Padding        = [0 0 0 0];
+            hEvtDDGrid.ColumnSpacing  = 4;
+            hEvtDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+            hEvtLbl = uilabel(hEvtDDGrid);
+            hEvtLbl.Layout.Row    = 1;
+            hEvtLbl.Layout.Column = 1;
+            hEvtLbl.Text          = 'Events log:';
+            hEvtLbl.FontSize      = 11;
+            hEvtLbl.FontColor     = obj.Theme_.ForegroundColor;
+            hEvtLbl.HorizontalAlignment = 'right';
+            hEvtLbl.VerticalAlignment   = 'center';
+            obj.hEventsLogStateDD_ = uidropdown(hEvtDDGrid);
+            obj.hEventsLogStateDD_.Layout.Row    = 1;
+            obj.hEventsLogStateDD_.Layout.Column = 2;
+            obj.hEventsLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
+            obj.hEventsLogStateDD_.Value   = 'Inline';
+            obj.hEventsLogStateDD_.FontSize = 11;
+            obj.hEventsLogStateDD_.Tooltip  = 'Events log window state';
+            obj.hEventsLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_('events', dd.Value);
+
+            % Phase 1027.1 — Col 4: Live log dropdown.
+            hLiveDDGrid = uigridlayout(hToolbarGrid, [1 2]);
+            hLiveDDGrid.Layout.Row     = 1;
+            hLiveDDGrid.Layout.Column  = 4;
+            hLiveDDGrid.ColumnWidth    = {64, '1x'};
+            hLiveDDGrid.RowHeight      = {'1x'};
+            hLiveDDGrid.Padding        = [0 0 0 0];
+            hLiveDDGrid.ColumnSpacing  = 4;
+            hLiveDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+            hLiveLbl = uilabel(hLiveDDGrid);
+            hLiveLbl.Layout.Row    = 1;
+            hLiveLbl.Layout.Column = 1;
+            hLiveLbl.Text          = 'Live log:';
+            hLiveLbl.FontSize      = 11;
+            hLiveLbl.FontColor     = obj.Theme_.ForegroundColor;
+            hLiveLbl.HorizontalAlignment = 'right';
+            hLiveLbl.VerticalAlignment   = 'center';
+            obj.hLiveLogStateDD_ = uidropdown(hLiveDDGrid);
+            obj.hLiveLogStateDD_.Layout.Row    = 1;
+            obj.hLiveLogStateDD_.Layout.Column = 2;
+            obj.hLiveLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
+            obj.hLiveLogStateDD_.Value   = 'Inline';
+            obj.hLiveLogStateDD_.FontSize = 11;
+            obj.hLiveLogStateDD_.Tooltip  = 'Live log window state';
+            obj.hLiveLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_('live', dd.Value);
+
+            % Col 5 — Settings gear (existing).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 2;
+            obj.hSettingsBtn_.Layout.Column = 5;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -224,6 +295,7 @@ classdef FastSenseCompanion < handle
             obj.hRightPanel_.Layout.Row = 2; obj.hRightPanel_.Layout.Column = 3;
             obj.hLogPanel_ = uipanel(obj.hLayout_);
             obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = [1 3];
+            % Phase 1027.1 -- LogPaneRoot tag moves to the two sub-panels below.
 
             % Apply panel styling from theme. uifigure-uipanel border
             % properties (BorderColor, BorderWidth) are R2021a+; on R2020b
@@ -237,8 +309,50 @@ classdef FastSenseCompanion < handle
                 try, hp{1}.BorderWidth = 1;                           catch, end
             end
 
-            % Build log strip (Header + uitextarea in a 2-row inner grid)
-            obj.buildLogStrip_();
+            % Phase 1027.1 -- inner [2 1] grid hosting two LogPaneRoot-tagged sub-panels.
+            obj.hLogStripGrid_ = uigridlayout(obj.hLogPanel_, [2 1]);
+            obj.hLogStripGrid_.RowHeight     = {180, '1x'};   % default Inline+Inline
+            obj.hLogStripGrid_.ColumnWidth   = {'1x'};
+            obj.hLogStripGrid_.Padding       = [0 0 0 0];
+            obj.hLogStripGrid_.RowSpacing    = 4;
+            obj.hLogStripGrid_.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            obj.hEventsLogPanel_ = uipanel(obj.hLogStripGrid_);
+            obj.hEventsLogPanel_.Layout.Row    = 1;
+            obj.hEventsLogPanel_.Layout.Column = 1;
+            obj.hEventsLogPanel_.BorderType    = 'none';
+            obj.hEventsLogPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
+            obj.hEventsLogPanel_.Tag = 'LogPaneRoot';   % theme walker skip rule
+
+            obj.hLiveLogPanel_ = uipanel(obj.hLogStripGrid_);
+            obj.hLiveLogPanel_.Layout.Row    = 2;
+            obj.hLiveLogPanel_.Layout.Column = 1;
+            obj.hLiveLogPanel_.BorderType    = 'none';
+            obj.hLiveLogPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
+            obj.hLiveLogPanel_.Tag = 'LogPaneRoot';   % theme walker skip rule
+
+            % Phase 1027 — capture the row-3 height once for restore on Inline.
+            rh3 = obj.hLayout_.RowHeight{3};
+            if isnumeric(rh3) && isscalar(rh3) && isfinite(rh3) && rh3 > 0
+                obj.OriginalLogRowHeight_ = rh3;
+            end
+
+            % Phase 1027.1 -- instantiate both panes; wire DetachRequested listeners.
+            obj.EventsLogPane_ = EventsLogPane(obj.Theme_);
+            obj.LiveLogPane_   = LiveLogPane(obj.Theme_);
+            obj.Listeners_{end+1} = addlistener(obj.EventsLogPane_, 'DetachRequested', ...
+                @(~,~) obj.setLogState_('events', 'Detached'));
+            obj.Listeners_{end+1} = addlistener(obj.LiveLogPane_, 'DetachRequested', ...
+                @(~,~) obj.setLogState_('live', 'Detached'));
+            % LiveSampleCount_ is companion-owned per Phase 1027 boundary --
+            % NEITHER pane tracks per-tag pipeline cursors.
+            obj.LiveSampleCount_ = containers.Map( ...
+                'KeyType', 'char', 'ValueType', 'double');
+            % Attach both panes inline by default.
+            obj.setLogState_('events', 'Inline');
+            obj.setLogState_('live',   'Inline');
+            % Seed the events log with the ready line.
+            obj.addLogEntry('info', 'Companion ready.');
 
             % Step 10 — Instantiate pane objects and attach
             obj.CatalogPane_   = TagCatalogPane();
@@ -325,6 +439,45 @@ classdef FastSenseCompanion < handle
             catch err
                 fprintf(2, '[FastSenseCompanion] InspectorPane.detach failed: %s\n', err.message);
             end
+            % Phase 1027.1 -- close any open detached uifigures FIRST (clear
+            % CloseRequestFcn so it can't fire mid-teardown), then destroy
+            % both panes. Order between events/live doesn't matter.
+            try
+                if ~isempty(obj.hDetachedEventsFig_) && isvalid(obj.hDetachedEventsFig_)
+                    obj.hDetachedEventsFig_.CloseRequestFcn = '';
+                    delete(obj.hDetachedEventsFig_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] hDetachedEventsFig cleanup failed: %s\n', err.message);
+            end
+            obj.hDetachedEventsFig_ = [];
+            try
+                if ~isempty(obj.hDetachedLiveFig_) && isvalid(obj.hDetachedLiveFig_)
+                    obj.hDetachedLiveFig_.CloseRequestFcn = '';
+                    delete(obj.hDetachedLiveFig_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] hDetachedLiveFig cleanup failed: %s\n', err.message);
+            end
+            obj.hDetachedLiveFig_ = [];
+            try
+                if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
+                    obj.EventsLogPane_.detach();
+                    delete(obj.EventsLogPane_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] EventsLogPane cleanup failed: %s\n', err.message);
+            end
+            obj.EventsLogPane_ = [];
+            try
+                if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
+                    obj.LiveLogPane_.detach();
+                    delete(obj.LiveLogPane_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] LiveLogPane cleanup failed: %s\n', err.message);
+            end
+            obj.LiveLogPane_ = [];
             % Release orchestrator-level listeners. delete(cellArray) is
             % interpreted as filename-delete by MATLAB ("Name must be a
             % text scalar"). Iterate explicitly.
@@ -420,6 +573,15 @@ classdef FastSenseCompanion < handle
                 @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
             obj.Listeners_{end+1} = addlistener(obj, 'OpenAdHocPlotRequested', ...
                 @(s, e) obj.onOpenAdHocPlotRequested_(s, e));
+            % Phase 1027.1 -- re-register both panes' DetachRequested listeners.
+            if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
+                obj.Listeners_{end+1} = addlistener(obj.EventsLogPane_, 'DetachRequested', ...
+                    @(~,~) obj.setLogState_('events', 'Detached'));
+            end
+            if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
+                obj.Listeners_{end+1} = addlistener(obj.LiveLogPane_, 'DetachRequested', ...
+                    @(~,~) obj.setLogState_('live', 'Detached'));
+            end
             obj.applyPlaceholderColors_();
         end
 
@@ -536,26 +698,13 @@ classdef FastSenseCompanion < handle
         end
 
         function addLogEntry(obj, level, msg)
-        %ADDLOGENTRY Append a timestamped log line.
-        %   level — 'info' | 'warn' | 'error' (any short tag accepted)
-        %   msg   — char/string. Anything else is sprintf'd through %s.
-        %   Pushes onto LogBuffer_ (full history, newest first, capped at
-        %   500), then re-applies the level + text filter to update the
-        %   visible uitable rows.
-            if isempty(obj.hLogTable_) || ~isvalid(obj.hLogTable_); return; end
-            try
-                ts = char(datetime('now', 'Format', 'HH:mm:ss'));
-                if isstring(msg) && isscalar(msg); msg = char(msg); end
-                if ~ischar(msg); msg = sprintf('%s', msg); end
-                row = {ts, upper(char(level)), msg};
-                obj.LogBuffer_ = [row; obj.LogBuffer_];
-                if size(obj.LogBuffer_, 1) > 500
-                    obj.LogBuffer_ = obj.LogBuffer_(1:500, :);
-                end
-                obj.applyLogFilter_();
-            catch
-                % Logging must never crash the UI.
-            end
+        %ADDLOGENTRY Append a timestamped log line. Forwards to EventsLogPane_.
+        %   Phase 1027.1: actual buffering + filter + render lives in
+        %   EventsLogPane. This method survives as the public API for code
+        %   that calls `obj.addLogEntry(...)` directly (existing callers are
+        %   unchanged).
+            if isempty(obj.EventsLogPane_) || ~isvalid(obj.EventsLogPane_); return; end
+            obj.EventsLogPane_.addLogEntry(level, msg);
         end
 
         function refreshCatalog(obj)
@@ -609,6 +758,22 @@ classdef FastSenseCompanion < handle
                 end
                 if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
                     obj.InspectorPane_.setTheme(obj.Theme_);
+                end
+                % Phase 1027.1 -- both panes manage their own theming (walker
+                % skips both LogPaneRoot-tagged sub-panels). Companion calls
+                % applyTheme on each pane and updates each detached uifigure's
+                % background.
+                if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
+                    obj.EventsLogPane_.applyTheme(obj.Theme_);
+                end
+                if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
+                    obj.LiveLogPane_.applyTheme(obj.Theme_);
+                end
+                if ~isempty(obj.hDetachedEventsFig_) && isvalid(obj.hDetachedEventsFig_)
+                    obj.hDetachedEventsFig_.Color = obj.Theme_.DashboardBackground;
+                end
+                if ~isempty(obj.hDetachedLiveFig_) && isvalid(obj.hDetachedLiveFig_)
+                    obj.hDetachedLiveFig_.Color = obj.Theme_.DashboardBackground;
                 end
                 obj.updateLiveButton_();
                 drawnow;
@@ -665,6 +830,71 @@ classdef FastSenseCompanion < handle
             obj.SettingsDlg_ = CompanionSettingsDialog(obj);
         end
 
+        % --- Test helpers (Phase 1027.1) -- do not call from production ---
+        % These accessors expose private state to TestFastSenseCompanion only.
+        % They are intentionally public (MATLAB has no friend-class scope), but
+        % production code paths must continue to use the private members
+        % directly (EventsLogPane_, LiveLogPane_, etc.) -- these wrappers exist
+        % solely so the test suite can verify state machine behavior without
+        % relaxing access on the real properties.
+
+        function p = getEventsLogPane(obj)
+        %GETEVENTSLOGPANE Test helper: return the EventsLogPane instance.
+            p = obj.EventsLogPane_;
+        end
+
+        function p = getLiveLogPane(obj)
+        %GETLIVELOGPANE Test helper: return the LiveLogPane instance.
+            p = obj.LiveLogPane_;
+        end
+
+        function v = getEventsLogStateValue(obj)
+        %GETEVENTSLOGSTATEVALUE Test helper: return events log dropdown value (or '').
+            if isempty(obj.hEventsLogStateDD_) || ~isvalid(obj.hEventsLogStateDD_)
+                v = '';
+            else
+                v = obj.hEventsLogStateDD_.Value;
+            end
+        end
+
+        function v = getLiveLogStateValue(obj)
+        %GETLIVELOGSTATEVALUE Test helper: return live log dropdown value (or '').
+            if isempty(obj.hLiveLogStateDD_) || ~isvalid(obj.hLiveLogStateDD_)
+                v = '';
+            else
+                v = obj.hLiveLogStateDD_.Value;
+            end
+        end
+
+        function hf = getDetachedEventsFig(obj)
+        %GETDETACHEDEVENTSFIG Test helper: return the events detached uifigure handle or [].
+            hf = obj.hDetachedEventsFig_;
+        end
+
+        function hf = getDetachedLiveFig(obj)
+        %GETDETACHEDLIVEFIG Test helper: return the live detached uifigure handle or [].
+            hf = obj.hDetachedLiveFig_;
+        end
+
+        function rh = getRow3Height(obj)
+        %GETROW3HEIGHT Test helper: return numeric row 3 height of hLayout_.
+            rh = obj.hLayout_.RowHeight{3};
+        end
+
+        function applyLogState(obj, which, newState)
+        %APPLYLOGSTATE Test helper: public wrapper for the private setLogState_.
+            obj.setLogState_(which, newState);
+        end
+
+        function par = getLiveButtonParent(obj)
+        %GETLIVEBUTTONPARENT Test helper: return the parent handle of hLiveBtn_.
+            if isempty(obj.hLiveBtn_) || ~isvalid(obj.hLiveBtn_)
+                par = [];
+            else
+                par = obj.hLiveBtn_.Parent;
+            end
+        end
+
     end
 
     methods (Access = private)
@@ -677,161 +907,162 @@ classdef FastSenseCompanion < handle
             companionPrefs('save', prefs);
         end
 
-        function buildLogStrip_(obj)
-        %BUILDLOGSTRIP_ Construct two stacked logs: events (top) + live updates (bottom).
-        %   Events: search + level filter + updated label + live toggle in
-        %   the header, table below.
-        %   Live updates: 'Live updates' label + Clear button in header,
-        %   table {Time, Tag, +Samples, Latest} below.
-            t = obj.Theme_;
-            g = uigridlayout(obj.hLogPanel_, [4 1]);
-            g.RowHeight   = {28, 150, 28, '1x'};
-            g.ColumnWidth = {'1x'};
-            g.Padding = [8 4 8 4];
-            g.RowSpacing = 4;
-            g.BackgroundColor = t.WidgetBackground;
+        function setLogState_(obj, which, newState)
+        %SETLOGSTATE_ Transition one log pane between Inline / Detached / Hidden.
+        %   Single transition function called from:
+        %     - hEventsLogStateDD_/hLiveLogStateDD_.ValueChangedFcn
+        %     - EventsLogPane_/LiveLogPane_.DetachRequested listeners
+        %     - hDetachedEventsFig_/hDetachedLiveFig_.CloseRequestFcn
+        %   Idempotent: derives current state from the pane's own attachment
+        %   plus the corresponding hDetached*Fig_ validity (NOT from the
+        %   dropdown -- that's set programmatically before each pane is
+        %   built during bootstrap). Same lesson as Phase 1027 fix-commit
+        %   3e6c155.
+        %
+        %   which    -- char: 'events' | 'live'
+        %   newState -- char: 'Inline' | 'Detached' | 'Hidden'
+            if ~ischar(which) && ~(isstring(which) && isscalar(which))
+                error('FastSenseCompanion:invalidLogWhich', ...
+                    'which must be ''events'' or ''live''.');
+            end
+            which = lower(char(which));
+            if ~any(strcmp(which, {'events', 'live'}))
+                error('FastSenseCompanion:invalidLogWhich', ...
+                    'which must be ''events'' or ''live'' (got ''%s'').', which);
+            end
+            if ~ischar(newState) && ~(isstring(newState) && isscalar(newState))
+                error('FastSenseCompanion:invalidLogState', ...
+                    'newState must be ''Inline'', ''Detached'', or ''Hidden''.');
+            end
+            newState = char(newState);
+            if ~any(strcmp(newState, {'Inline', 'Detached', 'Hidden'}))
+                error('FastSenseCompanion:invalidLogState', ...
+                    'newState must be ''Inline'', ''Detached'', or ''Hidden'' (got ''%s'').', ...
+                    newState);
+            end
 
-            % Header: Log label | search | level dropdown | last-update | Live toggle.
-            gHdr = uigridlayout(g, [1 5]);
-            gHdr.Layout.Row = 1; gHdr.Layout.Column = 1;
-            gHdr.ColumnWidth = {40, '1x', 100, 150, 110};
-            gHdr.RowHeight = {'1x'};
-            gHdr.Padding = [0 0 0 0];
-            gHdr.ColumnSpacing = 8;
-            gHdr.BackgroundColor = t.WidgetBackground;
-
-            hLbl = uilabel(gHdr);
-            hLbl.Layout.Row = 1; hLbl.Layout.Column = 1;
-            hLbl.Text = 'Log'; hLbl.FontWeight = 'bold'; hLbl.FontSize = 11;
-            hLbl.FontColor = t.ForegroundColor;
-            hLbl.HorizontalAlignment = 'left'; hLbl.VerticalAlignment = 'center';
-
-            obj.hLogSearch_ = uieditfield(gHdr, 'text');
-            obj.hLogSearch_.Layout.Row = 1; obj.hLogSearch_.Layout.Column = 2;
-            % Placeholder is R2021a+; tolerated on R2020b (no placeholder text).
-            try, obj.hLogSearch_.Placeholder = 'Search log…'; catch, end
-            obj.hLogSearch_.FontSize = 11;
-            obj.hLogSearch_.ValueChangedFcn = @(~,~) obj.applyLogFilter_();
-
-            obj.hLogLevelDD_ = uidropdown(gHdr);
-            obj.hLogLevelDD_.Layout.Row = 1; obj.hLogLevelDD_.Layout.Column = 3;
-            obj.hLogLevelDD_.Items = {'All', 'INFO', 'WARN', 'ERROR'};
-            obj.hLogLevelDD_.Value = 'All';
-            obj.hLogLevelDD_.FontSize = 11;
-            obj.hLogLevelDD_.Tooltip = 'Filter by log level';
-            obj.hLogLevelDD_.ValueChangedFcn = @(~,~) obj.applyLogFilter_();
-
-            obj.hLastUpdateLbl_ = uilabel(gHdr);
-            obj.hLastUpdateLbl_.Layout.Row = 1; obj.hLastUpdateLbl_.Layout.Column = 4;
-            obj.hLastUpdateLbl_.Text = 'Updated: --:--:--';
-            obj.hLastUpdateLbl_.FontSize = 11; obj.hLastUpdateLbl_.FontName = 'Menlo';
-            obj.hLastUpdateLbl_.FontColor = t.PlaceholderTextColor;
-            obj.hLastUpdateLbl_.HorizontalAlignment = 'right';
-            obj.hLastUpdateLbl_.VerticalAlignment = 'center';
-            obj.hLastUpdateLbl_.Tooltip = 'Time of the last successful live refresh';
-
-            obj.hLiveBtn_ = uibutton(gHdr, 'push');
-            obj.hLiveBtn_.Layout.Row = 1; obj.hLiveBtn_.Layout.Column = 5;
-            obj.hLiveBtn_.Text = 'Live: OFF';
-            obj.hLiveBtn_.FontSize = 11; obj.hLiveBtn_.FontWeight = 'bold';
-            obj.hLiveBtn_.Tooltip = 'Toggle live refresh of the inspector';
-            obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
-            obj.updateLiveButton_();
-
-            obj.hLogTable_ = uitable(g);
-            obj.hLogTable_.Layout.Row = 2; obj.hLogTable_.Layout.Column = 1;
-            obj.hLogTable_.ColumnName     = {'Time', 'Level', 'Message'};
-            obj.hLogTable_.ColumnWidth    = {65, 55, 'auto'};
-            obj.hLogTable_.ColumnEditable = [false false false];
-            obj.hLogTable_.RowName        = {};
-            obj.hLogTable_.FontSize       = 10;
-            obj.hLogTable_.FontName       = 'Menlo';
-            obj.hLogTable_.ForegroundColor = t.ForegroundColor;
-            if strcmp(obj.Theme, 'dark')
-                obj.hLogTable_.BackgroundColor = [0.13 0.13 0.13; 0.20 0.20 0.20];
+            % Resolve which pane / dropdown / parent / detached handle to use.
+            if strcmp(which, 'events')
+                pane     = obj.EventsLogPane_;
+                dd       = obj.hEventsLogStateDD_;
+                panel    = obj.hEventsLogPanel_;
+                detName  = 'hDetachedEventsFig_';
+                figTitle = sprintf('FastSense Companion %s Events Log', char(8212));
+                figSize  = [720 480];
             else
-                obj.hLogTable_.BackgroundColor = [1.00 1.00 1.00; 0.94 0.94 0.94];
+                pane     = obj.LiveLogPane_;
+                dd       = obj.hLiveLogStateDD_;
+                panel    = obj.hLiveLogPanel_;
+                detName  = 'hDetachedLiveFig_';
+                figTitle = sprintf('FastSense Companion %s Live Log', char(8212));
+                figSize  = [480 360];
             end
 
-            % Seed buffer with one ready line and apply filter.
-            obj.LogBuffer_ = { ...
-                char(datetime('now', 'Format', 'HH:mm:ss')), 'INFO', 'Companion ready.'};
-            obj.applyLogFilter_();
+            if isempty(pane) || ~isvalid(pane); return; end
 
-            % --- Live updates header (label + Clear button) ---
-            gLive = uigridlayout(g, [1 2]);
-            gLive.Layout.Row = 3; gLive.Layout.Column = 1;
-            gLive.ColumnWidth = {'1x', 80};
-            gLive.RowHeight = {'1x'};
-            gLive.Padding = [0 0 0 0]; gLive.ColumnSpacing = 8;
-            gLive.BackgroundColor = t.WidgetBackground;
-
-            hLiveLbl = uilabel(gLive);
-            hLiveLbl.Layout.Row = 1; hLiveLbl.Layout.Column = 1;
-            hLiveLbl.Text = 'Live updates'; hLiveLbl.FontWeight = 'bold'; hLiveLbl.FontSize = 11;
-            hLiveLbl.FontColor = t.ForegroundColor;
-            hLiveLbl.HorizontalAlignment = 'left'; hLiveLbl.VerticalAlignment = 'center';
-
-            hLiveClear = uibutton(gLive, 'push');
-            hLiveClear.Layout.Row = 1; hLiveClear.Layout.Column = 2;
-            hLiveClear.Text = 'Clear'; hLiveClear.FontSize = 11;
-            hLiveClear.Tooltip = 'Clear the live updates log';
-            hLiveClear.ButtonPushedFcn = @(~,~) obj.clearLiveLog_();
-
-            % --- Live updates table ---
-            obj.hLiveLogTable_ = uitable(g);
-            obj.hLiveLogTable_.Layout.Row = 4; obj.hLiveLogTable_.Layout.Column = 1;
-            obj.hLiveLogTable_.ColumnName     = {'Time', 'Tag', char([8710, ' samples']), 'Latest'};
-            obj.hLiveLogTable_.ColumnWidth    = {65, 'auto', 90, 90};
-            obj.hLiveLogTable_.ColumnEditable = [false false false false];
-            obj.hLiveLogTable_.RowName        = {};
-            obj.hLiveLogTable_.FontSize       = 10;
-            obj.hLiveLogTable_.FontName       = 'Menlo';
-            obj.hLiveLogTable_.ForegroundColor = t.ForegroundColor;
-            if strcmp(obj.Theme, 'dark')
-                obj.hLiveLogTable_.BackgroundColor = [0.13 0.13 0.13; 0.20 0.20 0.20];
-            else
-                obj.hLiveLogTable_.BackgroundColor = [1.00 1.00 1.00; 0.94 0.94 0.94];
+            % Idempotency: derive actual state from pane attachment + detFig validity.
+            detFig = obj.(detName);
+            hasDetached = ~isempty(detFig) && isvalid(detFig);
+            attached    = pane.IsAttached;
+            inState = '';
+            if attached && ~hasDetached
+                inState = 'Inline';
+            elseif attached && hasDetached
+                inState = 'Detached';
+            elseif ~attached && ~hasDetached
+                inState = 'Hidden';
             end
-            obj.hLiveLogTable_.Data = cell(0, 4);
-
-            % Per-tag last-seen sample count map (for delta detection).
-            obj.LiveSampleCount_ = containers.Map( ...
-                'KeyType', 'char', 'ValueType', 'double');
-        end
-
-        function clearLiveLog_(obj)
-        %CLEARLIVELOG_ Wipe the live-updates buffer + table.
-            obj.LiveLogBuffer_ = cell(0, 4);
-            if ~isempty(obj.hLiveLogTable_) && isvalid(obj.hLiveLogTable_)
-                obj.hLiveLogTable_.Data = cell(0, 4);
+            if strcmp(inState, newState)
+                return;
             end
-        end
 
-        function addLiveLogEntry_(obj, tagKey, deltaSamples, latestY)
-        %ADDLIVELOGENTRY_ Push a row into the live-updates log.
-            if isempty(obj.hLiveLogTable_) || ~isvalid(obj.hLiveLogTable_); return; end
             try
-                ts = char(datetime('now', 'Format', 'HH:mm:ss'));
-                latestTxt = '—';
-                if ~isempty(latestY) && isnumeric(latestY) && isfinite(latestY)
-                    a = abs(latestY);
-                    if a == 0;       latestTxt = '0';
-                    elseif a >= 1000 || a < 0.01; latestTxt = sprintf('%.3g', latestY);
-                    elseif a >= 100;  latestTxt = sprintf('%.0f', latestY);
-                    elseif a >= 10;   latestTxt = sprintf('%.2f', latestY);
-                    else;             latestTxt = sprintf('%.3f', latestY);
-                    end
-                elseif ischar(latestY) || (isstring(latestY) && isscalar(latestY))
-                    latestTxt = char(latestY);
+                switch newState
+                    case 'Inline'
+                        if ~isempty(detFig) && isvalid(detFig)
+                            detFig.CloseRequestFcn = '';
+                            delete(detFig);
+                        end
+                        obj.(detName) = [];
+                        if pane.IsAttached
+                            pane.detach();
+                        end
+                        pane.attach(panel, obj.Theme_);
+
+                    case 'Detached'
+                        if pane.IsAttached
+                            pane.detach();
+                        end
+                        newFig = uifigure( ...
+                            'Name',     figTitle, ...
+                            'Position', [0 0 figSize(1) figSize(2)], ...
+                            'Color',    obj.Theme_.DashboardBackground);
+                        movegui(newFig, 'center');
+                        % CloseRequestFcn drives state back to Inline. The
+                        % cleared-handler dance in 'Inline' above prevents
+                        % recursion when WE delete it programmatically.
+                        newFig.CloseRequestFcn = ...
+                            @(~,~) obj.setLogState_(which, 'Inline');
+                        obj.(detName) = newFig;
+                        pane.attach(newFig, obj.Theme_);
+
+                    case 'Hidden'
+                        if ~isempty(detFig) && isvalid(detFig)
+                            detFig.CloseRequestFcn = '';
+                            delete(detFig);
+                        end
+                        obj.(detName) = [];
+                        if pane.IsAttached
+                            pane.detach();
+                        end
                 end
-                row = {ts, char(tagKey), sprintf('+%d', deltaSamples), latestTxt};
-                obj.LiveLogBuffer_ = [row; obj.LiveLogBuffer_];
-                if size(obj.LiveLogBuffer_, 1) > 500
-                    obj.LiveLogBuffer_ = obj.LiveLogBuffer_(1:500, :);
+                % Sync dropdown (programmatic assignment is silent per MATLAB convention).
+                if ~isempty(dd) && isvalid(dd)
+                    dd.Value = newState;
                 end
-                obj.hLiveLogTable_.Data = obj.LiveLogBuffer_;
-            catch
+                obj.rebalanceLogStrip_();
+            catch err
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, err.message, 'FastSense Companion');
+                end
+            end
+        end
+
+        function rebalanceLogStrip_(obj)
+        %REBALANCELOGSTRIP_ Recompute inner hLogStripGrid_.RowHeight + outer hLayout_.RowHeight{3}
+        %   from BOTH panes' actual attachment state (pane.IsAttached AND
+        %   the corresponding hDetached*Fig_ validity -- a pane "Inline"
+        %   means attached AND no detached uifigure).
+        %   Single-source of truth so callers (setLogState_ and tests) never
+        %   touch row heights directly.
+            if isempty(obj.hLogStripGrid_) || ~isvalid(obj.hLogStripGrid_); return; end
+            evtInline  = false;
+            liveInline = false;
+            if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_) && ...
+                    obj.EventsLogPane_.IsAttached && ...
+                    (isempty(obj.hDetachedEventsFig_) || ~isvalid(obj.hDetachedEventsFig_))
+                evtInline = true;
+            end
+            if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_) && ...
+                    obj.LiveLogPane_.IsAttached && ...
+                    (isempty(obj.hDetachedLiveFig_) || ~isvalid(obj.hDetachedLiveFig_))
+                liveInline = true;
+            end
+            % Inner sub-grid row heights (events row 1, live row 2).
+            if evtInline && liveInline
+                obj.hLogStripGrid_.RowHeight = {180, '1x'};
+            elseif evtInline && ~liveInline
+                obj.hLogStripGrid_.RowHeight = {'1x', 0};
+            elseif ~evtInline && liveInline
+                obj.hLogStripGrid_.RowHeight = {0, '1x'};
+            else
+                obj.hLogStripGrid_.RowHeight = {0, 0};
+            end
+            % Outer row 3: collapse to 0 only when neither pane is inline.
+            if evtInline || liveInline
+                obj.hLayout_.RowHeight{3} = obj.OriginalLogRowHeight_;
+            else
+                obj.hLayout_.RowHeight{3} = 0;
             end
         end
 
@@ -840,11 +1071,12 @@ classdef FastSenseCompanion < handle
             % Guard for the truly-uninitialized state (property default is []).
             % Do NOT use isempty() here — isempty(containers.Map) returns true
             % whenever the map has 0 entries, and the map only acquires keys
-            % from inside this function (chicken-and-egg). buildLogStrip_()
-            % constructs the map in the constructor before startLiveMode() runs,
-            % so by the time the timer fires, LiveSampleCount_ is always a
+            % from inside this function (chicken-and-egg). The constructor
+            % initialises the map before startLiveMode() runs, so by the
+            % time the timer fires, LiveSampleCount_ is always a
             % containers.Map handle.
             if ~isa(obj.LiveSampleCount_, 'containers.Map'); return; end
+            if isempty(obj.LiveLogPane_) || ~isvalid(obj.LiveLogPane_); return; end
             try
                 tags = TagRegistry.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'));
             catch
@@ -869,49 +1101,13 @@ classdef FastSenseCompanion < handle
                             if iscell(y); latestY = y{end}; else; latestY = y(end); end
                         end
                         if last > 0  % skip the first-seen baseline log
-                            obj.addLiveLogEntry_(key, delta, latestY);
+                            obj.LiveLogPane_.addLiveLogEntry(key, delta, latestY);
                         end
                         obj.LiveSampleCount_(key) = n;
                     end
                 catch
                 end
             end
-        end
-
-        function applyLogFilter_(obj)
-        %APPLYLOGFILTER_ Re-apply level + text filter to LogBuffer_ → uitable.Data.
-            if isempty(obj.hLogTable_) || ~isvalid(obj.hLogTable_); return; end
-            rows = obj.LogBuffer_;
-            if isempty(rows)
-                obj.hLogTable_.Data = cell(0, 3); return;
-            end
-            % Level filter
-            lvl = 'All';
-            if ~isempty(obj.hLogLevelDD_) && isvalid(obj.hLogLevelDD_)
-                lvl = obj.hLogLevelDD_.Value;
-            end
-            if ~strcmpi(lvl, 'All')
-                keep = false(size(rows, 1), 1);
-                for i = 1:size(rows, 1)
-                    keep(i) = strcmpi(rows{i, 2}, lvl);
-                end
-                rows = rows(keep, :);
-            end
-            % Text filter — case-insensitive substring across all 3 columns.
-            qry = '';
-            if ~isempty(obj.hLogSearch_) && isvalid(obj.hLogSearch_)
-                qry = strtrim(obj.hLogSearch_.Value);
-            end
-            if ~isempty(qry)
-                qLow = lower(qry);
-                keep = false(size(rows, 1), 1);
-                for i = 1:size(rows, 1)
-                    line = lower([rows{i, 1}, ' ', rows{i, 2}, ' ', rows{i, 3}]);
-                    keep(i) = ~isempty(strfind(line, qLow)); %#ok<STREMP>
-                end
-                rows = rows(keep, :);
-            end
-            obj.hLogTable_.Data = rows;
         end
 
         function updateLiveButton_(obj)
@@ -942,9 +1138,8 @@ classdef FastSenseCompanion < handle
                     obj.InspectorPane_.refreshLive();
                 end
                 obj.scanLiveTagUpdates_();
-                if ~isempty(obj.hLastUpdateLbl_) && isvalid(obj.hLastUpdateLbl_)
-                    obj.hLastUpdateLbl_.Text = sprintf('Updated: %s', ...
-                        char(datetime('now', 'Format', 'HH:mm:ss')));
+                if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
+                    obj.EventsLogPane_.setLastUpdated(datetime('now'));
                 end
             catch
                 % Live ticks must never crash the timer.

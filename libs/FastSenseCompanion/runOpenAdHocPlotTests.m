@@ -21,6 +21,14 @@ function runOpenAdHocPlotTests()
 %
 %   See also openAdHocPlot, MockPlottableTag, runFilterDashboardsTests.
 
+    % MATLAB-only: matlab.ui.Figure / MockPlottableTag rely on MATLAB's
+    % handle-class infrastructure and isvalid that don't translate to Octave.
+    % Skip cleanly when invoked from the Octave path.
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('    Skipped on Octave (FastSense + classical figure are MATLAB-only).\n');
+        return;
+    end
+
     nPassed = 0;
     spawned = matlab.ui.Figure.empty;
     cleanupAll = onCleanup(@() closeFigs_(spawned)); %#ok<NASGU>

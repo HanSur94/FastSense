@@ -25,6 +25,16 @@ classdef TestInspectorPane < matlab.unittest.TestCase
                 'Companion suite requires MATLAB R2021a+ uifigure features');
         end
 
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners — uifigure
+            %   construction + interaction is unreliable without a real
+            %   X server. macOS / Windows CI cover this suite.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestInspectorPane uifigure paths fail on headless Linux — covered on macOS/Windows CI');
+        end
+
         function addPaths(~)
             %ADDPATHS Add project root to path and call install().
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));

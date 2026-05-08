@@ -414,9 +414,29 @@ jobs:
             end
 
       - name: Run tests with coverage
+        id: matlab-tests
+        continue-on-error: true
         uses: matlab-actions/run-command@v3
         with:
           command: "addpath('scripts'); run_tests_with_coverage('${{ needs.changes.outputs.test_pattern }}');"
+
+      - name: Verify MATLAB test pass via sentinel file
+        # MATLAB R2021b reproducibly segfaults during shutdown on the
+        # headless Linux runner, even when every test passes. The
+        # matlab-actions step above is allowed to fail; truth comes from
+        # the .matlab-tests-passed sentinel that run_tests_with_coverage
+        # writes only after results.Failed == 0. If the sentinel is
+        # missing, this step fails the job.
+        shell: bash
+        run: |
+          if [[ -f .matlab-tests-passed ]]; then
+            echo "MATLAB tests passed (sentinel present); ignoring shutdown segfault."
+            rm -f .matlab-tests-passed
+          else
+            echo "MATLAB tests failed: .matlab-tests-passed sentinel not written."
+            echo "matlab-actions step outcome: ${{ steps.matlab-tests.outcome }}"
+            exit 1
+          fi
 
       - name: Write MATLAB test summary
         if: always()

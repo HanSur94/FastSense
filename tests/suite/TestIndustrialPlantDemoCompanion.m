@@ -20,6 +20,24 @@ classdef TestIndustrialPlantDemoCompanion < matlab.unittest.TestCase
                 'Companion suite requires MATLAB R2021a+ uifigure features');
         end
 
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners (xvfb / -batch).
+            %   This test runs the FULL run_demo() flow which spawns 25+
+            %   widgets in a uifigure. MATLAB segfaults during rendering
+            %   on headless Linux — observed on both R2020b and R2021b.
+            %   PR #109 already partially addressed this (skip
+            %   WidgetButtonBar SizeChangedFcn under headless), but the
+            %   crash persists deeper in libmex.so /
+            %   libmwm_dispatcher.so. The companion wiring this test
+            %   verifies (COMPDEMO-01..04) is structural and exercised
+            %   by TestFastSenseCompanion and the run_demo smoke tests
+            %   on macOS/Windows CI.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestIndustrialPlantDemoCompanion segfaults MATLAB headless on Linux — covered on macOS/Windows CI');
+        end
+
         function addPaths(testCase) %#ok<MANU>
         %ADDPATHS Add demo + suite + lib paths and run install().
             here = fileparts(mfilename('fullpath'));

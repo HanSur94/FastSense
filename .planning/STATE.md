@@ -7,19 +7,20 @@ last_updated: "2026-05-08T23:30:00.000Z"
 last_activity: 2026-05-08 -- Quick fix 260508-od4: roll back ny6 switchPage refresh sweep (didn't fix stuck-widget symptom, added per-tab cost) + guard HoverCrosshair.onFigureMove_ against invalid-object errors after panel teardown (OD4-01/02)
 progress:
   total_phases: 6
-  completed_phases: 6
-  total_plans: 18
-  completed_plans: 18
-shipped_at: 2026-04-30
+  completed_phases: 2
+  total_plans: 13
+  completed_plans: 13
 ---
 
 # State
 
 ## Current Position
 
+Phase: 1028
+Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Quick fix 260508-ny6 (31a7b94): switchPage now marks active-page widgets dirty + refreshes them (incl. nested GroupWidget children), so HistogramWidget/HeatmapWidget/BarChartWidget/ScatterWidget no longer render empty after tab switch (NY6-01/02/03)
+Last activity: 2026-05-08 -- Quick fix 260508-od4 (936feac): roll back ny6 + guard HoverCrosshair.onFigureMove_ against invalid-object errors after panel teardown
 
 ### Quick Tasks Completed
 
@@ -49,6 +50,9 @@ Last activity: 2026-05-08 -- Quick fix 260508-ny6 (31a7b94): switchPage now mark
 | 260508-ng1 | Add Reset button to DashboardToolbar that triggers DashboardEngine.rerenderWidgets() | 2026-05-08 | fb80f4b | Verified | [260508-ng1-add-reset-button-to-dashboard-toolbar](./quick/260508-ng1-add-reset-button-to-dashboard-toolbar/) |
 | 260508-ny6 | switchPage marks active-page widgets dirty + refreshes them, incl. nested GroupWidget children; isolates per-widget refresh failures (NY6-01/02/03) | 2026-05-08 | 31a7b94 | Superseded by od4 | [260508-ny6-tab-switch-marks-active-page-widgets-dir](./quick/260508-ny6-tab-switch-marks-active-page-widgets-dir/) |
 | 260508-od4 | Roll back ny6 (switchPage markDirty+refresh sweep didn't fix stuck-widget symptom and added per-tab cost) + fix HoverCrosshair.onFigureMove_ invalid-object guard (OD4-01/02) | 2026-05-08 | 6ef1a86, 936feac | — | [260508-od4-rollback-ny6-sweep-and-fix-hovercrosshai](./quick/260508-od4-rollback-ny6-sweep-and-fix-hovercrosshai/) |
+| 260508-huo | Fix CI — hoist companion test runners out of private/; guard headless web() in DashboardEngine; gate R2020b MEX-heavy tests | 2026-05-08 | 62b99ab | — | [260508-huo-fix-octave-tests-move-companion-runner-f](./quick/260508-huo-fix-octave-tests-move-companion-runner-f/) |
+| 260508-mjp | Add tag-column search field to LiveLogPane mirroring events log | 2026-05-08 | 1c258fb | — | [260508-mjp-add-tag-column-search-field-to-livelogpa](./quick/260508-mjp-add-tag-column-search-field-to-livelogpa/) |
+| 260508-n8h | Dashboard Info button opens modal in-app uifigure (uihtml) instead of system browser | 2026-05-08 | 8b525a8 | — | [260508-n8h-dashboard-info-button-opens-modal-render](./quick/260508-n8h-dashboard-info-button-opens-modal-render/) |
 
 ## Progress Bar
 

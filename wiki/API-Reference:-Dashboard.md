@@ -102,6 +102,24 @@ SHOWINFO Display the linked Markdown info file in a browser.
 
 WRITEANDOPENINFOHTML Write rendered HTML to the cached temp file and open it.
 
+#### `showInfoModal_(obj, html)`
+
+SHOWINFOMODAL_ Render the info HTML in an in-app modal uifigure (260508-n8h).
+  Replaces the previous browser handoff via web(). Reuses an
+  existing modal if still open so repeated Info-button clicks
+  refocus rather than stack windows. Falls back silently on
+  uifigure construction errors (older MATLAB releases without
+  uihtml support keep the temp HTML file as the user-facing
+  artifact).
+
+#### `onInfoModalResize_(~, src, hHtml)`
+
+ONINFOMODALRESIZE_ Keep the uihtml panel filling the modal figure.
+
+#### `onInfoModalClose_(obj, src)`
+
+ONINFOMODALCLOSE_ Clear the cached modal handle and dispose the figure.
+
 #### `md = buildPlaceholderInfoMarkdown(obj)`
 
 BUILDPLACEHOLDERINFOMARKDOWN Default info page shown when no InfoFile is set.

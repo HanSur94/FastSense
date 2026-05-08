@@ -17,6 +17,17 @@ function run_tests_with_coverage(pattern)
     addpath(repo_root);
     install();
 
+    % Sentinel file the CI workflow checks after this script runs. We
+    % delete it up front and only write it on success below — see the
+    % "force-quit" comment near the end of this file. CI uses this
+    % instead of MATLAB's exit code because R2021b reproducibly
+    % segfaults during shutdown after our script returns, even when
+    % every test passes.
+    sentinelFile = fullfile(repo_root, '.matlab-tests-passed');
+    if exist(sentinelFile, 'file')
+        delete(sentinelFile);
+    end
+
     suite_dir = fullfile(test_dir, 'suite');
     addpath(suite_dir);
 
@@ -54,5 +65,24 @@ function run_tests_with_coverage(pattern)
     nFailed = sum([results.Failed]);
     if nFailed > 0
         error('Tests failed: %d', nFailed);
+    end
+
+    % All tests passed (or were filtered by assumption). Write the
+    % sentinel file so CI knows the run was clean even if MATLAB
+    % subsequently segfaults during shutdown.
+    %
+    % Background: on R2021b headless Linux MATLAB reproducibly crashes
+    % during exit cleanup after our script returns — stack lands in
+    % libmwbridge.so / Mfh_file::dispatch (the same MATLAB-internals
+    % dispatcher bug that drove the gateHeadlessLinux skips in
+    % tests/suite/). matlab-actions/run-command sees the non-zero exit
+    % code and fails the step, even though the test run itself was
+    % clean. The CI workflow checks this sentinel file after the
+    % matlab-actions step (with continue-on-error) and decides
+    % pass/fail based on its presence.
+    fid = fopen(sentinelFile, 'w');
+    if fid ~= -1
+        fprintf(fid, 'pass\n');
+        fclose(fid);
     end
 end
