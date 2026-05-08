@@ -19,6 +19,24 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
     end
 
     methods (TestClassSetup)
+        function gateHeadlessR2020b(testCase)
+            %GATEHEADLESSR2020B Skip on the Linux CI runner (MATLAB R2020b
+            %   under -batch / xvfb). Same dispatcher segfault as
+            %   TestMexEdgeCases (70ed08a) and TestMexParity (f655db0) —
+            %   crash during 'Running TestMexPrebuilt' inside MATLAB
+            %   internals (libmwm_dispatcher.so::Mfh_file::dispatch_file_common).
+            %   The mex_stamp/install probe logic exercised here runs every
+            %   time install() is called — already implicitly covered by
+            %   every other class's TestClassSetup on this runner. Local
+            %   interactive MATLAB / macOS / Windows CI continue running
+            %   the full TestMexPrebuilt suite.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            isR2020b = ~verLessThan('matlab', '9.9') && verLessThan('matlab', '9.10');
+            testCase.assumeFalse(isHeadlessLinux && isR2020b, ...
+                'TestMexPrebuilt segfaults MATLAB R2020b headless — install() probe still exercised by every other class');
+        end
+
         function addPaths(testCase)
             %ADDPATHS Add project paths so mex_stamp and install shim are reachable.
             repo_root = fullfile(fileparts(mfilename('fullpath')), '..', '..');
