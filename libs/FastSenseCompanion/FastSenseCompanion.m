@@ -59,7 +59,7 @@ classdef FastSenseCompanion < handle
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
-        hLogPanel_     = []   % bottom log uipanel (full-width); LogPane attaches inline here
+        hLogPanel_     = []   % bottom log uipanel (full-width); hosts hLogStripGrid_ with EventsLogPane and LiveLogPane sub-panels
         LiveSampleCount_ = []  % containers.Map(tagKey -> last seen sample count); pipeline state used by scanLiveTagUpdates_, initialised in constructor
         hLiveBtn_      = []   % Live mode toggle button (parented to top toolbar in Phase 1027)
         LiveTimer_     = []   % MATLAB timer driving inspector refresh
@@ -694,10 +694,11 @@ classdef FastSenseCompanion < handle
         end
 
         function addLogEntry(obj, level, msg)
-        %ADDLOGENTRY Append a timestamped log line. Forwards to LogPane_.
-        %   Phase 1027: actual buffering + filter + render lives in LogPane.
-        %   This method survives as the public API for code that calls
-        %   `obj.addLogEntry(...)` directly (existing callers are unchanged).
+        %ADDLOGENTRY Append a timestamped log line. Forwards to EventsLogPane_.
+        %   Phase 1027.1: actual buffering + filter + render lives in
+        %   EventsLogPane. This method survives as the public API for code
+        %   that calls `obj.addLogEntry(...)` directly (existing callers are
+        %   unchanged).
             if isempty(obj.EventsLogPane_) || ~isvalid(obj.EventsLogPane_); return; end
             obj.EventsLogPane_.addLogEntry(level, msg);
         end
@@ -910,8 +911,9 @@ classdef FastSenseCompanion < handle
         %     - hDetachedEventsFig_/hDetachedLiveFig_.CloseRequestFcn
         %   Idempotent: derives current state from the pane's own attachment
         %   plus the corresponding hDetached*Fig_ validity (NOT from the
-        %   dropdown -- that's set programmatically before LogPane is built
-        %   during bootstrap). Same lesson as Phase 1027 fix-commit 3e6c155.
+        %   dropdown -- that's set programmatically before each pane is
+        %   built during bootstrap). Same lesson as Phase 1027 fix-commit
+        %   3e6c155.
         %
         %   which    -- char: 'events' | 'live'
         %   newState -- char: 'Inline' | 'Detached' | 'Hidden'
