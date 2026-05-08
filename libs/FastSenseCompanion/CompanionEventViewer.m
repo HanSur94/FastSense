@@ -113,6 +113,21 @@ classdef CompanionEventViewer < handle
             obj.applyPreset_(name);
         end
 
+        function refresh(obj)
+        %REFRESH Pull from store, apply filters, redraw Gantt. No-op if figure gone.
+            if isempty(obj.hFigure) || ~isgraphics(obj.hFigure); return; end
+            evs = obj.Store_.getEvents();
+            if isempty(evs); evs = Event.empty; end
+            filtered = CompanionEventViewer.applyFilters( ...
+                evs, obj.SelectedTagKeys, obj.SeverityMask, obj.OpenOnly, obj.TimeRange);
+            obj.Canvas_.draw(filtered, obj.Theme_);
+        end
+
+        function c = getCanvasForTest_(obj)
+        %GETCANVASFORTEST_ Test-only accessor for the canvas helper.
+            c = obj.Canvas_;
+        end
+
         function close(obj)
         %CLOSE Idempotent teardown: timer, listeners, canvas, figure.
             if isempty(obj.hFigure) || ~isgraphics(obj.hFigure)

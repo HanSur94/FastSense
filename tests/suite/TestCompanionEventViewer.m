@@ -160,6 +160,40 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             testCase.verifyError(@() v.setTimeRange(5, 5), 'CompanionEventViewer:invalidTimeRange');
             testCase.verifyError(@() v.setTimeRange(10, 5), 'CompanionEventViewer:invalidTimeRange');
         end
+
+        % --- Task 9: refresh() tests ---
+
+        function testRefreshDrawsBarsForStoreEvents(testCase)
+            es = makeStore_(testCase);
+            e1 = Event(0,  1,  'sA', 'lbl', 1, 'upper'); e1.TagKeys = {'tA'}; e1.Severity = 1;
+            e2 = Event(10, 11, 'sB', 'lbl', 1, 'upper'); e2.TagKeys = {'tB'}; e2.Severity = 2;
+            es.append([e1 e2]);
+
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.setTimeRange(-1, 100);   % wide window
+            v.refresh();
+
+            canvas = v.getCanvasForTest_();
+            testCase.verifyEqual(numel(canvas.BarHandles), 2);
+        end
+
+        function testRefreshPicksUpAppendedEvents(testCase)
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.setTimeRange(-1, 100);
+            v.refresh();
+            canvas = v.getCanvasForTest_();
+            testCase.verifyEqual(numel(canvas.BarHandles), 0);
+
+            e1 = Event(0, 1, 'sA', 'lbl', 1, 'upper'); e1.TagKeys = {'tA'};
+            es.append(e1);
+            v.refresh();
+            testCase.verifyEqual(numel(canvas.BarHandles), 1);
+        end
     end
 end
 
