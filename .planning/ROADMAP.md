@@ -123,3 +123,13 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
+
+### Phase 999.3: Dashboard time slider preview (BACKLOG)
+
+**Goal:** Fix the lower dashboard time slider so it shows a preview overlay of all graphed plot lines and detected events across the full time range. Currently the slider track is empty — investigate why the preview rendering isn't happening and restore it.
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
