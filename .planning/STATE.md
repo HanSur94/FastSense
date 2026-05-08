@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T14:30:00.000Z"
-last_activity: 2026-05-08 -- Completed Phase 1027 + 1027.1 (companion detachable log window with independent events/live panes) and quick task 260508-mjp (tag-column search on live log)
+last_updated: "2026-05-08T16:50:00.000Z"
+last_activity: 2026-05-08 -- Completed quick task 260508-n8h (dashboard Info button opens in-app uihtml modal instead of system browser)
 progress:
   total_phases: 6
   completed_phases: 2
@@ -20,7 +20,7 @@ Phase: 1028
 Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Completed Phase 1027 + 1027.1 + quick task 260508-mjp (live log tag search)
+Last activity: 2026-05-08 -- Completed quick task 260508-n8h (dashboard Info button opens in-app uihtml modal)
 
 ### Quick Tasks Completed
 
@@ -40,6 +40,7 @@ Last activity: 2026-05-08 -- Completed Phase 1027 + 1027.1 + quick task 260508-m
 | 260508-f7p | Reset button on time panel now restyles on dashboard theme switch | 2026-05-08 | 0e9c6f7 | Verified | (inline) |
 | 260508-huo | Fix CI — hoist companion test runners out of private/; guard headless web() in DashboardEngine; gate R2020b MEX-heavy tests | 2026-05-08 | 62b99ab | — | [260508-huo-fix-octave-tests-move-companion-runner-f](./quick/260508-huo-fix-octave-tests-move-companion-runner-f/) |
 | 260508-mjp | Add tag-column search field to LiveLogPane mirroring events log | 2026-05-08 | 1c258fb | — | [260508-mjp-add-tag-column-search-field-to-livelogpa](./quick/260508-mjp-add-tag-column-search-field-to-livelogpa/) |
+| 260508-n8h | Dashboard Info button opens modal in-app uifigure (uihtml) instead of system browser | 2026-05-08 | 8b525a8 | — | [260508-n8h-dashboard-info-button-opens-modal-render](./quick/260508-n8h-dashboard-info-button-opens-modal-render/) |
 
 ## Progress Bar
 
