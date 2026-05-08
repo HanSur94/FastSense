@@ -40,18 +40,14 @@ classdef TestDashboardEngineEventMarkers < matlab.unittest.TestCase
             d.switchPage(1);
             d.render();
             testCase.addTeardown(@() close(d.hFigure));
-            % 260508-kau / KAU-01: slider preview aggregates across ALL pages,
-            % so markers are the sorted union of every page's events
-            % regardless of which tab is currently active.
-            expected = sort([5 15 100 200 300]);
-            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), expected, ...
-                'Initial render must show union of all pages'' markers.');
+            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), [5 15]);
             d.switchPage(2);
-            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), expected, ...
-                'switchPage must keep all-pages markers visible (KAU-01).');
+            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), [100 200 300]);
+            % Reverse navigation must restore the previous page's markers,
+            % not leak P2's events back onto P1.
             d.switchPage(1);
-            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), expected, ...
-                'reverse switchPage must keep all-pages markers visible (KAU-01).');
+            testCase.verifyEqual(markerXData(d.TimeRangeSelector_), [5 15], ...
+                'Reverse page switch must reset markers to the active page''s widgets.');
         end
 
         function testEventMarkersUpdateOnUpdateGlobalTimeRange(testCase)

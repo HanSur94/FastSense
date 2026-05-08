@@ -69,20 +69,14 @@ function case_switch_page()
     d.addWidget(EventTimelineWidget('Title', 'T2', 'Events', e2));
     d.switchPage(1);
     d.render();
-    cleanup = onCleanup(@() closeDashboard(d)); %#ok<NASGU>
-    % 260508-kau / KAU-01: slider preview now aggregates events from
-    % ALL pages regardless of which tab is active. The expected marker
-    % set is therefore the sorted union of P1 and P2 events.
-    expected = sort([5 15 100 200 300]);
-    assert(isequal(markerXData(d.TimeRangeSelector_), expected), ...
-        sprintf('initial render: expected %s, got %s', mat2str(expected), ...
-                mat2str(markerXData(d.TimeRangeSelector_))));
+    cleanup = onCleanup(@() closeDashboard(d));
+    assert(isequal(markerXData(d.TimeRangeSelector_), [5 15]));
     d.switchPage(2);
-    assert(isequal(markerXData(d.TimeRangeSelector_), expected), ...
-        'switchPage must keep all-pages markers visible (KAU-01).');
+    assert(isequal(markerXData(d.TimeRangeSelector_), [100 200 300]));
+    % Reverse navigation must restore P1 markers, not leak P2's events.
     d.switchPage(1);
-    assert(isequal(markerXData(d.TimeRangeSelector_), expected), ...
-        'reverse switchPage must keep all-pages markers visible (KAU-01).');
+    assert(isequal(markerXData(d.TimeRangeSelector_), [5 15]), ...
+        'reverse switch must reset to active page widgets');
 end
 
 function case_update_global_time_range()
