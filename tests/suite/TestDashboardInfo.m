@@ -209,6 +209,54 @@ classdef TestDashboardInfo < matlab.unittest.TestCase
             end
         end
 
+        function testShowInfoOpensModalFigure(testCase)
+            % 260508-n8h — showInfo should render the HTML in an in-app
+            % modal uifigure instead of the system browser. Skips on
+            % headless runs (no uihtml support without a desktop).
+            testCase.assumeTrue(usejava('desktop'), ...
+                'Modal uifigure path requires interactive MATLAB desktop.');
+
+            d = DashboardEngine('Modal Test');
+            d.showInfo();
+            testCase.addTeardown(@() d.cleanupInfoTempFile());
+            testCase.addTeardown(@() TestDashboardInfo.tryCloseInfoModal(d));
+
+            testCase.verifyNotEmpty(d.InfoModalFigure_, ...
+                'showInfo did not populate InfoModalFigure_');
+            testCase.verifyTrue(ishandle(d.InfoModalFigure_), ...
+                'InfoModalFigure_ is not a valid handle');
+
+            % Verify a uihtml child exists
+            htmlChild = findobj(d.InfoModalFigure_, '-depth', 1, 'Type', 'uihtml');
+            testCase.verifyNotEmpty(htmlChild, ...
+                'Info modal does not contain a uihtml panel');
+
+            % Existing temp-file contract still holds
+            testCase.verifyNotEmpty(d.InfoTempFile);
+            testCase.verifyEqual(exist(d.InfoTempFile, 'file'), 2);
+        end
+
+        function testShowInfoModalReusesFigure(testCase)
+            % 260508-n8h — repeated Info clicks should refocus the existing
+            % modal rather than stack new windows.
+            testCase.assumeTrue(usejava('desktop'), ...
+                'Modal uifigure path requires interactive MATLAB desktop.');
+
+            d = DashboardEngine('Reuse Test');
+            d.showInfo();
+            testCase.addTeardown(@() d.cleanupInfoTempFile());
+            testCase.addTeardown(@() TestDashboardInfo.tryCloseInfoModal(d));
+
+            firstHandle = d.InfoModalFigure_;
+            testCase.verifyNotEmpty(firstHandle);
+
+            d.showInfo();
+            secondHandle = d.InfoModalFigure_;
+
+            testCase.verifyEqual(firstHandle, secondHandle, ...
+                'Second showInfo should reuse the existing modal figure');
+        end
+
         function testLiveButtonBorderReflectsActiveState(testCase)
             % Live button should show a blue border when live mode is ON,
             % and a neutral (toolbar-background) border when OFF.
@@ -235,6 +283,22 @@ classdef TestDashboardInfo < matlab.unittest.TestCase
             onColor = get(d.Toolbar.hLivePanel, 'HighlightColor');
             testCase.verifyEqual(onColor, themeStruct.InfoColor, ...
                 'AbsTol', 1e-6);
+        end
+    end
+
+    methods (Static)
+        function tryCloseInfoModal(d)
+        %TRYCLOSEINFOMODAL Teardown helper — close the info modal if it
+        %   is still open. Tolerates already-closed handles and engines
+        %   without an InfoModalFigure_ field.
+            try
+                if isprop(d, 'InfoModalFigure_') && ~isempty(d.InfoModalFigure_) ...
+                        && ishandle(d.InfoModalFigure_)
+                    delete(d.InfoModalFigure_);
+                end
+            catch
+                % swallow — best-effort teardown
+            end
         end
     end
 end
