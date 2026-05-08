@@ -426,7 +426,8 @@ classdef InspectorPane < handle
 
             lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
             lt.Text = char(tag.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
-            lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
+            lt.FontColor = t.ForegroundColor;
+            try, lt.WordWrap = 'on'; catch, end  % R2022a+
             lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
             obj.hTagTitle_ = lt;
 
@@ -887,7 +888,8 @@ classdef InspectorPane < handle
 
             lt = uilabel(g); lt.Layout.Row = 1; lt.Layout.Column = 1;
             lt.Text = char(db.Name); lt.FontSize = 14; lt.FontWeight = 'bold';
-            lt.FontColor = t.ForegroundColor; lt.WordWrap = 'on';
+            lt.FontColor = t.ForegroundColor;
+            try, lt.WordWrap = 'on'; catch, end  % R2022a+
             lt.HorizontalAlignment = 'left'; lt.VerticalAlignment = 'center';
             obj.hDashTitle_ = lt;
 
@@ -1365,7 +1367,7 @@ classdef InspectorPane < handle
             lv = uilabel(hr); lv.Layout.Row = 1; lv.Layout.Column = 2;
             lv.Text = valTxt; lv.FontSize = 11; lv.FontColor = t.ForegroundColor;
             lv.HorizontalAlignment = 'left'; lv.VerticalAlignment = 'center';
-            lv.WordWrap = 'on';
+            try, lv.WordWrap = 'on'; catch, end  % R2022a+
             lv.Tooltip = valTxt;  % full value visible on hover even if visually clipped
         end
 

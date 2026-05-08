@@ -708,7 +708,8 @@ classdef FastSenseCompanion < handle
 
             obj.hLogSearch_ = uieditfield(gHdr, 'text');
             obj.hLogSearch_.Layout.Row = 1; obj.hLogSearch_.Layout.Column = 2;
-            obj.hLogSearch_.Placeholder = 'Search log…';
+            % Placeholder is R2021a+; tolerated on R2020b (no placeholder text).
+            try, obj.hLogSearch_.Placeholder = 'Search log…'; catch, end
             obj.hLogSearch_.FontSize = 11;
             obj.hLogSearch_.ValueChangedFcn = @(~,~) obj.applyLogFilter_();
 
