@@ -33,7 +33,14 @@ function runDiscoverEventStoreTests()
         TagRegistry.register('m', mon);
 
         found = companionDiscoverEventStore();
-        assert(~isempty(found) && found == es, ...
+        % Portable handle-identity check: MATLAB auto-defines == on handle
+        % classes but Octave doesn't (errors with "eq method not defined").
+        % Mutate a property on `es` and confirm the same change is visible
+        % through `found` — proves both references point at the same object
+        % without relying on overloaded operators.
+        es.MaxBackups = 1337;
+        assert(~isempty(found) && isa(found, 'EventStore') && ...
+            found.MaxBackups == 1337, ...
             'Test 2: companionDiscoverEventStore must return the MonitorTag''s EventStore.');
     catch e
         TagRegistry.clear();
