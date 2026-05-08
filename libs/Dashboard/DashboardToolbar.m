@@ -33,9 +33,12 @@ classdef DashboardToolbar < handle
             obj.Engine = engine;
             obj.Theme_ = theme;
 
+            % Y accounts for the reserved banner strip at the figure top —
+            % toolbar always sits directly below the banner strip
+            % (260508-jyh).
             obj.hPanel = uipanel('Parent', hFigure, ...
                 'Units', 'normalized', ...
-                'Position', [0, 1 - obj.Height, 1, obj.Height], ...
+                'Position', [0, 1 - engine.BannerHeight - obj.Height, 1, obj.Height], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', theme.ToolbarBackground);
 
@@ -294,8 +297,16 @@ classdef DashboardToolbar < handle
         end
 
         function contentArea = getContentArea(obj)
+        %GETCONTENTAREA Compute the widget content area in normalized units.
+        %   Subtracts the reserved banner strip at the top, the toolbar,
+        %   and the time-panel height (260508-jyh). DashboardEngine
+        %   computes ContentArea inline in render() and
+        %   applyVisibilityAndRelayout(); this helper exists for
+        %   consistency with consumers that read directly from the
+        %   toolbar (e.g. DashboardBuilder canvas calc).
             timePanelH = obj.Engine.TimePanelHeight;
-            contentArea = [0, timePanelH, 1, 1 - obj.Height - timePanelH];
+            contentArea = [0, timePanelH, ...
+                1, 1 - obj.Engine.BannerHeight - obj.Height - timePanelH];
         end
     end
 end

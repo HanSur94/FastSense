@@ -28,6 +28,12 @@ classdef DashboardEngine < handle
         ShowTimePanel = true     % hide the bottom time slider panel
         EventMarkersVisible = true  % global toggle for event markers across all widgets (runtime UI state, not serialized)
         DebugPreview_ = false    % 260508-das — opt-in: surface preview/marker pipeline failures as warnings
+        % Reserved vertical strip at the figure top for the stale-data banner
+        % (normalized units). The banner is no longer an overlay — its space
+        % is permanently reserved, so toolbar / page-bar / content-area all
+        % shift down by BannerHeight. Single source of truth for the banner
+        % strip height (260508-jyh).
+        BannerHeight  = 0.035
     end
 
     properties (SetAccess = private)
@@ -313,10 +319,11 @@ classdef DashboardEngine < handle
                 obj.renderPageBar(themeStruct);
                 pageBarH = obj.PageBarHeight;
             else
-                % Create hidden PageBar placeholder so hPageBar is always valid
+                % Create hidden PageBar placeholder so hPageBar is always valid.
+                % Y accounts for the reserved banner strip at the figure top.
                 obj.hPageBar = uipanel('Parent', obj.hFigure, ...
                     'Units', 'normalized', ...
-                    'Position', [0, 1 - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
+                    'Position', [0, 1 - obj.BannerHeight - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
                     'BorderType', 'none', ...
                     'BackgroundColor', themeStruct.ToolbarBackground, ...
                     'Visible', 'off');
@@ -329,10 +336,13 @@ classdef DashboardEngine < handle
             % Create the stale-data banner (hidden by default; toggled by live tick)
             obj.createStaleBanner(themeStruct, toolbarH);
 
-            % Apply visibility flags + compute content area based on effective heights
+            % Apply visibility flags + compute content area based on effective
+            % heights. BannerHeight is reserved at the top regardless of
+            % banner Visible state — toolbar/pagebar/content-area all shift
+            % down so the banner is never an overlay (260508-jyh).
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
             obj.Layout.ContentArea = [0, effTimeH, ...
-                1, 1 - effToolbarH - effPageBarH - effTimeH];
+                1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
@@ -1017,10 +1027,13 @@ classdef DashboardEngine < handle
                 return;
             end
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility();
+            % BannerHeight is reserved at the top — content area never extends
+            % into the banner strip (260508-jyh).
             obj.Layout.ContentArea = [0, effTimeH, ...
-                1, 1 - effToolbarH - effPageBarH - effTimeH];
-            % Reposition the banner BEFORE the widget rerender — banner Y must
-            % track current chrome heights even if rerenderWidgets() throws.
+                1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
+            % Reposition the banner so it stays parked in the reserved strip
+            % even after a re-layout. Body is geometry-stable now (constant
+            % Y), but the call is preserved as defence-in-depth.
             obj.repositionStaleBanner_();
             try
                 obj.rerenderWidgets();
@@ -1199,27 +1212,23 @@ classdef DashboardEngine < handle
             newTMax = tMax;
         end
 
-        function createStaleBanner(obj, theme, toolbarH)
-        %CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
-        %   A uipanel strip below the toolbar AND below the page-tab strip
-        %   (when present) so the banner never occludes page navigation.
-        %   Hidden by default; shown when staleness is detected and not
-        %   previously dismissed by the user.
+        function createStaleBanner(obj, theme, toolbarH) %#ok<INUSD>
+        %CREATESTALEBANNER Create the hidden stale-data warning banner.
+        %   Permanent reserved strip at the very TOP of the figure.
+        %   Toolbar, page tabs, and content area all sit BELOW this strip —
+        %   the banner is never an overlay (260508-jyh). Hidden by default;
+        %   shown when staleness is detected and not previously dismissed
+        %   by the user. toolbarH is retained for signature compat; banner
+        %   now lives in the reserved top strip independent of chrome
+        %   heights.
             if ~isempty(obj.hStaleBanner) && ishandle(obj.hStaleBanner)
                 return;
             end
-            bannerH = 0.035;
+            bannerH = obj.BannerHeight;
             warnColor = theme.StatusWarnColor;
             fgColor   = [0.15 0.10 0.02];
 
-            % Effective page-bar height matches applyChromeVisibility:
-            % zero when single-page (tabs hidden), PageBarHeight when multi-page.
-            if numel(obj.Pages) > 1
-                effPageBarH = obj.PageBarHeight;
-            else
-                effPageBarH = 0;
-            end
-            bannerY = 1 - toolbarH - effPageBarH - bannerH;
+            bannerY = 1 - bannerH;  % Reserved strip at the very top of the figure
 
             obj.hStaleBanner = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
@@ -1250,27 +1259,16 @@ classdef DashboardEngine < handle
         end
 
         function repositionStaleBanner_(obj)
-        %REPOSITIONSTALEBANNER_ Recompute banner Y from current chrome heights.
-        %   Safe to call before render or after teardown — no-ops when the
-        %   banner handle is empty/invalid. Banner stays an overlay; this
-        %   never touches Layout.ContentArea.
+        %REPOSITIONSTALEBANNER_ Park banner in the reserved top strip.
+        %   Banner now lives in a permanent strip at the figure top; no
+        %   chrome-height dependence (260508-jyh). Safe to call before
+        %   render or after teardown — no-ops when the handle is
+        %   empty/invalid.
             if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
                 return;
             end
-            if ~isempty(obj.Toolbar)
-                toolbarH = obj.Toolbar.Height;
-            else
-                toolbarH = 0;
-            end
-            if numel(obj.Pages) > 1
-                effPageBarH = obj.PageBarHeight;
-            else
-                effPageBarH = 0;
-            end
-            pos = get(obj.hStaleBanner, 'Position');
-            bannerH = pos(4);
             set(obj.hStaleBanner, 'Position', ...
-                [0, 1 - toolbarH - effPageBarH - bannerH, 1, bannerH]);
+                [0, 1 - obj.BannerHeight, 1, obj.BannerHeight]);
         end
 
         function showStaleBanner(obj, staleTitles)
@@ -1731,11 +1729,12 @@ classdef DashboardEngine < handle
 
         function renderPageBar(obj, themeStruct)
         %RENDERPAGEBAR Create the PageBar uipanel with one button per page.
-        %   Called from render() when numel(Pages) > 1.
+        %   Called from render() when numel(Pages) > 1. Y accounts for the
+        %   reserved banner strip at the figure top (260508-jyh).
             toolbarH = obj.Toolbar.Height;
             hPageBar = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
-                'Position', [0, 1 - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
+                'Position', [0, 1 - obj.BannerHeight - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', themeStruct.ToolbarBackground, ...
                 'Visible', 'on');
