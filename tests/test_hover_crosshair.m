@@ -12,6 +12,15 @@ function test_hover_crosshair()
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
 
+    % HoverCrosshair uses MATLAB's handle-class isvalid() throughout, which
+    % Octave does not implement (errors: 'isvalid undefined' /
+    % 'function not yet implemented in Octave'). Hover is mouse-driven and
+    % targets MATLAB anyway — skip cleanly under Octave.
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('    SKIPPED (Octave: HoverCrosshair is MATLAB-only — uses isvalid).\n');
+        return;
+    end
+
     if ~canCreateFigure_()
         fprintf('    SKIPPED (headless: cannot create figure)\n');
         return;
