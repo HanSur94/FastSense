@@ -114,7 +114,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1025. FastSense hover crosshair + datatip | pending | 0/? | Not started | — |
 | 1026. Dashboard time slider preview | pending | 0/? | Not started | — |
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
-| 1027.1. Independent events/live log detach | pending | 8/8 | Complete   | 2026-05-08 |
+| 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
 
 ## Phase Details (Pending Milestone)
