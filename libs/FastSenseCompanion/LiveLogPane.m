@@ -42,7 +42,8 @@ classdef LiveLogPane < handle
         ThemeStruct_     = []          % resolved CompanionTheme struct
         hRoot_           = []          % outer uigridlayout (the [2 1] grid)
         hLiveLogTable_   = []          % uitable for live updates log
-        hPopoutBtn_      = []          % pop-out icon uibutton in header col 3
+        hPopoutBtn_      = []          % pop-out icon uibutton in header col 4
+        hLiveSearch_     = []          % uieditfield (case-insensitive Tag substring filter)
         LiveLogBuffer_   = cell(0, 4)  % {Time, Tag, +Samples, Latest} newest first, capped 500
     end
 
@@ -89,11 +90,11 @@ classdef LiveLogPane < handle
             obj.hRoot_.RowSpacing  = 4;
             obj.hRoot_.BackgroundColor = t.WidgetBackground;
 
-            % --- Header (row 1): "Live updates" label | Clear button | pop-out icon ---
-            gHdr = uigridlayout(obj.hRoot_, [1 3]);
+            % --- Header (row 1): "Live updates" label | search | Clear button | pop-out icon ---
+            gHdr = uigridlayout(obj.hRoot_, [1 4]);
             gHdr.Layout.Row    = 1;
             gHdr.Layout.Column = 1;
-            gHdr.ColumnWidth   = {'1x', 80, 36};
+            gHdr.ColumnWidth   = {80, '1x', 80, 36};
             gHdr.RowHeight     = {'1x'};
             gHdr.Padding       = [0 0 0 0];
             gHdr.ColumnSpacing = 8;
@@ -105,14 +106,20 @@ classdef LiveLogPane < handle
             hLbl.FontColor = t.ForegroundColor;
             hLbl.HorizontalAlignment = 'left'; hLbl.VerticalAlignment = 'center';
 
+            obj.hLiveSearch_ = uieditfield(gHdr, 'text');
+            obj.hLiveSearch_.Layout.Row = 1; obj.hLiveSearch_.Layout.Column = 2;
+            obj.hLiveSearch_.Placeholder = ['Search by tag', char(8230)];
+            obj.hLiveSearch_.FontSize = 11;
+            obj.hLiveSearch_.ValueChangedFcn = @(~,~) obj.applyLiveFilter_();
+
             hClearBtn = uibutton(gHdr, 'push');
-            hClearBtn.Layout.Row = 1; hClearBtn.Layout.Column = 2;
+            hClearBtn.Layout.Row = 1; hClearBtn.Layout.Column = 3;
             hClearBtn.Text = 'Clear'; hClearBtn.FontSize = 11;
             hClearBtn.Tooltip = 'Clear the live updates log';
             hClearBtn.ButtonPushedFcn = @(~,~) obj.clearLiveLog();
 
             obj.hPopoutBtn_ = uibutton(gHdr, 'push');
-            obj.hPopoutBtn_.Layout.Row = 1; obj.hPopoutBtn_.Layout.Column = 3;
+            obj.hPopoutBtn_.Layout.Row = 1; obj.hPopoutBtn_.Layout.Column = 4;
             obj.hPopoutBtn_.Text            = char(8689);  % pop-out arrow glyph
             obj.hPopoutBtn_.FontSize        = 14;
             obj.hPopoutBtn_.Tooltip         = 'Detach live log to its own window';
@@ -144,7 +151,7 @@ classdef LiveLogPane < handle
             obj.IsAttached = true;
 
             % Re-render any buffered history so re-attach is non-destructive.
-            obj.renderLiveTable_();
+            obj.applyLiveFilter_();
         end
 
         function detach(obj)
@@ -161,6 +168,7 @@ classdef LiveLogPane < handle
             obj.hRoot_         = [];
             obj.hLiveLogTable_ = [];
             obj.hPopoutBtn_    = [];
+            obj.hLiveSearch_   = [];
             obj.IsAttached     = false;
         end
 
@@ -191,7 +199,7 @@ classdef LiveLogPane < handle
                     obj.LiveLogBuffer_ = obj.LiveLogBuffer_(1:500, :);
                 end
                 if obj.IsAttached
-                    obj.renderLiveTable_();
+                    obj.applyLiveFilter_();
                 end
             catch
                 % Live logging must never crash the UI.
@@ -202,9 +210,14 @@ classdef LiveLogPane < handle
         %CLEARLIVELOG Wipe the live-updates buffer + table.
         %   NOTE: does NOT reset any companion-side pipeline-cursor map. If the
         %   companion needs that reset (e.g. on project switch), it does so itself.
+        %   Also resets the search field so the user does not see an empty
+        %   table caused by a stale filter on a now-empty buffer.
             obj.LiveLogBuffer_ = cell(0, 4);
+            if obj.IsAttached && ~isempty(obj.hLiveSearch_) && isvalid(obj.hLiveSearch_)
+                obj.hLiveSearch_.Value = '';
+            end
             if obj.IsAttached && ~isempty(obj.hLiveLogTable_) && isvalid(obj.hLiveLogTable_)
-                obj.hLiveLogTable_.Data = cell(0, 4);
+                obj.applyLiveFilter_();
             end
         end
 
@@ -232,6 +245,11 @@ classdef LiveLogPane < handle
                 if ~isempty(obj.hPopoutBtn_) && isvalid(obj.hPopoutBtn_)
                     obj.hPopoutBtn_.BackgroundColor = t.WidgetBorderColor;
                     obj.hPopoutBtn_.FontColor       = t.ForegroundColor;
+                end
+                % Search field: re-assert WidgetBackground/ForegroundColor.
+                if ~isempty(obj.hLiveSearch_) && isvalid(obj.hLiveSearch_)
+                    obj.hLiveSearch_.BackgroundColor = t.WidgetBackground;
+                    obj.hLiveSearch_.FontColor       = t.ForegroundColor;
                 end
                 % Table: re-assert striped pair so attach() and applyTheme()
                 % share the same logic regardless of walker behavior.
@@ -300,14 +318,29 @@ classdef LiveLogPane < handle
 
     methods (Access = private)
 
-        function renderLiveTable_(obj)
-        %RENDERLIVETABLE_ Push LiveLogBuffer_ into hLiveLogTable_.Data (newest first).
+        function applyLiveFilter_(obj)
+        %APPLYLIVEFILTER_ Re-apply Tag-column substring filter to LiveLogBuffer_ -> uitable.Data.
+        %   Mirrors EventsLogPane.applyLogFilter_ but scoped to the Tag column
+        %   only (column 2 of the {Time, Tag, +Samples, Latest} buffer).
             if isempty(obj.hLiveLogTable_) || ~isvalid(obj.hLiveLogTable_); return; end
-            if isempty(obj.LiveLogBuffer_)
-                obj.hLiveLogTable_.Data = cell(0, 4);
-            else
-                obj.hLiveLogTable_.Data = obj.LiveLogBuffer_;
+            rows = obj.LiveLogBuffer_;
+            if isempty(rows)
+                obj.hLiveLogTable_.Data = cell(0, 4); return;
             end
+            % Text filter — case-insensitive substring on the Tag column only.
+            qry = '';
+            if ~isempty(obj.hLiveSearch_) && isvalid(obj.hLiveSearch_)
+                qry = strtrim(obj.hLiveSearch_.Value);
+            end
+            if ~isempty(qry)
+                qLow = lower(qry);
+                keep = false(size(rows, 1), 1);
+                for i = 1:size(rows, 1)
+                    keep(i) = ~isempty(strfind(lower(rows{i, 2}), qLow)); %#ok<STREMP>
+                end
+                rows = rows(keep, :);
+            end
+            obj.hLiveLogTable_.Data = rows;
         end
 
     end

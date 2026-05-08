@@ -153,6 +153,35 @@ classdef TestLiveLogPane < matlab.unittest.TestCase
             testCase.verifyFalse(p.IsAttached);
         end
 
+        function testLiveSearchFiltersByTag(testCase)
+            %TESTLIVESEARCHFILTERSBYTAG hLiveSearch_ filters table by case-insensitive Tag substring.
+            [p, fig] = testCase.makePane_('dark');
+            % Seed 3 rows with different tags
+            p.addLiveLogEntry('temp.sensor.1', 5, 21.3);
+            p.addLiveLogEntry('pressure.high', 3, 101.2);
+            p.addLiveLogEntry('temp.sensor.2', 1, 22.4);
+            % All 3 visible by default
+            tbl = findall(fig, 'Type', 'uitable');
+            testCase.verifyEqual(size(tbl.Data, 1), 3);
+            % Find search edit field — there's only one uieditfield in the LiveLogPane
+            searchField = findall(fig, 'Type', 'uieditfield');
+            testCase.assertNotEmpty(searchField);
+            % Set search to "temp" and trigger ValueChangedFcn — should match 2 rows
+            searchField.Value = 'temp';
+            feval(searchField.ValueChangedFcn, searchField, []);
+            testCase.verifyEqual(size(tbl.Data, 1), 2, ...
+                'Search "temp" should match the 2 temp tags, not pressure.high');
+            % Case-insensitive: "PRESSURE" should match pressure.high
+            searchField.Value = 'PRESSURE';
+            feval(searchField.ValueChangedFcn, searchField, []);
+            testCase.verifyEqual(size(tbl.Data, 1), 1);
+            testCase.verifyEqual(tbl.Data{1, 2}, 'pressure.high');
+            % Empty query: all 3 visible again
+            searchField.Value = '';
+            feval(searchField.ValueChangedFcn, searchField, []);
+            testCase.verifyEqual(size(tbl.Data, 1), 3);
+        end
+
         function testDetachRequestedEventFires(testCase)
             %TESTDETACHREQUESTEDEVENTFIRES requestDetach() fires DetachRequested once per call.
             [p, ~] = testCase.makePane_('dark');
