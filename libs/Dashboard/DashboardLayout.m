@@ -609,19 +609,22 @@ classdef DashboardLayout < handle
                 'BackgroundColor', barBg, ...
                 'BorderType', 'none', ...
                 'Tag', 'WidgetButtonBar');
-            % Reposition on panel resize so the bar tracks the widget.
-            % Skip the SizeChangedFcn wiring under headless MATLAB R2020b:
-            % the immediate-fire-on-first-render path can SEGV the
-            % defaultFigureVisible='off' demo suite. The bar's initial
-            % pixel position above is already correct; resize follow-up
-            % is a nice-to-have only relevant in an interactive desktop.
+            % Reposition on panel resize so the bar tracks the widget —
+            % only when MATLAB has an interactive desktop. Under -batch /
+            % -nodesktop / -nodisplay (CI, xvfb), the SizeChangedFcn fires
+            % during render of run_demo's 25+ widgets and segfaults R2020b.
+            % usejava('desktop') is true only in an interactive Java desktop;
+            % batchStartupOptionUsed catches MATLAB -batch on R2019a+.
+            isInteractive = false;
             try
-                isHeadless = isempty(getenv('DISPLAY')) && ...
-                    ~ispc && ~ismac && ~usejava('desktop');
+                isInteractive = usejava('desktop');
+                if exist('batchStartupOptionUsed', 'builtin') == 5 ...
+                        && batchStartupOptionUsed
+                    isInteractive = false;
+                end
             catch
-                isHeadless = false;
             end
-            if ~isHeadless
+            if isInteractive
                 set(widget.hPanel, 'SizeChangedFcn', ...
                     @(src, ~) DashboardLayout.reflowButtonBar_(src, barH, inset));
             end
