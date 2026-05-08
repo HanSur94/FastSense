@@ -127,6 +127,11 @@ classdef HoverCrosshair < handle
                 header = sprintf('%.6g', xQuery);
             end
 
+            % Theme colors needed early for the foreground TeX color reset
+            theme = fp.Theme;
+            [bgColor, fgColor, edgeColor, fontName, fontSize] = ...
+                obj.themeColors_(theme);
+
             nLines = numel(fp.Lines);
             rows = cell(1, nLines + 1);
             rows{1} = header;
@@ -134,7 +139,13 @@ classdef HoverCrosshair < handle
                 lineRec = fp.Lines(i);
                 yStr = obj.computeYAtX_(lineRec, xQuery);
                 displayName = obj.lineDisplayName_(lineRec, i);
-                rows{i + 1} = sprintf('%s: %s', displayName, yStr);
+                lineColor = obj.resolveLineColor_(lineRec, fgColor);
+                % TeX interpreter: colored bullet then reset to fg color.
+                rows{i + 1} = sprintf( ...
+                    '\\color[rgb]{%.4f,%.4f,%.4f}\\bullet \\color[rgb]{%.4f,%.4f,%.4f}%s: %s', ...
+                    lineColor(1), lineColor(2), lineColor(3), ...
+                    fgColor(1), fgColor(2), fgColor(3), ...
+                    obj.escapeTeX_(displayName), yStr);
             end
 
             % Position the tip box. Use a small offset (~3% of axes width)
@@ -155,15 +166,11 @@ classdef HoverCrosshair < handle
             end
             tipY = yLim(2) - offY;
 
-            % Theme colors with safe fallbacks
-            theme = fp.Theme;
-            [bgColor, fgColor, edgeColor, fontName, fontSize] = ...
-                obj.themeColors_(theme);
-
             try
                 set(obj.hTipBox, ...
                     'Position', [tipX, tipY, 0], ...
                     'String', rows, ...
+                    'Interpreter', 'tex', ...
                     'Color', fgColor, ...
                     'BackgroundColor', bgColor, ...
                     'EdgeColor', edgeColor, ...
@@ -247,11 +254,13 @@ classdef HoverCrosshair < handle
                 'Visible', 'off');
             if ~wasHeld; hold(obj.hAxes, 'off'); end
 
-            % Datatip text box
+            % Datatip text box (TeX interpreter so per-row colored bullets
+            % can be rendered via \color[rgb]{...}\bullet directives).
             obj.hTipBox = text(obj.hAxes, ...
                 mean(get(obj.hAxes, 'XLim')), ...
                 mean(get(obj.hAxes, 'YLim')), ...
                 '', ...
+                'Interpreter', 'tex', ...
                 'Color', fgColor, ...
                 'BackgroundColor', bgColor, ...
                 'EdgeColor', edgeColor, ...
@@ -408,6 +417,48 @@ classdef HoverCrosshair < handle
             catch
                 % keep fallback
             end
+        end
+
+        function color = resolveLineColor_(lineRec, fallback)
+            %RESOLVELINECOLOR_ Best-effort RGB color for a line record.
+            %   Order: rendered handle 'Color' -> Options.Color -> fallback.
+            color = fallback;
+            try
+                if isfield(lineRec, 'hLine') && ~isempty(lineRec.hLine) ...
+                        && ishandle(lineRec.hLine)
+                    c = get(lineRec.hLine, 'Color');
+                    if isnumeric(c) && numel(c) == 3
+                        color = double(c(:)');
+                        return;
+                    end
+                end
+            catch
+            end
+            try
+                if isfield(lineRec, 'Options') && isstruct(lineRec.Options) ...
+                        && isfield(lineRec.Options, 'Color') ...
+                        && ~isempty(lineRec.Options.Color)
+                    c = lineRec.Options.Color;
+                    if isnumeric(c) && numel(c) == 3
+                        color = double(c(:)');
+                    end
+                end
+            catch
+            end
+        end
+
+        function s = escapeTeX_(s)
+            %ESCAPETEX_ Escape TeX special chars in plain text labels.
+            if ~ischar(s) && ~isstring(s); s = char(s); end
+            s = strrep(s, '\', '\\');
+            s = strrep(s, '_', '\_');
+            s = strrep(s, '^', '\^');
+            s = strrep(s, '{', '\{');
+            s = strrep(s, '}', '\}');
+            s = strrep(s, '$', '\$');
+            s = strrep(s, '&', '\&');
+            s = strrep(s, '#', '\#');
+            s = strrep(s, '%', '\%');
         end
 
         function [bgColor, fgColor, edgeColor, fontName, fontSize] = ...
