@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T06:13:00.000Z"
-last_activity: 2026-05-08 -- Completed quick task 260508-b8m: Refresh CLAUDE.md for Tag-based API and add Running MATLAB code section
+last_updated: "2026-05-08T06:29:20.000Z"
+last_activity: 2026-05-08 -- Completed quick task 260508-bju: Lock down WebBridge CORS to localhost-only with env-var override
 progress:
   total_phases: 6
   completed_phases: 6
@@ -19,7 +19,7 @@ shipped_at: 2026-04-30
 
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Completed quick task 260508-b8m: Refresh CLAUDE.md for Tag-based API and add Running MATLAB code section
+Last activity: 2026-05-08 -- Completed quick task 260508-bju: Lock down WebBridge CORS to localhost-only with env-var override
 
 ### Quick Tasks Completed
 
@@ -29,6 +29,7 @@ Last activity: 2026-05-08 -- Completed quick task 260508-b8m: Refresh CLAUDE.md 
 | 260504-sgt | Implement Companion Settings Dialog (Theme + Live period) | 2026-05-04 | c522988 | Verified | [260504-sgt-implement-companion-settings-dialog-them](./quick/260504-sgt-implement-companion-settings-dialog-them/) |
 | 260504-sfp | Unify single-tag Open Detail through openAdHocPlot + right-click event-marker context menu | 2026-05-04 | 1d0ccd3 | — | [260504-sfp-fastsensecompanion-route-single-tag-open](./quick/260504-sfp-fastsensecompanion-route-single-tag-open/) |
 | 260508-b8m | Refresh CLAUDE.md for Tag-based API and add Running MATLAB code section | 2026-05-08 | 90d9c03 | — | [260508-b8m-refresh-claude-md-for-tag-based-api-and-](./quick/260508-b8m-refresh-claude-md-for-tag-based-api-and-/) |
+| 260508-bju | Lock down WebBridge CORS to localhost with env-var override | 2026-05-08 | 518b778 | Verified | [260508-bju-lock-down-webbridge-cors-to-localhost-on](./quick/260508-bju-lock-down-webbridge-cors-to-localhost-on/) |
 
 ## Progress Bar
 
