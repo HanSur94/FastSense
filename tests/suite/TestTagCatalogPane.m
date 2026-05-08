@@ -14,6 +14,12 @@ classdef TestTagCatalogPane < matlab.unittest.TestCase
 
     % ------------------------------------------------------------------
     methods (TestClassSetup)
+        function gateModernMatlab(testCase)
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeTrue(~verLessThan('matlab', '9.10'), ...
+                'Companion suite requires MATLAB R2021a+ uifigure features');
+        end
+
         function addPaths(~)
             %ADDPATHS Add project root to path and call install().
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));

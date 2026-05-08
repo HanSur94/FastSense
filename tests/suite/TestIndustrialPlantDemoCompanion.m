@@ -14,6 +14,12 @@ classdef TestIndustrialPlantDemoCompanion < matlab.unittest.TestCase
 %   See also: run_demo, teardownDemo, FastSenseCompanion, TagRegistry.
 
     methods (TestClassSetup)
+        function gateModernMatlab(testCase)
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeTrue(~verLessThan('matlab', '9.10'), ...
+                'Companion suite requires MATLAB R2021a+ uifigure features');
+        end
+
         function addPaths(testCase) %#ok<MANU>
         %ADDPATHS Add demo + suite + lib paths and run install().
             here = fileparts(mfilename('fullpath'));

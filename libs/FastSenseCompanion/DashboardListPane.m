@@ -83,7 +83,8 @@ classdef DashboardListPane < handle
             obj.hSearchField_ = uieditfield(hSearchGrid, 'text');
             obj.hSearchField_.Layout.Row      = 1;
             obj.hSearchField_.Layout.Column   = 1;
-            obj.hSearchField_.Placeholder     = ['Search dashboards', char(8230)];
+            % Placeholder is R2021a+; tolerated on R2020b.
+            try, obj.hSearchField_.Placeholder = ['Search dashboards', char(8230)]; catch, end
             obj.hSearchField_.FontSize        = 11;
             obj.hSearchField_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hSearchField_.BackgroundColor = obj.Theme_.WidgetBackground;
