@@ -7,11 +7,23 @@ function result = bench_tag_pipeline_1k(varargin)
     %   and CI gate referenced by phase 1028 (D-01, D-06, D-07, D-12).
     %
     %   Forms (mirror existing bench_*.m self-bootstrap pattern):
-    %     bench_tag_pipeline_1k()                  % NoIO mode, gated, full run
-    %     bench_tag_pipeline_1k('--smoke')         % NoIO, nTicks=10, no gate (CI smoke)
-    %     bench_tag_pipeline_1k('Mode', 'WithIO')  % diagnostic, not gated
-    %     bench_tag_pipeline_1k('--profile')       % NoIO + profile on/off; populates tBreakdown
-    %     result = bench_tag_pipeline_1k(...)      % returns struct with timings
+    %     bench_tag_pipeline_1k()                    % NoIO mode, gated, full run
+    %     bench_tag_pipeline_1k('--smoke')           % NoIO, nTicks=10, no gate (CI smoke)
+    %     bench_tag_pipeline_1k('Mode', 'WithIO')    % diagnostic, not gated
+    %     bench_tag_pipeline_1k('--profile')         % NoIO + profile on/off; populates tBreakdown
+    %     bench_tag_pipeline_1k('--cache-on')        % default — production cache enabled
+    %     bench_tag_pipeline_1k('--cache-off')       % regression check / Plan 02b WithIO baseline
+    %     result = bench_tag_pipeline_1k(...)        % returns struct with timings
+    %
+    %   Phase 1028 plan 02d: --cache-on (default) routes per-tick appends
+    %   through the in-memory priorState_ cache, skipping the load() inside
+    %   writeTagMat_('append',...). --cache-off forces every append to do
+    %   load+concat+save (the Plan 02b WithIO behavior). Both modes record
+    %   tickMin / tBreakdown so VERIFICATION.md can show before/after.
+    %   The previous "--coalesce-on/--coalesce-off" framing was incorrect
+    %   (the pipeline already calls writeFn_ once per tag per tick — there
+    %   was no within-tick redundancy to coalesce). The actual mechanism
+    %   is read-side cache eliminating per-tick load.
     %
     %   Output struct fields:
     %     tickMin       — minimum tick wall (seconds)
@@ -85,10 +97,11 @@ function result = bench_tag_pipeline_1k(varargin)
     addpath(fullfile(here, '..'));
     install();
 
-    % --------- Mode + smoke + profile parsing ---------
+    % --------- Mode + smoke + profile + cache parsing ---------
     mode = 'NoIO';
     smoke = false;
     profileMode = false;
+    cacheActive = true;     % Phase 1028 plan 02d: production default.
     i = 1;
     while i <= numel(varargin)
         arg = varargin{i};
@@ -97,6 +110,12 @@ function result = bench_tag_pipeline_1k(varargin)
             i = i + 1;
         elseif ischar(arg) && strcmp(arg, '--profile')
             profileMode = true;
+            i = i + 1;
+        elseif ischar(arg) && strcmp(arg, '--cache-on')
+            cacheActive = true;
+            i = i + 1;
+        elseif ischar(arg) && strcmp(arg, '--cache-off')
+            cacheActive = false;
             i = i + 1;
         elseif ischar(arg) && strcmpi(arg, 'Mode')
             if i + 1 > numel(varargin)
@@ -107,7 +126,7 @@ function result = bench_tag_pipeline_1k(varargin)
             i = i + 2;
         else
             error('bench_tag_pipeline_1k:badArgs', ...
-                'Unknown argument %s. Expected ''--smoke'', ''--profile'', or ''Mode''.', ...
+                'Unknown argument %s. Expected ''--smoke'', ''--profile'', ''--cache-on'', ''--cache-off'', or ''Mode''.', ...
                 disp_(arg));
         end
     end
@@ -176,9 +195,14 @@ function result = bench_tag_pipeline_1k(varargin)
         randn('state', 0);  %#ok<RAND>
     end
 
-    fprintf('\n== bench_tag_pipeline_1k: %d tags (%d sensors + %d state + %d monitor + %d composite), %d machines, mode=%s%s ==\n', ...
+    if cacheActive
+        cacheLbl = 'cache=on';
+    else
+        cacheLbl = 'cache=off';
+    end
+    fprintf('\n== bench_tag_pipeline_1k: %d tags (%d sensors + %d state + %d monitor + %d composite), %d machines, mode=%s, %s%s ==\n', ...
         nSensors + nState + nMonitor + nComposite, nSensors, nState, nMonitor, nComposite, ...
-        nMachines, mode, char(repmat('  [SMOKE]', 1, double(smoke))));
+        nMachines, mode, cacheLbl, char(repmat('  [SMOKE]', 1, double(smoke))));
 
     % --------- Setup: temp dirs (NoIO is now wired post-construction via DI seam) ---------
     rawDir = setupTempRawDir_('bench_tp1k_raw');
@@ -215,6 +239,12 @@ function result = bench_tag_pipeline_1k(varargin)
         % the libs/SensorThreshold/private/writeTagMat_ caller — addpath(-begin)
         % is scoped out by MATLAB/Octave private/ visibility rules.
         p.setWriteFnForTesting_(@noopWrite_);
+    end
+    % Phase 1028 plan 02d: opt-out of the priorState_ cache when --cache-off.
+    % Default cacheActive_=true reflects the production path; --cache-off
+    % is the regression-check / Plan 02b WithIO baseline.
+    if ~cacheActive
+        p.setCacheActiveForTesting_(false);
     end
 
     tickTimes = nan(1, nTicks);
@@ -269,6 +299,7 @@ function result = bench_tag_pipeline_1k(varargin)
     result.tickMedian = median(tickTimes);
     result.tBreakdown = tBreakdown;
     result.mode       = mode;
+    result.cacheActive = cacheActive;   % Phase 1028 plan 02d: record so artifact diffs are unambiguous.
     result.wallTotal  = wallTotal;
     result.nTagsTotal = nTagsTotal;
     result.profiled   = profileMode;

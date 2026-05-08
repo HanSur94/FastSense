@@ -214,7 +214,7 @@ function run_ci_benchmark()
     % rather than re-running it for outer-loop variance.
     fprintf('\n========== Phase 1028: 1000-tag pipeline ==========\n');
 
-    fprintf('Running bench_tag_pipeline_1k (NoIO, gated)...\n');
+    fprintf('Running bench_tag_pipeline_1k (NoIO, cache-on, gated)...\n');
     r1k = bench_tag_pipeline_1k();
     results{end+1} = struct( ...
         'name',  'tag_pipeline_1k_noio_min_ms', ...
@@ -225,12 +225,26 @@ function run_ci_benchmark()
         'unit',  'ms', ...
         'value', r1k.tickMedian * 1000); %#ok<AGROW>
 
-    fprintf('Running bench_tag_pipeline_1k (WithIO, diagnostic — not gated, D-12)...\n');
-    rIO = bench_tag_pipeline_1k('Mode', 'WithIO');
+    % Phase 1028 plan 02d: record BOTH cache-on (production default) and
+    % cache-off (Plan 02b WithIO baseline / regression check) so the
+    % post-cache tBreakdown table in VERIFICATION.md has both numbers.
+    fprintf('Running bench_tag_pipeline_1k (WithIO, cache-on, diagnostic — not gated, D-12)...\n');
+    rIO = bench_tag_pipeline_1k('Mode', 'WithIO', '--cache-on');
     results{end+1} = struct( ...
         'name',  'tag_pipeline_1k_withio_min_ms', ...
         'unit',  'ms', ...
         'value', rIO.tickMin * 1000); %#ok<AGROW>
+    results{end+1} = struct( ...
+        'name',  'tag_pipeline_1k_withio_cache_on_min_ms', ...
+        'unit',  'ms', ...
+        'value', rIO.tickMin * 1000); %#ok<AGROW>
+
+    fprintf('Running bench_tag_pipeline_1k (WithIO, cache-off, regression check)...\n');
+    rIOOff = bench_tag_pipeline_1k('Mode', 'WithIO', '--cache-off');
+    results{end+1} = struct( ...
+        'name',  'tag_pipeline_1k_withio_cache_off_min_ms', ...
+        'unit',  'ms', ...
+        'value', rIOOff.tickMin * 1000); %#ok<AGROW>
 
     % Phase 1028 Wave 1: tBreakdown profile run (informational — not gated).
     % Captures per-region wall time so kernel selection in waves 2/3 can be
@@ -238,8 +252,12 @@ function run_ci_benchmark()
     % H1-H10 ranking. Slower than the gated run because Octave's profile
     % adds per-call overhead; runs only ONCE at smoke scale to keep CI
     % wall budget bounded.
-    fprintf('\nRunning bench_tag_pipeline_1k (--profile, Wave 1 tBreakdown)...\n');
-    rProf = bench_tag_pipeline_1k('--smoke', '--profile');
+    %
+    % Phase 1028 plan 02d: profile NoIO cache-on as the primary tBreakdown
+    % (production-default behavior). Additional WithIO cache-on/off profile
+    % runs below quantify the load() reduction at the bench scale.
+    fprintf('\nRunning bench_tag_pipeline_1k (--profile, NoIO cache-on, Wave 1 tBreakdown)...\n');
+    rProf = bench_tag_pipeline_1k('--smoke', '--profile', '--cache-on');
     nMeasTicks = max(1, numel(rProf.profileTopN.totalTime));  %#ok<NASGU> (smoke has 3 ticks)
     smokeTicksDivisor = 3;  % matches `nTicks=3` for smoke; sec/tick = total/3
     if isfield(rProf.tBreakdown, 'parse')
@@ -279,6 +297,35 @@ function run_ci_benchmark()
             'name',  'tag_pipeline_1k_breakdown_total_profiled_ms_per_tick', ...
             'unit',  'ms', ...
             'value', rProf.tBreakdown.totalProfiled * 1000 / smokeTicksDivisor); %#ok<AGROW>
+    end
+
+    % Phase 1028 plan 02d: profile WithIO cache-on AND cache-off so the
+    % post-cache table in VERIFICATION.md can show the load() reduction at
+    % bench scale. Smoke (3 ticks) keeps CI wall under control.
+    fprintf('\nRunning bench_tag_pipeline_1k (--profile, WithIO cache-on)...\n');
+    rProfOn = bench_tag_pipeline_1k('--smoke', '--profile', 'Mode', 'WithIO', '--cache-on');
+    if isfield(rProfOn.tBreakdown, 'mat_write')
+        results{end+1} = struct( ...
+            'name',  'tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick', ...
+            'unit',  'ms', ...
+            'value', rProfOn.tBreakdown.mat_write * 1000 / smokeTicksDivisor); %#ok<AGROW>
+        results{end+1} = struct( ...
+            'name',  'tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick', ...
+            'unit',  'ms', ...
+            'value', rProfOn.tBreakdown.other * 1000 / smokeTicksDivisor); %#ok<AGROW>
+    end
+
+    fprintf('\nRunning bench_tag_pipeline_1k (--profile, WithIO cache-off)...\n');
+    rProfOff = bench_tag_pipeline_1k('--smoke', '--profile', 'Mode', 'WithIO', '--cache-off');
+    if isfield(rProfOff.tBreakdown, 'mat_write')
+        results{end+1} = struct( ...
+            'name',  'tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick', ...
+            'unit',  'ms', ...
+            'value', rProfOff.tBreakdown.mat_write * 1000 / smokeTicksDivisor); %#ok<AGROW>
+        results{end+1} = struct( ...
+            'name',  'tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick', ...
+            'unit',  'ms', ...
+            'value', rProfOff.tBreakdown.other * 1000 / smokeTicksDivisor); %#ok<AGROW>
     end
 
     % --- Write JSON ---
