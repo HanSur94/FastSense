@@ -1577,8 +1577,21 @@ classdef FastSense < handle
             end
 
             % Attach hover crosshair (default on; opt-out via constructor or property).
-            % try/catch keeps render() resilient on platforms where mouse handlers misbehave.
-            if obj.HoverCrosshair && isempty(obj.HoverCrosshair_)
+            % Skip when MATLAB has no interactive Java desktop (CI / -batch /
+            % -nodesktop / -nodisplay even with xvfb): the WindowButtonMotionFcn
+            % + figure-destroy listener wiring across 25+ FastSense instances in
+            % run_demo segfaults R2020b headless. Hover is mouse-driven and
+            % therefore irrelevant in that environment.
+            isInteractive = false;
+            try
+                isInteractive = usejava('desktop');
+                if exist('batchStartupOptionUsed', 'builtin') == 5 && ...
+                        batchStartupOptionUsed
+                    isInteractive = false;
+                end
+            catch
+            end
+            if obj.HoverCrosshair && isempty(obj.HoverCrosshair_) && isInteractive
                 try
                     obj.HoverCrosshair_ = HoverCrosshair(obj);
                 catch ME
