@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T18:30:00.000Z"
-last_activity: 2026-05-08 -- Quick fix 260508-llw (ed66ec5): broadcastTimeRange + resetGlobalTime apply across all pages; switchPage re-broadcasts cached range so widgets realized on tab-switch inherit the synced window (LLW-01/02/03)
+last_updated: "2026-05-08T19:15:00.000Z"
+last_activity: 2026-05-08 -- Quick fix 260508-m52 (1410524): shrink WidgetButtonBar from full-width to 64px right-anchored strip so widget titles below it become visible (M52-01/02)
 progress:
   total_phases: 6
   completed_phases: 6
@@ -19,7 +19,7 @@ shipped_at: 2026-04-30
 
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Quick fix 260508-llw (ed66ec5): broadcastTimeRange + resetGlobalTime apply across all pages; switchPage re-broadcasts cached range so widgets realized on tab-switch inherit the synced window (LLW-01/02/03)
+Last activity: 2026-05-08 -- Quick fix 260508-m52 (1410524): shrink WidgetButtonBar from full-width to 64px right-anchored strip so widget titles below it become visible (M52-01/02)
 
 ### Quick Tasks Completed
 
@@ -43,6 +43,7 @@ Last activity: 2026-05-08 -- Quick fix 260508-llw (ed66ec5): broadcastTimeRange 
 | 260508-kov | Revert slider preview/markers to active-page-only iteration (supersedes kau via forward-fix; KOV-01) | 2026-05-08 | ac5d4df | — | [260508-kov-revert-slider-preview-to-active-page-onl](./quick/260508-kov-revert-slider-preview-to-active-page-onl/) |
 | 260508-l2k | Slider preview + event-marker iteration recurses into GroupWidget children, scoped to active page (L2K-01) | 2026-05-08 | 5cd3e27 | — | [260508-l2k-preview-iteration-recurses-into-groupwid](./quick/260508-l2k-preview-iteration-recurses-into-groupwid/) |
 | 260508-llw | Broadcast time range across ALL pages (broadcastTimeRange + resetGlobalTime) and re-broadcast on tab-switch so realized widgets inherit synced range (LLW-01/02/03) | 2026-05-08 | ed66ec5 | Verified | [260508-llw-broadcast-time-range-across-all-pages-wi](./quick/260508-llw-broadcast-time-range-across-all-pages-wi/) |
+| 260508-m52 | Shrink WidgetButtonBar from full-width to 64px right-anchored strip so widget titles below it become visible (M52-01/02) | 2026-05-08 | 1410524 | — | [260508-m52-shrink-widget-button-bar-to-right-anchor](./quick/260508-m52-shrink-widget-button-bar-to-right-anchor/) |
 
 ## Progress Bar
 
