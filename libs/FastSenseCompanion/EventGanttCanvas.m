@@ -32,6 +32,112 @@ classdef EventGanttCanvas < handle
             obj.BarHandles = [];
             obj.BarEvents  = Event.empty;
         end
+
+        function draw(obj, events, theme)
+        %DRAW Repaint the axes from scratch with the given event list + theme.
+        %   Open events render with a dashed right edge extending to "now".
+            if nargin >= 3 && ~isempty(theme); obj.Theme = theme; end
+
+            % Clear prior handles.
+            for i = 1:numel(obj.BarHandles)
+                if isgraphics(obj.BarHandles(i)); delete(obj.BarHandles(i)); end
+            end
+            obj.BarHandles = [];
+            obj.BarEvents  = Event.empty;
+
+            cla(obj.hAxes);
+            set(obj.hAxes, ...
+                'Color',     obj.Theme.WidgetBackground, ...
+                'XColor',    obj.Theme.ForegroundColor, ...
+                'YColor',    obj.Theme.ForegroundColor, ...
+                'GridColor', obj.Theme.WidgetBorderColor);
+            hold(obj.hAxes, 'on');
+
+            if isempty(events)
+                set(obj.hAxes, 'YTick', [], 'YTickLabel', {});
+                hold(obj.hAxes, 'off');
+                return;
+            end
+
+            [rowMap, keys] = EventGanttCanvas.computeRows(events);
+            barH = 0.6;
+            nowRef = now;     % wall-clock reference for open events
+
+            for i = 1:numel(events)
+                ev = events(i);
+                if ~isempty(ev.TagKeys)
+                    rowKey = ev.TagKeys{1};
+                else
+                    rowKey = ev.SensorName;
+                end
+                if ~isKey(rowMap, rowKey); continue; end
+                y = rowMap(rowKey);
+                x0 = ev.StartTime;
+                x1 = EventGanttCanvas.eventEndOrNow(ev, nowRef);
+                rgb = EventGanttCanvas.severityColor(ev.Severity);
+                hRect = patch(obj.hAxes, ...
+                    [x0 x1 x1 x0], [y-barH/2 y-barH/2 y+barH/2 y+barH/2], ...
+                    rgb, ...
+                    'EdgeColor', 'none', ...
+                    'FaceAlpha', 0.85, ...
+                    'Tag',       'GanttBar', ...
+                    'UserData',  i);
+
+                if ev.IsOpen || isnan(ev.EndTime)
+                    line(obj.hAxes, [x1 x1], [y-barH/2 y+barH/2], ...
+                        'Color',     rgb, ...
+                        'LineStyle', '--', ...
+                        'LineWidth', 1.5, ...
+                        'Tag',       'OpenEdge', ...
+                        'UserData',  i);
+                end
+                obj.BarHandles(end+1) = hRect; %#ok<AGROW>
+                obj.BarEvents(end+1)  = ev;     %#ok<AGROW>
+            end
+
+            set(obj.hAxes, ...
+                'YDir',       'reverse', ...
+                'YTick',      1:numel(keys), ...
+                'YTickLabel', keys, ...
+                'YLim',       [0.5, numel(keys) + 0.5]);
+
+            hold(obj.hAxes, 'off');
+
+            % Wire bar click handler — single + double click distinguished
+            % via figure SelectionType in the callback.
+            for i = 1:numel(obj.BarHandles)
+                set(obj.BarHandles(i), 'ButtonDownFcn', @(src, ~) obj.onBarButtonDown_(src));
+            end
+        end
+
+        function delete(obj)
+        %DELETE Tear down handles. Theme/axes lifecycle owned by parent.
+            for i = 1:numel(obj.BarHandles)
+                if isgraphics(obj.BarHandles(i)); delete(obj.BarHandles(i)); end
+            end
+            obj.BarHandles = [];
+            obj.BarEvents  = Event.empty;
+        end
+    end
+
+    methods (Access = private)
+        function onBarButtonDown_(obj, src)
+            try
+                idx = get(src, 'UserData');
+                if ~isnumeric(idx) || idx < 1 || idx > numel(obj.BarEvents); return; end
+                ev = obj.BarEvents(idx);
+                fig = ancestor(obj.hAxes, 'figure');
+                selType = '';
+                if isgraphics(fig); selType = get(fig, 'SelectionType'); end
+                if strcmp(selType, 'open')
+                    if ~isempty(obj.OnDoubleClick); obj.OnDoubleClick(ev); end
+                else
+                    if ~isempty(obj.OnSingleClick); obj.OnSingleClick(ev); end
+                end
+            catch
+                % Click handlers must never crash drawing.
+            end
+        end
     end
 
     methods (Static)

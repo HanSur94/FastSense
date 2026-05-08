@@ -74,6 +74,56 @@ classdef TestEventGanttCanvas < matlab.unittest.TestCase
             ev.IsOpen = true;
             testCase.verifyEqual(EventGanttCanvas.eventEndOrNow(ev, 1000), 1000);
         end
+
+        function testDrawCreatesOneRectanglePerEvent(testCase)
+            %TESTDRAWCREATESONERECTANGLEPEREVENT
+            %   Each event becomes one rectangle handle.
+            f = figure('Visible', 'off');
+            testCase.addTeardown(@() close(f, 'force'));
+            ax = axes('Parent', f);
+            canvas = EventGanttCanvas(ax, defaultTheme_());
+
+            ev1 = Event(0, 1, 'sA', 'lbl', 1, 'upper'); ev1.TagKeys = {'tA'}; ev1.Severity = 1;
+            ev2 = Event(2, 3, 'sB', 'lbl', 1, 'upper'); ev2.TagKeys = {'tB'}; ev2.Severity = 2;
+            canvas.draw([ev1 ev2], canvas.Theme);
+
+            testCase.verifyEqual(numel(canvas.BarHandles), 2);
+            testCase.verifyEqual(numel(canvas.BarEvents),  2);
+        end
+
+        function testDrawClearsPriorRenderOnSecondCall(testCase)
+            %TESTDRAWCLEARSPRIORRENDERONSECONDCALL
+            %   Calling draw() twice doesn't accumulate handles — old ones deleted.
+            f = figure('Visible', 'off');
+            testCase.addTeardown(@() close(f, 'force'));
+            ax = axes('Parent', f);
+            canvas = EventGanttCanvas(ax, defaultTheme_());
+
+            ev1 = Event(0, 1, 'sA', 'lbl', 1, 'upper'); ev1.TagKeys = {'tA'};
+            ev2 = Event(2, 3, 'sA', 'lbl', 1, 'upper'); ev2.TagKeys = {'tA'};
+            canvas.draw([ev1 ev2], canvas.Theme);
+            canvas.draw(ev1, canvas.Theme);
+
+            testCase.verifyEqual(numel(canvas.BarHandles), 1, ...
+                'Second draw must not accumulate handles.');
+        end
+
+        function testDrawDashedRightEdgeForOpenEvent(testCase)
+            %TESTDRAWDASHEDRIGHTEDGEFOROPENEVENT
+            %   Open events draw an extra dashed line; verify >0 child line
+            %   handles tagged 'OpenEdge'.
+            f = figure('Visible', 'off');
+            testCase.addTeardown(@() close(f, 'force'));
+            ax = axes('Parent', f);
+            canvas = EventGanttCanvas(ax, defaultTheme_());
+
+            ev = Event(0, NaN, 'sA', 'lbl', 1, 'upper'); ev.TagKeys = {'tA'}; ev.IsOpen = true;
+            canvas.draw(ev, canvas.Theme);
+
+            edges = findobj(ax, 'Tag', 'OpenEdge');
+            testCase.verifyTrue(numel(edges) >= 1, ...
+                'Open events must render at least one dashed edge handle.');
+        end
     end
 end
 
@@ -83,4 +133,12 @@ function ev = makeEvent_(tagKey, severity, startT, endT, sensorIdx)
     ev.TagKeys = {tagKey};
     ev.Severity = severity;
     ev.IsOpen = false;
+end
+
+function t = defaultTheme_()
+    t = struct( ...
+        'DashboardBackground', [1 1 1], ...
+        'WidgetBackground',    [1 1 1], ...
+        'ForegroundColor',     [0 0 0], ...
+        'WidgetBorderColor',   [0.7 0.7 0.7]);
 end
