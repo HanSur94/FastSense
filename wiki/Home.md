@@ -21,9 +21,9 @@ FastPlot consists of five integrated libraries:
 |---------|-------------|
 | **FastSense** | Core plotting engine with dynamic downsampling, dashboard layouts (FastSenseGrid, FastSenseDock), interactive toolbar, themes, and disk-backed storage via FastSenseDataStore |
 | **Dashboard** | Widget-based dashboard engine with 8 widget types, 24-column responsive grid, edit mode, and JSON persistence |
-| **SensorThreshold** | Sensor data containers with state-dependent threshold rules, violation detection, and SensorRegistry catalog |
-| **EventDetection** | Event detection from threshold violations, EventViewer with Gantt timeline, live pipeline with notifications |
-| **WebBridge** | TCP server for web-based visualization with NDJSON protocol |
+| **SensorThreshold** | Tag-based domain model (SensorTag, StateTag, MonitorTag, CompositeTag, DerivedTag) for sensor data, thresholds, and derived signals with TagRegistry catalog |
+| **EventDetection** | Event detection from threshold violations, EventViewer with Gantt timeline, live pipeline with notifications, and MatFileDataSource |
+| **WebBridge** | TCP server for web-based visualization with NDJSON protocol, REST API, and WebSocket push |
 
 ## Features
 
@@ -34,7 +34,7 @@ FastPlot consists of five integrated libraries:
 - **Interactive toolbar** — data cursor, crosshair, grid/legend toggle, autoscale, PNG export
 - **6 built-in themes** — default, dark, light, industrial, scientific, ocean
 - **Linked axes** — synchronized zoom/pan across subplots
-- **Sensor system** — state-dependent thresholds with condition-based rules and violation markers
+- **Tag system** — unified Tag hierarchy (SensorTag, StateTag, MonitorTag, CompositeTag) replaces legacy Sensor/Threshold classes
 - **Event detection** — group violations into events with statistics, Gantt viewer, click-to-plot
 - **Live mode** — file polling with auto-refresh (preserve/follow/reset view modes)
 - **Disk-backed storage** — SQLite-backed chunked DataStore for 100M+ point datasets
@@ -71,19 +71,18 @@ fig.renderAll();
 ```
 
 ```matlab
-% Sensor with state-dependent thresholds
-s = Sensor('pressure', 'Name', 'Chamber Pressure');
-s.X = linspace(0, 100, 1e6);
-s.Y = randn(1, 1e6) * 10 + 50;
+% Sensor with threshold detection using Tag API
+st = SensorTag('pressure', 'Name', 'Chamber Pressure', ...
+               'X', linspace(0, 100, 1e6), 'Y', randn(1, 1e6) * 10 + 50);
+sc = StateTag('machine', 'X', [0 30 60 80], 'Y', [0 1 2 1]);
 
-sc = StateChannel('machine');
-sc.X = [0 30 60 80]; sc.Y = [0 1 2 1];
-s.addStateChannel(sc);
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.resolve();
+% Monitor for high-pressure condition
+m = MonitorTag('run_hi', st, @(x,y) y > 70, 'Name', 'Run HI');
+[~, triggered] = m.getXY();   % binary alarm series
 
-fp = FastSense('Theme', 'industrial');
-fp.addSensor(s, 'ShowThresholds', true);
+fp = FastSense('Theme', 'light');  % 'industrial' aliased to 'light'
+fp.addLine(st.X, st.Y, 'DisplayName', 'Chamber Pressure');
+fp.addThreshold(70, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'High');
 fp.render();
 ```
 
@@ -102,10 +101,10 @@ Start with the [[Installation]] guide to set up FastPlot and compile MEX acceler
 **Core Classes**
 - [[API Reference: FastPlot]] — main plotting engine with dynamic downsampling
 - [[API Reference: Dashboard]] — FastSenseGrid, FastSenseDock, FastSenseToolbar
-- [[API Reference: Sensors]] — Sensor, StateChannel, ThresholdRule, SensorRegistry
-- [[API Reference: Event Detection]] — EventDetector, EventViewer, LiveEventPipeline
+- [[API Reference: Sensors]] — SensorTag, StateTag, MonitorTag, CompositeTag, TagRegistry
+- [[API Reference: Event Detection]] — Event, EventStore, EventViewer, LiveEventPipeline
 - [[API Reference: Themes]] — theme presets, customization, color palettes
-- [[API Reference: Utilities]] — ConsoleProgressBar, FastSenseDefaults
+- [[API Reference: Utilities]] — ConsoleProgressBar, FastSenseDefaults, binary_search
 
 **Specialized Guides**
 - [[Live Mode Guide]] — file polling, view modes, live dashboards
