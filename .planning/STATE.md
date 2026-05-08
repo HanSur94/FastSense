@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-04T00:00:00.000Z"
-last_activity: 2026-05-04 -- Completed quick task 260504-sfp: Unify single-tag Open Detail through openAdHocPlot + right-click event-marker context menu
+last_updated: "2026-05-08T08:00:00.000Z"
+last_activity: 2026-05-08 -- Completed quick task 260508-das: Restore dashboard time-slider preview lines + event markers (backlog 999.3)
 progress:
   total_phases: 6
   completed_phases: 6
@@ -19,7 +19,7 @@ shipped_at: 2026-04-30
 
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-04 -- Completed quick task 260504-sfp: Unify single-tag Open Detail through openAdHocPlot + right-click event-marker context menu
+Last activity: 2026-05-08 -- Completed quick task 260508-das: Restore dashboard time-slider preview lines + event markers (backlog 999.3)
 
 ### Quick Tasks Completed
 
@@ -28,6 +28,7 @@ Last activity: 2026-05-04 -- Completed quick task 260504-sfp: Unify single-tag O
 | 260504-rcw | Fix isempty(containers.Map) guard in FastSenseCompanion.scanLiveTagUpdates_ | 2026-05-04 | cb83b51 | — | [260504-rcw-fix-isempty-containers-map-guard-in-fast](./quick/260504-rcw-fix-isempty-containers-map-guard-in-fast/) |
 | 260504-sgt | Implement Companion Settings Dialog (Theme + Live period) | 2026-05-04 | c522988 | Verified | [260504-sgt-implement-companion-settings-dialog-them](./quick/260504-sgt-implement-companion-settings-dialog-them/) |
 | 260504-sfp | Unify single-tag Open Detail through openAdHocPlot + right-click event-marker context menu | 2026-05-04 | 1d0ccd3 | — | [260504-sfp-fastsensecompanion-route-single-tag-open](./quick/260504-sfp-fastsensecompanion-route-single-tag-open/) |
+| 260508-das | Restore dashboard time-slider preview lines + event markers (backlog 999.3) | 2026-05-08 | 4110024 | Verified | [260508-das-implement-backlog-999-3-dashboard-time-s](./quick/260508-das-implement-backlog-999-3-dashboard-time-s/) |
 
 ## Progress Bar
 
