@@ -101,6 +101,12 @@ classdef EventGanttCanvas < handle
                 'YTickLabel', keys, ...
                 'YLim',       [0.5, numel(keys) + 0.5]);
 
+            % Datetime tick labels on the X axis (event times are datenums).
+            try
+                datetick(obj.hAxes, 'x', 'keeplimits');
+            catch
+            end
+
             hold(obj.hAxes, 'off');
 
             % Wire bar click handler — single + double click distinguished
