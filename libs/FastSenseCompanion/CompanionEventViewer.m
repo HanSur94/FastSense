@@ -128,6 +128,17 @@ classdef CompanionEventViewer < handle
             c = obj.Canvas_;
         end
 
+        function tf = isAutoTimerRunning_(obj)
+        %ISAUTOTIMERRUNNING_ Test accessor: true if the auto-refresh timer is running.
+            tf = ~isempty(obj.AutoTimer_) && isvalid(obj.AutoTimer_) && ...
+                strcmp(obj.AutoTimer_.Running, 'on');
+        end
+
+        function t = getAutoTimerForTest_(obj)
+        %GETAUTOTIMERFORTEST_ Test accessor: return AutoTimer_ handle (may be []).
+            t = obj.AutoTimer_;
+        end
+
         function close(obj)
         %CLOSE Idempotent teardown: timer, listeners, canvas, figure.
             if isempty(obj.hFigure) || ~isgraphics(obj.hFigure)
@@ -274,6 +285,72 @@ classdef CompanionEventViewer < handle
                 'XColor',   t.ForegroundColor, ...
                 'YColor',   t.ForegroundColor);
             obj.Canvas_ = EventGanttCanvas(ax, t);
+
+            % Live-mode coupling.
+            obj.Listeners_{end+1} = addlistener(obj.Companion_, 'LiveModeChanged', ...
+                @(s, ~) obj.onCompanionLiveChanged_(s.IsLive));
+            obj.onCompanionLiveChanged_(obj.Companion_.IsLive);  % initial sync
+        end
+
+        function onCompanionLiveChanged_(obj, isLive)
+        %ONCOMPANIONLIVECHANGED_ React to companion LiveModeChanged event.
+            obj.IsLive = logical(isLive);
+            if obj.IsLive && obj.AutoEnabled_
+                obj.startAutoTimer_();
+                if strcmp(obj.TimePresetMode, 'snapshot')
+                    obj.TimePresetMode = 'roll';
+                end
+            else
+                obj.stopAutoTimer_();
+                if strcmp(obj.TimePresetMode, 'roll')
+                    obj.TimePresetMode = 'snapshot';
+                end
+            end
+        end
+
+        function startAutoTimer_(obj)
+        %STARTAUTOTIMER_ Create and start the auto-refresh timer if not already running.
+            try
+                if isempty(obj.AutoTimer_) || ~isvalid(obj.AutoTimer_)
+                    obj.AutoTimer_ = timer( ...
+                        'ExecutionMode', 'fixedRate', ...
+                        'Period',        obj.AutoPeriod_, ...
+                        'BusyMode',      'drop', ...
+                        'TimerFcn',      @(~,~) obj.onAutoTick_(), ...
+                        'ErrorFcn',      @(~,~) []);
+                end
+                if strcmp(obj.AutoTimer_.Running, 'off')
+                    start(obj.AutoTimer_);
+                end
+            catch
+                % Auto-refresh failure must never crash the viewer.
+            end
+        end
+
+        function stopAutoTimer_(obj)
+        %STOPAUTOTIMER_ Stop the auto-refresh timer if running.
+            try
+                if ~isempty(obj.AutoTimer_) && isvalid(obj.AutoTimer_) && ...
+                        strcmp(obj.AutoTimer_.Running, 'on')
+                    stop(obj.AutoTimer_);
+                end
+            catch
+            end
+        end
+
+        function onAutoTick_(obj)
+        %ONAUTOTICK_ Timer callback: advance window if rolling, then refresh.
+            try
+                if isempty(obj.hFigure) || ~isgraphics(obj.hFigure)
+                    obj.stopAutoTimer_(); return;
+                end
+                if strcmp(obj.TimePresetMode, 'roll')
+                    span = obj.TimeRange(2) - obj.TimeRange(1);
+                    obj.TimeRange = [now - span, now];
+                end
+                obj.refresh();
+            catch
+            end
         end
     end
 end

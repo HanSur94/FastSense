@@ -194,6 +194,53 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             v.refresh();
             testCase.verifyEqual(numel(canvas.BarHandles), 1);
         end
+
+        % --- Task 10: live-mode coupling + auto-refresh timer tests ---
+
+        function testViewerStartsTimerWhenCompanionGoesLive(testCase)
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            comp.stopLiveMode();
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            testCase.verifyFalse(v.isAutoTimerRunning_(), 'Initially: not running.');
+
+            comp.startLiveMode();
+            testCase.verifyTrue(v.isAutoTimerRunning_(), 'Live ON must start timer.');
+
+            comp.stopLiveMode();
+            testCase.verifyFalse(v.isAutoTimerRunning_(), 'Live OFF must stop timer.');
+        end
+
+        function testViewerSnapshotPresetWhenCompanionLiveOff(testCase)
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            if ~comp.IsLive; comp.startLiveMode(); end
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.applyPreset_internalForTest('1h');
+            testCase.verifyEqual(v.TimePresetMode, 'roll');
+
+            comp.stopLiveMode();
+            testCase.verifyEqual(v.TimePresetMode, 'snapshot', ...
+                'Companion live OFF must demote roll → snapshot.');
+        end
+
+        function testCloseRemovesLiveListenerAndTimer(testCase)
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            if ~comp.IsLive; comp.startLiveMode(); end
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.verifyTrue(v.isAutoTimerRunning_());
+            v.close();
+
+            % After close, toggling companion must not error or re-create state.
+            comp.stopLiveMode();
+            comp.startLiveMode();
+            t = v.getAutoTimerForTest_();
+            testCase.verifyFalse(~isempty(t) && isvalid(t) && strcmp(t.Running, 'on'), ...
+                'Closed viewer must not re-arm its timer.');
+        end
     end
 end
 
