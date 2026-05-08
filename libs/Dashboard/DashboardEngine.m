@@ -149,6 +149,11 @@ classdef DashboardEngine < handle
             if ~isempty(obj.Toolbar) && ismethod(obj.Toolbar, 'setEventsActiveIndicator')
                 obj.Toolbar.setEventsActiveIndicator(tf);
             end
+            % Refresh slider preview markers so the toolbar toggle is
+            % reflected in the time-panel track too (260508 follow-up).
+            try obj.computeEventMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
         end
 
         function switchPage(obj, pageIdx)
@@ -1957,6 +1962,12 @@ classdef DashboardEngine < handle
             % adding it would silently drop markers via the outer try/catch.
             if isempty(obj.TimeRangeSelector_) || ...
                     ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
+            end
+            % Honor the global Events toggle: when off, clear any existing
+            % slider markers and bail before doing the per-widget aggregation.
+            if ~obj.EventMarkersVisible
+                obj.TimeRangeSelector_.setEventMarkers([]);
                 return;
             end
             ws = obj.activePageWidgets();
