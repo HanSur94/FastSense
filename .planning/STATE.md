@@ -1,25 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: FastSense Companion
-status: shipped
-last_updated: "2026-05-08T08:00:00.000Z"
-last_activity: 2026-05-08 -- Completed quick task 260508-d8y: FastSense hover crosshair + datatip
+milestone: v1.0
+milestone_name: milestone
+status: executing
+last_updated: "2026-05-08T12:27:27.176Z"
+last_activity: 2026-05-08
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 18
-  completed_plans: 18
-shipped_at: 2026-04-30
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 1
 ---
 
 # State
 
 ## Current Position
 
+Phase: 1027 (companion-detachable-log-window) — EXECUTING
+Plan: 2 of 5
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
-Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Completed quick task 260508-d8y: FastSense hover crosshair + datatip
+Status: Ready to execute
+Last activity: 2026-05-08
 
 ### Quick Tasks Completed
 
