@@ -4,7 +4,11 @@
 
 ## Overview
 
-FastPlot uses a render-once, re-downsample-on-zoom architecture. Instead of pushing millions of points to the GPU, it maintains a lightweight cache and re-downsamples only the visible range on every interaction.
+FastPlot is built on a **render-once, re-downsample-on-zoom** architecture. Rather than pushing millions of data points to the GPU on every interaction, the library maintains lightweight downsampling caches and recomputes only the visible range at screen resolution. A multi‑level pyramid cache eliminates the need to scan raw data during zoom/pan, while optional MEX acceleration with SIMD intrinsics makes the C‑backed code paths competitive with native toolkits.
+
+The core plotting engine (`FastSense`) is wrapped by higher‑level layouts (`FastSenseGrid`, `DashboardEngine`) and integrates with a Tag‑based domain model for sensors, thresholds, and derived signals.
+
+---
 
 ## Project Structure
 
@@ -18,34 +22,35 @@ FastPlot/
 │   │   ├── FastSenseDock.m           # Tabbed container
 │   │   ├── FastSenseToolbar.m        # Interactive toolbar
 │   │   ├── FastSenseTheme.m          # Theme system
-│   │   ├── FastSenseDataStore.m      # SQLite-backed chunked storage
+│   │   ├── FastSenseDataStore.m      # SQLite‑backed chunked storage
 │   │   ├── SensorDetailPlot.m        # Sensor detail view with state bands
 │   │   ├── NavigatorOverlay.m        # Minimap zoom navigator
 │   │   ├── ConsoleProgressBar.m      # Progress indication
 │   │   ├── binary_search.m           # Binary search utility
 │   │   ├── build_mex.m               # MEX compilation script
 │   │   └── private/                  # Internal algorithms + MEX sources
-│   ├── SensorThreshold/              # Sensor and threshold system
-│   │   ├── Sensor.m
-│   │   ├── StateChannel.m
-│   │   ├── ThresholdRule.m
-│   │   ├── SensorRegistry.m
-│   │   ├── ExternalSensorRegistry.m
-│   │   └── private/                  # Resolution algorithms
+│   ├── SensorThreshold/              # Tag‑based domain model
+│   │   ├── Tag.m                     # Abstract base class
+│   │   ├── SensorTag.m               # Sensor time‑series data
+│   │   ├── StateTag.m                # Discrete state signals
+│   │   ├── MonitorTag.m              # Binary monitor (threshold)
+│   │   ├── CompositeTag.m            # Aggregate monitor
+│   │   ├── DerivedTag.m              # Continuous derived signal
+│   │   ├── TagRegistry.m             # Singleton catalog
+│   │   ├── BatchTagPipeline.m        # Raw‑data → per‑tag .mat pipeline
+│   │   ├── LiveTagPipeline.m         # Timer‑driven raw‑data pipeline
+│   │   └── private/                  # File parsing and writing utilities
 │   ├── EventDetection/               # Event detection and viewer
 │   │   ├── Event.m
-│   │   ├── EventDetector.m
+│   │   ├── EventStore.m
 │   │   ├── EventViewer.m
 │   │   ├── LiveEventPipeline.m
 │   │   ├── NotificationService.m
-│   │   ├── EventStore.m
-│   │   ├── EventConfig.m
-│   │   ├── IncrementalEventDetector.m
+│   │   ├── NotificationRule.m
 │   │   ├── DataSource.m              # Abstract data source
-│   │   ├── MatFileDataSource.m       # File-based data source
+│   │   ├── MatFileDataSource.m       # File‑based data source
 │   │   ├── MockDataSource.m          # Test data generation
-│   │   ├── NotificationRule.m        # Email notification rules
-│   │   └── private/                  # Event grouping algorithms
+│   │   └── private/
 │   ├── Dashboard/                    # Dashboard engine (serializable)
 │   │   ├── DashboardEngine.m
 │   │   ├── DashboardBuilder.m
@@ -69,7 +74,15 @@ FastPlot/
 │   │   ├── HeatmapWidget.m
 │   │   ├── HistogramWidget.m
 │   │   ├── ImageWidget.m
-│   │   └── MarkdownRenderer.m        # HTML conversion for info panels
+│   │   ├── IconCardWidget.m          # Compact icon + value card
+│   │   ├── SparklineCardWidget.m     # KPI card with sparkline
+│   │   ├── ChipBarWidget.m           # Horizontal status chip bar
+│   │   ├── DividerWidget.m           # Horizontal divider line
+│   │   ├── DashboardPage.m           # Multi‑page container
+│   │   ├── DashboardConfigDialog.m   # Config editor
+│   │   ├── TimeRangeSelector.m       # Time‑range scrubber
+│   │   ├── DashboardProgress.m       # Progress helper
+│   │   └── MarkdownRenderer.m        # Markdown→HTML for info panels
 │   └── WebBridge/                    # TCP server for web visualization
 │       ├── WebBridge.m
 │       └── WebBridgeProtocol.m
@@ -77,89 +90,110 @@ FastPlot/
 └── tests/                            # 30+ test suites
 ```
 
+---
+
 ## Render Pipeline
 
-1. User calls `render()`
-2. Create figure/axes if not parented
-3. Validate all data (X monotonic, dimensions match)
-4. Switch to disk storage mode if data exceeds `MemoryLimit`
-5. Allocate downsampling buffers based on axes pixel width
-6. For each line: initial downsample of full range, create graphics object
-7. Create threshold, band, shading, marker objects
-8. Install XLim PostSet listener for zoom/pan events
-9. Set axis limits, disable auto-limits
-10. `drawnow` to display
+1. User calls `render()` on a `FastSense` instance.
+2. If no parent axes have been supplied, a new figure and axes are created.
+3. All line data are validated: X must be monotonic and the same length as Y.
+4. When total data volume exceeds `MemoryLimit` (default 500 MB) and `StorageMode` is `'auto'`, the line is transparently moved to a disk‑backed `FastSenseDataStore`.
+5. Downsampling buffers are allocated based on the current axes pixel width.
+6. For each line an initial downsample of the full X‑range is computed and a graphics `line` object is created.
+7. Band, shaded region, threshold, violation marker, and custom marker objects are created (the order ensures correct Z‑stacking).
+8. A `PostSet` listener on `XLim` is installed — this drives all zoom/pan re‑downsampling.
+9. Axis limits are set with 5 % padding and auto‑limits are disabled (the plot then manages its own range).
+10. A deferred refinement pass is scheduled for large datasets to fill in missing pyramid levels.
+11. `drawnow` makes the plot visible.
 
-## Zoom/Pan Callback
+---
 
-When the user zooms or pans:
+## Zoom / Pan Callback
 
-1. XLim listener fires
-2. Compare new XLim to cached value (skip if unchanged)
-3. For each line:
-   - Binary search visible X range — O(log N)
-   - Select pyramid level with sufficient resolution
-   - Build pyramid level lazily if needed
-   - Downsample visible range to ~4,000 points
-   - Update hLine.XData/YData (dot notation for speed)
-4. Recompute violation markers (fused SIMD with pixel culling)
-5. If LinkGroup active: propagate XLim to linked plots
-6. `drawnow limitrate` (caps display at 20 FPS)
+Every interactive change to the X‑axis fires the same callback chain:
+
+1. **XLim listener fires** — the new limits are compared to a cached value; identical limits are skipped.
+2. **Binary search** locates the first and last visible point indices in O(log N) using `binary_search` (or `binary_search_mex` if MEX is available).
+3. **Pyramid level selection** — the coarsest pre‑computed level that still has more samples than the target pixel count is chosen. If the required level does not yet exist, it is built lazily (see [Lazy Multi‑Resolution Pyramid](#lazy-multi-resolution-pyramid)).
+4. **Downsample visible range** — about 2–4 points per pixel (configurable via `DownsampleFactor`) are extracted from the selected pyramid level using MinMax or LTTB.
+5. **Update graphics** — the `XData` and `YData` of the line handle are replaced using dot‑notation for speed (avoiding `set` overhead).
+6. **Violation markers** are recomputed for the visible range with SIMD‑accelerated culling when MEX is present.
+7. **LinkGroup** — if the plot belongs to a `LinkGroup`, the new XLim is propagated to all other plots in the same group.
+8. **drawnow limitrate** caps the frame rate at approximately 20 FPS.
+
+---
 
 ## Downsampling Algorithms
 
 ### MinMax (default)
-For each pixel bucket, keep the minimum and maximum Y values. Preserves signal envelope and extreme values. Fast O(N/bucket) per bucket.
+For each pixel bucket the minimum and maximum Y values are kept. This preserves the signal envelope and guarantees that extreme values are never missed. The algorithm runs in O(N/bucket) per bucket.
 
 ### LTTB (Largest Triangle Three Buckets)
-Visually optimal downsampling that preserves signal shape by maximizing triangle area between consecutive buckets. Better visual fidelity but slightly slower.
+Visually optimised downsampling that maximises triangle area between consecutive buckets, preserving the perceived shape of the signal. Slightly slower than MinMax but yields better visual fidelity for smooth curves.
 
-Both algorithms handle NaN gaps by segmenting contiguous non-NaN regions independently.
+Both algorithms handle NaN gaps by splitting into contiguous non‑NaN segments and processing each independently.
 
-## Lazy Multi-Resolution Pyramid
+---
 
-Problem: At full zoom-out with 50M+ points, scanning all data is O(N).
+## Lazy Multi‑Resolution Pyramid
 
-Solution: Pre-computed MinMax pyramid with configurable reduction factor (default 100x per level):
+The challenge: when fully zoomed out with 50 M+ points, scanning all raw data to subsample to screen pixels is O(N) and too slow for interactive use.
+
+**Solution:** a pre‑computed MinMax pyramid with a configurable reduction factor (default 100× per level):
 
 ```
 Level 0: Raw data         (50,000,000 points)
-Level 1: 100x reduction   (   500,000 points)
-Level 2: 100x reduction   (     5,000 points)
+Level 1: 100× reduction   (   500,000 points)
+Level 2: 100× reduction   (     5,000 points)
 ```
 
-On zoom, the coarsest level with sufficient resolution is selected. Full zoom-out reads level 2 (5K points) and downsamples to ~4K in under 1ms.
+On zoom, the coarsest level with sufficient resolution is selected. At full zoom‑out the renderer reads level 2 (5 K points) and downsamples to ~4 K in under 1 ms.
 
-Levels are built lazily on first access — the first zoom-out pays a one-time build cost (~70ms with MEX), subsequent queries are instant.
+Levels are built lazily on first access — the first zoom‑out pays a one‑time build cost (~70 ms with MEX), subsequent queries are instant.
+
+---
 
 ## MEX Acceleration
 
-Optional C MEX functions with SIMD intrinsics (AVX2 on x86_64, NEON on arm64):
+Optional C MEX functions with SIMD intrinsics (AVX2 on x86_64, NEON on arm64) accelerate the most compute‑intensive operations. Every MEX function has an identical pure‑MATLAB fallback that is used automatically when compilation is unavailable.
 
 | Function | Speedup | Description |
-|----------|---------|-------------|
-| binary_search_mex | 10-20x | O(log n) visible range lookup |
-| minmax_core_mex | 3-10x | Per-pixel MinMax reduction |
-| lttb_core_mex | 10-50x | Triangle area computation |
-| violation_cull_mex | significant | Fused detection + pixel culling |
-| compute_violations_mex | significant | Batch violation detection for resolve() |
-| resolve_disk_mex | significant | SQLite disk-based sensor resolution |
-| build_store_mex | 2-3x | Bulk SQLite writer for DataStore init |
-| to_step_function_mex | significant | SIMD step-function conversion for thresholds |
+|---|---|---|
+| `binary_search_mex` | 10–20× | O(log N) visible‑range lookup |
+| `minmax_core_mex` | 3–10× | Per‑pixel MinMax reduction |
+| `lttb_core_mex` | 10–50× | Triangle‑area computation for LTTB |
+| `violation_cull_mex` | significant | Fused detection + pixel culling for violation markers |
+| `compute_violations_mex` | significant | Batch violation detection for threshold resolution |
+| `resolve_disk_mex` | significant | SQLite‑disk‑based sensor resolution |
+| `build_store_mex` | 2–3× | Bulk SQLite writer for DataStore initialisation |
+| `to_step_function_mex` | significant | SIMD step‑function conversion for thresholds |
 
-All share a common `simd_utils.h` abstraction layer. If MEX is unavailable, pure-MATLAB implementations are used with identical behavior.
+All MEX sources share a common `simd_utils.h` abstraction layer and the bundled SQLite3 amalgamation. The build system (`build_mex.m`) detects the platform and selects appropriate compiler flags; if AVX2 fails, it automatically retries with SSE2.
+
+The availability check is cached per session:
+```matlab
+persistent useMex;
+if isempty(useMex)
+    useMex = (exist('binary_search_mex', 'file') == 3);
+end
+```
+
+For full details, see [[MEX Acceleration]].
+
+---
 
 ## Data Flow Architecture
 
 ### Core Data Path
+
 ```
 Raw Data (X, Y arrays)
     ↓
 FastSenseDataStore (optional, for large datasets)
     ↓
-Downsampling Engine (MinMax/LTTB)
+Downsampling Engine (MinMax / LTTB)
     ↓
-Pyramid Cache (lazy multi-resolution)
+Pyramid Cache (lazy multi‑resolution)
     ↓
 Graphics Objects (line handles)
     ↓
@@ -167,159 +201,141 @@ Interactive Display
 ```
 
 ### Storage Modes
-- **Memory mode**: X/Y arrays held in MATLAB workspace
-- **Disk mode**: Data chunked into SQLite database via `FastSenseDataStore`
-- **Auto mode**: Switches to disk when data exceeds `MemoryLimit` (default 500MB)
+- **Memory mode** — X/Y arrays held in MATLAB workspace.
+- **Disk mode** — data chunked into a SQLite database via `FastSenseDataStore`.
+- **Auto mode** — switches to disk when total data exceeds `MemoryLimit` (default 500 MB).
 
-## Sensor Threshold Resolution
+---
 
-The `Sensor.resolve()` algorithm is segment-based:
+## Tag‑Based Domain Model
 
-1. Collect all state-change timestamps from all StateChannels
-2. For each segment between state changes:
-   - Evaluate which ThresholdRules match the current state
-   - Group rules with identical conditions
-3. Assign threshold values per segment
-4. Detect violations using SIMD-accelerated comparison
+FastPlot v2.0 replaces the previous `Sensor`/`StateChannel`/`ThresholdRule` model with a unified **Tag** hierarchy ([API Reference: Sensors](API-Reference-Sensors)). Every signal is a `Tag`, providing a consistent interface (`getXY`, `valueAt`, `getTimeRange`, `toStruct`).
 
-Complexity: O(S × R) where S = state segments and R = rules, instead of O(N × R) per-point evaluation.
+```
+Tag (abstract)
+├── SensorTag        — raw sensor time series (X, Y)
+├── StateTag         — discrete state signals (ZOH lookup)
+├── MonitorTag       — binary monitor: applies ConditionFn to parent → 0/1 output
+├── CompositeTag     — aggregate multiple Monitor/Composite children with logical modes
+└── DerivedTag       — continuous derived signal from N parents via a compute function
+```
 
-## Disk-Backed Data Storage
+**Threshold / event detection** is now a first‑class citizen of this model:
 
-For datasets exceeding available memory (100M+ points), `FastSenseDataStore` provides SQLite-backed chunked storage:
+1. A `MonitorTag` is created with a parent `SensorTag` (or `StateTag`, `DerivedTag`) and a condition function.
+2. Calling `monitor.getXY()` lazily evaluates the condition on the parent’s grid, returning a binary series (with optional hysteresis and debounce via `MinDuration`).
+3. The `EventStore` and `LiveEventPipeline` consume `MonitorTag` objects directly — the pipeline polls data sources, pushes new data to `MonitorTag.appendData`, and emits `Event` objects with correct `TagKeys`.
 
-1. Data is split into chunks (~10K-500K points each, auto-tuned)
-2. Each chunk stored as a pair of typed BLOBs (X and Y) with X range metadata
-3. On zoom/pan, only chunks overlapping the visible range are loaded
-4. Pre-computed L1 MinMax pyramid for instant zoom-out
+### Event Detection Flow
 
-The bulk write path uses `build_store_mex` — a single C call that writes all chunks with SIMD-accelerated Y min/max computation, replacing ~20K mksqlite round-trips.
+```
+[Data Sources] → LiveEventPipeline.runCycle()
+    ├─ fetch new data from DataSourceMap
+    ├─ append to parent Tag (e.g., SensorTag.updateData)
+    ├─ append to MonitorTag via monitor.appendData (streaming tail extension)
+    ├─ events created/closed via EventStore
+    └─ NotificationService sends alerts (with plot snapshots)
+```
 
-If SQLite is unavailable, a binary file fallback is used automatically.
+The pipeline can escalate event severity when multiple thresholds are crossed and supports configurable callbacks.
+
+---
+
+## Disk‑Backed Data Storage
+
+For datasets that exceed available memory, `FastSenseDataStore` provides SQLite‑backed chunked storage:
+
+1. Data is split into chunks (~10 K–500 K points each, auto‑tuned).
+2. Each chunk is stored as a pair of typed BLOBs (X and Y) together with X‑range metadata.
+3. On zoom/pan only chunks overlapping the visible range are loaded.
+4. A pre‑computed L1 MinMax pyramid (level 1) is built at storage time for instant zoom‑out.
+
+Bulk insert uses `build_store_mex` — a single C call that writes all chunks with SIMD‑accelerated Y min/max computation, replacing tens of thousands of individual `mksqlite` round‑trips.
+
+If SQLite is unavailable (e.g., MEX compilation failure), a binary‑file fallback is used automatically.
+
+---
 
 ## Theme Inheritance
 
 ```
-Element override  >  Tile theme  >  Figure theme  >  'default' preset
+Element override  →  Tile theme  →  Figure theme  →  Preset ('light' or 'dark')
 ```
 
-Each level fills in only the fields it specifies; unspecified fields cascade from the next level.
+Each level fills in only the fields it specifies; unspecified fields cascade from the next level. The `FastSenseTheme` and `DashboardTheme` functions return complete structs by merging preset defaults with user overrides. The palette of line colours (8×3 matrix) is resolved at theme load time.
+
+---
 
 ## Dashboard Architecture
 
-### FastSenseGrid vs DashboardEngine
+FastPlot provides two levels of dashboard composition:
 
-- **[[Dashboard|FastSenseGrid]]**: Simple tiled grid of FastSense instances with synchronized live mode
-- **[[Dashboard Engine Guide|DashboardEngine]]**: Full widget-based dashboard with gauges, numbers, status indicators, tables, timelines, and edit mode
+- **`FastSenseGrid`** — lightweight tiled grid of FastSense instances with synchronised live mode.
+- **`DashboardEngine`** — full widget‑based dashboard with gauges, numbers, status indicators, tables, timelines, and an edit mode. Layout is managed on a 24‑column responsive grid.
 
 ### DashboardEngine Components
 
 ```
 DashboardEngine
-├── DashboardToolbar      — Top toolbar (Live, Edit, Save, Export, Sync)
-├── DashboardLayout       — 24-column responsive grid with scrollable canvas
-├── DashboardTheme        — FastSenseTheme + dashboard-specific fields
+├── DashboardToolbar      — Top toolbar (Live, Edit, Save, Export, Info)
+├── DashboardLayout       — 24‑column responsive grid with scrollable canvas
+├── DashboardTheme        — FastSenseTheme + dashboard‑specific fields
 ├── DashboardBuilder      — Edit mode overlay (drag/resize, palette, properties)
 ├── DashboardSerializer   — JSON save/load and .m script export
 └── Widgets (DashboardWidget subclasses)
-    ├── FastSenseWidget         — FastSense instance (Sensor/DataStore/inline)
+    ├── FastSenseWidget         — FastSense instance (Tag / DataStore / inline)
     ├── GaugeWidget            — Arc/donut/bar/thermometer gauge
     ├── NumberWidget            — Big number with trend arrow
     ├── StatusWidget           — Colored dot indicator
     ├── TextWidget             — Static label or header
     ├── TableWidget            — uitable display
-    ├── RawAxesWidget          — User-supplied plot function
+    ├── RawAxesWidget          — User‑supplied plot function
     ├── EventTimelineWidget    — Colored event bars on timeline
     ├── GroupWidget            — Collapsible panels, tabbed containers
-    └── MultiStatusWidget      — Grid of sensor status dots
+    ├── MultiStatusWidget      — Grid of sensor status dots
+    ├── IconCardWidget         — Compact card with icon, value, label
+    ├── SparklineCardWidget    — KPI card with sparkline chart
+    ├── ChipBarWidget          — Horizontal row of status chips
+    └── DividerWidget          — Visual section separator
 ```
 
-### Render Flow
+### Dashboard Pages
+The engine supports **multi‑page dashboards** via `DashboardPage` objects. Each page holds its own set of widgets, and navigation is handled by a tab bar. This keeps the user interface dense yet organised.
 
-1. `DashboardEngine.render()` creates the figure
-2. `DashboardTheme(preset)` generates the full theme struct
-3. `DashboardToolbar` creates the top toolbar panel
-4. Time control panel (dual sliders) is created at the bottom
-5. `DashboardLayout.createPanels()` computes grid positions, creates viewport/canvas/scrollbar, and creates a uipanel per widget
-6. Each widget's `render(parentPanel)` is called to populate its panel
-7. `updateGlobalTimeRange()` scans widgets for data bounds and configures the time sliders
+For detailed usage, see [[Dashboard Engine Guide]].
 
-### Live Mode
-
-When `startLive()` is called, a timer fires at `LiveInterval` seconds:
-1. `updateLiveTimeRange()` expands time bounds from new data
-2. Each widget's `refresh()` is called (sensor-bound widgets re-read `Sensor.Y(end)`)
-3. The toolbar timestamp label is updated
-4. Current slider positions are re-applied to the updated time range
-
-### Edit Mode
-
-Clicking "Edit" in the toolbar creates a `DashboardBuilder` instance:
-1. A palette sidebar (left) shows widget type buttons
-2. A properties panel (right) shows selected widget settings
-3. Drag/resize overlays are added on top of each widget panel
-4. The content area narrows to accommodate sidebars
-5. Mouse move/up callbacks handle drag and resize interactions
-6. Grid snap rounds positions to the nearest column/row
-
-### JSON Persistence
-
-`DashboardSerializer` handles round-trip serialization:
-- **Save:** each widget's `toStruct()` produces a plain struct with type, title, position, and source. The struct is encoded to JSON with heterogeneous widget arrays assembled manually (MATLAB's `jsonencode` cannot handle cell arrays of mixed structs).
-- **Load:** JSON is decoded, widgets array is normalized to cell, and `configToWidgets()` dispatches to each widget class's `fromStruct()` static method. An optional `SensorResolver` function handle re-binds Sensor objects by name.
-- **Export script:** generates a `.m` file with `DashboardEngine` constructor calls and `addWidget` calls for each widget.
-
-## Event Detection Architecture
-
-The event detection system provides real-time threshold violation monitoring with configurable notifications and data persistence.
-
-### Core Components
-
-```
-LiveEventPipeline
-├── DataSourceMap          — Maps sensor keys to data sources
-├── IncrementalEventDetector — Tracks per-sensor state and open events
-├── EventStore            — Thread-safe .mat file persistence
-├── NotificationService   — Rule-based email alerts
-└── EventViewer          — Interactive Gantt chart + filterable table
-```
-
-### Data Sources
-
-- **MatFileDataSource**: Polls .mat files for new data
-- **MockDataSource**: Generates realistic test signals with violations
-- **Custom sources**: Implement `DataSource.fetchNew()` interface
-
-### Event Detection Flow
-
-1. `LiveEventPipeline.runCycle()` polls all data sources
-2. New data is passed to `IncrementalEventDetector.process()`
-3. Sensor state is evaluated via `Sensor.resolve()`
-4. Violations are grouped into events with debouncing (`MinDuration`)
-5. Events are stored via `EventStore.append()` (atomic .mat writes)
-6. `NotificationService` sends rule-based email alerts with plot snapshots
-7. Active `EventViewer` instances auto-refresh to show new events
-
-### Escalation Logic
-
-When `EscalateSeverity` is enabled, events are promoted to the highest violated threshold:
-- A violation starts at "Warning" level
-- If "Alarm" threshold is also crossed, the event is escalated to "Alarm"
-- The event retains the highest severity level encountered
+---
 
 ## Progress Indication
 
-`ConsoleProgressBar` provides hierarchical progress feedback:
-- Single-line ASCII/Unicode bars with backspace-based updates
-- Indentation support for nested operations (e.g., dock → tabs → tiles)
-- Freeze/finish modes for permanent status lines
+`ConsoleProgressBar` renders a single‑line progress bar in the MATLAB console, supporting indentation for nested operations (e.g., dock → tabs → tiles). The bar uses Unicode block characters on MATLAB and ASCII on Octave. The lifecycle is:
+
+```
+pb = ConsoleProgressBar(indent);
+pb.start();
+pb.update(current, total, label);   % loop
+pb.freeze();   % make permanent, or
+pb.finish();   % 100% + freeze
+```
+
+`DashboardProgress` is a higher‑level wrapper that logs per‑widget realisation progress during `DashboardEngine.render()` while respecting the `ProgressMode` setting.
+
+---
 
 ## Interactive Features
 
-### Toolbars and Navigation
-- **[[API Reference: FastPlot|FastSenseToolbar]]**: Data cursor, crosshair, grid toggle, autoscale, export, live mode
-- **DashboardToolbar**: Live toggle, edit mode, save/export, name editing
-- **NavigatorOverlay**: Minimap with draggable zoom rectangle for `SensorDetailPlot`
+- **Toolbars** – `FastSenseToolbar` provides data cursor, crosshair, grid/legend toggles, autoscale, export, and live controls. `DashboardToolbar` adds live toggle, edit mode, save/export, and name editing.
+- **NavigatorOverlay** – minimap with draggable zoom rectangle for `SensorDetailPlot`.
+- **Link Groups** – multiple `FastSense` instances can synchronise zoom/pan via a shared `LinkGroup` string.
+- **Live Mode** – polls a `.mat` file (or raw text file via pipelines) at a configurable interval and auto‑refreshes the plot; `LiveViewMode` controls whether the X‑axis follows the data or stays fixed.
+- **Event Markers** – event overlays (round markers) can be toggled on any `FastSense` plot; clicking a marker opens a floating details window with editable notes.
 
-### Link Groups
-Multiple FastSense instances can share synchronized zoom/pan via `LinkGroup` strings. When one plot's XLim changes, all plots in the same group update automatically.
+---
+
+## Cross‑References
+
+- [[Home]] | [[Installation]] | [[Getting Started]]
+- [[API Reference: FastPlot]] | [[API Reference: Dashboard]] | [[API Reference: Themes]] | [[API Reference: Sensors]] | [[API Reference: Event Detection]] | [[API Reference: Utilities]]
+- [[Live Mode Guide]] | [[Datetime Guide]] | [[Dashboard Engine Guide]]
+- [[MEX Acceleration]] | [[Performance]]
+- [[Examples]]
