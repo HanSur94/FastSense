@@ -28,6 +28,12 @@ classdef DashboardEngine < handle
         ShowTimePanel = true     % hide the bottom time slider panel
         EventMarkersVisible = true  % global toggle for event markers across all widgets (runtime UI state, not serialized)
         DebugPreview_ = false    % 260508-das — opt-in: surface preview/marker pipeline failures as warnings
+        % Reserved vertical strip at the figure top for the stale-data banner
+        % (normalized units). The banner is no longer an overlay — its space
+        % is permanently reserved, so toolbar / page-bar / content-area all
+        % shift down by BannerHeight. Single source of truth for the banner
+        % strip height (260508-jyh).
+        BannerHeight  = 0.035
     end
 
     properties (SetAccess = private)
@@ -63,6 +69,7 @@ classdef DashboardEngine < handle
         hTimeResetBtn   = []       % Reset button on time panel (260508-f7p — needed for theme switch)
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
         TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
+        LastSyncedTimeRange_ = []  % [tStart tEnd] cache of most recent broadcast (260508-llw); used by switchPage to re-apply current synced window to widgets realized on tab-switch
         Progress_           = []   % DashboardProgress instance (active during render)
         % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
         hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
@@ -187,11 +194,20 @@ classdef DashboardEngine < handle
                 for pgIdx = 1:numel(obj.Pages)
                     pgWidgets = obj.Pages{pgIdx}.Widgets;
                     for wi = 1:numel(pgWidgets)
-                        if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
+                        % Toggle visibility on the OUTER cell panel so the
+                        % WidgetButtonBar (a sibling of the WidgetContentPanel)
+                        % is hidden alongside widget content. Fall back to
+                        % hPanel for widgets that haven't been realized yet
+                        % (hCellPanel is set during realizeWidget).
+                        cellH = pgWidgets{wi}.hCellPanel;
+                        if isempty(cellH) || ~ishandle(cellH)
+                            cellH = pgWidgets{wi}.hPanel;
+                        end
+                        if ~isempty(cellH) && ishandle(cellH)
                             if pgIdx == obj.ActivePage
-                                set(pgWidgets{wi}.hPanel, 'Visible', 'on');
+                                set(cellH, 'Visible', 'on');
                             else
-                                set(pgWidgets{wi}.hPanel, 'Visible', 'off');
+                                set(cellH, 'Visible', 'off');
                             end
                         end
                     end
@@ -208,6 +224,13 @@ classdef DashboardEngine < handle
                 if hasUnrealized
                     obj.realizeBatch(5);
                 end
+            end
+            % Re-apply the current synced time range so widgets that just
+            % realized on this tab inherit the dashboard-wide window
+            % instead of their construction default. (260508-llw)
+            if ~isempty(obj.LastSyncedTimeRange_)
+                rng = obj.LastSyncedTimeRange_;
+                obj.broadcastTimeRange(rng(1), rng(2));
             end
             % Refresh the preview envelope on the newly active page (D-07).
             try obj.computePreviewEnvelope(); catch err
@@ -314,10 +337,11 @@ classdef DashboardEngine < handle
                 obj.renderPageBar(themeStruct);
                 pageBarH = obj.PageBarHeight;
             else
-                % Create hidden PageBar placeholder so hPageBar is always valid
+                % Create hidden PageBar placeholder so hPageBar is always valid.
+                % Y accounts for the reserved banner strip at the figure top.
                 obj.hPageBar = uipanel('Parent', obj.hFigure, ...
                     'Units', 'normalized', ...
-                    'Position', [0, 1 - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
+                    'Position', [0, 1 - obj.BannerHeight - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
                     'BorderType', 'none', ...
                     'BackgroundColor', themeStruct.ToolbarBackground, ...
                     'Visible', 'off');
@@ -330,10 +354,13 @@ classdef DashboardEngine < handle
             % Create the stale-data banner (hidden by default; toggled by live tick)
             obj.createStaleBanner(themeStruct, toolbarH);
 
-            % Apply visibility flags + compute content area based on effective heights
+            % Apply visibility flags + compute content area based on effective
+            % heights. BannerHeight is reserved at the top regardless of
+            % banner Visible state — toolbar/pagebar/content-area all shift
+            % down so the banner is never an overlay (260508-jyh).
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
             obj.Layout.ContentArea = [0, effTimeH, ...
-                1, 1 - effToolbarH - effPageBarH - effTimeH];
+                1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
@@ -361,7 +388,11 @@ classdef DashboardEngine < handle
                     end
                     pgWidgets = obj.Pages{pgIdx}.Widgets;
                     obj.Layout.allocatePanels(obj.hFigure, pgWidgets, themeStruct);
-                    % Hide panels for non-active pages
+                    % Hide panels for non-active pages. allocatePanels has
+                    % only just assigned the cell panel to widget.hPanel
+                    % (hCellPanel is still empty until realizeWidget fires
+                    % on tab-switch), so toggling hPanel here hides the
+                    % cell — correct.
                     for wi = 1:numel(pgWidgets)
                         if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
                             set(pgWidgets{wi}.hPanel, 'Visible', 'off');
@@ -1083,8 +1114,14 @@ classdef DashboardEngine < handle
                 return;
             end
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility();
+            % BannerHeight is reserved at the top — content area never extends
+            % into the banner strip (260508-jyh).
             obj.Layout.ContentArea = [0, effTimeH, ...
-                1, 1 - effToolbarH - effPageBarH - effTimeH];
+                1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
+            % Reposition the banner so it stays parked in the reserved strip
+            % even after a re-layout. Body is geometry-stable now (constant
+            % Y), but the call is preserved as defence-in-depth.
+            obj.repositionStaleBanner_();
             try
                 obj.rerenderWidgets();
             catch
@@ -1262,21 +1299,27 @@ classdef DashboardEngine < handle
             newTMax = tMax;
         end
 
-        function createStaleBanner(obj, theme, toolbarH)
-        %CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
-        %   A uipanel strip below the toolbar containing a message label and
-        %   a close button. Hidden by default; shown when staleness is detected
-        %   and not previously dismissed by the user.
+        function createStaleBanner(obj, theme, toolbarH) %#ok<INUSD>
+        %CREATESTALEBANNER Create the hidden stale-data warning banner.
+        %   Permanent reserved strip at the very TOP of the figure.
+        %   Toolbar, page tabs, and content area all sit BELOW this strip —
+        %   the banner is never an overlay (260508-jyh). Hidden by default;
+        %   shown when staleness is detected and not previously dismissed
+        %   by the user. toolbarH is retained for signature compat; banner
+        %   now lives in the reserved top strip independent of chrome
+        %   heights.
             if ~isempty(obj.hStaleBanner) && ishandle(obj.hStaleBanner)
                 return;
             end
-            bannerH = 0.035;
+            bannerH = obj.BannerHeight;
             warnColor = theme.StatusWarnColor;
             fgColor   = [0.15 0.10 0.02];
 
+            bannerY = 1 - bannerH;  % Reserved strip at the very top of the figure
+
             obj.hStaleBanner = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
-                'Position', [0, 1 - toolbarH - bannerH, 1, bannerH], ...
+                'Position', [0, bannerY, 1, bannerH], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', warnColor, ...
                 'Visible', 'off');
@@ -1300,6 +1343,19 @@ classdef DashboardEngine < handle
                 'FontWeight', 'bold', ...
                 'TooltipString', 'Dismiss this warning (reappears when data resumes then stops again)', ...
                 'Callback', @(~,~) obj.onStaleBannerClose());
+        end
+
+        function repositionStaleBanner_(obj)
+        %REPOSITIONSTALEBANNER_ Park banner in the reserved top strip.
+        %   Banner now lives in a permanent strip at the figure top; no
+        %   chrome-height dependence (260508-jyh). Safe to call before
+        %   render or after teardown — no-ops when the handle is
+        %   empty/invalid.
+            if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
+                return;
+            end
+            set(obj.hStaleBanner, 'Position', ...
+                [0, 1 - obj.BannerHeight, 1, obj.BannerHeight]);
         end
 
         function showStaleBanner(obj, staleTitles)
@@ -1399,8 +1455,15 @@ classdef DashboardEngine < handle
         end
 
         function broadcastTimeRange(obj, tStart, tEnd)
-        %BROADCASTTIMERANGE Push time range to widgets using global time.
-            ws = obj.activePageWidgets();
+        %BROADCASTTIMERANGE Push time range to widgets across ALL pages (not just active).
+        %   Time sync is a dashboard-wide control: dragging the slider, clicking
+        %   "Sync all", or calling broadcastTimeRangeNow updates every page's
+        %   widgets so switching tabs preserves the synced window. Per-widget
+        %   UseGlobalTime=false (manually zoomed) widgets opt out via their own
+        %   setTimeRange guard. (260508-llw — was activePageWidgets, caused a
+        %   per-tab desync bug.)
+            obj.LastSyncedTimeRange_ = [tStart tEnd];
+            ws = obj.allPageWidgets();
             for i = 1:numel(ws)
                 try
                     ws{i}.setTimeRange(tStart, tEnd);
@@ -1413,8 +1476,10 @@ classdef DashboardEngine < handle
         end
 
         function resetGlobalTime(obj)
-        %RESETGLOBALTIME Re-attach all widgets to global time and apply.
-            ws = obj.activePageWidgets();
+        %RESETGLOBALTIME Re-attach all widgets across ALL pages to global time and apply.
+        %   (260508-llw — was activePageWidgets, leaving widgets on inactive
+        %   pages still detached after a "Reset" toolbar action.)
+            ws = obj.allPageWidgets();
             for i = 1:numel(ws)
                 ws{i}.UseGlobalTime = true;
             end
@@ -1589,6 +1654,7 @@ classdef DashboardEngine < handle
         %ONRESIZE Handle figure resize: reposition all widget panels.
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 obj.repositionPanels();
+                obj.repositionStaleBanner_();
             end
         end
 
@@ -1763,13 +1829,51 @@ classdef DashboardEngine < handle
             end
         end
 
+        function flat = flattenWidgetsForPreview_(obj, widgets, depth)
+        %FLATTENWIDGETSFORPREVIEW_ Depth-first flatten of a widget list.
+        %   Unwraps any container widget that returns a non-empty
+        %   getNestedWidgets() cell. Used by computePreviewEnvelopeReturning_
+        %   and computeEventMarkers so nested FastSenseWidgets inside a
+        %   GroupWidget contribute to the slider preview / marker overlay
+        %   (260508-l2k).
+        %
+        %   Order: input order, with each container's leaves spliced in
+        %   at the container's position. Defensive depth cap of 10 stops
+        %   pathological recursion (GroupWidget enforces maxDepth=2 at
+        %   addChild, but the flatten is engine-level and should not
+        %   assume well-formedness). getNestedWidgets() failures fall
+        %   back to leaf treatment via try/catch — matches the engine's
+        %   existing per-widget defensive iteration pattern.
+            if nargin < 3, depth = 0; end
+            flat = {};
+            if depth >= 10
+                flat = widgets;
+                return;
+            end
+            for i = 1:numel(widgets)
+                w = widgets{i};
+                nested = {};
+                try
+                    nested = w.getNestedWidgets();
+                catch
+                    nested = {};
+                end
+                if isempty(nested)
+                    flat = [flat, {w}]; %#ok<AGROW>
+                else
+                    flat = [flat, obj.flattenWidgetsForPreview_(nested, depth + 1)]; %#ok<AGROW>
+                end
+            end
+        end
+
         function renderPageBar(obj, themeStruct)
         %RENDERPAGEBAR Create the PageBar uipanel with one button per page.
-        %   Called from render() when numel(Pages) > 1.
+        %   Called from render() when numel(Pages) > 1. Y accounts for the
+        %   reserved banner strip at the figure top (260508-jyh).
             toolbarH = obj.Toolbar.Height;
             hPageBar = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
-                'Position', [0, 1 - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
+                'Position', [0, 1 - obj.BannerHeight - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', themeStruct.ToolbarBackground, ...
                 'Visible', 'on');
@@ -1913,12 +2017,15 @@ classdef DashboardEngine < handle
         end
 
         function computePreviewEnvelope(obj, nBuckets)
-        %COMPUTEPREVIEWENVELOPE Aggregate per-bucket min/max across
-        %   active-page widgets and push the result onto the selector's
-        %   envelope patch (D-07, D-08). nBuckets optional; when omitted,
+        %COMPUTEPREVIEWENVELOPE Aggregate per-bucket min/max across the
+        %   currently active page's widgets (including nested GroupWidget
+        %   children) and push the result onto the selector's envelope
+        %   patch (D-07, D-08). Multi-page dashboards therefore reflect
+        %   only the active tab — switchPage() recomputes the envelope so
+        %   navigation stays in sync. nBuckets optional; when omitted,
         %   defaults to ~200 based on panel axes pixel width, clamped to
-        %   [50, 400]. Silently no-ops when no selector is wired yet (e.g.
-        %   before render()).
+        %   [50, 400]. Silently no-ops when no selector is wired yet
+        %   (e.g. before render()).
             if nargin < 2, nBuckets = []; end
             obj.computePreviewEnvelopeReturning_(nBuckets);
         end
@@ -1947,7 +2054,7 @@ classdef DashboardEngine < handle
                 catch
                 end
             end
-            ws = obj.activePageWidgets();
+            ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
             if isempty(ws)
                 obj.TimeRangeSelector_.setPreviewLines({});
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
@@ -2019,8 +2126,12 @@ classdef DashboardEngine < handle
         end
 
         function computeEventMarkers(obj)
-        %COMPUTEEVENTMARKERS Aggregate event markers across active-page widgets
+        %COMPUTEEVENTMARKERS Aggregate event markers across the currently
+        %   active page's widgets (including nested GroupWidget children)
         %   and push them onto the TimeRangeSelector's marker overlay.
+        %   Multi-page dashboards therefore reflect only the active tab —
+        %   switchPage() recomputes the marker overlay so navigation stays
+        %   in sync.
         %
         %   Mirrors computePreviewEnvelope's guard + iteration pattern:
         %   no-op before render or when no widgets expose events. A failing
@@ -2052,7 +2163,7 @@ classdef DashboardEngine < handle
                 obj.TimeRangeSelector_.setEventMarkers([]);
                 return;
             end
-            ws = obj.activePageWidgets();
+            ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
 
             % Accumulators (parallel arrays — keep allocation-free until
             % the dedup pass at the end). Severity defaults to 1 (OK) for

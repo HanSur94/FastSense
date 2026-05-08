@@ -48,6 +48,18 @@ classdef FastSenseWidget < DashboardWidget
         PreviewCacheKey_   = []    % [numel(x), x(1), x(end), nBucketsEff] sentinel
     end
 
+    properties (Access = private, Constant)
+        % PREVIEWRAWTHRESHOLD_ Sample-count threshold below which
+        %   getPreviewSeries skips downsampling and renders one bucket
+        %   per raw sample. Chosen as 100 because:
+        %     - small enough that raw rendering remains cheap (<= 100
+        %       points -> ~200 line vertices after min/max pairing);
+        %     - large enough that downsampling only kicks in once a
+        %       slider preview is dense enough to genuinely benefit.
+        %   Adjust here if user feedback warrants a different cut-off.
+        PreviewRawThreshold_ = 100
+    end
+
     methods
         function obj = FastSenseWidget(varargin)
             obj = obj@DashboardWidget(varargin{:});
@@ -478,7 +490,15 @@ classdef FastSenseWidget < DashboardWidget
                 if numel(x) < 4
                     return;
                 end
-                nBucketsEff = max(1, min(nBuckets, floor(numel(x) / 2)));
+                if numel(x) <= obj.PreviewRawThreshold_
+                    % Below this threshold, render one bucket per raw
+                    % sample — full fidelity for small / freshly-live
+                    % datasets where downsampling artefacts dominate
+                    % the visible slider preview line.
+                    nBucketsEff = numel(x);
+                else
+                    nBucketsEff = max(1, min(nBuckets, floor(numel(x) / 2)));
+                end
 
                 % Cache lookup — bit-identical for unchanged data shape.
                 cacheKey = [double(numel(x)), double(x(1)), double(x(end)), double(nBucketsEff)];
@@ -499,7 +519,11 @@ classdef FastSenseWidget < DashboardWidget
                     if numel(x) < 4
                         return;
                     end
-                    nBucketsEff = max(1, min(nBuckets, floor(numel(x) / 2)));
+                    if numel(x) <= obj.PreviewRawThreshold_
+                        nBucketsEff = numel(x);
+                    else
+                        nBucketsEff = max(1, min(nBuckets, floor(numel(x) / 2)));
+                    end
                 end
 
                 % Call MEX when available; otherwise compute per-bucket

@@ -336,23 +336,57 @@ classdef DashboardLayout < handle
 
         function realizeWidget(obj, widget)
         %REALIZEWIDGET Render a single widget into its pre-allocated panel.
+        %   Creates the chrome (full-width WidgetButtonBar + WidgetContentPanel
+        %   sub-panel below the bar) BEFORE calling widget.render so the
+        %   widget's own graphics children (titles, axes, status text, group
+        %   headers) land in the visible content area, never under the bar.
+        %
+        %   Widgets that don't need chrome (no Description AND no
+        %   DetachCallback, or DividerWidget) skip both the bar and the
+        %   content sub-panel and render directly into the outer cell panel
+        %   as before — preserving zero-chrome behavior for visual-only
+        %   widgets.
             if widget.Realized, return; end
             if isempty(widget.hPanel) || ~ishandle(widget.hPanel), return; end
-            % Remove placeholder
-            ph = findobj(widget.hPanel, 'Tag', 'placeholder');
+
+            % The outer grid-cell panel was assigned to widget.hPanel by
+            % allocatePanels. Pin that handle as hCellPanel so chrome
+            % helpers can find it after widget.render reassigns hPanel to
+            % the content sub-panel below.
+            widget.hCellPanel = widget.hPanel;
+
+            % Remove placeholder from the cell panel before chrome lands.
+            ph = findobj(widget.hCellPanel, 'Tag', 'placeholder');
             delete(ph);
-            % Render actual content
-            widget.render(widget.hPanel);
+
+            % Decide whether this widget needs chrome.
+            needsBar = ~isempty(widget.Description) || ...
+                       (~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget'));
+
+            if needsBar
+                % 1. Create the full-width bar at the top of the cell panel.
+                obj.getOrCreateButtonBar_(widget);
+                % 2. Create the content sub-panel that fills the cell BELOW the bar.
+                contentPanel = obj.createContentPanel_(widget);
+                % 3. Render widget content into the content sub-panel.
+                %    The widget's render() will assign obj.hPanel = contentPanel,
+                %    which is intentional: subsequent refresh/relayout_/findobj
+                %    operations on hPanel target the content area, not the cell.
+                widget.render(contentPanel);
+                % 4. Inject buttons into the existing bar.
+                if ~isempty(widget.Description)
+                    obj.addInfoIcon(widget);
+                end
+                if ~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')
+                    obj.addDetachButton(widget);
+                end
+            else
+                % No chrome — render directly into the cell panel as before.
+                widget.render(widget.hCellPanel);
+            end
+
             widget.markRealized();
             widget.Dirty = false;
-            % Inject info icon when widget has a description
-            if ~isempty(widget.Description)
-                obj.addInfoIcon(widget);
-            end
-            % Inject detach button when DetachCallback is wired (skip for dividers)
-            if ~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')
-                obj.addDetachButton(widget);
-            end
         end
 
         function createPanels(obj, hFigure, widgets, theme)
@@ -568,11 +602,14 @@ classdef DashboardLayout < handle
 
         function bar = getOrCreateButtonBar_(obj, widget) %#ok<INUSL>
         %GETORCREATEBUTTONBAR_ Return the per-widget button bar uipanel,
-        %   creating it the first time. The bar is a small opaque strip in
-        %   the top-right of widget.hPanel that hosts the info + detach
-        %   buttons so they aren't obscured by widget content drawn behind
-        %   them. Tag = 'WidgetButtonBar' (protected by sweepUserChildren_).
-            existing = findobj(widget.hPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
+        %   creating it the first time. The bar is a full-width opaque
+        %   header strip across the top of widget.hCellPanel (28px tall,
+        %   inset 2px from cell edges) that hosts the info + detach
+        %   buttons. Widgets render into a sibling WidgetContentPanel
+        %   sub-panel BELOW the bar (created by DashboardLayout.realizeWidget
+        %   via createContentPanel_) so widget content is never overlapped
+        %   by the bar. Tag = 'WidgetButtonBar'.
+            existing = findobj(widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
             if ~isempty(existing) && ishandle(existing(1))
                 bar = existing(1);
                 return;
@@ -591,19 +628,18 @@ classdef DashboardLayout < handle
             else
                 barBg = theme.ToolbarBackground;
             end
-            % Full-width header strip, 28px tall, anchored at the top of
-            % the widget panel. Inset by 2px on left/right/top to keep the
-            % widget panel border visible.
-            oldUnits = get(widget.hPanel, 'Units');
-            set(widget.hPanel, 'Units', 'pixels');
-            pp = get(widget.hPanel, 'Position');
-            set(widget.hPanel, 'Units', oldUnits);
+            % Full-width header strip, 28px tall, left-anchored across the
+            % top of the outer cell panel. Inset by 2px from cell edges.
+            oldUnits = get(widget.hCellPanel, 'Units');
+            set(widget.hCellPanel, 'Units', 'pixels');
+            pp = get(widget.hCellPanel, 'Position');
+            set(widget.hCellPanel, 'Units', oldUnits);
             barH = 28;
             inset = 2;
-            barW = pp(3) - 2 * inset;
+            barW = max(1, pp(3) - 2 * inset);
             x = inset;
             y = pp(4) - barH - inset;
-            bar = uipanel('Parent', widget.hPanel, ...
+            bar = uipanel('Parent', widget.hCellPanel, ...
                 'Units', 'pixels', ...
                 'Position', [x y barW barH], ...
                 'BackgroundColor', barBg, ...
@@ -625,9 +661,42 @@ classdef DashboardLayout < handle
             catch
             end
             if isInteractive
-                set(widget.hPanel, 'SizeChangedFcn', ...
-                    @(src, ~) DashboardLayout.reflowButtonBar_(src, barH, inset));
+                set(widget.hCellPanel, 'SizeChangedFcn', ...
+                    @(src, ~) DashboardLayout.reflowChrome_(src, barH, inset));
             end
+        end
+
+        function panel = createContentPanel_(obj, widget) %#ok<INUSL>
+        %CREATECONTENTPANEL_ Create the WidgetContentPanel sub-panel that
+        %   widgets render their content into. Sized to fill the cell panel
+        %   BELOW the WidgetButtonBar so widget content never overlaps chrome.
+        %   Idempotent: returns the existing panel if already created.
+        %   Tag = 'WidgetContentPanel'.
+            cell = widget.hCellPanel;
+            existing = findobj(cell, 'Tag', 'WidgetContentPanel', '-depth', 1);
+            if ~isempty(existing) && ishandle(existing(1))
+                panel = existing(1);
+                return;
+            end
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            contentBg = theme.WidgetBackground;
+            barH = 28;
+            inset = 2;
+            oldUnits = get(cell, 'Units');
+            set(cell, 'Units', 'pixels');
+            pp = get(cell, 'Position');
+            set(cell, 'Units', oldUnits);
+            contentH = max(1, pp(4) - barH - inset);
+            panel = uipanel('Parent', cell, ...
+                'Units', 'pixels', ...
+                'Position', [0, 0, pp(3), contentH], ...
+                'BackgroundColor', contentBg, ...
+                'BorderType', 'none', ...
+                'Tag', 'WidgetContentPanel');
         end
 
         function addInfoIcon(obj, widget)
@@ -680,33 +749,52 @@ classdef DashboardLayout < handle
         end
     end
 
-    methods (Static, Access = private)
+    methods (Static)
 
-        function reflowButtonBar_(hPanel, barH, inset)
-        %REFLOWBUTTONBAR_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
-        %   uipanel and its right-aligned buttons after the parent panel resizes.
-        %   No-op when the panel has been deleted or the bar isn't there yet.
-            if ~ishandle(hPanel), return; end
-            bar = findobj(hPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
-            if isempty(bar) || ~ishandle(bar(1)), return; end
-            bar = bar(1);
-            oldUnits = get(hPanel, 'Units');
-            set(hPanel, 'Units', 'pixels');
-            pp = get(hPanel, 'Position');
-            set(hPanel, 'Units', oldUnits);
-            barW = max(1, pp(3) - 2 * inset);
-            set(bar, 'Units', 'pixels', ...
-                'Position', [inset, pp(4) - barH - inset, barW, barH]);
-            % Re-anchor right-aligned buttons inside the bar.
-            det  = findobj(bar, 'Tag', 'DetachButton',   '-depth', 1);
-            info = findobj(bar, 'Tag', 'InfoIconButton', '-depth', 1);
-            if ~isempty(det) && ishandle(det(1))
-                set(det(1), 'Position', [barW - 24 - 4, 2, 24, 24]);
+        function reflowChrome_(hCell, barH, inset)
+        %REFLOWCHROME_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
+        %   AND resize the WidgetContentPanel after the parent cell panel
+        %   resizes. Public so tests can drive a deterministic resize without
+        %   relying on SizeChangedFcn firing under -batch.
+        %   No-op when the cell has been deleted or chrome isn't there yet.
+            if ~ishandle(hCell), return; end
+            bar     = findobj(hCell, 'Tag', 'WidgetButtonBar',    '-depth', 1);
+            content = findobj(hCell, 'Tag', 'WidgetContentPanel', '-depth', 1);
+            oldUnits = get(hCell, 'Units');
+            set(hCell, 'Units', 'pixels');
+            pp = get(hCell, 'Position');
+            set(hCell, 'Units', oldUnits);
+            if ~isempty(bar) && ishandle(bar(1))
+                barW = max(1, pp(3) - 2 * inset);
+                set(bar(1), 'Units', 'pixels', ...
+                    'Position', [inset, pp(4) - barH - inset, barW, barH]);
+                % Re-anchor right-aligned buttons inside the bar.
+                det  = findobj(bar(1), 'Tag', 'DetachButton',   '-depth', 1);
+                info = findobj(bar(1), 'Tag', 'InfoIconButton', '-depth', 1);
+                if ~isempty(det) && ishandle(det(1))
+                    set(det(1), 'Position', [barW - 24 - 4, 2, 24, 24]);
+                end
+                if ~isempty(info) && ishandle(info(1))
+                    set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                end
             end
-            if ~isempty(info) && ishandle(info(1))
-                set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+            if ~isempty(content) && ishandle(content(1))
+                contentH = max(1, pp(4) - barH - inset);
+                set(content(1), 'Units', 'pixels', ...
+                    'Position', [0, 0, pp(3), contentH]);
             end
         end
+
+        function reflowButtonBar_(hCell, barH, inset)
+        %REFLOWBUTTONBAR_ Deprecated alias — forwards to reflowChrome_.
+        %   Kept temporarily for any external callers that still reference
+        %   the m52-era name.
+            DashboardLayout.reflowChrome_(hCell, barH, inset);
+        end
+
+    end
+
+    methods (Static, Access = private)
 
         function anchorTopRight(btn, offsetFromRight)
         %ANCHORTOPRIGHT Position a pixel-sized button at the top-right of its parent.
