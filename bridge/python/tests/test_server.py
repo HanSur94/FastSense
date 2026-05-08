@@ -1,6 +1,7 @@
 """Tests for the FastAPI bridge server REST API."""
 
 import asyncio
+import logging
 import sqlite3
 import struct
 from pathlib import Path
@@ -315,3 +316,100 @@ class TestHealth:
         resp = client.get("/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+
+class TestCORSPolicy:
+    """Tests for the CORS policy controlled by FASTSENSE_BRIDGE_CORS_ORIGINS."""
+
+    def test_default_allows_localhost(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        resp = client.get(
+            "/health", headers={"Origin": "http://localhost:5173"}
+        )
+        assert resp.status_code == 200
+        assert (
+            resp.headers.get("access-control-allow-origin")
+            == "http://localhost:5173"
+        )
+
+        resp2 = client.get(
+            "/health", headers={"Origin": "http://127.0.0.1:8080"}
+        )
+        assert resp2.status_code == 200
+        assert (
+            resp2.headers.get("access-control-allow-origin")
+            == "http://127.0.0.1:8080"
+        )
+
+    def test_default_blocks_foreign_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        resp = client.get(
+            "/health", headers={"Origin": "https://evil.example.com"}
+        )
+        # CORSMiddleware should not echo the foreign origin.
+        assert (
+            resp.headers.get("access-control-allow-origin")
+            != "https://evil.example.com"
+        )
+
+    def test_env_override_allows_listed_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.setenv(
+            "FASTSENSE_BRIDGE_CORS_ORIGINS", "https://app.example.com"
+        )
+        client = TestClient(create_app(app_state))
+
+        resp = client.get(
+            "/health", headers={"Origin": "https://app.example.com"}
+        )
+        assert resp.status_code == 200
+        assert (
+            resp.headers.get("access-control-allow-origin")
+            == "https://app.example.com"
+        )
+
+        resp2 = client.get(
+            "/health", headers={"Origin": "https://evil.example.com"}
+        )
+        assert (
+            resp2.headers.get("access-control-allow-origin")
+            != "https://evil.example.com"
+        )
+
+    def test_wildcard_logs_warning(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        app_state: AppState,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("FASTSENSE_BRIDGE_CORS_ORIGINS", "*")
+
+        with caplog.at_level(
+            logging.WARNING, logger="fastsense_bridge.server"
+        ):
+            app = create_app(app_state)
+
+        warning_records = [
+            r for r in caplog.records if r.levelno == logging.WARNING
+        ]
+        assert warning_records, "Expected a WARNING record on wildcard CORS"
+        assert any(
+            "*" in r.getMessage() or "wide open" in r.getMessage().lower()
+            for r in warning_records
+        )
+
+        client = TestClient(app)
+        resp = client.get(
+            "/health", headers={"Origin": "https://anything.example.com"}
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("access-control-allow-origin") == "*"
