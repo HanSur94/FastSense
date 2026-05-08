@@ -223,39 +223,6 @@ classdef DashboardEngine < handle
                 if hasUnrealized
                     obj.realizeBatch(5);
                 end
-                % 260508-ny6: Force a refresh of every active-page widget
-                % (including nested group children) so any widget whose
-                % Dirty flag self-cleared on a previous render re-paints
-                % from current state. Without this, widgets like
-                % HistogramWidget render empty after tab switch until the
-                % next live tick happens to land — or never, in static mode.
-                %
-                % Two-pass: (1) markDirty on the FLAT widget list so
-                % nested group children are also re-armed; (2) refresh on
-                % the TOP-LEVEL list so GroupWidget.refresh's existing
-                % recursion into Children/Tabs paints the now-dirty inner
-                % widgets. markDirty does not propagate through GroupWidget
-                % on its own, so the flat sweep is required.
-                activeWs = obj.Pages{obj.ActivePage}.Widgets;
-                flatWs = obj.flattenWidgetsForPreview_(activeWs);
-                for wi = 1:numel(flatWs)
-                    try
-                        flatWs{wi}.markDirty();
-                    catch
-                        % markDirty is trivial; swallow defensively.
-                    end
-                end
-                for wi = 1:numel(activeWs)
-                    try
-                        activeWs{wi}.refresh();
-                    catch err
-                        if obj.DebugPreview_
-                            warning('DashboardEngine:switchPageRefreshFailed', ...
-                                'Widget "%s" refresh failed on tab switch: %s', ...
-                                activeWs{wi}.Title, err.message);
-                        end
-                    end
-                end
             end
             % Re-apply the current synced time range so widgets that just
             % realized on this tab inherit the dashboard-wide window
