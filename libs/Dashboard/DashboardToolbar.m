@@ -19,6 +19,7 @@ classdef DashboardToolbar < handle
         hExportBtn   = []
         hImageBtn    = []
         hSyncBtn     = []
+        hResetBtn    = []
         hEventsBtn   = []
         hEventsPanel = []
         hTitleText   = []
@@ -124,6 +125,20 @@ classdef DashboardToolbar < handle
                 'String', 'Sync', ...
                 'TooltipString', 'Reset all widgets to global time range', ...
                 'Callback', @(~,~) obj.Engine.resetGlobalTime());
+
+            % Reset button — manual recovery; forces full re-render of every
+            % widget on the active page. Placed next to Sync because both
+            % are "fix the dashboard" actions, but their roles differ:
+            % Sync resets the time range; Reset re-renders widget panels.
+            rightEdge = rightEdge - btnW - 0.005;
+            obj.hResetBtn = uicontrol('Parent', obj.hPanel, ...
+                'Style', 'pushbutton', ...
+                'Units', 'normalized', ...
+                'Position', [rightEdge btnY btnW btnH], ...
+                'String', 'Reset', ...
+                'TooltipString', ['Force re-render of all widgets on the active page ' ...
+                    '(recovery action when widgets get stuck)'], ...
+                'Callback', @(~,~) obj.onReset());
 
             % Events toggle — globally show/hide event markers across all
             % widgets. Wrapped in a thin panel so we can show a blue
@@ -232,6 +247,24 @@ classdef DashboardToolbar < handle
         function onConfig(obj)
         %ONCONFIG Open the dashboard config dialog.
             DashboardConfigDialog(obj.Engine);
+        end
+
+        function onReset(obj)
+        %ONRESET Manual recovery — re-render all widgets on the active page.
+        %   Delegates to DashboardEngine.rerenderWidgets which deletes every
+        %   widget panel, marks widgets unrealized, then re-allocates and
+        %   re-realizes them. Use when widgets get stuck (stale axes, zombie
+        %   state, transient render error). Safe to call while Live mode is
+        %   active — rerenderWidgets does not touch the Live timer state.
+            if isempty(obj.Engine)
+                return;
+            end
+            try
+                obj.Engine.rerenderWidgets();
+            catch ME
+                warning('DashboardToolbar:resetFailed', ...
+                    'Reset failed: %s', ME.message);
+            end
         end
 
         function onExport(obj)
