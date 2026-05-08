@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T06:38:30.000Z"
-last_activity: 2026-05-08 -- Completed quick task 260508-bxh: Gate WebSocket /ws endpoint with same origin policy as HTTP CORS
+last_updated: "2026-05-08T07:35:00.000Z"
+last_activity: 2026-05-08 -- Completed quick task 260508-d7k: fix companion app dark mode — uilistbox + 7 prophylactic widget classes added to theme walker
 progress:
   total_phases: 6
   completed_phases: 6
@@ -19,7 +19,7 @@ shipped_at: 2026-04-30
 
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Completed quick task 260508-bxh: Gate WebSocket /ws endpoint with same origin policy as HTTP CORS
+Last activity: 2026-05-08 -- Completed quick task 260508-d7k: fix companion app dark mode — uilistbox + 7 prophylactic widget classes added to theme walker
 
 ### Quick Tasks Completed
 
@@ -31,6 +31,7 @@ Last activity: 2026-05-08 -- Completed quick task 260508-bxh: Gate WebSocket /ws
 | 260508-b8m | Refresh CLAUDE.md for Tag-based API and add Running MATLAB code section | 2026-05-08 | 90d9c03 | — | [260508-b8m-refresh-claude-md-for-tag-based-api-and-](./quick/260508-b8m-refresh-claude-md-for-tag-based-api-and-/) |
 | 260508-bju | Lock down WebBridge CORS to localhost with env-var override | 2026-05-08 | 518b778 | Verified | [260508-bju-lock-down-webbridge-cors-to-localhost-on](./quick/260508-bju-lock-down-webbridge-cors-to-localhost-on/) |
 | 260508-bxh | Gate WebSocket /ws endpoint with same origin policy as HTTP CORS | 2026-05-08 | e1aeebc | — | [260508-bxh-gate-websocket-ws-endpoint-with-same-ori](./quick/260508-bxh-gate-websocket-ws-endpoint-with-same-ori/) |
+| 260508-d7k | Fix companion app dark mode — add uilistbox + 7 widget classes to theme walker | 2026-05-08 | 4472cc2 | Verified | [260508-d7k-fix-companion-app-dark-mode-switching-th](./quick/260508-d7k-fix-companion-app-dark-mode-switching-th/) |
 
 ## Progress Bar
 

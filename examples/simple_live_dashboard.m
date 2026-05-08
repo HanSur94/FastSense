@@ -94,8 +94,8 @@ function ctx = simple_live_dashboard()
         catch
         end
         try
-            if ~isempty(engine) && isvalid(engine) ...
-                    && ismethod(engine, 'stopLive')
+            if ~isempty(engine) && isvalid(engine) && ...
+                    ismethod(engine, 'stopLive')
                 engine.stopLive();
             end
         catch

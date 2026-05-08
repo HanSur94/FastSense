@@ -128,8 +128,8 @@ classdef InspectorPane < handle
                         if ~isfield(obj.Payload_, 'tag'); return; end
                         tag = obj.Payload_.tag;
                         if ~isobject(tag) || ~isvalid(tag); return; end
-                        if isempty(obj.hTagTable_) || ~isvalid(obj.hTagTable_) ...
-                                || ~strcmp(obj.RenderedTagKey_, char(tag.Key))
+                        if isempty(obj.hTagTable_) || ~isvalid(obj.hTagTable_) || ...
+                                ~strcmp(obj.RenderedTagKey_, char(tag.Key))
                             obj.renderState_();
                             return;
                         end
@@ -140,8 +140,8 @@ classdef InspectorPane < handle
                         if ~isfield(obj.Payload_, 'dashboard'); return; end
                         db = obj.Payload_.dashboard;
                         if ~isobject(db) || ~isvalid(db); return; end
-                        if isempty(obj.hDashTable_) || ~isvalid(obj.hDashTable_) ...
-                                || ~strcmp(obj.RenderedDashName_, char(db.Name))
+                        if isempty(obj.hDashTable_) || ~isvalid(obj.hDashTable_) || ...
+                                ~strcmp(obj.RenderedDashName_, char(db.Name))
                             obj.renderState_();
                             return;
                         end
@@ -153,8 +153,8 @@ classdef InspectorPane < handle
                         if isfield(obj.Payload_, 'tagKeys')
                             keys = obj.Payload_.tagKeys;
                         end
-                        if numel(obj.Payload_.tags) ~= numel(obj.hMultiSparkLines_) ...
-                                || ~isequal(keys, obj.RenderedMultiKeys_)
+                        if numel(obj.Payload_.tags) ~= numel(obj.hMultiSparkLines_) || ...
+                                ~isequal(keys, obj.RenderedMultiKeys_)
                             obj.renderState_();
                             return;
                         end
@@ -311,8 +311,8 @@ classdef InspectorPane < handle
             catch
             end
             try
-                if ~isempty(obj.hFig_) && isvalid(obj.hFig_) ...
-                        && strcmp(obj.hFig_.Visible, 'on')
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_) && ...
+                        strcmp(obj.hFig_.Visible, 'on')
                     uialert(obj.hFig_, err.message, 'FastSense Companion');
                 end
             catch
@@ -629,9 +629,9 @@ classdef InspectorPane < handle
                     return;
                 end
                 if isa(tag, 'SensorTag') || isa(tag, 'StateTag')
-                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
-                        && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
-                        && strcmp(tt.Parent.Key, key));
+                    rules = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') && ...
+                        ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') && ...
+                        strcmp(tt.Parent.Key, key));
                 elseif isa(tag, 'MonitorTag')
                     rules = {tag};
                 end
@@ -840,9 +840,9 @@ classdef InspectorPane < handle
         %   identically for 1..N tags.
             try
                 preset = 'dark';
-                if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) ...
-                        && isprop(obj.Orchestrator_, 'Theme') ...
-                        && ~isempty(obj.Orchestrator_.Theme)
+                if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) && ...
+                        isprop(obj.Orchestrator_, 'Theme') && ...
+                        ~isempty(obj.Orchestrator_.Theme)
                     preset = char(obj.Orchestrator_.Theme);
                 end
                 openAdHocPlot({tag}, 'LinkedGrid', preset);
@@ -857,8 +857,8 @@ classdef InspectorPane < handle
         function log_(obj, level, msg)
         %LOG_ Forward to orchestrator's log strip; safe if orchestrator is gone.
             try
-                if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) ...
-                        && ismethod(obj.Orchestrator_, 'addLogEntry')
+                if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) && ...
+                        ismethod(obj.Orchestrator_, 'addLogEntry')
                     obj.Orchestrator_.addLogEntry(level, msg);
                 end
             catch

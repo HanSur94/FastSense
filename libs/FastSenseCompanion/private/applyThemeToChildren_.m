@@ -2,8 +2,8 @@ function applyThemeToChildren_(rootHandle, theme)
 %APPLYTHEMETOCHILDREN_ Recursive walker that recolors uifigure subtrees in place.
 %   applyThemeToChildren_(rootHandle, theme) walks rootHandle.Children and
 %   sets BackgroundColor / FontColor / ForegroundColor properties from the
-%   given CompanionTheme struct. Recurses into uipanel and uigridlayout.
-%   Skips unknown widget classes silently.
+%   given CompanionTheme struct. Recurses into uipanel, uigridlayout, and
+%   uibuttongroup. Skips unknown widget classes silently.
 %
 %   theme must contain at least:
 %     WidgetBackground, WidgetBorderColor, ForegroundColor,
@@ -11,6 +11,14 @@ function applyThemeToChildren_(rootHandle, theme)
 %
 %   Each property assignment is wrapped in try/catch so a single
 %   incompatible widget cannot abort the rest of the repaint.
+%
+%   Covered widget classes (v260508-d7k):
+%     Containers (recurse): Panel, GridLayout, ButtonGroup
+%     Text/input:  Label, EditField, NumericEditField, TextArea, DropDown,
+%                  Spinner
+%     Buttons:     Button, StateButton, ToggleButton
+%     Selection:   CheckBox, RadioButton, ListBox
+%     Data:        Table
 %
 %   Out of scope: axes / uiaxes children (owned by FastSense widgets) and
 %   anything inside them (line/threshold colors).
@@ -45,6 +53,11 @@ function applyThemeToChildren_(rootHandle, theme)
                 try; ch.BackgroundColor = theme.WidgetBackground; catch; end
                 applyThemeToChildren_(ch, theme);
 
+            case 'matlab.ui.container.ButtonGroup'
+                try; ch.BackgroundColor = theme.WidgetBackground; catch; end
+                try; ch.BorderColor     = theme.WidgetBorderColor; catch; end
+                applyThemeToChildren_(ch, theme);
+
             case 'matlab.ui.control.Label'
                 % Labels inherit BackgroundColor from their parent — only
                 % update FontColor here.
@@ -67,6 +80,34 @@ function applyThemeToChildren_(rootHandle, theme)
                 % so do NOT special-case it here. Default to neutral styling.
                 try; ch.BackgroundColor = theme.WidgetBorderColor; catch; end
                 try; ch.FontColor       = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.ListBox'
+                try; ch.BackgroundColor = theme.WidgetBackground; catch; end
+                try; ch.FontColor       = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.TextArea'
+                try; ch.BackgroundColor = theme.WidgetBackground; catch; end
+                try; ch.FontColor       = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.CheckBox'
+                % CheckBox has no BackgroundColor -- it inherits from parent.
+                try; ch.FontColor = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.NumericEditField'
+                try; ch.BackgroundColor = theme.WidgetBackground; catch; end
+                try; ch.FontColor       = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.StateButton'
+                try; ch.BackgroundColor = theme.WidgetBorderColor; catch; end
+                try; ch.FontColor       = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.ToggleButton'
+                try; ch.BackgroundColor = theme.WidgetBorderColor; catch; end
+                try; ch.FontColor       = theme.ForegroundColor; catch; end
+
+            case 'matlab.ui.control.RadioButton'
+                % RadioButton has no BackgroundColor -- it inherits from parent.
+                try; ch.FontColor = theme.ForegroundColor; catch; end
 
             case 'matlab.ui.control.Table'
                 try; ch.ForegroundColor = theme.ForegroundColor; catch; end
