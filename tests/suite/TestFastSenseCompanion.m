@@ -1124,6 +1124,66 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'Last fire must observe IsLive=false after stopLiveMode.');
         end
 
+        % ---- Task 13: toolbar Events button + single-instance viewer wiring ----
+
+        function testEventsButtonExistsInToolbar(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(btn.Enable), 'on');
+        end
+
+        function testEventsButtonDisabledWhenNoStore(testCase)
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(btn.Enable), 'off');
+            testCase.verifyEqual(btn.Tooltip, 'No EventStore registered');
+        end
+
+        function testEventsButtonOpensViewerSingleInstance(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.openEventViewer_internalForTest();
+            v1 = app.getEventViewerForTest_();
+            testCase.verifyClass(v1, 'CompanionEventViewer');
+            app.openEventViewer_internalForTest();
+            v2 = app.getEventViewerForTest_();
+            testCase.verifySameHandle(v1, v2, 'Second click must reuse the existing viewer.');
+        end
+
+        function testCompanionCloseClosesViewer(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            app.openEventViewer_internalForTest();
+            v = app.getEventViewerForTest_();
+            f = v.hFigure;
+            app.close();
+            testCase.verifyFalse(isgraphics(f), 'Companion close must close viewer figure.');
+        end
+
+        function testViewerObjectBeingDestroyedClearsHandle(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.openEventViewer_internalForTest();
+            v = app.getEventViewerForTest_();
+            delete(v);
+            drawnow;
+            testCase.verifyEmpty(app.getEventViewerForTest_(), ...
+                'ObjectBeingDestroyed listener must clear EventViewer_.');
+        end
+
     end
 
     methods (Access = private)

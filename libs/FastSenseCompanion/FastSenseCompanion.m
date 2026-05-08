@@ -61,6 +61,7 @@ classdef FastSenseCompanion < handle
         hLayout_       = []   % root uigridlayout handle
         hToolbarPanel_ = []   % top toolbar uipanel (row 1, spans cols [1 3])
         hSettingsBtn_  = []   % gear button inside hToolbarPanel_ (right-aligned)
+        hEventsBtn_    = []   % toolbar uibutton: Events viewer launch
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
@@ -225,16 +226,31 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x5 grid — col 1 reserved for future toolbar items;
+            % Inner 1x5 grid — col 1 = Events viewer button (Task 13);
             % col 2 = Live: ON/OFF button; col 3 = Events log dropdown
             % (Phase 1027.1); col 4 = Live log dropdown (Phase 1027.1);
             % col 5 = gear button.
             hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 5]);
-            hToolbarGrid.ColumnWidth     = {'1x', 110, 150, 150, 36};
+            hToolbarGrid.ColumnWidth     = {110, 110, 150, 150, 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
             hToolbarGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            % Col 1 — Events viewer launch (Task 13).
+            obj.hEventsBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hEventsBtn_.Layout.Row    = 1;
+            obj.hEventsBtn_.Layout.Column = 1;
+            obj.hEventsBtn_.Text          = ['Events ', char(8599)];   % ↗
+            obj.hEventsBtn_.FontSize      = 11;
+            obj.hEventsBtn_.FontWeight    = 'bold';
+            obj.hEventsBtn_.Tag           = 'CompanionEventsBtn';
+            obj.hEventsBtn_.Tooltip       = 'Open the event viewer';
+            obj.hEventsBtn_.ButtonPushedFcn = @(~,~) obj.openEventViewer_();
+            if isempty(obj.EventStore_)
+                obj.hEventsBtn_.Enable  = 'off';
+                obj.hEventsBtn_.Tooltip = 'No EventStore registered';
+            end
 
             % Col 2 — Live: ON/OFF button (Phase 1027: moved from log header).
             obj.hLiveBtn_ = uibutton(hToolbarGrid, 'push');
@@ -427,6 +443,17 @@ classdef FastSenseCompanion < handle
             end
             % Diagnostic — confirms the X click reached close().
             fprintf('[FastSenseCompanion] close() invoked, tearing down...\n');
+            % Tear down the event viewer first so its listener doesn't fire
+            % into a half-deleted companion. Independent try/catch — viewer
+            % failure must not block the rest of teardown.
+            try
+                if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_)
+                    obj.EventViewer_.close();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] EventViewer cleanup failed: %s\n', err.message);
+            end
+            obj.EventViewer_ = [];
             % Stop and delete live timer first so no tick fires mid-teardown.
             try
                 if ~isempty(obj.LiveTimer_) && isvalid(obj.LiveTimer_)
@@ -928,6 +955,26 @@ classdef FastSenseCompanion < handle
             s = obj.EventStore_;
         end
 
+        function openEventViewer(obj)
+        %OPENEVENTVIEWER Public alias for the toolbar callback (used by tests / scripting).
+            obj.openEventViewer_();
+        end
+
+        function openEventViewer_internalForTest(obj)
+        %OPENEVENTVIEWER_INTERNALFORTEST Test shim: call openEventViewer_ directly.
+            obj.openEventViewer_();
+        end
+
+        function v = getEventViewerForTest_(obj)
+        %GETEVENTVIEWERFORTEST_ Test helper: return the EventViewer_ handle or [].
+            v = obj.EventViewer_;
+        end
+
+        function f = getFigForTest_(obj)
+        %GETFIGFORTEST_ Test helper: return the companion uifigure handle.
+            f = obj.hFig_;
+        end
+
     end
 
     methods (Access = private)
@@ -1297,6 +1344,26 @@ classdef FastSenseCompanion < handle
             catch err
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
+        end
+
+        function openEventViewer_(obj)
+        %OPENEVENTVIEWER_ Open or bring-to-front the singleton CompanionEventViewer.
+        %   Idempotent: second call focuses the existing viewer window.
+        %   No-op when EventStore_ is empty.
+            if isempty(obj.EventStore_); return; end
+            if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_) && ...
+                    ~isempty(obj.EventViewer_.hFigure) && isgraphics(obj.EventViewer_.hFigure)
+                obj.EventViewer_.bringToFront();
+                return;
+            end
+            obj.EventViewer_ = CompanionEventViewer(obj.EventStore_, obj.Registry_, obj);
+            obj.Listeners_{end+1} = addlistener(obj.EventViewer_, 'ObjectBeingDestroyed', ...
+                @(~,~) obj.clearEventViewerHandle_());
+        end
+
+        function clearEventViewerHandle_(obj)
+        %CLEAREVENTVIEWERHANDLE_ ObjectBeingDestroyed callback: clear the stale handle.
+            obj.EventViewer_ = [];
         end
 
         function onOpenAdHocPlotRequested_(obj, ~, evt)
