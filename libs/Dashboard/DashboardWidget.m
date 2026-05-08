@@ -230,43 +230,6 @@ classdef DashboardWidget < handle
                 end
             end
         end
-
-        function [pxW, pxH, pxHContent, contentTopFrac] = panelMetrics_(~, parentPanel)
-            %PANELMETRICS_ Pixel dimensions and the content area below the
-            % WidgetButtonBar (28 px tall, 2 px inset, 2 px breathing room
-            % below the bar — see DashboardLayout.getOrCreateButtonBar_).
-            %
-            % Subclasses use pxHContent for adaptive font sizing so values
-            % aren't clipped under the bar, and contentTopFrac for the top
-            % edge of normalized-units uicontrols/axes inside parentPanel.
-            %
-            % Outputs:
-            %   pxW            — panel width in pixels
-            %   pxH            — panel height in pixels
-            %   pxHContent     — usable content height (pxH - 32), >= 20
-            %   contentTopFrac — y-coordinate (in normalized units) of the
-            %                    top edge of the content area inside the
-            %                    panel; use as the upper Y for uicontrol
-            %                    Position rectangles to keep them clear of
-            %                    the button bar.
-            BUTTON_BAR_RESERVE_PX = 32;  % 28 px bar + 4 px breathing
-            try
-                oldUnits = get(parentPanel, 'Units');
-                set(parentPanel, 'Units', 'pixels');
-                pp = get(parentPanel, 'Position');
-                set(parentPanel, 'Units', oldUnits);
-                pxW = pp(3);
-                pxH = pp(4);
-            catch
-                pxW = 200; pxH = 100;
-            end
-            pxHContent = max(20, pxH - BUTTON_BAR_RESERVE_PX);
-            if pxH > 0
-                contentTopFrac = pxHContent / pxH;
-            else
-                contentTopFrac = 1;
-            end
-        end
     end
 
     % NOTE: Conceptually abstract -- every subclass MUST override these methods.
