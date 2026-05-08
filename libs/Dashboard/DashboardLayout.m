@@ -569,9 +569,10 @@ classdef DashboardLayout < handle
         function bar = getOrCreateButtonBar_(obj, widget) %#ok<INUSL>
         %GETORCREATEBUTTONBAR_ Return the per-widget button bar uipanel,
         %   creating it the first time. The bar is a small opaque strip in
-        %   the top-right of widget.hPanel that hosts the info + detach
-        %   buttons so they aren't obscured by widget content drawn behind
-        %   them. Tag = 'WidgetButtonBar' (protected by sweepUserChildren_).
+        %   the top-right corner of widget.hPanel that hosts the info +
+        %   detach buttons in a stable hit-target area regardless of widget
+        %   content drawn behind/below it. Tag = 'WidgetButtonBar'
+        %   (protected by sweepUserChildren_).
             existing = findobj(widget.hPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
             if ~isempty(existing) && ishandle(existing(1))
                 bar = existing(1);
@@ -591,17 +592,19 @@ classdef DashboardLayout < handle
             else
                 barBg = theme.ToolbarBackground;
             end
-            % Full-width header strip, 28px tall, anchored at the top of
-            % the widget panel. Inset by 2px on left/right/top to keep the
-            % widget panel border visible.
+            % Small right-anchored strip, 28px tall, anchored at the
+            % top-right of the widget panel. Sized to host the info +
+            % detach buttons (2 * 24px buttons + spacing) so it sits in a
+            % stable hit-target area regardless of widget content drawn
+            % behind/below it. Inset by 2px from the panel edges.
             oldUnits = get(widget.hPanel, 'Units');
             set(widget.hPanel, 'Units', 'pixels');
             pp = get(widget.hPanel, 'Position');
             set(widget.hPanel, 'Units', oldUnits);
             barH = 28;
             inset = 2;
-            barW = pp(3) - 2 * inset;
-            x = inset;
+            barW = min(64, max(1, pp(3) - 2 * inset));
+            x = max(inset, pp(3) - barW - inset);
             y = pp(4) - barH - inset;
             bar = uipanel('Parent', widget.hPanel, ...
                 'Units', 'pixels', ...
@@ -680,12 +683,14 @@ classdef DashboardLayout < handle
         end
     end
 
-    methods (Static, Access = private)
+    methods (Static)
 
         function reflowButtonBar_(hPanel, barH, inset)
         %REFLOWBUTTONBAR_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
         %   uipanel and its right-aligned buttons after the parent panel resizes.
         %   No-op when the panel has been deleted or the bar isn't there yet.
+        %   Public so tests can drive a deterministic resize without relying
+        %   on SizeChangedFcn firing under -batch.
             if ~ishandle(hPanel), return; end
             bar = findobj(hPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
             if isempty(bar) || ~ishandle(bar(1)), return; end
@@ -694,9 +699,10 @@ classdef DashboardLayout < handle
             set(hPanel, 'Units', 'pixels');
             pp = get(hPanel, 'Position');
             set(hPanel, 'Units', oldUnits);
-            barW = max(1, pp(3) - 2 * inset);
+            barW = min(64, max(1, pp(3) - 2 * inset));
+            x = max(inset, pp(3) - barW - inset);
             set(bar, 'Units', 'pixels', ...
-                'Position', [inset, pp(4) - barH - inset, barW, barH]);
+                'Position', [x, pp(4) - barH - inset, barW, barH]);
             % Re-anchor right-aligned buttons inside the bar.
             det  = findobj(bar, 'Tag', 'DetachButton',   '-depth', 1);
             info = findobj(bar, 'Tag', 'InfoIconButton', '-depth', 1);
@@ -707,6 +713,10 @@ classdef DashboardLayout < handle
                 set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
             end
         end
+
+    end
+
+    methods (Static, Access = private)
 
         function anchorTopRight(btn, offsetFromRight)
         %ANCHORTOPRIGHT Position a pixel-sized button at the top-right of its parent.

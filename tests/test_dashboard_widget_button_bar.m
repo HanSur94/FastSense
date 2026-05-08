@@ -109,21 +109,16 @@ function test_dashboard_widget_button_bar()
         bar = bar(1);
         widgetPanel = get(bar, 'Parent');
 
-        % Trigger SizeChangedFcn by directly invoking the callback that
-        % getOrCreateButtonBar_ wired (interactive sessions only). When
-        % running under -batch, the callback is intentionally skipped, so
-        % we resize the panel manually and re-derive the expected bar
-        % position from the same right-anchor formula.
-        scf = get(widgetPanel, 'SizeChangedFcn');
-        if ~isempty(scf)
-            % Resize the panel to a new pixel size and fire the handler.
-            oldUnits = get(widgetPanel, 'Units');
-            set(widgetPanel, 'Units', 'pixels');
-            pp = get(widgetPanel, 'Position');
-            set(widgetPanel, 'Position', [pp(1) pp(2) pp(3) - 30 pp(4)]);
-            try feval(scf, widgetPanel, []); catch, end
-            set(widgetPanel, 'Units', oldUnits);
-        end
+        % Resize the panel to a new pixel width and call the static
+        % reflow helper that production wires to SizeChangedFcn. Calling
+        % it directly keeps the test deterministic across desktop / -batch
+        % MATLAB, which differ in whether SizeChangedFcn is wired.
+        oldUnits = get(widgetPanel, 'Units');
+        set(widgetPanel, 'Units', 'pixels');
+        pp = get(widgetPanel, 'Position');
+        set(widgetPanel, 'Position', [pp(1) pp(2) pp(3) - 30 pp(4)]);
+        DashboardLayout.reflowButtonBar_(widgetPanel, 28, 2);
+        set(widgetPanel, 'Units', oldUnits);
 
         [barPos, panelPos] = getPixelPositions_(bar);
         inset = 2;
