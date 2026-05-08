@@ -48,6 +48,7 @@ FASTSENSE Construct a FastSense instance.
 | ShowThresholdLabels | `false` | show inline name labels on threshold lines |
 | ShowEventMarkers | `true` | toggle event round-marker overlay (EVENT-07) |
 | EventStore | `[]` | EventStore handle for event overlay queries |
+| HoverCrosshair | `true` | enable hover crosshair + multi-line datatip (set false to disable; see HoverCrosshair.m) |
 | MinPointsForDownsample | `5000` | below this, plot raw data |
 | DownsampleFactor | `2` | points per pixel (min + max) |
 | PyramidReduction | `100` | reduction factor per pyramid level |
@@ -1043,4 +1044,63 @@ COMPUTETILEPOSITION Calculate normalized [x y w h] for tile n.
   ContentOffset. Tiles are numbered in row-major order with
   top-left origin, then converted to MATLAB's bottom-left
   coordinate system.
+
+---
+
+## `HoverCrosshair` --- Hover-driven vertical crosshair + multi-line datatip for FastSense.
+
+> Inherits from: `handle`
+
+hc = HOVERCROSSHAIR(fp) attaches a hover crosshair to a rendered
+  FastSense instance fp. While the mouse is over fp.hAxes, a vertical
+  line tracks the cursor's x position and a small datatip near the
+  cursor shows the formatted x value plus one row per visible line
+  (DisplayName + interpolated y at hovered x via binary_search).
+
+  The handler is *chained*: any pre-existing WindowButtonMotionFcn
+  on the figure is preserved and invoked first on every motion event,
+  so this class coexists with other hover-driven features
+  (FastSenseToolbar crosshair toggle, NavigatorOverlay drag, etc.).
+
+  Properties (read-only):
+    Target           — FastSense instance
+    hFigure, hAxes   — cached graphics handles
+    hLineV           — vertical crosshair line
+    hTipBox          — text annotation acting as datatip box
+
+  Methods:
+    onMove(xQuery)   — update + show crosshair at xQuery (data coords)
+    onLeave()        — hide crosshair + datatip
+    delete()         — restore prior WindowButtonMotionFcn and clean up
+
+  Coexistence with FastSenseToolbar:
+    The toolbar's setCrosshair() also swaps WindowButtonMotionFcn at
+    activation. Because we only chain whatever handler was installed
+    when our constructor ran, when the toolbar later overwrites the
+    callback our hover handler is temporarily detached (toolbar mode
+    wins). When the toolbar deactivates and restores its saved
+    callback (which is *our* chained handler), hover resumes
+    automatically.
+
+### Constructor
+
+```matlab
+obj = HoverCrosshair(fp)
+```
+
+HOVERCROSSHAIR Construct hover crosshair attached to a FastSense.
+  hc = HOVERCROSSHAIR(fp) requires fp to be a rendered FastSense
+  handle. Throws HoverCrosshair:invalidTarget if not.
+
+### Methods
+
+#### `onMove(obj, xQuery)`
+
+ONMOVE Update + show the crosshair at data x-coordinate xQuery.
+  Public so tests can drive motion deterministically without
+  needing real mouse input.
+
+#### `onLeave(obj)`
+
+ONLEAVE Hide the crosshair line + datatip.
 

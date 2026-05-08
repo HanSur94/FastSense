@@ -88,6 +88,7 @@ classdef FastSense < handle
         ShowThresholdLabels = false  % show inline name labels on threshold lines
         ShowEventMarkers = true     % toggle event round-marker overlay (EVENT-07)
         EventStore = []             % EventStore handle for event overlay queries
+        HoverCrosshair = true       % enable hover crosshair + multi-line datatip (set false to disable; see HoverCrosshair.m)
     end
 
     % ====================== INTERNAL DATA STORAGE ========================
@@ -153,6 +154,7 @@ classdef FastSense < handle
     properties (SetAccess = private)
         hEventDetails_ = []               % popup figure handle (empty when no popup open)
         EventContextMenu_ = []            % cached uicontextmenu (lazy; one per FastSense)
+        HoverCrosshair_ = []              % HoverCrosshair instance (created in render() when HoverCrosshair=true)
     end
 
     % ===================== PERFORMANCE TUNING ============================
@@ -216,6 +218,7 @@ classdef FastSense < handle
             defaults.YScale = cfg.YScale;
             defaults.StorageMode = cfg.StorageMode;
             defaults.MemoryLimit = cfg.MemoryLimit;
+            defaults.HoverCrosshair = true;
             [opts, ~] = parseOpts(defaults, varargin);
 
             obj.ParentAxes = opts.Parent;
@@ -230,6 +233,7 @@ classdef FastSense < handle
             obj.YScale = opts.YScale;
             obj.StorageMode = opts.StorageMode;
             obj.MemoryLimit = opts.MemoryLimit;
+            obj.HoverCrosshair = logical(opts.HoverCrosshair);
             obj.Theme = resolveTheme(opts.Theme, cfg.Theme);
         end
 
@@ -1571,6 +1575,19 @@ classdef FastSense < handle
                 end
                 drawnow;
             end
+
+            % Attach hover crosshair (default on; opt-out via constructor or property).
+            % try/catch keeps render() resilient on platforms where mouse handlers misbehave.
+            if obj.HoverCrosshair && isempty(obj.HoverCrosshair_)
+                try
+                    obj.HoverCrosshair_ = HoverCrosshair(obj);
+                catch ME
+                    if obj.Verbose
+                        fprintf('[FastSense] HoverCrosshair init failed: %s\n', ME.message);
+                    end
+                    obj.HoverCrosshair_ = [];
+                end
+            end
         end
 
         function result = lookupMetadata(obj, lineIdx, xValue)
@@ -1898,6 +1915,12 @@ classdef FastSense < handle
             %   timer callbacks referencing deleted objects.
             %
             %   See also stopLive, stopRefineTimer.
+            % Tear down HoverCrosshair FIRST so its chained motion handler
+            % is restored on the figure before any other teardown runs.
+            if ~isempty(obj.HoverCrosshair_) && isvalid(obj.HoverCrosshair_)
+                try delete(obj.HoverCrosshair_); catch; end
+            end
+            obj.HoverCrosshair_ = [];
             obj.stopRefineTimer();
             try obj.stopLive(); catch; end
             % Clean up disk-backed DataStores

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T10:30:00.000Z"
-last_activity: 2026-05-08 -- Merged origin/main (PR #110 lint cleanup + 260508-d7k companion theme walker fix) into PR #109
+last_updated: "2026-05-08T11:00:00.000Z"
+last_activity: 2026-05-08 -- Merged origin/main (PR #112 hover crosshair + #110 lint + d7k walker) into PR #109
 progress:
   total_phases: 6
   completed_phases: 6
@@ -19,7 +19,7 @@ shipped_at: 2026-04-30
 
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Merged origin/main (PR #110 lint cleanup + 260508-d7k companion theme walker fix) into PR #109
+Last activity: 2026-05-08 -- Merged origin/main (PR #112 hover crosshair + #110 lint + d7k walker) into PR #109
 
 ### Quick Tasks Completed
 
@@ -32,6 +32,7 @@ Last activity: 2026-05-08 -- Merged origin/main (PR #110 lint cleanup + 260508-d
 | 260508-bju | Lock down WebBridge CORS to localhost with env-var override | 2026-05-08 | 518b778 | Verified | [260508-bju-lock-down-webbridge-cors-to-localhost-on](./quick/260508-bju-lock-down-webbridge-cors-to-localhost-on/) |
 | 260508-bxh | Gate WebSocket /ws endpoint with same origin policy as HTTP CORS | 2026-05-08 | e1aeebc | — | [260508-bxh-gate-websocket-ws-endpoint-with-same-ori](./quick/260508-bxh-gate-websocket-ws-endpoint-with-same-ori/) |
 | 260508-d7k | Fix companion app dark mode — add uilistbox + 7 widget classes to theme walker | 2026-05-08 | 4472cc2 | Verified | [260508-d7k-fix-companion-app-dark-mode-switching-th](./quick/260508-d7k-fix-companion-app-dark-mode-switching-th/) |
+| 260508-d8y | FastSense hover crosshair + datatip | 2026-05-08 | 0221795 | — | [260508-d8y-fastsense-hover-crosshair-datatip](./quick/260508-d8y-fastsense-hover-crosshair-datatip/) |
 | 260508-das | Restore dashboard time-slider preview lines + event markers (backlog 999.3) | 2026-05-08 | 4110024 | Verified | [260508-das-implement-backlog-999-3-dashboard-time-s](./quick/260508-das-implement-backlog-999-3-dashboard-time-s/) |
 | 260508-edd | Color dashboard slider preview event markers per-severity (sev1/2/3 -> green/orange/red) | 2026-05-08 | 9c1ef82 | Verified | [260508-edd-color-slider-preview-event-markers-per-e](./quick/260508-edd-color-slider-preview-event-markers-per-e/) |
 | 260508-eu2 | Restore EventStore on detached FastSenseWidget so event markers stay visible after detach | 2026-05-08 | 952ad90 | Verified | [260508-eu2-restore-eventstore-on-detached-fastsense](./quick/260508-eu2-restore-eventstore-on-detached-fastsense/) |
