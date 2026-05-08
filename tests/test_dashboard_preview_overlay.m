@@ -40,6 +40,7 @@ function test_dashboard_preview_overlay()
     nPassed = nPassed + runCase_(@() case_empty_dashboard_no_crash(),             'empty_dashboard_no_crash');
     nPassed = nPassed + runCase_(@() case_preview_cache_short_circuit(),          'preview_cache_short_circuit');
     nPassed = nPassed + runCase_(@() case_multipage_preview_follows_active_tab(), 'multipage_preview_follows_active_tab');
+    nPassed = nPassed + runCase_(@() case_nested_group_preview_lines(),           'nested_group_preview_lines');
 
     try close(findall(0, 'Type', 'figure')); catch, end
     fprintf('    All %d tests passed.\n', nPassed);
@@ -396,6 +397,52 @@ function case_multipage_preview_follows_active_tab()
         sprintf('KOV-01 reverse: expected >=1 preview line in [0,10] (active P1), got %d', nLow));
     assert(nHigh == 0, ...
         sprintf('KOV-01 reverse: expected 0 preview lines in [200,210] (inactive P2), got %d', nHigh));
+end
+
+function case_nested_group_preview_lines()
+    %CASE_NESTED_GROUP_PREVIEW_LINES 260508-l2k regression.
+    %   Build a single-page dashboard whose only top-level widget is a
+    %   GroupWidget containing two FastSenseWidgets with disjoint Y
+    %   ranges. Before 260508-l2k the slider preview iterated only
+    %   top-level widgets and the Group's base getPreviewSeries() returns
+    %   [], so no lines were drawn. After the fix the engine flattens
+    %   the active page's widget list through getNestedWidgets() and
+    %   each child contributes a preview line.
+    x  = linspace(0, 100, 500);
+    y1 = sin(x * 0.1);
+    y2 = cos(x * 0.1) * 5;
+    w1 = FastSenseWidget('Title', 'nestA', 'XData', x, 'YData', y1);
+    w2 = FastSenseWidget('Title', 'nestB', 'XData', x, 'YData', y2);
+    g  = GroupWidget('Label', 'Nested', 'Mode', 'panel');
+    g.addChild(w1);
+    g.addChild(w2);
+
+    d = DashboardEngine('preview-nested-group');
+    d.addWidget(g);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
+    drawnow;
+
+    sel = d.TimeRangeSelector_;
+    assert(~isempty(sel.hPreviewLines), ...
+        'Expected hPreviewLines non-empty when widgets are nested in a GroupWidget (260508-l2k)');
+    assert(numel(sel.hPreviewLines) == 2, ...
+        sprintf('Expected 2 preview lines from nested Group children, got %d', numel(sel.hPreviewLines)));
+
+    % Sanity check: each line's X data is non-trivial and inside the
+    % overall data range. Mirrors case_two_widgets_have_preview_lines.
+    dr = sel.DataRange;
+    span = dr(2) - dr(1);
+    pad = 0.05 * span;
+    for k = 1:numel(sel.hPreviewLines)
+        h = sel.hPreviewLines(k);
+        assert(ishandle(h), sprintf('nested preview line %d not a valid handle', k));
+        xd = get(h, 'XData');
+        assert(numel(xd) > 1, sprintf('nested preview line %d has too few points (%d)', k, numel(xd)));
+        assert(all(xd >= dr(1) - pad) && all(xd <= dr(2) + pad), ...
+            sprintf('nested preview line %d X out of DataRange [%g %g]: [%g %g]', ...
+                    k, dr(1), dr(2), min(xd), max(xd)));
+    end
 end
 
 function [nLow, nHigh] = classifyPreviewLines_(sel)
