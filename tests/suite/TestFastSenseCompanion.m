@@ -1007,35 +1007,15 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         end
 
         % ---- Task 1: Auto-discover EventStore from registry ----
-        % These three tests delegate to runDiscoverEventStoreTests(), which
-        % lives in libs/FastSenseCompanion/ and has MATLAB private-directory
-        % access to companionDiscoverEventStore.
 
-        function testDiscoverEventStoreReturnsEmptyOnEmptyRegistry(testCase)
-        %TESTDISCOVEREVENTSTORERETURNSEMPTYONEMPTYREGISTRY
-        %   With no MonitorTags carrying an EventStore, helper returns [].
+        function testDiscoverEventStoreSuite(testCase)
+        %TESTDISCOVEREVENTSTORESUITE Run the flat-file test suite for the helper.
+        %   Wraps the assert-based runner so its stdout output is captured and
+        %   any assertion failure is surfaced as an xunit-style test failure.
+            TagRegistry.clear();
             testCase.addTeardown(@() TagRegistry.clear());
-            r = runDiscoverEventStoreTests();
-            idx = strcmp({r.name}, 'testDiscoverEventStoreReturnsEmptyOnEmptyRegistry');
-            testCase.verifyTrue(r(idx).passed, r(idx).msg);
-        end
-
-        function testDiscoverEventStoreFindsFirstMonitorTagStore(testCase)
-        %TESTDISCOVEREVENTSTOREFINDSFIRSTMONITORTAGSTORE
-        %   Registry with one MonitorTag whose EventStore is set returns it.
-            testCase.addTeardown(@() TagRegistry.clear());
-            r = runDiscoverEventStoreTests();
-            idx = strcmp({r.name}, 'testDiscoverEventStoreFindsFirstMonitorTagStore');
-            testCase.verifyTrue(r(idx).passed, r(idx).msg);
-        end
-
-        function testDiscoverEventStoreSkipsTagsWithoutStore(testCase)
-        %TESTDISCOVEREVENTSTORESKIPSTAGSWITHOUTSTORE
-        %   Registry with MonitorTags whose EventStore is [] returns [].
-            testCase.addTeardown(@() TagRegistry.clear());
-            r = runDiscoverEventStoreTests();
-            idx = strcmp({r.name}, 'testDiscoverEventStoreSkipsTagsWithoutStore');
-            testCase.verifyTrue(r(idx).passed, r(idx).msg);
+            testCase.verifyWarningFree(@() evalc('runDiscoverEventStoreTests()'), ...
+                'runDiscoverEventStoreTests must complete without errors.');
         end
 
     end

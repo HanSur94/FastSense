@@ -1,50 +1,24 @@
-function results = runDiscoverEventStoreTests()
-%RUNDISCOVEREVENTRESTORETESTS Execute unit tests for companionDiscoverEventStore.
-%   results = runDiscoverEventStoreTests() exercises the private helper
-%   companionDiscoverEventStore and returns a struct array, one element per
-%   test, with fields:
-%     name   — char, test name
-%     passed — logical, true if the assertion held
-%     msg    — char, failure message (empty when passed)
-%
-%   This runner lives in libs/FastSenseCompanion/ (same directory as the
-%   private/ sub-folder) so that MATLAB's private-directory mechanism makes
-%   companionDiscoverEventStore visible.  Tests in TestFastSenseCompanion
-%   delegate here via a single call.
+function runDiscoverEventStoreTests()
+%RUNDISCOVEREVENTSTORETESTS Execute unit tests for companionDiscoverEventStore.
+%   Called by tests/test_companion_discover_event_store.m.  Lives here
+%   (inside libs/FastSenseCompanion) so that MATLAB's private-directory
+%   mechanism makes companionDiscoverEventStore visible (private functions
+%   are accessible to callers in the same folder).
 %
 %   See also companionDiscoverEventStore, TestFastSenseCompanion.
 
-    results = runTest1_emptyRegistry_();
-    results(end+1) = runTest2_findsFirstStore_();
-    results(end+1) = runTest3_skipsTagsWithoutStore_();
-end
+    nPassed = 0;
 
-% ---------------------------------------------------------------------------
-
-function r = runTest1_emptyRegistry_()
-%RUNTEST1_EMPTYREGISTRY_ Empty registry -> [] returned.
-    r.name = 'testDiscoverEventStoreReturnsEmptyOnEmptyRegistry';
-    r.passed = false;
-    r.msg = '';
+    % --- Test 1: empty registry -> [] returned ---
     TagRegistry.clear();
-    try
-        store = companionDiscoverEventStore();
-        if isempty(store)
-            r.passed = true;
-        else
-            r.msg = 'companionDiscoverEventStore: empty registry must return [].';
-        end
-    catch e
-        r.msg = e.message;
-    end
+    store = companionDiscoverEventStore();
+    assert(isempty(store), ...
+        'Test 1: companionDiscoverEventStore must return [] for an empty registry.');
     TagRegistry.clear();
-end
+    nPassed = nPassed + 1;
 
-function r = runTest2_findsFirstStore_()
-%RUNTEST2_FINDSFIRSTSTORE_ MonitorTag with EventStore -> handle returned.
-    r.name = 'testDiscoverEventStoreFindsFirstMonitorTagStore';
-    r.passed = false;
-    r.msg = '';
+    % --- Test 2: MonitorTag with EventStore -> handle returned ---
+    storePath = '';
     TagRegistry.clear();
     try
         parent = SensorTag('p', 'Name', 'P', 'Units', 'u', ...
@@ -54,47 +28,40 @@ function r = runTest2_findsFirstStore_()
         storePath = [tempname() '.mat'];
         es = EventStore(storePath);
 
-        mon = MonitorTag('m', parent, @(x,y) y > 100, ...
+        mon = MonitorTag('m', parent, @(x, y) y > 100, ...
             'EventStore', es);
         TagRegistry.register('m', mon);
 
         found = companionDiscoverEventStore();
-        if ~isempty(found) && found == es
-            r.passed = true;
-        else
-            r.msg = 'companionDiscoverEventStore: must return the MonitorTag''s EventStore.';
-        end
+        assert(~isempty(found) && found == es, ...
+            'Test 2: companionDiscoverEventStore must return the MonitorTag''s EventStore.');
     catch e
-        r.msg = e.message;
+        TagRegistry.clear();
+        if exist(storePath, 'file') == 2
+            delete(storePath);
+        end
+        rethrow(e);
     end
     TagRegistry.clear();
     if exist(storePath, 'file') == 2
         delete(storePath);
     end
-end
+    nPassed = nPassed + 1;
 
-function r = runTest3_skipsTagsWithoutStore_()
-%RUNTEST3_SKIPSTAGSWITHOUSTORE_ MonitorTag without EventStore -> [] returned.
-    r.name = 'testDiscoverEventStoreSkipsTagsWithoutStore';
-    r.passed = false;
-    r.msg = '';
+    % --- Test 3: MonitorTag without EventStore -> [] returned ---
     TagRegistry.clear();
-    try
-        parent = SensorTag('p', 'Name', 'P', 'Units', 'u', ...
-            'X', [0 1 2], 'Y', [1 2 3]);
-        TagRegistry.register('p', parent);
+    parent = SensorTag('p', 'Name', 'P', 'Units', 'u', ...
+        'X', [0 1 2], 'Y', [1 2 3]);
+    TagRegistry.register('p', parent);
 
-        mon = MonitorTag('m', parent, @(x,y) y > 100);   % no EventStore
-        TagRegistry.register('m', mon);
+    mon = MonitorTag('m', parent, @(x, y) y > 100);   % no EventStore
+    TagRegistry.register('m', mon);
 
-        found = companionDiscoverEventStore();
-        if isempty(found)
-            r.passed = true;
-        else
-            r.msg = 'companionDiscoverEventStore: must return [] when no monitor has a store.';
-        end
-    catch e
-        r.msg = e.message;
-    end
+    found = companionDiscoverEventStore();
+    assert(isempty(found), ...
+        'Test 3: companionDiscoverEventStore must return [] when no monitor has a store.');
     TagRegistry.clear();
+    nPassed = nPassed + 1;
+
+    fprintf('    All %d tests passed.\n', nPassed);
 end
