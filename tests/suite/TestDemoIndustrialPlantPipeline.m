@@ -15,6 +15,15 @@ classdef TestDemoIndustrialPlantPipeline < matlab.unittest.TestCase
     %     - testTeardownLeavesNoDanglingTimers   timerfindall delta = 0
 
     methods (TestClassSetup)
+        function gateModernMatlab(testCase)
+            %GATEMODERNMATLAB Skip on MATLAB R2020b — same libmex segfault
+            %   pattern as TestDemoIndustrialPlantHeadless inside
+            %   build_store_mex / mksqlite during run_demo's data path.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeTrue(~verLessThan('matlab', '9.10'), ...
+                'TestDemoIndustrialPlantPipeline segfaults on R2020b libmex; needs R2021a+');
+        end
+
         function addPaths(~)
             here = fileparts(mfilename('fullpath'));
             addpath(fullfile(here, '..', '..'));
