@@ -29,7 +29,8 @@ function test_hover_crosshair()
         @test_out_of_range_shows_dash, ...
         @test_leave_hides, ...
         @test_delete_cleanup, ...
-        @test_chain_preserved ...
+        @test_chain_preserved, ...
+        @test_invalid_obj_no_error ...
     };
     % Append integration tests if the FastSense.HoverCrosshair property
     % wiring landed (Task 2). Older builds without the property gracefully
@@ -155,6 +156,48 @@ function test_chain_preserved()
     assert(exist(flagFile, 'file') == 2, ...
         'sentinel handler was not invoked via the chained callback');
     delete(hc);
+end
+
+function test_invalid_obj_no_error()
+    %TEST_INVALID_OBJ_NO_ERROR Regression: onFigureMove_ on an invalidated
+    %   HoverCrosshair must early-return silently rather than throw
+    %   "Invalid or deleted object" when a stale closure fires after the
+    %   widget panel hosting the HoverCrosshair has been torn down via
+    %   DashboardEngine.rerenderWidgets / Reset (260508-od4).
+    [fp, hFig] = makeFp_(2);
+    cleanup = onCleanup(@() safeClose_(hFig)); %#ok<NASGU>
+
+    hc = HoverCrosshair(fp);
+
+    % Capture the closure currently installed on the figure (this is
+    % the @(s,e) obj.onFigureMove_(s,e) wrapper bound to hc).
+    wbm = get(hFig, 'WindowButtonMotionFcn');
+    assert(isa(wbm, 'function_handle'), ...
+        'expected figure WBMFcn to be a function handle after construction');
+
+    % Invalidate hc. delete() restores PrevWBMFcn_ so the figure no
+    % longer points at our stale closure — but to simulate the bug
+    % condition (Reset / rerenderWidgets path where a sibling or stale
+    % redraw re-installs the closure after the underlying obj is gone),
+    % we explicitly re-install the captured closure AFTER delete().
+    delete(hc);
+    set(hFig, 'WindowButtonMotionFcn', wbm);
+
+    % Invoke the now-stale closure.
+    %   Pre-fix: throws "Invalid or deleted object" at obj.PrevWBMFcn_.
+    %   Post-fix: returns silently because ~isvalid(obj) is checked
+    %             before any property access.
+    threw = false;
+    errMsg = '';
+    try
+        wbm(hFig, []);
+    catch err
+        threw = true;
+        errMsg = err.message;
+    end
+    assert(~threw, ...
+        'onFigureMove_ on invalid HoverCrosshair must not throw (got: %s)', ...
+        errMsg);
 end
 
 function test_disable_property()
