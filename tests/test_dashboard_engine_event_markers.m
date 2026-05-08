@@ -26,6 +26,7 @@ function test_dashboard_engine_event_markers()
     nPassed = nPassed + runCase(@() case_non_finite_filtered(),       'non_finite');
     nPassed = nPassed + runCase(@() case_empty_widgets_no_crash(),    'empty');
     nPassed = nPassed + runCase(@() case_throwing_widget_swallowed(), 'throwing');
+    nPassed = nPassed + runCase(@() case_nested_group_event_markers(),'nested_group_event_markers');
 
     fprintf('    All %d tests passed.\n', nPassed);
 end
@@ -166,6 +167,33 @@ function case_throwing_widget_swallowed()
     cleanup = onCleanup(@() closeDashboard(d));
     assert(isequal(markerXData(d.TimeRangeSelector_), [10 20]), ...
         'throwing widget must not block siblings');
+end
+
+function case_nested_group_event_markers()
+    %CASE_NESTED_GROUP_EVENT_MARKERS 260508-l2k regression.
+    %   Two EventTimelineWidgets with disjoint event times nested inside
+    %   a single GroupWidget. Before 260508-l2k the engine iterated only
+    %   top-level widgets, so the Group's base getEventTimes() returned []
+    %   and the slider showed no markers. After the fix the active page's
+    %   widget list is flattened via getNestedWidgets() and the slider
+    %   reflects the union of both children's events.
+    e1 = struct('startTime', {5, 15}, 'endTime', {6, 16}, ...
+                'label', {'A','B'}, 'color', {[1 0 0],[0 1 0]});
+    e2 = struct('startTime', {25, 35}, 'endTime', {26, 36}, ...
+                'label', {'C','D'}, 'color', {[0 0 1],[1 1 0]});
+    w1 = EventTimelineWidget('Title', 'nestA', 'Events', e1);
+    w2 = EventTimelineWidget('Title', 'nestB', 'Events', e2);
+    g  = GroupWidget('Label', 'Nested', 'Mode', 'panel');
+    g.addChild(w1);
+    g.addChild(w2);
+
+    d = DashboardEngine('EvtMarkNestedGroup');
+    d.addWidget(g);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard(d));
+    x = markerXData(d.TimeRangeSelector_);
+    assert(isequal(x, [5 15 25 35]), ...
+        sprintf('expected [5 15 25 35] from nested Group children, got %s', mat2str(x)));
 end
 
 function x = markerXData(sel)

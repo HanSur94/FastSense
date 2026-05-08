@@ -39,6 +39,8 @@ function test_dashboard_preview_overlay()
     nPassed = nPassed + runCase_(@() case_max_severity_wins_on_duplicate_times(), 'max_severity_wins_on_duplicate_times');
     nPassed = nPassed + runCase_(@() case_empty_dashboard_no_crash(),             'empty_dashboard_no_crash');
     nPassed = nPassed + runCase_(@() case_preview_cache_short_circuit(),          'preview_cache_short_circuit');
+    nPassed = nPassed + runCase_(@() case_multipage_preview_follows_active_tab(), 'multipage_preview_follows_active_tab');
+    nPassed = nPassed + runCase_(@() case_nested_group_preview_lines(),           'nested_group_preview_lines');
 
     try close(findall(0, 'Type', 'figure')); catch, end
     fprintf('    All %d tests passed.\n', nPassed);
@@ -347,6 +349,118 @@ function case_preview_cache_short_circuit()
     t1 = tic; for k = 1:5; w.getPreviewSeries(200); end; firstBatch = toc(t1);
     assert(firstBatch < 5.0, ...
         sprintf('preview pipeline too slow: 5 cached calls took %.3fs', firstBatch));
+end
+
+function case_multipage_preview_follows_active_tab()
+    %CASE_MULTIPAGE_PREVIEW_FOLLOWS_ACTIVE_TAB KOV-01 regression.
+    %   Build a 2-page dashboard with disjoint X ranges per page; assert
+    %   the slider preview reflects ONLY the active page's widgets and
+    %   that switching pages swaps which line is visible. Inverse of
+    %   the (now-reverted) 260508-kau aggregation contract.
+    x1 = linspace(0,   10,  500);
+    y1 = sin(x1 * 0.1);
+    x2 = linspace(200, 210, 500);
+    y2 = cos(x2 * 0.1);
+
+    d = DashboardEngine('preview-multipage-pertab');
+    d.addPage('P1');
+    d.addWidget('fastsense', 'Title', 'wP1', 'XData', x1, 'YData', y1);
+    d.addPage('P2');
+    d.switchPage(2);
+    d.addWidget('fastsense', 'Title', 'wP2', 'XData', x2, 'YData', y2);
+    d.switchPage(1);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
+    drawnow;
+
+    % Initial render: P1 active. Expect a P1-range line, NO P2-range line.
+    [nLow, nHigh] = classifyPreviewLines_(d.TimeRangeSelector_);
+    assert(nLow  >= 1, ...
+        sprintf('KOV-01 initial: expected >=1 preview line in [0,10] (active P1), got %d', nLow));
+    assert(nHigh == 0, ...
+        sprintf('KOV-01 initial: expected 0 preview lines in [200,210] (inactive P2), got %d', nHigh));
+
+    % Switch to P2: P2 line appears, P1 line gone.
+    d.switchPage(2);
+    drawnow;
+    [nLow, nHigh] = classifyPreviewLines_(d.TimeRangeSelector_);
+    assert(nLow  == 0, ...
+        sprintf('KOV-01 after switchPage(2): expected 0 preview lines in [0,10] (inactive P1), got %d', nLow));
+    assert(nHigh >= 1, ...
+        sprintf('KOV-01 after switchPage(2): expected >=1 preview line in [200,210] (active P2), got %d', nHigh));
+
+    % Switch back to P1: P1 line returns, P2 line gone.
+    d.switchPage(1);
+    drawnow;
+    [nLow, nHigh] = classifyPreviewLines_(d.TimeRangeSelector_);
+    assert(nLow  >= 1, ...
+        sprintf('KOV-01 reverse: expected >=1 preview line in [0,10] (active P1), got %d', nLow));
+    assert(nHigh == 0, ...
+        sprintf('KOV-01 reverse: expected 0 preview lines in [200,210] (inactive P2), got %d', nHigh));
+end
+
+function case_nested_group_preview_lines()
+    %CASE_NESTED_GROUP_PREVIEW_LINES 260508-l2k regression.
+    %   Build a single-page dashboard whose only top-level widget is a
+    %   GroupWidget containing two FastSenseWidgets with disjoint Y
+    %   ranges. Before 260508-l2k the slider preview iterated only
+    %   top-level widgets and the Group's base getPreviewSeries() returns
+    %   [], so no lines were drawn. After the fix the engine flattens
+    %   the active page's widget list through getNestedWidgets() and
+    %   each child contributes a preview line.
+    x  = linspace(0, 100, 500);
+    y1 = sin(x * 0.1);
+    y2 = cos(x * 0.1) * 5;
+    w1 = FastSenseWidget('Title', 'nestA', 'XData', x, 'YData', y1);
+    w2 = FastSenseWidget('Title', 'nestB', 'XData', x, 'YData', y2);
+    g  = GroupWidget('Label', 'Nested', 'Mode', 'panel');
+    g.addChild(w1);
+    g.addChild(w2);
+
+    d = DashboardEngine('preview-nested-group');
+    d.addWidget(g);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
+    drawnow;
+
+    sel = d.TimeRangeSelector_;
+    assert(~isempty(sel.hPreviewLines), ...
+        'Expected hPreviewLines non-empty when widgets are nested in a GroupWidget (260508-l2k)');
+    assert(numel(sel.hPreviewLines) == 2, ...
+        sprintf('Expected 2 preview lines from nested Group children, got %d', numel(sel.hPreviewLines)));
+
+    % Sanity check: each line's X data is non-trivial and inside the
+    % overall data range. Mirrors case_two_widgets_have_preview_lines.
+    dr = sel.DataRange;
+    span = dr(2) - dr(1);
+    pad = 0.05 * span;
+    for k = 1:numel(sel.hPreviewLines)
+        h = sel.hPreviewLines(k);
+        assert(ishandle(h), sprintf('nested preview line %d not a valid handle', k));
+        xd = get(h, 'XData');
+        assert(numel(xd) > 1, sprintf('nested preview line %d has too few points (%d)', k, numel(xd)));
+        assert(all(xd >= dr(1) - pad) && all(xd <= dr(2) + pad), ...
+            sprintf('nested preview line %d X out of DataRange [%g %g]: [%g %g]', ...
+                    k, dr(1), dr(2), min(xd), max(xd)));
+    end
+end
+
+function [nLow, nHigh] = classifyPreviewLines_(sel)
+    %CLASSIFYPREVIEWLINES_ Count preview lines whose X range falls in
+    %   the P1 band [-1,12] (nLow) vs the P2 band [199,211] (nHigh).
+    %   Mirrors the line-detection style used by case 1 / kau case.
+    nLow  = 0;
+    nHigh = 0;
+    for k = 1:numel(sel.hPreviewLines)
+        xd = get(sel.hPreviewLines(k), 'XData');
+        xd = xd(:)';
+        if isempty(xd), continue; end
+        if all(xd >= -1) && all(xd <= 12)
+            nLow = nLow + 1;
+        elseif all(xd >= 199) && all(xd <= 211)
+            nHigh = nHigh + 1;
+        end
+    end
 end
 
 % -------------------------------------------------------------------------

@@ -278,12 +278,24 @@ classdef HoverCrosshair < handle
         function onFigureMove_(obj, src, evt)
             %ONFIGUREMOVE_ Chained WindowButtonMotionFcn handler.
             %   Order of operations:
-            %     1. Always invoke previous handler first (toolbar / overlay
-            %        coexistence).
-            %     2. Throttle to ThrottleSeconds.
-            %     3. Re-entrancy guard.
-            %     4. Pixel-bounds hit-test on hAxes.
-            %     5. If outside, onLeave; else onMove(currentX).
+            %     1. Validate obj + figure/axes handles. MUST precede any
+            %        property access on obj — when widget panels are torn
+            %        down via DashboardEngine.rerenderWidgets / Reset, the
+            %        owning HoverCrosshair becomes invalid but the figure's
+            %        WindowButtonMotionFcn may still hold our closure
+            %        (delete() restores PrevWBMFcn_, but the closure can
+            %        fire in the brief window before delete() runs, or if
+            %        a sibling re-installs the closure). Bail before
+            %        touching obj.PrevWBMFcn_ et al. (260508-od4)
+            %     2. Invoke previous handler (toolbar / overlay coexistence).
+            %     3. Throttle to ThrottleSeconds.
+            %     4. Re-entrancy guard.
+            %     5. Pixel-bounds hit-test on hAxes.
+            %     6. If outside, onLeave; else onMove(currentX).
+            if ~isvalid(obj); return; end
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure); return; end
+            if isempty(obj.hAxes) || ~ishandle(obj.hAxes); return; end
+
             if isa(obj.PrevWBMFcn_, 'function_handle')
                 try
                     obj.PrevWBMFcn_(src, evt);
@@ -291,10 +303,6 @@ classdef HoverCrosshair < handle
                     % Swallow — never let chained handler break our hover
                 end
             end
-
-            if ~isvalid(obj); return; end
-            if isempty(obj.hFigure) || ~ishandle(obj.hFigure); return; end
-            if isempty(obj.hAxes) || ~ishandle(obj.hAxes); return; end
 
             % Throttle (~40 Hz cap)
             if ~isempty(obj.LastUpdateTime)

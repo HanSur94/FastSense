@@ -24,7 +24,22 @@ classdef DashboardWidget < handle
     end
 
     properties (SetAccess = public)
-        hPanel = []             % Handle to the uipanel this widget renders into
+        hPanel     = []   % Handle to the panel where this widget's content lives.
+                          % When DashboardLayout creates a per-widget chrome bar,
+                          % hPanel points at the WidgetContentPanel sub-panel BELOW
+                          % the bar (so widget.render's child-creation lands in the
+                          % visible content area, not under the bar). When no chrome
+                          % is needed (e.g. DividerWidget), hPanel == hCellPanel.
+                          % When rendered standalone via DetachedMirror, hCellPanel
+                          % is empty and hPanel == the mirror's standalone panel.
+        hCellPanel = []   % Handle to the outer grid-cell uipanel that owns
+                          % this widget. Set by DashboardLayout BEFORE render().
+                          % Layout helpers (getOrCreateButtonBar_, addInfoIcon,
+                          % addDetachButton, reflowChrome_) parent and size the
+                          % chrome relative to hCellPanel — never relative to
+                          % hPanel, because hPanel may be the content sub-panel.
+                          % Empty when not realized through DashboardLayout
+                          % (e.g. DetachedMirror standalone path).
     end
 
     properties (Dependent)
@@ -86,7 +101,14 @@ classdef DashboardWidget < handle
         end
 
         function delete(obj)
-            if ~isempty(obj.hPanel) && ishandle(obj.hPanel)
+            % Delete the OUTER cell panel when chrome was rendered — that
+            % cascades to the bar + WidgetContentPanel + widget children.
+            % For widgets without chrome (DetachedMirror, DividerWidget no-
+            % chrome path, or pre-realize), hCellPanel is empty and we fall
+            % back to hPanel.
+            if ~isempty(obj.hCellPanel) && ishandle(obj.hCellPanel)
+                delete(obj.hCellPanel);
+            elseif ~isempty(obj.hPanel) && ishandle(obj.hPanel)
                 delete(obj.hPanel);
             end
         end
@@ -153,6 +175,18 @@ classdef DashboardWidget < handle
         %   TimeRangeSelector event-marker overlay; base returns [] so
         %   widgets without events contribute nothing.
             t = [];
+        end
+
+        function children = getNestedWidgets(~)
+        %GETNESTEDWIDGETS Optional list of nested DashboardWidgets for engine traversal.
+        %   children = getNestedWidgets(obj) returns a cell array of
+        %   DashboardWidget subclasses that this widget logically contains
+        %   (e.g., a GroupWidget's Children + Tabs widgets). The
+        %   DashboardEngine uses this to flatten the active-page widget
+        %   tree when collecting preview series and event markers so that
+        %   data/events inside container widgets contribute to the slider
+        %   overlay. Base returns {} — leaf widgets are not containers.
+            children = {};
         end
 
         function lines = asciiRender(obj, width, height)

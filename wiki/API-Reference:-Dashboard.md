@@ -24,6 +24,7 @@ obj = DashboardEngine(name, varargin)
 | ShowTimePanel | `true` | hide the bottom time slider panel |
 | EventMarkersVisible | `true` | global toggle for event markers across all widgets (runtime UI state, not serialized) |
 | DebugPreview_ | `false` | 260508-das — opt-in: surface preview/marker pipeline failures as warnings |
+| BannerHeight | `0.035` |  |
 
 ### Methods
 
@@ -196,10 +197,22 @@ UPDATELIVETIMERANGEFROM Update DataTimeRange from pre-fetched widget list.
 
 #### `createStaleBanner(obj, theme, toolbarH)`
 
-CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
-  A uipanel strip below the toolbar containing a message label and
-  a close button. Hidden by default; shown when staleness is detected
-  and not previously dismissed by the user.
+CREATESTALEBANNER Create the hidden stale-data warning banner.
+  Permanent reserved strip at the very TOP of the figure.
+  Toolbar, page tabs, and content area all sit BELOW this strip —
+  the banner is never an overlay (260508-jyh). Hidden by default;
+  shown when staleness is detected and not previously dismissed
+  by the user. toolbarH is retained for signature compat; banner
+  now lives in the reserved top strip independent of chrome
+  heights.
+
+#### `repositionStaleBanner_(obj)`
+
+REPOSITIONSTALEBANNER_ Park banner in the reserved top strip.
+  Banner now lives in a permanent strip at the figure top; no
+  chrome-height dependence (260508-jyh). Safe to call before
+  render or after teardown — no-ops when the handle is
+  empty/invalid.
 
 #### `showStaleBanner(obj, staleTitles)`
 
@@ -226,11 +239,19 @@ DETECTSTALEWIDGETS Return titles of widgets whose tMax did not advance.
 
 #### `broadcastTimeRange(obj, tStart, tEnd)`
 
-BROADCASTTIMERANGE Push time range to widgets using global time.
+BROADCASTTIMERANGE Push time range to widgets across ALL pages (not just active).
+  Time sync is a dashboard-wide control: dragging the slider, clicking
+  "Sync all", or calling broadcastTimeRangeNow updates every page's
+  widgets so switching tabs preserves the synced window. Per-widget
+  UseGlobalTime=false (manually zoomed) widgets opt out via their own
+  setTimeRange guard. (260508-llw — was activePageWidgets, caused a
+  per-tab desync bug.)
 
 #### `resetGlobalTime(obj)`
 
-RESETGLOBALTIME Re-attach all widgets to global time and apply.
+RESETGLOBALTIME Re-attach all widgets across ALL pages to global time and apply.
+  (260508-llw — was activePageWidgets, leaving widgets on inactive
+  pages still detached after a "Reset" toolbar action.)
 
 #### `realizeBatch(obj, batchSize)`
 
@@ -394,7 +415,8 @@ of serialized dashboards.
 | Tag | `[]` | v2.0 Tag API — any Tag subclass |
 | ParentTheme | `[]` | Theme inherited from DashboardEngine |
 | Dirty | `true` | true when widget needs refresh (data changed) |
-| hPanel | `[]` | Handle to the uipanel this widget renders into |
+| hPanel | `[]` | Handle to the panel where this widget's content lives. |
+| hCellPanel | `[]` | Handle to the outer grid-cell uipanel that owns |
 
 ### Methods
 
@@ -445,6 +467,17 @@ GETEVENTTIMES Optional list of event times for the time-slider overlay.
   in the dashboard's time axis. Override to expose events to the
   TimeRangeSelector event-marker overlay; base returns [] so
   widgets without events contribute nothing.
+
+#### `children = getNestedWidgets(~)`
+
+GETNESTEDWIDGETS Optional list of nested DashboardWidgets for engine traversal.
+  children = getNestedWidgets(obj) returns a cell array of
+  DashboardWidget subclasses that this widget logically contains
+  (e.g., a GroupWidget's Children + Tabs widgets). The
+  DashboardEngine uses this to flatten the active-page widget
+  tree when collecting preview series and event markers so that
+  data/events inside container widgets contribute to the slider
+  overlay. Base returns {} — leaf widgets are not containers.
 
 #### `lines = asciiRender(obj, width, height)`
 
@@ -1082,6 +1115,10 @@ Ensure viewport exists (idempotent — no-op if already live)
 #### `realizeWidget(obj, widget)`
 
 REALIZEWIDGET Render a single widget into its pre-allocated panel.
+  Creates the chrome (full-width WidgetButtonBar + WidgetContentPanel
+  sub-panel below the bar) BEFORE calling widget.render so the
+  widget's own graphics children (titles, axes, status text, group
+  headers) land in the visible content area, never under the bar.
 
 #### `createPanels(obj, hFigure, widgets, theme)`
 
@@ -1120,6 +1157,22 @@ ONFIGURECLICKFORDISMISS Dismiss popup if click was outside the popup panel.
 #### `onKeyPressForDismiss(obj, eventData)`
 
 ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
+
+### Static Methods
+
+#### `DashboardLayout.reflowChrome_(hCell, barH, inset)`
+
+REFLOWCHROME_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
+  AND resize the WidgetContentPanel after the parent cell panel
+  resizes. Public so tests can drive a deterministic resize without
+  relying on SizeChangedFcn firing under -batch.
+  No-op when the cell has been deleted or chrome isn't there yet.
+
+#### `DashboardLayout.reflowButtonBar_(hCell, barH, inset)`
+
+REFLOWBUTTONBAR_ Deprecated alias — forwards to reflowChrome_.
+  Kept temporarily for any external callers that still reference
+  the m52-era name.
 
 ---
 
@@ -1179,6 +1232,15 @@ SETEVENTSACTIVEINDICATOR Blue border when event markers are visible.
 
 ONCONFIG Open the dashboard config dialog.
 
+#### `onReset(obj)`
+
+ONRESET Manual recovery — re-render all widgets on the active page.
+  Delegates to DashboardEngine.rerenderWidgets which deletes every
+  widget panel, marks widgets unrealized, then re-allocates and
+  re-realizes them. Use when widgets get stuck (stale axes, zombie
+  state, transient render error). Safe to call while Live mode is
+  active — rerenderWidgets does not touch the Live timer state.
+
 #### `onExport(obj)`
 
 #### `onImage(obj)`
@@ -1208,6 +1270,14 @@ DEFAULTIMAGEFILENAME Build sanitized default filename for the dialog.
 #### `onInfo(obj)`
 
 #### `contentArea = getContentArea(obj)`
+
+GETCONTENTAREA Compute the widget content area in normalized units.
+  Subtracts the reserved banner strip at the top, the toolbar,
+  and the time-panel height (260508-jyh). DashboardEngine
+  computes ContentArea inline in render() and
+  applyVisibilityAndRelayout(); this helper exists for
+  consistency with consumers that read directly from the
+  toolbar (e.g. DashboardBuilder canvas calc).
 
 ---
 
@@ -1540,6 +1610,14 @@ Check nesting depth for GroupWidget children
 #### `[tMin, tMax] = getTimeRange(obj)`
 
 GETTIMERANGE Aggregate time range from all children and tabs.
+
+#### `children = getNestedWidgets(obj)`
+
+GETNESTEDWIDGETS Return Children plus all Tabs widgets as a flat cell.
+  Used by DashboardEngine.flattenWidgetsForPreview_ to surface
+  nested data/event widgets to the time-slider preview and
+  marker overlay. Order: Children first, then Tabs widgets in
+  declaration order. Empty Group returns {}.
 
 #### `t = getType(obj)`
 
