@@ -286,6 +286,46 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             v.onSliderRangeChanged_internalForTest(now - 0.5, now);
             testCase.verifyEqual(v.TimePresetMode, 'custom');
         end
+
+        % --- Task 12: single-click details popup + double-click drill-down tests ---
+
+        function testSingleClickInvokesDetailsHandler(testCase)
+            es = makeStore_(testCase);
+            e = Event(0, 1, 'sA', 'lbl', 1, 'upper'); e.TagKeys = {'tA'}; e.Severity = 1;
+            es.append(e);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.setTimeRange(-1, 100);
+            v.refresh();
+
+            captured = LiveModeCapture();
+            v.setSingleClickHandlerForTest_(@(ev) captured.push(true));
+            v.fireBarClickForTest_(1, 'normal');
+            testCase.verifyTrue(any(captured.Vals));
+        end
+
+        function testDoubleClickOpensSensorDetailPlot(testCase)
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            parent = SensorTag('sA', 'Name', 'A', 'Units', 'u', ...
+                'X', 0:5, 'Y', [1 2 3 2 1 2]);
+            TagRegistry.register('sA', parent);
+
+            es = makeStore_(testCase);
+            e = Event(0, 1, 'sA', 'lbl', 1, 'upper'); e.TagKeys = {'sA'}; e.Severity = 1;
+            es.append(e);
+
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.setTimeRange(-1, 100); v.refresh();
+
+            captured = LiveModeCapture();
+            v.setDoubleClickHandlerForTest_(@(ev) captured.push(true));
+            v.fireBarClickForTest_(1, 'open');
+            testCase.verifyTrue(any(captured.Vals));
+        end
     end
 end
 

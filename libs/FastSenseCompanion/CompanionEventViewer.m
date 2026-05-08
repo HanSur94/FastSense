@@ -128,6 +128,30 @@ classdef CompanionEventViewer < handle
             c = obj.Canvas_;
         end
 
+        function setSingleClickHandlerForTest_(obj, fn)
+        %SETSINGLECLICKHANDLERFORTEST_ Override OnSingleClick for testing.
+            obj.Canvas_.OnSingleClick = fn;
+        end
+
+        function setDoubleClickHandlerForTest_(obj, fn)
+        %SETDOUBLECLICKHANDLERFORTEST_ Override OnDoubleClick for testing.
+            obj.Canvas_.OnDoubleClick = fn;
+        end
+
+        function fireBarClickForTest_(obj, idx, selType)
+        %FIREBARCLICKFORTEST_ Simulate a bar click without GUI.
+            ev = obj.Canvas_.BarEvents(idx);
+            if strcmp(selType, 'open')
+                if ~isempty(obj.Canvas_.OnDoubleClick)
+                    obj.Canvas_.OnDoubleClick(ev);
+                end
+            else
+                if ~isempty(obj.Canvas_.OnSingleClick)
+                    obj.Canvas_.OnSingleClick(ev);
+                end
+            end
+        end
+
         function tf = isAutoTimerRunning_(obj)
         %ISAUTOTIMERRUNNING_ Test accessor: true if the auto-refresh timer is running.
             tf = ~isempty(obj.AutoTimer_) && isvalid(obj.AutoTimer_) && ...
@@ -296,6 +320,8 @@ classdef CompanionEventViewer < handle
                 'XColor',   t.ForegroundColor, ...
                 'YColor',   t.ForegroundColor);
             obj.Canvas_ = EventGanttCanvas(ax, t);
+            obj.Canvas_.OnSingleClick = @(ev) obj.onEventSingleClick_(ev);
+            obj.Canvas_.OnDoubleClick = @(ev) obj.onEventDoubleClick_(ev);
 
             % --- Filter bar contents -----------------------------------
             % Preset buttons row.
@@ -518,6 +544,72 @@ classdef CompanionEventViewer < handle
                 obj.AutoTimer_.Period = v;
                 if wasOn; start(obj.AutoTimer_); end
             end
+        end
+
+        function onEventSingleClick_(obj, ev)
+        %ONEVENTSINGLECLICK_ Show a small details popup with editable Notes.
+            try
+                msg = sprintf( ...
+                    ['Sensor:    %s\nThreshold: %s (%s @ %g)\n', ...
+                     'Severity:  %d\nStart:     %s\nEnd:       %s\n', ...
+                     'Duration:  %g\nPeak:      %g\nN points:  %d'], ...
+                    ev.SensorName, ev.ThresholdLabel, ev.Direction, ev.ThresholdValue, ...
+                    ev.Severity, ...
+                    obj.formatTime_(ev.StartTime), ...
+                    obj.formatTime_(ev.EndTime), ...
+                    obj.eventDuration_(ev), ...
+                    obj.scalarOrNaN_(ev.PeakValue), obj.scalarOrNaN_(ev.NumPoints));
+
+                answer = inputdlg({sprintf('%s\n\nNotes:', msg)}, ...
+                    sprintf('Event %s', ev.Id), [10 60], {ev.Notes});
+                if ~isempty(answer)
+                    ev.Notes = answer{1};
+                    try; obj.Store_.save(); catch; end
+                end
+            catch
+                % Popups must never crash the viewer.
+            end
+        end
+
+        function onEventDoubleClick_(obj, ev)
+        %ONEVENTDOUBLECLICK_ Open a SensorDetailPlot zoomed to the event window.
+            try
+                tagKey = '';
+                if ~isempty(ev.TagKeys); tagKey = ev.TagKeys{1}; end
+                if isempty(tagKey); tagKey = ev.SensorName; end
+                tag = [];
+                try; tag = TagRegistry.get(tagKey); catch; end
+                if isempty(tag) || ~isa(tag, 'Tag'); return; end
+                sdp = SensorDetailPlot(tag);
+                evEnd = EventGanttCanvas.eventEndOrNow(ev, now);
+                pad = 0.1 * max(evEnd - ev.StartTime, 1);
+                try
+                    set(sdp.hMainAxes, 'XLim', [ev.StartTime - pad, evEnd + pad]);
+                catch
+                end
+            catch
+            end
+        end
+
+        function s = formatTime_(~, t)
+        %FORMATTIME_ Format a datenum time as readable string; NaN => '(open)'.
+            if isnan(t); s = '(open)'; return; end
+            try
+                s = datestr(t, 'yyyy-mm-dd HH:MM:SS');
+            catch
+                s = sprintf('%g', t);
+            end
+        end
+
+        function d = eventDuration_(~, ev)
+        %EVENTDURATION_ Return EndTime-StartTime, or NaN for open events.
+            if isnan(ev.EndTime); d = NaN; return; end
+            d = ev.EndTime - ev.StartTime;
+        end
+
+        function v = scalarOrNaN_(~, x)
+        %SCALARORNANNORM_ Return x(1) if numeric, else NaN.
+            if isempty(x) || ~isnumeric(x); v = NaN; else; v = x(1); end
         end
     end
 end
