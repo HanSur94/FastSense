@@ -257,12 +257,23 @@ classdef TimeRangeSelector < handle
             end
         end
 
-        function setEventMarkers(obj, times)
+        function setEventMarkers(obj, times, colors)
             %setEventMarkers  Draw a faint full-height line per event time.
             %   setEventMarkers(times) clears any existing markers and draws
             %   one vertical line per finite time in `times`. Non-finite
             %   values (NaN, +/-Inf) are silently dropped. Empty input just
             %   clears the markers.
+            %
+            %   setEventMarkers(times, colors) accepts an optional Nx3 RGB
+            %   matrix index-matched to `times`. Each row supplies the base
+            %   color for the marker at the corresponding time; the same
+            %   35/65 AxesColor blend used by the uniform path is applied
+            %   per-row to preserve the translucent feel. If `colors` is
+            %   omitted or empty, the existing uniform path runs unchanged
+            %   (no behavior change for legacy 1-arg callers). Size mismatch
+            %   between `times` and `colors` triggers a one-shot
+            %   `TimeRangeSelector:colorSizeMismatch` warning and a
+            %   fallback to the uniform path.
             %
             %   Markers are purely visual — they have HitTest='off' and
             %   PickableParts='none' so they never intercept drag/pan/resize
@@ -293,29 +304,61 @@ classdef TimeRangeSelector < handle
             if nargin < 2 || isempty(times)
                 return;
             end
-            times = times(:).';
-            times = times(isfinite(times));
+            timesIn = times(:).';
+            finiteMask = isfinite(timesIn);
+            times = timesIn(finiteMask);
             if isempty(times)
                 return;
             end
-            % Derive marker colour from theme (foreground/toolbar font) and
-            % blend toward the axes background to get a translucent feel.
+
+            % Decide whether the per-event-color path is engaged.
+            usePerColor = false;
+            if nargin >= 3 && ~isempty(colors)
+                if isnumeric(colors) && ismatrix(colors) && size(colors, 2) == 3 ...
+                        && size(colors, 1) == numel(timesIn) && all(isfinite(colors(:)))
+                    % Apply the SAME finite mask used on `times` so colors
+                    % stay index-matched after dropping NaN/Inf entries.
+                    colors = colors(finiteMask, :);
+                    usePerColor = true;
+                else
+                    warning('TimeRangeSelector:colorSizeMismatch', ...
+                        'colors must be an Nx3 finite numeric matrix matched to times; falling back to uniform.');
+                end
+            end
+
+            % Derive uniform marker colour from theme (foreground/toolbar
+            % font) and blend toward the axes background to get a
+            % translucent feel. Used both for the legacy 1-arg path and as
+            % the fallback when the colors argument is missing/invalid.
             markerColor = [0.55 0.55 0.55];
             if isstruct(obj.Theme) && isfield(obj.Theme, 'ToolbarFontColor')
                 markerColor = obj.Theme.ToolbarFontColor;
             end
-            try
-                if isstruct(obj.Theme) && isfield(obj.Theme, 'AxesColor')
-                    bg = obj.Theme.AxesColor;
+            haveBg = isstruct(obj.Theme) && isfield(obj.Theme, 'AxesColor');
+            if haveBg
+                bg = obj.Theme.AxesColor;
+                try
                     markerColor = 0.35 * markerColor + 0.65 * bg;
+                catch
+                    haveBg = false; % defensive — bg malformed
                 end
-            catch
             end
+
             handles = [];
             for i = 1:numel(times)
                 t = times(i);
+                if usePerColor
+                    lineColor = colors(i, :);
+                    if haveBg
+                        % Same 35/65 blend the uniform path applies, just
+                        % per-row instead of once.
+                        lineColor = 0.35 * lineColor + 0.65 * bg;
+                    end
+                else
+                    lineColor = markerColor;
+                end
                 h = line(obj.hAxes, [t t], [0 1], ...
-                    'Color', markerColor, 'LineWidth', 1, ...
+                    'Color', lineColor, 'LineWidth', 1, ...
                     'HitTest', 'off', 'PickableParts', 'none');
                 handles(end + 1) = h; %#ok<AGROW>
             end

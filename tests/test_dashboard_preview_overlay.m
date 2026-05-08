@@ -31,11 +31,14 @@ function test_dashboard_preview_overlay()
     end
 
     nPassed = 0;
-    nPassed = nPassed + runCase_(@() case_two_widgets_have_preview_lines(),  'two_widgets_have_preview_lines');
-    nPassed = nPassed + runCase_(@() case_small_dataset_adaptive_buckets(),  'small_dataset_adaptive_buckets');
-    nPassed = nPassed + runCase_(@() case_event_markers_from_widget_store(), 'event_markers_from_widget_store');
-    nPassed = nPassed + runCase_(@() case_empty_dashboard_no_crash(),        'empty_dashboard_no_crash');
-    nPassed = nPassed + runCase_(@() case_preview_cache_short_circuit(),     'preview_cache_short_circuit');
+    nPassed = nPassed + runCase_(@() case_two_widgets_have_preview_lines(),       'two_widgets_have_preview_lines');
+    nPassed = nPassed + runCase_(@() case_small_dataset_adaptive_buckets(),       'small_dataset_adaptive_buckets');
+    nPassed = nPassed + runCase_(@() case_event_markers_from_widget_store(),      'event_markers_from_widget_store');
+    nPassed = nPassed + runCase_(@() case_event_markers_colored_by_severity(),    'event_markers_colored_by_severity');
+    nPassed = nPassed + runCase_(@() case_default_severity_backward_compat(),     'default_severity_backward_compat');
+    nPassed = nPassed + runCase_(@() case_max_severity_wins_on_duplicate_times(), 'max_severity_wins_on_duplicate_times');
+    nPassed = nPassed + runCase_(@() case_empty_dashboard_no_crash(),             'empty_dashboard_no_crash');
+    nPassed = nPassed + runCase_(@() case_preview_cache_short_circuit(),          'preview_cache_short_circuit');
 
     try close(findall(0, 'Type', 'figure')); catch, end
     fprintf('    All %d tests passed.\n', nPassed);
@@ -152,6 +155,152 @@ function case_event_markers_from_widget_store()
     expected = [10, 40, 80];
     assert(isequal(xs, expected), ...
         sprintf('marker X positions wrong: got %s, expected %s', mat2str(xs), mat2str(expected)));
+end
+
+function case_event_markers_colored_by_severity()
+    %CASE_EVENT_MARKERS_COLORED_BY_SEVERITY Per-event severity drives marker color.
+    %   Three events on one widget at distinct times, one each at
+    %   Severity=1/2/3. After render the slider must contain three
+    %   markers whose Color properties are all distinct from each other,
+    %   and each must equal the expected severity-blended palette
+    %   (StatusOk/Warn/Alarm blended 35/65 against AxesColor).
+    x = linspace(0, 100, 500);
+    y = sin(x * 0.1);
+
+    es = EventStore('');
+    e1 = Event(10, 12, 'wevt', 'thr', 0.9, 'upper');  e1.Severity = 1;
+    e2 = Event(40, 42, 'wevt', 'thr', 0.9, 'upper');  e2.Severity = 2;
+    e3 = Event(80, 82, 'wevt', 'thr', 0.9, 'upper');  e3.Severity = 3;
+    es.append([e1, e2, e3]);
+
+    d = DashboardEngine('preview-evt-color');
+    w = FastSenseWidget('Title', 'wevt', 'XData', x, 'YData', y, ...
+        'ShowEventMarkers', true, 'EventStore', es);
+    d.addWidget(w);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
+    drawnow;
+
+    sel = d.TimeRangeSelector_;
+    assert(numel(sel.hEventMarkers) == 3, ...
+        sprintf('expected 3 colored markers, got %d', numel(sel.hEventMarkers)));
+
+    % Sort markers by X position so we can match Sev=1/2/3 deterministically.
+    xs = zeros(1, 3);
+    cols = zeros(3, 3);
+    for k = 1:3
+        xd = get(sel.hEventMarkers(k), 'XData');
+        xs(k) = xd(1);
+        cols(k, :) = get(sel.hEventMarkers(k), 'Color');
+    end
+    [~, order] = sort(xs);
+    cols = cols(order, :);
+
+    % Pairwise distinctness — three severity colors must produce three
+    % visually different blended results.
+    assert(~isequal(cols(1, :), cols(2, :)), 'sev1 and sev2 marker colors should differ');
+    assert(~isequal(cols(2, :), cols(3, :)), 'sev2 and sev3 marker colors should differ');
+    assert(~isequal(cols(1, :), cols(3, :)), 'sev1 and sev3 marker colors should differ');
+
+    % Identity check — each blended color must match severityColor(theme,sev)
+    % composed with the same 35/65 AxesColor blend the selector applies.
+    theme = d.getCachedTheme();
+    bg = theme.AxesColor;
+    expected = zeros(3, 3);
+    expected(1, :) = 0.35 * severityColor(theme, 1) + 0.65 * bg;
+    expected(2, :) = 0.35 * severityColor(theme, 2) + 0.65 * bg;
+    expected(3, :) = 0.35 * severityColor(theme, 3) + 0.65 * bg;
+
+    tol = 1e-6;
+    for k = 1:3
+        assert(max(abs(cols(k, :) - expected(k, :))) < tol, ...
+            sprintf('marker %d color mismatch: got [%g %g %g], expected [%g %g %g]', ...
+                    k, cols(k, 1), cols(k, 2), cols(k, 3), ...
+                    expected(k, 1), expected(k, 2), expected(k, 3)));
+    end
+end
+
+function case_default_severity_backward_compat()
+    %CASE_DEFAULT_SEVERITY_BACKWARD_COMPAT Events without explicit Severity.
+    %   Three events constructed without touching Severity (defaults to 1
+    %   on the Event class). All three slider markers must therefore be
+    %   the same uniform OK/info color — guards against a regression where
+    %   the new colored path silently broke the legacy default-severity
+    %   case.
+    x = linspace(0, 100, 500);
+    y = sin(x * 0.1);
+
+    es = EventStore('');
+    e1 = Event(15, 16, 'wevt', 'thr', 0.9, 'upper');  % Severity = 1 (default)
+    e2 = Event(50, 51, 'wevt', 'thr', 0.9, 'upper');
+    e3 = Event(85, 86, 'wevt', 'thr', 0.9, 'upper');
+    es.append([e1, e2, e3]);
+
+    d = DashboardEngine('preview-evt-default-sev');
+    w = FastSenseWidget('Title', 'wevt', 'XData', x, 'YData', y, ...
+        'ShowEventMarkers', true, 'EventStore', es);
+    d.addWidget(w);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
+    drawnow;
+
+    sel = d.TimeRangeSelector_;
+    assert(numel(sel.hEventMarkers) == 3, ...
+        sprintf('expected 3 markers (default severity), got %d', numel(sel.hEventMarkers)));
+
+    cols = zeros(3, 3);
+    for k = 1:3
+        cols(k, :) = get(sel.hEventMarkers(k), 'Color');
+    end
+    assert(isequal(cols(1, :), cols(2, :)) && isequal(cols(2, :), cols(3, :)), ...
+        'default-severity markers must all share the same uniform OK color');
+end
+
+function case_max_severity_wins_on_duplicate_times()
+    %CASE_MAX_SEVERITY_WINS_ON_DUPLICATE_TIMES Cross-widget dedup picks max sev.
+    %   Two FastSenseWidgets each carry an event at t=50 — one Severity=1,
+    %   one Severity=3. After dedup the slider must show ONE marker at
+    %   t=50 painted with the alarm-red blended color (sev=3 wins).
+    x = linspace(0, 100, 500);
+    y1 = sin(x * 0.1);
+    y2 = cos(x * 0.1);
+
+    esA = EventStore('');
+    eA = Event(50, 51, 'wA', 'thr', 0.9, 'upper');  eA.Severity = 1;
+    esA.append(eA);
+
+    esB = EventStore('');
+    eB = Event(50, 51, 'wB', 'thr', 0.9, 'upper');  eB.Severity = 3;
+    esB.append(eB);
+
+    d = DashboardEngine('preview-evt-dedup');
+    wA = FastSenseWidget('Title', 'wA', 'XData', x, 'YData', y1, ...
+        'ShowEventMarkers', true, 'EventStore', esA);
+    wB = FastSenseWidget('Title', 'wB', 'XData', x, 'YData', y2, ...
+        'ShowEventMarkers', true, 'EventStore', esB);
+    d.addWidget(wA);
+    d.addWidget(wB);
+    d.render();
+    cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
+    drawnow;
+
+    sel = d.TimeRangeSelector_;
+    assert(numel(sel.hEventMarkers) == 1, ...
+        sprintf('expected 1 deduped marker at t=50, got %d', numel(sel.hEventMarkers)));
+
+    xd = get(sel.hEventMarkers(1), 'XData');
+    assert(abs(xd(1) - 50) < 1e-9, ...
+        sprintf('expected deduped marker at t=50, got t=%g', xd(1)));
+
+    % Color must equal the sev=3 (alarm) blend, NOT the sev=1 (OK) blend.
+    theme = d.getCachedTheme();
+    bg = theme.AxesColor;
+    expectedAlarm = 0.35 * severityColor(theme, 3) + 0.65 * bg;
+    actual = get(sel.hEventMarkers(1), 'Color');
+    assert(max(abs(actual - expectedAlarm)) < 1e-6, ...
+        sprintf('deduped marker color must be sev=3 alarm; got [%g %g %g], expected [%g %g %g]', ...
+                actual(1), actual(2), actual(3), ...
+                expectedAlarm(1), expectedAlarm(2), expectedAlarm(3)));
 end
 
 function case_empty_dashboard_no_crash()

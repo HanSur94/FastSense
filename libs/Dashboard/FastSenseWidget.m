@@ -594,6 +594,102 @@ classdef FastSenseWidget < DashboardWidget
             end
         end
 
+        function m = getEventMarkers(obj)
+        %GETEVENTMARKERS Per-event time + severity + color for slider markers.
+        %   m = getEventMarkers(obj) returns a struct array with fields:
+        %     m(k).Time     — numeric timestamp (StartTime)
+        %     m(k).Severity — numeric severity in {1,2,3} (default 1 if absent)
+        %     m(k).Color    — 1x3 RGB triplet from severityColor(theme, sev)
+        %
+        %   Walks the same priority chain as getEventTimes (widget-level
+        %   EventStore -> inner FastSense.EventStore -> bare Events array),
+        %   so the slider markers stay in sync with whatever events the
+        %   widget would otherwise display. Always returns an empty struct
+        %   array (struct('Time',{},'Severity',{},'Color',{})) when no
+        %   source yields events; never throws.
+        %
+        %   The Color is the *base* per-severity palette color — the
+        %   TimeRangeSelector blends it toward AxesColor at draw time.
+        %   Tiebreaker on duplicate Times across widgets is resolved by
+        %   DashboardEngine.computeEventMarkers using the Severity field.
+            m = struct('Time', {}, 'Severity', {}, 'Color', {});
+            try
+                raw = [];
+                if ~isempty(obj.EventStore)
+                    try
+                        raw = obj.EventStore.getEvents();
+                    catch
+                        raw = [];
+                    end
+                end
+                if isempty(raw) && ~isempty(obj.FastSenseObj) && ...
+                        isa(obj.FastSenseObj, 'FastSense') && ...
+                        isprop(obj.FastSenseObj, 'EventStore') && ...
+                        ~isempty(obj.FastSenseObj.EventStore)
+                    try
+                        raw = obj.FastSenseObj.EventStore.getEvents();
+                    catch
+                        raw = [];
+                    end
+                end
+                if isempty(raw) && ~isempty(obj.FastSenseObj) && ...
+                        isa(obj.FastSenseObj, 'FastSense')
+                    if isprop(obj.FastSenseObj, 'Events') && ~isempty(obj.FastSenseObj.Events)
+                        raw = obj.FastSenseObj.Events;
+                    end
+                end
+                if isempty(raw), return; end
+
+                % Resolve theme once — getTheme() is inherited from
+                % DashboardWidget. Tolerate failures (returns []).
+                theme = [];
+                try
+                    theme = obj.getTheme();
+                catch
+                    theme = [];
+                end
+
+                n = numel(raw);
+                for i = 1:n
+                    t = NaN;
+                    sev = 1;
+                    if isstruct(raw)
+                        if isfield(raw, 'StartTime')
+                            t = raw(i).StartTime;
+                        elseif isfield(raw, 'startTime')
+                            t = raw(i).startTime;
+                        end
+                        if isfield(raw, 'Severity') && ~isempty(raw(i).Severity)
+                            sev = raw(i).Severity;
+                        elseif isfield(raw, 'severity') && ~isempty(raw(i).severity)
+                            sev = raw(i).severity;
+                        end
+                    else
+                        if isprop(raw(i), 'StartTime')
+                            t = raw(i).StartTime;
+                        end
+                        if isprop(raw(i), 'Severity') && ~isempty(raw(i).Severity)
+                            sev = raw(i).Severity;
+                        end
+                    end
+                    if ~isnumeric(t) || ~isfinite(t)
+                        continue;
+                    end
+                    if ~isnumeric(sev) || isempty(sev) || ~isfinite(sev(1))
+                        sev = 1;
+                    else
+                        sev = sev(1);
+                    end
+                    m(end + 1) = struct( ...
+                        'Time',     t, ...
+                        'Severity', sev, ...
+                        'Color',    severityColor(theme, sev)); %#ok<AGROW>
+                end
+            catch
+                m = struct('Time', {}, 'Severity', {}, 'Color', {});
+            end
+        end
+
         function invalidatePreviewCache_(obj)
         %INVALIDATEPREVIEWCACHE_ Clear PreviewCache_ so getPreviewSeries recomputes.
         %   Called from refresh() / update() / rebuildForTag_() whenever

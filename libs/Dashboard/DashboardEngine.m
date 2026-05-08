@@ -1925,11 +1925,25 @@ classdef DashboardEngine < handle
         end
 
         function computeEventMarkers(obj)
-        %COMPUTEEVENTMARKERS Aggregate event times across active-page widgets
+        %COMPUTEEVENTMARKERS Aggregate event markers across active-page widgets
         %   and push them onto the TimeRangeSelector's marker overlay.
-        %   Mirrors computePreviewEnvelope's guard + iteration pattern: no-op
-        %   before render or when no widgets expose events. A failing widget
-        %   does not block siblings (each call is wrapped in try/catch).
+        %
+        %   Mirrors computePreviewEnvelope's guard + iteration pattern:
+        %   no-op before render or when no widgets expose events. A failing
+        %   widget does not block siblings (each call is wrapped in
+        %   try/catch).
+        %
+        %   For each widget we prefer the modern getEventMarkers() shape
+        %   (struct array with Time/Severity/Color fields) — it lets us
+        %   color each slider marker by event severity. Widgets that
+        %   predate the per-severity-color contract still expose only
+        %   getEventTimes() and are folded in with default OK-severity
+        %   color via the severityColor helper.
+        %
+        %   Tiebreaker on duplicate event Times across widgets: KEEP THE
+        %   ROW WITH THE HIGHEST SEVERITY. So if widget A reports
+        %   Severity=1 at t=50 and widget B reports Severity=3 at t=50,
+        %   the slider draws a single alarm-red marker at t=50.
             % Guard mirrors computePreviewEnvelopeReturning_ for parity.
             % We deliberately do NOT use isvalid() here because Octave 7+11
             % does not implement isvalid() for non-timer handle objects;
@@ -1939,27 +1953,110 @@ classdef DashboardEngine < handle
                 return;
             end
             ws = obj.activePageWidgets();
-            allTimes = [];
+
+            % Accumulators (parallel arrays — keep allocation-free until
+            % the dedup pass at the end). Severity defaults to 1 (OK) for
+            % legacy getEventTimes()-only widgets so the dedup tiebreaker
+            % cleanly prefers any explicitly-tagged sev>=2 widget.
+            allTimes  = [];
+            allSev    = [];
+            allColors = zeros(0, 3);
+
+            % Resolve the *struct* theme — obj.Theme is a preset string
+            % (e.g. 'light'/'dark'); severityColor wants a struct, so go
+            % through the cached resolver. Tolerate failure (helper is
+            % defensive and accepts []).
+            themeStruct = [];
+            try
+                themeStruct = obj.getCachedTheme();
+            catch
+                themeStruct = [];
+            end
+            okColor = severityColor(themeStruct, 1);  % cached for legacy fallback
+
             for i = 1:numel(ws)
-                tVec = [];
+                w = ws{i};
+
+                % Prefer the modern colored-marker shape when the widget
+                % advertises it. ismethod works on classdef objects in
+                % both MATLAB and Octave 7+.
+                useMarkers = false;
                 try
-                    tVec = ws{i}.getEventTimes();
-                catch err
-                    warning('DashboardEngine:getEventTimesFailed', ...
-                        'Widget %d getEventTimes failed: %s', i, err.message);
+                    useMarkers = ismethod(w, 'getEventMarkers');
+                catch
+                    useMarkers = false;
+                end
+
+                if useMarkers
+                    ms = struct('Time', {}, 'Severity', {}, 'Color', {});
+                    try
+                        ms = w.getEventMarkers();
+                    catch err
+                        warning('DashboardEngine:getEventMarkersFailed', ...
+                            'Widget %d getEventMarkers failed: %s', i, err.message);
+                        ms = struct('Time', {}, 'Severity', {}, 'Color', {});
+                    end
+                    for k = 1:numel(ms)
+                        t = ms(k).Time;
+                        if ~isnumeric(t) || ~isfinite(t)
+                            continue;
+                        end
+                        sev = 1;
+                        if isfield(ms, 'Severity') && isnumeric(ms(k).Severity) ...
+                                && ~isempty(ms(k).Severity) && isfinite(ms(k).Severity(1))
+                            sev = ms(k).Severity(1);
+                        end
+                        c = okColor;
+                        if isfield(ms, 'Color') && isnumeric(ms(k).Color) ...
+                                && numel(ms(k).Color) == 3
+                            c = ms(k).Color(:).';
+                        end
+                        allTimes(end + 1)  = t;          %#ok<AGROW>
+                        allSev(end + 1)    = sev;        %#ok<AGROW>
+                        allColors(end + 1, :) = c;       %#ok<AGROW>
+                    end
+                else
+                    % Legacy widgets — synthesize default-severity markers.
                     tVec = [];
-                end
-                if ~isempty(tVec)
-                    allTimes = [allTimes, tVec(:).']; %#ok<AGROW>
+                    try
+                        tVec = w.getEventTimes();
+                    catch err
+                        warning('DashboardEngine:getEventTimesFailed', ...
+                            'Widget %d getEventTimes failed: %s', i, err.message);
+                        tVec = [];
+                    end
+                    if isempty(tVec), continue; end
+                    tVec = tVec(:).';
+                    tVec = tVec(isfinite(tVec));
+                    for k = 1:numel(tVec)
+                        allTimes(end + 1)  = tVec(k);   %#ok<AGROW>
+                        allSev(end + 1)    = 1;          %#ok<AGROW>
+                        allColors(end + 1, :) = okColor; %#ok<AGROW>
+                    end
                 end
             end
-            if ~isempty(allTimes)
-                allTimes = allTimes(isfinite(allTimes));
-                % unique() returns a sorted ascending row in both MATLAB and
-                % Octave 7+, so an explicit sort() is redundant here.
-                allTimes = unique(allTimes);
+
+            if isempty(allTimes)
+                obj.TimeRangeSelector_.setEventMarkers([]);
+                return;
             end
-            obj.TimeRangeSelector_.setEventMarkers(allTimes);
+
+            % Dedup pass with max-severity-wins tiebreaker.
+            % unique() returns a sorted ascending row in both MATLAB and
+            % Octave 7+; idx maps each input row to its bucket in uTimes.
+            [uTimes, ~, idx] = unique(allTimes);
+            uColors = zeros(numel(uTimes), 3);
+            for k = 1:numel(uTimes)
+                rows = find(idx == k);
+                if numel(rows) == 1
+                    uColors(k, :) = allColors(rows, :);
+                else
+                    [~, pickRel] = max(allSev(rows));
+                    uColors(k, :) = allColors(rows(pickRel), :);
+                end
+            end
+
+            obj.TimeRangeSelector_.setEventMarkers(uTimes, uColors);
         end
 
     end
