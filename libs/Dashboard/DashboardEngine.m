@@ -829,7 +829,17 @@ classdef DashboardEngine < handle
                     system(['xdg-open "' obj.InfoTempFile '"']);
                 end
             else
-                web(obj.InfoTempFile, '-new');
+                % web() launches MATLAB's Java-backed help browser. On
+                % headless CI runners (no DISPLAY, no JVM desktop) it can
+                % segfault MATLAB R2020b — observed crashing TestDashboardInfo
+                % in CI for days. Skip the browser launch in those
+                % conditions; the InfoTempFile is still written and
+                % verifiable from tests.
+                hasDisplay = ~isempty(getenv('DISPLAY')) || ispc || ismac;
+                hasDesktop = usejava('jvm') && usejava('desktop');
+                if hasDisplay && hasDesktop
+                    web(obj.InfoTempFile, '-new');
+                end
             end
         end
 

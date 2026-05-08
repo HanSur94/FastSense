@@ -120,7 +120,7 @@ classdef TestIndustrialPlantDemoCompanion < matlab.unittest.TestCase
             teardownDemo(ctx);
             drawnow;
             testCase.addTeardown(@() teardownDemo(ctx));   % belt-and-braces
-            testCase.verifyTrue( ~isvalid(ctx.companion) || ~ctx.companion.IsOpen, ...
+            testCase.verifyTrue(~isvalid(ctx.companion) || ~ctx.companion.IsOpen, ...
                 'COMPDEMO-04: teardownDemo must close ctx.companion (handle invalid OR IsOpen=false)');
             postTimers = timerfindall();
             newTimers  = setdiff(postTimers, preTimers);
