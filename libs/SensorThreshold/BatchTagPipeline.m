@@ -40,6 +40,11 @@ classdef BatchTagPipeline < handle
 
     properties (Access = private)
         fileCache_         % containers.Map: absPath -> parsed struct (per-run)
+        writeFn_  = @writeTagMat_   % Phase 1028 plan 02b: DI seam for .mat I/O suppression in benchmarks.
+                                    % Default routes to libs/SensorThreshold/private/writeTagMat_ (production path,
+                                    % unchanged). The handle is created in this class's scope so resolution to the
+                                    % private/ helper is captured at class load time. Tests override via
+                                    % setWriteFnForTesting_ (Hidden); see LiveTagPipeline for full rationale.
     end
 
     methods
@@ -103,7 +108,7 @@ classdef BatchTagPipeline < handle
                 t = tags{i};
                 try
                     [x, y] = obj.ingestTag_(t);
-                    writeTagMat_(obj.OutputDir, t, x, y, 'overwrite');
+                    obj.writeFn_(obj.OutputDir, t, x, y, 'overwrite');
                     report.succeeded{end+1} = char(t.Key); %#ok<AGROW>
                 catch ex
                     if obj.Verbose
@@ -140,6 +145,32 @@ classdef BatchTagPipeline < handle
                     '%d tag(s) failed during ingest (succeeded: %d). See LastReport.failed.', ...
                     numel(report.failed), numel(report.succeeded));
             end
+        end
+    end
+
+    methods (Hidden)
+        function setWriteFnForTesting_(obj, fn)
+            %SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
+            %   Phase 1028 plan 02b: replace the default @writeTagMat_ with a
+            %   user-supplied function handle (e.g., a no-op for benchmark NoIO
+            %   measurement). Production callers MUST NOT use this — the
+            %   default cadence per D-12 is write-on-every-tick.
+            %
+            %   Why this exists: addpath(-begin) cannot shadow private/ helpers
+            %   because MATLAB/Octave scope private/ to the parent directory.
+            %   A function-handle property captured at class-load time is the
+            %   one mechanism that reliably reaches into the private/ caller.
+            %
+            %   The fn must accept the same signature as writeTagMat_:
+            %     fn(outputDir, tag, x, y, mode)
+            %
+            %   Public API note: marked Hidden so it does not appear in
+            %   tab-completion, doc(), or properties() listings (D-10).
+            if ~isa(fn, 'function_handle')
+                error('TagPipeline:invalidWriteFn', ...
+                    'setWriteFnForTesting_ requires a function_handle (got %s)', class(fn));
+            end
+            obj.writeFn_ = fn;
         end
     end
 

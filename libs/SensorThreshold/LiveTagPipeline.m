@@ -61,6 +61,11 @@ classdef LiveTagPipeline < handle
     properties (Access = private)
         timer_    = []
         tagState_          % containers.Map: key (char) -> struct('lastModTime', d, 'lastIndex', n)
+        writeFn_  = @writeTagMat_   % Phase 1028 plan 02b: DI seam for .mat I/O suppression in benchmarks.
+                                    % Default routes to libs/SensorThreshold/private/writeTagMat_ (production path,
+                                    % unchanged write-on-every-tick cadence per D-12). The handle is created in this
+                                    % class's scope so the resolution to the private/ helper is captured at class
+                                    % load time. Tests/benchmarks override via setWriteFnForTesting_ (Hidden).
     end
 
     methods
@@ -170,6 +175,33 @@ classdef LiveTagPipeline < handle
         end
     end
 
+    methods (Hidden)
+        function setWriteFnForTesting_(obj, fn)
+            %SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
+            %   Phase 1028 plan 02b: replace the default @writeTagMat_ with a
+            %   user-supplied function handle (e.g., a no-op for benchmark NoIO
+            %   measurement). Production callers MUST NOT use this — the
+            %   default cadence per D-12 is write-on-every-tick.
+            %
+            %   Why this exists: addpath(-begin) cannot shadow private/ helpers
+            %   because MATLAB/Octave scope private/ to the parent directory.
+            %   A function-handle property captured at class-load time is the
+            %   one mechanism that reliably reaches into the private/ caller.
+            %
+            %   The fn must accept the same signature as writeTagMat_:
+            %     fn(outputDir, tag, x, y, mode)
+            %
+            %   Public API note: this is marked Hidden so it does not appear
+            %   in tab-completion, doc(), or properties() listings. It is not
+            %   considered part of the public surface (D-10).
+            if ~isa(fn, 'function_handle')
+                error('TagPipeline:invalidWriteFn', ...
+                    'setWriteFnForTesting_ requires a function_handle (got %s)', class(fn));
+            end
+            obj.writeFn_ = fn;
+        end
+    end
+
     methods (Access = private)
         function onTick_(obj)
             %ONTICK_ One polling cycle. Mirrors MatFileDataSource.fetchNew
@@ -275,7 +307,7 @@ classdef LiveTagPipeline < handle
             newX = x(newRange);
             newY = y(newRange);
 
-            writeTagMat_(obj.OutputDir, t, newX, newY, 'append');
+            obj.writeFn_(obj.OutputDir, t, newX, newY, 'append');
 
             state.lastModTime = modTime;
             state.lastIndex   = total;
