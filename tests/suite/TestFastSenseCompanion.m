@@ -1018,6 +1018,85 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'runDiscoverEventStoreTests must complete without errors.');
         end
 
+        % ---- Task 2: EventStore constructor option with auto-discovery ----
+
+        function testEventStoreOptionAcceptsHandle(testCase)
+            %TESTEVENTSTOREOPTIONACCEPTSHANDLE
+            %   Explicit 'EventStore' option is stored on the object.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath);
+            testCase.addTeardown(@() delete(storePath));
+
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+
+            testCase.verifySameHandle(app.getEventStore(), es, ...
+                'EventStore option must be stored verbatim.');
+        end
+
+        function testEventStoreOptionInvalidThrows(testCase)
+            %TESTEVENTSTOREOPTIONINVALIDTHROWS
+            %   Non-EventStore values raise FastSenseCompanion:invalidEventStore.
+            testCase.verifyError(@() FastSenseCompanion('EventStore', 42), ...
+                'FastSenseCompanion:invalidEventStore');
+        end
+
+        function testEventStoreEmptyOptionAllowed(testCase)
+            %TESTEVENTSTOREEMPTYOPTIONALLOWED
+            %   Empty value is accepted (means "no override; auto-discover").
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion('EventStore', []);
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEmpty(app.getEventStore());
+        end
+
+        function testEventStoreAutoDiscoveryUsedWhenNoOverride(testCase)
+            %TESTEVENTSTOREAUTODISCOVERYUSEDWHENNOOVERRIDE
+            %   Without explicit option, the helper-discovered store is used.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            parent = SensorTag('p2', 'Name', 'P', 'Units', 'u', ...
+                'X', [0 1 2], 'Y', [1 2 3]);
+            TagRegistry.register('p2', parent);
+
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath);
+            testCase.addTeardown(@() delete(storePath));
+
+            mon = MonitorTag('m2', parent, @(x,y) y > 100, 'EventStore', es);
+            TagRegistry.register('m2', mon);
+
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), es);
+        end
+
+        function testEventStoreOverrideBeatsAutoDiscovery(testCase)
+            %TESTEVENTSTOREOVERRIDEBEATSAUTODISCOVERY
+            %   Explicit 'EventStore' wins over auto-discovery.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            parent = SensorTag('p3', 'Name', 'P', 'Units', 'u', ...
+                'X', [0 1 2], 'Y', [1 2 3]);
+            TagRegistry.register('p3', parent);
+
+            pathA = [tempname() '.mat'];
+            pathB = [tempname() '.mat'];
+            esA = EventStore(pathA); esB = EventStore(pathB);
+            testCase.addTeardown(@() delete(pathA));
+            testCase.addTeardown(@() delete(pathB));
+
+            mon = MonitorTag('m3', parent, @(x,y) y > 100, 'EventStore', esA);
+            TagRegistry.register('m3', mon);
+
+            app = FastSenseCompanion('EventStore', esB);
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), esB);
+        end
+
     end
 
     methods (Access = private)

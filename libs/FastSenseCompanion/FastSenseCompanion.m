@@ -85,6 +85,8 @@ classdef FastSenseCompanion < handle
         hEventsLogPanel_      = []     % sub-panel (LogPaneRoot-tagged) for events pane
         hLiveLogPanel_        = []     % sub-panel (LogPaneRoot-tagged) for live pane
         OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
+        EventStore_  = []   % EventStore handle resolved via constructor option or auto-discovery
+        EventViewer_ = []   % CompanionEventViewer handle (single-instance) or [] (Task 13 wires it)
     end
 
     methods (Access = public)
@@ -105,6 +107,7 @@ classdef FastSenseCompanion < handle
             userName       = 'FastSense Companion';
             userTheme      = 'dark';
             userLivePeriod = 1.0;
+            userEventStore = [];
 
             % Step 2b — Override with stored prefdir values (if present and well-formed).
             % Priority: built-in default < prefdir < explicit Name-Value (Step 3).
@@ -145,10 +148,17 @@ classdef FastSenseCompanion < handle
                                 'LivePeriod must be a positive finite scalar (seconds).');
                         end
                         userLivePeriod = double(v);
+                    case 'EventStore'
+                        v = varargin{k+1};
+                        if ~isempty(v) && ~isa(v, 'EventStore')
+                            error('FastSenseCompanion:invalidEventStore', ...
+                                'EventStore must be an EventStore handle or [] (got %s).', class(v));
+                        end
+                        userEventStore = v;
                     otherwise
                         error('FastSenseCompanion:unknownOption', ...
                             ['Unknown option ''%s''. Valid options: ', ...
-                             'Dashboards, Registry, Name, Theme, LivePeriod.'], key);
+                             'Dashboards, Registry, Name, Theme, LivePeriod, EventStore.'], key);
                 end
             end
 
@@ -177,6 +187,14 @@ classdef FastSenseCompanion < handle
             obj.Theme_      = CompanionTheme.get(userTheme);
             obj.LivePeriod_ = userLivePeriod;
             obj.LivePeriod  = userLivePeriod;
+
+            % Step 6b — Resolve EventStore: explicit override wins; otherwise
+            % auto-discover from the first MonitorTag with a non-empty EventStore.
+            if ~isempty(userEventStore)
+                obj.EventStore_ = userEventStore;
+            else
+                obj.EventStore_ = companionDiscoverEventStore();
+            end
 
             % Step 7 — Build uifigure (Visible='off' while building)
             obj.hFig_ = uifigure( ...
@@ -893,6 +911,14 @@ classdef FastSenseCompanion < handle
             else
                 par = obj.hLiveBtn_.Parent;
             end
+        end
+
+        function s = getEventStore(obj)
+        %GETEVENTSTORE Return the resolved EventStore handle (or [] if none).
+        %   Returns whatever was passed via the 'EventStore' constructor
+        %   option, OR the auto-discovered store from the registry, OR []
+        %   if neither resolved.
+            s = obj.EventStore_;
         end
 
     end
