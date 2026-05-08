@@ -29,12 +29,14 @@ classdef FastSenseCompanion < handle
 %   Events fired:
 %     InspectorStateChanged    payload: InspectorStateEventData(state, payload)
 %     OpenAdHocPlotRequested   payload: AdHocPlotEventData(tagKeys, mode) — fired by InspectorPane
+%     LiveModeChanged          no payload — fires on startLiveMode/stopLiveMode after IsLive is updated
 %
 %   See also DashboardEngine, TagRegistry, CompanionTheme.
 
     events
         InspectorStateChanged
         OpenAdHocPlotRequested
+        LiveModeChanged
     end
 
     properties (Access = public)
@@ -689,6 +691,7 @@ classdef FastSenseCompanion < handle
                 obj.IsLive = true;
                 obj.updateLiveButton_();
                 obj.addLogEntry('info', sprintf('Live mode ON (period %gs)', obj.LivePeriod_));
+                notify(obj, 'LiveModeChanged');
             catch err
                 obj.addLogEntry('error', sprintf('Live start failed: %s', err.message));
             end
@@ -707,6 +710,7 @@ classdef FastSenseCompanion < handle
             obj.IsLive = false;
             obj.updateLiveButton_();
             obj.addLogEntry('info', 'Live mode OFF');
+            notify(obj, 'LiveModeChanged');
         end
 
         function toggleLiveMode(obj)

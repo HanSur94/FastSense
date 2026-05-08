@@ -1097,6 +1097,33 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             testCase.verifySameHandle(app.getEventStore(), esB);
         end
 
+        % ---- Task 3: LiveModeChanged event ----
+
+        function testLiveModeChangedFiresOnStartAndStop(testCase)
+            %TESTLIVEMODECHANGEDFIRESONSTARTANDSTOP
+            %   Toggling live mode fires LiveModeChanged each time, and listeners
+            %   observe the new IsLive value via the source object.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+
+            % Companion launches with live mode ON; stop it for a clean baseline.
+            app.stopLiveMode();
+
+            captured = LiveModeCapture();
+            L = addlistener(app, 'LiveModeChanged', @(s, ~) captured.push(s.IsLive));
+            testCase.addTeardown(@() delete(L));
+
+            app.startLiveMode();
+            app.stopLiveMode();
+
+            testCase.verifyTrue(numel(captured.Vals) >= 2, ...
+                'LiveModeChanged must fire at least twice (start + stop).');
+            testCase.verifyTrue(captured.Vals(end-1), ...
+                'Penultimate fire must observe IsLive=true after startLiveMode.');
+            testCase.verifyFalse(captured.Vals(end), ...
+                'Last fire must observe IsLive=false after stopLiveMode.');
+        end
+
     end
 
     methods (Access = private)
