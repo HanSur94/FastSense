@@ -114,7 +114,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1025. FastSense hover crosshair + datatip | pending | 0/? | Not started | — |
 | 1026. Dashboard time slider preview | pending | 0/? | Not started | — |
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
-| 1027.1. Independent events/live log detach | pending | 6/8 | In Progress|  |
+| 1027.1. Independent events/live log detach | pending | 8/8 | Complete   | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
 
 ## Phase Details (Pending Milestone)
@@ -168,7 +168,7 @@ Plans:
 **Source:** User feedback after Phase 1027 demo (2026-05-08) — "we have 2 logs right? I want both separately detachable."
 **Spec:** [docs/superpowers/specs/2026-05-08-independent-log-detach-design.md](../../docs/superpowers/specs/2026-05-08-independent-log-detach-design.md)
 **Requirements:** none — CONTEXT.md acceptance criteria are the contract
-**Plans:** 6/8 plans executed
+**Plans:** 8/8 plans complete
 
 Plans:
 - [x] 1027.1-01-create-events-log-pane-PLAN.md — port events-half of LogPane into self-contained `EventsLogPane` class (Wave 1, parallel-safe)
@@ -176,8 +176,8 @@ Plans:
 - [x] 1027.1-03-test-events-log-pane-PLAN.md — class-based unit suite for EventsLogPane (Wave 2, depends on 01)
 - [x] 1027.1-04-test-live-log-pane-PLAN.md — class-based unit suite for LiveLogPane (Wave 2, depends on 02)
 - [x] 1027.1-05-companion-integration-PLAN.md — heavy: replace LogPane with two panes, two dropdowns, two detached uifigures, parameterized `setLogState_(which, newState)`, `rebalanceLogStrip_()` (Wave 3, depends on 01+02)
-- [ ] 1027.1-06-delete-old-logpane-PLAN.md — delete `libs/FastSenseCompanion/LogPane.m` and `tests/suite/TestLogPane.m` (Wave 4, depends on 05)
-- [ ] 1027.1-07-update-companion-tests-PLAN.md — migrate Phase 1027 accessors and add 5 independence tests to `TestFastSenseCompanion` (Wave 4, depends on 05)
+- [x] 1027.1-06-delete-old-logpane-PLAN.md — delete `libs/FastSenseCompanion/LogPane.m` and `tests/suite/TestLogPane.m` (Wave 4, depends on 05)
+- [x] 1027.1-07-update-companion-tests-PLAN.md — migrate Phase 1027 accessors and add 5 independence tests to `TestFastSenseCompanion` (Wave 4, depends on 05)
 - [x] 1027.1-08-update-walker-test-PLAN.md — assert two-panel LogPaneRoot skip-rule in walker test (Wave 4, depends on 05)
 
 
