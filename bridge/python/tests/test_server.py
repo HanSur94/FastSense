@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from fastsense_bridge.blob_decoder import MKSQ_MAGIC
 from fastsense_bridge.server import AppState, create_app
@@ -413,3 +414,87 @@ class TestCORSPolicy:
         )
         assert resp.status_code == 200
         assert resp.headers.get("access-control-allow-origin") == "*"
+
+
+class TestWebSocketOriginPolicy:
+    """Tests for the WebSocket /ws origin gate.
+
+    Mirrors TestCORSPolicy but exercises the WS upgrade path. The /ws
+    endpoint must reject disallowed origins BEFORE accepting the
+    upgrade, surfacing as WebSocketDisconnect(code=1008) on the client.
+    """
+
+    def test_default_allows_localhost_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        with client.websocket_connect(
+            "/ws", headers={"origin": "http://localhost:5173"}
+        ):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
+
+    def test_default_blocks_foreign_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(
+                "/ws", headers={"origin": "https://evil.example.com"}
+            ):
+                pass
+        assert ei.value.code == 1008
+        assert len(app_state._ws_clients) == 0
+
+    def test_default_blocks_missing_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.delenv("FASTSENSE_BRIDGE_CORS_ORIGINS", raising=False)
+        client = TestClient(create_app(app_state))
+
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect("/ws", headers={}):
+                pass
+        assert ei.value.code == 1008
+        assert len(app_state._ws_clients) == 0
+
+    def test_env_override_list_allows_listed_origin(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.setenv(
+            "FASTSENSE_BRIDGE_CORS_ORIGINS", "https://app.example.com"
+        )
+        client = TestClient(create_app(app_state))
+
+        with client.websocket_connect(
+            "/ws", headers={"origin": "https://app.example.com"}
+        ):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
+
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(
+                "/ws", headers={"origin": "https://evil.example.com"}
+            ):
+                pass
+        assert ei.value.code == 1008
+
+    def test_wildcard_allows_any_origin_including_missing(
+        self, monkeypatch: pytest.MonkeyPatch, app_state: AppState
+    ) -> None:
+        monkeypatch.setenv("FASTSENSE_BRIDGE_CORS_ORIGINS", "*")
+        client = TestClient(create_app(app_state))
+
+        with client.websocket_connect(
+            "/ws", headers={"origin": "https://anything.example.com"}
+        ):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
+
+        with client.websocket_connect("/ws", headers={}):
+            assert len(app_state._ws_clients) >= 1
+        assert len(app_state._ws_clients) == 0
