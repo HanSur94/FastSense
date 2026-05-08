@@ -39,7 +39,7 @@ function test_dashboard_preview_overlay()
     nPassed = nPassed + runCase_(@() case_max_severity_wins_on_duplicate_times(), 'max_severity_wins_on_duplicate_times');
     nPassed = nPassed + runCase_(@() case_empty_dashboard_no_crash(),             'empty_dashboard_no_crash');
     nPassed = nPassed + runCase_(@() case_preview_cache_short_circuit(),          'preview_cache_short_circuit');
-    nPassed = nPassed + runCase_(@() case_multipage_preview_aggregates_all_pages(), 'multipage_preview_aggregates_all_pages');
+    nPassed = nPassed + runCase_(@() case_multipage_preview_follows_active_tab(), 'multipage_preview_follows_active_tab');
 
     try close(findall(0, 'Type', 'figure')); catch, end
     fprintf('    All %d tests passed.\n', nPassed);
@@ -350,17 +350,18 @@ function case_preview_cache_short_circuit()
         sprintf('preview pipeline too slow: 5 cached calls took %.3fs', firstBatch));
 end
 
-function case_multipage_preview_aggregates_all_pages()
-    %CASE_MULTIPAGE_PREVIEW_AGGREGATES_ALL_PAGES KAU-01 regression.
+function case_multipage_preview_follows_active_tab()
+    %CASE_MULTIPAGE_PREVIEW_FOLLOWS_ACTIVE_TAB KOV-01 regression.
     %   Build a 2-page dashboard with disjoint X ranges per page; assert
-    %   the slider preview folds in BOTH pages' widgets regardless of
-    %   which tab is currently active.
+    %   the slider preview reflects ONLY the active page's widgets and
+    %   that switching pages swaps which line is visible. Inverse of
+    %   the (now-reverted) 260508-kau aggregation contract.
     x1 = linspace(0,   10,  500);
     y1 = sin(x1 * 0.1);
     x2 = linspace(200, 210, 500);
     y2 = cos(x2 * 0.1);
 
-    d = DashboardEngine('preview-multipage');
+    d = DashboardEngine('preview-multipage-pertab');
     d.addPage('P1');
     d.addWidget('fastsense', 'Title', 'wP1', 'XData', x1, 'YData', y1);
     d.addPage('P2');
@@ -371,12 +372,36 @@ function case_multipage_preview_aggregates_all_pages()
     cleanup = onCleanup(@() closeDashboard_(d));  %#ok<NASGU>
     drawnow;
 
-    sel = d.TimeRangeSelector_;
-    assert(~isempty(sel.hPreviewLines), ...
-        'KAU-01: hPreviewLines must be non-empty on multi-page dashboard');
+    % Initial render: P1 active. Expect a P1-range line, NO P2-range line.
+    [nLow, nHigh] = classifyPreviewLines_(d.TimeRangeSelector_);
+    assert(nLow  >= 1, ...
+        sprintf('KOV-01 initial: expected >=1 preview line in [0,10] (active P1), got %d', nLow));
+    assert(nHigh == 0, ...
+        sprintf('KOV-01 initial: expected 0 preview lines in [200,210] (inactive P2), got %d', nHigh));
 
-    % Each preview line carries the X centers of one widget's buckets.
-    % Classify each line by which range its X data falls into.
+    % Switch to P2: P2 line appears, P1 line gone.
+    d.switchPage(2);
+    drawnow;
+    [nLow, nHigh] = classifyPreviewLines_(d.TimeRangeSelector_);
+    assert(nLow  == 0, ...
+        sprintf('KOV-01 after switchPage(2): expected 0 preview lines in [0,10] (inactive P1), got %d', nLow));
+    assert(nHigh >= 1, ...
+        sprintf('KOV-01 after switchPage(2): expected >=1 preview line in [200,210] (active P2), got %d', nHigh));
+
+    % Switch back to P1: P1 line returns, P2 line gone.
+    d.switchPage(1);
+    drawnow;
+    [nLow, nHigh] = classifyPreviewLines_(d.TimeRangeSelector_);
+    assert(nLow  >= 1, ...
+        sprintf('KOV-01 reverse: expected >=1 preview line in [0,10] (active P1), got %d', nLow));
+    assert(nHigh == 0, ...
+        sprintf('KOV-01 reverse: expected 0 preview lines in [200,210] (inactive P2), got %d', nHigh));
+end
+
+function [nLow, nHigh] = classifyPreviewLines_(sel)
+    %CLASSIFYPREVIEWLINES_ Count preview lines whose X range falls in
+    %   the P1 band [-1,12] (nLow) vs the P2 band [199,211] (nHigh).
+    %   Mirrors the line-detection style used by case 1 / kau case.
     nLow  = 0;
     nHigh = 0;
     for k = 1:numel(sel.hPreviewLines)
@@ -389,29 +414,6 @@ function case_multipage_preview_aggregates_all_pages()
             nHigh = nHigh + 1;
         end
     end
-    assert(nLow  >= 1, ...
-        sprintf('KAU-01: expected >=1 preview line in [0,10] (P1 widget), got %d', nLow));
-    assert(nHigh >= 1, ...
-        sprintf('KAU-01: expected >=1 preview line in [200,210] (P2 widget, inactive page), got %d', nHigh));
-
-    % Switch to P2 and re-assert: preview is page-agnostic.
-    d.switchPage(2);
-    drawnow;
-    sel = d.TimeRangeSelector_;
-    nLow2  = 0;
-    nHigh2 = 0;
-    for k = 1:numel(sel.hPreviewLines)
-        xd = get(sel.hPreviewLines(k), 'XData');
-        xd = xd(:)';
-        if isempty(xd), continue; end
-        if all(xd >= -1) && all(xd <= 12)
-            nLow2 = nLow2 + 1;
-        elseif all(xd >= 199) && all(xd <= 211)
-            nHigh2 = nHigh2 + 1;
-        end
-    end
-    assert(nLow2  >= 1, 'KAU-01: after switchPage(2), P1 widget line must still appear');
-    assert(nHigh2 >= 1, 'KAU-01: after switchPage(2), P2 widget line must still appear');
 end
 
 % -------------------------------------------------------------------------
