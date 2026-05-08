@@ -226,22 +226,88 @@ classdef LogPane < handle
 
         function addLogEntry(obj, level, msg)
         %ADDLOGENTRY Append a timestamped log line. Buffers always; renders if attached.
-            % TODO Task 3
+        %   level — 'info' | 'warn' | 'error' (any short tag accepted; uppercased).
+        %   msg   — char/string. Anything else is sprintf'd through %s.
+        %   Pushes onto LogBuffer_ (newest first, capped at 500). When attached,
+        %   re-applies the level + text filter to update the visible uitable rows.
+            try
+                ts = char(datetime('now', 'Format', 'HH:mm:ss'));
+                if isstring(msg) && isscalar(msg); msg = char(msg); end
+                if ~ischar(msg); msg = sprintf('%s', msg); end
+                row = {ts, upper(char(level)), msg};
+                obj.LogBuffer_ = [row; obj.LogBuffer_];
+                if size(obj.LogBuffer_, 1) > 500
+                    obj.LogBuffer_ = obj.LogBuffer_(1:500, :);
+                end
+                if obj.IsAttached
+                    obj.applyLogFilter_();
+                end
+            catch
+                % Logging must never crash the UI.
+            end
         end
 
         function addLiveLogEntry(obj, tagKey, deltaSamples, latestY)
         %ADDLIVELOGENTRY Push a row into the live-updates log; cap at 500.
-            % TODO Task 3
+        %   tagKey       — char tag key.
+        %   deltaSamples — number of new samples since the last log entry
+        %                  (caller computes via its own pipeline-cursor map).
+        %   latestY      — latest Y value (numeric, or char/string for state tags).
+            try
+                ts = char(datetime('now', 'Format', 'HH:mm:ss'));
+                latestTxt = char(8212);  % em-dash placeholder
+                if ~isempty(latestY) && isnumeric(latestY) && isfinite(latestY)
+                    a = abs(latestY);
+                    if a == 0;       latestTxt = '0';
+                    elseif a >= 1000 || a < 0.01; latestTxt = sprintf('%.3g', latestY);
+                    elseif a >= 100;  latestTxt = sprintf('%.0f', latestY);
+                    elseif a >= 10;   latestTxt = sprintf('%.2f', latestY);
+                    else;             latestTxt = sprintf('%.3f', latestY);
+                    end
+                elseif ischar(latestY) || (isstring(latestY) && isscalar(latestY))
+                    latestTxt = char(latestY);
+                end
+                row = {ts, char(tagKey), sprintf('+%d', deltaSamples), latestTxt};
+                obj.LiveLogBuffer_ = [row; obj.LiveLogBuffer_];
+                if size(obj.LiveLogBuffer_, 1) > 500
+                    obj.LiveLogBuffer_ = obj.LiveLogBuffer_(1:500, :);
+                end
+                if obj.IsAttached
+                    obj.renderLiveTable_();
+                end
+            catch
+                % Live logging must never crash the UI.
+            end
         end
 
         function clearLiveLog(obj)
         %CLEARLIVELOG Wipe the live-updates buffer + table.
-            % TODO Task 3
+        %   NOTE: does NOT reset any companion-side pipeline-cursor map. If the
+        %   companion needs that reset (e.g. on project switch), it does so itself.
+            obj.LiveLogBuffer_ = cell(0, 4);
+            if obj.IsAttached && ~isempty(obj.hLiveLogTable_) && isvalid(obj.hLiveLogTable_)
+                obj.hLiveLogTable_.Data = cell(0, 4);
+            end
         end
 
         function setLastUpdated(obj, dt)
         %SETLASTUPDATED Update the 'Updated: HH:MM:SS' label.
-            % TODO Task 3
+        %   dt — datetime, char, or string. Anything else falls back to now().
+            if ~obj.IsAttached || isempty(obj.hLastUpdateLbl_) || ~isvalid(obj.hLastUpdateLbl_)
+                return;
+            end
+            try
+                if isa(dt, 'datetime')
+                    txt = char(dt, 'HH:mm:ss');
+                elseif ischar(dt) || (isstring(dt) && isscalar(dt))
+                    txt = char(dt);
+                else
+                    txt = char(datetime('now', 'Format', 'HH:mm:ss'));
+                end
+                obj.hLastUpdateLbl_.Text = sprintf('Updated: %s', txt);
+            catch
+                % Label update must never crash the UI.
+            end
         end
 
         function applyTheme(obj, themeStruct)
@@ -265,13 +331,49 @@ classdef LogPane < handle
     methods (Access = private)
 
         function applyLogFilter_(obj)
-        %APPLYLOGFILTER_ Re-apply level + text filter to LogBuffer_ then render.
-            % TODO Task 3
+        %APPLYLOGFILTER_ Re-apply level + text filter to LogBuffer_ → uitable.Data.
+            if isempty(obj.hLogTable_) || ~isvalid(obj.hLogTable_); return; end
+            rows = obj.LogBuffer_;
+            if isempty(rows)
+                obj.hLogTable_.Data = cell(0, 3); return;
+            end
+            % Level filter
+            lvl = 'All';
+            if ~isempty(obj.hLogLevelDD_) && isvalid(obj.hLogLevelDD_)
+                lvl = obj.hLogLevelDD_.Value;
+            end
+            if ~strcmpi(lvl, 'All')
+                keep = false(size(rows, 1), 1);
+                for i = 1:size(rows, 1)
+                    keep(i) = strcmpi(rows{i, 2}, lvl);
+                end
+                rows = rows(keep, :);
+            end
+            % Text filter — case-insensitive substring across all 3 columns.
+            qry = '';
+            if ~isempty(obj.hLogSearch_) && isvalid(obj.hLogSearch_)
+                qry = strtrim(obj.hLogSearch_.Value);
+            end
+            if ~isempty(qry)
+                qLow = lower(qry);
+                keep = false(size(rows, 1), 1);
+                for i = 1:size(rows, 1)
+                    line = lower([rows{i, 1}, ' ', rows{i, 2}, ' ', rows{i, 3}]);
+                    keep(i) = ~isempty(strfind(line, qLow)); %#ok<STREMP>
+                end
+                rows = rows(keep, :);
+            end
+            obj.hLogTable_.Data = rows;
         end
 
         function renderLiveTable_(obj)
-        %RENDERLIVETABLE_ Push LiveLogBuffer_ into hLiveLogTable_.Data.
-            % TODO Task 3
+        %RENDERLIVETABLE_ Push LiveLogBuffer_ into hLiveLogTable_.Data (newest first).
+            if isempty(obj.hLiveLogTable_) || ~isvalid(obj.hLiveLogTable_); return; end
+            if isempty(obj.LiveLogBuffer_)
+                obj.hLiveLogTable_.Data = cell(0, 4);
+            else
+                obj.hLiveLogTable_.Data = obj.LiveLogBuffer_;
+            end
         end
 
         function styleTables_(obj)
