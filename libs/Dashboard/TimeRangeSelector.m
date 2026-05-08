@@ -314,8 +314,8 @@ classdef TimeRangeSelector < handle
             % Decide whether the per-event-color path is engaged.
             usePerColor = false;
             if nargin >= 3 && ~isempty(colors)
-                if isnumeric(colors) && ismatrix(colors) && size(colors, 2) == 3 ...
-                        && size(colors, 1) == numel(timesIn) && all(isfinite(colors(:)))
+                if isnumeric(colors) && ismatrix(colors) && size(colors, 2) == 3 && ...
+                        size(colors, 1) == numel(timesIn) && all(isfinite(colors(:)))
                     % Apply the SAME finite mask used on `times` so colors
                     % stay index-matched after dropping NaN/Inf entries.
                     colors = colors(finiteMask, :);

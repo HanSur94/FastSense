@@ -2020,13 +2020,13 @@ classdef DashboardEngine < handle
                             continue;
                         end
                         sev = 1;
-                        if isfield(ms, 'Severity') && isnumeric(ms(k).Severity) ...
-                                && ~isempty(ms(k).Severity) && isfinite(ms(k).Severity(1))
+                        if isfield(ms, 'Severity') && isnumeric(ms(k).Severity) && ...
+                                ~isempty(ms(k).Severity) && isfinite(ms(k).Severity(1))
                             sev = ms(k).Severity(1);
                         end
                         c = okColor;
-                        if isfield(ms, 'Color') && isnumeric(ms(k).Color) ...
-                                && numel(ms(k).Color) == 3
+                        if isfield(ms, 'Color') && isnumeric(ms(k).Color) && ...
+                                numel(ms(k).Color) == 3
                             c = ms(k).Color(:).';
                         end
                         allTimes(end + 1)  = t;          %#ok<AGROW>
