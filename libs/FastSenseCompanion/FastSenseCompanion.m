@@ -74,11 +74,17 @@ classdef FastSenseCompanion < handle
         SelectedDashboardIdx_ = 0    % 1-based; 0 = nothing selected (Phase 1020)
         LastInteraction_      = ''   % '' | 'tags' | 'dashboard' (Phase 1020 sets 'dashboard'; Phase 1021 sets 'tags')
         SelectedTagKeys_      = {}   % cellstr cache mirrored from CatalogPane.getSelectedKeys() (Phase 1021)
-        % Phase 1027 — LogPane integration
-        LogPane_              = []     % LogPane instance (Phase 1027)
-        hLogStateDD_          = []     % toolbar uidropdown {'Inline','Detached','Hidden'}
-        hDetachedLogFig_      = []     % uifigure when state == 'Detached', else []
-        OriginalLogRowHeight_ = 360    % captured at construction; restored on Inline (matches hLayout_.RowHeight{3} default)
+        % Phase 1027.1 — independent EventsLogPane + LiveLogPane integration
+        EventsLogPane_        = []     % EventsLogPane instance
+        LiveLogPane_          = []     % LiveLogPane instance
+        hEventsLogStateDD_    = []     % toolbar dropdown for events log {'Inline','Detached','Hidden'}
+        hLiveLogStateDD_      = []     % toolbar dropdown for live log   {'Inline','Detached','Hidden'}
+        hDetachedEventsFig_   = []     % uifigure when events state == 'Detached', else []
+        hDetachedLiveFig_     = []     % uifigure when live state   == 'Detached', else []
+        hLogStripGrid_        = []     % inner uigridlayout([2 1]) hosting both sub-panels in row 3
+        hEventsLogPanel_      = []     % sub-panel (LogPaneRoot-tagged) for events pane
+        hLiveLogPanel_        = []     % sub-panel (LogPaneRoot-tagged) for live pane
+        OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
     end
 
     methods (Access = public)
@@ -196,11 +202,12 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x4 grid — col 1 reserved for future toolbar items;
-            % col 2 = Live: ON/OFF button (Phase 1027 moved from log header);
-            % col 3 = Log: state dropdown (Phase 1027); col 4 = gear button.
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 4]);
-            hToolbarGrid.ColumnWidth     = {'1x', 110, 130, 36};
+            % Inner 1x5 grid — col 1 reserved for future toolbar items;
+            % col 2 = Live: ON/OFF button; col 3 = Events log dropdown
+            % (Phase 1027.1); col 4 = Live log dropdown (Phase 1027.1);
+            % col 5 = gear button.
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 5]);
+            hToolbarGrid.ColumnWidth     = {'1x', 110, 150, 150, 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -216,36 +223,62 @@ classdef FastSenseCompanion < handle
             obj.hLiveBtn_.Tooltip       = 'Toggle live refresh of the inspector';
             obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
 
-            % Col 3 — Log: state dropdown (Phase 1027). Inner 1x2 grid: label + dropdown.
-            hLogDDGrid = uigridlayout(hToolbarGrid, [1 2]);
-            hLogDDGrid.Layout.Row     = 1;
-            hLogDDGrid.Layout.Column  = 3;
-            hLogDDGrid.ColumnWidth    = {32, '1x'};
-            hLogDDGrid.RowHeight      = {'1x'};
-            hLogDDGrid.Padding        = [0 0 0 0];
-            hLogDDGrid.ColumnSpacing  = 4;
-            hLogDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
-            hLogLbl = uilabel(hLogDDGrid);
-            hLogLbl.Layout.Row    = 1;
-            hLogLbl.Layout.Column = 1;
-            hLogLbl.Text          = 'Log:';
-            hLogLbl.FontSize      = 11;
-            hLogLbl.FontColor     = obj.Theme_.ForegroundColor;
-            hLogLbl.HorizontalAlignment = 'right';
-            hLogLbl.VerticalAlignment   = 'center';
-            obj.hLogStateDD_ = uidropdown(hLogDDGrid);
-            obj.hLogStateDD_.Layout.Row    = 1;
-            obj.hLogStateDD_.Layout.Column = 2;
-            obj.hLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
-            obj.hLogStateDD_.Value   = 'Inline';
-            obj.hLogStateDD_.FontSize = 11;
-            obj.hLogStateDD_.Tooltip  = 'Log window state';
-            obj.hLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_(dd.Value);
+            % Phase 1027.1 — Col 3: Events log dropdown.
+            hEvtDDGrid = uigridlayout(hToolbarGrid, [1 2]);
+            hEvtDDGrid.Layout.Row     = 1;
+            hEvtDDGrid.Layout.Column  = 3;
+            hEvtDDGrid.ColumnWidth    = {72, '1x'};
+            hEvtDDGrid.RowHeight      = {'1x'};
+            hEvtDDGrid.Padding        = [0 0 0 0];
+            hEvtDDGrid.ColumnSpacing  = 4;
+            hEvtDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+            hEvtLbl = uilabel(hEvtDDGrid);
+            hEvtLbl.Layout.Row    = 1;
+            hEvtLbl.Layout.Column = 1;
+            hEvtLbl.Text          = 'Events log:';
+            hEvtLbl.FontSize      = 11;
+            hEvtLbl.FontColor     = obj.Theme_.ForegroundColor;
+            hEvtLbl.HorizontalAlignment = 'right';
+            hEvtLbl.VerticalAlignment   = 'center';
+            obj.hEventsLogStateDD_ = uidropdown(hEvtDDGrid);
+            obj.hEventsLogStateDD_.Layout.Row    = 1;
+            obj.hEventsLogStateDD_.Layout.Column = 2;
+            obj.hEventsLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
+            obj.hEventsLogStateDD_.Value   = 'Inline';
+            obj.hEventsLogStateDD_.FontSize = 11;
+            obj.hEventsLogStateDD_.Tooltip  = 'Events log window state';
+            obj.hEventsLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_('events', dd.Value);
 
-            % Col 4 — Settings gear (existing).
+            % Phase 1027.1 — Col 4: Live log dropdown.
+            hLiveDDGrid = uigridlayout(hToolbarGrid, [1 2]);
+            hLiveDDGrid.Layout.Row     = 1;
+            hLiveDDGrid.Layout.Column  = 4;
+            hLiveDDGrid.ColumnWidth    = {64, '1x'};
+            hLiveDDGrid.RowHeight      = {'1x'};
+            hLiveDDGrid.Padding        = [0 0 0 0];
+            hLiveDDGrid.ColumnSpacing  = 4;
+            hLiveDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+            hLiveLbl = uilabel(hLiveDDGrid);
+            hLiveLbl.Layout.Row    = 1;
+            hLiveLbl.Layout.Column = 1;
+            hLiveLbl.Text          = 'Live log:';
+            hLiveLbl.FontSize      = 11;
+            hLiveLbl.FontColor     = obj.Theme_.ForegroundColor;
+            hLiveLbl.HorizontalAlignment = 'right';
+            hLiveLbl.VerticalAlignment   = 'center';
+            obj.hLiveLogStateDD_ = uidropdown(hLiveDDGrid);
+            obj.hLiveLogStateDD_.Layout.Row    = 1;
+            obj.hLiveLogStateDD_.Layout.Column = 2;
+            obj.hLiveLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
+            obj.hLiveLogStateDD_.Value   = 'Inline';
+            obj.hLiveLogStateDD_.FontSize = 11;
+            obj.hLiveLogStateDD_.Tooltip  = 'Live log window state';
+            obj.hLiveLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_('live', dd.Value);
+
+            % Col 5 — Settings gear (existing).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 4;
+            obj.hSettingsBtn_.Layout.Column = 5;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -262,7 +295,7 @@ classdef FastSenseCompanion < handle
             obj.hRightPanel_.Layout.Row = 2; obj.hRightPanel_.Layout.Column = 3;
             obj.hLogPanel_ = uipanel(obj.hLayout_);
             obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = [1 3];
-            obj.hLogPanel_.Tag = 'LogPaneRoot';   % Phase 1027 — applyThemeToChildren_ skips this subtree
+            % Phase 1027.1 -- LogPaneRoot tag moves to the two sub-panels below.
 
             % Apply panel styling from theme
             for hp = {obj.hLeftPanel_, obj.hMidPanel_, obj.hRightPanel_, obj.hLogPanel_}
@@ -272,24 +305,49 @@ classdef FastSenseCompanion < handle
                 hp{1}.BorderWidth     = 1;
             end
 
+            % Phase 1027.1 -- inner [2 1] grid hosting two LogPaneRoot-tagged sub-panels.
+            obj.hLogStripGrid_ = uigridlayout(obj.hLogPanel_, [2 1]);
+            obj.hLogStripGrid_.RowHeight     = {180, '1x'};   % default Inline+Inline
+            obj.hLogStripGrid_.ColumnWidth   = {'1x'};
+            obj.hLogStripGrid_.Padding       = [0 0 0 0];
+            obj.hLogStripGrid_.RowSpacing    = 4;
+            obj.hLogStripGrid_.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            obj.hEventsLogPanel_ = uipanel(obj.hLogStripGrid_);
+            obj.hEventsLogPanel_.Layout.Row    = 1;
+            obj.hEventsLogPanel_.Layout.Column = 1;
+            obj.hEventsLogPanel_.BorderType    = 'none';
+            obj.hEventsLogPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
+            obj.hEventsLogPanel_.Tag = 'LogPaneRoot';   % theme walker skip rule
+
+            obj.hLiveLogPanel_ = uipanel(obj.hLogStripGrid_);
+            obj.hLiveLogPanel_.Layout.Row    = 2;
+            obj.hLiveLogPanel_.Layout.Column = 1;
+            obj.hLiveLogPanel_.BorderType    = 'none';
+            obj.hLiveLogPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
+            obj.hLiveLogPanel_.Tag = 'LogPaneRoot';   % theme walker skip rule
+
             % Phase 1027 — capture the row-3 height once for restore on Inline.
             rh3 = obj.hLayout_.RowHeight{3};
             if isnumeric(rh3) && isscalar(rh3) && isfinite(rh3) && rh3 > 0
                 obj.OriginalLogRowHeight_ = rh3;
             end
 
-            % Phase 1027 — instantiate LogPane and attach inline by default.
-            obj.LogPane_ = LogPane(obj.Theme_);
-            obj.Listeners_{end+1} = addlistener(obj.LogPane_, 'DetachRequested', ...
-                @(~,~) obj.setLogState_('Detached'));
-            % LiveSampleCount_ used to be initialised inside buildLogStrip_;
-            % move it here since buildLogStrip_ is gone but the pipeline
-            % bookkeeping still belongs to FastSenseCompanion (CONTEXT.md
-            % Live-pipeline integration boundary).
+            % Phase 1027.1 -- instantiate both panes; wire DetachRequested listeners.
+            obj.EventsLogPane_ = EventsLogPane(obj.Theme_);
+            obj.LiveLogPane_   = LiveLogPane(obj.Theme_);
+            obj.Listeners_{end+1} = addlistener(obj.EventsLogPane_, 'DetachRequested', ...
+                @(~,~) obj.setLogState_('events', 'Detached'));
+            obj.Listeners_{end+1} = addlistener(obj.LiveLogPane_, 'DetachRequested', ...
+                @(~,~) obj.setLogState_('live', 'Detached'));
+            % LiveSampleCount_ is companion-owned per Phase 1027 boundary --
+            % NEITHER pane tracks per-tag pipeline cursors.
             obj.LiveSampleCount_ = containers.Map( ...
                 'KeyType', 'char', 'ValueType', 'double');
-            obj.setLogState_('Inline');
-            % Seed the log with the same ready line buildLogStrip_ used to add.
+            % Attach both panes inline by default.
+            obj.setLogState_('events', 'Inline');
+            obj.setLogState_('live',   'Inline');
+            % Seed the events log with the ready line.
             obj.addLogEntry('info', 'Companion ready.');
 
             % Step 10 — Instantiate pane objects and attach
@@ -494,13 +552,14 @@ classdef FastSenseCompanion < handle
                 @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
             obj.Listeners_{end+1} = addlistener(obj, 'OpenAdHocPlotRequested', ...
                 @(s, e) obj.onOpenAdHocPlotRequested_(s, e));
-            % Phase 1027 — re-register LogPane.DetachRequested listener
-            % (cleared by the explicit Listeners_ reset above). LogPane and
-            % its detached uifigure (if any) survive setProject — only the
-            % listener wiring is rebuilt.
-            if ~isempty(obj.LogPane_) && isvalid(obj.LogPane_)
-                obj.Listeners_{end+1} = addlistener(obj.LogPane_, 'DetachRequested', ...
-                    @(~,~) obj.setLogState_('Detached'));
+            % Phase 1027.1 -- re-register both panes' DetachRequested listeners.
+            if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
+                obj.Listeners_{end+1} = addlistener(obj.EventsLogPane_, 'DetachRequested', ...
+                    @(~,~) obj.setLogState_('events', 'Detached'));
+            end
+            if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
+                obj.Listeners_{end+1} = addlistener(obj.LiveLogPane_, 'DetachRequested', ...
+                    @(~,~) obj.setLogState_('live', 'Detached'));
             end
             obj.applyPlaceholderColors_();
         end
