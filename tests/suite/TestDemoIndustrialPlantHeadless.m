@@ -30,6 +30,16 @@ classdef TestDemoIndustrialPlantHeadless < matlab.unittest.TestCase
     end
 
     methods (TestClassSetup)
+        function gateModernMatlab(testCase)
+            %GATEMODERNMATLAB Skip on MATLAB R2020b — segfaults in
+            %   libmex.so during the demo's MEX kernel calls (mksqlite /
+            %   build_store_mex). Pre-existing issue; the test only ran
+            %   to completion on R2021a+ in CI.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeTrue(~verLessThan('matlab', '9.10'), ...
+                'TestDemoIndustrialPlantHeadless segfaults on R2020b libmex; needs R2021a+');
+        end
+
         function addPaths(testCase)
             here = fileparts(mfilename('fullpath'));
             addpath(fullfile(here, '..', '..'));
