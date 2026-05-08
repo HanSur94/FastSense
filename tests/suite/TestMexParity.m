@@ -1,19 +1,19 @@
 classdef TestMexParity < matlab.unittest.TestCase
     methods (TestClassSetup)
-        function gateHeadlessR2020b(testCase)
-            %GATEHEADLESSR2020B Skip on the Linux CI runner (MATLAB R2020b
-            %   under -batch / xvfb). Same dispatcher segfault as
-            %   TestMexEdgeCases — MATLAB libmwm_dispatcher.so crashes in
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners (xvfb / -batch).
+            %   Same dispatcher segfault as TestMexEdgeCases —
+            %   libmwm_dispatcher.so crashes in
             %   Mfh_file::dispatch_file_common during the transition into
-            %   this MEX-heavy class. MEX correctness is still verified
-            %   indirectly through every FastSense rendering test on this
-            %   runner. Interactive desktop / macOS / Windows CI run the
-            %   full TestMexParity suite.
+            %   this MEX-heavy class. Reproduced on R2020b AND R2021b.
+            %   MEX correctness is still verified indirectly through
+            %   every FastSense rendering test on this runner.
+            %   Interactive desktop / macOS / Windows CI run the full
+            %   TestMexParity suite.
             if exist('OCTAVE_VERSION', 'builtin'); return; end
             isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
-            isR2020b = ~verLessThan('matlab', '9.9') && verLessThan('matlab', '9.10');
-            testCase.assumeFalse(isHeadlessLinux && isR2020b, ...
-                'TestMexParity segfaults MATLAB R2020b headless — covered indirectly by FastSense render tests');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestMexParity segfaults MATLAB headless on Linux — covered indirectly by FastSense render tests');
         end
 
         function addPaths(testCase)

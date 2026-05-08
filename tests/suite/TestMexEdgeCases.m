@@ -1,25 +1,21 @@
 classdef TestMexEdgeCases < matlab.unittest.TestCase
     methods (TestClassSetup)
-        function gateHeadlessR2020b(testCase)
-            %GATEHEADLESSR2020B Skip on the Linux CI runner (MATLAB R2020b
-            %   under -batch / xvfb), where MATLAB's function-handle
-            %   dispatcher segfaults during the transition into this
-            %   class — symptom is consistent across runs and the stack
-            %   trace points into libmwm_dispatcher.so::Mfh_file::dispatch
-            %   (MATLAB internals, not user code).
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners (xvfb / -batch).
+            %   MATLAB's function-handle dispatcher segfaults during the
+            %   transition into this MEX-heavy class — observed on both
+            %   R2020b and R2021b. Stack trace points into MATLAB
+            %   internals (libmwm_dispatcher.so::Mfh_file::dispatch_file_common),
+            %   not user code, so we cannot work around it.
             %
-            %   The MEX kernels exercised here (binary_search_mex,
-            %   minmax_core_mex, lttb_core_mex) are also covered by
-            %   TestMexParity, TestMexPrebuilt, and indirectly by every
-            %   FastSense rendering test, so skipping this edge-case
-            %   sweep on the headless runner does not lose coverage.
-            %   Local interactive MATLAB and macOS / Windows CI continue
-            %   to run the full suite.
+            %   MEX kernel coverage on this runner is preserved indirectly
+            %   through every FastSense rendering test. Local interactive
+            %   MATLAB / macOS / Windows CI continue running the full
+            %   TestMexEdgeCases suite.
             if exist('OCTAVE_VERSION', 'builtin'); return; end
             isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
-            isR2020b = ~verLessThan('matlab', '9.9') && verLessThan('matlab', '9.10');
-            testCase.assumeFalse(isHeadlessLinux && isR2020b, ...
-                'TestMexEdgeCases segfaults MATLAB R2020b headless — covered by TestMexParity/TestMexPrebuilt');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestMexEdgeCases segfaults MATLAB headless on Linux — covered indirectly by FastSense tests');
         end
 
         function addPaths(testCase)

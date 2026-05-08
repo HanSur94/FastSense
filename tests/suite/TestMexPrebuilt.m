@@ -19,22 +19,21 @@ classdef TestMexPrebuilt < matlab.unittest.TestCase
     end
 
     methods (TestClassSetup)
-        function gateHeadlessR2020b(testCase)
-            %GATEHEADLESSR2020B Skip on the Linux CI runner (MATLAB R2020b
-            %   under -batch / xvfb). Same dispatcher segfault as
-            %   TestMexEdgeCases (70ed08a) and TestMexParity (f655db0) —
-            %   crash during 'Running TestMexPrebuilt' inside MATLAB
-            %   internals (libmwm_dispatcher.so::Mfh_file::dispatch_file_common).
-            %   The mex_stamp/install probe logic exercised here runs every
-            %   time install() is called — already implicitly covered by
-            %   every other class's TestClassSetup on this runner. Local
-            %   interactive MATLAB / macOS / Windows CI continue running
-            %   the full TestMexPrebuilt suite.
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners (xvfb / -batch).
+            %   Same dispatcher segfault as TestMexEdgeCases (70ed08a) and
+            %   TestMexParity (f655db0) — crash during 'Running TestMexPrebuilt'
+            %   inside MATLAB internals
+            %   (libmwm_dispatcher.so::Mfh_file::dispatch_file_common).
+            %   Reproduced on R2020b AND R2021b. The mex_stamp/install
+            %   probe logic exercised here is already implicitly covered
+            %   by every other class's TestClassSetup on this runner.
+            %   Local interactive MATLAB / macOS / Windows CI continue
+            %   running the full TestMexPrebuilt suite.
             if exist('OCTAVE_VERSION', 'builtin'); return; end
             isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
-            isR2020b = ~verLessThan('matlab', '9.9') && verLessThan('matlab', '9.10');
-            testCase.assumeFalse(isHeadlessLinux && isR2020b, ...
-                'TestMexPrebuilt segfaults MATLAB R2020b headless — install() probe still exercised by every other class');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestMexPrebuilt segfaults MATLAB headless on Linux — install() probe exercised by every other class');
         end
 
         function addPaths(testCase)
