@@ -9,8 +9,20 @@
 - ✅ **v2.0 Tag-Based Domain Model** — Phases 1004-1011 (shipped 2026-04-17)
 - 📋 **v2.1 Tag-API Tech Debt Cleanup** — Phases 1012-1017 (carry-forward, parallel — not active)
 - ✅ **v3.0 FastSense Companion** — Phases 1018-1023 + 1023.1 gap closure (shipped 2026-04-30)
+- 🚧 **Pending milestone** — Phases 1025-1028 (promoted from backlog 2026-05-08, awaiting milestone scoping; 1024 closed via quick task 260508-d7k)
 
 ## Phases
+
+<details open>
+<summary>🚧 Pending milestone (Phases 1025-1028) — promoted from backlog 2026-05-08</summary>
+
+- [x] Phase 1024: Fix companion app dark mode — closed via quick task [260508-d7k](./quick/260508-d7k-fix-companion-app-dark-mode-switching-th/) (2026-05-08)
+- [ ] Phase 1025: FastSense hover crosshair + datatip
+- [ ] Phase 1026: Dashboard time slider preview
+- [ ] Phase 1027: Companion detachable log window
+- [ ] Phase 1028: Tag update perf — MEX + SIMD
+
+</details>
 
 <details>
 <summary>✅ v1.0 FastSense Advanced Dashboard (Phases 1-9) — SHIPPED 2026-04-03</summary>
@@ -70,10 +82,6 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 
 </details>
 
-## Phase Details
-
-(no active milestone — see [milestones/](milestones/) for archived versions)
-
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -101,55 +109,56 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1022. Ad-Hoc Plot Composer | v3.0 | 3/3 | Complete   | 2026-04-30 |
 | 1023. Industrial Plant Demo Integration | v3.0 | 2/2 | Complete | 2026-04-30 |
 | 1023.1. Cross-Phase Wiring Fixes | v3.0 | gap-closure | Complete | 2026-04-30 |
+| 1024. Fix companion app dark mode | pending | quick-task | Complete (via 260508-d7k) | 2026-05-08 |
+| 1025. FastSense hover crosshair + datatip | pending | 0/? | Not started | — |
+| 1026. Dashboard time slider preview | pending | 0/? | Not started | — |
+| 1027. Companion detachable log window | pending | 0/? | Not started | — |
+| 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
 
-## Backlog
+## Phase Details (Pending Milestone)
 
-### Phase 999.1: Fix companion app dark mode (BACKLOG)
+### Phase 1024: Fix companion app dark mode — CLOSED
 
-**Goal:** Some UI elements in the FastSense Companion app are not respecting dark mode — notably the log panel. Audit all companion UI surfaces and ensure consistent dark theming.
+**Status:** Closed 2026-05-08 via quick task [260508-d7k](./quick/260508-d7k-fix-companion-app-dark-mode-switching-th/).
 
-**Requirements:** TBD
-**Plans:** 0 plans
+**Root cause:** `applyThemeToChildren_` walker silently skipped widget classes without an explicit `case`. `uilistbox` (TagCatalogPane Row 7 — the tag list) was the visible casualty.
 
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
+**Fix:** Added 8 widget cases to the walker (`ListBox`, `TextArea`, `CheckBox`, `NumericEditField`, `StateButton`, `ToggleButton`, `RadioButton`, `ButtonGroup`). Regression test asserts dark→light→dark flip across all classes.
 
-### Phase 999.2: FastSense hover crosshair + datatip (BACKLOG)
+**Promoted from:** Backlog 999.1 (2026-05-08)
+
+### Phase 1025: FastSense hover crosshair + datatip
 
 **Goal:** Add a vertical crosshair line that follows the mouse when hovering over a FastSense plot/widget, with a context datatip window showing the values of all lines at the hovered x position.
 
+**Promoted from:** Backlog 999.2 (2026-05-08)
 **Requirements:** TBD
 **Plans:** 0 plans
 
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
-
-### Phase 999.3: Dashboard time slider preview (BACKLOG)
+### Phase 1026: Dashboard time slider preview
 
 **Goal:** Fix the lower dashboard time slider so it shows a preview overlay of all graphed plot lines and detected events across the full time range. Currently the slider track is empty — investigate why the preview rendering isn't happening and restore it.
 
+**Promoted from:** Backlog 999.3 (2026-05-08)
 **Requirements:** TBD
 **Plans:** 0 plans
 
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
-
-### Phase 999.4: Companion detachable log window (BACKLOG)
+### Phase 1027: Companion detachable log window
 
 **Goal:** In the FastSense Companion app, make the log panel detachable into its own draggable, resizable window — same pop-out pattern as detachable widgets in the main dashboard.
 
+**Promoted from:** Backlog 999.4 (2026-05-08)
 **Requirements:** TBD
 **Plans:** 0 plans
 
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
-
-### Phase 999.5: Tag update perf — MEX + SIMD (BACKLOG)
+### Phase 1028: Tag update perf — MEX + SIMD
 
 **Goal:** Profile and accelerate the tag update path (SensorTag/StateTag/MonitorTag/CompositeTag streaming + recompute). Identify hot spots and replace with C MEX kernels using SIMD (AVX2 / NEON) where it pays off, consistent with existing FastSense MEX patterns.
 
+**Promoted from:** Backlog 999.5 (2026-05-08)
 **Requirements:** TBD
 **Plans:** 0 plans
 
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
+## Backlog
+
+(empty — last 5 items promoted to phases 1024-1028 on 2026-05-08)
