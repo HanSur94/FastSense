@@ -820,9 +820,22 @@ classdef FastSenseCompanion < handle
                     'newState must be ''Inline'', ''Detached'', or ''Hidden'' (got ''%s'').', ...
                     newState);
             end
-            % Idempotency: read current state from dropdown (when present).
-            if ~isempty(obj.hLogStateDD_) && isvalid(obj.hLogStateDD_)
-                if strcmp(obj.hLogStateDD_.Value, newState)
+            % Idempotency: only no-op if the system is ACTUALLY in the
+            % requested state (not just if the dropdown reads that value).
+            % Guards the bootstrap path where the dropdown is pre-set to
+            % 'Inline' before LogPane is constructed.
+            if ~isempty(obj.LogPane_) && isvalid(obj.LogPane_)
+                hasDetached = ~isempty(obj.hDetachedLogFig_) && isvalid(obj.hDetachedLogFig_);
+                attached    = obj.LogPane_.IsAttached;
+                inState = '';
+                if attached && ~hasDetached
+                    inState = 'Inline';
+                elseif attached && hasDetached
+                    inState = 'Detached';
+                elseif ~attached && ~hasDetached
+                    inState = 'Hidden';
+                end
+                if strcmp(inState, newState)
                     return;
                 end
             end
