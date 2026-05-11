@@ -2100,3 +2100,11 @@ setEventMarkers  Draw a faint full-height line per event time.
   values (NaN, +/-Inf) are silently dropped. Empty input just
   clears the markers.
 
+#### `setEventBands(obj, starts, ends, colors)`
+
+setEventBands  Draw a translucent rectangle per event spanning start→end.
+  setEventBands(starts, ends) clears any existing bands and
+  draws one semi-transparent rectangle per event, spanning
+  the start time to the end time. Non-finite values (NaN,
+  ±Inf) are silently dropped.
+
