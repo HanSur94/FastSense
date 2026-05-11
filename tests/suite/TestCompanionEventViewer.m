@@ -520,6 +520,46 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(v.TimeRange(1), 0);
             testCase.verifyGreaterThanOrEqual(v.TimeRange(2), 11);
         end
+
+        % --- Slider readout label tests ---
+
+        function testSliderReadoutsUpdateAfterPreset(testCase)
+            es = makeStore_(testCase);
+            % Append events so 'all' has a real span.
+            e1 = Event(0,  1,  'sA', 'lbl', 1, 'upper'); e1.TagKeys = {'tA'}; e1.Severity = 1;
+            e2 = Event(10, 11, 'sB', 'lbl', 1, 'upper'); e2.TagKeys = {'tB'}; e2.Severity = 2;
+            es.append([e1 e2]);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            % Constructor applies 'all' preset, which calls updateSliderReadouts_.
+            startLbl = findall(v.hFigure, 'Tag', 'SliderReadoutStart');
+            endLbl   = findall(v.hFigure, 'Tag', 'SliderReadoutEnd');
+            spanLbl  = findall(v.hFigure, 'Tag', 'SliderReadoutSpan');
+            testCase.verifyNotEmpty(startLbl);
+            testCase.verifyNotEmpty(endLbl);
+            testCase.verifyNotEmpty(spanLbl);
+            % Labels must be populated, not the placeholder dash.
+            testCase.verifyNotEqual(startLbl.Text, char(8212));
+            testCase.verifyNotEqual(endLbl.Text,   char(8212));
+            testCase.verifyNotEqual(spanLbl.Text,  char(8212));
+        end
+
+        function testSliderReadoutsUpdateAfterSetTimeRange(testCase)
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.setTimeRange(100, 200);
+            startLbl = findall(v.hFigure, 'Tag', 'SliderReadoutStart');
+            endLbl   = findall(v.hFigure, 'Tag', 'SliderReadoutEnd');
+            spanLbl  = findall(v.hFigure, 'Tag', 'SliderReadoutSpan');
+            % Span = 100 days -> "100.0 days"
+            testCase.verifyEqual(spanLbl.Text, '100.0 days');
+            % start/end should be parseable as datestrs that match the inputs
+            testCase.verifyEqual(startLbl.Text, datestr(100, 'yyyy-mm-dd HH:MM:SS'));
+            testCase.verifyEqual(endLbl.Text,   datestr(200, 'yyyy-mm-dd HH:MM:SS'));
+        end
     end
 end
 

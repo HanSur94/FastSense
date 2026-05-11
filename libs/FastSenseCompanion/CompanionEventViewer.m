@@ -81,6 +81,11 @@ classdef CompanionEventViewer < handle
         Table_        = []   % uitable handle
         ToolbarPanel_ = []   % uipanel hosting the view-mode toggle
         ViewSwitch_   = []   % uiswitch handle
+        SliderInnerPanel_   = []   % uipanel hosting the TimeRangeSelector itself (row 1 of SliderPanel_)
+        SliderReadoutGrid_  = []   % uigridlayout hosting the 3 readout labels (row 2 of SliderPanel_)
+        SliderReadoutStart_ = []   % uilabel showing selection start time (left)
+        SliderReadoutSpan_  = []   % uilabel showing selection span (middle)
+        SliderReadoutEnd_   = []   % uilabel showing selection end time (right)
     end
 
     methods
@@ -139,6 +144,7 @@ classdef CompanionEventViewer < handle
             end
             obj.TimeRange      = [tStart tEnd];
             obj.TimePresetMode = 'custom';
+            obj.updateSliderReadouts_();
         end
 
         function setTagFilter(obj, keysCell)
@@ -173,6 +179,7 @@ classdef CompanionEventViewer < handle
             obj.Canvas_.draw(filtered, obj.Theme_);
             obj.updateTableData_(filtered);
             obj.updateSliderPreview_(evs);
+            obj.updateSliderReadouts_();
         end
 
         function c = getCanvasForTest_(obj)
@@ -284,6 +291,11 @@ classdef CompanionEventViewer < handle
             catch
             end
             obj.Selector_ = [];
+            obj.SliderReadoutStart_ = [];
+            obj.SliderReadoutSpan_  = [];
+            obj.SliderReadoutEnd_   = [];
+            obj.SliderReadoutGrid_  = [];
+            obj.SliderInnerPanel_   = [];
             try
                 if ~isempty(obj.CatalogPane_)
                     obj.CatalogPane_.detach();
@@ -375,6 +387,7 @@ classdef CompanionEventViewer < handle
                 obj.TimePresetMode = 'snapshot';
             end
             obj.refresh();
+            obj.updateSliderReadouts_();
         end
 
         function buildFigure_(obj)
@@ -406,7 +419,7 @@ classdef CompanionEventViewer < handle
             obj.RightGrid_ = uigridlayout(obj.RootGrid_, [4 1]);
             obj.RightGrid_.Layout.Row    = 1;
             obj.RightGrid_.Layout.Column = 2;
-            obj.RightGrid_.RowHeight     = {36, 60, '1x', 80};
+            obj.RightGrid_.RowHeight     = {36, 60, '1x', 110};
             obj.RightGrid_.ColumnWidth   = {'1x'};
             obj.RightGrid_.Padding       = [0 0 0 0];
             obj.RightGrid_.RowSpacing    = 0;
@@ -612,9 +625,64 @@ classdef CompanionEventViewer < handle
             obj.ViewSwitch_.ValueChangedFcn = @(src, ~) obj.onViewSwitchChanged_(src.Value);
 
             % --- Slider in bottom panel --------------------------------
-            obj.Selector_ = TimeRangeSelector(obj.SliderPanel_, ...
+            % Host the slider in row 1 of a 2-row grid; readout labels go in row 2.
+            hSliderGrid = uigridlayout(obj.SliderPanel_, [2 1]);
+            hSliderGrid.RowHeight     = {'1x', 28};
+            hSliderGrid.ColumnWidth   = {'1x'};
+            hSliderGrid.Padding       = [0 0 0 0];
+            hSliderGrid.RowSpacing    = 2;
+            hSliderGrid.BackgroundColor = t.WidgetBackground;
+
+            obj.SliderInnerPanel_ = uipanel(hSliderGrid);
+            obj.SliderInnerPanel_.Layout.Row    = 1;
+            obj.SliderInnerPanel_.Layout.Column = 1;
+            obj.SliderInnerPanel_.BackgroundColor = t.WidgetBackground;
+            obj.SliderInnerPanel_.BorderType      = 'none';
+
+            obj.Selector_ = TimeRangeSelector(obj.SliderInnerPanel_, ...
                 'OnRangeChanged', @(t1, t2) obj.onSliderRangeChanged_(t1, t2), ...
                 'Theme',          t);
+
+            % Readout strip: [start | span | end] under the slider.
+            obj.SliderReadoutGrid_ = uigridlayout(hSliderGrid, [1 3]);
+            obj.SliderReadoutGrid_.Layout.Row    = 2;
+            obj.SliderReadoutGrid_.Layout.Column = 1;
+            obj.SliderReadoutGrid_.RowHeight     = {'1x'};
+            obj.SliderReadoutGrid_.ColumnWidth   = {'1x', '1x', '1x'};
+            obj.SliderReadoutGrid_.Padding       = [8 0 8 0];
+            obj.SliderReadoutGrid_.ColumnSpacing = 8;
+            obj.SliderReadoutGrid_.BackgroundColor = t.WidgetBackground;
+
+            obj.SliderReadoutStart_ = uilabel(obj.SliderReadoutGrid_);
+            obj.SliderReadoutStart_.Layout.Row    = 1;
+            obj.SliderReadoutStart_.Layout.Column = 1;
+            obj.SliderReadoutStart_.Text          = char(8212);
+            obj.SliderReadoutStart_.Tag           = 'SliderReadoutStart';
+            obj.SliderReadoutStart_.HorizontalAlignment = 'left';
+            obj.SliderReadoutStart_.FontColor     = t.ForegroundColor;
+            obj.SliderReadoutStart_.BackgroundColor = t.WidgetBackground;
+            obj.SliderReadoutStart_.FontSize      = 11;
+
+            obj.SliderReadoutSpan_ = uilabel(obj.SliderReadoutGrid_);
+            obj.SliderReadoutSpan_.Layout.Row    = 1;
+            obj.SliderReadoutSpan_.Layout.Column = 2;
+            obj.SliderReadoutSpan_.Text          = char(8212);
+            obj.SliderReadoutSpan_.Tag           = 'SliderReadoutSpan';
+            obj.SliderReadoutSpan_.HorizontalAlignment = 'center';
+            obj.SliderReadoutSpan_.FontColor     = t.ForegroundColor;
+            obj.SliderReadoutSpan_.BackgroundColor = t.WidgetBackground;
+            obj.SliderReadoutSpan_.FontSize      = 11;
+            obj.SliderReadoutSpan_.FontWeight    = 'bold';
+
+            obj.SliderReadoutEnd_ = uilabel(obj.SliderReadoutGrid_);
+            obj.SliderReadoutEnd_.Layout.Row    = 1;
+            obj.SliderReadoutEnd_.Layout.Column = 3;
+            obj.SliderReadoutEnd_.Text          = char(8212);
+            obj.SliderReadoutEnd_.Tag           = 'SliderReadoutEnd';
+            obj.SliderReadoutEnd_.HorizontalAlignment = 'right';
+            obj.SliderReadoutEnd_.FontColor     = t.ForegroundColor;
+            obj.SliderReadoutEnd_.BackgroundColor = t.WidgetBackground;
+            obj.SliderReadoutEnd_.FontSize      = 11;
 
             % --- Event table view (overlays AxesPanel_'s grid cell) ----
             obj.Table_ = uitable(obj.TablePanel_);
@@ -650,6 +718,8 @@ classdef CompanionEventViewer < handle
             obj.Listeners_{end+1} = addlistener(obj.Companion_, 'LiveModeChanged', ...
                 @(s, ~) obj.onCompanionLiveChanged_(s.IsLive));
             obj.onCompanionLiveChanged_(obj.Companion_.IsLive);  % initial sync
+
+            obj.updateSliderReadouts_();
         end
 
         function onCompanionLiveChanged_(obj, isLive)
@@ -707,6 +777,7 @@ classdef CompanionEventViewer < handle
                 if strcmp(obj.TimePresetMode, 'roll')
                     span = obj.TimeRange(2) - obj.TimeRange(1);
                     obj.TimeRange = [now - span, now];
+                    obj.updateSliderReadouts_();
                 end
                 obj.refresh();
             catch
@@ -729,6 +800,7 @@ classdef CompanionEventViewer < handle
             obj.TimeRange      = [t1 t2];
             obj.TimePresetMode = 'custom';
             obj.refresh();
+            obj.updateSliderReadouts_();
         end
 
         function updateSliderPreview_(obj, allEvents)
@@ -966,6 +1038,46 @@ classdef CompanionEventViewer < handle
                 evs(row).Notes = char(ev.NewData);
                 try; obj.Store_.save(); catch; end
             catch
+            end
+        end
+
+        function updateSliderReadouts_(obj)
+        %UPDATESLIDERREADOUTS_ Refresh the [start | span | end] labels under the slider.
+        %   Reads obj.TimeRange and writes formatted strings into the three
+        %   uilabels. No-op if the labels haven't been built yet (i.e., during
+        %   the part of buildFigure_ that runs before they exist).
+            if isempty(obj.SliderReadoutStart_) || ~isvalid(obj.SliderReadoutStart_); return; end
+            t1 = obj.TimeRange(1);
+            t2 = obj.TimeRange(2);
+            obj.SliderReadoutStart_.Text = obj.formatSliderTime_(t1);
+            obj.SliderReadoutEnd_.Text   = obj.formatSliderTime_(t2);
+            obj.SliderReadoutSpan_.Text  = obj.formatSliderSpan_(t1, t2);
+        end
+
+        function s = formatSliderTime_(~, t)
+        %FORMATSLIDERTIME_ Format a datenum as 'yyyy-mm-dd HH:MM:SS' or char(8212) on bad input.
+            if ~isfinite(t); s = char(8212); return; end
+            try
+                s = datestr(t, 'yyyy-mm-dd HH:MM:SS');
+            catch
+                s = sprintf('%g', t);
+            end
+        end
+
+        function s = formatSliderSpan_(~, t1, t2)
+        %FORMATSLIDERSPAN_ Humanize a time span (in datenum days) for display.
+            if ~isfinite(t1) || ~isfinite(t2) || t2 <= t1
+                s = char(8212); return;
+            end
+            spanDays = t2 - t1;
+            if spanDays >= 1
+                s = sprintf('%.1f days', spanDays);
+            elseif spanDays >= 1/24
+                s = sprintf('%.1f h', spanDays * 24);
+            elseif spanDays >= 1/1440
+                s = sprintf('%.1f min', spanDays * 1440);
+            else
+                s = sprintf('%.1f s', spanDays * 86400);
             end
         end
 
