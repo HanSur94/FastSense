@@ -181,6 +181,12 @@ classdef CompanionEventViewer < handle
 
         function setTagFilter(obj, keysCell)
         %SETTAGFILTER Set the tag key filter. {} / '' means "all tags".
+        %
+        %   This is a ONE-WAY set: the viewer's internal SelectedTagKeys is
+        %   updated and a subsequent refresh() will apply the filter, but the
+        %   left-column TagCatalogPane UI is NOT updated to mirror it. Use
+        %   companion.refreshUI() or set the catalog pane's selection directly
+        %   if you need the UI to reflect the programmatic filter.
             if isempty(keysCell)
                 obj.SelectedTagKeys = {};
                 return;
@@ -1247,25 +1253,7 @@ classdef CompanionEventViewer < handle
                 % Zoom is nice-to-have; failure must not suppress the dashboard.
             end
 
-            % macOS quirk: opening a classic figure from a uifigure callback
-            % can leave the new window behind without input focus, so clicks
-            % fall through OR don't register. Force the dashboard's figure
-            % to the foreground via shg + figure(), then flush twice with a
-            % short pause to let the window-server finish raising the window
-            % before the next user click arrives.
-            try
-                if ~isempty(d.hFigure) && isgraphics(d.hFigure)
-                    set(d.hFigure, 'WindowStyle', 'normal');
-                    set(d.hFigure, 'Visible',     'on');
-                    drawnow;
-                    figure(d.hFigure);
-                    shg;
-                    pause(0.15);
-                    figure(d.hFigure);
-                    drawnow;
-                end
-            catch
-            end
+            obj.bringFigureToFront_(d.hFigure);
         end
 
         function onTableRowSelectionChanged_(obj, evt)
@@ -1382,20 +1370,30 @@ classdef CompanionEventViewer < handle
                 % Zoom is nice-to-have; failure must not suppress the dashboard.
             end
 
-            % macOS: bring the new dashboard to the front (same pattern as
-            % single-event drill-down).
+            obj.bringFigureToFront_(d.hFigure);
+        end
+
+        function bringFigureToFront_(~, hFig)
+        %BRINGFIGURETOFRONT_ macOS focus workaround for figures spawned from a uifigure.
+        %   On macOS, opening a classic figure from a uifigure callback can
+        %   leave the new window behind without input focus, so clicks fall
+        %   through OR don't register. Force the figure to the foreground via
+        %   shg + figure(), then flush twice with a short pause to let the
+        %   window-server finish raising the window before the next user
+        %   click arrives. No-op if hFig is empty or non-graphics.
             try
-                if ~isempty(d.hFigure) && isgraphics(d.hFigure)
-                    set(d.hFigure, 'WindowStyle', 'normal');
-                    set(d.hFigure, 'Visible',     'on');
+                if ~isempty(hFig) && isgraphics(hFig)
+                    set(hFig, 'WindowStyle', 'normal');
+                    set(hFig, 'Visible',     'on');
                     drawnow;
-                    figure(d.hFigure);
+                    figure(hFig);
                     shg;
                     pause(0.15);
-                    figure(d.hFigure);
+                    figure(hFig);
                     drawnow;
                 end
             catch
+                % Foreground raise is best-effort; never let it crash the caller.
             end
         end
 
