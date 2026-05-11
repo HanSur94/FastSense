@@ -20,7 +20,8 @@
       "Skill(gsd:research-phase)",
       "WebSearch",
       "Skill(gsd:ui-phase)",
-      "Skill(gsd:ui-phase:*)"
+      "Skill(gsd:ui-phase:*)",
+      "mcp__matlab__evaluate_matlab_code"
     ]
   }
 }
