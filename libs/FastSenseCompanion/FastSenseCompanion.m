@@ -1357,7 +1357,12 @@ classdef FastSenseCompanion < handle
                 return;
             end
             obj.EventViewer_ = CompanionEventViewer(obj.EventStore_, obj.Registry_, obj);
-            obj.Listeners_{end+1} = addlistener(obj.EventViewer_, 'ObjectBeingDestroyed', ...
+            % Listen on the figure rather than the viewer object: viewer.close()
+            % destroys the figure but leaves the viewer handle alive (we still
+            % hold it in EventViewer_), so ObjectBeingDestroyed on the viewer
+            % itself never fires. The figure is destroyed reliably whether the
+            % user clicks X or anyone calls viewer.close() directly.
+            obj.Listeners_{end+1} = addlistener(obj.EventViewer_.hFigure, 'ObjectBeingDestroyed', ...
                 @(~,~) obj.clearEventViewerHandle_());
             % Disable the launch button so it visually reflects that the viewer
             % is currently open. The destruction listener re-enables it.
