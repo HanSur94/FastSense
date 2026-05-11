@@ -1131,19 +1131,25 @@ classdef CompanionEventViewer < handle
             d.render();
 
             % DashboardEngine.render auto-computes RowHeight to make grid
-            % cells square in pixels — so a [1 1 24 1] widget ends up only
-            % ~100px tall. Override by stretching the widget panel to fill
-            % the entire content area (the canvas inside hViewport).
+            % cells square in pixels (DashboardLayout.m:197-209) — so a
+            % [1 1 24 1] widget ends up in a layout cell ~11% of canvas
+            % height regardless of figure size. The widget hierarchy is:
+            %   widget.hPanel (pixels) ⊂ layoutCell (norm) ⊂ hCanvas ⊂ hViewport
+            % Stretch BOTH the layout cell AND the widget panel to fill the
+            % canvas, so the FastSenseWidget gets the entire content area.
             try
                 if ~isempty(d.Widgets)
                     w = d.Widgets{1};
                     if ~isempty(w.hPanel) && isgraphics(w.hPanel)
-                        oldUnits = w.hPanel.Units;
+                        cellPanel = w.hPanel.Parent;
+                        if ~isempty(cellPanel) && isgraphics(cellPanel)
+                            cellPanel.Units    = 'normalized';
+                            cellPanel.Position = [0 0 1 1];   % fill hCanvas
+                        end
                         w.hPanel.Units    = 'normalized';
-                        w.hPanel.Position = [0 0 1 1];   % fill the canvas
-                        w.hPanel.Units    = oldUnits;
-                        % Drawnow so the inner FastSense axes resize before
-                        % we set XLim below.
+                        w.hPanel.Position = [0 0 1 1];   % fill the cell
+                        % Flush so the inner FastSense axes pick up the new
+                        % size before we zoom XLim below.
                         drawnow;
                     end
                 end
