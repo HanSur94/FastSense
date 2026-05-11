@@ -581,6 +581,8 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
 
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
+            % Start live mode explicitly (constructor no longer auto-starts).
+            app.startLiveMode();
             drawnow;
 
             % Reach the private scan method via the live timer's TimerFcn,
@@ -589,7 +591,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             cleanupW = onCleanup(@() warning(warnState)); %#ok<NASGU>
             s = struct(app);
             testCase.assertNotEmpty(s.LiveTimer_, ...
-                'Live timer must exist after construction (Live mode defaults ON)');
+                'Live timer must exist after startLiveMode()');
             testCase.assertTrue(isa(s.LiveSampleCount_, 'containers.Map'), ...
                 'LiveSampleCount_ must be a containers.Map after constructor');
             tickFcn = s.LiveTimer_.TimerFcn;
@@ -681,6 +683,8 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             testCase.backupAndArmRestore_();
             app = FastSenseCompanion();
             testCase.addTeardown(@() delete(app));
+            % Start live mode so LiveTimer_ is created before calling setLivePeriod.
+            app.startLiveMode();
             app.setLivePeriod(2.0);
             testCase.verifyEqual(app.LivePeriod, 2.0);
             warnState = warning('off', 'MATLAB:structOnObject');

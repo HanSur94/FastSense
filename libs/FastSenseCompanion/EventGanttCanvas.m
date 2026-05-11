@@ -17,6 +17,13 @@ classdef EventGanttCanvas < handle
         Theme           % CompanionTheme struct
         BarHandles      % rectangle/patch handles, Nx1
         BarEvents       % Event objects mirrored to handles, Nx1
+        hCrosshairLine  % vertical line that tracks the cursor's X position
+        hCrosshairText  % text annotation at the top of the line showing datetime
+    end
+
+    properties (Access = private)
+        CrosshairFigure_      = []   % uifigure host (set by installCrosshair)
+        CrosshairPrevMotion_  = []   % saved figure WindowButtonMotionFcn for chaining
     end
 
     properties
@@ -47,10 +54,16 @@ classdef EventGanttCanvas < handle
 
             cla(obj.hAxes);
             set(obj.hAxes, ...
-                'Color',     obj.Theme.WidgetBackground, ...
-                'XColor',    obj.Theme.ForegroundColor, ...
-                'YColor',    obj.Theme.ForegroundColor, ...
-                'GridColor', obj.Theme.WidgetBorderColor);
+                'Color',                obj.Theme.WidgetBackground, ...
+                'XColor',               obj.Theme.ForegroundColor, ...
+                'YColor',               obj.Theme.ForegroundColor, ...
+                'GridColor',            [0.25 0.25 0.25], ...   % dark grey, theme-independent
+                'GridAlpha',            0.55, ...
+                'XGrid',                'on', ...
+                'YGrid',                'on', ...
+                'GridLineStyle',        ':', ...
+                'Layer',                'top', ...
+                'TickLabelInterpreter', 'none');
             hold(obj.hAxes, 'on');
 
             if isempty(events)
@@ -123,6 +136,41 @@ classdef EventGanttCanvas < handle
             end
             obj.BarHandles = [];
             obj.BarEvents  = Event.empty;
+            % Restore figure callbacks before destroying our crosshair handles.
+            try; obj.uninstallCrosshair(); catch; end
+        end
+
+        function installCrosshair(obj, hFigure)
+        %INSTALLCROSSHAIR Wire a vertical crosshair that tracks the cursor over the Gantt axes.
+        %   installCrosshair(hFigure) chains onto the figure's existing
+        %   WindowButtonMotionFcn so the slider's drag handler keeps working.
+        %   No-op if already installed.
+            if ~isempty(obj.CrosshairFigure_); return; end
+            if isempty(hFigure) || ~isgraphics(hFigure); return; end
+            obj.CrosshairFigure_     = hFigure;
+            obj.CrosshairPrevMotion_ = get(hFigure, 'WindowButtonMotionFcn');
+            set(hFigure, 'WindowButtonMotionFcn', @(s, e) obj.onMouseMove_(s, e));
+        end
+
+        function uninstallCrosshair(obj)
+        %UNINSTALLCROSSHAIR Restore the previous WindowButtonMotionFcn and delete crosshair graphics.
+            if isempty(obj.CrosshairFigure_); return; end
+            try
+                if isgraphics(obj.CrosshairFigure_)
+                    set(obj.CrosshairFigure_, 'WindowButtonMotionFcn', obj.CrosshairPrevMotion_);
+                end
+            catch
+            end
+            obj.CrosshairFigure_     = [];
+            obj.CrosshairPrevMotion_ = [];
+            if ~isempty(obj.hCrosshairLine) && isgraphics(obj.hCrosshairLine)
+                delete(obj.hCrosshairLine);
+            end
+            obj.hCrosshairLine = [];
+            if ~isempty(obj.hCrosshairText) && isgraphics(obj.hCrosshairText)
+                delete(obj.hCrosshairText);
+            end
+            obj.hCrosshairText = [];
         end
     end
 
@@ -142,6 +190,68 @@ classdef EventGanttCanvas < handle
                 end
             catch
                 % Click handlers must never crash drawing.
+            end
+        end
+
+        function onMouseMove_(obj, src, evt)
+        %ONMOUSEMOVE_ Update the vertical crosshair when the cursor is over the Gantt axes.
+        %   Chains to the previously-saved WindowButtonMotionFcn so other
+        %   listeners (TimeRangeSelector slider drag) keep functioning.
+            % Always defer to the chained handler first — slider drag must keep
+            % responding even when the cursor is outside the Gantt axes.
+            try
+                if ~isempty(obj.CrosshairPrevMotion_)
+                    if isa(obj.CrosshairPrevMotion_, 'function_handle')
+                        feval(obj.CrosshairPrevMotion_, src, evt);
+                    end
+                end
+            catch
+                % Don't let chained-handler failures crash the crosshair.
+            end
+
+            if isempty(obj.hAxes) || ~isgraphics(obj.hAxes); return; end
+
+            % Get cursor position in axes data units.
+            cp = get(obj.hAxes, 'CurrentPoint');
+            xp = cp(1, 1);
+            yp = cp(1, 2);
+            xlims = get(obj.hAxes, 'XLim');
+            ylims = get(obj.hAxes, 'YLim');
+
+            % Hide crosshair when cursor is outside the axes.
+            if xp < xlims(1) || xp > xlims(2) || yp < ylims(1) || yp > ylims(2)
+                if ~isempty(obj.hCrosshairLine) && isgraphics(obj.hCrosshairLine)
+                    set(obj.hCrosshairLine, 'Visible', 'off');
+                end
+                if ~isempty(obj.hCrosshairText) && isgraphics(obj.hCrosshairText)
+                    set(obj.hCrosshairText, 'Visible', 'off');
+                end
+                return;
+            end
+
+            % Format datetime label for the crosshair.
+            try
+                dtStr = datestr(xp, 'yyyy-mm-dd HH:MM:SS');
+            catch
+                dtStr = sprintf('%.4g', xp);
+            end
+
+            if isempty(obj.hCrosshairLine) || ~isgraphics(obj.hCrosshairLine)
+                hold(obj.hAxes, 'on');
+                obj.hCrosshairLine = line([xp xp], ylims, 'Parent', obj.hAxes, ...
+                    'Color', [0.5 0.5 0.5], 'LineStyle', '-', 'LineWidth', 1, ...
+                    'HandleVisibility', 'off', 'HitTest', 'off', ...
+                    'PickableParts', 'none', 'Tag', 'GanttCrosshair');
+                obj.hCrosshairText = text(xp, ylims(1), dtStr, 'Parent', obj.hAxes, ...
+                    'FontSize', 9, 'HorizontalAlignment', 'left', ...
+                    'VerticalAlignment', 'top', 'BackgroundColor', 'w', ...
+                    'EdgeColor', [0.5 0.5 0.5], 'Margin', 2, ...
+                    'HandleVisibility', 'off', 'HitTest', 'off', ...
+                    'PickableParts', 'none', 'Tag', 'GanttCrosshairText');
+                hold(obj.hAxes, 'off');
+            else
+                set(obj.hCrosshairLine, 'XData', [xp xp], 'YData', ylims, 'Visible', 'on');
+                set(obj.hCrosshairText, 'Position', [xp ylims(1) 0], 'String', dtStr, 'Visible', 'on');
             end
         end
     end

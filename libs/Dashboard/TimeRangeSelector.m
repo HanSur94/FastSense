@@ -383,6 +383,111 @@ classdef TimeRangeSelector < handle
             end
         end
 
+        function setEventBands(obj, starts, ends, colors)
+            %setEventBands  Draw a translucent rectangle per event spanning start→end.
+            %   setEventBands(starts, ends) clears any existing bands and
+            %   draws one semi-transparent rectangle per event, spanning
+            %   the start time to the end time. Non-finite values (NaN,
+            %   ±Inf) are silently dropped.
+            %
+            %   setEventBands(starts, ends, colors) accepts an optional
+            %   Nx3 RGB matrix index-matched to events. Each row supplies
+            %   the base color blended with the axes background for a
+            %   translucent fill. If `colors` is omitted, a default subtle
+            %   axes-foreground tint is used.
+            %
+            %   Bands have HitTest='off' and PickableParts='none' so they
+            %   never intercept selection-rectangle drag/pan/resize. They
+            %   are sent to the BACK of the axes children list so the
+            %   selection patch and edges remain visible on top.
+            %
+            %   This is the natural extension of setEventMarkers for
+            %   events that have a duration (start ≠ end). Empty input
+            %   simply clears the bands.
+            % Clear previous bands (reuses the hEventMarkers field — mutually
+            % exclusive with setEventMarkers; calling one clears the other).
+            for k = 1:numel(obj.hEventMarkers)
+                if ishandle(obj.hEventMarkers(k))
+                    delete(obj.hEventMarkers(k));
+                end
+            end
+            obj.hEventMarkers = [];
+
+            if nargin < 3 || isempty(starts) || isempty(ends); return; end
+            starts = starts(:);
+            ends   = ends(:);
+            if numel(starts) ~= numel(ends)
+                warning('TimeRangeSelector:bandSizeMismatch', ...
+                    'setEventBands: starts and ends must be same length; bands skipped.');
+                return;
+            end
+
+            haveColors = (nargin >= 4) && ~isempty(colors);
+            if haveColors
+                if size(colors, 1) ~= numel(starts) || size(colors, 2) ~= 3
+                    warning('TimeRangeSelector:colorSizeMismatch', ...
+                        'setEventBands: colors must be Nx3 matching starts; falling back to uniform.');
+                    haveColors = false;
+                end
+            end
+
+            % YLim of the slider axes is fixed at [0 1] by buildGraphics_.
+            % Bands span the full vertical extent.
+            yBox = [0 0 1 1];
+
+            ax = obj.hAxes;
+            if isempty(ax) || ~ishandle(ax); return; end
+
+            % Default tint: blend axes foreground with axes background.
+            try
+                axBg = get(ax, 'Color');
+                axFg = get(ax, 'XColor');
+            catch
+                axBg = [1 1 1];
+                axFg = [0 0 0];
+            end
+            defaultRGB = 0.65 * axBg + 0.35 * axFg;
+
+            handles = [];
+            for i = 1:numel(starts)
+                s = starts(i);
+                e = ends(i);
+                if ~isfinite(s); continue; end
+                if ~isfinite(e); e = obj.DataRange(2); end
+                if e < s; continue; end
+                % Clip to DataRange so off-screen bands don't widen the axes.
+                s = max(s, obj.DataRange(1));
+                e = min(e, obj.DataRange(2));
+                if e <= s; continue; end
+                if haveColors
+                    base = colors(i, :);
+                    rgb  = 0.55 * axBg + 0.45 * base;
+                else
+                    rgb = defaultRGB;
+                end
+                xv = [s e e s];
+                h = patch(ax, xv, yBox, rgb, ...
+                    'EdgeColor', 'none', ...
+                    'FaceAlpha', 0.4, ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'Tag', 'EventBand');
+                handles(end + 1) = h; %#ok<AGROW>
+            end
+            obj.hEventMarkers = handles;
+
+            % Send bands to the BACK so the selection patch / edges stay on top.
+            if ~isempty(handles)
+                ch = get(ax, 'Children');
+                mask = true(size(ch));
+                for k = 1:numel(handles)
+                    mask(ch == handles(k)) = false;
+                end
+                others = ch(mask);
+                set(ax, 'Children', [others(:); handles(:)]);
+            end
+        end
+
         function delete(obj)
             %delete  Restore figure WindowButton* callbacks saved at construction.
             obj.restoreCallbacks_();
@@ -512,38 +617,22 @@ classdef TimeRangeSelector < handle
         function [inAxes, xData] = pointerInAxes_(obj)
             %pointerInAxes_  Convert figure CurrentPoint to axes data units.
             %   Returns inAxes=false if the pointer is outside the axes'
-            %   normalized bounding box. Works in both MATLAB and Octave by
-            %   normalizing the figure units on demand.
-            cp = get(obj.hFigure, 'CurrentPoint');           % figure units
-            figUnits = get(obj.hFigure, 'Units');
-            % Get axes position in figure-normalized coords.
-            oldUnitsA = get(obj.hAxes, 'Units');
-            set(obj.hAxes, 'Units', 'normalized');
-            axPos = get(obj.hAxes, 'Position');              % relative to parent panel
-            set(obj.hAxes, 'Units', oldUnitsA);
-            % Compose panel position into figure coords.
-            oldUnitsP = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'normalized');
-            pnPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnitsP);
-            axX = pnPos(1) + axPos(1) * pnPos(3);
-            axY = pnPos(2) + axPos(2) * pnPos(4);
-            axW = axPos(3) * pnPos(3);
-            axH = axPos(4) * pnPos(4);
+            %   pixel-bounded area. Uses getpixelposition(obj.hAxes, true)
+            %   so the math works regardless of how deeply the hosting
+            %   panel is nested in uigridlayouts (uifigure case).
+            % Pointer position in figure pixels.
+            oldUnitsF = get(obj.hFigure, 'Units');
+            set(obj.hFigure, 'Units', 'pixels');
+            cp = get(obj.hFigure, 'CurrentPoint');
+            set(obj.hFigure, 'Units', oldUnitsF);
             fx = cp(1); fy = cp(2);
-            % fig units may be pixels; normalize if so.
-            if ~strcmp(figUnits, 'normalized')
-                oldUnitsF = get(obj.hFigure, 'Units');
-                set(obj.hFigure, 'Units', 'normalized');
-                cpN = get(obj.hFigure, 'CurrentPoint');
-                set(obj.hFigure, 'Units', oldUnitsF);
-                fx = cpN(1); fy = cpN(2);
-            end
-            inAxes = (fx >= axX) && (fx <= axX + axW) && ...
-                     (fy >= axY) && (fy <= axY + axH);
+            % Axes position in figure pixels (recursive=true walks parents).
+            axPx = getpixelposition(obj.hAxes, true);  % [x y w h]
+            inAxes = (fx >= axPx(1)) && (fx <= axPx(1) + axPx(3)) && ...
+                     (fy >= axPx(2)) && (fy <= axPx(2) + axPx(4));
             frac = 0;
-            if axW > 0
-                frac = (fx - axX) / axW;
+            if axPx(3) > 0
+                frac = (fx - axPx(1)) / axPx(3);
             end
             % Map the axes-relative fraction through the CURRENT XLim —
             % not DataRange — because redraw_ pads the XLim by 5% on each
@@ -555,20 +644,11 @@ classdef TimeRangeSelector < handle
         end
 
         function tolData = edgeTolData_(obj)
-            %edgeTolData_  Convert EdgeTolPx to data units for current figure size.
-            oldUnits = get(obj.hFigure, 'Units');
-            set(obj.hFigure, 'Units', 'pixels');
-            figPx = get(obj.hFigure, 'Position');
-            set(obj.hFigure, 'Units', oldUnits);
-            oldUnitsA = get(obj.hAxes, 'Units');
-            set(obj.hAxes, 'Units', 'normalized');
-            axPos = get(obj.hAxes, 'Position');
-            set(obj.hAxes, 'Units', oldUnitsA);
-            oldUnitsP = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'normalized');
-            pnPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnitsP);
-            axWpx = axPos(3) * pnPos(3) * figPx(3);
+            %edgeTolData_  Convert EdgeTolPx to data units for current axes pixel width.
+            %   Uses getpixelposition(obj.hAxes, true) so it works regardless
+            %   of layout nesting depth.
+            axPx = getpixelposition(obj.hAxes, true);  % [x y w h]
+            axWpx = axPx(3);
             span  = obj.DataRange(2) - obj.DataRange(1);
             if axWpx <= 0
                 tolData = span * 0.01;
