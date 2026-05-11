@@ -865,11 +865,67 @@ classdef MonitorTag < Tag
             [sI, eI] = obj.findRuns_(bin);
             % Phase 1012: detect trailing open run (last run ends at last bin index)
             lastOpenRun = ~isempty(eI) && eI(end) == numel(bin);
+
+            % Dedup index: prevents recompute_ from re-emitting events that
+            % were already appended on a prior recompute_. In live mode the
+            % parent fires invalidate on every updateData, which wipes
+            % cache_ and forces the next getXY into recompute_; without this
+            % guard the same run is appended once per refresh tick (the
+            % industrial-plant demo accumulated ~30x duplicates of each
+            % closed event in a single minute). Keys are StartTime; for the
+            % open→closed transition we also remember the existing open
+            % event's Id so we can close it in place.
+            existingStarts    = [];
+            existingOpenStart = NaN;
+            existingOpenId    = '';
+            if ~isempty(obj.EventStore)
+                try
+                    prior = obj.EventStore.getEventsForTag(char(obj.Key));
+                catch
+                    prior = [];
+                end
+                if ~isempty(prior)
+                    existingStarts = arrayfun(@(e) e.StartTime, prior);
+                    openMask = arrayfun(@(e) logical(e.IsOpen), prior);
+                    if any(openMask)
+                        % Take the first open event's StartTime/Id; in
+                        % normal usage there's at most one open event per
+                        % monitor at a time.
+                        openIdx = find(openMask, 1, 'first');
+                        existingOpenStart = prior(openIdx).StartTime;
+                        existingOpenId    = char(prior(openIdx).Id);
+                        % Re-seed cache_.openEventId_ so the streaming
+                        % appendData hot path can still close this event
+                        % via EventStore.closeEvent on its next tail.
+                        obj.cache_.openEventId_ = existingOpenId;
+                    end
+                end
+            end
+            startsAlreadyEmitted = @(t) ~isempty(existingStarts) && ...
+                any(abs(existingStarts - t) <= max(1e-9, eps(max(abs(t), 1)) * 8));
+
             % Closed runs first
             for k = 1:numel(sI)
                 if lastOpenRun && k == numel(sI), continue; end  % last run is OPEN — handled below
                 startT = px(sI(k));
                 endT   = px(eI(k));
+                if startsAlreadyEmitted(startT)
+                    % Open→closed transition: the run was previously emitted
+                    % as an open event; close that existing event in place
+                    % rather than appending a duplicate.
+                    if ~isempty(existingOpenId) && ...
+                            ~isnan(existingOpenStart) && ...
+                            abs(existingOpenStart - startT) <= max(1e-9, eps(max(abs(startT), 1)) * 8)
+                        try
+                            obj.EventStore.closeEvent(existingOpenId, endT, []);
+                        catch
+                        end
+                        obj.cache_.openEventId_ = '';
+                        existingOpenId    = '';
+                        existingOpenStart = NaN;
+                    end
+                    continue;
+                end
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
                 if ~isempty(obj.EventStore)
                     obj.EventStore.append(ev);
@@ -877,6 +933,7 @@ classdef MonitorTag < Tag
                     ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
                     EventBinding.attach(ev.Id, char(obj.Key));
                     EventBinding.attach(ev.Id, char(obj.Parent.Key));
+                    existingStarts(end+1) = startT; %#ok<AGROW>
                 end
                 if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
                 if ~isempty(obj.OnEventEnd),   obj.OnEventEnd(ev);   end
@@ -884,6 +941,10 @@ classdef MonitorTag < Tag
             % Phase 1012: open run (trailing) — emit IsOpen=true event
             if lastOpenRun && isempty(obj.cache_.openEventId_)
                 startT = px(sI(end));
+                if startsAlreadyEmitted(startT)
+                    % Already emitted on a prior recompute_; nothing to do.
+                    return;
+                end
                 ev = Event(startT, NaN, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
                 ev.IsOpen = true;
                 if ~isempty(obj.EventStore)

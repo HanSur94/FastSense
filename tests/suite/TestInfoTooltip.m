@@ -49,7 +49,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
         % INFO-01: widget with Description gets an InfoIconButton after realizeWidget.
             widget = testCase.makeWidget('## Hello\n\nWorld');
             testCase.Layout.realizeWidget(widget);
-            btn = findobj(widget.hPanel, 'Tag', 'InfoIconButton');
+            btn = findobj(widget.hCellPanel, 'Tag', 'InfoIconButton');
             testCase.verifyNotEmpty(btn, 'InfoIconButton should appear when Description is set');
         end
 
@@ -57,7 +57,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
         % INFO-02: widget without Description gets no InfoIconButton after realizeWidget.
             widget = testCase.makeWidget();  % no Description
             testCase.Layout.realizeWidget(widget);
-            btn = findobj(widget.hPanel, 'Tag', 'InfoIconButton');
+            btn = findobj(widget.hCellPanel, 'Tag', 'InfoIconButton');
             testCase.verifyEmpty(btn, 'InfoIconButton should NOT appear when Description is empty');
         end
 
@@ -146,7 +146,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
                     w.hPanel = hp;
                     layout = DashboardLayout();
                     layout.realizeWidget(w);
-                    btn = findobj(w.hPanel, 'Tag', 'InfoIconButton');
+                    btn = findobj(w.hCellPanel, 'Tag', 'InfoIconButton');
                     testCase.verifyNotEmpty(btn, ...
                         sprintf('%s should have InfoIconButton when Description is set', cls));
                 catch e
@@ -168,7 +168,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
                 'Position', [0 0 1 1], 'BorderType', 'none');
             widget.hPanel = hp;
             layout.realizeWidget(widget);
-            btn = findobj(widget.hPanel, 'Tag', 'InfoIconButton');
+            btn = findobj(widget.hCellPanel, 'Tag', 'InfoIconButton');
             testCase.verifyNotEmpty(btn, ...
                 'InfoIconButton should appear after realizeWidget with non-empty Description');
         end
@@ -182,7 +182,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
             w = d.Widgets{1};
-            btn = findobj(w.hPanel, 'Tag', 'InfoIconButton');
+            btn = findobj(w.hCellPanel, 'Tag', 'InfoIconButton');
             testCase.verifyNotEmpty(btn, ...
                 'InfoIconButton should appear via DashboardEngine.render() for widget with Description');
         end
@@ -195,7 +195,7 @@ classdef TestInfoTooltip < matlab.unittest.TestCase
             set(d.hFigure, 'Visible', 'off');
             testCase.addTeardown(@() close(d.hFigure));
             w = d.Widgets{1};
-            btn = findobj(w.hPanel, 'Tag', 'InfoIconButton');
+            btn = findobj(w.hCellPanel, 'Tag', 'InfoIconButton');
             testCase.verifyEmpty(btn, ...
                 'InfoIconButton should NOT appear for widget without Description');
         end

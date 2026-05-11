@@ -23,11 +23,15 @@ classdef MultiStatusWidget < DashboardWidget
             % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
             try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme();
+            % DataAspectRatio=[1 1 1] forces equal data units in pixels so
+            % circles drawn with cos/sin remain circular regardless of how
+            % the panel resizes. MATLAB letterboxes the axes if needed.
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
                 'Position', [0.02 0.02 0.96 0.96], ...
                 'Visible', 'off', ...
-                'XLim', [0 1], 'YLim', [0 1]);
+                'XLim', [0 1], 'YLim', [0 1], ...
+                'DataAspectRatio', [1 1 1]);
             obj.refresh();
         end
 
@@ -55,14 +59,9 @@ classdef MultiStatusWidget < DashboardWidget
             warnColor = theme.StatusWarnColor;
             alarmColor = theme.StatusAlarmColor;
 
-            % Compute aspect ratio correction for circles
-            oldUnits = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'pixels');
-            pxPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnits);
-            pxW = pxPos(3);
-            pxH = pxPos(4);
-
+            % Equal x/y radii — DataAspectRatio=[1 1 1] on the axes (set in
+            % render()) keeps the drawn ellipses perfectly circular at any
+            % panel aspect ratio. No pxW/pxH correction needed.
             for i = 1:n
                 col = mod(i-1, cols);
                 row = floor((i-1) / cols);
@@ -72,13 +71,8 @@ classdef MultiStatusWidget < DashboardWidget
 
                 item = expandedItems{i};
 
-                % Draw indicator — aspect-ratio-corrected so circles stay round
                 ry = 0.3 / max(cols, rows);
-                if pxW > 0 && pxH > 0
-                    rx = ry * (pxH / pxW);
-                else
-                    rx = ry;
-                end
+                rx = ry;
 
                 if isstruct(item)
                     % Tag-first dispatch (v2.0 Tag API) — falls through to legacy

@@ -1006,6 +1006,184 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'Live detached uifigure must NOT be torn down by the events close');
         end
 
+        % ---- Task 1: Auto-discover EventStore from registry ----
+
+        function testDiscoverEventStoreSuite(testCase)
+        %TESTDISCOVEREVENTSTORESUITE Run the flat-file test suite for the helper.
+        %   Wraps the assert-based runner so its stdout output is captured and
+        %   any assertion failure is surfaced as an xunit-style test failure.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            testCase.verifyWarningFree(@() evalc('runDiscoverEventStoreTests()'), ...
+                'runDiscoverEventStoreTests must complete without errors.');
+        end
+
+        % ---- Task 2: EventStore constructor option with auto-discovery ----
+
+        function testEventStoreOptionAcceptsHandle(testCase)
+            %TESTEVENTSTOREOPTIONACCEPTSHANDLE
+            %   Explicit 'EventStore' option is stored on the object.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath);
+            testCase.addTeardown(@() delete(storePath));
+
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+
+            testCase.verifySameHandle(app.getEventStore(), es, ...
+                'EventStore option must be stored verbatim.');
+        end
+
+        function testEventStoreOptionInvalidThrows(testCase)
+            %TESTEVENTSTOREOPTIONINVALIDTHROWS
+            %   Non-EventStore values raise FastSenseCompanion:invalidEventStore.
+            testCase.verifyError(@() FastSenseCompanion('EventStore', 42), ...
+                'FastSenseCompanion:invalidEventStore');
+        end
+
+        function testEventStoreEmptyOptionAllowed(testCase)
+            %TESTEVENTSTOREEMPTYOPTIONALLOWED
+            %   Empty value is accepted (means "no override; auto-discover").
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion('EventStore', []);
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEmpty(app.getEventStore());
+        end
+
+        function testEventStoreAutoDiscoveryUsedWhenNoOverride(testCase)
+            %TESTEVENTSTOREAUTODISCOVERYUSEDWHENNOOVERRIDE
+            %   Without explicit option, the helper-discovered store is used.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            parent = SensorTag('p2', 'Name', 'P', 'Units', 'u', ...
+                'X', [0 1 2], 'Y', [1 2 3]);
+            TagRegistry.register('p2', parent);
+
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath);
+            testCase.addTeardown(@() delete(storePath));
+
+            mon = MonitorTag('m2', parent, @(x,y) y > 100, 'EventStore', es);
+            TagRegistry.register('m2', mon);
+
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), es);
+        end
+
+        function testEventStoreOverrideBeatsAutoDiscovery(testCase)
+            %TESTEVENTSTOREOVERRIDEBEATSAUTODISCOVERY
+            %   Explicit 'EventStore' wins over auto-discovery.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            parent = SensorTag('p3', 'Name', 'P', 'Units', 'u', ...
+                'X', [0 1 2], 'Y', [1 2 3]);
+            TagRegistry.register('p3', parent);
+
+            pathA = [tempname() '.mat'];
+            pathB = [tempname() '.mat'];
+            esA = EventStore(pathA); esB = EventStore(pathB);
+            testCase.addTeardown(@() delete(pathA));
+            testCase.addTeardown(@() delete(pathB));
+
+            mon = MonitorTag('m3', parent, @(x,y) y > 100, 'EventStore', esA);
+            TagRegistry.register('m3', mon);
+
+            app = FastSenseCompanion('EventStore', esB);
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), esB);
+        end
+
+        % ---- Task 3: LiveModeChanged event ----
+
+        function testLiveModeChangedFiresOnStartAndStop(testCase)
+            %TESTLIVEMODECHANGEDFIRESONSTARTANDSTOP
+            %   Toggling live mode fires LiveModeChanged each time, and listeners
+            %   observe the new IsLive value via the source object.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+
+            % Companion launches with live mode ON; stop it for a clean baseline.
+            app.stopLiveMode();
+
+            captured = LiveModeCapture();
+            L = addlistener(app, 'LiveModeChanged', @(s, ~) captured.push(s.IsLive));
+            testCase.addTeardown(@() delete(L));
+
+            app.startLiveMode();
+            app.stopLiveMode();
+
+            testCase.verifyTrue(numel(captured.Vals) >= 2, ...
+                'LiveModeChanged must fire at least twice (start + stop).');
+            testCase.verifyTrue(captured.Vals(end-1), ...
+                'Penultimate fire must observe IsLive=true after startLiveMode.');
+            testCase.verifyFalse(captured.Vals(end), ...
+                'Last fire must observe IsLive=false after stopLiveMode.');
+        end
+
+        % ---- Task 13: toolbar Events button + single-instance viewer wiring ----
+
+        function testEventsButtonExistsInToolbar(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(btn.Enable), 'on');
+        end
+
+        function testEventsButtonDisabledWhenNoStore(testCase)
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(btn.Enable), 'off');
+            testCase.verifyEqual(btn.Tooltip, 'No EventStore registered');
+        end
+
+        function testEventsButtonOpensViewerSingleInstance(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.openEventViewer_internalForTest();
+            v1 = app.getEventViewerForTest_();
+            testCase.verifyClass(v1, 'CompanionEventViewer');
+            app.openEventViewer_internalForTest();
+            v2 = app.getEventViewerForTest_();
+            testCase.verifySameHandle(v1, v2, 'Second click must reuse the existing viewer.');
+        end
+
+        function testCompanionCloseClosesViewer(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            app.openEventViewer_internalForTest();
+            v = app.getEventViewerForTest_();
+            f = v.hFigure;
+            app.close();
+            testCase.verifyFalse(isgraphics(f), 'Companion close must close viewer figure.');
+        end
+
+        function testViewerObjectBeingDestroyedClearsHandle(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.openEventViewer_internalForTest();
+            v = app.getEventViewerForTest_();
+            delete(v);
+            drawnow;
+            testCase.verifyEmpty(app.getEventViewerForTest_(), ...
+                'ObjectBeingDestroyed listener must clear EventViewer_.');
+        end
+
     end
 
     methods (Access = private)

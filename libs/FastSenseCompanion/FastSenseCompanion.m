@@ -15,23 +15,28 @@ classdef FastSenseCompanion < handle
 %     Registry   — TagRegistry instance (default: TagRegistry singleton)
 %     Name       — window title string (default: 'FastSense Companion')
 %     Theme      — 'dark' | 'light' (default: 'dark')
+%     LivePeriod — seconds between live refreshes (default: 1.0)
+%     EventStore — EventStore handle or [] (default: auto-discover from registry)
 %
 %   Public methods:
 %     setProject(dashboards, registry) — rebuild against new project
 %     addDashboard(d)                  - append a DashboardEngine; refresh browser
 %     removeDashboard(key)             - remove by Name; reset inspector if it was selected
 %     refreshCatalog()                 — re-snapshot tags and rebuild catalog
+%     getEventStore()                  — resolved EventStore handle or []
 %     close()                          — idempotent teardown
 %
 %   Events fired:
 %     InspectorStateChanged    payload: InspectorStateEventData(state, payload)
 %     OpenAdHocPlotRequested   payload: AdHocPlotEventData(tagKeys, mode) — fired by InspectorPane
+%     LiveModeChanged          no payload — fires on startLiveMode/stopLiveMode after IsLive is updated
 %
 %   See also DashboardEngine, TagRegistry, CompanionTheme.
 
     events
         InspectorStateChanged
         OpenAdHocPlotRequested
+        LiveModeChanged
     end
 
     properties (Access = public)
@@ -56,6 +61,7 @@ classdef FastSenseCompanion < handle
         hLayout_       = []   % root uigridlayout handle
         hToolbarPanel_ = []   % top toolbar uipanel (row 1, spans cols [1 3])
         hSettingsBtn_  = []   % gear button inside hToolbarPanel_ (right-aligned)
+        hEventsBtn_    = []   % toolbar uibutton: Events viewer launch
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
@@ -85,13 +91,15 @@ classdef FastSenseCompanion < handle
         hEventsLogPanel_      = []     % sub-panel (LogPaneRoot-tagged) for events pane
         hLiveLogPanel_        = []     % sub-panel (LogPaneRoot-tagged) for live pane
         OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
+        EventStore_  = []   % EventStore handle resolved via constructor option or auto-discovery
+        EventViewer_ = []   % CompanionEventViewer handle (single-instance) or [] (Task 13 wires it)
     end
 
     methods (Access = public)
 
         function obj = FastSenseCompanion(varargin)
         %FASTSENSECOMPANION Constructor. Opens a themed three-pane uifigure immediately.
-        %   Name-value pairs: 'Dashboards', 'Registry', 'Name', 'Theme'.
+        %   Name-value pairs: 'Dashboards', 'Registry', 'Name', 'Theme', 'LivePeriod', 'EventStore'.
 
             % Step 1 — Octave guard (FIRST, before any other work)
             if exist('OCTAVE_VERSION', 'builtin') ~= 0
@@ -105,6 +113,7 @@ classdef FastSenseCompanion < handle
             userName       = 'FastSense Companion';
             userTheme      = 'dark';
             userLivePeriod = 1.0;
+            userEventStore = [];
 
             % Step 2b — Override with stored prefdir values (if present and well-formed).
             % Priority: built-in default < prefdir < explicit Name-Value (Step 3).
@@ -145,10 +154,17 @@ classdef FastSenseCompanion < handle
                                 'LivePeriod must be a positive finite scalar (seconds).');
                         end
                         userLivePeriod = double(v);
+                    case 'EventStore'
+                        v = varargin{k+1};
+                        if ~isempty(v) && ~isa(v, 'EventStore')
+                            error('FastSenseCompanion:invalidEventStore', ...
+                                'EventStore must be an EventStore handle or [] (got %s).', class(v));
+                        end
+                        userEventStore = v;
                     otherwise
                         error('FastSenseCompanion:unknownOption', ...
                             ['Unknown option ''%s''. Valid options: ', ...
-                             'Dashboards, Registry, Name, Theme, LivePeriod.'], key);
+                             'Dashboards, Registry, Name, Theme, LivePeriod, EventStore.'], key);
                 end
             end
 
@@ -178,6 +194,14 @@ classdef FastSenseCompanion < handle
             obj.LivePeriod_ = userLivePeriod;
             obj.LivePeriod  = userLivePeriod;
 
+            % Step 6b — Resolve EventStore: explicit override wins; otherwise
+            % auto-discover from the first MonitorTag with a non-empty EventStore.
+            if ~isempty(userEventStore)
+                obj.EventStore_ = userEventStore;
+            else
+                obj.EventStore_ = companionDiscoverEventStore();
+            end
+
             % Step 7 — Build uifigure (Visible='off' while building)
             obj.hFig_ = uifigure( ...
                 'Name',               userName, ...
@@ -202,16 +226,31 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x5 grid — col 1 reserved for future toolbar items;
+            % Inner 1x5 grid — col 1 = Events viewer button (Task 13);
             % col 2 = Live: ON/OFF button; col 3 = Events log dropdown
             % (Phase 1027.1); col 4 = Live log dropdown (Phase 1027.1);
             % col 5 = gear button.
             hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 5]);
-            hToolbarGrid.ColumnWidth     = {'1x', 110, 150, 150, 36};
+            hToolbarGrid.ColumnWidth     = {110, 110, 150, 150, 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
             hToolbarGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            % Col 1 — Events viewer launch (Task 13).
+            obj.hEventsBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hEventsBtn_.Layout.Row    = 1;
+            obj.hEventsBtn_.Layout.Column = 1;
+            obj.hEventsBtn_.Text          = ['Events ', char(8599)];   % ↗
+            obj.hEventsBtn_.FontSize      = 11;
+            obj.hEventsBtn_.FontWeight    = 'bold';
+            obj.hEventsBtn_.Tag           = 'CompanionEventsBtn';
+            obj.hEventsBtn_.Tooltip       = 'Open the event viewer';
+            obj.hEventsBtn_.ButtonPushedFcn = @(~,~) obj.openEventViewer_();
+            if isempty(obj.EventStore_)
+                obj.hEventsBtn_.Enable  = 'off';
+                obj.hEventsBtn_.Tooltip = 'No EventStore registered';
+            end
 
             % Col 2 — Live: ON/OFF button (Phase 1027: moved from log header).
             obj.hLiveBtn_ = uibutton(hToolbarGrid, 'push');
@@ -404,6 +443,17 @@ classdef FastSenseCompanion < handle
             end
             % Diagnostic — confirms the X click reached close().
             fprintf('[FastSenseCompanion] close() invoked, tearing down...\n');
+            % Tear down the event viewer first so its listener doesn't fire
+            % into a half-deleted companion. Independent try/catch — viewer
+            % failure must not block the rest of teardown.
+            try
+                if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_)
+                    obj.EventViewer_.close();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] EventViewer cleanup failed: %s\n', err.message);
+            end
+            obj.EventViewer_ = [];
             % Stop and delete live timer first so no tick fires mid-teardown.
             try
                 if ~isempty(obj.LiveTimer_) && isvalid(obj.LiveTimer_)
@@ -668,6 +718,7 @@ classdef FastSenseCompanion < handle
                 obj.IsLive = true;
                 obj.updateLiveButton_();
                 obj.addLogEntry('info', sprintf('Live mode ON (period %gs)', obj.LivePeriod_));
+                notify(obj, 'LiveModeChanged');
             catch err
                 obj.addLogEntry('error', sprintf('Live start failed: %s', err.message));
             end
@@ -686,6 +737,7 @@ classdef FastSenseCompanion < handle
             obj.IsLive = false;
             obj.updateLiveButton_();
             obj.addLogEntry('info', 'Live mode OFF');
+            notify(obj, 'LiveModeChanged');
         end
 
         function toggleLiveMode(obj)
@@ -893,6 +945,34 @@ classdef FastSenseCompanion < handle
             else
                 par = obj.hLiveBtn_.Parent;
             end
+        end
+
+        function s = getEventStore(obj)
+        %GETEVENTSTORE Return the resolved EventStore handle (or [] if none).
+        %   Returns whatever was passed via the 'EventStore' constructor
+        %   option, OR the auto-discovered store from the registry, OR []
+        %   if neither resolved.
+            s = obj.EventStore_;
+        end
+
+        function openEventViewer(obj)
+        %OPENEVENTVIEWER Public alias for the toolbar callback (used by tests / scripting).
+            obj.openEventViewer_();
+        end
+
+        function openEventViewer_internalForTest(obj)
+        %OPENEVENTVIEWER_INTERNALFORTEST Test shim: call openEventViewer_ directly.
+            obj.openEventViewer_();
+        end
+
+        function v = getEventViewerForTest_(obj)
+        %GETEVENTVIEWERFORTEST_ Test helper: return the EventViewer_ handle or [].
+            v = obj.EventViewer_;
+        end
+
+        function f = getFigForTest_(obj)
+        %GETFIGFORTEST_ Test helper: return the companion uifigure handle.
+            f = obj.hFig_;
         end
 
     end
@@ -1264,6 +1344,26 @@ classdef FastSenseCompanion < handle
             catch err
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
             end
+        end
+
+        function openEventViewer_(obj)
+        %OPENEVENTVIEWER_ Open or bring-to-front the singleton CompanionEventViewer.
+        %   Idempotent: second call focuses the existing viewer window.
+        %   No-op when EventStore_ is empty.
+            if isempty(obj.EventStore_); return; end
+            if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_) && ...
+                    ~isempty(obj.EventViewer_.hFigure) && isgraphics(obj.EventViewer_.hFigure)
+                obj.EventViewer_.bringToFront();
+                return;
+            end
+            obj.EventViewer_ = CompanionEventViewer(obj.EventStore_, obj.Registry_, obj);
+            obj.Listeners_{end+1} = addlistener(obj.EventViewer_, 'ObjectBeingDestroyed', ...
+                @(~,~) obj.clearEventViewerHandle_());
+        end
+
+        function clearEventViewerHandle_(obj)
+        %CLEAREVENTVIEWERHANDLE_ ObjectBeingDestroyed callback: clear the stale handle.
+            obj.EventViewer_ = [];
         end
 
         function onOpenAdHocPlotRequested_(obj, ~, evt)

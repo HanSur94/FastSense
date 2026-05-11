@@ -152,6 +152,48 @@ classdef TestIndustrialPlantDemoCompanion < matlab.unittest.TestCase
                 'COMPDEMO-04: teardownDemo must leave no NEW timers in timerfindall (no orphans)');
         end
 
+        function testDemoCompanionExposesEventStore(testCase)
+            %TESTDEMOCOMPANIONEXPOSESEVENTSTORE
+            %   After run_demo, companion's resolved EventStore is non-empty.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestIndustrialPlantDemoCompanion is MATLAB-only.');
+            TagRegistry.clear();
+            ctx = run_demo();
+            testCase.addTeardown(@() teardownDemo(ctx));
+            testCase.addTeardown(@() TagRegistry.clear());
+            testCase.assertNotEmpty(ctx.companion);
+            testCase.verifyNotEmpty(ctx.companion.getEventStore());
+        end
+
+        function testDemoEventsButtonEnabled(testCase)
+            %TESTDEMOEVENTSBUTTONENABLED
+            %   After run_demo, the toolbar Events button is enabled.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestIndustrialPlantDemoCompanion is MATLAB-only.');
+            TagRegistry.clear();
+            ctx = run_demo();
+            testCase.addTeardown(@() teardownDemo(ctx));
+            testCase.addTeardown(@() TagRegistry.clear());
+            btn = findall(ctx.companion.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(get(btn, 'Enable')), 'on');
+        end
+
+        function testDemoEventViewerOpensWithoutErrors(testCase)
+            %TESTDEMOEVENTVIEWEROPENSWITHOUTERRORS
+            %   Programmatically open the viewer; verify it constructs successfully.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestIndustrialPlantDemoCompanion is MATLAB-only.');
+            TagRegistry.clear();
+            ctx = run_demo();
+            testCase.addTeardown(@() teardownDemo(ctx));
+            testCase.addTeardown(@() TagRegistry.clear());
+            ctx.companion.openEventViewer();
+            v = ctx.companion.getEventViewerForTest_();
+            testCase.verifyClass(v, 'CompanionEventViewer');
+            testCase.verifyTrue(isgraphics(v.hFigure));
+        end
+
     end
 
 end

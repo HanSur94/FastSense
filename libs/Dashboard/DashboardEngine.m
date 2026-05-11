@@ -69,7 +69,10 @@ classdef DashboardEngine < handle
         hTimeResetBtn   = []       % Reset button on time panel (260508-f7p — needed for theme switch)
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
         TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
-        LastSyncedTimeRange_ = []  % [tStart tEnd] cache of most recent broadcast (260508-llw); used by switchPage to re-apply current synced window to widgets realized on tab-switch
+        % [tStart tEnd] cache of most recent broadcast (260508-llw); used by
+        % switchPage to re-apply the current synced window to widgets that
+        % get realized on tab-switch.
+        LastSyncedTimeRange_ = []
         Progress_           = []   % DashboardProgress instance (active during render)
         % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
         hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
