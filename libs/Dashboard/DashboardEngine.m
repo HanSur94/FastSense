@@ -1697,6 +1697,14 @@ classdef DashboardEngine < handle
         end
 
         function delete(obj)
+            % Remove the figure-destroyed safety-net listener BEFORE any
+            % other teardown so it cannot fire on a partially-destroyed
+            % obj during MATLAB GC. Prevents R2021b segfault when the
+            % engine handle is collected before its hFigure (260511-n1r).
+            if ~isempty(obj.FigureDestroyedListener_)
+                try delete(obj.FigureDestroyedListener_); catch, end
+                obj.FigureDestroyedListener_ = [];
+            end
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
