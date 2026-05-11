@@ -512,38 +512,22 @@ classdef TimeRangeSelector < handle
         function [inAxes, xData] = pointerInAxes_(obj)
             %pointerInAxes_  Convert figure CurrentPoint to axes data units.
             %   Returns inAxes=false if the pointer is outside the axes'
-            %   normalized bounding box. Works in both MATLAB and Octave by
-            %   normalizing the figure units on demand.
-            cp = get(obj.hFigure, 'CurrentPoint');           % figure units
-            figUnits = get(obj.hFigure, 'Units');
-            % Get axes position in figure-normalized coords.
-            oldUnitsA = get(obj.hAxes, 'Units');
-            set(obj.hAxes, 'Units', 'normalized');
-            axPos = get(obj.hAxes, 'Position');              % relative to parent panel
-            set(obj.hAxes, 'Units', oldUnitsA);
-            % Compose panel position into figure coords.
-            oldUnitsP = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'normalized');
-            pnPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnitsP);
-            axX = pnPos(1) + axPos(1) * pnPos(3);
-            axY = pnPos(2) + axPos(2) * pnPos(4);
-            axW = axPos(3) * pnPos(3);
-            axH = axPos(4) * pnPos(4);
+            %   pixel-bounded area. Uses getpixelposition(obj.hAxes, true)
+            %   so the math works regardless of how deeply the hosting
+            %   panel is nested in uigridlayouts (uifigure case).
+            % Pointer position in figure pixels.
+            oldUnitsF = get(obj.hFigure, 'Units');
+            set(obj.hFigure, 'Units', 'pixels');
+            cp = get(obj.hFigure, 'CurrentPoint');
+            set(obj.hFigure, 'Units', oldUnitsF);
             fx = cp(1); fy = cp(2);
-            % fig units may be pixels; normalize if so.
-            if ~strcmp(figUnits, 'normalized')
-                oldUnitsF = get(obj.hFigure, 'Units');
-                set(obj.hFigure, 'Units', 'normalized');
-                cpN = get(obj.hFigure, 'CurrentPoint');
-                set(obj.hFigure, 'Units', oldUnitsF);
-                fx = cpN(1); fy = cpN(2);
-            end
-            inAxes = (fx >= axX) && (fx <= axX + axW) && ...
-                     (fy >= axY) && (fy <= axY + axH);
+            % Axes position in figure pixels (recursive=true walks parents).
+            axPx = getpixelposition(obj.hAxes, true);  % [x y w h]
+            inAxes = (fx >= axPx(1)) && (fx <= axPx(1) + axPx(3)) && ...
+                     (fy >= axPx(2)) && (fy <= axPx(2) + axPx(4));
             frac = 0;
-            if axW > 0
-                frac = (fx - axX) / axW;
+            if axPx(3) > 0
+                frac = (fx - axPx(1)) / axPx(3);
             end
             % Map the axes-relative fraction through the CURRENT XLim —
             % not DataRange — because redraw_ pads the XLim by 5% on each
@@ -555,20 +539,11 @@ classdef TimeRangeSelector < handle
         end
 
         function tolData = edgeTolData_(obj)
-            %edgeTolData_  Convert EdgeTolPx to data units for current figure size.
-            oldUnits = get(obj.hFigure, 'Units');
-            set(obj.hFigure, 'Units', 'pixels');
-            figPx = get(obj.hFigure, 'Position');
-            set(obj.hFigure, 'Units', oldUnits);
-            oldUnitsA = get(obj.hAxes, 'Units');
-            set(obj.hAxes, 'Units', 'normalized');
-            axPos = get(obj.hAxes, 'Position');
-            set(obj.hAxes, 'Units', oldUnitsA);
-            oldUnitsP = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'normalized');
-            pnPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnitsP);
-            axWpx = axPos(3) * pnPos(3) * figPx(3);
+            %edgeTolData_  Convert EdgeTolPx to data units for current axes pixel width.
+            %   Uses getpixelposition(obj.hAxes, true) so it works regardless
+            %   of layout nesting depth.
+            axPx = getpixelposition(obj.hAxes, true);  % [x y w h]
+            axWpx = axPx(3);
             span  = obj.DataRange(2) - obj.DataRange(1);
             if axWpx <= 0
                 tolData = span * 0.01;
