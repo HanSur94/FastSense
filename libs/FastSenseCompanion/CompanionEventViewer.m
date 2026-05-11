@@ -1,19 +1,46 @@
 classdef CompanionEventViewer < handle
-%COMPANIONEVENTVIEWER Pop-out classic-figure viewer: tag-aware, time-filtered Gantt of EventStore events.
+%COMPANIONEVENTVIEWER Pop-out uifigure viewer: tag-aware Gantt + table of EventStore events.
 %
 %   v = CompanionEventViewer(store, registry, companion)
 %     store      — EventStore handle (required)
 %     registry   — TagRegistry handle/class (required, for tag-key search)
 %     companion  — FastSenseCompanion handle (required, for theme + LiveModeChanged)
 %
+%   Layout:
+%     Left column  — Gantt/Table view-mode uiswitch + TagCatalogPane
+%                    (tag search, kind/criticality pills, multi-select listbox).
+%                    Selecting tags filters the Gantt and Table.
+%     Right column — filter bar (presets, From/To, severity, Open only,
+%                    Refresh, Auto, interval), Gantt axes (with crosshair
+%                    + dark gridlines) OR uitable (Plot Selected → multi-
+%                    event drill-down dashboard), and a TimeRangeSelector
+%                    slider with start/span/end readouts.
+%
 %   Public:
-%     v.refresh()                    — pull from store, redraw Gantt (Task 9)
-%     v.setTimeRange(tStart, tEnd)   — programmatic; sets mode to 'custom' (Task 8)
-%     v.setTagFilter(keysCell)       — {} / '' means "all tags" (Task 8)
+%     v.refresh()                    — pull from store, redraw Gantt + Table + slider
+%     v.setTimeRange(tStart, tEnd)   — programmatic; sets mode to 'custom'
+%     v.setTagFilter(keysCell)       — {} / '' means "all tags" (one-way:
+%                                      does NOT push back into the catalog UI)
+%     v.LeftPaneWidth                — settable (>= 80 px); propagates to grid
+%     v.ViewMode                     — 'gantt' | 'table' (settable; toggles via
+%                                      the left-header uiswitch)
 %     v.bringToFront()               — figure(hFigure)
 %     v.close()                      — idempotent teardown
 %
-%   See also EventGanttCanvas, FastSenseCompanion.
+%   Click behavior on Gantt bars:
+%     Single-click → debounced (300 ms) "Event Info" uifigure with
+%                    editable Notes (cancelled by a follow-up double-click)
+%     Double-click → brand-new DashboardEngine with one FastSenseWidget
+%                    for the event's sensor, X zoomed to the event window
+%
+%   Click behavior on Table rows:
+%     Multi-row select → "Plot Selected (N)" button enables; click opens
+%                        a single dashboard with N stacked FastSenseWidgets
+%                        (one per selected event)
+%     Double-click row → same dashboard drill-down as Gantt double-click
+%
+%   See also EventGanttCanvas, FastSenseCompanion, TagCatalogPane,
+%            TimeRangeSelector, DashboardEngine.
 
     properties (SetAccess = private)
         hFigure
