@@ -2090,7 +2090,6 @@ setPreviewLines  Draw one downsampled line per widget preview.
   Each line is rendered with a distinct color from a fixed
   palette, placed behind the selection rectangle so drag
   interactions remain unaffected.
-Clear previous preview lines.
 
 #### `setEventMarkers(obj, times, colors)`
 
