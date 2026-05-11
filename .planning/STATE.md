@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T23:30:00.000Z"
-last_activity: 2026-05-08 -- Quick fix 260508-od4: roll back ny6 switchPage refresh sweep (didn't fix stuck-widget symptom, added per-tab cost) + guard HoverCrosshair.onFigureMove_ against invalid-object errors after panel teardown (OD4-01/02)
+last_updated: "2026-05-11T14:20:05.000Z"
+last_activity: 2026-05-11 -- Quick fix 260511-mjb: green TestFastSenseCompanion baseline (findobj->findall + DashboardEngine ObjectBeingDestroyed safety-net listener; 64/64 tests pass)
 progress:
   total_phases: 6
   completed_phases: 2
@@ -20,7 +20,7 @@ Phase: 1028
 Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-11 - Completed quick task 260511-ldu: PR #125 followup polish (extract bringFigureToFront_, tighten crosshair visibility, +2 tests, doc fixes)
+Last activity: 2026-05-11 - Completed quick task 260511-mjb: Fix 2 pre-existing TestFastSenseCompanion failures — findobj→findall for uifigure lookup; ObjectBeingDestroyed safety-net listener on DashboardEngine.hFigure stops LiveTimer for any destruction path (delete(fig), close all force) — 64/64 suite tests pass
 
 ### Quick Tasks Completed
 
@@ -54,6 +54,7 @@ Last activity: 2026-05-11 - Completed quick task 260511-ldu: PR #125 followup po
 | 260508-mjp | Add tag-column search field to LiveLogPane mirroring events log | 2026-05-08 | 1c258fb | — | [260508-mjp-add-tag-column-search-field-to-livelogpa](./quick/260508-mjp-add-tag-column-search-field-to-livelogpa/) |
 | 260508-n8h | Dashboard Info button opens modal in-app uifigure (uihtml) instead of system browser | 2026-05-08 | 8b525a8 | — | [260508-n8h-dashboard-info-button-opens-modal-render](./quick/260508-n8h-dashboard-info-button-opens-modal-render/) |
 | 260511-ldu | PR #125 followup polish — extract bringFigureToFront_, tighten crosshair visibility, +2 tests, doc fixes | 2026-05-11 | 134a0d9 | — | [260511-ldu-pr-125-followup-polish-extract-bringfigu](./quick/260511-ldu-pr-125-followup-polish-extract-bringfigu/) |
+| 260511-mjb | Fix 2 pre-existing TestFastSenseCompanion failures — findobj→findall for uifigure lookup; ObjectBeingDestroyed safety-net listener on DashboardEngine.hFigure (stops LiveTimer for delete(fig)/close all force paths) | 2026-05-11 | 8df1a67 | Verified | [260511-mjb-fix-2-pre-existing-testfastsensecompanio](./quick/260511-mjb-fix-2-pre-existing-testfastsensecompanio/) |
 
 ## Progress Bar
 
