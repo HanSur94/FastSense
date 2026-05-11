@@ -43,6 +43,9 @@ classdef CompanionEventViewer < handle
         AutoPeriod_  = 1.0
         AutoEnabled_ = true
         Listeners_   = {}
+        RootGrid_    = []   % 1x2 uigridlayout: [left pane | right column]
+        RightGrid_   = []   % 3x1 uigridlayout: [filter bar; gantt; slider]
+        LeftPanel_   = []   % uipanel hosting the TagCatalogPane
     end
 
     methods
@@ -301,22 +304,48 @@ classdef CompanionEventViewer < handle
                 'CloseRequestFcn', @(~,~) obj.close(), ...
                 'Visible',         'on');
 
-            % Layout: filter bar 15% top, Gantt 75% middle, slider 10% bottom.
-            obj.FilterPanel_ = uipanel('Parent', obj.hFigure, ...
-                'Units',           'normalized', ...
-                'Position',        [0 0.85 1 0.15], ...
-                'BackgroundColor', t.WidgetBackground, ...
-                'BorderType',      'none');
-            obj.AxesPanel_ = uipanel('Parent', obj.hFigure, ...
-                'Units',           'normalized', ...
-                'Position',        [0 0.10 1 0.75], ...
-                'BackgroundColor', t.WidgetBackground, ...
-                'BorderType',      'none');
-            obj.SliderPanel_ = uipanel('Parent', obj.hFigure, ...
-                'Units',           'normalized', ...
-                'Position',        [0 0 1 0.10], ...
-                'BackgroundColor', t.WidgetBackground, ...
-                'BorderType',      'none');
+            % Root layout: 1x2 (left tag pane | right column).
+            obj.RootGrid_ = uigridlayout(obj.hFigure, [1 2]);
+            obj.RootGrid_.ColumnWidth     = {obj.LeftPaneWidth, '1x'};
+            obj.RootGrid_.RowHeight       = {'1x'};
+            obj.RootGrid_.Padding         = [0 0 0 0];
+            obj.RootGrid_.ColumnSpacing   = 0;
+            obj.RootGrid_.BackgroundColor = t.DashboardBackground;
+
+            % Left column: uipanel host for TagCatalogPane (attached in Task 5).
+            obj.LeftPanel_ = uipanel(obj.RootGrid_);
+            obj.LeftPanel_.Layout.Row    = 1;
+            obj.LeftPanel_.Layout.Column = 1;
+            obj.LeftPanel_.BackgroundColor = t.WidgetBackground;
+            obj.LeftPanel_.BorderType      = 'none';
+
+            % Right column: 3-row nested grid (filter bar | gantt | slider).
+            obj.RightGrid_ = uigridlayout(obj.RootGrid_, [3 1]);
+            obj.RightGrid_.Layout.Row    = 1;
+            obj.RightGrid_.Layout.Column = 2;
+            obj.RightGrid_.RowHeight     = {60, '1x', 80};
+            obj.RightGrid_.ColumnWidth   = {'1x'};
+            obj.RightGrid_.Padding       = [0 0 0 0];
+            obj.RightGrid_.RowSpacing    = 0;
+            obj.RightGrid_.BackgroundColor = t.DashboardBackground;
+
+            obj.FilterPanel_ = uipanel(obj.RightGrid_);
+            obj.FilterPanel_.Layout.Row      = 1;
+            obj.FilterPanel_.Layout.Column   = 1;
+            obj.FilterPanel_.BackgroundColor = t.WidgetBackground;
+            obj.FilterPanel_.BorderType      = 'none';
+
+            obj.AxesPanel_ = uipanel(obj.RightGrid_);
+            obj.AxesPanel_.Layout.Row      = 2;
+            obj.AxesPanel_.Layout.Column   = 1;
+            obj.AxesPanel_.BackgroundColor = t.WidgetBackground;
+            obj.AxesPanel_.BorderType      = 'none';
+
+            obj.SliderPanel_ = uipanel(obj.RightGrid_);
+            obj.SliderPanel_.Layout.Row      = 3;
+            obj.SliderPanel_.Layout.Column   = 1;
+            obj.SliderPanel_.BackgroundColor = t.WidgetBackground;
+            obj.SliderPanel_.BorderType      = 'none';
 
             % Wider left margin so long tag keys (e.g. feedline.pressure.high) fit.
             ax = axes('Parent', obj.AxesPanel_, ...
