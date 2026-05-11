@@ -20,7 +20,7 @@ Phase: 1028
 Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Quick fix 260508-od4 (936feac): roll back ny6 + guard HoverCrosshair.onFigureMove_ against invalid-object errors after panel teardown
+Last activity: 2026-05-11 - Completed quick task 260511-ldu: PR #125 followup polish (extract bringFigureToFront_, tighten crosshair visibility, +2 tests, doc fixes)
 
 ### Quick Tasks Completed
 
@@ -53,6 +53,7 @@ Last activity: 2026-05-08 -- Quick fix 260508-od4 (936feac): roll back ny6 + gua
 | 260508-huo | Fix CI — hoist companion test runners out of private/; guard headless web() in DashboardEngine; gate R2020b MEX-heavy tests | 2026-05-08 | 62b99ab | — | [260508-huo-fix-octave-tests-move-companion-runner-f](./quick/260508-huo-fix-octave-tests-move-companion-runner-f/) |
 | 260508-mjp | Add tag-column search field to LiveLogPane mirroring events log | 2026-05-08 | 1c258fb | — | [260508-mjp-add-tag-column-search-field-to-livelogpa](./quick/260508-mjp-add-tag-column-search-field-to-livelogpa/) |
 | 260508-n8h | Dashboard Info button opens modal in-app uifigure (uihtml) instead of system browser | 2026-05-08 | 8b525a8 | — | [260508-n8h-dashboard-info-button-opens-modal-render](./quick/260508-n8h-dashboard-info-button-opens-modal-render/) |
+| 260511-ldu | PR #125 followup polish — extract bringFigureToFront_, tighten crosshair visibility, +2 tests, doc fixes | 2026-05-11 | 134a0d9 | — | [260511-ldu-pr-125-followup-polish-extract-bringfigu](./quick/260511-ldu-pr-125-followup-polish-extract-bringfigu/) |
 
 ## Progress Bar
 
