@@ -389,9 +389,62 @@ classdef CompanionEventViewer < handle
             end
             out = events(keep);
         end
+
+        function chainedResize_(src, evt, prevFcn, d, n)
+        %CHAINEDRESIZE_ ResizeFcn shim: invoke the dashboard's previous
+        %   ResizeFcn (so its own layout still runs) THEN re-apply our
+        %   even-stack layout override on top.
+            try
+                if ~isempty(prevFcn)
+                    if isa(prevFcn, 'function_handle')
+                        feval(prevFcn, src, evt);
+                    elseif iscell(prevFcn) && ~isempty(prevFcn) && isa(prevFcn{1}, 'function_handle')
+                        feval(prevFcn{1}, src, evt, prevFcn{2:end});
+                    end
+                end
+            catch
+                % Don't let a chained-handler error break our reapply.
+            end
+            try
+                CompanionEventViewer.applyEvenStackLayout_(d, n);
+            catch
+            end
+        end
+
+        function applyEvenStackLayout_(d, n)
+        %APPLYEVENSTACKLAYOUT_ Stretch N FastSenseWidgets in a DashboardEngine
+        %   so they evenly fill the canvas top→bottom, regardless of the
+        %   layout's own RowHeight calculation. Top widget = row 1.
+        %   Idempotent and safe to call from a ResizeFcn.
+            if isempty(d) || ~isvalid(d) || isempty(d.Widgets); return; end
+            n = min(n, numel(d.Widgets));
+            for i = 1:n
+                w = d.Widgets{i};
+                if isempty(w.hPanel) || ~isgraphics(w.hPanel); continue; end
+                cellPanel = w.hPanel.Parent;
+                if ~isempty(cellPanel) && isgraphics(cellPanel)
+                    cellPanel.Units    = 'normalized';
+                    cellPanel.Position = [0 (n-i)/n 1 1/n];
+                end
+                w.hPanel.Units    = 'normalized';
+                w.hPanel.Position = [0 0 1 1];
+            end
+        end
     end
 
     methods (Access = private)
+        function installResizeReapply_(obj, d, n) %#ok<INUSL>
+        %INSTALLRESIZEREAPPLY_ Chain a layout-reapply onto the dashboard
+        %   figure's existing ResizeFcn so the even-stack layout survives
+        %   window resizes and dashboard Reset clicks (otherwise the
+        %   dashboard's own onResize recomputes RowHeight to ~11%).
+            if isempty(d) || ~isvalid(d) || isempty(d.hFigure) || ~isgraphics(d.hFigure)
+                return;
+            end
+            prevFcn = get(d.hFigure, 'ResizeFcn');
+            set(d.hFigure, 'ResizeFcn', @(src, evt) ...
+                CompanionEventViewer.chainedResize_(src, evt, prevFcn, d, n));
+        end
         function applyPreset_(obj, name)
         %APPLYPRESET_ Set TimeRange + TimePresetMode for a named preset.
         %   Presets: '1h', '24h', '7d', 'all'.
@@ -1195,28 +1248,15 @@ classdef CompanionEventViewer < handle
             d.render();
 
             % DashboardEngine.render auto-computes RowHeight to make grid
-            % cells square in pixels (DashboardLayout.m:197-209) — so a
-            % [1 1 24 1] widget ends up in a layout cell ~11% of canvas
-            % height regardless of figure size. The widget hierarchy is:
-            %   widget.hPanel (pixels) ⊂ layoutCell (norm) ⊂ hCanvas ⊂ hViewport
-            % Stretch BOTH the layout cell AND the widget panel to fill the
-            % canvas, so the FastSenseWidget gets the entire content area.
+            % cells square in pixels (DashboardLayout.m:197-209), so the
+            % widget cells default to ~11% of canvas height. Stretch them
+            % to fill the full canvas, and chain onto the figure's ResizeFcn
+            % so subsequent resizes (window drag, dashboard "Reset" button,
+            % etc.) keep the layout instead of reverting to ~11%.
             try
-                if ~isempty(d.Widgets)
-                    w = d.Widgets{1};
-                    if ~isempty(w.hPanel) && isgraphics(w.hPanel)
-                        cellPanel = w.hPanel.Parent;
-                        if ~isempty(cellPanel) && isgraphics(cellPanel)
-                            cellPanel.Units    = 'normalized';
-                            cellPanel.Position = [0 0 1 1];   % fill hCanvas
-                        end
-                        w.hPanel.Units    = 'normalized';
-                        w.hPanel.Position = [0 0 1 1];   % fill the cell
-                        % Flush so the inner FastSense axes pick up the new
-                        % size before we zoom XLim below.
-                        drawnow;
-                    end
-                end
+                CompanionEventViewer.applyEvenStackLayout_(d, 1);
+                obj.installResizeReapply_(d, 1);
+                drawnow;
             catch
                 % Layout override is nice-to-have; failures must not suppress
                 % the dashboard.
@@ -1356,19 +1396,12 @@ classdef CompanionEventViewer < handle
             d.render();
 
             % Stretch each widget panel + its layout cell so the N widgets
-            % evenly fill the canvas top-to-bottom (top widget = row 1).
+            % evenly fill the canvas top→bottom (top widget = row 1). Chain
+            % onto the figure's ResizeFcn so the override survives later
+            % window resizes / dashboard Reset clicks.
             try
-                for i = 1:n
-                    w = d.Widgets{i};
-                    if isempty(w.hPanel) || ~isgraphics(w.hPanel); continue; end
-                    cellPanel = w.hPanel.Parent;
-                    if ~isempty(cellPanel) && isgraphics(cellPanel)
-                        cellPanel.Units    = 'normalized';
-                        cellPanel.Position = [0 (n-i)/n 1 1/n];
-                    end
-                    w.hPanel.Units    = 'normalized';
-                    w.hPanel.Position = [0 0 1 1];
-                end
+                CompanionEventViewer.applyEvenStackLayout_(d, n);
+                obj.installResizeReapply_(d, n);
                 drawnow;
                 % Zoom each widget to its event window (after layout settles).
                 for i = 1:n
