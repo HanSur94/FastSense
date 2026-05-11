@@ -33,5 +33,25 @@ classdef TestIndustrialPlantHistory < matlab.unittest.TestCase
             testCase.assertEqual(nTransitions, 7, ...
                 sprintf('expected 7 running->cooldown transitions, got %d', nTransitions));
         end
+
+        function testStateHistoryHasSevenValveCycles(testCase)
+            cfg     = plantConfig();
+            tStart  = now() - 7;
+            nDays   = 7;
+            [xValve, yValve, ~, ~] = buildStateHistory(cfg, tStart, nDays);
+            testCase.assertEqual(numel(xValve), numel(yValve), ...
+                'valve X/Y length mismatch');
+            testCase.assertGreaterThan(numel(xValve), 0, 'valve history empty');
+
+            % Count `closing` -> `closed` transitions; one per day = 7.
+            nClose = 0;
+            for k = 2:numel(yValve)
+                if strcmp(yValve{k-1}, 'closing') && strcmp(yValve{k}, 'closed')
+                    nClose = nClose + 1;
+                end
+            end
+            testCase.assertEqual(nClose, 7, ...
+                sprintf('expected 7 closing->closed transitions, got %d', nClose));
+        end
     end
 end

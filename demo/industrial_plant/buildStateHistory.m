@@ -24,14 +24,23 @@ function [xValve, yValve, xMode, yMode] = buildStateHistory(cfg, tStart, nDays)
 %
 %   See also: seedHistory, plantConfig.
 
-    % Validate label sets exist.
+    sec = 1/86400;            % 1 second in days
+    h   = 1/24;               % 1 hour in days
+
+    % Static label sets per the daily cycle. Assert these match the
+    % allowed labels in plantConfig so a rename in plantConfig is
+    % caught here rather than silently writing an invalid StateTag value.
+    modeLabels  = {'idle', 'heating', 'running', 'cooldown', 'idle'};
+    valveLabels = {'closed', 'opening', 'open', 'closing', 'closed'};
+
     assert(isfield(cfg.Labels, 'reactor_mode'), ...
         'plantConfig().Labels.reactor_mode missing');
     assert(isfield(cfg.Labels, 'feedline_valve_state'), ...
         'plantConfig().Labels.feedline_valve_state missing');
-
-    sec = 1/86400;            % 1 second in days
-    h   = 1/24;               % 1 hour in days
+    assert(all(ismember(modeLabels, cfg.Labels.reactor_mode)), ...
+        'buildStateHistory: hardcoded reactor mode labels not all in cfg.Labels.reactor_mode');
+    assert(all(ismember(valveLabels, cfg.Labels.feedline_valve_state)), ...
+        'buildStateHistory: hardcoded valve labels not all in cfg.Labels.feedline_valve_state');
 
     xValve = []; yValve = {};
     xMode  = []; yMode  = {};
@@ -41,11 +50,9 @@ function [xValve, yValve, xMode, yMode] = buildStateHistory(cfg, tStart, nDays)
 
         % Reactor mode for this day.
         modeTimes  = dayStart + [0, 2*h, 4*h, 20*h, 22*h];
-        modeLabels = {'idle', 'heating', 'running', 'cooldown', 'idle'};
 
         % Valve state for this day. Three-second open/close ramps.
         valveTimes  = dayStart + [0, 2*h, 2*h + 3*sec, 20*h, 20*h + 3*sec];
-        valveLabels = {'closed', 'opening', 'open', 'closing', 'closed'};
 
         for k = 1:numel(modeTimes)
             label = modeLabels{k};
