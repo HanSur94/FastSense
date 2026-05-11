@@ -366,11 +366,27 @@ jobs:
         run: Get-ChildItem -Recurse libs -Filter '*.mex' | ForEach-Object { $_.FullName }
 
   matlab:
-    name: MATLAB Tests
+    # Split into 4 alphabetical batches so each MATLAB process sees a
+    # bounded test load. Background: R2021b headless Linux suffers
+    # cumulative state corruption (libmwm_dispatcher / libmwlxeindexing
+    # internals) after the long test suite runs in one process, causing
+    # segfaults in unrelated tests late in the run. Running each batch
+    # in a fresh MATLAB process resets the state between groups.
+    # Batches are matrix-parallel so wall-clock time is similar to the
+    # old single-process job.
+    name: MATLAB Tests (${{ matrix.batch.name }})
     needs: [changes, build-mex-matlab]
-    timeout-minutes: 45
+    timeout-minutes: 25
     if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        batch:
+          - { id: 1, name: "A-D", pattern: "^Test[A-D]" }
+          - { id: 2, name: "E-I", pattern: "^Test[E-I]" }
+          - { id: 3, name: "J-P", pattern: "^Test[J-P]" }
+          - { id: 4, name: "Q-Z", pattern: "^Test[Q-Z]" }
     env:
       FASTSENSE_SKIP_BUILD: "1"
     steps:
@@ -392,7 +408,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          echo "=== matlab job: pre-test mksqlite diagnostic ==="
+          echo "=== matlab job batch ${{ matrix.batch.name }}: pre-test mksqlite diagnostic ==="
           echo "--- files on disk after artifact download ---"
           ls -la libs/FastSense/mksqlite.* 2>&1 || echo "(no mksqlite files on disk)"
 
@@ -413,12 +429,15 @@ jobs:
                 fprintf('mksqlite call FAILED: %s\n', e.message);
             end
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (batch ${{ matrix.batch.name }})
         id: matlab-tests
         continue-on-error: true
         uses: matlab-actions/run-command@v3
         with:
-          command: "addpath('scripts'); run_tests_with_coverage('${{ needs.changes.outputs.test_pattern }}');"
+          # Second arg is the batch regex; first arg remains the
+          # path-filter pattern. Empty batch regex disables the filter
+          # (used for non-batched single-job invocations).
+          command: "addpath('scripts'); run_tests_with_coverage('${{ needs.changes.outputs.test_pattern }}', '${{ matrix.batch.pattern }}');"
 
       - name: Verify MATLAB test pass via sentinel file
         # MATLAB R2021b reproducibly segfaults during shutdown on the
@@ -430,10 +449,10 @@ jobs:
         shell: bash
         run: |
           if [[ -f .matlab-tests-passed ]]; then
-            echo "MATLAB tests passed (sentinel present); ignoring shutdown segfault."
+            echo "MATLAB tests passed in batch ${{ matrix.batch.name }} (sentinel present); ignoring shutdown segfault."
             rm -f .matlab-tests-passed
           else
-            echo "MATLAB tests failed: .matlab-tests-passed sentinel not written."
+            echo "MATLAB tests failed in batch ${{ matrix.batch.name }}: .matlab-tests-passed sentinel not written."
             echo "matlab-actions step outcome: ${{ steps.matlab-tests.outcome }}"
             exit 1
           fi
@@ -443,8 +462,9 @@ jobs:
         shell: bash
         run: |
           {
-            echo "### MATLAB Tests"
+            echo "### MATLAB Tests (batch ${{ matrix.batch.name }})"
             echo ""
+            echo "Pattern: \`${{ matrix.batch.pattern }}\`"
             echo "MATLAB test run completed — see job log for details."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -453,7 +473,10 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           files: coverage.xml
-          flags: matlab
+          # Codecov merges multiple uploads sharing the `matlab` flag
+          # by SHA. Batch flag is informational so per-batch coverage
+          # is visible in the Codecov UI.
+          flags: matlab,batch${{ matrix.batch.id }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
