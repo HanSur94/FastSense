@@ -117,9 +117,27 @@ function industrialPlantTick_(tObj, ~)
         % Update in-memory accumulators + push to the registered tag so
         % getXY() / valueAt() / MonitorTag listeners see fresh data
         % without waiting for a LiveTagPipeline round-trip.
+        %
+        % First-tick seeding from the existing tag preserves any history
+        % loaded by seedHistory before the timer started — without this
+        % seeding, the tick's bare `(end+1) = ...` accumulator would
+        % start empty and the first updateData() call would clobber the
+        % seeded historical buffer.
         if ~isfield(ud.sensorX, field)
-            ud.sensorX.(field) = [];
-            ud.sensorY.(field) = [];
+            try
+                seedTag = TagRegistry.get(key);
+                if isa(seedTag, 'SensorTag')
+                    [xExist, yExist] = seedTag.getXY();
+                    ud.sensorX.(field) = xExist(:)';
+                    ud.sensorY.(field) = yExist(:)';
+                else
+                    ud.sensorX.(field) = [];
+                    ud.sensorY.(field) = [];
+                end
+            catch
+                ud.sensorX.(field) = [];
+                ud.sensorY.(field) = [];
+            end
         end
         ud.sensorX.(field)(end+1) = nowTime; %#ok<AGROW>
         ud.sensorY.(field)(end+1) = y;        %#ok<AGROW>
@@ -147,9 +165,22 @@ function industrialPlantTick_(tObj, ~)
         if isnan(prevIdx) || prevIdx ~= idx
             appendRow_(ud.rawDir, key, nowTime, labels{idx}, 'state');
             ud.stateIdx.(field) = idx;
+            % First-time seeding from the existing tag preserves any
+            % history loaded by seedHistory (see sensor block above).
             if ~isfield(ud.stateX, field)
-                ud.stateX.(field) = [];
-                ud.stateY.(field) = {};
+                try
+                    seedStateTag = TagRegistry.get(key);
+                    if isa(seedStateTag, 'StateTag')
+                        ud.stateX.(field) = seedStateTag.X(:)';
+                        ud.stateY.(field) = reshape(seedStateTag.Y, 1, []);
+                    else
+                        ud.stateX.(field) = [];
+                        ud.stateY.(field) = {};
+                    end
+                catch
+                    ud.stateX.(field) = [];
+                    ud.stateY.(field) = {};
+                end
             end
             ud.stateX.(field)(end+1) = nowTime;     %#ok<AGROW>
             ud.stateY.(field){end+1} = labels{idx};  %#ok<AGROW>

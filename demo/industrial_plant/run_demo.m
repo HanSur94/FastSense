@@ -70,6 +70,14 @@ function ctx = run_demo(varargin)
     % find a target on the very first tick.
     [store, plantHealthKey] = registerPlantTags(rawDir);
 
+    % Preload one week of synthetic 1 Hz history into every SensorTag /
+    % StateTag, drive the MonitorTag detector over that history so the
+    % EventStore is populated with real (not injected) events, and
+    % persist the store. seedHistory must run BEFORE the writer timer
+    % starts so the first live tick lands strictly after the historical
+    % window. Deterministic under rng(1015); restored on exit.
+    seedHistory(store, plantConfig());
+
     % Build the writer timer (unstarted), then the pipeline, then start both.
     writerTimer = makeDataGenerator(rawDir);
     start(writerTimer);
