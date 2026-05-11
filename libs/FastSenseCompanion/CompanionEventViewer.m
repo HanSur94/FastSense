@@ -378,96 +378,143 @@ classdef CompanionEventViewer < handle
             obj.Canvas_.OnSingleClick = @(ev) obj.onEventSingleClick_(ev);
             obj.Canvas_.OnDoubleClick = @(ev) obj.onEventDoubleClick_(ev);
 
-            % --- Filter bar contents -----------------------------------
-            % Preset buttons row.
-            presets       = {'1h', '24h', '7d', 'All'};
+            % --- Filter bar contents (uifigure widgets) ---------------
+            % Single-row grid with explicit pixel widths; '1x' between groups
+            % keeps everything aligned regardless of window width.
+            hFilterGrid = uigridlayout(obj.FilterPanel_, [1 17]);
+            hFilterGrid.RowHeight     = {'1x'};
+            hFilterGrid.ColumnWidth   = { ...
+                40, 40, 40, 40, ...                  % cols 1-4: presets
+                40, 110, 30, 110, ...                % cols 5-8: From label, edit, To label, edit
+                30, 30, 30, ...                      % cols 9-11: severity I/W/A
+                90, ...                              % col 12: Open only
+                '1x', ...                            % col 13: spacer
+                70, ...                              % col 14: Refresh
+                60, 50, '1x'};                       % cols 15-17: Auto, interval, trailing spacer
+            hFilterGrid.Padding       = [8 8 8 8];
+            hFilterGrid.ColumnSpacing = 4;
+            hFilterGrid.BackgroundColor = t.WidgetBackground;
+
+            % Preset buttons (cols 1-4).
+            presets        = {'1h', '24h', '7d', 'All'};
             presetTooltips = { ...
                 'Show events from the last hour', ...
                 'Show events from the last 24 hours', ...
                 'Show events from the last 7 days', ...
                 'Show all events on record'};
             for i = 1:numel(presets)
-                uicontrol('Parent', obj.FilterPanel_, ...
-                    'Style', 'pushbutton', 'String', presets{i}, ...
-                    'Tag', 'PresetBtn', ...
-                    'Units', 'normalized', ...
-                    'Position', [0.02 + (i-1)*0.05, 0.55, 0.045, 0.35], ...
-                    'BackgroundColor', t.WidgetBorderColor, ...
-                    'ForegroundColor', t.ForegroundColor, ...
-                    'TooltipString', presetTooltips{i}, ...
-                    'Callback', @(src, ~) obj.applyPreset_(get(src, 'String')));
+                btn = uibutton(hFilterGrid, 'push');
+                btn.Layout.Row    = 1;
+                btn.Layout.Column = i;
+                btn.Text          = presets{i};
+                btn.Tag           = 'PresetBtn';
+                btn.Tooltip       = presetTooltips{i};
+                btn.BackgroundColor = t.WidgetBorderColor;
+                btn.FontColor       = t.ForegroundColor;
+                btn.ButtonPushedFcn = @(src, ~) obj.applyPreset_(src.Text);
             end
 
-            % From / To datetime edits.
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'text', 'String', 'From:', ...
-                'Units', 'normalized', 'Position', [0.25 0.55 0.04 0.35], ...
-                'BackgroundColor', t.WidgetBackground, 'ForegroundColor', t.ForegroundColor, ...
-                'HorizontalAlignment', 'right');
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'edit', 'Tag', 'FromEdit', ...
-                'Units', 'normalized', 'Position', [0.30 0.55 0.10 0.35], ...
-                'String', '', ...
-                'TooltipString', 'Custom start time (e.g. 2026-05-08 14:30:00)', ...
-                'Callback', @(src, ~) obj.onFromToEdited_());
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'text', 'String', 'To:', ...
-                'Units', 'normalized', 'Position', [0.40 0.55 0.03 0.35], ...
-                'BackgroundColor', t.WidgetBackground, 'ForegroundColor', t.ForegroundColor, ...
-                'HorizontalAlignment', 'right');
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'edit', 'Tag', 'ToEdit', ...
-                'Units', 'normalized', 'Position', [0.43 0.55 0.10 0.35], ...
-                'String', '', ...
-                'TooltipString', 'Custom end time (e.g. 2026-05-08 15:30:00)', ...
-                'Callback', @(src, ~) obj.onFromToEdited_());
+            % From label + edit (cols 5-6).
+            lblFrom = uilabel(hFilterGrid);
+            lblFrom.Layout.Row    = 1;
+            lblFrom.Layout.Column = 5;
+            lblFrom.Text          = 'From:';
+            lblFrom.FontColor     = t.ForegroundColor;
+            lblFrom.BackgroundColor = t.WidgetBackground;
+            lblFrom.HorizontalAlignment = 'right';
 
-            % Severity toggles.
+            edFrom = uieditfield(hFilterGrid, 'text');
+            edFrom.Layout.Row    = 1;
+            edFrom.Layout.Column = 6;
+            edFrom.Tag           = 'FromEdit';
+            edFrom.Tooltip       = 'Custom start time (e.g. 2026-05-08 14:30:00)';
+            edFrom.FontColor       = t.ForegroundColor;
+            edFrom.BackgroundColor = t.WidgetBackground;
+            edFrom.ValueChangedFcn = @(~, ~) obj.onFromToEdited_();
+
+            % To label + edit (cols 7-8).
+            lblTo = uilabel(hFilterGrid);
+            lblTo.Layout.Row    = 1;
+            lblTo.Layout.Column = 7;
+            lblTo.Text          = 'To:';
+            lblTo.FontColor     = t.ForegroundColor;
+            lblTo.BackgroundColor = t.WidgetBackground;
+            lblTo.HorizontalAlignment = 'right';
+
+            edTo = uieditfield(hFilterGrid, 'text');
+            edTo.Layout.Row    = 1;
+            edTo.Layout.Column = 8;
+            edTo.Tag           = 'ToEdit';
+            edTo.Tooltip       = 'Custom end time (e.g. 2026-05-08 15:30:00)';
+            edTo.FontColor       = t.ForegroundColor;
+            edTo.BackgroundColor = t.WidgetBackground;
+            edTo.ValueChangedFcn = @(~, ~) obj.onFromToEdited_();
+
+            % Severity toggles (cols 9-11).
             sevLabels   = {'I', 'W', 'A'};
             sevTooltips = { ...
                 'Show info events (severity 1)', ...
                 'Show warning events (severity 2)', ...
                 'Show alarm events (severity 3)'};
             for i = 1:3
-                uicontrol('Parent', obj.FilterPanel_, 'Style', 'togglebutton', ...
-                    'String', sevLabels{i}, 'Tag', sprintf('SevBtn%d', i), ...
-                    'Value', 1, ...
-                    'Units', 'normalized', ...
-                    'Position', [0.55 + (i-1)*0.03, 0.55, 0.025, 0.35], ...
-                    'BackgroundColor', t.WidgetBorderColor, ...
-                    'ForegroundColor', t.ForegroundColor, ...
-                    'TooltipString', sevTooltips{i}, ...
-                    'Callback', @(src, ~) obj.onSevToggled_(i, get(src, 'Value')));
+                stBtn = uibutton(hFilterGrid, 'state');
+                stBtn.Layout.Row    = 1;
+                stBtn.Layout.Column = 8 + i;
+                stBtn.Text          = sevLabels{i};
+                stBtn.Tag           = sprintf('SevBtn%d', i);
+                stBtn.Value         = true;
+                stBtn.Tooltip       = sevTooltips{i};
+                stBtn.BackgroundColor = t.WidgetBorderColor;
+                stBtn.FontColor       = t.ForegroundColor;
+                stBtn.ValueChangedFcn = @(src, ~) obj.onSevToggled_(i, src.Value);
             end
 
-            % Open-only checkbox.
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'checkbox', ...
-                'String', 'Open only', 'Tag', 'OpenOnlyChk', ...
-                'Value', 0, ...
-                'Units', 'normalized', 'Position', [0.65 0.55 0.07 0.35], ...
-                'BackgroundColor', t.WidgetBackground, 'ForegroundColor', t.ForegroundColor, ...
-                'TooltipString', 'Show only currently-open (still active) events', ...
-                'Callback', @(src, ~) obj.setOpenOnly_(get(src, 'Value') == 1));
+            % Open-only checkbox (col 12).
+            chkOpen = uicheckbox(hFilterGrid);
+            chkOpen.Layout.Row    = 1;
+            chkOpen.Layout.Column = 12;
+            chkOpen.Text          = 'Open only';
+            chkOpen.Tag           = 'OpenOnlyChk';
+            chkOpen.Value         = false;
+            chkOpen.Tooltip       = 'Show only currently-open (still active) events';
+            chkOpen.FontColor     = t.ForegroundColor;
+            chkOpen.ValueChangedFcn = @(src, ~) obj.setOpenOnly_(src.Value);
 
-            % Tag search.
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'edit', ...
-                'Tag', 'TagSearch', 'String', '', ...
-                'Units', 'normalized', 'Position', [0.02 0.10 0.20 0.35], ...
-                'TooltipString', 'Substring filter on registered tag keys (empty = all tags)', ...
-                'Callback', @(src, ~) obj.onTagSearchChanged_(get(src, 'String')));
+            % Spacer at col 13.
 
-            % Refresh + Auto + interval.
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'pushbutton', 'String', 'Refresh', ...
-                'Units', 'normalized', 'Position', [0.74 0.55 0.07 0.35], ...
-                'TooltipString', 'Re-read events from the EventStore and redraw', ...
-                'Callback', @(~, ~) obj.refresh());
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'checkbox', 'String', 'Auto', ...
-                'Tag', 'AutoChk', 'Value', 1, ...
-                'Units', 'normalized', 'Position', [0.82 0.55 0.05 0.35], ...
-                'BackgroundColor', t.WidgetBackground, 'ForegroundColor', t.ForegroundColor, ...
-                'TooltipString', 'Auto-refresh while the companion is in Live mode', ...
-                'Callback', @(src, ~) obj.setAutoEnabled_(get(src, 'Value') == 1));
-            uicontrol('Parent', obj.FilterPanel_, 'Style', 'edit', 'Tag', 'IntervalEdit', ...
-                'String', sprintf('%g', obj.AutoPeriod_), ...
-                'Units', 'normalized', 'Position', [0.87 0.55 0.04 0.35], ...
-                'TooltipString', 'Auto-refresh interval in seconds', ...
-                'Callback', @(src, ~) obj.onIntervalEdited_(get(src, 'String')));
+            % Refresh button (col 14).
+            btnRefresh = uibutton(hFilterGrid, 'push');
+            btnRefresh.Layout.Row    = 1;
+            btnRefresh.Layout.Column = 14;
+            btnRefresh.Text          = 'Refresh';
+            btnRefresh.Tooltip       = 'Re-read events from the EventStore and redraw';
+            btnRefresh.BackgroundColor = t.WidgetBorderColor;
+            btnRefresh.FontColor       = t.ForegroundColor;
+            btnRefresh.ButtonPushedFcn = @(~, ~) obj.refresh();
+
+            % Auto checkbox (col 15).
+            chkAuto = uicheckbox(hFilterGrid);
+            chkAuto.Layout.Row    = 1;
+            chkAuto.Layout.Column = 15;
+            chkAuto.Text          = 'Auto';
+            chkAuto.Tag           = 'AutoChk';
+            chkAuto.Value         = true;
+            chkAuto.Tooltip       = 'Auto-refresh while the companion is in Live mode';
+            chkAuto.FontColor     = t.ForegroundColor;
+            chkAuto.ValueChangedFcn = @(src, ~) obj.setAutoEnabled_(src.Value);
+
+            % Interval edit (col 16).
+            edInterval = uieditfield(hFilterGrid, 'text');
+            edInterval.Layout.Row    = 1;
+            edInterval.Layout.Column = 16;
+            edInterval.Tag           = 'IntervalEdit';
+            edInterval.Value         = sprintf('%g', obj.AutoPeriod_);
+            edInterval.Tooltip       = 'Auto-refresh interval in seconds';
+            edInterval.FontColor       = t.ForegroundColor;
+            edInterval.BackgroundColor = t.WidgetBackground;
+            edInterval.ValueChangedFcn = @(src, ~) obj.onIntervalEdited_(src.Value);
+
+            % Trailing spacer at col 17.
 
             % --- Slider in bottom panel --------------------------------
             obj.Selector_ = TimeRangeSelector(obj.SliderPanel_, ...
@@ -613,8 +660,9 @@ classdef CompanionEventViewer < handle
         %ONFROMTOEDITED_ Parse From/To edit fields and apply as custom range.
             fromCtl = findall(obj.hFigure, 'Tag', 'FromEdit');
             toCtl   = findall(obj.hFigure, 'Tag', 'ToEdit');
-            sFrom = strtrim(get(fromCtl, 'String'));
-            sTo   = strtrim(get(toCtl,   'String'));
+            if isempty(fromCtl) || isempty(toCtl); return; end
+            sFrom = strtrim(fromCtl.Value);
+            sTo   = strtrim(toCtl.Value);
             if isempty(sFrom) || isempty(sTo); return; end
             try
                 t1 = datenum(sFrom);
@@ -635,23 +683,6 @@ classdef CompanionEventViewer < handle
         function setOpenOnly_(obj, tf)
         %SETOPENONLY_ Set open-only filter flag and refresh.
             obj.OpenOnly = logical(tf);
-            obj.refresh();
-        end
-
-        function onTagSearchChanged_(obj, txt)
-        %ONTAGSEARCHCHANGED_ Filter by tag keys matching search text.
-            txt = strtrim(txt);
-            if isempty(txt)
-                obj.SelectedTagKeys = {};
-            else
-                allKeys = TagRegistry.keys();
-                if isempty(allKeys)
-                    obj.SelectedTagKeys = {};
-                else
-                    hit = allKeys(contains(allKeys, txt));
-                    obj.SelectedTagKeys = hit(:)';
-                end
-            end
             obj.refresh();
         end
 

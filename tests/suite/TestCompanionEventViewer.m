@@ -257,9 +257,20 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             comp = makeRealCompanion_(testCase);
             v = CompanionEventViewer(es, TagRegistry, comp);
             testCase.addTeardown(@() v.close());
-            btns = findall(v.hFigure, 'Style', 'pushbutton', 'Tag', 'PresetBtn');
-            presetTexts = arrayfun(@(b) get(b, 'String'), btns, 'UniformOutput', false);
+            btns = findall(v.hFigure, 'Tag', 'PresetBtn');
+            testCase.verifyEqual(numel(btns), 4);
+            presetTexts = arrayfun(@(b) b.Text, btns, 'UniformOutput', false);
             testCase.verifyEqual(sort(presetTexts), {'1h'; '24h'; '7d'; 'All'});
+        end
+
+        function testTagSearchFieldIsRemoved(testCase)
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            hits = findall(v.hFigure, 'Tag', 'TagSearch');
+            testCase.verifyEmpty(hits, ...
+                'TagSearch field removed — TagCatalogPane supersedes it.');
         end
 
         function testFromToDateTimePickersExist(testCase)
