@@ -382,11 +382,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Batch budget: empirically ~30 classes per fresh MATLAB process
+        # on R2021b headless Linux before the dispatcher state corrupts.
+        # TestDashboard* alone is 23 classes (heaviest cluster), so it
+        # gets its own batch; the rest of D folds into batch 1.
         batch:
-          - { id: 1, name: "A-D", pattern: "^Test[A-D]" }
-          - { id: 2, name: "E-I", pattern: "^Test[E-I]" }
-          - { id: 3, name: "J-P", pattern: "^Test[J-P]" }
-          - { id: 4, name: "Q-Z", pattern: "^Test[Q-Z]" }
+          - { id: 1, name: "A-D",         pattern: "^Test[ABC]|^TestD(?!ashboard)" }
+          - { id: 2, name: "Dashboard",   pattern: "^TestDashboard" }
+          - { id: 3, name: "E-I",         pattern: "^Test[E-I]" }
+          - { id: 4, name: "J-P",         pattern: "^Test[J-P]" }
+          - { id: 5, name: "Q-Z",         pattern: "^Test[Q-Z]" }
     env:
       FASTSENSE_SKIP_BUILD: "1"
     steps:
