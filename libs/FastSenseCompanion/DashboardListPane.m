@@ -324,24 +324,35 @@ classdef DashboardListPane < handle
 
         function renderEmptyState_(obj, msgText)
         %RENDEREMPTYSTATE_ Render a centered label inside hScroll_ when no rows to show.
+        %   Builds a 1x1 grid filling the scroll area so the label can be
+        %   vertically AND horizontally centered (uilabel alignment alone
+        %   only centers text within the widget's bounding box).
             % Clear prior grid (safety — applyFilter_ also deletes, but be defensive)
             if ~isempty(obj.hRowGrid_) && isvalid(obj.hRowGrid_)
                 delete(obj.hRowGrid_);
             end
-            obj.hRowGrid_         = [];
             obj.hRowButtons_      = {};
             obj.hOpenButtons_     = {};
             obj.hDotLabels_       = {};
             obj.hRowCountLabels_  = {};
-            lbl = uilabel(obj.hScroll_);
+
+            % Reuse hRowGrid_ as a flex-filled 1x1 layout that centers the label.
+            obj.hRowGrid_ = uigridlayout(obj.hScroll_, [1 1]);
+            obj.hRowGrid_.RowHeight       = {'1x'};
+            obj.hRowGrid_.ColumnWidth     = {'1x'};
+            obj.hRowGrid_.Padding         = [16 16 16 16];
+            obj.hRowGrid_.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            lbl = uilabel(obj.hRowGrid_);
+            lbl.Layout.Row          = 1;
+            lbl.Layout.Column       = 1;
             lbl.Text                = msgText;
-            lbl.FontSize            = 11;
+            lbl.FontSize            = 14;
+            lbl.FontWeight          = 'bold';
             lbl.FontColor           = obj.Theme_.PlaceholderTextColor;
+            lbl.BackgroundColor     = obj.Theme_.WidgetBackground;
             lbl.HorizontalAlignment = 'center';
             lbl.VerticalAlignment   = 'center';
-            % Note: uilabel has no Units/Position properties (uicontrol-only).
-            % Default placement inside the parent uipanel is acceptable for
-            % the empty-state placeholder.
         end
 
         function onSearchChanged_(obj)
