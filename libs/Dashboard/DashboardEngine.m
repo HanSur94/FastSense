@@ -87,6 +87,7 @@ classdef DashboardEngine < handle
         EventMarkerTimesCache_  = []   % last uTimes passed to setEventMarkers
         EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
         PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
+        FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
     end
 
     methods (Access = public)
@@ -347,6 +348,16 @@ classdef DashboardEngine < handle
                 'Units', 'normalized', ...
                 'OuterPosition', [0.05 0.05 0.9 0.9], ...
                 'CloseRequestFcn', @(~,~) obj.onClose());
+            % Safety net: any figure-destruction path (delete(hf), close all force,
+            % parent teardown) must also stop the live timer. CloseRequestFcn ->
+            % onClose() already handles the normal close path; this listener
+            % covers everything else (260511-mjb).
+            try
+                obj.FigureDestroyedListener_ = addlistener(obj.hFigure, ...
+                    'ObjectBeingDestroyed', @(~,~) obj.onFigureDestroyed_());
+            catch
+                obj.FigureDestroyedListener_ = [];
+            end
             set(obj.hFigure, 'ResizeFcn', @(~,~) obj.onResize());
 
             obj.Toolbar = DashboardToolbar(obj, obj.hFigure, themeStruct);
@@ -1686,6 +1697,14 @@ classdef DashboardEngine < handle
         end
 
         function delete(obj)
+            % Remove the figure-destroyed safety-net listener BEFORE any
+            % other teardown so it cannot fire on a partially-destroyed
+            % obj during MATLAB GC. Prevents R2021b segfault when the
+            % engine handle is collected before its hFigure (260511-n1r).
+            if ~isempty(obj.FigureDestroyedListener_)
+                try delete(obj.FigureDestroyedListener_); catch, end
+                obj.FigureDestroyedListener_ = [];
+            end
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
@@ -2418,6 +2437,25 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.rerenderWidgets();
+        end
+
+        function onFigureDestroyed_(obj)
+        %ONFIGUREDESTROYED_ Safety-net handler invoked when hFigure is destroyed.
+        %   Fires for ANY destruction path (delete(hf), close all force, parent
+        %   teardown). The normal close-via-X path goes through CloseRequestFcn
+        %   -> onClose(), which has already called stopLive() and cleared
+        %   hFigure by the time we get here — both operations below are
+        %   idempotent and benign in that case. Listener MUST NOT throw, so
+        %   every operation is wrapped in try/catch (260511-mjb).
+            try
+                obj.stopLive();
+            catch
+                % best-effort: stopLive is already try/catch internally
+            end
+            try
+                obj.hFigure = [];
+            catch
+            end
         end
 
     end

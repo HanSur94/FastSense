@@ -46,8 +46,12 @@ end
 function case_draws_lines(hFig)
     sel = makeSelector(hFig);
     sel.setEventMarkers([10 25 60 90]);
-    assert(numel(sel.hEventMarkers) == 4, ...
-        sprintf('expected 4 markers, got %d', numel(sel.hEventMarkers)));
+    % Uniform-color path consolidates all events into a single
+    % NaN-separated polyline (260508-slider-stuck): expect 1 handle,
+    % event positions verified via markerX which flattens XData.
+    assert(numel(sel.hEventMarkers) == 1, ...
+        sprintf('expected 1 polyline (uniform color), got %d', ...
+                numel(sel.hEventMarkers)));
     xs = markerX(sel);
     assert(isequal(sort(xs), [10 25 60 90]), 'X positions mismatch');
     delete(sel);
@@ -56,7 +60,8 @@ end
 function case_empty_clears(hFig)
     sel = makeSelector(hFig);
     sel.setEventMarkers([10 20 30]);
-    assert(numel(sel.hEventMarkers) == 3);
+    % Uniform-color path: 1 polyline encodes all 3 events.
+    assert(numel(sel.hEventMarkers) == 1);
     sel.setEventMarkers([]);
     assert(isempty(sel.hEventMarkers), 'empty input should clear markers');
     delete(sel);
@@ -65,8 +70,10 @@ end
 function case_nan_filtered(hFig)
     sel = makeSelector(hFig);
     sel.setEventMarkers([10 NaN 20 Inf -Inf 30]);
-    assert(numel(sel.hEventMarkers) == 3, ...
-        sprintf('expected 3 (finite only), got %d', numel(sel.hEventMarkers)));
+    % After filtering: 3 finite events on the uniform-color path → 1 polyline.
+    assert(numel(sel.hEventMarkers) == 1, ...
+        sprintf('expected 1 polyline (uniform color), got %d', ...
+                numel(sel.hEventMarkers)));
     xs = markerX(sel);
     assert(isequal(sort(xs), [10 20 30]));
     delete(sel);
@@ -77,7 +84,8 @@ function case_replaces_previous(hFig)
     sel.setEventMarkers([10 20]);
     old = sel.hEventMarkers;
     sel.setEventMarkers([40 50 60]);
-    assert(numel(sel.hEventMarkers) == 3);
+    % Uniform-color path: each call yields a single polyline.
+    assert(numel(sel.hEventMarkers) == 1);
     for k = 1:numel(old)
         assert(~ishandle(old(k)), 'old marker handle should be deleted');
     end
@@ -190,11 +198,18 @@ function case_fastsense_with_store(hFig)
 end
 
 function xs = markerX(sel)
-    xs = zeros(1, numel(sel.hEventMarkers));
+    %MARKERX Collect every unique non-NaN x value across all marker handles.
+    %   setEventMarkers consolidates events into NaN-separated polylines
+    %   (one polyline per unique color, or a single polyline for the
+    %   uniform-color path). Each event contributes the triplet
+    %   [t t NaN], so this helper flattens every handle's XData, drops
+    %   NaN separators, and returns the unique x positions as a row.
+    xs = [];
     for k = 1:numel(sel.hEventMarkers)
         xd = get(sel.hEventMarkers(k), 'XData');
-        xs(k) = xd(1);
+        xs = [xs, xd(~isnan(xd))]; %#ok<AGROW>
     end
+    xs = unique(xs(:).');
 end
 
 function safeClose(hFig)

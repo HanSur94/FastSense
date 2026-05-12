@@ -59,7 +59,7 @@ classdef TestIndustrialPlantHistory < matlab.unittest.TestCase
             tStart = now() - 7;
             % 600 samples (10 min at 1 Hz) is enough to verify shape
             % without committing to a full week here.
-            tHist  = (tStart : 1/86400 : tStart + 600/86400)';
+            tHist  = (tStart:1/86400:tStart + 600/86400)';
 
             % An unmonitored sensor: no excursions overlay, so y should
             % be exactly baseline + noise (within RNG determinism).
@@ -89,7 +89,7 @@ classdef TestIndustrialPlantHistory < matlab.unittest.TestCase
             cfg    = plantConfig();
             % Full week so the schedule is exercised.
             tStart = now() - 7;
-            tHist  = (tStart : 1/86400 : tStart + 7 - 1/86400)';
+            tHist  = (tStart:1/86400:tStart + 7 - 1/86400)';
 
             % `reactor.pressure` has trip at y > 18.
             rng(1015, 'twister');

@@ -17,13 +17,13 @@ classdef EventGanttCanvas < handle
         Theme           % CompanionTheme struct
         BarHandles      % rectangle/patch handles, Nx1
         BarEvents       % Event objects mirrored to handles, Nx1
-        hCrosshairLine  % vertical line that tracks the cursor's X position
-        hCrosshairText  % text annotation at the top of the line showing datetime
     end
 
     properties (Access = private)
         CrosshairFigure_      = []   % uifigure host (set by installCrosshair)
         CrosshairPrevMotion_  = []   % saved figure WindowButtonMotionFcn for chaining
+        hCrosshairLine        = []   % vertical line tracking cursor X (created lazily on first move)
+        hCrosshairText        = []   % datetime annotation at top of crosshair line
     end
 
     properties
