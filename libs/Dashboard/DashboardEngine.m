@@ -179,7 +179,7 @@ classdef DashboardEngine < handle
         function switchPage(obj, pageIdx)
         %SWITCHPAGE Switch the active page using panel visibility toggling.
         %   d.switchPage(2) sets ActivePage = 2 and toggles panel visibility.
-            if ~isvalid(obj)
+            if ~obj.isObjValid_()
                 return;  % uicontrol callback fired after engine was deleted
             end
             if pageIdx < 1 || pageIdx > numel(obj.Pages)
@@ -1578,7 +1578,7 @@ classdef DashboardEngine < handle
         end
 
         function onLiveTick(obj)
-            if ~isvalid(obj)
+            if ~obj.isObjValid_()
                 return;  % live timer fired after engine was deleted
             end
             if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
@@ -1695,7 +1695,7 @@ classdef DashboardEngine < handle
 
         function onResize(obj)
         %ONRESIZE Handle figure resize: reposition all widget panels.
-            if ~isvalid(obj)
+            if ~obj.isObjValid_()
                 return;  % SizeChangedFcn fired after engine was deleted
             end
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
@@ -1794,6 +1794,27 @@ classdef DashboardEngine < handle
     end
 
     methods (Access = private)
+
+        function tf = isObjValid_(obj)
+        %ISOBJVALID_ Cross-platform "is this handle still alive?" check.
+        %   MATLAB: delegates to builtin isvalid().
+        %   Octave 7+: isvalid() is not implemented for classdef handles,
+        %   so the call itself throws; fall through to a property-access
+        %   probe — accessing a property of a deleted handle throws on
+        %   both runtimes, so the inner try/catch is the portable test.
+            try
+                tf = isvalid(obj);
+                return;
+            catch
+                % Octave: isvalid undefined for classdef handles.
+            end
+            try
+                obj.hFigure; %#ok<VUNUS>
+                tf = true;
+            catch
+                tf = false;
+            end
+        end
 
         function repositionPanels(obj)
         %REPOSITIONPANELS Reposition existing widget panels in-place after resize.
