@@ -1890,6 +1890,37 @@ classdef FastSense < handle
             end
         end
 
+        function setXLimQuiet(obj, tStart, tEnd)
+            %SETXLIMQUIET Set XLim without triggering XLimMode listener overhead.
+            %   fp.SETXLIMQUIET(tStart, tEnd) is a performance-optimised
+            %   alternative to calling xlim(ax, [tStart tEnd]) from external
+            %   callers (e.g. FastSenseWidget.setTimeRange). The plain
+            %   xlim() call fires the XLimMode PostSet listener every time,
+            %   which routes to onXLimModeChanged -> scheduleDeferredXLimCheck
+            %   and creates a new 10 ms one-shot timer per call.  That timer
+            %   overhead adds ~4 ms per FastSenseWidget per live tick.
+            %
+            %   This method suppresses the overhead by briefly setting
+            %   IsPropagating = true so the listener's early-return fires.
+            %   The XLim value is still applied directly; the deferred check
+            %   is simply skipped because we are not responding to a user
+            %   gesture (resetplotview / Home button).
+            %
+            %   Note: does NOT update CachedXLim (that is the caller's
+            %   responsibility if needed).  Intended only for the
+            %   dashboard time-sync path, not for user-driven zoom/pan.
+            if ~obj.IsRendered || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
+                return;
+            end
+            obj.IsPropagating = true;
+            try
+                set(obj.hAxes, 'XLim', [tStart, tEnd]);
+                set(obj.hAxes, 'XLimMode', 'manual');
+            catch
+            end
+            obj.IsPropagating = false;
+        end
+
         function stopLive(obj)
             %STOPLIVE Stop live mode polling.
             %   fp.STOPLIVE() stops the live timer, cleans up the deferred
@@ -3081,12 +3112,28 @@ classdef FastSense < handle
                     windowWidth = currentXLim(2) - currentXLim(1);
                     newXMax = newX(end);
                     newXLim = [newXMax - windowWidth, newXMax];
-                    set(obj.hAxes, 'XLim', newXLim);
+                    % Suppress XLim PostSet listener: updateData() will call
+                    % updateLines() explicitly right after applyViewMode returns,
+                    % so triggering onXLimChanged here would double the work.
+                    obj.IsPropagating = true;
+                    try
+                        set(obj.hAxes, 'XLim', newXLim);
+                    catch
+                    end
+                    obj.IsPropagating = false;
                     obj.CachedXLim = newXLim;
 
                 case 'reset'
                     newXLim = [newX(1), newX(end)];
-                    set(obj.hAxes, 'XLim', newXLim);
+                    % Suppress XLim PostSet listener: updateData() will call
+                    % updateLines() explicitly right after applyViewMode returns,
+                    % so triggering onXLimChanged here would double the work.
+                    obj.IsPropagating = true;
+                    try
+                        set(obj.hAxes, 'XLim', newXLim);
+                    catch
+                    end
+                    obj.IsPropagating = false;
                     obj.CachedXLim = newXLim;
             end
         end

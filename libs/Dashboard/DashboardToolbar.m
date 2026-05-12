@@ -176,9 +176,16 @@ classdef DashboardToolbar < handle
 
         function setLastUpdateTime(obj, t)
         %SETLASTUPDATETIME Update the last-update label with a timestamp.
+        %   Hot-path note: called on every live tick. Uses datevec (no format
+        %   string parsing) instead of datestr to avoid timefun/private overhead.
             if ~isempty(obj.hLastUpdate) && ishandle(obj.hLastUpdate)
-                set(obj.hLastUpdate, 'String', ...
-                    ['Last update: ' datestr(t, 'HH:MM:SS')]);
+                try
+                    dv = datevec(t);
+                    timeStr = sprintf('%02d:%02d:%02d', dv(4), dv(5), floor(dv(6)));
+                catch
+                    timeStr = datestr(t, 'HH:MM:SS');
+                end
+                set(obj.hLastUpdate, 'String', ['Last update: ' timeStr]);
             end
         end
 

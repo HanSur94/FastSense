@@ -408,12 +408,14 @@ classdef FastSenseWidget < DashboardWidget
             end
             if ~isempty(obj.FastSenseObj)
                 try
-                    ax = obj.FastSenseObj.hAxes;
-                    if ~isempty(ax) && ishandle(ax)
-                        obj.IsSettingTime = true;
-                        xlim(ax, [tStart tEnd]);
-                        obj.IsSettingTime = false;
-                    end
+                    obj.IsSettingTime = true;
+                    % Use setXLimQuiet to suppress the XLimMode PostSet
+                    % listener (onXLimModeChanged -> scheduleDeferredXLimCheck
+                    % -> timer creation) that fires on every plain xlim() call.
+                    % This avoids ~4 ms of timer-creation overhead per widget
+                    % per live tick when the dashboard broadcasts a time sync.
+                    obj.FastSenseObj.setXLimQuiet(tStart, tEnd);
+                    obj.IsSettingTime = false;
                 catch
                     obj.IsSettingTime = false;
                 end

@@ -80,6 +80,7 @@ classdef DashboardEngine < handle
         hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
         LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
         StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
+        PreviewNBuckets_     = 0   % Cached nBuckets from last figure-pixel query; 0 = uncached
         % Slider overlay caches — avoid deleting/recreating line handles when
         % the underlying data hasn't changed between ticks (260508-slider-stuck).
         % Each cache stores the last value passed to the selector so the
@@ -178,6 +179,9 @@ classdef DashboardEngine < handle
         function switchPage(obj, pageIdx)
         %SWITCHPAGE Switch the active page using panel visibility toggling.
         %   d.switchPage(2) sets ActivePage = 2 and toggles panel visibility.
+            if ~obj.isObjValid_()
+                return;  % uicontrol callback fired after engine was deleted
+            end
             if pageIdx < 1 || pageIdx > numel(obj.Pages)
                 return;
             end
@@ -1404,13 +1408,18 @@ classdef DashboardEngine < handle
             end
             msg = obj.buildStaleMessage(staleTitles, intervalStr);
             set(obj.hStaleBannerText, 'String', msg);
+            % Only raise to front on first show (when transitioning from hidden
+            % to visible). Calling uistack on every tick is expensive (~10 ms
+            % in uifigure due to WebComponentController updates) and unnecessary
+            % once the banner is already visible and at the top.
+            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
             set(obj.hStaleBanner, 'Visible', 'on');
-            % Widget panels are created after the banner, so they render on top
-            % by default. Raise the banner to the front so it is actually seen.
-            try
-                uistack(obj.hStaleBanner, 'top');
-            catch
-                % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+            if wasHidden
+                try
+                    uistack(obj.hStaleBanner, 'top');
+                catch
+                    % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+                end
             end
         end
 
@@ -1569,6 +1578,9 @@ classdef DashboardEngine < handle
         end
 
         function onLiveTick(obj)
+            if ~obj.isObjValid_()
+                return;  % live timer fired after engine was deleted
+            end
             if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
                 return;
             end
@@ -1683,9 +1695,15 @@ classdef DashboardEngine < handle
 
         function onResize(obj)
         %ONRESIZE Handle figure resize: reposition all widget panels.
+            if ~obj.isObjValid_()
+                return;  % SizeChangedFcn fired after engine was deleted
+            end
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 obj.repositionPanels();
                 obj.repositionStaleBanner_();
+                % Invalidate the cached nBuckets so the next preview computation
+                % re-derives it from the new figure pixel width.
+                obj.PreviewNBuckets_ = 0;
                 % Invalidate slider overlay caches: nBuckets is derived from
                 % figure width, so a resize changes the bucket count and both
                 % preview lines and (potentially) event markers must refresh.
@@ -1776,6 +1794,27 @@ classdef DashboardEngine < handle
     end
 
     methods (Access = private)
+
+        function tf = isObjValid_(obj)
+        %ISOBJVALID_ Cross-platform "is this handle still alive?" check.
+        %   MATLAB: delegates to builtin isvalid().
+        %   Octave 7+: isvalid() is not implemented for classdef handles,
+        %   so the call itself throws; fall through to a property-access
+        %   probe — accessing a property of a deleted handle throws on
+        %   both runtimes, so the inner try/catch is the portable test.
+            try
+                tf = isvalid(obj);
+                return;
+            catch
+                % Octave: isvalid undefined for classdef handles.
+            end
+            try
+                obj.hFigure; %#ok<VUNUS>
+                tf = true;
+            catch
+                tf = false;
+            end
+        end
 
         function repositionPanels(obj)
         %REPOSITIONPANELS Reposition existing widget panels in-place after resize.
@@ -2089,15 +2128,22 @@ classdef DashboardEngine < handle
             end
             if isempty(nBuckets)
                 % Derive nBuckets from figure pixel width; clamp to [50, 400].
-                nBuckets = 200;
-                try
-                    oldU = get(obj.hFigure, 'Units');
-                    set(obj.hFigure, 'Units', 'pixels');
-                    figPx = get(obj.hFigure, 'Position');
-                    set(obj.hFigure, 'Units', oldU);
-                    axWpx = figPx(3) * 0.94;
-                    nBuckets = max(50, min(400, floor(axWpx / 2)));
-                catch
+                % Cache the computed value so we avoid get/set Units on every
+                % live tick (figure size rarely changes between ticks).
+                if obj.PreviewNBuckets_ > 0
+                    nBuckets = obj.PreviewNBuckets_;
+                else
+                    nBuckets = 200;
+                    try
+                        oldU = get(obj.hFigure, 'Units');
+                        set(obj.hFigure, 'Units', 'pixels');
+                        figPx = get(obj.hFigure, 'Position');
+                        set(obj.hFigure, 'Units', oldU);
+                        axWpx = figPx(3) * 0.94;
+                        nBuckets = max(50, min(400, floor(axWpx / 2)));
+                    catch
+                    end
+                    obj.PreviewNBuckets_ = nBuckets;
                 end
             end
             ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
@@ -2362,9 +2408,15 @@ classdef DashboardEngine < handle
         function str = formatTimeVal(~, t)
         %FORMATTIMEVAL Format a numeric time value as a human-readable string.
         %   Supports three numeric ranges:
-        %     posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
-        %     MATLAB datenum (t > 700000, not posix) — uses datestr directly
-        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix
+        %     posix epoch seconds (9e8 < t < 5e9) — fast arithmetic via datevec
+        %     MATLAB datenum (t > 700000, not posix) — fast via datevec
+        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix via sprintf
+        %
+        %   Hot-path note: this is called twice per live tick. Uses datevec
+        %   (no string format parsing) instead of datestr (which invokes
+        %   timefun/private/dateformverify on every call) to avoid ~7 ms
+        %   per-call overhead. datetime constructor is also slow (~16 ms) so
+        %   datevec is preferred here too.
         %
         %   The posix bracket is evaluated BEFORE the datenum bracket because
         %   posix seconds for modern dates (year 2001-2128) are also > 700000
@@ -2372,15 +2424,35 @@ classdef DashboardEngine < handle
             % Order matters: posix epoch seconds (year 2000-2128) are > 700000,
             % so the posix bracket must be evaluated BEFORE the datenum bracket.
             if t > 9e8 && t < 5e9
-                % Posix epoch seconds (year ~2000 - 2128)
-                str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
-                              'yyyy-mm-dd HH:MM');
+                % Posix epoch seconds (year ~2000 - 2128).
+                % Add posix offset (days from year 0 to 1970-01-01) and convert
+                % via datevec, which is faster than datestr (no format parsing).
+                try
+                    dv = datevec(datenum(1970, 1, 1) + t / 86400);
+                    str = sprintf('%04d-%02d-%02d %02d:%02d', ...
+                        dv(1), dv(2), dv(3), dv(4), dv(5));
+                catch
+                    % Fallback for Octave or edge inputs.
+                    str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
+                                  'yyyy-mm-dd HH:MM');
+                end
             elseif t > 700000
-                % MATLAB datenum (days since year 0000)
-                if t > 730000
-                    str = datestr(t, 'yyyy-mm-dd HH:MM');
-                else
-                    str = datestr(t, 'HH:MM:SS');
+                % MATLAB datenum (days since year 0000).
+                try
+                    dv = datevec(t);
+                    if t > 730000
+                        str = sprintf('%04d-%02d-%02d %02d:%02d', ...
+                            dv(1), dv(2), dv(3), dv(4), dv(5));
+                    else
+                        str = sprintf('%02d:%02d:%02d', dv(4), dv(5), floor(dv(6)));
+                    end
+                catch
+                    % Fallback for Octave or edge inputs.
+                    if t > 730000
+                        str = datestr(t, 'yyyy-mm-dd HH:MM');
+                    else
+                        str = datestr(t, 'HH:MM:SS');
+                    end
                 end
             else
                 % Raw numeric (seconds, samples, etc.)
