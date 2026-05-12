@@ -577,6 +577,36 @@ classdef TimeRangeSelector < handle
             end
         end
 
+        function reinstallCallbacks(obj)
+            %reinstallCallbacks  Re-install the figure WindowButton* handlers.
+            %   Public wrapper around the private installCallbacks_ used by
+            %   DashboardEngine.rerenderWidgets to force the selector back
+            %   to the OUTERMOST position on the figure's WindowButton
+            %   handlers after a Reset. Required because rerenderWidgets
+            %   tears down widget panels in install-order, and each
+            %   per-widget HoverCrosshair.delete() unconditionally restores
+            %   its saved PrevWBMFcn_ — when sibling HCs delete in
+            %   install-order (not reverse), the chain leaves a dangling
+            %   closure on the figure's WindowButtonMotionFcn whose
+            %   `~isvalid` guard silently no-ops every motion event, so the
+            %   slider's onButtonMotion_ is never reached and bracket
+            %   drag/resize freezes. (260512-egv)
+            %
+            %   This method intentionally does NOT preserve any previously
+            %   installed callbacks beyond what installCallbacks_ already
+            %   captures into Old* — calling code (rerenderWidgets) accepts
+            %   the side effect that widget HoverCrosshair chained motion
+            %   handlers become inert after this call. They will reattach
+            %   on the NEXT HoverCrosshair construction.
+            %
+            %   Safe to call when the figure is invalid — guarded with
+            %   isempty + ishandle before delegating to installCallbacks_.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            obj.installCallbacks_();
+        end
+
         function delete(obj)
             %delete  Restore figure WindowButton* callbacks saved at construction.
             obj.restoreCallbacks_();

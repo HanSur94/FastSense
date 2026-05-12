@@ -542,6 +542,33 @@ classdef FastSenseWidget < DashboardWidget
                     [xOut, yOut] = localMinMaxBuckets_(x, y, nBucketsEff);
                 end
 
+                % Accept BOTH 2*nb (no tail anchor) and 2*nb+1 (anchor
+                % appended by minmax cores — 260512-c5x). The slider
+                % preview only needs paired (min, max) per bucket; the
+                % anchor is informational for the main chart and is
+                % safely dropped here before the reshape (drops the
+                % single trailing anchor (x, y) pair tail).
+                %
+                % 260512-cxc: capture the tail anchor BEFORE the drop so we
+                % can thread it through to xCenters(end). The drop itself
+                % is still required because reshape(xOut, 2, nb) below
+                % needs an even-length vector. Without this capture, the
+                % slider preview's last bucket freezes at the interior
+                % min/max midpoint and never advances under live data
+                % growth (visible "stuck preview tail" on the industrial
+                % plant demo's reactor.pressure widget).
+                anchorX = [];
+                anchorY = []; %#ok<NASGU>  % captured for future symmetry;
+                                           % yMinB/yMaxB already include
+                                           % the anchor's y because
+                                           % minmax_core_mex scans the
+                                           % full last bucket.
+                if numel(xOut) == 2 * nBucketsEff + 1 && numel(yOut) == 2 * nBucketsEff + 1
+                    anchorX = xOut(end);
+                    anchorY = yOut(end); %#ok<NASGU>
+                    xOut = xOut(1:end - 1);
+                    yOut = yOut(1:end - 1);
+                end
                 if numel(xOut) ~= 2 * nBucketsEff || numel(yOut) ~= 2 * nBucketsEff
                     return;
                 end
@@ -552,6 +579,20 @@ classdef FastSenseWidget < DashboardWidget
                 yMinB  = min(yPairs, [], 1);
                 yMaxB  = max(yPairs, [], 1);
                 xCenters = (xPairs(1, :) + xPairs(2, :)) / 2;
+
+                % 260512-cxc: snap the trailing xCenter to the tail anchor
+                % when the downsampler appended one. The bucket's interior
+                % (min-X, max-X) midpoint can be hundreds of seconds
+                % behind segX(end) under steady-state live data — the
+                % main chart's tail-anchor fix (260512-c5x) made the
+                % rendered line advance, but the slider preview was still
+                % reading the interior midpoint. Guard against
+                % anchorX <= xCenters(end) to preserve strict monotonicity
+                % (the drop-and-override is purely additive in the X
+                % dimension).
+                if ~isempty(anchorX) && anchorX > xCenters(end)
+                    xCenters(end) = anchorX;
+                end
 
                 % Determine y-range: prefer current axes YLim; fallback to data.
                 yRange = [];
@@ -1195,4 +1236,13 @@ function [xOut, yOut] = localMinMaxBuckets_(x, y, nb)
     yOut(odd(~minFirst))  = yMaxVals(~minFirst);
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
+
+    % Tail-anchor (260512-c5x): mirrors minmax_core_mex.c — append
+    % (x(end), y(end)) iff its X strictly exceeds the last emitted X
+    % so the rendered line pins to the data tail. Output length:
+    % 2*nb or 2*nb+1.
+    if x(end) > xOut(end)
+        xOut(end + 1) = x(end);
+        yOut(end + 1) = y(end);
+    end
 end

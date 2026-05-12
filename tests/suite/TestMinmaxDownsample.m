@@ -26,8 +26,12 @@ classdef TestMinmaxDownsample < matlab.unittest.TestCase
             x = 1:100;
             y = sin(linspace(0, 4*pi, 100));
             [xOut, yOut] = minmax_downsample(x, y, 10);
-            testCase.verifyEqual(numel(xOut), 20, 'testBasicReduction xOut: expected 20');
-            testCase.verifyEqual(numel(yOut), 20, 'testBasicReduction yOut: expected 20');
+            % Tail-anchor (260512-c5x): downsampler may emit one extra
+            % point (segX(end), segY(end)) — accept 2*nb or 2*nb+1.
+            testCase.verifyTrue(ismember(numel(xOut), [20, 21]), ...
+                sprintf('testBasicReduction xOut: expected 20 or 21 (tail anchor), got %d', numel(xOut)));
+            testCase.verifyTrue(ismember(numel(yOut), [20, 21]), ...
+                sprintf('testBasicReduction yOut: expected 20 or 21, got %d', numel(yOut)));
         end
 
         function testPreservesExtremes(testCase)
@@ -76,8 +80,10 @@ classdef TestMinmaxDownsample < matlab.unittest.TestCase
         function testUnevenSpacing(testCase)
             x = [1 2 3 100 200 300 1000 2000 3000];
             y = [1 2 3 4   5   6   7    8    9];
-            [xOut, yOut] = minmax_downsample(x, y, 3);
-            testCase.verifyEqual(numel(xOut), 6, sprintf('testUnevenSpacing: expected 6, got %d', numel(xOut)));
+            [xOut, yOut] = minmax_downsample(x, y, 3); %#ok<ASGLU>
+            % Tail-anchor (260512-c5x): accept 2*nb or 2*nb+1.
+            testCase.verifyTrue(ismember(numel(xOut), [6, 7]), ...
+                sprintf('testUnevenSpacing: expected 6 or 7 (tail anchor), got %d', numel(xOut)));
         end
 
         function testAllNaN(testCase)
@@ -92,9 +98,11 @@ classdef TestMinmaxDownsample < matlab.unittest.TestCase
             x = 1:n;
             y = randn(1, n);
             tic;
-            [xOut, yOut] = minmax_downsample(x, y, 1000);
+            [xOut, yOut] = minmax_downsample(x, y, 1000); %#ok<ASGLU>
             elapsed = toc;
-            testCase.verifyEqual(numel(xOut), 2000, sprintf('testLargeData: expected 2000, got %d', numel(xOut)));
+            % Tail-anchor (260512-c5x): accept 2*nb or 2*nb+1.
+            testCase.verifyTrue(ismember(numel(xOut), [2000, 2001]), ...
+                sprintf('testLargeData: expected 2000 or 2001 (tail anchor), got %d', numel(xOut)));
             testCase.verifyLessThan(elapsed, 1.0, sprintf('testLargeData: took %.3f s, must be < 1s', elapsed));
         end
     end

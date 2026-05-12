@@ -113,8 +113,10 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN, logX)
     segLens = segEnds - segStarts + 1;
     segBuckets = max(1, round(numBuckets * segLens / totalValid));
 
-    % Pre-allocate output arrays with NaN (NaN separators come for free)
-    maxOut = sum(segBuckets) * 2 + (numSegs - 1);
+    % Pre-allocate output arrays with NaN (NaN separators come for free).
+    % Tail-anchor (260512-c5x): each segment may append one extra (segX(end),
+    % segY(end)) point after its final bucket — widen by numSegs to fit.
+    maxOut = sum(segBuckets) * 2 + numSegs + (numSegs - 1);
     xOut = NaN(1, maxOut);
     yOut = NaN(1, maxOut);
     pos = 0;
@@ -243,6 +245,15 @@ function [xOut, yOut] = minmax_core(segX, segY, nb)
     yOut(odd(~minFirst))  = yMaxVals(~minFirst);
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
+
+    % Tail-anchor (260512-c5x): see minmax_core_mex.c for rationale.
+    % Append (segX(end), segY(end)) iff its X strictly exceeds the last
+    % emitted X — pins the rendered line to the data tail without
+    % breaking monotonicity. Output length: 2*nb or 2*nb+1.
+    if segX(end) > xOut(end)
+        xOut(end + 1) = segX(end);
+        yOut(end + 1) = segY(end);
+    end
 end
 
 function [xOut, yOut] = minmax_core_logx(segX, segY, nb)
@@ -314,4 +325,13 @@ function [xOut, yOut] = minmax_core_logx(segX, segY, nb)
     % Trim unused pre-allocated tail
     xOut = xOut(1:pos);
     yOut = yOut(1:pos);
+
+    % Tail-anchor (260512-c5x): see minmax_core_mex.c for rationale.
+    % The log-X path may emit fewer than 2*nb due to empty buckets,
+    % but the same right-edge truncation can occur — anchor against
+    % whatever the current xOut(end) happens to be.
+    if pos > 0 && segX(end) > xOut(end)
+        xOut(end + 1) = segX(end);
+        yOut(end + 1) = segY(end);
+    end
 end
