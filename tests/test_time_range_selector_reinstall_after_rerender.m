@@ -1,5 +1,5 @@
 function test_time_range_selector_reinstall_after_rerender()
-%TEST_TIME_RANGE_SELECTOR_REINSTALL_AFTER_RERENDER Regression for 260512-egv.
+%TEST_TIME_RANGE_SELECTOR_REINSTALL_AFTER_RERENDER Regression for 260512-egv + 260512-eu2.
 %   After DashboardEngine.rerenderWidgets() (top-toolbar Reset), the
 %   figure's WindowButton{Down,Motion,Up}Fcn must remain wired such
 %   that a synthesized WBD -> WBM -> WBU sequence on the slider
@@ -11,6 +11,29 @@ function test_time_range_selector_reinstall_after_rerender()
 %   silently no-op'd every motion event, so the slider's
 %   onButtonMotion_ was never reached after a Reset and Selection
 %   never updated.
+%
+%   This test was extended for 260512-eu2 to ALSO assert that
+%   per-widget HoverCrosshair survives rerenderWidgets. 260512-egv
+%   placed the TRS reinstall at the END of rerenderWidgets, AFTER
+%   the Layout.realizeWidget loop that constructs new HoverCrosshairs,
+%   which wiped out the new HC chain on the figure WBM and left
+%   HoverCrosshair feature inert after Reset (acknowledged trade-off
+%   in 260512-egv). 260512-eu2 moves the reinstall to BEFORE the
+%   realizeWidget loop so new HCs install on TOP of trs.onButtonMotion_,
+%   restoring HoverCrosshair while keeping slider drag working (motion
+%   events forward through the HC chain via PrevWBMFcn_ down to trs).
+%
+%   Post-eu2 assertions added (gated on usejava('desktop')):
+%     - func2str(get(fig, 'WBM')) contains 'onFigureMove_' — proves
+%       WBM is a HoverCrosshair, NOT trs.onButtonMotion_ directly.
+%     - At least one realized FastSenseWidget has a valid HoverCrosshair
+%       handle on its inner FastSenseObj after rerender.
+%
+%   HoverCrosshair construction is gated on usejava('desktop') in
+%   FastSense.m so it's skipped in `matlab -batch` / CI runs. The
+%   slider-drag (egv) regression coverage runs in all environments;
+%   the HC (eu2) assertions only fire when desktop is available
+%   (live MATLAB GUI session).
 %
 %   Test strategy (PATH I from the plan): construct a minimal
 %   DashboardEngine with one FastSenseWidget, render it, exercise
@@ -70,15 +93,68 @@ function test_time_range_selector_reinstall_after_rerender()
     assert(~isempty(wbmFcn), 'Case B: WindowButtonMotionFcn must not be empty post-rerender');
     assert(~isempty(wbuFcn), 'Case B: WindowButtonUpFcn must not be empty post-rerender');
 
+    % (eu2) WBM must be a HoverCrosshair's onFigureMove_, NOT
+    % trs.onButtonMotion_ directly. This is the key signal that the
+    % new HCs are chained ON TOP of the freshly-reinstalled trs
+    % handler (eu2 install order), rather than being wiped out by an
+    % end-of-method reinstall (egv install order).
+    %
+    % HC construction is gated on usejava('desktop') in FastSense.m
+    % (line ~1594); in batch mode (matlab -batch / CI) usejava('desktop')
+    % returns false so no HCs are ever installed and WBM remains the
+    % bare trs handler. The eu2-specific assertions only apply when
+    % desktop is available (live MATLAB / interactive sessions).
+    hcAvailable = usejava('desktop');
+    wbmStr = '';
+    if isa(wbmFcn, 'function_handle')
+        try
+            wbmStr = func2str(wbmFcn);
+        catch
+            wbmStr = '';
+        end
+    end
+    if hcAvailable
+        assertHoverCrosshair_(wbmStr, 'Case B (post-rerender)');
+    else
+        fprintf(['    [eu2] Skipped HC chain assertion (Case B) — '...
+                 'usejava(''desktop'')=0; HC creation is desktop-gated.\n']);
+    end
+
     % Function handles can't be compared portably for identity, so we
     % verify BEHAVIOR: a synth drag must move Selection.
     synthDragShouldMoveSelection_(fig, trs, 'Case B (post-rerender)');
 
+    % (eu2) At least one realized FastSenseWidget must have a live
+    % HoverCrosshair attached on its inner FastSenseObj.
+    if hcAvailable
+        assertSomeWidgetHasHoverCrosshair_(engine, 'Case B (post-rerender)');
+    else
+        fprintf(['    [eu2] Skipped widget-HC assertion (Case B) — '...
+                 'usejava(''desktop'')=0; HC creation is desktop-gated.\n']);
+    end
+
     % --- Case C: Idempotent under repeated Resets ---------------------------
     % rerenderWidgets() can be called many times during a session; the
-    % reinstall hook must keep the selector wired across all of them.
+    % reinstall hook must keep BOTH the slider wired AND the HoverCrosshair
+    % chain rebuilt across all of them. (egv: slider; eu2: HC.)
     engine.rerenderWidgets();
     synthDragShouldMoveSelection_(fig, trs, 'Case C (second rerender)');
+    if hcAvailable
+        wbmFcn2 = get(fig, 'WindowButtonMotionFcn');
+        wbmStr2 = '';
+        if isa(wbmFcn2, 'function_handle')
+            try
+                wbmStr2 = func2str(wbmFcn2);
+            catch
+                wbmStr2 = '';
+            end
+        end
+        assertHoverCrosshair_(wbmStr2, 'Case C (second rerender)');
+        assertSomeWidgetHasHoverCrosshair_(engine, 'Case C (second rerender)');
+    else
+        fprintf(['    [eu2] Skipped HC chain + widget-HC assertions '...
+                 '(Case C) — usejava(''desktop'')=0.\n']);
+    end
 
     fprintf('    All cases passed: TRS callbacks remain wired across rerenderWidgets.\n');
 end
@@ -138,5 +214,73 @@ function safeDeleteEngine_(engine)
         end
     catch
         % Best-effort cleanup; never throw from onCleanup.
+    end
+end
+
+function assertHoverCrosshair_(wbmStr, label)
+%ASSERTHOVERCROSSHAIR_ Assert the WBM func2str signature looks like a HC handler.
+%   Post-eu2 the figure's WindowButtonMotionFcn must be a HoverCrosshair's
+%   anonymous wrapper around onFigureMove_, NOT trs.onButtonMotion_ directly.
+%   The exact func2str output depends on MATLAB version and the closure
+%   contents, so we accept anything containing 'onFigureMove_' as the
+%   positive signal, and explicitly reject 'onButtonMotion_' (the TRS
+%   signature that would indicate eu2's earlier-reinstall move didn't
+%   stick or was overwritten).
+    hasHC = ~isempty(strfind(wbmStr, 'onFigureMove_'));  %#ok<STREMP>
+    isTrsDirect = ~isempty(strfind(wbmStr, 'onButtonMotion_'));  %#ok<STREMP>
+    msgHC = ['%s: WindowButtonMotionFcn must be a HoverCrosshair ' ...
+             '(contain ''onFigureMove_''), got func2str=''%s''. ' ...
+             'The eu2 fix requires new HCs to install on top of ' ...
+             'the reinstalled trs handler.'];
+    assert(hasHC, sprintf(msgHC, label, wbmStr));
+    msgTrs = ['%s: WindowButtonMotionFcn appears to be ' ...
+              'trs.onButtonMotion_ DIRECTLY (func2str=''%s'') — ' ...
+              'this is the pre-eu2 state where the end-of-method ' ...
+              'reinstall wiped out new HCs. The eu2 fix moves the ' ...
+              'reinstall earlier so HCs install on top.'];
+    assert(~isTrsDirect, sprintf(msgTrs, label, wbmStr));
+end
+
+function assertSomeWidgetHasHoverCrosshair_(engine, label)
+%ASSERTSOMEWIDGETHASHOVERCROSSHAIR_ Walk engine widgets and find a live HC.
+%   FastSenseWidget stores its FastSense instance on the public read-only
+%   property `FastSenseObj`, and FastSense stores its HoverCrosshair on
+%   `HoverCrosshair_`. Walk activePageWidgets() and accept the first one
+%   that exposes a valid HoverCrosshair handle.
+    ws = engine.activePageWidgets();
+    assert(~isempty(ws), [label ': activePageWidgets returned empty']);
+    found = false;
+    for k = 1:numel(ws)
+        w = ws{k};
+        hc = probeHoverCrosshair_(w);
+        if ~isempty(hc) && isvalid(hc)
+            found = true;
+            break;
+        end
+    end
+    msgFound = [label ': No active-page FastSenseWidget has a ' ...
+                'live HoverCrosshair after rerender. The eu2 fix ' ...
+                'should rebuild HoverCrosshair on each widget ' ...
+                'during Layout.realizeWidget; if this fails, the ' ...
+                'reinstall is still wiping them out.'];
+    assert(found, msgFound);
+end
+
+function hc = probeHoverCrosshair_(w)
+%PROBEHOVERCROSSHAIR_ Return widget's HoverCrosshair handle or [] if none.
+%   FastSenseWidget exposes FastSenseObj (public SetAccess=private); the
+%   FastSense instance stores HoverCrosshair_ as a private property that
+%   FastSense's own constructor populates in render() when
+%   HoverCrosshair=true and the figure is interactive.
+    hc = [];
+    try
+        if isprop(w, 'FastSenseObj') && ~isempty(w.FastSenseObj)
+            fp = w.FastSenseObj;
+            if isprop(fp, 'HoverCrosshair_') && ~isempty(fp.HoverCrosshair_)
+                hc = fp.HoverCrosshair_;
+            end
+        end
+    catch
+        % Best-effort probe; return [] on any error.
     end
 end
