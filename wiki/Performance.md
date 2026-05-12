@@ -2,11 +2,11 @@
 
 # Performance
 
-FastSense achieves dramatic performance improvements over MATLAB's built-in `plot()` function through intelligent downsampling, multi-level caching, and optimized MEX kernels. Here's what you can expect and how to measure it yourself.
+FastSense achieves dramatic speed-ups over MATLAB’s built-in `plot()` by using intelligent downsampling, multi-level caching, and compiled MEX kernels. This page explains what to expect, how to measure performance on your own data, and how to tune the engine for maximum throughput.
 
 ## Key Performance Metrics
 
-Based on benchmarks with 10M data points on Apple M4 with GNU Octave 11:
+Based on benchmarks with 10M data points on modern CPUs (Apple M4, GNU Octave 11):
 
 | Metric | Value | Description |
 |--------|-------|-------------|
@@ -15,105 +15,135 @@ Based on benchmarks with 10M data points on Apple M4 with GNU Octave 11:
 | Point reduction | 99.96% | 10M points → ~4K rendered points |
 | GPU memory usage | 0.06 MB | vs 153 MB for equivalent `plot()` |
 
-The key advantage isn't just initial render time — it's maintaining fluid interactivity. With `plot()`, 10M points make zoom/pan unusable, while FastSense maintains sub-5ms response times.
+The key advantage isn’t just initial render time — it’s maintaining fluid interactivity. With `plot()`, 10M points make zoom/pan unusable; FastSense maintains sub‑5 ms response times regardless of dataset size.
 
-## FastSense vs plot() Performance
+## FastSense vs plot()
 
-| Points | plot() render | FastSense render | Speedup |
-|--------|---------------|------------------|---------|
-| 10K | instant | instant | ~1x |
-| 100K | moderate lag | instant | ~5x |
-| 1M | slow | fast | ~10x |
-| 10M | very slow | 0.19 s | ~50x |
-| 100M | often fails | works | ∞ |
+| Points | `plot()` render | FastSense render | Speedup |
+|--------|----------------|------------------|---------|
+| 10K    | instant        | instant          | ~1×     |
+| 100K   | moderate lag   | instant          | ~5×     |
+| 1M     | slow           | fast             | ~10×    |
+| 10M    | very slow      | 0.19 s           | ~50×    |
+| 100M   | often fails    | works            | ∞       |
 
 At 100M+ points, `plot()` frequently runs out of memory or becomes completely unresponsive, while FastSense handles it gracefully.
 
 ## Dashboard Performance
 
-Multi-tile dashboards show increasing advantage as tile count grows:
+Multi‑tile dashboards show an increasing advantage as the grid grows:
 
-| Layout | subplot() | FastSenseGrid | Speedup |
-|--------|-----------|---------------|---------|
-| 1x1 | 0.195 s | 0.187 s | 1.0x |
-| 2x2 | 0.451 s | 0.377 s | 1.2x |
-| 3x3 | 0.964 s | 0.709 s | 1.4x |
+| Layout | `subplot()` | `FastSenseGrid` | Speedup |
+|--------|------------|-----------------|---------|
+| 1×1    | 0.195 s    | 0.187 s         | 1.0×    |
+| 2×2    | 0.451 s    | 0.377 s         | 1.2×    |
+| 3×3    | 0.964 s    | 0.709 s         | 1.4×    |
 
-Each [[FastSenseGrid]] tile downsamples independently to ~4K points regardless of raw data size, so rendering cost stays nearly flat. Traditional approaches scale linearly with total point count.
+Each [[FastSenseGrid]] tile downsamples independently to ~4K points regardless of the raw data size, so rendering cost stays nearly flat. Traditional approaches scale linearly with total point count.
 
-## MEX vs Pure MATLAB
+## MEX Acceleration
 
 Compiled MEX kernels provide substantial acceleration for core operations:
 
-| Operation (10M points) | MATLAB | MEX | Speedup |
-|------------------------|--------|-----|---------|
-| Binary search | ~1 ms | ~0.05 ms | 20x |
-| MinMax downsample | ~25 ms | ~7 ms | 3.5x |
-| LTTB downsample | ~200 ms | ~4 ms | 50x |
-| Violation detection | ~50 ms | ~2 ms | 25x |
+| Operation (10M points) | MATLAB    | MEX       | Speedup |
+|------------------------|-----------|-----------|---------|
+| Binary search          | ~1 ms     | ~0.05 ms  | 20×     |
+| MinMax downsampling    | ~25 ms    | ~7 ms     | 3.5×    |
+| LTTB downsampling      | ~200 ms   | ~4 ms     | 50×     |
+| Violation detection    | ~50 ms    | ~2 ms     | 25×     |
 
-MEX kernels use SIMD instructions (AVX2/NEON) to process 4 doubles per CPU cycle when possible.
-
-## Running Your Own Benchmarks
-
-FastSense includes benchmark scripts to measure performance on your system. From the `examples/` directory:
+MEX kernels use SIMD instructions (AVX2 on x86-64, NEON on ARM64) to process multiple doubles per CPU cycle. Build them with:
 
 ```matlab
-% Stress test with 100M points
-example_100M;
-
-% Compare LTTB vs MinMax downsampling algorithms
-example_lttb_vs_minmax;
-
-% Multi-dashboard stress test: 5 tabs, 26 sensors, 104 thresholds
-example_stress_test;
+build_mex();
 ```
 
-The stress test creates a realistic large-scale scenario with 5 tabbed dashboards, 26 sensors, ~86M total points, and 104 dynamic thresholds that change based on machine state.
+This detects your platform, selects the best SIMD flags, and compiles all kernels into the `private/` folder. See [[MEX Acceleration]] for details.
+
+## Measuring Your Own Data
+
+You can benchmark FastSense on your system with a short script:
+
+```matlab
+% Create a large noisy signal
+x = (1:1e7)';
+y = cumsum(randn(1e7,1));
+
+fp = FastSense();
+fp.addLine(x, y);
+
+tic;
+fp.render();
+fprintf('Render time: %.3f s\n', toc);
+```
+
+For stress‑testing, create a grid of tiles:
+
+```matlab
+fig = FastSenseGrid(2, 2);
+fig.tile(1).addLine(x, y);
+fig.tile(2).addLine(x, y);
+fig.tile(3).addLine(x, y);
+fig.tile(4).addLine(x, y);
+
+tic;
+fig.renderAll();
+fprintf('Dashboard render: %.3f s\n', toc);
+```
 
 ## Why FastSense is Fast
 
 ### 1. Downsample to Screen Resolution
-Only renders ~4,000 points regardless of dataset size. A 100M point dataset uses the same GPU memory as a 4K dataset once downsampled.
+
+Only the [~4,000 pixels visible on‑screen](https://en.wikipedia.org/wiki/Retina_display) worth of points are drawn. A 100M‑point dataset uses the same GPU memory as a 4K dataset once downsampled.
+
+```matlab
+fp = FastSense('DownsampleFactor', 2);  % default: 2 pts per pixel
+```
 
 ### 2. Binary Search for Range Queries
-Uses O(log N) binary search instead of O(N) linear scanning to find visible data ranges on zoom/pan:
+
+Panning and zooming trigger range lookups. The O(log N) [[binary_search]] function avoids scanning the full array:
 
 ```matlab
-% Binary search is 20x faster than MATLAB fallback
-idx = binary_search(x, xValue, 'left');  % First index where x >= xValue
-idx = binary_search(x, xValue, 'right'); % Last index where x <= xValue
+idx = binary_search(x, xValue, 'left');   % first index where x >= xValue
+idx = binary_search(x, xValue, 'right');  % last  index where x <= xValue
 ```
 
-### 3. Lazy Multi-Level Pyramid
-Pre-computes downsampled levels (100:1, 10000:1, etc.) so zooming out never touches raw data. Cache is built incrementally as needed.
+### 3. Lazy Multi‑Level Pyramid
 
-### 4. SIMD-Optimized MEX Kernels
-C implementations use vectorized instructions to process multiple data points per CPU cycle:
-- **AVX2** on x86_64: processes 4 doubles simultaneously
-- **NEON** on ARM64: processes 2-4 elements per cycle
-
-Build the MEX kernels for maximum performance:
+A pre‑computed pyramid of coarsened levels (100×, 10 000×, …) means that zooming out never touches the raw data. The pyramid is built incrementally as needed, not all at render time.
 
 ```matlab
-build_mex();  % Compile with platform-specific SIMD optimization
+fp = FastSense('PyramidReduction', 100);  % default compression per level
 ```
+
+### 4. SIMD‑Optimized MEX Kernels
+
+Compiled C implementations use vectorised instructions to process multiple data points per CPU cycle:
+- **AVX2** on x86‑64: processes 4 doubles simultaneously
+- **NEON** on ARM64: processes 2–4 elements per cycle
+
+Always call `build_mex()` to compile the platform‑specific kernels.
 
 ### 5. Fused Operations
-Combines multiple operations in single passes:
+
+Multiple tasks are combined into single passes over the data:
 - Violation detection + pixel coordinate culling
 - Downsampling + threshold line intersection
 - Range lookup + metadata forwarding
 
 ### 6. Direct Graphics Updates
-Updates line data via direct XData/YData assignment — the fastest path through MATLAB's graphics system. Avoids object recreation or property listeners.
+
+Line data is updated via fast `XData`/`YData` assignment, avoiding object recreation or property listeners — the shortest path through MATLAB’s graphics system.
 
 ### 7. Frame Rate Limiting
-Uses `drawnow limitrate` to cap display refresh at 20 FPS, preventing GPU thrashing during rapid zoom/pan sequences.
+
+`drawnow limitrate` caps display refresh at 20 fps, preventing GPU thrashing during rapid zoom/pan sequences.
 
 ## Performance Tuning Options
 
-Several properties control the performance vs. quality trade-off:
+Several properties let you trade speed for quality:
 
 ```matlab
 fp = FastSense();
@@ -121,36 +151,39 @@ fp = FastSense();
 % Increase points per pixel for denser traces (default: 2)
 fp.DownsampleFactor = 4;
 
-% Adjust pyramid compression (default: 100)
-fp.PyramidReduction = 50;  % more levels, finer granularity
+% Adjust pyramid granularity (default: 100)
+fp.PyramidReduction = 50;
 
-% Switch algorithms for different data characteristics
-fp.DefaultDownsampleMethod = 'lttb';  % vs 'minmax'
+% Switch downsampling algorithm
+fp.DefaultDownsampleMethod = 'lttb';   % preserves visual shape
+fp.DefaultDownsampleMethod = 'minmax'; % preserves extremes
 
 % Control when downsampling kicks in (default: 5000)
 fp.MinPointsForDownsample = 10000;
 ```
 
+Set these before calling `render()` — changes after rendering have no effect.
+
 ## Memory Management
 
-FastSense automatically switches between in-memory and disk-backed storage:
+FastSense can automatically switch between in‑memory and disk‑backed storage using [[FastSenseDataStore]]:
 
 ```matlab
 fp = FastSense();
 
 % Force storage mode (default: 'auto')
-fp.StorageMode = 'memory';  % always RAM
-fp.StorageMode = 'disk';    % always SQLite
+fp.StorageMode = 'memory';   % always keep data in RAM
+fp.StorageMode = 'disk';     % always store in SQLite
 
-% Adjust memory threshold (default: 500 MB)
-fp.MemoryLimit = 1e9;  % 1 GB threshold
+% Adjust memory threshold for 'auto' mode (default: 500 MB)
+fp.MemoryLimit = 1e9;        % 1 GB
 ```
 
-The `'auto'` mode uses [[FastSenseDataStore]] for lines exceeding the memory limit, seamlessly providing disk-based storage without performance degradation.
+In `'auto'` mode, any line exceeding `MemoryLimit` is transparently offloaded to disk. Zoom/pan still work because [[FastSenseDataStore]] reads only the chunks that overlap the view window.
 
 ## Monitoring Performance
 
-Enable verbose output to see detailed timing information:
+Enable verbose output to see per‑line timing:
 
 ```matlab
 fp = FastSense('Verbose', true);
@@ -159,34 +192,44 @@ fp.render();
 
 % Output:
 % [FastSense] Line 1: 10000000 points → 3847 (MinMax, 23.4 ms)
-% [FastSense] Pyramid L1: 100000 points (7.8 ms)  
+% [FastSense] Pyramid L1: 100000 points (7.8 ms)
 % [FastSense] Pyramid L2: 1000 points (0.3 ms)
 % [FastSense] Total render: 187.2 ms
 ```
 
-The [[ConsoleProgressBar]] class (used internally) is also available for your own batch operations:
+The internal [[ConsoleProgressBar]] can be used in your own batch operations:
 
 ```matlab
 pb = ConsoleProgressBar();
 pb.start();
 for k = 1:1000
-    % your processing
+    % … processing …
     pb.update(k, 1000, 'Processing');
 end
 pb.finish();
 ```
 
-## Batch Rendering Options
+## Batch Rendering
 
-For headless or batch workflows, use `DeferDraw` to skip intermediate display updates:
+For headless or batch workflows, suppress intermediate draws and the progress bar:
 
 ```matlab
 fp = FastSense();
-fp.DeferDraw = true;     % Skip drawnow during render
-fp.ShowProgress = false; % Hide console progress bar
+fp.DeferDraw = true;      % skip drawnow during render
+fp.ShowProgress = false;  % hide console bar
 fp.addLine(x, y);
 fp.render();
-drawnow;  % Manual drawnow when ready to display
+drawnow;                  % single drawnow when ready
 ```
 
-This is demonstrated in the 100M point stress test example, where it provides measurable performance gains for very large datasets.
+This can measurably improve throughput for very large datasets.
+
+## See Also
+
+- [[FastSense]] — full API reference for the main plotting object
+- [[FastSenseGrid]] — tiled dashboards with independent downsampling
+- [[FastSenseDataStore]] — disk‑based storage for huge datasets
+- [[ConsoleProgressBar]] — progress bar used internally
+- [[MEX Acceleration]] — details on SIMD compilation and `build_mex`
+- [[Architecture]] — internal design of the downsampling pipeline
+- [[binary_search]] — the O(log N) search routine used throughout

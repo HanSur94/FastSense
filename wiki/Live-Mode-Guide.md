@@ -62,7 +62,7 @@ fp.setViewMode('preserve');
 
 ## Polling Interval
 
-Default is 2 seconds. Adjust with the 'Interval' option:
+Default is 2 seconds. Adjust with the `'Interval'` option:
 
 ```matlab
 fp.startLive('data.mat', @updateFcn, 'Interval', 0.5);  % Poll every 500ms
@@ -73,7 +73,7 @@ fp.startLive('data.mat', @updateFcn, 'Interval', 5);     % Poll every 5 seconds
 
 ## Live Dashboard
 
-FastSenseGrid supports live mode across all tiles:
+`FastSenseGrid` supports live mode across all tiles:
 
 ```matlab
 fig = FastSenseGrid(2, 2, 'Theme', 'dark');
@@ -91,6 +91,7 @@ fig.startLive('sensors.mat', @(fig, s) updateDashboard(fig, s), ...
 ```
 
 Update callback for dashboard:
+
 ```matlab
 function updateDashboard(fig, s)
     fig.tile(1).updateData(1, s.t, s.pressure);
@@ -104,51 +105,23 @@ end
 
 ## Live Mode with Metadata
 
-Attach metadata that updates on each poll:
+Attach metadata that updates on each poll by setting the `MetadataFile` and `MetadataVars` properties. The metadata is loaded from a separate .mat file and attached to the specified line.
 
 ```matlab
-fp.startLive('data.mat', @updateFcn, ...
-    'MetadataFile', 'meta.mat', ...
-    'MetadataVars', {'units', 'calibration'});
+fp.MetadataFile = 'meta.mat';
+fp.MetadataVars = {'units', 'calibration'};
+fp.MetadataLineIndex = 1;  % which line to attach metadata to
+fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
 ```
 
-The metadata is loaded from a separate file and attached to the specified line and tile:
+For dashboards, set the properties on the grid figure:
 
 ```matlab
 fig.MetadataFile = 'metadata.mat';
 fig.MetadataVars = {'sensor_id', 'location', 'units'};
-fig.MetadataLineIndex = 1;   % which line within the tile
+fig.MetadataLineIndex = 1;
 fig.MetadataTileIndex = 1;   % which tile to attach to
-```
-
----
-
-## Live Event Detection
-
-Combine live mode with event detection for real-time monitoring using the LiveEventPipeline:
-
-```matlab
-% Create sensors with thresholds
-tempSensor = Sensor('temperature', 'Name', 'Temperature');
-tempSensor.addThresholdRule(struct(), 78, 'Direction', 'upper', 'Label', 'Hi Warn');
-tempSensor.addThresholdRule(struct(), 82, 'Direction', 'upper', 'Label', 'Hi Alarm');
-tempSensor.resolve();
-
-sensors = containers.Map();
-sensors('temperature') = tempSensor;
-
-% Configure data sources
-dsMap = DataSourceMap();
-dsMap.add('temperature', MockDataSource('BaseValue', 70, 'NoiseStd', 2));
-
-% Set up pipeline with event store
-pipeline = LiveEventPipeline(sensors, dsMap, ...
-    'EventFile', 'events.mat', ...
-    'Interval', 15, ...
-    'MinDuration', 0.5);
-
-% Start live event detection
-pipeline.start();
+fig.startLive('sensors.mat', @updateDashboard);
 ```
 
 ---
@@ -207,7 +180,7 @@ tb.refresh();
 
 ## Console Progress Bars
 
-Use ConsoleProgressBar for visual feedback during long operations:
+Use `ConsoleProgressBar` for visual feedback during long operations:
 
 ```matlab
 pb = ConsoleProgressBar(2);   % 2-space indent
@@ -223,18 +196,22 @@ pb.freeze();   % becomes permanent line
 
 ## Tips
 
-- Set `'ViewMode', 'follow'` for monitoring use cases where you always want to see the latest data
-- Use `'preserve'` when users need to zoom into historical data while live updates continue
-- Keep polling interval reasonable (1-5 seconds) to avoid overwhelming the file system
-- The .mat file should be written atomically (write to temp file, then rename) to avoid partial reads
-- Live mode works with linked axes — all linked plots update together
-- Use `DeferDraw = true` to skip drawnow during batch render for better performance
+- Set `'ViewMode', 'follow'` for monitoring use cases where you always want to see the latest data.
+- Use `'preserve'` when users need to zoom into historical data while live updates continue.
+- Keep polling interval reasonable (1–5 seconds) to avoid overwhelming the file system.
+- The .mat file should be written atomically (write to temp file, then rename) to avoid partial reads.
+- Use `DeferDraw = true` on a `FastSense` instance to skip `drawnow` during batch render for better performance.
+- The `updateData` method accepts optional `'Metadata'` and `'SkipViewMode'` arguments for advanced control.
+
+For real‑time event monitoring with thresholds and live pipelines, see [[API Reference: Event Detection]].
 
 ---
 
 ## See Also
 
-- [[API Reference: FastPlot]] — startLive(), stopLive(), updateData() methods
+- [[API Reference: FastPlot]] — `startLive()`, `stopLive()`, `updateData()` methods
 - [[API Reference: Dashboard]] — Dashboard live mode
-- [[API Reference: Event Detection]] — Live event detection
-- [[Examples]] — example_dashboard_live.m, example_live_pipeline.m
+- [[API Reference: Event Detection]] — Event‑based monitoring
+- [[Examples]] — `example_dashboard_live.m`, `example_live_pipeline.m`
+- [[API Reference: Themes]] — styling live plots
+- [[API Reference: FastSenseToolbar]] — toolbar integration

@@ -2,7 +2,7 @@
 
 # Getting Started
 
-A step-by-step tutorial introducing FastSense's core features for ultra-fast time series plotting.
+A step‑by‑step tutorial introducing FastSense’s core features for ultra‑fast time series plotting.
 
 ## 1. Your First Plot
 
@@ -19,7 +19,7 @@ fp.addLine(x, y, 'DisplayName', 'Noisy Sine');
 fp.render();
 ```
 
-Try zooming and panning — FastSense automatically downsamples data to screen resolution in real time, keeping the display responsive regardless of dataset size.
+Try zooming and panning — FastSense automatically downsamples data to screen resolution, keeping the display responsive regardless of dataset size.
 
 ## 2. Themes
 
@@ -29,7 +29,9 @@ fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-Available presets: 'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'. See [[API Reference: Themes]] for customization options.
+Available presets: `'light'` and `'dark'`.  
+Legacy names (`'default'`, `'industrial'`, `'scientific'`, `'ocean'`) are aliased to `'light'`.  
+See [[Themes|API Reference: Themes]] for customisation options.
 
 ## 3. Thresholds and Violations
 
@@ -53,7 +55,8 @@ fp.addLine(x, sin(2*x) * 0.5, 'DisplayName', 'Channel C');
 fp.render();
 ```
 
-Colors auto-cycle from the theme's palette. Use `resetColorIndex()` to restart the color sequence.
+Colors auto‑cycle from the theme’s palette.  
+Use `resetColorIndex()` to restart the colour sequence.
 
 ## 5. Visual Annotations
 
@@ -76,6 +79,8 @@ fp.addFill(x, abs(y), 'FaceColor', [0 0.5 1], 'Baseline', 0, 'DisplayName', 'Ene
 ```matlab
 fp.addMarker([10 30 70], [0.9 0.9 0.9], 'Marker', 'v', 'MarkerSize', 10, 'Color', [1 0 0], 'Label', 'Events');
 ```
+
+All annotations must be added **before** calling `render()`.
 
 ## 6. Dashboard Layout
 
@@ -124,17 +129,7 @@ fp2.render();
 
 Zoom in one subplot, the other follows.
 
-## 9. Datetime Axes
-
-```matlab
-x = datenum(2024,1,1) + (0:99999)/86400;
-y = sin(2*pi*(1:100000)/86400);
-fp = FastSense('Theme', 'dark');
-fp.addLine(x, y, 'XType', 'datenum', 'DisplayName', 'Daily Cycle');
-fp.render();
-```
-
-## 10. Logarithmic Axes
+## 9. Logarithmic Axes
 
 ```matlab
 % Exponential growth data
@@ -148,19 +143,22 @@ fp2.setScale('YScale', 'log');
 fp2.render();
 ```
 
-Use `setScale('XScale', 'log')` for logarithmic X-axis or both together.
+Use `setScale('XScale', 'log')` for a logarithmic X‑axis, or both scales together.
 
-## 11. Updating Data
+## 10. Updating Data
+
+Replace line data on an already‑rendered plot:
 
 ```matlab
-% Replace line data on an already-rendered plot
 newY = cos(x * 2*pi/15) + 0.4*randn(size(x));
 fp.updateData(1, x, newY);
 ```
 
-## 12. Downsampling Methods
+## 11. Downsampling Methods
 
 MinMax (default) preserves signal envelope. LTTB preserves visual shape.
+
+Set a global default:
 
 ```matlab
 fp = FastSense('DefaultDownsampleMethod', 'lttb');
@@ -168,25 +166,26 @@ fp.addLine(x, y, 'DisplayName', 'LTTB');
 fp.render();
 ```
 
-Or per-line:
+Or per‑line:
+
 ```matlab
 fp.addLine(x, y1, 'DownsampleMethod', 'minmax', 'DisplayName', 'MinMax');
 fp.addLine(x, y2, 'DownsampleMethod', 'lttb', 'DisplayName', 'LTTB');
 ```
 
-## 13. Live Mode
+## 12. Live Mode
 
 ```matlab
-% Start live mode to auto-refresh from a .mat file
+% Start live mode to auto‑refresh from a .mat file
 fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y), 'Interval', 1);
 ```
 
-The callback is triggered whenever the file's modification date changes.
+The callback is triggered whenever the file’s modification date changes.
 
-## 14. Figure Distribution
+## 13. Figure Distribution
 
 ```matlab
-% Auto-arrange all open figures on screen
+% Auto‑arrange all open figures on screen
 FastSense.distFig();
 
 % Or use specific grid dimensions
@@ -197,9 +196,9 @@ FastSense.distFig('Rows', 2, 'Cols', 3);
 
 - [[FastPlot|API Reference: FastPlot]] — full constructor options, properties, methods
 - [[Dashboard|API Reference: Dashboard]] — tiled and tabbed layouts
-- [[Sensors|API Reference: Sensors]] — state-dependent thresholds
+- [[Themes|API Reference: Themes]] — theme presets and customisation
+- [[Sensors|API Reference: Sensors]] — state‑dependent thresholds
 - [[Event Detection|API Reference: Event Detection]] — event detection and viewer
-- [[Live Mode Guide]] — live data polling
-- [[Datetime Guide]] — datetime axes
-- [[Dashboard Engine Guide]] — DashboardEngine + DashboardBuilder
+- [[Live Mode Guide]] — live data polling in depth
+- [[Dashboard Engine Guide]] — widget‑based dashboards
 - [[Examples]] — 40+ runnable examples
