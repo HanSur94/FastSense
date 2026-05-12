@@ -2090,15 +2090,10 @@ setPreviewLines  Draw one downsampled line per widget preview.
   Each line is rendered with a distinct color from a fixed
   palette, placed behind the selection rectangle so drag
   interactions remain unaffected.
-Clear previous preview lines.
 
 #### `setEventMarkers(obj, times, colors)`
 
 setEventMarkers  Draw a faint full-height line per event time.
-  setEventMarkers(times) clears any existing markers and draws
-  one vertical line per finite time in `times`. Non-finite
-  values (NaN, +/-Inf) are silently dropped. Empty input just
-  clears the markers.
 
 #### `setEventBands(obj, starts, ends, colors)`
 

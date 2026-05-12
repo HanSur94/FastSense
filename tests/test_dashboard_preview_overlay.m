@@ -124,8 +124,15 @@ end
 function case_event_markers_from_widget_store()
     %CASE_EVENT_MARKERS_FROM_WIDGET_STORE FastSenseWidget.EventStore -> markers.
     %   Mirrors how modern dashboards bind events: an EventStore on the
-    %   widget, with ShowEventMarkers=true. Three events should produce
-    %   three vertical marker handles.
+    %   widget, with ShowEventMarkers=true. Three events at the same
+    %   severity (default=1) should produce at least one marker handle
+    %   that encodes all three event times.
+    %
+    %   Note: setEventMarkers uses NaN-separated polylines grouped by color
+    %   (260508-slider-stuck). Three events at severity=1 share one color,
+    %   so they form a single NaN-separated polyline handle, NOT three
+    %   separate handles. We verify all three times appear in the combined
+    %   XData rather than counting handles.
     x = linspace(0, 100, 500);
     y = sin(x * 0.1);
 
@@ -144,19 +151,17 @@ function case_event_markers_from_widget_store()
     drawnow;
 
     sel = d.TimeRangeSelector_;
-    assert(numel(sel.hEventMarkers) == 3, ...
-        sprintf('expected 3 event markers, got %d', numel(sel.hEventMarkers)));
-
-    % Sanity check: marker X positions match StartTime values.
-    xs = zeros(1, numel(sel.hEventMarkers));
+    assert(~isempty(sel.hEventMarkers), ...
+        'Expected at least one marker handle after binding 3 events.');
     for k = 1:numel(sel.hEventMarkers)
-        xd = get(sel.hEventMarkers(k), 'XData');
-        xs(k) = xd(1);
+        assert(ishandle(sel.hEventMarkers(k)), ...
+            sprintf('Marker handle %d must be a valid graphics handle.', k));
     end
-    xs = sort(xs);
-    expected = [10, 40, 80];
-    assert(isequal(xs, expected), ...
-        sprintf('marker X positions wrong: got %s, expected %s', mat2str(xs), mat2str(expected)));
+
+    % Extract all finite event times from the NaN-separated polylines.
+    xs = extractMarkerTimes_(sel);
+    assert(isequal(sort(xs), [10, 40, 80]), ...
+        sprintf('marker X positions wrong: got %s, expected [10 40 80]', mat2str(sort(xs))));
 end
 
 function case_event_markers_colored_by_severity()
@@ -230,6 +235,12 @@ function case_default_severity_backward_compat()
     %   the same uniform OK/info color — guards against a regression where
     %   the new colored path silently broke the legacy default-severity
     %   case.
+    %
+    %   Note: setEventMarkers uses NaN-separated polylines grouped by color
+    %   (260508-slider-stuck). All 3 events share severity=1 → one color →
+    %   one handle with all 3 times packed as [t t NaN t t NaN t t NaN].
+    %   We verify all times are present and the single handle's Color is the
+    %   OK-severity color. The old per-handle count assertion is removed.
     x = linspace(0, 100, 500);
     y = sin(x * 0.1);
 
@@ -248,15 +259,27 @@ function case_default_severity_backward_compat()
     drawnow;
 
     sel = d.TimeRangeSelector_;
-    assert(numel(sel.hEventMarkers) == 3, ...
-        sprintf('expected 3 markers (default severity), got %d', numel(sel.hEventMarkers)));
+    assert(~isempty(sel.hEventMarkers), ...
+        'Expected at least one marker handle for 3 default-severity events.');
 
-    cols = zeros(3, 3);
-    for k = 1:3
-        cols(k, :) = get(sel.hEventMarkers(k), 'Color');
-    end
-    assert(isequal(cols(1, :), cols(2, :)) && isequal(cols(2, :), cols(3, :)), ...
-        'default-severity markers must all share the same uniform OK color');
+    % All events share severity=1 → grouped into one color → one handle.
+    assert(numel(sel.hEventMarkers) == 1, ...
+        sprintf('3 same-severity events must merge into 1 color group; got %d handles', ...
+                numel(sel.hEventMarkers)));
+
+    % Verify all three times appear in the NaN-separated polyline.
+    xs = extractMarkerTimes_(sel);
+    assert(isequal(sort(xs), [15 50 85]), ...
+        sprintf('expected times [15 50 85], got %s', mat2str(sort(xs))));
+
+    % The single handle's Color must be the OK-severity color.
+    theme = d.getCachedTheme();
+    expectedColor = severityColor(theme, 1);
+    actualColor = get(sel.hEventMarkers(1), 'Color');
+    assert(max(abs(actualColor - expectedColor)) < 1e-6, ...
+        sprintf('default-severity color wrong: got [%g %g %g], expected [%g %g %g]', ...
+                actualColor(1), actualColor(2), actualColor(3), ...
+                expectedColor(1), expectedColor(2), expectedColor(3)));
 end
 
 function case_max_severity_wins_on_duplicate_times()
@@ -442,6 +465,27 @@ function case_nested_group_preview_lines()
         assert(all(xd >= dr(1) - pad) && all(xd <= dr(2) + pad), ...
             sprintf('nested preview line %d X out of DataRange [%g %g]: [%g %g]', ...
                     k, dr(1), dr(2), min(xd), max(xd)));
+    end
+end
+
+function xs = extractMarkerTimes_(sel)
+    %EXTRACTMARKERTIMES_  Collect all finite event times from hEventMarkers.
+    %   setEventMarkers uses NaN-separated polylines (one handle per unique
+    %   color group). XData layout is [t t NaN t t NaN ...]. We read the
+    %   first value of each [t t NaN] triplet across all handles.
+    %   (260508-slider-stuck: NaN-separator reduces O(N_events) handles to
+    %   O(N_severity_colors), so numel(hEventMarkers) != event count.)
+    xs = [];
+    for k = 1:numel(sel.hEventMarkers)
+        h = sel.hEventMarkers(k);
+        if ~ishandle(h), continue; end
+        xd = get(h, 'XData');
+        for idx = 1:3:numel(xd)
+            v = xd(idx);
+            if isfinite(v)
+                xs(end + 1) = v; %#ok<AGROW>
+            end
+        end
     end
 end
 

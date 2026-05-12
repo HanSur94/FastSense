@@ -81,6 +81,14 @@ classdef DashboardEngine < handle
         LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
         StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
         PreviewNBuckets_     = 0   % Cached nBuckets from last figure-pixel query; 0 = uncached
+        % Slider overlay caches — avoid deleting/recreating line handles when
+        % the underlying data hasn't changed between ticks (260508-slider-stuck).
+        % Each cache stores the last value passed to the selector so the
+        % comparisons below can skip the expensive delete/recreate cycle.
+        EventMarkerTimesCache_  = []   % last uTimes passed to setEventMarkers
+        EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
+        PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
+        FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
     end
 
     methods (Access = public)
@@ -240,6 +248,16 @@ classdef DashboardEngine < handle
                 obj.broadcastTimeRange(rng(1), rng(2));
             end
             % Refresh the preview envelope on the newly active page (D-07).
+            % Do NOT clear the slider overlay caches before calling compute.
+            % The dirty-check in computePreviewEnvelopeReturning_ and
+            % computeEventMarkers uses isequal() to detect whether the new
+            % page's data differs from what's currently drawn. If it differs
+            % (different widgets, different events), the compute functions
+            % invoke setPreviewLines/setEventMarkers automatically. Clearing
+            % the caches here was redundant and harmful: it forced a full
+            % delete/recreate of 129+ line handles synchronously inside
+            % switchPage(), blocking the MATLAB event queue long enough to
+            % drop the user's next mouse event (slider drag). (260508-slider-stuck)
             try obj.computePreviewEnvelope(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:previewFailed', 'computePreviewEnvelope: %s', err.message); end
             end
@@ -334,6 +352,16 @@ classdef DashboardEngine < handle
                 'Units', 'normalized', ...
                 'OuterPosition', [0.05 0.05 0.9 0.9], ...
                 'CloseRequestFcn', @(~,~) obj.onClose());
+            % Safety net: any figure-destruction path (delete(hf), close all force,
+            % parent teardown) must also stop the live timer. CloseRequestFcn ->
+            % onClose() already handles the normal close path; this listener
+            % covers everything else (260511-mjb).
+            try
+                obj.FigureDestroyedListener_ = addlistener(obj.hFigure, ...
+                    'ObjectBeingDestroyed', @(~,~) obj.onFigureDestroyed_());
+            catch
+                obj.FigureDestroyedListener_ = [];
+            end
             set(obj.hFigure, 'ResizeFcn', @(~,~) obj.onResize());
 
             obj.Toolbar = DashboardToolbar(obj, obj.hFigure, themeStruct);
@@ -1676,10 +1704,25 @@ classdef DashboardEngine < handle
                 % Invalidate the cached nBuckets so the next preview computation
                 % re-derives it from the new figure pixel width.
                 obj.PreviewNBuckets_ = 0;
+                % Invalidate slider overlay caches: nBuckets is derived from
+                % figure width, so a resize changes the bucket count and both
+                % preview lines and (potentially) event markers must refresh.
+                % (260508-slider-stuck)
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
+                obj.PreviewLinesCache_      = {};
             end
         end
 
         function delete(obj)
+            % Remove the figure-destroyed safety-net listener BEFORE any
+            % other teardown so it cannot fire on a partially-destroyed
+            % obj during MATLAB GC. Prevents R2021b segfault when the
+            % engine handle is collected before its hFigure (260511-n1r).
+            if ~isempty(obj.FigureDestroyedListener_)
+                try delete(obj.FigureDestroyedListener_); catch, end
+                obj.FigureDestroyedListener_ = [];
+            end
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
@@ -2136,11 +2179,27 @@ classdef DashboardEngine < handle
                 end
             end
             if isempty(linesList)
+                % Cache check for the empty case.
+                if isempty(obj.PreviewLinesCache_)
+                    env = struct('xCenters', [], 'yMin', [], 'yMax', []);
+                    return;
+                end
+                obj.PreviewLinesCache_ = {};
                 obj.TimeRangeSelector_.setPreviewLines({});
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
                 return;
             end
-            obj.TimeRangeSelector_.setPreviewLines(linesList);
+            % Cache check: if linesList is identical to the previous call
+            % (cache hits in every FastSenseWidget.getPreviewSeries return
+            % the same struct — isequal compares N*200 doubles, which is fast
+            % and avoids the expensive delete/recreate of N line handles per
+            % tick when data hasn't changed). (260508-slider-stuck)
+            if isequal(linesList, obj.PreviewLinesCache_)
+                % Preview lines unchanged — skip the delete/recreate cycle.
+            else
+                obj.PreviewLinesCache_ = linesList;
+                obj.TimeRangeSelector_.setPreviewLines(linesList);
+            end
             if ~haveAggSeries
                 % No widget produced exactly nBuckets buckets — return an
                 % empty envelope but keep the per-widget lines we drew.
@@ -2187,7 +2246,11 @@ classdef DashboardEngine < handle
             end
             % Honor the global Events toggle: when off, clear any existing
             % slider markers and bail before doing the per-widget aggregation.
+            % Also reset the marker cache so re-enabling the toggle forces a
+            % full redraw on the next call (260508-slider-stuck).
             if ~obj.EventMarkersVisible
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
                 obj.TimeRangeSelector_.setEventMarkers([]);
                 return;
             end
@@ -2276,6 +2339,12 @@ classdef DashboardEngine < handle
             end
 
             if isempty(allTimes)
+                % Cache check for the empty case.
+                if isempty(obj.EventMarkerTimesCache_)
+                    return;  % already empty — no need to clear markers again
+                end
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
                 obj.TimeRangeSelector_.setEventMarkers([]);
                 return;
             end
@@ -2295,6 +2364,19 @@ classdef DashboardEngine < handle
                 end
             end
 
+            % Cache check: skip the expensive delete/recreate cycle in
+            % setEventMarkers when the marker set hasn't changed since the
+            % last tick. Historical events are stable between ticks; only new
+            % live events would invalidate the cache. isequal is fast on small
+            % numeric arrays (129 events = 129 doubles + 129x3 RGB matrix).
+            % (260508-slider-stuck: creating 129+ line handles every 1-second
+            % tick blocked the MATLAB event loop long enough to cause null drags.)
+            if isequal(uTimes, obj.EventMarkerTimesCache_) && ...
+                    isequal(uColors, obj.EventMarkerColorsCache_)
+                return;  % marker set unchanged — no need to redraw
+            end
+            obj.EventMarkerTimesCache_  = uTimes;
+            obj.EventMarkerColorsCache_ = uColors;
             obj.TimeRangeSelector_.setEventMarkers(uTimes, uColors);
         end
 
@@ -2406,6 +2488,25 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.rerenderWidgets();
+        end
+
+        function onFigureDestroyed_(obj)
+        %ONFIGUREDESTROYED_ Safety-net handler invoked when hFigure is destroyed.
+        %   Fires for ANY destruction path (delete(hf), close all force, parent
+        %   teardown). The normal close-via-X path goes through CloseRequestFcn
+        %   -> onClose(), which has already called stopLive() and cleared
+        %   hFigure by the time we get here — both operations below are
+        %   idempotent and benign in that case. Listener MUST NOT throw, so
+        %   every operation is wrapped in try/catch (260511-mjb).
+            try
+                obj.stopLive();
+            catch
+                % best-effort: stopLive is already try/catch internally
+            end
+            try
+                obj.hFigure = [];
+            catch
+            end
         end
 
     end

@@ -33,10 +33,25 @@ Closing the dashboard figure tears every timer down automatically
   press the re-attach button on its panel) to fold it back into the
   dashboard. Pop out any other widget the same way via the detach button
   on its title bar.
-- **Watch the Events page.** A `MonitorTag` fires within ~15 seconds for
-  reactor.pressure spikes (deterministic anomaly windows at t ~= 15 s and
-  t ~= 45 s); events populate the `EventTimelineWidget` and round markers
-  appear on the FastSense plot.
+- **Watch the Events page.** ~100–160 events are visible immediately
+  on first paint, distributed deterministically across the past 7 days
+  (seed `1015`). Live `MonitorTag` events continue to fire from "now"
+  forward — the existing reactor.pressure anomaly window at t ~= 15 s
+  still produces a fresh critical event on top of the seeded history.
+  The slider preview in the EventViewer shows historical event-density
+  clusters; double-click any historical event to drill down to a
+  per-event dashboard.
+
+## Historical seed
+
+Each `run_demo()` call preloads each `SensorTag` with 7 days × 1 Hz of
+synthetic history (~605k samples per sensor) and runs the real
+`MonitorTag` detector over it, so every event in the EventStore
+corresponds to an actual threshold violation in the data. The seed is
+deterministic (`rng(1015, 'twister')`) — the same week appears on every
+run. State tags get a 7-day daily cycle of `idle → heating → running →
+cooldown → idle`. Live mode picks up cleanly from "now" with fresh
+RNG state. See `demo/industrial_plant/seedHistory.m`.
 
 ## Architecture
 

@@ -146,10 +146,17 @@ classdef TestDashboardEngineEventMarkers < matlab.unittest.TestCase
 end
 
 function x = markerXData(sel)
-    x = zeros(1, numel(sel.hEventMarkers));
+    %MARKERXDATA Collect unique non-NaN x positions across all marker handles.
+    %   PR #128 (260508-slider-stuck) replaced one line() per event with
+    %   a single NaN-separated polyline (uniform color) or N polylines
+    %   (one per severity color). Each event contributes the triplet
+    %   [t t NaN], so this helper flattens every handle's XData, drops
+    %   NaN separators, deduplicates, and returns the sorted unique
+    %   positions — equivalent semantics to the old per-handle helper.
+    x = [];
     for k = 1:numel(sel.hEventMarkers)
         xd = get(sel.hEventMarkers(k), 'XData');
-        x(k) = xd(1);
+        x = [x, xd(~isnan(xd))]; %#ok<AGROW>
     end
-    x = sort(x);
+    x = sort(unique(x(:).'));
 end

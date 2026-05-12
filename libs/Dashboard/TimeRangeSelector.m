@@ -215,23 +215,14 @@ classdef TimeRangeSelector < handle
             %   palette, placed behind the selection rectangle so drag
             %   interactions remain unaffected.
             %
-            %   Performance: when the number of lines matches the existing
-            %   hPreviewLines cache and all handles are valid, only XData/YData
-            %   are updated in-place (no delete/recreate, no Children reorder).
-            %   This saves ~7 ms/tick on uifigure-backed dashboards by avoiding
-            %   WebComponentController add/delete calls.
-            % Hide the legacy envelope patch.
-            set(obj.hEnvelope, 'Visible', 'off');
-            if isempty(lines)
-                for k = 1:numel(obj.hPreviewLines)
-                    if ishandle(obj.hPreviewLines(k))
-                        delete(obj.hPreviewLines(k));
-                    end
-                end
-                obj.hPreviewLines = [];
-                return;
-            end
-
+            %   Performance note (260508-slider-stuck): when the widget count
+            %   is stable (same number of lines as the existing handles), this
+            %   method updates XData/YData in-place on the existing line handles
+            %   instead of deleting and recreating them. Live ticks that deliver
+            %   one new sample per second produce a different linesList (new x
+            %   endpoint) but the same number of widget lines, so the in-place
+            %   path fires every tick and avoids the delete/recreate cycle that
+            %   blocked the MATLAB event queue.
             palette = [ ...
                 0.00 0.45 0.70    % blue
                 0.90 0.40 0.20    % orange
@@ -240,50 +231,60 @@ classdef TimeRangeSelector < handle
                 0.85 0.70 0.20    % mustard
                 0.30 0.70 0.70    % teal
                 0.70 0.30 0.30]; % brick
-
-            % Collect valid incoming lines
-            validLines = {};
+            % Hide the legacy envelope patch regardless of path taken.
+            set(obj.hEnvelope, 'Visible', 'off');
+            if isempty(lines)
+                % Clear all preview lines.
+                for k = 1:numel(obj.hPreviewLines)
+                    if ishandle(obj.hPreviewLines(k))
+                        delete(obj.hPreviewLines(k));
+                    end
+                end
+                obj.hPreviewLines = [];
+                return;
+            end
+            % Build validated (x,y) data for each incoming series.
+            validX = {};
+            validY = {};
             for i = 1:numel(lines)
                 L = lines{i};
                 if ~isstruct(L) || ~isfield(L, 'x') || ~isfield(L, 'y'), continue; end
                 if isempty(L.x) || isempty(L.y) || numel(L.x) ~= numel(L.y), continue; end
-                validLines{end + 1} = L; %#ok<AGROW>
+                validX{end + 1} = L.x(:).'; %#ok<AGROW>
+                validY{end + 1} = L.y(:).'; %#ok<AGROW>
             end
-
-            nNew = numel(validLines);
-            nCached = numel(obj.hPreviewLines);
-
-            % Fast-path: same line count and all existing handles still valid
-            % — update XData/YData in-place (no delete/create, no z-order reorder).
-            if nNew == nCached && nCached > 0 && all(ishandle(obj.hPreviewLines))
-                for i = 1:nNew
-                    L = validLines{i};
-                    try
-                        set(obj.hPreviewLines(i), 'XData', L.x(:).', 'YData', L.y(:).');
-                    catch
-                        % Handle went stale — fall through to full rebuild
-                        nCached = 0;
+            nValid = numel(validX);
+            nExist = numel(obj.hPreviewLines);
+            allHandlesValid = nExist > 0;
+            if allHandlesValid
+                for k = 1:nExist
+                    if ~ishandle(obj.hPreviewLines(k))
+                        allHandlesValid = false;
                         break;
                     end
                 end
-                if nCached > 0
-                    return;  % In-place update succeeded
-                end
             end
-
-            % Full rebuild path: clear existing handles, create new lines
-            for k = 1:numel(obj.hPreviewLines)
+            if nValid == nExist && allHandlesValid
+                % In-place update: same widget count — update XData/YData on
+                % existing handles without delete/recreate. This is the common
+                % case every live tick when only sample values change.
+                for i = 1:nValid
+                    set(obj.hPreviewLines(i), 'XData', validX{i}, 'YData', validY{i});
+                end
+                return;
+            end
+            % Widget count changed or handles are stale — full recreate.
+            for k = 1:nExist
                 if ishandle(obj.hPreviewLines(k))
                     delete(obj.hPreviewLines(k));
                 end
             end
             obj.hPreviewLines = [];
-
+            if nValid == 0, return; end
             handles = [];
-            for i = 1:nNew
-                L = validLines{i};
+            for i = 1:nValid
                 c = palette(mod(i - 1, size(palette, 1)) + 1, :);
-                h = line(obj.hAxes, L.x(:).', L.y(:).', ...
+                h = line(obj.hAxes, validX{i}, validY{i}, ...
                     'Color', c, 'LineWidth', 1, ...
                     'HitTest', 'off', 'PickableParts', 'none');
                 handles(end + 1) = h; %#ok<AGROW>
@@ -304,6 +305,11 @@ classdef TimeRangeSelector < handle
 
         function setEventMarkers(obj, times, colors)
             %setEventMarkers  Draw a faint full-height line per event time.
+            %
+            %   NOTE: mutually exclusive with setEventBands — both methods share
+            %         the hEventMarkers storage slot, so calling either one
+            %         clears any handles created by the other.
+            %
             %   setEventMarkers(times) clears any existing markers and draws
             %   one vertical line per finite time in `times`. Non-finite
             %   values (NaN, +/-Inf) are silently dropped. Empty input just
@@ -389,24 +395,62 @@ classdef TimeRangeSelector < handle
                 end
             end
 
-            handles = [];
-            for i = 1:numel(times)
-                t = times(i);
-                if usePerColor
-                    % Per-event-color path: skip the AxesColor blend so the
-                    % severity color reads at full saturation. The blend was
-                    % designed for the uniform-faint marker case; under a dark
-                    % theme it crushed sev colors into near-background shades.
-                    lineColor = colors(i, :);
-                    lineWidth = 1.4;
-                else
-                    lineColor = markerColor;
-                    lineWidth = 1;
+            % NaN-separator polyline strategy (260508-slider-stuck):
+            % Instead of one line() handle per event (N handles for N events),
+            % group events by their RGB color and draw one NaN-separated
+            % polyline per unique color. For the demo's 129+ events with 4
+            % severity levels this reduces 129 handles to at most 4 handles,
+            % making setEventMarkers O(N_colors) in graphics objects instead
+            % of O(N_events). The NaN breaks ensure MATLAB treats the
+            % sub-segments as disconnected vertical marks.
+            if usePerColor
+                % Group event times by rounded color triplet so all events
+                % sharing the same severity color are packed into a single
+                % NaN-separated polyline. unique(...,'rows') returns one row
+                % per unique color; the loop then extracts each group's times.
+                colorKey = round(colors * 255);  % Nx3 integer triplets for row-compare
+                uniqueKeys = unique(colorKey, 'rows', 'stable');
+                nGroups = size(uniqueKeys, 1);
+                handles = [];
+                for g = 1:nGroups
+                    mask = all(colorKey == uniqueKeys(g, :), 2);
+                    tGroup = times(mask);
+                    % Use first-occurrence float color to avoid round-trip error.
+                    lineColor = colors(find(mask, 1), :);
+                    % Build NaN-separated [t t NaN t t NaN ...] pattern.
+                    nG = numel(tGroup);
+                    xv = nan(1, 3 * nG);
+                    yv = nan(1, 3 * nG);
+                    for gi = 1:nG
+                        idx3 = (gi - 1) * 3;
+                        xv(idx3 + 1) = tGroup(gi);
+                        xv(idx3 + 2) = tGroup(gi);
+                        % xv(idx3+3) stays NaN (separator)
+                        yv(idx3 + 1) = 0;
+                        yv(idx3 + 2) = 1;
+                        % yv(idx3+3) stays NaN (separator)
+                    end
+                    h = line(obj.hAxes, xv, yv, ...
+                        'Color', lineColor, 'LineWidth', 1.4, ...
+                        'HitTest', 'off', 'PickableParts', 'none');
+                    handles(end + 1) = h; %#ok<AGROW>
                 end
-                h = line(obj.hAxes, [t t], [0 1], ...
-                    'Color', lineColor, 'LineWidth', lineWidth, ...
+            else
+                % Uniform color: single NaN-separated polyline for all markers.
+                nT = numel(times);
+                xv = nan(1, 3 * nT);
+                yv = nan(1, 3 * nT);
+                for i = 1:nT
+                    idx3 = (i - 1) * 3;
+                    xv(idx3 + 1) = times(i);
+                    xv(idx3 + 2) = times(i);
+                    yv(idx3 + 1) = 0;
+                    yv(idx3 + 2) = 1;
+                end
+                h = line(obj.hAxes, xv, yv, ...
+                    'Color', markerColor, 'LineWidth', 1, ...
                     'HitTest', 'off', 'PickableParts', 'none');
-                handles(end + 1) = h; %#ok<AGROW>
+                handles = h;
             end
             obj.hEventMarkers = handles;
             % Z-order: per-color markers go in FRONT of preview lines so the

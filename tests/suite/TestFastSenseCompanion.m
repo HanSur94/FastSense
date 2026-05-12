@@ -397,9 +397,9 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             feval(cs.hListbox_.ValueChangedFcn, [], []);
             drawnow;
             % Find Plot button and click
-            hFig = findobj(groot, 'Type', 'figure', 'Name', 'FastSense Companion');
+            hFig = findall(groot, 'Type', 'figure', 'Name', 'FastSense Companion');
             if isempty(hFig)
-                hFig = findobj(groot, '-regexp', 'Name', 'FastSense Companion');
+                hFig = findall(groot, '-regexp', 'Name', 'FastSense Companion');
             end
             testCase.assertNotEmpty(hFig, 'Phase 1021: companion figure not found');
             allBtns = findall(hFig(1), '-isa', 'matlab.ui.control.Button');

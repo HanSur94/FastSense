@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
-last_updated: "2026-05-08T23:30:00.000Z"
-last_activity: 2026-05-08 -- Quick fix 260508-od4: roll back ny6 switchPage refresh sweep (didn't fix stuck-widget symptom, added per-tab cost) + guard HoverCrosshair.onFigureMove_ against invalid-object errors after panel teardown (OD4-01/02)
+last_updated: "2026-05-11T14:20:05.000Z"
+last_activity: 2026-05-11 -- Quick fix 260511-n1r: delete FigureDestroyedListener_ at top of DashboardEngine.delete() — fixes R2021b CI segfault in TestDashboardDirtyFlag (listener could fire on partially-destroyed obj during MATLAB GC)
 progress:
   total_phases: 6
   completed_phases: 2
@@ -20,7 +20,7 @@ Phase: 1028
 Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-08 -- Quick fix 260508-od4 (936feac): roll back ny6 + guard HoverCrosshair.onFigureMove_ against invalid-object errors after panel teardown
+Last activity: 2026-05-11 - Completed quick task 260511-n1r: Sever FigureDestroyedListener_ at top of DashboardEngine.delete() to prevent R2021b CI segfault — TestDashboardDirtyFlag 6/6, TestFastSenseCompanion 64/64
 
 ### Quick Tasks Completed
 
@@ -53,6 +53,9 @@ Last activity: 2026-05-08 -- Quick fix 260508-od4 (936feac): roll back ny6 + gua
 | 260508-huo | Fix CI — hoist companion test runners out of private/; guard headless web() in DashboardEngine; gate R2020b MEX-heavy tests | 2026-05-08 | 62b99ab | — | [260508-huo-fix-octave-tests-move-companion-runner-f](./quick/260508-huo-fix-octave-tests-move-companion-runner-f/) |
 | 260508-mjp | Add tag-column search field to LiveLogPane mirroring events log | 2026-05-08 | 1c258fb | — | [260508-mjp-add-tag-column-search-field-to-livelogpa](./quick/260508-mjp-add-tag-column-search-field-to-livelogpa/) |
 | 260508-n8h | Dashboard Info button opens modal in-app uifigure (uihtml) instead of system browser | 2026-05-08 | 8b525a8 | — | [260508-n8h-dashboard-info-button-opens-modal-render](./quick/260508-n8h-dashboard-info-button-opens-modal-render/) |
+| 260511-ldu | PR #125 followup polish — extract bringFigureToFront_, tighten crosshair visibility, +2 tests, doc fixes | 2026-05-11 | 134a0d9 | — | [260511-ldu-pr-125-followup-polish-extract-bringfigu](./quick/260511-ldu-pr-125-followup-polish-extract-bringfigu/) |
+| 260511-mjb | Fix 2 pre-existing TestFastSenseCompanion failures — findobj→findall for uifigure lookup; ObjectBeingDestroyed safety-net listener on DashboardEngine.hFigure (stops LiveTimer for delete(fig)/close all force paths) | 2026-05-11 | 8df1a67 | Verified | [260511-mjb-fix-2-pre-existing-testfastsensecompanio](./quick/260511-mjb-fix-2-pre-existing-testfastsensecompanio/) |
+| 260511-n1r | Sever FigureDestroyedListener_ at top of DashboardEngine.delete() — fixes R2021b CI segfault in TestDashboardDirtyFlag (listener captured engine handle; on R2021b GC could destroy engine before its hFigure, then listener fired on deleted handle inside MATLAB's C++ dispatch layer) | 2026-05-11 | e7026bb | Verified | [260511-n1r-fix-r2021b-segfault-delete-figuredestroy](./quick/260511-n1r-fix-r2021b-segfault-delete-figuredestroy/) |
 
 ## Progress Bar
 

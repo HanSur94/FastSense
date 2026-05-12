@@ -574,6 +574,27 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             testCase.verifyEqual(numel(canvas.BarHandles), 12);
         end
 
+        function testTableNotesCellEditPersists(testCase)
+            % Item 3: inline Notes edits in the table view must write back
+            % through onTableCellEdit_ to the EventStore.
+            es = makeStore_(testCase);
+            e1 = Event(0, 1, 'sA', 'lbl', 1, 'upper'); e1.TagKeys = {'tA'}; e1.Severity = 1;
+            es.append(e1);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.setTimeRange(-1, 100);
+            v.refresh();
+            t = v.getTableForTest_();
+            testCase.assertEqual(size(t.Data, 1), 1, 'Pre-condition: one row.');
+            % Column 8 is Notes (see testTableHasExpectedColumns).
+            v.onTableCellEditForTest_(1, 8, 'investigated 2026-05-11');
+            % EventStore mutated in-place (Table_.UserData mirrors the
+            % filtered Event array passed to updateTableData_).
+            evsAfter = es.getEvents();
+            testCase.verifyEqual(evsAfter(1).Notes, 'investigated 2026-05-11');
+        end
+
         function testDefaultsToAllPreset(testCase)
             es = makeStore_(testCase);
             % Append events so 'all' has something to span.
@@ -666,8 +687,14 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             canvas = v.getCanvasForTest_();
             testCase.verifyTrue(ismethod(canvas, 'installCrosshair'));
             testCase.verifyTrue(ismethod(canvas, 'uninstallCrosshair'));
-            % The crosshair line shouldn't exist yet (only created on first mouse move).
-            testCase.verifyEmpty(canvas.hCrosshairLine);
+            % Behavior: install is idempotent — calling twice must not error
+            % and must not chain the figure motion handler onto itself.
+            testCase.verifyWarningFree(@() canvas.installCrosshair(v.hFigure));
+            testCase.verifyWarningFree(@() canvas.installCrosshair(v.hFigure));
+            % Behavior: uninstall returns the canvas to a clean state and is
+            % itself idempotent (second call is a no-op).
+            testCase.verifyWarningFree(@() canvas.uninstallCrosshair());
+            testCase.verifyWarningFree(@() canvas.uninstallCrosshair());
         end
 
         % --- Multi-event drill-down (Plot Selected) tests ---
@@ -723,6 +750,38 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             testCase.verifyGreaterThanOrEqual(numel(newFigs), 1, ...
                 'Multi-event dashboard must spawn a new figure.');
             testCase.addTeardown(@() arrayfun(@(f) close(f, 'force'), newFigs));
+        end
+
+        function testEventsButtonReEnablesWhenViewerCloses(testCase)
+            % Item 3: opening the event viewer disables hEventsBtn_; closing
+            % the viewer must clear EventViewer_ AND re-enable the button.
+            es = makeStore_(testCase);
+            % EventStore_ is private, so wire it into the companion via the
+            % constructor name-value option rather than direct assignment.
+            comp = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() comp.close());
+            % Locate the toolbar Events button by Tag (private property,
+            % located via findall on the companion's uifigure).
+            figH = comp.getFigForTest_();
+            btn = findall(figH, 'Tag', 'CompanionEventsBtn');
+            testCase.assertNotEmpty(btn, 'Pre: Events button must exist.');
+            testCase.assertEqual(char(btn.Enable), 'on', ...
+                'Pre: Events button enabled when no viewer open.');
+            % Open the viewer via the test shim.
+            comp.openEventViewer_internalForTest();
+            drawnow;
+            testCase.verifyEqual(char(btn.Enable), 'off', ...
+                'While viewer is open, Events button must be disabled.');
+            v = comp.getEventViewerForTest_();
+            testCase.assertNotEmpty(v, 'Viewer handle must be set.');
+            % Close the viewer; the figure's ObjectBeingDestroyed listener
+            % runs clearEventViewerHandle_ which resets the button + handle.
+            v.close();
+            drawnow;
+            testCase.verifyEqual(char(btn.Enable), 'on', ...
+                'After close, Events button must be re-enabled.');
+            testCase.verifyEmpty(comp.getEventViewerForTest_(), ...
+                'After close, EventViewer_ handle must be cleared.');
         end
     end
 end
