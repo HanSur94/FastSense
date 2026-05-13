@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Plant Log Integration
 status: executing
-last_updated: "2026-05-13T20:55:18.507Z"
+last_updated: "2026-05-13T21:08:27.874Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # State
@@ -26,23 +26,23 @@ toolbox dependencies.
 ## Current Position
 
 Phase: 1029 (Plant Log Storage Foundation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Milestone: v3.1 Plant Log Integration
-Status: Plan 01 complete, ready for Plan 02 (PlantLogStore)
-Last activity: 2026-05-13 -- Plan 1029-01 (entry + hash) complete
+Status: Plan 02 complete, ready for Plan 03 (install.m wiring + integration smoke)
+Last activity: 2026-05-13 -- Plan 1029-02 (store) complete
 
 ## Progress Bar
 
 v3.1 Plant Log Integration:
 
-- [ ] Phase 1029: Plant Log Storage Foundation — 1/3 plans
+- [ ] Phase 1029: Plant Log Storage Foundation — 2/3 plans
 - [ ] Phase 1030: CSV/XLSX Import + Mapping Dialog — 0/? plans
 - [ ] Phase 1031: Live Tail + Slider Preview Overlay — 0/? plans
 - [ ] Phase 1032: Per-Widget Plant Log Overlay — 0/? plans
 - [ ] Phase 1033: Dashboard + Companion Integration & Serialization — 0/? plans
 
 Phases complete: 0/5
-Plans complete: 1/3 (33%) in Phase 1029
+Plans complete: 2/3 (67%) in Phase 1029
 
 ## Accumulated Context
 
@@ -154,17 +154,23 @@ separate REQ-IDs:
 
 ## Session Continuity
 
-- **Resume point:** Phase 1029 — Plan 02 `PlantLogStore`. The value-class
-  `PlantLogEntry` and hash helpers (`djb2Hash`, `computeRowHash`) are now
-  available under `libs/PlantLog/`. Run `/gsd:execute-phase 1029` (or directly
-  execute `1029-02-store-PLAN.md` if it exists) to build the handle-class
-  store on top of them.
+- **Resume point:** Phase 1029 — Plan 03 `install.m wiring + integration smoke`.
+  `PlantLogEntry`, the private hash helpers (`djb2Hash`, `computeRowHash`), and
+  `PlantLogStore` are all available under `libs/PlantLog/`. Run
+  `/gsd:execute-phase 1029` (or directly execute `1029-03-install-and-smoke-PLAN.md`)
+  to wire the library directory into the global `install.m` path loop and to
+  add the end-to-end integration smoke test that exercises the full pipeline
+  without explicit `addpath` helpers.
 
 - **Order of phases:** 1029 → 1030 → 1031 → 1032 → 1033 (each phase depends on
   prior phases; no parallel execution paths).
 
 - **Coverage:** 32/32 active PLOG-* requirements mapped to phases — verified
   during roadmap creation.
+
+- **Stopped at:** 2026-05-13 -- Completed 1029-02-store-PLAN.md (PlantLogStore
+  handle class + cross-runtime tests; 21/21 PASS on both MATLAB and Octave).
+  Plan 03 (install.m wiring + integration smoke) next.
 
 ## Decisions Log
 
@@ -179,3 +185,24 @@ separate REQ-IDs:
   (1030 import, 1031 live tail, 1033 serializer) rely on. Private hash helpers are
   tested indirectly via `PlantLogEntry.RowHash` because functions under `libs/PlantLog/private/`
   cannot be called from `tests/`. See `.planning/phases/1029-plant-log-storage-foundation/1029-01-entry-and-hash-SUMMARY.md`.
+
+- **Plan 02 (store, 2026-05-13)** — `PlantLogStore` handle class reuses
+  `libs/FastSense/binary_search.m` for the ordered-insert position lookup
+  (`'left'` direction) and for the inclusive range-query bounds in
+  `getEntriesInRange` (`'left'` for lo, `'right'` for hi); no new
+  `binarySearchInsert.m` helper was added. Silent dedup on the composite key
+  `(Timestamp, RowHash)` via a Timestamp-pre-filtered linear scan (O(k)
+  effective for plant-log volumes); `nextId_` is `uint64` and advances only
+  after the dedup check passes so re-adding identical sets does not burn ids.
+  Static `PlantLogStore.computeEntryHash(message, metadata)` exposes the
+  hash entry point for tests and the Phase 1030 reader. Cross-runtime fix:
+  switched private `entries_` default from `PlantLogEntry.empty` to `[]`
+  because Octave does not implement classdef `.empty`; every `[obj.entries_.Timestamp]`
+  expression is already guarded by `isempty(obj.entries_)`. Independence from
+  EventStore is enforced at the file level — zero code-level constructor calls
+  or method invocations to `Event*`, only doc-comment mentions; verified by
+  three relaxed-regex grep acceptance checks plus an explicit runtime test
+  (`test_independence_from_event_store` / `testIndependenceFromEventStore`).
+  21/21 function-style + 21/21 class-based tests PASS on MATLAB; 21/21
+  function-style PASS on Octave. See
+  `.planning/phases/1029-plant-log-storage-foundation/1029-02-store-SUMMARY.md`.
