@@ -1690,7 +1690,12 @@ classdef DashboardEngine < handle
                 obj.TimeRangeSelector_.setDataRange( ...
                     obj.DataTimeRange(1), obj.DataTimeRange(2));
                 [tStart, tEnd] = obj.TimeRangeSelector_.getSelection();
-                obj.broadcastTimeRange(tStart, tEnd);
+                % broadcastTimeRange(tStart, tEnd) removed (260513-ovt):
+                % live ticks must not silently push the slider selection
+                % onto every widget's XLim — that resets the user's X
+                % view every tick. User-driven broadcast paths
+                % (slider drag debounce timer, broadcastTimeRangeNow
+                % public API, "Sync all" button) remain wired up.
                 % Refresh BOTH label rows (in-axes selection labels +
                 % below-slider edge labels) with the current selection.
                 % Usually no-op because the preserve-selection fix keeps

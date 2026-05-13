@@ -271,7 +271,9 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — the user's Y view is preserved
+                    % unless they explicitly pan/zoom or pin YLimits.
                     obj.updateTimeRangeCache();
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
@@ -290,6 +292,8 @@ classdef FastSenseWidget < DashboardWidget
         %   Uses FastSenseObj.updateData() to replace data and re-downsample,
         %   avoiding the expensive delete/recreate cycle of refresh().
         %   Falls back to refresh() if FastSenseObj is not in a renderable state.
+        %   (260513-ovt) Per-tick Y autoscale removed from this path so
+        %   Live mode never silently mutates the user's Y view.
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
@@ -297,7 +301,8 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — see refresh() above for rationale.
                     obj.updateTimeRangeCache();
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
