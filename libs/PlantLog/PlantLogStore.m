@@ -46,7 +46,14 @@ classdef PlantLogStore < handle
     end
 
     properties (Access = private)
-        entries_  = PlantLogEntry.empty     % sorted ascending by Timestamp
+        % entries_ holds the sorted-ascending-by-Timestamp PlantLogEntry array.
+        % We default to [] (not PlantLogEntry.empty) because Octave does not
+        % support the static `.empty` method on classdef value classes; every
+        % code path that touches `[entries_.Timestamp]` is guarded by an
+        % `isempty(obj.entries_)` check, so the [] default is safe on both
+        % runtimes. Empty returns from getEntriesInRange also use [] for the
+        % same reason.
+        entries_  = []
         nextId_   = uint64(0)
     end
 
@@ -93,7 +100,7 @@ classdef PlantLogStore < handle
 
             % --- Auto-promote struct array -> PlantLogEntry array ---
             if isstruct(entries)
-                promoted = PlantLogEntry.empty;
+                promoted = [];
                 for k = 1:numel(entries)
                     rowStruct = entries(k);
                     if ~isfield(rowStruct, 'Timestamp') ...
@@ -102,7 +109,12 @@ classdef PlantLogStore < handle
                         error('PlantLogStore:emptyEntry', ...
                             'Entry %d missing or invalid Timestamp.', k);
                     end
-                    promoted(end+1) = PlantLogEntry(rowStruct); %#ok<AGROW>
+                    next_entry = PlantLogEntry(rowStruct);
+                    if isempty(promoted)
+                        promoted = next_entry;
+                    else
+                        promoted(end+1) = next_entry; %#ok<AGROW>
+                    end
                 end
                 entries = promoted;
             end
@@ -172,7 +184,7 @@ classdef PlantLogStore < handle
 
         function clear(obj)
             %CLEAR Empty the store and reset the id counter.
-            obj.entries_ = PlantLogEntry.empty;
+            obj.entries_ = [];
             obj.nextId_  = uint64(0);
         end
 
@@ -192,14 +204,14 @@ classdef PlantLogStore < handle
                     't0 (%g) must be <= t1 (%g).', t0, t1);
             end
             if isempty(obj.entries_)
-                entries = PlantLogEntry.empty;
+                entries = [];
                 return;
             end
             ts = [obj.entries_.Timestamp];
             lo = binary_search(ts, t0, 'left');   % first idx where ts(idx) >= t0
             hi = binary_search(ts, t1, 'right');  % last  idx where ts(idx) <= t1
             if lo > hi || ts(lo) > t1 || ts(hi) < t0
-                entries = PlantLogEntry.empty;
+                entries = [];
                 return;
             end
             entries = obj.entries_(lo:hi);
