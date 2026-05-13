@@ -41,6 +41,18 @@ classdef CreateEventDialog < handle
 %
 %   See also DashboardEngine, FastSenseWidget, EventStore, EventBinding,
 %            Event, Tag.addManualEvent.
+%
+%   NOTE (260513-v69 - supersedes 260513-snt's trigger):
+%     The "+" button on FastSenseWidget no longer triggers this dialog
+%     directly. Clicking "+" now enters a two-click pick-on-chart mode
+%     on the widget's FastSense axes (see FastSense.startEventPick_).
+%     The pick flow constructs the Event programmatically and hands off
+%     to FastSense.openEventDetails_ for Notes editing. This dialog
+%     remains available as a programmatic API:
+%         CreateEventDialog(widget, engine)
+%     and CreateEventDialog.persistEventStatic remains the single source
+%     of truth for "persist a manual Event into the engine's EventStore";
+%     FastSense.completeEventPick_ calls it.
 
     properties (SetAccess = private)
         Widget    = []

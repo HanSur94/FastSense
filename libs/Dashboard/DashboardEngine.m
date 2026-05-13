@@ -2476,14 +2476,32 @@ classdef DashboardEngine < handle
         end
 
         function openCreateEventDialog_(obj, widget)
-        %OPENCREATEEVENTDIALOG_ Entry point invoked by the FastSenseWidget '+Event' button (260513-snt).
-        %   Resolves the engine's EventStore (lazy auto-discovery from
-        %   EventTimelineWidget if obj.EventStore is empty). Shows a
-        %   non-blocking errordlg if no store can be found. Otherwise
-        %   constructs CreateEventDialog(widget, obj). Any dialog
-        %   construction failure is surfaced as a namespaced warning so
-        %   the bar callback never burns down.
+        %OPENCREATEEVENTDIALOG_ Entry point invoked by the FastSenseWidget '+Event' button.
+        %   260513-snt shipped this as a modal dialog. 260513-v69 supersedes
+        %   that trigger with a two-click pick-on-chart flow:
+        %     1. Resolve EventStore via resolveEventStore_ (auto-discovery
+        %        from EventTimelineWidget if obj.EventStore is empty).
+        %     2. If no store: non-blocking errordlg, return.
+        %     3. Otherwise: hand off to widget.FastSenseObj.startEventPick_(obj).
+        %        The FastSense instance owns the state machine; this engine
+        %        method only gates on store availability and forwards.
+        %   The CreateEventDialog class remains importable as a programmatic
+        %   API (e.g., CreateEventDialog(widget, engine)) but is no longer the
+        %   default '+' button entry point. The persistEventStatic helper is
+        %   still the single source of truth for persistence and is reused by
+        %   FastSense.completeEventPick_.
             try
+                if ~isa(widget, 'FastSenseWidget')
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'openCreateEventDialog_ requires a FastSenseWidget; got %s.', class(widget));
+                    return;
+                end
+                fs = widget.FastSenseObj;
+                if isempty(fs) || ~isa(fs, 'FastSense') || ~fs.IsRendered
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'FastSenseWidget has no rendered FastSense instance.');
+                    return;
+                end
                 store = obj.resolveEventStore_();
                 if isempty(store)
                     msg = ['No EventStore is bound to this dashboard. ', ...
@@ -2493,7 +2511,7 @@ classdef DashboardEngine < handle
                     errordlg(msg, 'Create Event');
                     return;
                 end
-                CreateEventDialog(widget, obj);
+                fs.startEventPick_(obj);
             catch ME
                 warning('DashboardEngine:openCreateEventDialogFailed', ...
                     'openCreateEventDialog_ failed: %s', ME.message);
