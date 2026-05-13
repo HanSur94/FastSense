@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Plant Log Integration
-status: verifying
-stopped_at: Completed 1029-03-install-and-smoke-PLAN.md — Phase 1029 closed
-last_updated: "2026-05-13T21:18:26.320Z"
+status: executing
+stopped_at: Completed 1030-01-reader-and-helpers-PLAN.md
+last_updated: "2026-05-13T22:13:36.070Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
 ---
 
 # State
@@ -22,28 +22,28 @@ See: .planning/PROJECT.md (created 2026-05-13)
 **Core value:** Engineers can render millions of sensor points smoothly, organize
 them into navigable dashboards, and surface anomalies — all in pure MATLAB with no
 toolbox dependencies.
-**Current focus:** Phase 1029 — Plant Log Storage Foundation
+**Current focus:** Phase 1030 — CSV/XLSX Import + Mapping Dialog
 
 ## Current Position
 
-Phase: 1029 (Plant Log Storage Foundation) — COMPLETE
-Plan: 3 of 3 (Phase 1029 closed)
+Phase: 1030 (CSV/XLSX Import + Mapping Dialog) — EXECUTING
+Plan: 2 of 3
 Milestone: v3.1 Plant Log Integration
-Status: Phase complete — ready for `/gsd:verify-phase 1029` then `/gsd:start-phase 1030`
-Last activity: 2026-05-13 -- Plan 1029-03 (install + smoke) complete; Phase 1029 closed
+Status: Ready to execute
+Last activity: 2026-05-14 -- Plan 1030-01 (reader + helpers) shipped; PlantLogReader headless API live; 25/25 tests PASS on MATLAB
 
 ## Progress Bar
 
 v3.1 Plant Log Integration:
 
 - [x] Phase 1029: Plant Log Storage Foundation — 3/3 plans
-- [ ] Phase 1030: CSV/XLSX Import + Mapping Dialog — 0/? plans
+- [ ] Phase 1030: CSV/XLSX Import + Mapping Dialog — 1/3 plans
 - [ ] Phase 1031: Live Tail + Slider Preview Overlay — 0/? plans
 - [ ] Phase 1032: Per-Widget Plant Log Overlay — 0/? plans
 - [ ] Phase 1033: Dashboard + Companion Integration & Serialization — 0/? plans
 
 Phases complete: 1/5
-Plans complete: 3/3 (100%) in Phase 1029
+Plans complete: 1/3 (33%) in Phase 1030
 
 ## Accumulated Context
 
@@ -164,13 +164,20 @@ separate REQ-IDs:
   prior phases; no parallel execution paths).
 
 - **Coverage:** 32/32 active PLOG-* requirements mapped to phases — verified
-  during roadmap creation. PLOG-ST-01..05 (5/32) now have unit + integration proof.
+  during roadmap creation. PLOG-ST-01..05 (5/32) have unit + integration
+  proof (Phase 1029); PLOG-IM-01..05 (10/32) have headless-reader proof
+  (Phase 1030 Plan 01). 22 requirements remaining across Phases 1030
+  Plans 02 + 03, 1031, 1032, 1033.
 
-- **Stopped at:** 2026-05-13 -- Completed 1029-03-install-and-smoke-PLAN.md;
-  Phase 1029 closed. install.m wired with libs/PlantLog/; integration smokes
-  (function-style + class-based) shipped; full Phase 1029 surface 44/44
-  class-based + 47/47 function-style PASS on MATLAB and 47/47 function-style
-  PASS on Octave.
+- **Stopped at:** Completed 1030-01-reader-and-helpers-PLAN.md.
+  PlantLogReader headless API now ships (static `readFile` +
+  `autoDetect`); 5 private helpers under `libs/PlantLog/private/` cover
+  the 7-format timestamp ladder, scoring, sanitization, and portable
+  readtable. 15/15 function-style + 10/10 class-based tests PASS on
+  MATLAB; checkcode clean on all 8 new files. Plan 1030-02 (import
+  dialog) is now unblocked; the dialog will consume `autoDetect` output
+  to pre-fill its dropdowns and produce a mapping struct that
+  `PlantLogReader.readFile` parses on Confirm.
 
 ## Decisions Log
 
@@ -224,3 +231,28 @@ separate REQ-IDs:
   green on Octave. All 5 PLOG-ST-* requirements integration-proven (multiple
   distinct test paths each). See
   `.planning/phases/1029-plant-log-storage-foundation/1029-03-install-and-smoke-SUMMARY.md`.
+
+### Phase 1030 — CSV/XLSX Import + Mapping Dialog
+
+- **Plan 01 (reader + helpers, 2026-05-14)** — Shipped `PlantLogReader`
+  handle class (`libs/PlantLog/PlantLogReader.m`) with static `readFile`
+  (headless CSV/XLSX -> `PlantLogEntry[]`) and `autoDetect` (column scoring
+  -> mapping struct) methods. Five private helpers under
+  `libs/PlantLog/private/`: `parseTimestampLadder.m` (7-format ladder
+  handling cell/char/string/numeric/datetime inputs), `scoreColumnAsTimestamp.m`,
+  `scoreColumnAsMessage.m`, `sanitizeFieldName.m` (cross-runtime
+  `matlab.lang.makeValidName` wrapper), and `readtablePortable.m` (CSV+XLSX
+  dispatcher with Octave xlsx gating). Auto-detect thresholds locked at
+  parse-ratio >= 0.9 (timestamp) and text-ness >= 0.7 (message); the
+  scorers expose raw ratios so callers can re-use them. Error namespace
+  `PlantLogReader:fileNotFound / unsupportedFormat / xlsxUnavailable /
+  invalidInput / unknownColumn / readError`. Auto-fixed during execution:
+  (1) added `datetime` input branch to parser because MATLAB readtable
+  auto-promotes ISO timestamps; (2) tightened numeric-datenum sanity gate
+  to values > 1e5 so integer count columns aren't misclassified as
+  timestamps; (3) quoted timestamp values in `yyyy/MM/dd` test fixture
+  because readtable was auto-splitting on '/'; (4) stripped no-longer-emitted
+  `%#ok<NASGU>` suppressions. 15/15 function-style + 10/10 class-based
+  tests PASS on MATLAB; checkcode reports clean on all 8 new files; zero
+  edits to existing files. PLOG-IM-01..05 completed. See
+  `.planning/phases/1030-csv-xlsx-import-mapping-dialog/1030-01-reader-and-helpers-SUMMARY.md`.

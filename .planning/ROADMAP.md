@@ -128,8 +128,8 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
 | 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
-| 1029. Plant Log Storage Foundation | v3.1 | 3/3 | Complete   | 2026-05-13 |
-| 1030. CSV/XLSX Import + Mapping Dialog | v3.1 | 0/? | Not started | — |
+| 1029. Plant Log Storage Foundation | v3.1 | 3/3 | Complete    | 2026-05-13 |
+| 1030. CSV/XLSX Import + Mapping Dialog | v3.1 | 1/3 | In Progress|  |
 | 1031. Live Tail + Slider Preview Overlay | v3.1 | 0/? | Not started | — |
 | 1032. Per-Widget Plant Log Overlay | v3.1 | 0/? | Not started | — |
 | 1033. Dashboard + Companion Integration & Serialization | v3.1 | 0/? | Not started | — |
@@ -165,7 +165,10 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
   3. After auto-detection, the user sees a modal uifigure mapping dialog listing the detected timestamp column, message column, metadata columns, and a 10-row preview of the parsed result — and can override the timestamp column, message column, or explicit timestamp format string before confirming.
   4. If no parseable timestamp column is detected, the user sees a non-blocking `uialert` and the dialog blocks confirmation until they pick a valid column manually.
   5. `PlantLogReader:*` / `PlantLogImportDialog:*` namespaced errors fire on malformed inputs, all dialog callbacks are wrapped in try/catch with non-blocking `uialert`, and unit tests for the pure auto-detect helper pass on both MATLAB and Octave.
-**Plans:** TBD
+**Plans:** 1/3 plans executed
+- [x] 1030-01-reader-and-helpers-PLAN.md — Private parsing/scoring helpers + PlantLogReader.readFile/autoDetect static methods + headless tests
+- [ ] 1030-02-import-dialog-PLAN.md — PlantLogImportDialog handle class (modal uifigure with dropdowns, format edit, preview, error label) + dialog tests
+- [ ] 1030-03-open-interactive-and-smoke-PLAN.md — PlantLogReader.openInteractive wiring + integration smoke (headless + interactive + XLSX runtime check)
 **UI hint**: yes
 
 ### Phase 1031: Live Tail + Slider Preview Overlay
