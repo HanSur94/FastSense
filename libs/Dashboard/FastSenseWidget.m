@@ -341,12 +341,20 @@ classdef FastSenseWidget < DashboardWidget
         %   threshold values so MonitorTag lines stay visible) and updates
         %   the axes. Skipped when:
         %     - the widget has a user-pinned YLimits NV-pair, or
-        %     - the user manually zoomed Y via mouse (UserZoomedY),
+        %     - the user manually zoomed Y via mouse (UserZoomedY), or
+        %     - the dashboard's Follow toggle is engaged
+        %       (FastSenseObj.LiveViewMode == 'follow') — Follow is an
+        %       explicit user intent to track the data tail in X only and
+        %       keep the rest of the view (including Y) frozen. (260513-ovt)
         %   so we never fight an explicit human interaction.
             if ~isempty(obj.YLimits)
                 return;
             end
             if obj.UserZoomedY
+                return;
+            end
+            if ~isempty(obj.FastSenseObj) && isvalid(obj.FastSenseObj) ...
+                    && strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
                 return;
             end
             if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered

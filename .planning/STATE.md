@@ -4,7 +4,7 @@ milestone: v3.0
 milestone_name: FastSense Companion
 status: shipped
 last_updated: "2026-05-12T09:20:00.000Z"
-last_activity: 2026-05-12 -- Quick task 260512-hrn: Follow uitoggletool added to FastSenseToolbar (between Live and Metadata) — setFollow(), syncFollowState(), IsPropagating-aware auto-disengage hook in FastSense.onXLimChanged, AppData stash at 4 attacher sites, 9 function-style tests
+last_activity: 2026-05-13 -- Quick task 260513-ovt: Preserve Y-axis limits when Follow toggle is engaged — added FastSenseObj.LiveViewMode=='follow' early-return in FastSenseWidget.autoScaleY_ so live ticks no longer rescale YLim while Follow tracks the data tail in X
 progress:
   total_phases: 6
   completed_phases: 2
@@ -20,7 +20,7 @@ Phase: 1028
 Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
 Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-12 - Completed quick task 260512-hrn: Follow uitoggletool on FastSenseToolbar — setFollow(), syncFollowState(), IsPropagating-aware auto-disengage in FastSense.onXLimChanged, AppData stash at 4 attacher sites (FastSenseDock x3, EventViewer x1), 9 function-style tests. test_add_line 8/8 regression clean.
+Last activity: 2026-05-13 - Completed quick task 260513-ovt: Preserve Y-axis limits when Follow toggle is engaged. Added a third early-return to FastSenseWidget.autoScaleY_ — when FastSenseObj.LiveViewMode == 'follow', skip Y rescale. Follow now controls only X-axis tail tracking; Y stays exactly where the user left it.
 
 ### Quick Tasks Completed
 
@@ -62,6 +62,7 @@ Last activity: 2026-05-12 - Completed quick task 260512-hrn: Follow uitoggletool
 | 260512-eu2 | Restore HoverCrosshair after Reset (260512-egv follow-up) — move TRS.reinstallCallbacks from end of rerenderWidgets to BETWEEN the delete-old-panels loop and the allocate-new-panels block. New chain post-rerender: newHcN→...→newHc1→trs.onButtonMotion_. Both slider drag AND per-widget HoverCrosshair work after Reset. Verified on live demo: POST-RESET WBM = HC's onFigureMove_, synth drag moves Selection by ~1.74 days, 2 live HoverCrosshair instances alive on active page | 2026-05-12 | dc84454 | Verified | [260512-eu2-restore-hovercrosshair-after-reset-by-mo](./quick/260512-eu2-restore-hovercrosshair-after-reset-by-mo/) |
 | 260512-fd9 | Industrial plant demo opens with Live mode OFF by default — removed `engine.startLive()` from buildDashboard.m. Both dashboard and companion now start idle (engine.IsLive=0, companion.IsLive=0); user opts in via the top-toolbar "Live" button. Aligns the two windows on the same default; data writer + LiveTagPipeline keep running independently in the background | 2026-05-12 | ac0baaa | Verified | (inline) |
 | 260512-hrn | Add Follow uitoggletool to FastSenseToolbar — between Live and Metadata — with setFollow(), syncFollowState(), IsPropagating-aware auto-disengage in FastSense.onXLimChanged, AppData stash at 4 attacher sites, and 9 function-style tests (test_fastsense_follow_toggle.m) | 2026-05-12 | 596d399, 0a4a516 | — | [260512-hrn-add-follow-toggle-button-to-fastsense-to](./quick/260512-hrn-add-follow-toggle-button-to-fastsense-to/) |
+| 260513-ovt | Preserve Y-axis limits when Follow toggle is engaged — added third early-return in FastSenseWidget.autoScaleY_ (after YLimits and UserZoomedY checks): when `FastSenseObj.LiveViewMode == 'follow'`, skip the per-tick YLim recompute. Follow is now strictly an X-tail-tracking feature; user's Y view is preserved | 2026-05-13 | TBD | — | [260513-ovt-when-follow-button-is-pressed-y-axis-lim](./quick/260513-ovt-when-follow-button-is-pressed-y-axis-lim/) |
 
 ## Progress Bar
 
