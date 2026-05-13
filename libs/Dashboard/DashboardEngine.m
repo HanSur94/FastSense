@@ -195,6 +195,21 @@ classdef DashboardEngine < handle
             % freshly-realized panels mid-flight and leaving widgets
             % white. (260513-q7w fu2)
             obj.cancelResizeTimers_();
+            % If a rerenderWidgets is currently in flight (the backstop
+            % fired and is mid-flight, with internal drawnow calls letting
+            % this uicontrol callback interrupt it), serialize: spin
+            % drawnow until the rerender completes. Running switchPage
+            % INSIDE a rerender races with the realizeWidget loop and
+            % leaves the previous page's widgets visible (chrome created
+            % inside their outer cells AFTER switchPage hid them) and
+            % the new page's widgets white. Spin with a 3 s safety
+            % timeout. (260513-q7w fu3)
+            if obj.IsRerendering_
+                waitStart = tic;
+                while obj.IsRerendering_ && toc(waitStart) < 3
+                    drawnow;
+                end
+            end
             obj.ActivePage = pageIdx;
             % Update button colors if PageBar exists
             if ~isempty(obj.hPageButtons)
