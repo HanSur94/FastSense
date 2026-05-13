@@ -79,7 +79,6 @@ classdef PlantLogEntry
                         'Name-value pairs must come in pairs; got %d args.', nargin);
                 end
                 validFields = fieldnames(opts);
-                validLower  = lower(validFields);
                 for k = 1:2:numel(varargin)
                     key = varargin{k};
                     val = varargin{k+1};
@@ -87,7 +86,7 @@ classdef PlantLogEntry
                         error('PlantLogEntry:invalidInput', ...
                             'Option keys must be char; got %s at position %d.', class(key), k);
                     end
-                    idx = find(strcmp(validLower, lower(char(key))), 1);
+                    idx = find(strcmpi(validFields, char(key)), 1);
                     if isempty(idx)
                         error('PlantLogEntry:unknownOption', ...
                             'Unknown option ''%s''. Valid: %s.', char(key), strjoin(validFields, ', '));
