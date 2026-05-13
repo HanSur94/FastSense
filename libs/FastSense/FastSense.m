@@ -150,6 +150,20 @@ classdef FastSense < handle
         DragOffsetPx_         = [0 0]     % [dx dy] mouse offset from panel origin at drag start
     end
 
+    % 260513-v69 two-click event-pick state machine.
+    % Public access so tests can drive the state machine through a state-seam
+    % (writing EventPickT1_, reading IsEventPicking_ / PrevAxesBDFcn_). The
+    % trailing-underscore convention still marks these as internal: production
+    % callers must go through startEventPick_ / cancelEventPick_, never poke
+    % these directly.
+    properties (Access = public)
+        IsEventPicking_       = false     % event-pick mode active flag (260513-v69)
+        EventPickT1_          = []        % first-click x coordinate
+        EventPickEngine_      = []        % DashboardEngine handle (needed for persist + store)
+        PrevAxesBDFcn_        = []        % saved hAxes.ButtonDownFcn during pick mode
+        PrevFigKPFcn_         = []        % saved figure WindowKeyPressFcn during pick mode
+    end
+
     % Phase 1012 event-details popup handle — test-readable
     properties (SetAccess = private)
         hEventDetails_ = []               % popup figure handle (empty when no popup open)
@@ -2890,6 +2904,244 @@ classdef FastSense < handle
             %ONKEYPRESSFORDETAILSDISMISS_ Close popup on ESC key.
             if isfield(eventData, 'Key') && strcmp(eventData.Key, 'escape')
                 obj.closeEventDetails_();
+            end
+        end
+
+        % ============================================================
+        % 260513-v69 - Two-click event-pick state machine.
+        % Replaces the modal-dialog trigger from 260513-snt; reuses
+        % CreateEventDialog.persistEventStatic for persistence and
+        % openEventDetails_ for the Notes-editing handoff. Hidden so
+        % DashboardEngine.openCreateEventDialog_ can call startEventPick_
+        % and tests can call onPickClick_ / onPickKey_ / completeEventPick_
+        % directly.
+        % ============================================================
+        function startEventPick_(obj, engine)
+            %STARTEVENTPICK_ Enter two-click event-pick mode (260513-v69).
+            %   Toggle-cancels if already active. Saves axes ButtonDownFcn
+            %   and figure WindowKeyPressFcn, installs our handlers, draws
+            %   hint. WindowButtonMotionFcn is never touched so
+            %   HoverCrosshair stays fully functional.
+            if obj.IsEventPicking_
+                obj.cancelEventPick_();    % toggle-cancel; no throw.
+                return;
+            end
+            if isempty(engine) || ~isa(engine, 'DashboardEngine')
+                error('FastSense:eventPickNoEngine', ...
+                    'startEventPick_ requires a DashboardEngine; got %s.', class(engine));
+            end
+            if ~obj.IsRendered || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
+                error('FastSense:eventPickNotRendered', ...
+                    'FastSense must be rendered before entering event-pick mode.');
+            end
+            obj.EventPickEngine_ = engine;
+            obj.PrevAxesBDFcn_   = get(obj.hAxes, 'ButtonDownFcn');
+            set(obj.hAxes, 'ButtonDownFcn', @(s,e) obj.onPickClick_(s, e));
+            hFig = ancestor(obj.hAxes, 'figure');
+            if ~isempty(hFig) && ishandle(hFig)
+                obj.PrevFigKPFcn_ = get(hFig, 'WindowKeyPressFcn');
+                set(hFig, 'WindowKeyPressFcn', @(s,e) obj.onPickKey_(s, e));
+            end
+            obj.drawPickHint_('Click START of event (Right-click or ESC to cancel)...');
+            obj.IsEventPicking_ = true;
+        end
+
+        function cancelEventPick_(obj)
+            %CANCELEVENTPICK_ Exit pick mode + cleanup temp graphics. Idempotent.
+            if ~obj.IsEventPicking_, return; end
+            try
+                hHints = findall(obj.hAxes, 'Tag', 'EventPickHint');
+                if ~isempty(hHints), delete(hHints); end
+            catch
+            end
+            try
+                hLines = findall(obj.hAxes, 'Tag', 'EventPickLine');
+                if ~isempty(hLines), delete(hLines); end
+            catch
+            end
+            try
+                if ~isempty(obj.hAxes) && ishandle(obj.hAxes)
+                    set(obj.hAxes, 'ButtonDownFcn', obj.PrevAxesBDFcn_);
+                end
+            catch
+            end
+            try
+                hFig = ancestor(obj.hAxes, 'figure');
+                if ~isempty(hFig) && ishandle(hFig)
+                    set(hFig, 'WindowKeyPressFcn', obj.PrevFigKPFcn_);
+                end
+            catch
+            end
+            obj.IsEventPicking_  = false;
+            obj.EventPickT1_     = [];
+            obj.EventPickEngine_ = [];
+            obj.PrevAxesBDFcn_   = [];
+            obj.PrevFigKPFcn_    = [];
+        end
+
+        function onPickClick_(obj, ~, ~)
+            %ONPICKCLICK_ Axes ButtonDownFcn during pick mode. Right-click cancels.
+            if ~obj.IsEventPicking_, return; end
+            hFig = ancestor(obj.hAxes, 'figure');
+            try
+                sel = '';
+                if ~isempty(hFig) && ishandle(hFig)
+                    sel = get(hFig, 'SelectionType');
+                end
+                if strcmp(sel, 'alt')
+                    obj.cancelEventPick_();
+                    return;
+                end
+            catch
+            end
+            try
+                cp = get(obj.hAxes, 'CurrentPoint');
+                x  = cp(1, 1);
+            catch
+                return;
+            end
+            if isempty(obj.EventPickT1_)
+                obj.EventPickT1_ = x;
+                obj.drawPickLine_(x);
+                obj.updatePickHint_('Click END of event (Right-click or ESC to cancel)...');
+            else
+                obj.completeEventPick_(obj.EventPickT1_, x);
+            end
+        end
+
+        function onPickKey_(obj, src, evt)
+            %ONPICKKEY_ Figure WindowKeyPressFcn during pick. ESC cancels; chain otherwise.
+            try
+                if isstruct(evt) || isobject(evt)
+                    k = '';
+                    if isprop(evt, 'Key') || isfield(evt, 'Key')
+                        k = lower(char(evt.Key));
+                    end
+                    if strcmp(k, 'escape')
+                        obj.cancelEventPick_();
+                        return;
+                    end
+                end
+            catch
+            end
+            % Chain to whatever WindowKeyPressFcn was installed before us.
+            try
+                prev = obj.PrevFigKPFcn_;
+                if ~isempty(prev)
+                    if isa(prev, 'function_handle')
+                        prev(src, evt);
+                    elseif iscell(prev) && ~isempty(prev) && isa(prev{1}, 'function_handle')
+                        feval(prev{1}, src, evt, prev{2:end});
+                    end
+                end
+            catch
+            end
+        end
+
+        function completeEventPick_(obj, tStart, tEnd)
+            %COMPLETEEVENTPICK_ Sort, persist, hand off to openEventDetails_, cleanup.
+            engine = obj.EventPickEngine_;
+            if isempty(engine) || ~isa(engine, 'DashboardEngine')
+                obj.cancelEventPick_();
+                error('FastSense:eventPickNoEngine', ...
+                    'completeEventPick_ has no DashboardEngine reference.');
+            end
+            t1 = min(tStart, tEnd);
+            t2 = max(tStart, tEnd);
+            keys = {};
+            try
+                for i = 1:numel(obj.Tags_)
+                    tg = obj.Tags_{i};
+                    if ~isempty(tg) && isprop(tg, 'Key') && ~isempty(tg.Key)
+                        keys{end+1} = char(tg.Key); %#ok<AGROW>
+                    end
+                end
+            catch
+            end
+            if isempty(keys)
+                primaryName = 'manual_event';
+            else
+                primaryName = keys{1};
+            end
+            newEv = [];
+            try
+                nBefore = numel(engine.EventStore.getEvents());
+                CreateEventDialog.persistEventStatic(engine, t1, t2, ...
+                    'Custom event', 2, 'manual_annotation', '', keys, primaryName);
+                evs = engine.EventStore.getEvents();
+                if numel(evs) > nBefore && ~isempty(evs)
+                    newEv = evs(end);
+                end
+            catch ME
+                try
+                    errordlg(ME.message, 'Create Event');
+                catch
+                end
+                obj.cancelEventPick_();
+                return;
+            end
+            obj.cancelEventPick_();          % restores axes BDFcn + KP before details open
+            if ~isempty(newEv)
+                try
+                    obj.openEventDetails_(newEv);
+                catch
+                end
+            end
+        end
+
+        function drawPickHint_(obj, str)
+            %DRAWPICKHINT_ Draw the EventPickHint text annotation in obj.hAxes.
+            try
+                hOld = findall(obj.hAxes, 'Tag', 'EventPickHint');
+                if ~isempty(hOld), delete(hOld); end
+            catch
+            end
+            try
+                color = [1.0 0.55 0.0];          % orange fallback
+                text(obj.hAxes, 0.02, 0.95, str, ...
+                    'Units', 'normalized', ...
+                    'Color', color, ...
+                    'FontSize', 11, ...
+                    'FontWeight', 'bold', ...
+                    'HorizontalAlignment', 'left', ...
+                    'VerticalAlignment', 'top', ...
+                    'BackgroundColor', [1 1 1], ...
+                    'Margin', 2, ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'HandleVisibility', 'off', ...
+                    'Tag', 'EventPickHint');
+            catch
+            end
+        end
+
+        function updatePickHint_(obj, str)
+            %UPDATEPICKHINT_ Mutate an existing EventPickHint's String, fallback redraws.
+            try
+                h = findall(obj.hAxes, 'Tag', 'EventPickHint');
+                if ~isempty(h)
+                    set(h(1), 'String', str);
+                    return;
+                end
+            catch
+            end
+            obj.drawPickHint_(str);
+        end
+
+        function drawPickLine_(obj, x)
+            %DRAWPICKLINE_ Draw a single orange vertical EventPickLine at x.
+            try
+                yl = get(obj.hAxes, 'YLim');
+                color = [1.0 0.55 0.0];
+                line(obj.hAxes, [x x], yl, ...
+                    'Color', color, ...
+                    'LineWidth', 2, ...
+                    'LineStyle', '-', ...
+                    'Tag', 'EventPickLine', ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'HandleVisibility', 'off');
+            catch
             end
         end
     end
