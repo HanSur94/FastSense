@@ -2,8 +2,9 @@ classdef TestClusterIdentity < matlab.unittest.TestCase
     %TESTCLUSTERIDENTITY Tests for ClusterIdentity and userIdentity (IDENT-01).
     %
     %   Covers:
-    %     testIdentityTupleComplete          - userIdentity() returns non-empty user + host
-    %     testClusterModeThrowsOnFailure     - ClusterIdentity Strict mode throws on empty
+    %     testIdentityTupleComplete          - ClusterIdentity.resolve() returns
+    %                                          non-empty struct with all 4 fields
+    %     testClusterModeThrowsOnFailure     - Strict mode throws on empty user/host
     %
     %   See also ClusterIdentity, userIdentity.
 
@@ -19,19 +20,42 @@ classdef TestClusterIdentity < matlab.unittest.TestCase
 
     methods (Test)
         function testIdentityTupleComplete(testCase)
-            %TESTIDENTITYTUPLECOMPLETE userIdentity returns non-empty user and host.
-            [user, host] = userIdentity();
-            testCase.verifyFalse(isempty(user), 'userIdentity: user must be non-empty');
-            testCase.verifyFalse(isempty(host), 'userIdentity: host must be non-empty');
-            testCase.verifyTrue(ischar(user), 'userIdentity: user must be char');
-            testCase.verifyTrue(ischar(host), 'userIdentity: host must be char');
+            %TESTIDENTITYTUPLECOMPLETE ClusterIdentity.resolve() returns all 4 fields.
+            ClusterIdentity.clearCache();
+            id = ClusterIdentity.resolve();
+
+            % user: non-empty char
+            testCase.verifyTrue(ischar(id.user), 'id.user must be char');
+            testCase.verifyFalse(isempty(id.user), 'id.user must be non-empty');
+
+            % host: non-empty char
+            testCase.verifyTrue(ischar(id.host), 'id.host must be char');
+            testCase.verifyFalse(isempty(id.host), 'id.host must be non-empty');
+
+            % pid: int64 scalar > 0
+            testCase.verifyEqual(class(id.pid), 'int64', 'id.pid must be int64');
+            testCase.verifyGreaterThan(double(id.pid), 0, 'id.pid must be positive');
+
+            % epoch: datetime
+            testCase.verifyTrue(isa(id.epoch, 'datetime'), 'id.epoch must be datetime');
+
+            ClusterIdentity.clearCache();
         end
 
         function testClusterModeThrowsOnFailure(testCase)
             %TESTCLUSTERMODETHREWSONFAILURE Strict mode throws Concurrency:identityResolutionFailed.
-            %   STUB — implemented in Task 2 after ClusterIdentity.m exists.
-            %   This method is a placeholder so the test class passes in Task 1.
-            testCase.verifyTrue(true, 'Task 2 will implement ClusterIdentity strict mode throw');
+            %   Tests that an empty user triggers the error.
+            ClusterIdentity.clearCache();
+            testCase.verifyError( ...
+                @() ClusterIdentity.resolve('Strict', true, 'OverrideUser', ''), ...
+                'Concurrency:identityResolutionFailed');
+
+            ClusterIdentity.clearCache();
+            testCase.verifyError( ...
+                @() ClusterIdentity.resolve('Strict', true, 'OverrideHost', ''), ...
+                'Concurrency:identityResolutionFailed');
+
+            ClusterIdentity.clearCache();
         end
     end
 end
