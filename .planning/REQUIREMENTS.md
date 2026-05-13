@@ -19,7 +19,7 @@ Foundation layer — cross-host file locking, stale-lock recovery, atomic writes
 
 Who did what — sourced from OS, no login screen, FDA Part 11 §11.10(e) audit trail compliance.
 
-- [ ] **IDENT-01**: Every shared write (event ack, NDJSON entry, snapshot, lockfile) is stamped with `user@host (pid, epoch)`. `userIdentity.m` resolves via `getenv('USERNAME'|'USER')` + `system('hostname')` + optional Java InetAddress fallback (Octave-guarded by `usejava('jvm')`). In cluster mode, identity failure throws — no silent `'unknown'` writes.
+- [x] **IDENT-01**: Every shared write (event ack, NDJSON entry, snapshot, lockfile) is stamped with `user@host (pid, epoch)`. `userIdentity.m` resolves via `getenv('USERNAME'|'USER')` + `system('hostname')` + optional Java InetAddress fallback (Octave-guarded by `usejava('jvm')`). In cluster mode, identity failure throws — no silent `'unknown'` writes.
 - [ ] **IDENT-02**: Every event acknowledgement records (user, host, timestamp, action, target event-id). Audit trail is queryable and viewable in the Companion app's event log column.
 
 ### Shared Event Store (EVTLOG)
