@@ -2,7 +2,7 @@
 
 # Getting Started
 
-A step-by-step tutorial introducing FastSense's core features for ultra-fast time series plotting.
+A step-by-step tutorial introducing FastSense's core features for ultra‑fast time series plotting.
 
 ## 1. Your First Plot
 
@@ -12,14 +12,15 @@ projectRoot = fileparts(fileparts(mfilename('fullpath')));
 run(fullfile(projectRoot, 'install.m'));
 
 % Create a 10 million point dataset
-fp = FastSense();
-x = linspace(0, 100, 1e7);  % 10 million points
+x = linspace(0, 100, 1e7);          % 10 million points
 y = sin(x) + 0.1 * randn(size(x));
+
+fp = FastSense();
 fp.addLine(x, y, 'DisplayName', 'Noisy Sine');
 fp.render();
 ```
 
-Try zooming and panning — FastSense automatically downsamples data to screen resolution in real time, keeping the display responsive regardless of dataset size.
+Try zooming and panning – FastSense automatically downsamples the data to screen resolution in real time, keeping the display responsive regardless of dataset size.
 
 ## 2. Themes
 
@@ -29,7 +30,9 @@ fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-Available presets: 'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'. See [[API Reference: Themes]] for customization options.
+Available presets: `'light'`, `'dark'`.  
+Legacy names (`'default'`, `'industrial'`, `'scientific'`, `'ocean'`) are aliased to `'light'`.  
+See [[API Reference: Themes]] for customization options.
 
 ## 3. Thresholds and Violations
 
@@ -41,19 +44,20 @@ fp.addThreshold(-0.8, 'Direction', 'lower', 'ShowViolations', true, 'Color', 'b'
 fp.render();
 ```
 
-Red circles appear where data exceeds the threshold.
+Red circles appear where data exceeds the threshold.  
+`addThreshold` also accepts time‑varying thresholds: `fp.addThreshold(thX, thY, ...)`.
 
 ## 4. Multiple Lines
 
 ```matlab
-fp = FastSense('Theme', 'scientific');
+fp = FastSense('Theme', 'scientific');   % aliased to 'light'
 fp.addLine(x, sin(x), 'DisplayName', 'Channel A');
 fp.addLine(x, cos(x), 'DisplayName', 'Channel B');
 fp.addLine(x, sin(2*x) * 0.5, 'DisplayName', 'Channel C');
 fp.render();
 ```
 
-Colors auto-cycle from the theme's palette. Use `resetColorIndex()` to restart the color sequence.
+Colors auto‑cycle from the theme’s palette. Use `resetColorIndex()` to restart the colour sequence.
 
 ## 5. Visual Annotations
 
@@ -77,11 +81,13 @@ fp.addFill(x, abs(y), 'FaceColor', [0 0.5 1], 'Baseline', 0, 'DisplayName', 'Ene
 fp.addMarker([10 30 70], [0.9 0.9 0.9], 'Marker', 'v', 'MarkerSize', 10, 'Color', [1 0 0], 'Label', 'Events');
 ```
 
+All annotation methods must be called **before** `render()`.
+
 ## 6. Dashboard Layout
 
 ```matlab
 fig = FastSenseGrid(2, 2, 'Theme', 'dark', 'Name', 'Monitor');
-fig.setTileSpan(1, [1 2]);  % top tile spans full width
+fig.setTileSpan(1, [1 2]);   % top tile spans full width
 
 fp1 = fig.tile(1);
 fp1.addLine(x, sin(x)*50+50, 'DisplayName', 'Pressure');
@@ -99,13 +105,16 @@ fig.setTileTitle(3, 'Vibration');
 fig.renderAll();
 ```
 
+Tiles are accessed by number, in row‑major order. Use `setTileSpan` to merge tiles across rows or columns.
+
 ## 7. Toolbar
 
 ```matlab
-tb = FastSenseToolbar(fig);
+tb = FastSenseToolbar(fp);       % for a single FastSense instance
+% or tb = FastSenseToolbar(fig); % for a FastSenseGrid
 ```
 
-Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Refresh, Live Mode, Metadata, Violations.
+Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Export Data, Refresh, Live Mode, Follow, Metadata, Violations.
 
 ## 8. Linked Axes
 
@@ -122,7 +131,7 @@ fp2.addLine(x, cos(x), 'DisplayName', 'Temperature');
 fp2.render();
 ```
 
-Zoom in one subplot, the other follows.
+Zoom or pan in one subplot; the other follows automatically.
 
 ## 9. Datetime Axes
 
@@ -134,6 +143,8 @@ fp.addLine(x, y, 'XType', 'datenum', 'DisplayName', 'Daily Cycle');
 fp.render();
 ```
 
+Pass `'XType', 'datenum'` to `addLine` so that tick labels are formatted as dates.
+
 ## 10. Logarithmic Axes
 
 ```matlab
@@ -142,25 +153,28 @@ n2 = 1e6;
 x2 = linspace(1, 1000, n2);
 y2 = exp(x2 / 200) .* (1 + 0.1 * randn(1, n2));
 
-fp2 = FastSense();
+fp2 = FastSense('YScale', 'log');  % set at construction
 fp2.addLine(x2, y2, 'DisplayName', 'Exponential Growth');
-fp2.setScale('YScale', 'log');
 fp2.render();
 ```
 
-Use `setScale('XScale', 'log')` for logarithmic X-axis or both together.
+Alternatively, use `setScale('XScale', 'log')` for a logarithmic X‑axis or both scales together, even after `render()`.
 
 ## 11. Updating Data
 
 ```matlab
-% Replace line data on an already-rendered plot
+% Replace line data on an already‑rendered plot
 newY = cos(x * 2*pi/15) + 0.4*randn(size(x));
 fp.updateData(1, x, newY);
 ```
 
+The first argument is the line index (1‑based).  
+You can also pass `'Metadata', meta` to update attached metadata.
+
 ## 12. Downsampling Methods
 
-MinMax (default) preserves signal envelope. LTTB preserves visual shape.
+The default method **MinMax** preserves the signal envelope.  
+**LTTB** (Largest Triangle Three Buckets) preserves the visual shape.
 
 ```matlab
 fp = FastSense('DefaultDownsampleMethod', 'lttb');
@@ -168,38 +182,40 @@ fp.addLine(x, y, 'DisplayName', 'LTTB');
 fp.render();
 ```
 
-Or per-line:
+Or on a per‑line basis:
 ```matlab
 fp.addLine(x, y1, 'DownsampleMethod', 'minmax', 'DisplayName', 'MinMax');
-fp.addLine(x, y2, 'DownsampleMethod', 'lttb', 'DisplayName', 'LTTB');
+fp.addLine(x, y2, 'DownsampleMethod', 'lttb',   'DisplayName', 'LTTB');
 ```
 
 ## 13. Live Mode
 
 ```matlab
-% Start live mode to auto-refresh from a .mat file
+% Start live mode – poll a .mat file and auto‑refresh on change
 fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y), 'Interval', 1);
 ```
 
-The callback is triggered whenever the file's modification date changes.
+When the file’s modification date changes, the callback is invoked with the loaded data.  
+Use `'ViewMode', 'follow'` to keep the X‑axis centred on the tail; `'preserve'` to hold the current zoom.
 
 ## 14. Figure Distribution
 
 ```matlab
-% Auto-arrange all open figures on screen
+% Auto‑arrange all open figures on the screen
 FastSense.distFig();
 
-% Or use specific grid dimensions
+% Or specify a grid
 FastSense.distFig('Rows', 2, 'Cols', 3);
 ```
 
 ## Next Steps
 
-- [[FastPlot|API Reference: FastPlot]] — full constructor options, properties, methods
-- [[Dashboard|API Reference: Dashboard]] — tiled and tabbed layouts
-- [[Sensors|API Reference: Sensors]] — state-dependent thresholds
-- [[Event Detection|API Reference: Event Detection]] — event detection and viewer
-- [[Live Mode Guide]] — live data polling
-- [[Datetime Guide]] — datetime axes
-- [[Dashboard Engine Guide]] — DashboardEngine + DashboardBuilder
-- [[Examples]] — 40+ runnable examples
+- [[FastPlot|API Reference: FastPlot]] – full constructor options, properties, methods
+- [[Dashboard|API Reference: Dashboard]] – tiled and tabbed layouts
+- [[Themes|API Reference: Themes]] – customizing colour, fonts, and palettes
+- [[Sensors|API Reference: Sensors]] – state‑dependent thresholds
+- [[Event Detection|API Reference: Event Detection]] – event detection and viewer
+- [[Live Mode Guide]] – detailed live data polling
+- [[Datetime Guide]] – working with datetime axes
+- [[Dashboard Engine Guide]] – DashboardEngine + DashboardBuilder
+- [[Examples]] – 40+ runnable examples
