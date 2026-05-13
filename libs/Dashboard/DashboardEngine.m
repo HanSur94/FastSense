@@ -2139,9 +2139,12 @@ classdef DashboardEngine < handle
         end
 
         function s = formatDuration_(~, durDays)
-            %FORMATDURATION_ Render a datenum-day span as a short readable string.
-            %   "Days" granularity for >=1d, "Xh Ym" for hours, "Xm Ys"
-            %   for minutes-with-seconds, "Ns" for sub-minute. (260512-hrn-followup)
+            %FORMATDURATION_ Render a datenum-day span as a full "Xd Yh Zm Ws" string.
+            %   Always shows all four units (days, hours, minutes,
+            %   seconds) so the user sees the complete granularity of
+            %   the selected window at a glance. Sub-second spans fall
+            %   back to a single "N.NN s" reading.
+            %   (260512-hrn-followup)
             if ~isfinite(durDays) || durDays < 0
                 s = '';
                 return;
@@ -2149,33 +2152,16 @@ classdef DashboardEngine < handle
             durSec = durDays * 86400;
             if durSec < 1
                 s = sprintf('%.2f s', durSec);
-            elseif durSec < 60
-                s = sprintf('%.0f s', durSec);
-            elseif durSec < 3600
-                m = floor(durSec / 60);
-                ss = round(mod(durSec, 60));
-                if ss > 0
-                    s = sprintf('%dm %ds', m, ss);
-                else
-                    s = sprintf('%dm', m);
-                end
-            elseif durSec < 86400
-                h = floor(durSec / 3600);
-                m = floor(mod(durSec, 3600) / 60);
-                if m > 0
-                    s = sprintf('%dh %dm', h, m);
-                else
-                    s = sprintf('%dh', h);
-                end
-            else
-                d = floor(durSec / 86400);
-                h = floor(mod(durSec, 86400) / 3600);
-                if h > 0
-                    s = sprintf('%dd %dh', d, h);
-                else
-                    s = sprintf('%dd', d);
-                end
+                return;
             end
+            totalSec = round(durSec);
+            d = floor(totalSec / 86400);
+            r = mod(totalSec, 86400);
+            h = floor(r / 3600);
+            r = mod(r, 3600);
+            m = floor(r / 60);
+            ss = mod(r, 60);
+            s = sprintf('%dd %dh %dm %ds', d, h, m, ss);
         end
 
         function computePreviewEnvelope(obj, nBuckets)
