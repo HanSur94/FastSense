@@ -1797,8 +1797,19 @@ classdef DashboardEngine < handle
         %   widget whose line data was wiped by a resize-race recovers
         %   without the user having to press Reset. (260513-q7w)
         %
-        %   Uses the cheap update()/refresh() path — no panel teardown,
-        %   no rerenderWidgets sledgehammer. Safe to call multiple times.
+        %   Two-pass design:
+        %     1. Cheap pass — call update()/refresh() on each widget.
+        %        For most cases this re-pushes data through updateLines
+        %        and restores the line.
+        %     2. Detection + escalation — re-check each FastSenseWidget's
+        %        first line. If XData is still empty (e.g. the user
+        %        shrunk the window so small that the axes XLim got
+        %        clobbered, so lineVisibleData returns empty), fall
+        %        back to per-widget refresh() (rebuildForTag_); if that
+        %        still doesn't fix it, escalate the whole active page
+        %        to rerenderWidgets() — the same heavy hammer the user
+        %        would have pressed manually via the toolbar's Reset
+        %        button.
             if ~obj.isObjValid_()
                 return;
             end
@@ -1806,6 +1817,7 @@ classdef DashboardEngine < handle
                 return;
             end
             ws = obj.activePageWidgets();
+            % --- Pass 1: cheap data re-push ---
             for i = 1:numel(ws)
                 w = ws{i};
                 if isempty(w) || ~isvalid(w)
@@ -1827,7 +1839,70 @@ classdef DashboardEngine < handle
                     end
                 end
             end
+            % --- Pass 2: detect any still-white FastSenseWidget and escalate ---
+            stillWhite = false;
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isempty(w) || ~isvalid(w) || ~isa(w, 'FastSenseWidget')
+                    continue;
+                end
+                if isempty(w.FastSenseObj) || ~isvalid(w.FastSenseObj) || ~w.FastSenseObj.IsRendered
+                    continue;
+                end
+                if ~obj.isWidgetLineWhite_(w)
+                    continue;
+                end
+                % Try per-widget refresh() (full rebuildForTag_) first
+                try
+                    w.refresh();
+                catch
+                end
+                if obj.isWidgetLineWhite_(w)
+                    stillWhite = true;
+                    break;  % one is enough to justify escalation
+                end
+            end
+            if stillWhite
+                % Heavy hammer — equivalent to the user pressing Reset.
+                try
+                    obj.rerenderWidgets();
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:postResizeRerenderFailed', ...
+                            'post-resize rerenderWidgets failed: %s', err.message);
+                    end
+                end
+            end
             try drawnow; catch, end
+        end
+
+        function tf = isWidgetLineWhite_(~, w)
+        %ISWIDGETLINEWHITE_ True if the FastSenseWidget's first line has
+        %   no XData but its bound Tag clearly does — the visible
+        %   manifestation of the resize-race bug. Defensive: any
+        %   missing-handle / invalid-object case returns false to avoid
+        %   false-positive escalations.
+            tf = false;
+            try
+                if isempty(w) || ~isvalid(w) || ~isa(w, 'FastSenseWidget'); return; end
+                if isempty(w.FastSenseObj) || ~isvalid(w.FastSenseObj); return; end
+                fp = w.FastSenseObj;
+                if ~fp.IsRendered || isempty(fp.Lines); return; end
+                hL = fp.Lines(1).hLine;
+                if ~ishandle(hL); return; end
+                xd = get(hL, 'XData');
+                if ~isempty(xd); return; end
+                % Line is empty; only flag as "white" if the source Tag
+                % actually has samples to display. Tag-less widgets or
+                % truly empty sensors should not trigger an escalation.
+                if isempty(w.Tag); return; end
+                try
+                    [tx, ~] = w.Tag.getXY();
+                    tf = ~isempty(tx);
+                catch
+                end
+            catch
+            end
         end
 
         function delete(obj)
