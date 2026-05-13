@@ -1,26 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: FastSense Companion
-status: shipped
-last_updated: "2026-05-12T09:20:00.000Z"
-last_activity: 2026-05-13 -- Quick task 260513-q7w: Debounced post-resize refresh + ROOT-CAUSE ZOMBIE-PANEL FIX. After widget realization w.hPanel points to the inner content panel; rerenderWidgets was only deleting that and leaving the outer cell + WidgetButtonBar chrome alive on the canvas, stacking up zombies across multiple rerenders that painted over switched-to pages. Now deletes the outer cell (hCellPanel) properly. Canvas children stay constant at 29 across 4 rerenders + resize + tab switch.
+milestone: v4.0
+milestone_name: Multi-User LAN Concurrency
+status: executing
+last_updated: "2026-05-13T21:49:15.292Z"
+last_activity: 2026-05-13
 progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 11
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 6
 ---
 
 # State
 
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-05-13)
+
+**Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
+**Current focus:** Phase 1029 — Concurrency Foundation
+
 ## Current Position
 
-Phase: 1028
-Plan: Not started
-Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
-Status: Awaiting next milestone (run `/gsd:new-milestone` to scope v3.x or v4.0)
-Last activity: 2026-05-13 - Completed quick task 260513-q7w: Debounced two-pass post-resize refresh. Initial commit 577bf95 added the ResizeDebounceTimer + cheap update()/refresh() sweep (mirrors SliderDebounceTimer). User reported "still white at very small window sizes" — so follow-up 99c8808 made the refresh callback two-pass: pass 1 = cheap update(); pass 2 = detect any FastSenseWidget whose first line has empty XData but whose Tag has samples (the visible "white" symptom), then escalate to per-widget refresh() and, if still white, to engine-level rerenderWidgets(). Synthetic test on the live demo: forced XData=[] on a real widget's line (941→0), refreshActivePageWidgetsAfterResize_ restored it (0→941). test_dashboard_time_sync_all_pages 5/5 PASS, test_dashboard_range_selector_integration 2/2 PASS.
+Phase: 1029 (Concurrency Foundation) — EXECUTING
+Plan: 3 of 5
+Milestone: v4.0 Multi-User LAN Concurrency
+Status: Ready to execute
+Last activity: 2026-05-13
 
 ### Quick Tasks Completed
 
@@ -80,10 +87,12 @@ Phase 1019 [██████████] 100% (3/3 plans complete in Phase 10
 - 2026-04-29 — Milestone v3.0 FastSense Companion started (programmatic MATLAB uifigure companion app; design brainstormed prior; v2.1 Tag-API Tech Debt Cleanup carried forward in parallel)
 - 2026-04-29 — v3.0 roadmap created: 5 phases (1018-1022) covering 28 REQ-IDs across COMPSHELL, CATALOG, BROWSER, INSPECT, ADHOC categories
 - 2026-04-29 — v3.0 phase 1023 added (Industrial Plant Demo Integration): wraps `demo/industrial_plant/run_demo.m` in `FastSenseCompanion`; 4 new COMPDEMO REQ-IDs; total now 6 phases / 32 REQ-IDs
+- 2026-05-13 — Milestone v4.0 Multi-User LAN Concurrency started; PROJECT.md updated, REQUIREMENTS.md created (14 P1 REQ-IDs across CONC/IDENT/EVTLOG/ACK/OPS categories; 6 P2 deferred to v4.1); research/ phase produced SUMMARY/STACK/FEATURES/ARCHITECTURE/PITFALLS markdown
+- 2026-05-13 — v4.0 roadmap created: 5 phases (1029-1033) covering all 14 P1 REQ-IDs, full coverage no orphans; phase structure mirrors research-recommended build order (Foundation → TagWriteCoordinator → EventLog → Single-Source Events → Companion Integration); three PITFALLS corrections (OFD locks, mtime heartbeat, lock-serialised appends) baked into Phase 1029 success criteria
 
 ### Phase Numbering Note
 
-v2.1 phases in the phases/ directory extend to 1017 (1012, 1013, 1014, 1017). v3.0 phases start at 1018 to avoid collision.
+v2.1 phases in the phases/ directory extend to 1017 (1012, 1013, 1014, 1017). v3.0 phases extended to 1023.1. Pending unscoped phases 1025-1028 are carry-forward from a backlog promotion (NOT v4.0). v4.0 phases start at **1029** to leave room for the pending carry-forward and avoid collision.
 
 ### Brainstorm Outcomes (v3.0)
 
@@ -129,6 +138,9 @@ These apply to every phase and are reflected in phase success criteria rather th
 - **Phase 1020 planning:** Read `libs/Dashboard/DashboardPage.m` and `libs/Dashboard/GroupWidget.m` to confirm `Widgets` and `Children` GetAccess. Determines whether `DashboardEngine.getWidgets()` wrapper is required or if `d.Widgets`/`d.Pages{i}.Widgets` suffices.
 - **Phase 1021 planning:** Run 20-line scratch test of `SensorDetailPlot(tag, 'Parent', uipanelHandle)` to verify resize behavior under embedded panel parenting.
 - **Phase 1022 planning:** Write standalone 50-line `FastSenseGrid` + `timer` + `CloseRequestFcn` prototype before full implementation; verify zero orphan timers in `timerfindall` after close.
+- **Phase 1029 planning (v4.0):** `lockfile_mex.c` OFD-vs-`F_SETLK` branching; Win32 `LockFileEx` flag combinations; `F_OFD_SETLK` re-acquire behaviour from same process (LOW confidence per SUMMARY.md); empirical `staleTimeout` calibration on target office LAN; mksqlite `extended_result_codes` pass-through probe (feeds Phase 1032's retry wrapper).
+- **Phase 1031 planning (v4.0):** SMB atomicity stress test on the target file server (Pitfalls 4 + 5 + 12); phase budget includes contingency to re-architect to per-writer-file + merge if SMB atomicity fails.
+- **Phase 1032 planning (v4.0):** SQLite `BUSY_SNAPSHOT` retry semantics under 50-writer contention; retry-loop tuning needs 20-process write-contention test.
 
 ### Decisions (Phase 1020)
 
@@ -138,4 +150,5 @@ These apply to every phase and are reflected in phase success criteria rather th
 
 ### Carry-Forward
 
-- **v2.1 Tag-API Tech Debt Cleanup** — in flight, parallel to v3.0. Phases 1012-1017. Does not block v3.0 work.
+- **v2.1 Tag-API Tech Debt Cleanup** — in flight, parallel to v3.0/v4.0. Phases 1012-1017. Does not block v4.0 work.
+- **Pending unscoped phases 1025-1028** — promoted from backlog 2026-05-08; NOT v4.0 scope. 1025 + 1026 largely addressed via quick tasks 260508-d8y / 260508-das. 1027/1027.1 complete. 1028 (Tag update perf — MEX + SIMD) remains on the books, may be re-scoped later.
