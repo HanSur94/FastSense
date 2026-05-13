@@ -196,5 +196,156 @@ classdef PlantLogReader < handle
             end
         end
 
+        function entries = openInteractive(filePath, varargin)
+            %OPENINTERACTIVE Full pipeline: parse + auto-detect + dialog + return entries.
+            %
+            %   entries = PlantLogReader.openInteractive(filePath) opens the
+            %   file, runs autoDetect, shows the modal mapping dialog, and
+            %   returns PlantLogEntry[] on Confirm or [] on Cancel.
+            %
+            %   entries = PlantLogReader.openInteractive(filePath, ...
+            %       'Headless', true, ...
+            %       'Mapping',  struct('TimestampColumn', ..., 'MessageColumn', ..., 'TimestampFormat', '')) ...
+            %   bypasses the dialog and runs readFile directly with the
+            %   given mapping. Used by Phase 1031 live-tail re-reads and
+            %   by every test that doesn't want to pop a uifigure.
+            %
+            %   Optional name-value:
+            %     'Theme'   -- 'dark' | 'light' (default 'dark', forwarded to the dialog)
+            %     'Mapping' -- struct (REQUIRED with 'Headless'; OPTIONAL otherwise --
+            %                  if provided, pre-fills the dialog instead of running autoDetect)
+            %
+            %   Errors:
+            %     PlantLogReader:invalidInput -- bad filePath OR Headless=true without Mapping
+            %     PlantLogReader:fileNotFound, :unsupportedFormat, :xlsxUnavailable --
+            %       propagated from readtablePortable
+            %     PlantLogReader:unknownColumn -- propagated from readFile when
+            %       the dialog returns a mapping that doesn't match the table
+            %       (should not happen in normal flow; defensive)
+
+            % --- Validate filePath ---
+            if isstring(filePath); filePath = char(filePath); end
+            if ~ischar(filePath) || isempty(filePath)
+                error('PlantLogReader:invalidInput', ...
+                    'filePath must be a non-empty char/string.');
+            end
+
+            % --- Parse name-value options ---
+            opts = struct( ...
+                'Headless', false, ...
+                'Mapping',  [], ...
+                'Theme',    'dark');
+            if mod(numel(varargin), 2) ~= 0
+                error('PlantLogReader:invalidInput', ...
+                    'openInteractive name-value args must come in pairs; got %d.', numel(varargin));
+            end
+            validKeys = fieldnames(opts);
+            for k = 1:2:numel(varargin)
+                key = varargin{k};
+                val = varargin{k+1};
+                if isstring(key); key = char(key); end
+                if ~ischar(key)
+                    error('PlantLogReader:invalidInput', ...
+                        'Option key at position %d must be char.', k);
+                end
+                idx = find(strcmpi(validKeys, key), 1);
+                if isempty(idx)
+                    error('PlantLogReader:invalidInput', ...
+                        'Unknown option ''%s''. Valid: %s.', key, strjoin(validKeys, ', '));
+                end
+                opts.(validKeys{idx}) = val;
+            end
+
+            headless = logical(opts.Headless);
+
+            % --- Headless fast path: bypass dialog, call readFile ---
+            if headless
+                if ~isstruct(opts.Mapping)
+                    error('PlantLogReader:invalidInput', ...
+                        'Headless=true requires a Mapping struct.');
+                end
+                entries = PlantLogReader.readFile(filePath, opts.Mapping);
+                return;
+            end
+
+            % --- Interactive path: load table, auto-detect, show dialog ---
+            % readtablePortable propagates fileNotFound/unsupportedFormat/xlsxUnavailable
+            T = readtablePortable(filePath);
+
+            if height(T) == 0
+                % Empty file -- surface a non-blocking uialert and return [].
+                % Use a transient uifigure (not modal) for the alert.
+                try
+                    if exist('uifigure', 'file') == 2 || exist('uifigure', 'builtin') == 5
+                        ttFig = uifigure('Visible', 'off');
+                        ttFig.Visible = 'on';
+                        uialert(ttFig, ...
+                            sprintf('No parseable rows found in %s', filePath), ...
+                            'Plant Log Import', 'Icon', 'warning', ...
+                            'CloseFcn', @(~,~) safeDeleteDialog_(ttFig));
+                    end
+                catch
+                    % uialert may fail on Octave or older MATLAB; fall back to warning
+                    warning('PlantLogReader:emptyFile', ...
+                        'No parseable rows found in %s', filePath);
+                end
+                entries = [];
+                return;
+            end
+
+            % Pre-fill dialog: use caller's Mapping if supplied, otherwise autoDetect
+            if isstruct(opts.Mapping)
+                autoMap = opts.Mapping;
+                % Fill missing fields with autoDetect outputs to ensure shape
+                ad = PlantLogReader.autoDetect(T);
+                if ~isfield(autoMap, 'TimestampColumn')
+                    autoMap.TimestampColumn = ad.TimestampColumn;
+                end
+                if ~isfield(autoMap, 'MessageColumn')
+                    autoMap.MessageColumn = ad.MessageColumn;
+                end
+                if ~isfield(autoMap, 'TimestampFormat')
+                    autoMap.TimestampFormat = ad.TimestampFormat;
+                end
+            else
+                autoMap = PlantLogReader.autoDetect(T);
+            end
+
+            % Construct + run the modal dialog
+            dlg = PlantLogImportDialog(filePath, T, autoMap, 'Theme', opts.Theme);
+            cleanup = onCleanup(@() safeDeleteDialog_(dlg));
+            confirmedMapping = dlg.runModal();
+
+            % Suppress unused-cleanup warning -- the onCleanup is the whole point.
+            clear cleanup;
+
+            % --- Post-dialog: Cancel returns [], Confirm runs readFile ---
+            if isempty(confirmedMapping) || ~isstruct(confirmedMapping)
+                entries = [];
+                return;
+            end
+            entries = PlantLogReader.readFile(filePath, confirmedMapping);
+        end
+
+    end
+end
+
+function safeDeleteDialog_(h)
+%SAFEDELETEDIALOG_ Best-effort handle teardown for the onCleanup guard.
+%   Accepts either a PlantLogImportDialog (handle class) or a raw uifigure
+%   handle (for the empty-file uialert transient figure). Anonymous functions
+%   cannot wrap try/catch, so callers route through this helper.
+    try
+        if isempty(h)
+            return;
+        end
+        if isa(h, 'PlantLogImportDialog')
+            if isvalid(h)
+                delete(h);
+            end
+        elseif isgraphics(h)
+            delete(h);
+        end
+    catch
     end
 end
