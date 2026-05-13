@@ -18,6 +18,7 @@ classdef FastSenseToolbar < handle
     %     Export Data  — save raw data as CSV or MAT with file dialog
     %     Refresh      — manual one-shot data reload
     %     Live Mode    — toggle automatic file polling
+    %     Follow       — auto-pan X-axis to show the data tail
     %     Metadata     — show/hide metadata in data cursor tooltips
     %     Violations   — toggle violation marker visibility
     %
@@ -34,6 +35,7 @@ classdef FastSenseToolbar < handle
     %     setCursor       — enable or disable data cursor snap mode
     %     refresh         — trigger a manual data refresh
     %     toggleLive      — toggle live mode on/off
+    %     setFollow       — enable or disable Follow auto-pan-to-tail
     %     setMetadata     — enable or disable metadata display in tooltips
     %     rebind          — switch toolbar to a new target without recreating HG objects
     %     buildCursorLabel — build the text label for data cursor
@@ -74,6 +76,7 @@ classdef FastSenseToolbar < handle
         hCursorTxt    = []    % data cursor text box
         SavedCallbacks = struct() % saved figure callbacks to restore
         hLiveBtn      = []    % uitoggletool handle for live mode
+        hFollowBtn    = []    % uitoggletool handle for Follow (auto-pan to data tail)
         hRefreshBtn   = []    % uipushtool handle for refresh
         hMetadataBtn  = []    % uitoggletool handle for metadata
         hThemeBtn     = []    % uipushtool handle for theme selector
@@ -244,6 +247,35 @@ classdef FastSenseToolbar < handle
             end
         end
 
+        function setFollow(obj, on)
+            %SETFOLLOW Enable or disable Follow auto-pan-to-tail.
+            %   tb.setFollow(true)  — set LiveViewMode='follow' and immediately
+            %                         snap XLim to [x(end)-w, x(end)] if the
+            %                         current XLim does not already include x(end).
+            %   tb.setFollow(false) — set LiveViewMode='preserve' (XLim unchanged).
+            %
+            %   Only operates when the target is a single FastSense (toolbar
+            %   over a FastSenseGrid: applies to every tile).
+            %
+            %   See also onFollowOn, onFollowOff, syncFollowState,
+            %   FastSense.setViewMode, FastSense.LiveViewMode.
+            for i = 1:numel(obj.FastSenses)
+                fp = obj.FastSenses{i};
+                if ~isa(fp, 'FastSense'); continue; end
+                if on
+                    % Snap XLim BEFORE setting LiveViewMode='follow' so that
+                    % onXLimChanged fires while LiveViewMode is still its previous
+                    % value (e.g. 'preserve'), preventing the auto-disengage hook
+                    % from immediately undoing the mode change.
+                    obj.snapToTailIfNeeded_(fp);
+                    fp.setViewMode('follow');
+                else
+                    fp.setViewMode('preserve');
+                end
+            end
+            obj.syncFollowState();
+        end
+
         function setMetadata(obj, on)
             %SETMETADATA Enable or disable metadata display in tooltips.
             %   tb.setMetadata(true)  — show metadata fields in cursor
@@ -318,6 +350,9 @@ classdef FastSenseToolbar < handle
             end
             setappdata(obj.hFigure, 'FastSenseMetadataEnabled', obj.MetadataEnabled);
 
+            % Sync Follow button to new target's LiveViewMode
+            obj.syncFollowState();
+
             % Sync violations toggle to first tile's state (all tiles
             % share the same ViolationsVisible after any toolbar action)
             if ~isempty(obj.FastSenses)
@@ -391,6 +426,37 @@ classdef FastSenseToolbar < handle
         end
     end
 
+    % syncFollowState is called from FastSense.onXLimChanged's
+    % auto-disengage hook (via getappdata) so it must be public —
+    % ismethod() returns false for private methods, which previously
+    % caused the button-state mirror to silently no-op when the user
+    % panned out of Follow mode. (260513-ovt regression fix)
+    methods (Access = public)
+        function syncFollowState(obj)
+            %SYNCFOLLOWSTATE Mirror target's LiveViewMode onto the Follow button.
+            %   Sets State='on' when LiveViewMode='follow', 'off' otherwise.
+            %   Sets Enable='off' when LiveViewMode is empty (no live wiring),
+            %   'on' otherwise. Safe to call before/after rebind.
+            if isempty(obj.hFollowBtn) || ~ishandle(obj.hFollowBtn); return; end
+            target = obj.Target;
+            if isempty(target) || ~isprop(target, 'LiveViewMode')
+                set(obj.hFollowBtn, 'Enable', 'off', 'State', 'off');
+                return;
+            end
+            mode = target.LiveViewMode;
+            if isempty(mode)
+                set(obj.hFollowBtn, 'Enable', 'off', 'State', 'off');
+            else
+                set(obj.hFollowBtn, 'Enable', 'on');
+                if strcmp(mode, 'follow')
+                    set(obj.hFollowBtn, 'State', 'on');
+                else
+                    set(obj.hFollowBtn, 'State', 'off');
+                end
+            end
+        end
+    end
+
     % ======================== PRIVATE METHODS ============================
     % Mouse event handlers, crosshair/cursor drawing, and cleanup.
     methods (Access = private)
@@ -451,6 +517,14 @@ classdef FastSenseToolbar < handle
                 'OnCallback',  @(s,e) obj.onLiveOn(), ...
                 'OffCallback', @(s,e) obj.onLiveOff());
 
+            obj.hFollowBtn = uitoggletool(obj.hToolbar, ...
+                'CData', FastSenseToolbar.makeIcon('follow'), ...
+                'TooltipString', 'Follow — auto-pan X to latest data', ...
+                'OnCallback',  @(s,e) obj.onFollowOn(), ...
+                'OffCallback', @(s,e) obj.onFollowOff());
+            % Initial state sync from current target
+            obj.syncFollowState();
+
             obj.hMetadataBtn = uitoggletool(obj.hToolbar, ...
                 'CData', FastSenseToolbar.makeIcon('metadata'), ...
                 'TooltipString', 'Metadata', ...
@@ -483,6 +557,54 @@ classdef FastSenseToolbar < handle
         function onLiveOff(obj)
             %ONLIVEOFF Callback: forward live toggle-off to toggleLive().
             obj.toggleLive();
+        end
+
+        function onFollowOn(obj)
+            %ONFOLLOWON Callback: enable Follow auto-pan.
+            obj.setFollow(true);
+        end
+
+        function onFollowOff(obj)
+            %ONFOLLOWOFF Callback: disable Follow auto-pan.
+            obj.setFollow(false);
+        end
+
+        function snapToTailIfNeeded_(~, fp)
+            %SNAPTOTAILIFNEEDED_ One-shot pan to data tail when XLim misses x(end).
+            %   Mirrors the math in FastSense.applyViewMode's 'follow' branch
+            %   but runs immediately (rather than waiting for the next live tick).
+            %   Must be called BEFORE setViewMode('follow') so that onXLimChanged
+            %   fires with LiveViewMode still at its previous value — this prevents
+            %   the auto-disengage hook from immediately undoing the mode change.
+            %   Allows onXLimChanged to fire normally so re-downsample and
+            %   link propagation work correctly — no IsPropagating suppression.
+            if ~fp.IsRendered || ~ishandle(fp.hAxes); return; end
+            if isempty(fp.Lines); return; end
+            % Find max x across all lines.
+            xEnd = -inf;
+            for k = 1:numel(fp.Lines)
+                xk = fp.Lines(k).X;
+                if ~isempty(xk) && xk(end) > xEnd
+                    xEnd = xk(end);
+                end
+            end
+            if ~isfinite(xEnd); return; end
+            currentXLim = get(fp.hAxes, 'XLim');
+            if currentXLim(2) >= xEnd
+                return;  % tail already visible — no snap needed
+            end
+            w = currentXLim(2) - currentXLim(1);
+            if w <= 0; return; end
+            newXLim = [xEnd - w, xEnd];
+            % Let onXLimChanged fire normally: this is a deliberate
+            % programmatic change at the user's explicit request, so
+            % allowing the listener to re-downsample and propagate to
+            % link group members is correct. Do NOT raise IsPropagating.
+            try
+                set(fp.hAxes, 'XLim', newXLim);
+            catch
+                % Bad handle / closed figure — ignore.
+            end
         end
 
         function onMetadataOn(obj)
@@ -1238,6 +1360,22 @@ classdef FastSenseToolbar < handle
                         end
                     end
 
+                case 'follow'
+                    % Right-pointing triangle (play-style "follow the tail" arrow)
+                    for r = 4:12
+                        % Triangle apex at column 13; base at columns 4 (left edge),
+                        % narrowing as we move toward the apex.
+                        halfH = abs(r - 8);
+                        if halfH > 4; continue; end
+                        cR = 13 - halfH;
+                        cL = 4;
+                        if cR >= cL
+                            icon(r, cL:cR, :) = repmat(reshape(fg, 1, 1, 3), 1, cR - cL + 1, 1);
+                        end
+                    end
+                    % Small vertical "tail anchor" line at column 14
+                    icon(6:10, 14, :) = repmat(reshape([0.8 0.1 0.1], 1, 1, 3), 5, 1, 1);
+
                 case 'metadata'
                     % "M" letter icon
                     icon(4:12, 3, :) = repmat(reshape(fg,1,1,3), 9, 1, 1);
@@ -1309,7 +1447,8 @@ classdef FastSenseToolbar < handle
         function initIcons()
             %INITICONS Pre-warm the icon cache for all toolbar buttons.
             names = {'cursor', 'crosshair', 'grid', 'legend', 'autoscale', ...
-                     'export', 'exportdata', 'refresh', 'live', 'metadata', 'violations', 'theme'};
+                     'export', 'exportdata', 'refresh', 'live', 'follow', ...
+                     'metadata', 'violations', 'theme'};
             for i = 1:numel(names)
                 FastSenseToolbar.makeIcon(names{i});
             end

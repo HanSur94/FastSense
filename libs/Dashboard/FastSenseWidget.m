@@ -22,14 +22,22 @@ classdef FastSenseWidget < DashboardWidget
         ShowEventMarkers    = false % Phase 1012 — toggle event round-marker overlay
         EventStore          = []    % Phase 1012 — EventStore handle forwarded to inner FastSense
         % Forwarded to FastSense.LiveViewMode on render:
-        %   'reset'    — window covers the full X range every tick (default:
-        %                matches dashboard-demo expectation that users see
-        %                every sample since session start)
+        %   'preserve' — DEFAULT (260513-ovt). Frozen at the initial X
+        %                range: live ticks append data without changing
+        %                XLim. The user opts into seeing new data via the
+        %                Follow toggle, by dragging the slider, or by
+        %                clicking the toolbar's Reset/Sync-All button.
+        %                This makes Live mode a "data flows in, my view
+        %                stays put" experience.
         %   'follow'   — window of current width tracks the latest sample
         %                (use for long-running deployments where the full
-        %                range would exhaust memory / downsampling budget)
-        %   'preserve' — frozen at the initial X range (legacy behaviour)
-        LiveViewMode = 'reset'
+        %                range would exhaust memory / downsampling budget;
+        %                also what the Follow toolbar toggle switches to)
+        %   'reset'    — window covers the full X range every tick (former
+        %                default; XLim grows automatically to show every
+        %                sample since session start — useful for short
+        %                demos where you want to see the chart fill up)
+        LiveViewMode = 'preserve'
     end
     %   (Tag property now lives on the DashboardWidget base class — Plan 1009-02.)
 
@@ -118,12 +126,12 @@ classdef FastSenseWidget < DashboardWidget
             end
 
             % Slide the X window as new samples arrive on updateData().
-            % Forwarded from the widget-level LiveViewMode property so
-            % callers can swap between 'reset' (default: window grows to
-            % cover all samples — best for short demos), 'follow' (fixed-
-            % width window tracking the latest sample — best for long-
-            % running deployments), and 'preserve' (frozen at the initial
-            % X range — legacy behaviour).
+            % Forwarded from the widget-level LiveViewMode property:
+            %   'preserve' — DEFAULT (260513-ovt): frozen at the initial
+            %                X range; live ticks append data only
+            %   'follow'   — fixed-width window tracking the latest sample
+            %   'reset'    — window grows to cover all samples since
+            %                session start (former default)
             fp.LiveViewMode = obj.LiveViewMode;
 
             % Bind data — Tag-first dispatch (v2.0).
@@ -271,7 +279,9 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — the user's Y view is preserved
+                    % unless they explicitly pan/zoom or pin YLimits.
                     obj.updateTimeRangeCache();
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
@@ -290,6 +300,8 @@ classdef FastSenseWidget < DashboardWidget
         %   Uses FastSenseObj.updateData() to replace data and re-downsample,
         %   avoiding the expensive delete/recreate cycle of refresh().
         %   Falls back to refresh() if FastSenseObj is not in a renderable state.
+        %   (260513-ovt) Per-tick Y autoscale removed from this path so
+        %   Live mode never silently mutates the user's Y view.
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
@@ -297,7 +309,8 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — see refresh() above for rationale.
                     obj.updateTimeRangeCache();
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
@@ -341,12 +354,20 @@ classdef FastSenseWidget < DashboardWidget
         %   threshold values so MonitorTag lines stay visible) and updates
         %   the axes. Skipped when:
         %     - the widget has a user-pinned YLimits NV-pair, or
-        %     - the user manually zoomed Y via mouse (UserZoomedY),
+        %     - the user manually zoomed Y via mouse (UserZoomedY), or
+        %     - the dashboard's Follow toggle is engaged
+        %       (FastSenseObj.LiveViewMode == 'follow') — Follow is an
+        %       explicit user intent to track the data tail in X only and
+        %       keep the rest of the view (including Y) frozen. (260513-ovt)
         %   so we never fight an explicit human interaction.
             if ~isempty(obj.YLimits)
                 return;
             end
             if obj.UserZoomedY
+                return;
+            end
+            if ~isempty(obj.FastSenseObj) && isvalid(obj.FastSenseObj) ...
+                    && strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
                 return;
             end
             if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered

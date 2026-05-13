@@ -39,11 +39,22 @@ void mexFunction(int nlhs, mxArray *plhs[],
     const double *x = mxGetPr(prhs[0]);
     const double *y = mxGetPr(prhs[1]);
     const size_t n = mxGetNumberOfElements(prhs[0]);
-    const size_t nb = (size_t)mxGetScalar(prhs[2]);
+    size_t nb = (size_t)mxGetScalar(prhs[2]);
 
-    const size_t bucketSize = n / nb;
-    const size_t usable = bucketSize * nb;
-    (void)usable;  /* reserved for future remainder folding */
+    /* Bucket-math: when nb*bucketSize << n, the previous code dumped the
+     * entire remainder into the LAST bucket (end = n on b == nb - 1),
+     * making that bucket cover hours of data while every other bucket
+     * covered ~bucketSize samples. The interior min/max emissions of
+     * that fat bucket sprawled across the chart's right edge as a fake
+     * sawtooth. Bumping nb to n/bucketSize keeps every bucket the same
+     * width and shrinks the remainder to < bucketSize, so the last
+     * bucket's time span matches its siblings.
+     * (260512-live-mode-companion-adhoc-tail-spike) */
+    const size_t bucketSize = (nb > 0) ? (n / nb) : 0;
+    if (bucketSize > 0) {
+        size_t nb_eff = n / bucketSize;
+        if (nb_eff > nb) nb = nb_eff;
+    }
 
     /* Tail-anchor (260512-c5x): the last bucket emits its min/max pair
      * at INTERIOR X positions; when neither lands on x[n-1] the

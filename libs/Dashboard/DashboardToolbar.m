@@ -15,6 +15,8 @@ classdef DashboardToolbar < handle
         hPanel       = []
         hLiveBtn     = []
         hLivePanel   = []
+        hFollowBtn   = []   % togglebutton: opt into per-tick XLim auto-pan to data tail (260512-hrn)
+        hFollowPanel = []   % wrapper panel — blue highlight when Follow is active
         hConfigBtn     = []
         hExportBtn   = []
         hImageBtn    = []
@@ -117,6 +119,29 @@ classdef DashboardToolbar < handle
                 'TooltipString', 'Toggle live mode — auto-refresh widgets from data', ...
                 'Callback', @(src,~) obj.onLiveToggle(src));
 
+            % Follow toggle (260512-hrn) — when ON, every FastSense widget
+            % in the dashboard auto-pans its XLim to track the live data
+            % tail; clicking ON from a panned-away view snaps the view to
+            % the tail immediately. Wrapped in a thin panel for the same
+            % blue-border active highlight as Live.
+            rightEdge = rightEdge - btnW - 0.005;
+            obj.hFollowPanel = uipanel('Parent', obj.hPanel, ...
+                'Units', 'normalized', ...
+                'Position', [rightEdge btnY btnW btnH], ...
+                'BorderType', 'line', ...
+                'HighlightColor', theme.ToolbarBackground, ...
+                'BorderWidth', 2, ...
+                'BackgroundColor', theme.ToolbarBackground);
+            obj.hFollowBtn = uicontrol('Parent', obj.hFollowPanel, ...
+                'Style', 'togglebutton', ...
+                'Units', 'normalized', ...
+                'Position', [0 0 1 1], ...
+                'String', 'Follow', ...
+                'Value', 0, ...
+                'TooltipString', ['Auto-pan all charts to track the live tail. ' ...
+                    'Click again to release the view (or pan/zoom manually).'], ...
+                'Callback', @(src,~) obj.onFollowToggle(src));
+
             rightEdge = rightEdge - btnW - 0.005;
             obj.hSyncBtn = uicontrol('Parent', obj.hPanel, ...
                 'Style', 'pushbutton', ...
@@ -214,6 +239,96 @@ classdef DashboardToolbar < handle
                 set(obj.hLivePanel, 'HighlightColor', obj.Theme_.InfoColor);
             else
                 set(obj.hLivePanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+            end
+        end
+
+        function onFollowToggle(obj, src)
+        %ONFOLLOWTOGGLE Apply auto-pan to every FastSense widget in the dashboard.
+        %   isOn=true:  LiveViewMode='follow' on every FastSenseWidget's
+        %               FastSenseObj AND snap each chart to its current
+        %               data tail (one-shot jump-to-now).
+        %   isOn=false: LiveViewMode='preserve' on every FastSenseWidget's
+        %               FastSenseObj (the chart stops following).
+        %
+        %   The per-FastSense state set by this method is also what the
+        %   FastSense auto-disengage hook reads — if the user manually
+        %   pans a chart while Follow is on, that chart's LiveViewMode
+        %   reverts to 'preserve', but other charts in the dashboard
+        %   keep following. The Follow button state on the toolbar does
+        %   not auto-update in that case; clicking Follow again resyncs
+        %   every widget.
+        %   (260512-hrn)
+            isOn = logical(get(src, 'Value'));
+            if isOn
+                mode = 'follow';
+            else
+                mode = 'preserve';
+            end
+            try
+                % Use allPageWidgets() not .Widgets so Follow reaches
+                % every FastSenseWidget on every page — in multi-page
+                % dashboards .Widgets is empty (widgets live on
+                % Pages{i}.Widgets). (260513-ovt)
+                ws = obj.Engine.allPageWidgets();
+                obj.applyFollowToWidgets_(ws, mode, isOn);
+            catch err
+                warning('DashboardToolbar:followToggleFailed', ...
+                    'Follow toggle failed: %s', err.message);
+            end
+            obj.setFollowActiveIndicator(isOn);
+        end
+
+        function setFollowActiveIndicator(obj, isActive)
+        %SETFOLLOWACTIVEINDICATOR Show a blue surround when Follow is active.
+            if isempty(obj.hFollowPanel) || ~ishandle(obj.hFollowPanel)
+                return;
+            end
+            if isActive
+                set(obj.hFollowPanel, 'HighlightColor', obj.Theme_.InfoColor);
+            else
+                set(obj.hFollowPanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+            end
+        end
+
+        function applyFollowToWidgets_(obj, widgets, mode, snap)
+        %APPLYFOLLOWTOWIDGETS_ Recursively apply LiveViewMode + optional snap.
+        %   Walks the widget tree (descends into GroupWidget children),
+        %   sets LiveViewMode on every FastSenseWidget's FastSenseObj,
+        %   and — when `snap` is true — calls snapToTail() on each to
+        %   immediately jump the view to the current data tail.
+        %
+        %   No-op for non-FastSenseWidget widgets (NumberWidget, GaugeWidget,
+        %   StatusWidget, etc.) — they don't have an XLim to follow.
+        %
+        %   (260512-hrn)
+            if iscell(widgets)
+                items = widgets;
+            else
+                items = {widgets};
+            end
+            for k = 1:numel(items)
+                w = items{k};
+                if isempty(w) || ~isvalid(w)
+                    continue;
+                end
+                if isa(w, 'FastSenseWidget')
+                    if ~isempty(w.FastSenseObj) && isvalid(w.FastSenseObj) ...
+                            && w.FastSenseObj.IsRendered
+                        try
+                            w.FastSenseObj.setViewMode(mode);
+                            if snap
+                                w.FastSenseObj.snapToTail();
+                            end
+                        catch
+                            % per-widget failure shouldn't break the sweep
+                        end
+                    end
+                elseif isa(w, 'GroupWidget')
+                    try
+                        obj.applyFollowToWidgets_(w.Children, mode, snap);
+                    catch
+                    end
+                end
             end
         end
 

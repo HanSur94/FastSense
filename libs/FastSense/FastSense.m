@@ -2037,6 +2037,48 @@ classdef FastSense < handle
             obj.LiveViewMode = mode;
         end
 
+        function snapToTail(obj)
+            %SNAPTOTAIL Slide XLim window so its right edge sits just past the data tail.
+            %   fp.SNAPTOTAIL() does a one-shot "jump to now" — finds the
+            %   maximum X across all lines, then sets XLim to
+            %   [xMax - currentWindowWidth + pad, xMax + pad] where pad =
+            %   2% of the current window width. The small right-edge
+            %   padding leaves visual breathing room between the latest
+            %   data point and the chart's right border so the line tail
+            %   doesn't get clipped against the axes frame.
+            %
+            %   No-op when the FastSense is not rendered, has no lines, or
+            %   has no finite data X values.
+            %
+            %   Used by DashboardToolbar's Follow toggle to immediately snap
+            %   the chart to live tail when the user enables Follow from a
+            %   panned-away view. (260512-hrn)
+            %
+            %   See also setViewMode, applyViewMode, setXLimQuiet.
+            if ~obj.IsRendered || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
+                return;
+            end
+            xMax = -Inf;
+            for i = 1:numel(obj.Lines)
+                if obj.lineNumPoints(i) > 0
+                    [~, xiMax] = obj.lineXRange(i);
+                    if xiMax > xMax
+                        xMax = xiMax;
+                    end
+                end
+            end
+            if ~isfinite(xMax)
+                return;
+            end
+            currentXLim = get(obj.hAxes, 'XLim');
+            w = currentXLim(2) - currentXLim(1);
+            if ~(isfinite(w) && w > 0)
+                return;
+            end
+            pad = 0.02 * w;
+            obj.setXLimQuiet(xMax - w + pad, xMax + pad);
+        end
+
         function runLive(obj)
             %RUNLIVE Blocking poll loop for live mode (Octave compatibility).
             %   fp.RUNLIVE() enters a blocking loop that polls LiveFile for
@@ -3111,7 +3153,10 @@ classdef FastSense < handle
                     currentXLim = get(obj.hAxes, 'XLim');
                     windowWidth = currentXLim(2) - currentXLim(1);
                     newXMax = newX(end);
-                    newXLim = [newXMax - windowWidth, newXMax];
+                    % 2% right-edge padding so the live tail doesn't sit
+                    % right on the axes frame — matches snapToTail (260512-hrn).
+                    pad = 0.02 * windowWidth;
+                    newXLim = [newXMax - windowWidth + pad, newXMax + pad];
                     % Suppress XLim PostSet listener: updateData() will call
                     % updateLines() explicitly right after applyViewMode returns,
                     % so triggering onXLimChanged here would double the work.
@@ -3353,6 +3398,31 @@ classdef FastSense < handle
 
             obj.drawnowLimitRate();
             if obj.Verbose && exist('OCTAVE_VERSION', 'builtin'); fflush(stdout); end
+
+            % Auto-disengage Follow on user-initiated pan/zoom.
+            % This branch is only reached when IsPropagating=false (see early
+            % return above), so XLim was changed by the user (mouse zoom/pan
+            % or external set(hAxes,'XLim',...) from anywhere other than
+            % applyViewMode / propagateXLim / onXLimModeChanged, all of which
+            % raise IsPropagating). When the user pans while Follow is on,
+            % their intent is "I want to look at the past now" — so flip to
+            % 'preserve' and update the toolbar State so the visual stays in
+            % sync.
+            if strcmp(obj.LiveViewMode, 'follow')
+                obj.LiveViewMode = 'preserve';
+                % Find the FastSenseToolbar (stored in figure AppData by attachers)
+                % and update its Follow button. AppData key 'FastSenseToolbar' is
+                % set in FastSense.openLoupe and in all toolbar attacher sites.
+                % Some older callers may not set it — the try/catch makes that safe.
+                try
+                    tb = getappdata(obj.hFigure, 'FastSenseToolbar');
+                    if ~isempty(tb) && isvalid(tb) && ismethod(tb, 'syncFollowState')
+                        tb.syncFollowState();
+                    end
+                catch
+                    % Toolbar gone, deleted, or method missing — silent ignore.
+                end
+            end
         end
 
         function onXLimModeChanged(obj)
