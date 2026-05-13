@@ -77,7 +77,10 @@ classdef DashboardEngine < handle
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
         ResizeDebounceTimer = []   % MATLAB timer for coalescing rapid resize events (260513-q7w)
         ResizeFinalRedrawTimer = [] % Longer-period backstop timer: unconditional rerenderWidgets after resize fully settles (260513-q7w fu)
-        IsRerendering_ = false   % true while rerenderWidgets is in flight — suppresses spurious resize-timer scheduling that the panel teardown/recreate cascade would otherwise trigger (260513-q7w fu2)
+        % 260513-q7w fu2: true while rerenderWidgets is in flight — suppresses
+        % spurious resize-timer scheduling that the panel teardown/recreate
+        % cascade would otherwise trigger.
+        IsRerendering_ = false
         TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
         % [tStart tEnd] cache of most recent broadcast (260508-llw); used by
         % switchPage to re-apply the current synced window to widgets that

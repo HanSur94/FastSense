@@ -301,7 +301,7 @@ end
 function clear_panel_controls_via_subclass_(hp)
 %CLEAR_PANEL_CONTROLS_VIA_SUBCLASS_ Drive DashboardWidget.clearPanelControls
 %   via a lightweight subclass that exposes the protected static.
-    TestClearPanelHelper_.run(hp);
+    TestClearPanelHelper.run(hp);
 end
 
 function safe_close_(h)

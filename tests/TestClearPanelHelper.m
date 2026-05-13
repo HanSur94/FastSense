@@ -1,4 +1,4 @@
-classdef TestClearPanelHelper_ < DashboardWidget
+classdef TestClearPanelHelper < DashboardWidget
 %TESTCLEARPANELHELPER_ Minimal DashboardWidget subclass used by
 %   tests/test_create_event_dialog.m to drive the
 %   `clearPanelControls` protected-static through a real subclass.
@@ -24,7 +24,7 @@ classdef TestClearPanelHelper_ < DashboardWidget
     methods (Static)
         function run(hp)
             %RUN Expose the protected clearPanelControls static for tests.
-            TestClearPanelHelper_.clearPanelControls(hp);
+            TestClearPanelHelper.clearPanelControls(hp);
         end
     end
 end

@@ -407,15 +407,15 @@ end
 function teardown_(engine, fs)
 %TEARDOWN_ Per-handle delete; never close all force.
     try
-        if ~isempty(fs) && ~isempty(fs.hEventDetails_) ...
-                && ishandle(fs.hEventDetails_)
+        if ~isempty(fs) && ~isempty(fs.hEventDetails_) && ...
+                ishandle(fs.hEventDetails_)
             delete(fs.hEventDetails_);
         end
     catch
     end
     try
-        if ~isempty(engine) && ~isempty(engine.hFigure) ...
-                && ishandle(engine.hFigure)
+        if ~isempty(engine) && ~isempty(engine.hFigure) && ...
+                ishandle(engine.hFigure)
             delete(engine.hFigure);
         end
     catch

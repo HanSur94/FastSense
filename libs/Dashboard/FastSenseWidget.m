@@ -450,8 +450,8 @@ classdef FastSenseWidget < DashboardWidget
             if obj.UserZoomedY
                 return;
             end
-            if ~isempty(obj.FastSenseObj) && isvalid(obj.FastSenseObj) ...
-                    && strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
+            if ~isempty(obj.FastSenseObj) && isvalid(obj.FastSenseObj) && ...
+                    strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
                 return;
             end
             if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered
