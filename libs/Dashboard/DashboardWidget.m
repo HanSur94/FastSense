@@ -133,14 +133,17 @@ classdef DashboardWidget < handle
         function clearPanelControls(hPanel)
         %CLEARPANELCONTROLS Delete uicontrol children of hPanel at depth 1,
         %   preserving DashboardLayout-injected buttons (InfoIconButton,
-        %   DetachButton, YLimitVisibleBtn, YLimitAllBtn).
+        %   DetachButton, YLimitVisibleBtn, YLimitAllBtn, CreateEventButton).
         %   The buttons live inside a uipanel button bar
         %   (Tag='WidgetButtonBar', also preserved here at the panel level)
         %   since 260508 — but the legacy tags are kept in case any pre-bar
         %   widgets still parent the buttons directly to hPanel.
             if isempty(hPanel) || ~ishandle(hPanel), return; end
+            % 260513-snt — preserve the per-FastSenseWidget '+Event' button
+            % injected by DashboardLayout.addCreateEventButton (Tag='CreateEventButton').
+            % 260513-sfp — preserve the V/A Y-limit cluster (YLimitVisibleBtn, YLimitAllBtn).
             protectedTags = {'InfoIconButton', 'DetachButton', 'WidgetButtonBar', ...
-                             'YLimitVisibleBtn', 'YLimitAllBtn'};
+                             'YLimitVisibleBtn', 'YLimitAllBtn', 'CreateEventButton'};
             % Sweep depth-1 uicontrols (legacy-positioned buttons).
             kids = findobj(hPanel, '-depth', 1, 'Type', 'uicontrol');
             for i = 1:numel(kids)

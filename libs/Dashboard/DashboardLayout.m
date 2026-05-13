@@ -22,6 +22,8 @@ classdef DashboardLayout < handle
         ScrollbarWidth  = 0.015
         OnScrollCallback = []       % function handle: @(topRow, bottomRow)
         DetachCallback   = []       % function handle: @(widget) — set by DashboardEngine
+        CreateEventCallback = []    % function handle: @(widget) — set by DashboardEngine
+                                    %   (260513-snt). Only invoked for FastSenseWidget.
         VisibleRows      = [1 Inf]  % [topRow bottomRow] currently visible
     end
 
@@ -366,7 +368,9 @@ classdef DashboardLayout < handle
             % FastSenseWidget, but the duck-type keeps the chrome generic.
             needsBar = ~isempty(widget.Description) || ...
                        (~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')) || ...
-                       ismethod(widget, 'setYLimitMode');
+                       ismethod(widget, 'setYLimitMode') || ...
+                       (~isempty(obj.CreateEventCallback) && isa(widget, 'FastSenseWidget'));
+                       % ^^^ 260513-sfp duck-type for V/A buttons + 260513-snt '+Event' button.
 
             if needsBar
                 % 1. Create the full-width bar at the top of the cell panel.
@@ -382,6 +386,10 @@ classdef DashboardLayout < handle
                 if ~isempty(widget.Description)
                     obj.addInfoIcon(widget);
                 end
+                if ~isempty(obj.CreateEventCallback) && isa(widget, 'FastSenseWidget')
+                    % 260513-snt — sibling to Detach; positioned LEFT of '^'.
+                    obj.addCreateEventButton(widget);
+                end
                 if ~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')
                     obj.addDetachButton(widget);
                 end
@@ -392,6 +400,12 @@ classdef DashboardLayout < handle
                 if ismethod(widget, 'setYLimitMode')
                     obj.addYLimitButtons_(widget);
                 end
+                % 260513-snt — settle final right-anchored button positions.
+                %   addInfoIcon runs BEFORE addCreateEventButton, so Info's
+                %   initial X collides with Create's slot. reflowChrome_ knows
+                %   the full layout (3-button vs 2-button right cluster + V/A
+                %   left cluster) and re-anchors everything in one pass.
+                DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
             else
                 % No chrome — render directly into the cell panel as before.
                 widget.render(widget.hCellPanel);
@@ -764,10 +778,10 @@ classdef DashboardLayout < handle
         %ADDYLIMITBUTTONS_ Inject the 2-button Y-limit-mode cluster.
         %   Only invoked from realizeWidget when ismethod(widget,'setYLimitMode').
         %   Buttons (V, A) are left-anchored relative to the EXISTING
-        %   right-anchored Info/Detach buttons, with a 4-px gap between the
-        %   clusters:
-        %     [V][A]  ...4px gap...  [Info][Detach]
-        %       24  24                 24    24
+        %   right-anchored Info/Create/Detach buttons, with a 4-px gap
+        %   between the clusters:
+        %     [V][A]  ...4px gap...  [Info][+][Detach]
+        %       24  24                 24  24   24
         %
         %   The 'locked' YLimitMode remains a valid programmatic mode on
         %   FastSenseWidget (setYLimitMode('locked')) but has no UI button.
@@ -788,15 +802,20 @@ classdef DashboardLayout < handle
             barW = barPos(3);
 
             % Layout (left-to-right):
-            %   [V][A]   ...4px gap...   [Info][Detach]
+            %   [V][A]   ...4px gap...   [Info][+][Detach]
+            % Right cluster width: when the '+' button is present, the
+            % right cluster spans 3 buttons (Info + Create + Detach)
+            % rather than 2 (Info + Detach). The V/A cluster anchors to
+            % the LEFT of that, so add an extra (bw + gap) on top of the
+            % pre-260513-snt math when CreateEventButton is present.
             bw  = 24;
             gap = 4;
-            % Right-anchor math mirrors addInfoIcon / addDetachButton.
-            % Detach:        x = barW - bw - gap
-            % Info:          x = barW - bw - bw - gap - gap   (Info uses 28-spacing pre-existing)
-            % YLimit-All:    x = barW - bw - gap - bw - gap - gap - bw
-            % YLimit-Visible:xAll - bw
-            xAll     = barW - bw - gap - bw - gap - gap - bw;
+            hasCreate = ~isempty(findobj(bar, 'Tag', 'CreateEventButton', '-depth', 1));
+            if hasCreate
+                xAll = barW - bw - gap - bw - gap - bw - gap - gap - bw;
+            else
+                xAll = barW - bw - gap - bw - gap - gap - bw;
+            end
             xVisible = xAll - bw;
 
             activeBg = DashboardLayout.chooseYLimitActiveBg_(theme);
@@ -851,6 +870,52 @@ classdef DashboardLayout < handle
                     'YLimit button click failed for mode ''%s'': %s', mode, ME.message);
             end
         end
+
+        function addCreateEventButton(obj, widget)
+        %ADDCREATEEVENTBUTTON Add a '+Event' button into the FastSenseWidget's button bar (260513-snt).
+        %   Sibling to InfoIconButton + DetachButton. Positioned LEFT of the
+        %   '^' Detach button: x = barW - 24 - 24 - 4 - 4 (24px wide button,
+        %   4px gap from Detach which sits 4px from the right edge).
+        %
+        %   The callback is wrapped through invokeCreateEventCallback_ so a
+        %   throwing dialog never crashes the bar — DashboardLayout logs a
+        %   namespaced warning instead.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            barPos = get(bar, 'Position');
+            xCreate = barPos(3) - 24 - 24 - 4 - 4;
+            uicontrol('Parent', bar, ...
+                'Style', 'pushbutton', ...
+                'String', '+', ...
+                'Units', 'pixels', ...
+                'Position', [xCreate 2 24 24], ...
+                'FontSize', 11, ...
+                'FontWeight', 'bold', ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'Tag', 'CreateEventButton', ...
+                'TooltipString', 'Create event from selection / current view', ...
+                'Callback', @(~,~) obj.invokeCreateEventCallback_(widget));
+        end
+
+        function invokeCreateEventCallback_(obj, widget)
+        %INVOKECREATEEVENTCALLBACK_ Defensive callback wrapper for the '+Event' button (260513-snt).
+        %   Any throw from the dialog flow is surfaced as a namespaced
+        %   warning ('DashboardLayout:createEventCallbackFailed') so the
+        %   widget chrome never goes down with a broken dialog. Mirrors
+        %   DashboardToolbar's onReset try/catch pattern.
+            if isempty(obj.CreateEventCallback), return; end
+            try
+                obj.CreateEventCallback(widget);
+            catch ME
+                warning('DashboardLayout:createEventCallbackFailed', ...
+                    'Create-Event callback failed: %s', ME.message);
+            end
+        end
     end
 
     methods (Static)
@@ -873,20 +938,44 @@ classdef DashboardLayout < handle
                 set(bar(1), 'Units', 'pixels', ...
                     'Position', [inset, pp(4) - barH - inset, barW, barH]);
                 % Re-anchor right-aligned buttons inside the bar.
-                det  = findobj(bar(1), 'Tag', 'DetachButton',   '-depth', 1);
-                info = findobj(bar(1), 'Tag', 'InfoIconButton', '-depth', 1);
+                % Layout right-to-left: DetachButton at the far right, then
+                % CreateEventButton 28px to its left (260513-snt), then
+                % InfoIconButton 28px to the left of that. When barW < ~120px
+                % the leftmost buttons may slide off the left edge — same
+                % failure mode as pre-260513-snt; documented and accepted.
+                det    = findobj(bar(1), 'Tag', 'DetachButton',      '-depth', 1);
+                create = findobj(bar(1), 'Tag', 'CreateEventButton', '-depth', 1);
+                info   = findobj(bar(1), 'Tag', 'InfoIconButton',    '-depth', 1);
                 if ~isempty(det) && ishandle(det(1))
                     set(det(1), 'Position', [barW - 24 - 4, 2, 24, 24]);
                 end
+                if ~isempty(create) && ishandle(create(1))
+                    set(create(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                end
                 if ~isempty(info) && ishandle(info(1))
-                    set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                    if ~isempty(create) && ishandle(create(1))
+                        % Info sits LEFT of Create: shift by another 28px.
+                        set(info(1), 'Position', [barW - 24 - 24 - 24 - 4 - 4 - 4, 2, 24, 24]);
+                    else
+                        % No Create button (non-FastSenseWidget): preserve
+                        % the legacy two-button layout (Info LEFT of Detach).
+                        set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                    end
                 end
                 % Re-anchor the V/A cluster. Math must match
-                % addYLimitButtons_ exactly so resize does not introduce drift.
+                % addYLimitButtons_ exactly so resize does not introduce
+                % drift. When the '+' button is present, the right cluster
+                % widens by one button (Info + Create + Detach instead of
+                % Info + Detach), so the V/A cluster shifts left by (bw+gap).
                 bw  = 24; gap = 4;
                 allBtn     = findobj(bar(1), 'Tag', 'YLimitAllBtn',     '-depth', 1);
                 visibleBtn = findobj(bar(1), 'Tag', 'YLimitVisibleBtn', '-depth', 1);
-                xAll     = barW - bw - gap - bw - gap - gap - bw;
+                hasCreate  = ~isempty(create) && ishandle(create(1));
+                if hasCreate
+                    xAll = barW - bw - gap - bw - gap - bw - gap - gap - bw;
+                else
+                    xAll = barW - bw - gap - bw - gap - gap - bw;
+                end
                 xVisible = xAll - bw;
                 if ~isempty(allBtn)     && ishandle(allBtn(1))
                     set(allBtn(1),     'Position', [xAll,     2, bw, bw]);
