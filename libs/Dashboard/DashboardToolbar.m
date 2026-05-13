@@ -312,8 +312,8 @@ classdef DashboardToolbar < handle
                     continue;
                 end
                 if isa(w, 'FastSenseWidget')
-                    if ~isempty(w.FastSenseObj) && isvalid(w.FastSenseObj) ...
-                            && w.FastSenseObj.IsRendered
+                    if ~isempty(w.FastSenseObj) && isvalid(w.FastSenseObj) && ...
+                            w.FastSenseObj.IsRendered
                         try
                             w.FastSenseObj.setViewMode(mode);
                             if snap
