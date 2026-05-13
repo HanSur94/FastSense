@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Plant Log Integration
 status: executing
-stopped_at: Completed 1030-01-reader-and-helpers-PLAN.md
-last_updated: "2026-05-13T22:13:36.070Z"
-last_activity: 2026-05-13
+stopped_at: Completed 1030-02-import-dialog-PLAN.md
+last_updated: "2026-05-13T22:33:05.668Z"
+last_activity: 2026-05-14 -- Plan 1030-02 (import dialog) shipped; PlantLogImportDialog modal uifigure live; 18/18 tests PASS on MATLAB
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # State
@@ -27,23 +27,23 @@ toolbox dependencies.
 ## Current Position
 
 Phase: 1030 (CSV/XLSX Import + Mapping Dialog) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Milestone: v3.1 Plant Log Integration
 Status: Ready to execute
-Last activity: 2026-05-14 -- Plan 1030-01 (reader + helpers) shipped; PlantLogReader headless API live; 25/25 tests PASS on MATLAB
+Last activity: 2026-05-14 -- Plan 1030-02 (import dialog) shipped; PlantLogImportDialog modal uifigure live; 18/18 tests PASS on MATLAB
 
 ## Progress Bar
 
 v3.1 Plant Log Integration:
 
 - [x] Phase 1029: Plant Log Storage Foundation — 3/3 plans
-- [ ] Phase 1030: CSV/XLSX Import + Mapping Dialog — 1/3 plans
+- [ ] Phase 1030: CSV/XLSX Import + Mapping Dialog — 2/3 plans
 - [ ] Phase 1031: Live Tail + Slider Preview Overlay — 0/? plans
 - [ ] Phase 1032: Per-Widget Plant Log Overlay — 0/? plans
 - [ ] Phase 1033: Dashboard + Companion Integration & Serialization — 0/? plans
 
 Phases complete: 1/5
-Plans complete: 1/3 (33%) in Phase 1030
+Plans complete: 2/3 (67%) in Phase 1030
 
 ## Accumulated Context
 
@@ -165,19 +165,23 @@ separate REQ-IDs:
 
 - **Coverage:** 32/32 active PLOG-* requirements mapped to phases — verified
   during roadmap creation. PLOG-ST-01..05 (5/32) have unit + integration
-  proof (Phase 1029); PLOG-IM-01..05 (10/32) have headless-reader proof
-  (Phase 1030 Plan 01). 22 requirements remaining across Phases 1030
-  Plans 02 + 03, 1031, 1032, 1033.
+  proof (Phase 1029); PLOG-IM-01..05 (5/32) have headless-reader proof
+  (Phase 1030 Plan 01); PLOG-IM-06..08 (3/32) have modal-dialog proof
+  (Phase 1030 Plan 02). 19 requirements remaining across Phase 1030
+  Plan 03, 1031, 1032, 1033.
 
-- **Stopped at:** Completed 1030-01-reader-and-helpers-PLAN.md.
-  PlantLogReader headless API now ships (static `readFile` +
-  `autoDetect`); 5 private helpers under `libs/PlantLog/private/` cover
-  the 7-format timestamp ladder, scoring, sanitization, and portable
-  readtable. 15/15 function-style + 10/10 class-based tests PASS on
-  MATLAB; checkcode clean on all 8 new files. Plan 1030-02 (import
-  dialog) is now unblocked; the dialog will consume `autoDetect` output
-  to pre-fill its dropdowns and produce a mapping struct that
-  `PlantLogReader.readFile` parses on Confirm.
+- **Stopped at:** Completed 1030-02-import-dialog-PLAN.md
+  `PlantLogImportDialog` modal uifigure now ships
+  (`libs/PlantLog/PlantLogImportDialog.m`, ~370 LOC) with `runModal()`
+  blocking via `uiwait` and returning either the confirmed mapping struct
+  (`TimestampColumn`/`MessageColumn`/`TimestampFormat`) or `[]` on
+  cancel/close. Confirm gated on `parseTimestampLadder` >= 0.9 success
+  ratio. Same-column safeguard ships per CHECKER REVISION. 9/9
+  function-style + 9/9 class-based tests PASS on MATLAB; checkcode clean
+  on all 3 new files. Plan 1030-03 (`openInteractive` + integration smoke)
+  is now unblocked: it will construct `PlantLogReader.openInteractive` as
+  the orchestrator that runs `readtablePortable` -> `autoDetect` ->
+  `PlantLogImportDialog.runModal` -> `PlantLogReader.readFile`.
 
 ## Decisions Log
 
@@ -256,3 +260,30 @@ separate REQ-IDs:
   tests PASS on MATLAB; checkcode reports clean on all 8 new files; zero
   edits to existing files. PLOG-IM-01..05 completed. See
   `.planning/phases/1030-csv-xlsx-import-mapping-dialog/1030-01-reader-and-helpers-SUMMARY.md`.
+
+- **Plan 02 (import dialog, 2026-05-14)** — Shipped `PlantLogImportDialog`
+  handle class (`libs/PlantLog/PlantLogImportDialog.m`, ~370 LOC) — modal
+  uifigure with two dropdowns (timestamp + message column), explicit
+  format-override edit field, 10-row preview uitable, inline red error
+  label, and Cancel + Confirm buttons. `runModal()` blocks via `uiwait`
+  and returns the mapping struct on Confirm or `[]` on Cancel/CloseRequest.
+  `refreshState_` re-validates on every dropdown / format change via
+  `parseTimestampLadder` (private helper from Plan 01); Confirm gated on
+  parse-success ratio >= 0.9 (matches the autoDetect threshold so the user
+  never sees autoDetect-finds-it / dialog-rejects-it inconsistency).
+  Same-column safeguard: when ts == msg dropdown values, Confirm is disabled
+  with explicit error message (CHECKER REVISION). Theme via
+  `CompanionTheme.get(preset)` with a hardcoded fallback inside
+  `themeStruct_`. Every callback wraps work in try/catch + non-blocking
+  `uialert` (`surfaceError_`); no callback can throw to the user.
+  Auto-fixed during execution: (1) stripped four `%#ok<NASGU>` suppressions
+  on the `assert(isvalid(localHandle))` lines that R2024b checkcode no
+  longer flags; (2) switched `test_explicit_format_revalidates` fixture
+  from `'2025/01/15'` (which `datenum` parses leniently via `'MM/dd/yyyy'`)
+  to `'20250115'` (rejected by every ladder format yet parseable via the
+  explicit `'yyyyMMdd'` hint). Tests are MATLAB-only by design: function-style
+  file gates Octave with a clean SKIP + return; class-based suite is
+  `matlab.unittest.TestCase`. 9/9 function-style + 9/9 class-based PASS on
+  MATLAB; checkcode reports clean on all 3 new files; zero edits to existing
+  files. PLOG-IM-06..08 completed. See
+  `.planning/phases/1030-csv-xlsx-import-mapping-dialog/1030-02-import-dialog-SUMMARY.md`.
