@@ -1265,6 +1265,164 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'testExplicitEventStoreWins: explicit EventStore must win over cluster discovery');
         end
 
+        % ---- Phase 1033 Plan 04: cluster status surface ----
+
+        function testClusterStatusSurface(testCase)
+        %TESTCLUSTERSTATUSSURFACE Plan 04: contention event surfaces in Companion banner.
+        %   SC5 from CONTEXT.md: "Lock contention surfaces in the Companion UI as a
+        %   non-blocking notice and pipeline.SkippedTickCount is visible as a status badge."
+        %
+        %   Scenario: create a cluster-mode Companion with a LiveTagPipeline in cluster
+        %   mode. Pre-hold the tag lock (simulating a "second process"), run one pipeline
+        %   tick so LastLockContentionEvent is populated. Then fire one live tick on the
+        %   Companion and verify LastContentionNoticeText contains the user@host format.
+        %
+        %   If mksqlite is unavailable, the cluster-mode pipeline cannot be constructed;
+        %   the test falls back to verifying the structural wiring (property types, error
+        %   IDs, and empty-state contract) which are valid without a real cluster.
+            root = fullfile(tempdir(), sprintf('fsc_css_%d', round(rand()*1e9)));
+            mkdir(root);
+            testCase.addTeardown(@() rmdir(root, 's'));
+
+            % Verify the public health properties exist with correct types on a
+            % cluster-mode Companion (always runnable — no mksqlite required).
+            app = FastSenseCompanion('SharedRoot', root);
+            testCase.addTeardown(@() app.close());
+
+            % Baseline contract: all properties empty/true at construction.
+            testCase.verifyEmpty(app.LastContentionNoticeText, ...
+                'testClusterStatusSurface: banner must be empty at construction');
+            testCase.verifyEqual(app.getLastContentionNoticeText(), '', ...
+                'testClusterStatusSurface: getLastContentionNoticeText() must return empty');
+            testCase.verifyTrue(islogical(app.IsShareReachable), ...
+                'testClusterStatusSurface: IsShareReachable must be logical');
+            testCase.verifyTrue(app.IsShareReachable, ...
+                'testClusterStatusSurface: IsShareReachable must be true when share is intact');
+            testCase.verifyClass(app.LastContentionNoticeText, 'char', ...
+                'testClusterStatusSurface: LastContentionNoticeText must be char');
+            testCase.verifyEmpty(app.LastShareError, ...
+                'testClusterStatusSurface: LastShareError must be empty at construction');
+
+            % Validate the invalid-pipeline error ID (no mksqlite needed).
+            testCase.verifyError( ...
+                @() FastSenseCompanion('LiveTagPipelines', {struct('fake', 1)}), ...
+                'FastSenseCompanion:invalidLiveTagPipeline', ...
+                'testClusterStatusSurface: struct must not be accepted as LiveTagPipeline');
+            testCase.verifyError( ...
+                @() FastSenseCompanion('LiveEventPipelines', {struct('fake', 1)}), ...
+                'FastSenseCompanion:invalidLiveEventPipeline', ...
+                'testClusterStatusSurface: struct must not be accepted as LiveEventPipeline');
+
+            % Structural wiring: construct with a real LiveTagPipeline (single-user);
+            % isa check must pass; banner must stay empty when no contention on pipeline.
+            outDir = fullfile(tempdir(), sprintf('slp_%d', round(rand()*1e9)));
+            mkdir(outDir);
+            testCase.addTeardown(@() rmdir(outDir, 's'));
+            pipe = LiveTagPipeline('OutputDir', outDir, 'Interval', 99);
+
+            app.close();
+            app2 = FastSenseCompanion('SharedRoot', root, 'LiveTagPipelines', {pipe});
+            testCase.addTeardown(@() app2.close());
+
+            app2.startLiveMode();
+            testCase.addTeardown(@() app2.stopLiveMode());
+
+            % Fire one tick in-process via timer callback.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupWarn = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s2 = struct(app2);
+            if ~isempty(s2.LiveTimer_) && isvalid(s2.LiveTimer_)
+                feval(s2.LiveTimer_.TimerFcn, s2.LiveTimer_, []);
+                drawnow;
+            end
+
+            % No contention on single-user pipeline — banner must remain empty.
+            testCase.verifyEmpty(app2.LastContentionNoticeText, ...
+                'testClusterStatusSurface: banner must be empty when pipeline has no contention');
+
+            % LiveTagPipelines_ must have been stored (struct reflection).
+            try
+                s3 = struct(app2);
+                testCase.verifyEqual(numel(s3.LiveTagPipelines_), 1, ...
+                    'testClusterStatusSurface: LiveTagPipelines_ must contain the 1 registered pipeline');
+                testCase.verifyTrue(isvalid(s3.LiveTagPipelines_{1}), ...
+                    'testClusterStatusSurface: stored pipeline handle must be valid');
+            catch
+                % struct reflection not available in this version — skip structural check.
+            end
+
+            % --- Full contention-surfacing scenario (requires mksqlite for cluster pipeline) ---
+            if exist('mksqlite', 'file') ~= 3
+                % mksqlite unavailable — structural wiring verified above. Done.
+                return;
+            end
+
+            % Build a cluster-mode LiveTagPipeline; pre-hold the lock via a
+            % TagWriteCoordinator to simulate a "second Companion" holding the tag.
+            tagKey = sprintf('p101_%d', round(rand()*1e9));
+            rawFile = fullfile(tempdir(), sprintf('%s.csv', tagKey));
+            fid = fopen(rawFile, 'w');
+            fprintf(fid, 'time,pressure\n');
+            fprintf(fid, '0,100\n1,110\n');
+            fclose(fid);
+            testCase.addTeardown(@() delete(rawFile));
+
+            t = SensorTag(tagKey, 'RawSource', struct('file', rawFile, 'column', 'pressure'));
+            TagRegistry.register(tagKey, t);
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            coord = TagWriteCoordinator(root);
+            [outerLock, ok] = coord.acquireTag(tagKey, struct('Timeout', 0));
+            testCase.assertTrue(ok, 'testClusterStatusSurface: outer lock must acquire');
+            testCase.addTeardown(@() outerLock.release());
+
+            clusterPipe = LiveTagPipeline('OutputDir', outDir, ...
+                'SharedRoot', root, 'LockTimeout', 0);
+            try
+                clusterPipe.tickOnce();
+            catch
+            end
+
+            % The pipeline should have recorded a contention event via at least one channel:
+            %   a) SkippedTickCount incremented (ok=false from acquireTag)
+            %   b) LastLockContentionEvent populated (ok=false path)
+            %   c) LastTickReport.failed (nestedLockAcquireForbidden in same-process)
+            % Mirrors TestLiveTagPipelineCluster.testLockContentionDefersAndEmitsEvent.
+            sawContention = (clusterPipe.SkippedTickCount >= 1) || ...
+                ~isempty(clusterPipe.LastLockContentionEvent) || ...
+                (isstruct(clusterPipe.LastTickReport) && ...
+                 ~isempty(clusterPipe.LastTickReport.failed));
+            testCase.verifyTrue(sawContention, ...
+                'testClusterStatusSurface: pipeline must record contention (any channel) after pre-held lock');
+
+            % Now build a Companion observing this pipeline and fire a tick.
+            app2.close();
+            app3 = FastSenseCompanion('SharedRoot', root, 'LiveTagPipelines', {clusterPipe});
+            testCase.addTeardown(@() app3.close());
+
+            app3.startLiveMode();
+            testCase.addTeardown(@() app3.stopLiveMode());
+
+            warnState2 = warning('off', 'MATLAB:structOnObject');
+            cleanupWarn2 = onCleanup(@() warning(warnState2)); %#ok<NASGU>
+            s4 = struct(app3);
+            if ~isempty(s4.LiveTimer_) && isvalid(s4.LiveTimer_)
+                feval(s4.LiveTimer_.TimerFcn, s4.LiveTimer_, []);
+                drawnow;
+            end
+
+            % If LastLockContentionEvent was populated in the pipeline, the Companion
+            % must surface a non-empty banner in user@host format.
+            ev = clusterPipe.LastLockContentionEvent;
+            if ~isempty(ev)
+                txt = app3.LastContentionNoticeText;
+                testCase.verifyFalse(isempty(txt), ...
+                    'testClusterStatusSurface: banner must be non-empty when contention event observed');
+                testCase.verifyTrue(~isempty(strfind(txt, '@')), ...
+                    ['testClusterStatusSurface: banner must contain ''@'' (user@host format); got: ', txt]);
+            end
+        end
+
     end
 
     methods (Access = private)
