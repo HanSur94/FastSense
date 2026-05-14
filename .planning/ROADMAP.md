@@ -131,7 +131,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1029. Concurrency Foundation | v4.0 | 5/5 | Complete    | 2026-05-14 |
 | 1030. TagWriteCoordinator + LiveTagPipeline cluster mode | v4.0 | 2/2 | Complete    | 2026-05-14 |
 | 1031. EventLog + EventStore rollback-mode migration | v4.0 | 4/4 | Complete    | 2026-05-14 |
-| 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 4/5 | In Progress|  |
+| 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 5/5 | Complete   | 2026-05-14 |
 | 1033. Companion Integration + Acceptance Test | v4.0 | 0/? | Not started | — |
 
 ## Phase Details (v4.0 Multi-User LAN Concurrency)
@@ -229,12 +229,12 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 4. **SQLite `SQLITE_BUSY_SNAPSHOT` retry wrapper** handles 20-writer ack-contention stress with zero user-facing "database is locked" errors and zero double-ack records (`TestEventStoreConcurrency.testRetryOnBusySnapshot`).
 5. **SMB-oplocks smoke test at startup** (`ClusterConfig.checkSharedConfig`) detects torn reads on the EventStore directory and emits a one-time operator warning when oplocks appear enabled — best-effort detection per PITFALLS Pitfall 14.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 - [x] 1032-01-monitor-tag-emit-helper-PLAN.md — MonitorTag.emitEvent_ helper + deferred-notify refactor (Pitfall 13) for OnEventStart/OnEventEnd; routes all 4 EventStore.append call sites in fireEventsInTail_/fireEventsOnRisingEdges_ through emitEvent_; cluster mode (IsClusterMode_) writes to EventLog (1031-02), single-user writes to EventStore (Wave 1, no deps) (ACK-04 partial)
 - [x] 1032-02-live-event-pipeline-cluster-PLAN.md — LiveEventPipeline.processMonitorTag_ acquires per-tag FileLock via TagWriteCoordinator BEFORE parent.updateData + monitor.appendData (Pitfall 13 lock-domain unification with LiveTagPipeline); skip-and-defer on contention (SkippedMonitorCount); BusyMode=drop (Pitfall 7); mirrors 1030-02 cluster pattern. Plus TestMonitorTagSingleSource (4-node parfeval/matlab -batch cluster test) (Wave 2, depends on 1032-01) (ACK-04 full)
 - [x] 1032-03-event-store-retry-and-merge-PLAN.md — EventStore busyRetryWrap_ helper (extends 1031-04 retry into reusable 10-attempt exponential backoff up to 2s; Pitfall 6); refactors appendAckRecord through it; getEvents()/getEventsForTag() in cluster mode merge in-memory + EventLogReader.tail() so reads pull from BOTH SQLite snapshot AND live NDJSON. Plus TestEventStoreConcurrency (20-writer in-process ack-contention smoke) (Wave 1, no deps) (IDENT-02 indirect, ACK-04 indirect)
-- [ ] 1032-04-ack-workflow-PLAN.md — Event optional Identity + AckedAt + AckedBy fields (defaults empty; backward-compat fromStructSafe) + computeDisplayState() for ISA-18.2 three-state (unacked-active|acked-active|acked-cleared); EventStore.acknowledgeEvent(eventId, opts) routes single-user → acks_ array, cluster → appendAckRecord (1031-04). Plus TestEventAcknowledgement (Wave 2, depends on 1032-01) (ACK-01, ACK-02, ACK-03, IDENT-02)
+- [x] 1032-04-ack-workflow-PLAN.md — Event optional Identity + AckedAt + AckedBy fields (defaults empty; backward-compat fromStructSafe) + computeDisplayState() for ISA-18.2 three-state (unacked-active|acked-active|acked-cleared); EventStore.acknowledgeEvent(eventId, opts) routes single-user → acks_ array, cluster → appendAckRecord (1031-04). Plus TestEventAcknowledgement (Wave 2, depends on 1032-01) (ACK-01, ACK-02, ACK-03, IDENT-02)
 - [x] 1032-05-oplock-smoke-test-PLAN.md — ClusterConfig.checkSharedConfig(sharedRoot) best-effort SMB-oplock canary smoke test (Pitfall 14); single-process write-and-immediate-read of 1024 deterministic bytes; one-time warning(Concurrency:smbOplockDetected, ...) on mismatch; never throws (advisory); operator-fix guidance in warning text (Set-SmbServerConfiguration, smb.conf). Plus TestClusterConfigOplocks (Wave 1, no deps) (operational hardening; no REQ-IDs)
 
 **UI hint**: yes

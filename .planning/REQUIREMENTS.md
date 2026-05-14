@@ -20,7 +20,7 @@ Foundation layer — cross-host file locking, stale-lock recovery, atomic writes
 Who did what — sourced from OS, no login screen, FDA Part 11 §11.10(e) audit trail compliance.
 
 - [x] **IDENT-01**: Every shared write (event ack, NDJSON entry, snapshot, lockfile) is stamped with `user@host (pid, epoch)`. `userIdentity.m` resolves via `getenv('USERNAME'|'USER')` + `system('hostname')` + optional Java InetAddress fallback (Octave-guarded by `usejava('jvm')`). In cluster mode, identity failure throws — no silent `'unknown'` writes.
-- [ ] **IDENT-02**: Every event acknowledgement records (user, host, timestamp, action, target event-id). Audit trail is queryable and viewable in the Companion app's event log column.
+- [x] **IDENT-02**: Every event acknowledgement records (user, host, timestamp, action, target event-id). Audit trail is queryable and viewable in the Companion app's event log column.
 
 ### Shared Event Store (EVTLOG)
 
@@ -34,9 +34,9 @@ Replace the single MAT-file EventStore with a concurrent-safe append-only NDJSON
 
 User-facing event acknowledgement workflow + single-source event emission across the cluster.
 
-- [ ] **ACK-01**: When User A acknowledges an alarm, the ack becomes visible to the other 49 Companions within ~5 seconds (eventual-consistency target; UDP multicast hint accelerates propagation but disk state is canonical).
-- [ ] **ACK-02**: An event displays a distinct visual state for "acked but condition still active" vs "acked and cleared" vs "unacked active" (per ISA-18.2 / EEMUA 191 alarm-state model — condition state and ack state are orthogonal).
-- [ ] **ACK-03**: User can attach an optional free-text comment when acknowledging an event. Comment is persisted with the ack record.
+- [x] **ACK-01**: When User A acknowledges an alarm, the ack becomes visible to the other 49 Companions within ~5 seconds (eventual-consistency target; UDP multicast hint accelerates propagation but disk state is canonical).
+- [x] **ACK-02**: An event displays a distinct visual state for "acked but condition still active" vs "acked and cleared" vs "unacked active" (per ISA-18.2 / EEMUA 191 alarm-state model — condition state and ack state are orthogonal).
+- [x] **ACK-03**: User can attach an optional free-text comment when acknowledging an event. Comment is persisted with the ack record.
 - [x] **ACK-04**: A `MonitorTag` threshold violation produces exactly ONE event in the shared EventStore regardless of how many Companions are running. Single-source guarantee derives from "lock holder for tag data is sole emitter for tag events" — `LiveTagPipeline.processTag_` and `LiveEventPipeline.processMonitorTag_` share the same per-tag `FileLock` domain.
 
 ### Resilience & Operator Communication (OPS)
