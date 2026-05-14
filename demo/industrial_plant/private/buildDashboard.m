@@ -29,6 +29,11 @@ function engine = buildDashboard(ctx)
     engine = DashboardEngine('FastSense Industrial Plant Demo', ...
         'Theme', 'light', 'LiveInterval', 1.0);
 
+    % Wire EventStore so the per-widget "+" Create-Event button on every
+    % FastSenseWidget writes manual annotations into the same store the
+    % Events page (EventTimelineWidget) reads from (260513-snt).
+    engine.EventStore = ctx.store;
+
     engine.addPage('Overview');
     engine.addPage('Feed Line');
     engine.addPage('Reactor');

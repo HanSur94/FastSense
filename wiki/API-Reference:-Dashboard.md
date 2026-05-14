@@ -25,6 +25,7 @@ obj = DashboardEngine(name, varargin)
 | EventMarkersVisible | `true` | global toggle for event markers across all widgets (runtime UI state, not serialized) |
 | DebugPreview_ | `false` | 260508-das — opt-in: surface preview/marker pipeline failures as warnings |
 | BannerHeight | `0.035` |  |
+| EventStore | `[]` |  |
 
 ### Methods
 
@@ -179,6 +180,12 @@ APPLYTHEMETOCHROME Restyle figure + non-widget chrome using the current Theme.
 #### `rerenderWidgets(obj)`
 
 RERENDERWIDGETS Delete all widget panels and recreate them.
+Mark in-flight so the SizeChangedFcn that fires during
+panel teardown/recreate doesn't schedule new resize-debounce
+timers — that would cause a recursive rerender cascade.
+Also cancel any timers that ARE currently scheduled — they
+are about to be invalidated by this rerender anyway.
+(260513-q7w fu2)
 
 #### `updateGlobalTimeRange(obj)`
 
@@ -276,6 +283,71 @@ MARKALLDIRTY Flag all widgets as needing refresh.
 
 ONRESIZE Handle figure resize: reposition all widget panels.
 
+#### `clearRerenderFlag_(obj)`
+
+CLEARRERENDERFLAG_ Reset IsRerendering_ via onCleanup so it
+  always lands false even if rerenderWidgets throws.
+  (260513-q7w fu2)
+
+#### `cancelResizeTimers_(obj)`
+
+CANCELRESIZETIMERS_ Stop + delete both resize-related debounce
+  timers. Called from switchPage so a stale backstop scheduled
+  for the previous page doesn't fire after the user has moved
+  to a different tab; also called from rerenderWidgets so the
+  spurious SizeChangedFcn that fires during panel teardown
+  doesn't reschedule us into a cascade.
+  (260513-q7w fu2)
+
+#### `scheduleResizeRefresh_(obj)`
+
+SCHEDULERESIZEREFRESH_ Coalesce rapid resize events into a single
+  deferred refresh, mirroring the SliderDebounceTimer pattern.
+  Drag-resize on macOS fires many SizeChangedFcn events per
+  second; doing a full widget refresh on each would be expensive
+  and visibly stutter. Instead, restart a 300 ms one-shot timer
+  on every resize event — once the user stops dragging, the
+  timer fires and refreshes all active-page widgets one time.
+  (260513-q7w)
+
+#### `scheduleResizeFinalRedraw_(obj)`
+
+SCHEDULERESIZEFINALREDRAW_ Longer-period backstop debouncer that
+  fires once the user has clearly stopped resizing for
+  ~1.2 seconds, and unconditionally calls rerenderWidgets() —
+  the same operation the user would have invoked manually via
+  the toolbar's Reset button. Runs IN PARALLEL with the cheap
+  scheduleResizeRefresh_ (300 ms): both timers restart on every
+  resize event, so during continuous drag neither fires; the
+  moment dragging stops, the 300 ms cheap pass runs first and
+  handles most cases, then this 1.2 s backstop catches any
+  residual failure mode (degenerate axes after holding at very
+  small sizes, destroyed line handles, etc.).
+  (260513-q7w fu)
+
+#### `finalRedrawAfterResize_(obj)`
+
+FINALREDRAWAFTERRESIZE_ Unconditional full rebuild of all panels
+  on the active page after resize fully settles. Equivalent to
+  the user pressing the toolbar's Reset button. Bulletproof
+  catch-all for any failure mode the cheap two-pass refresh
+  missed. (260513-q7w fu)
+
+#### `refreshActivePageWidgetsAfterResize_(obj)`
+
+REFRESHACTIVEPAGEWIDGETSAFTERRESIZE_ Re-push data through every
+  realized widget on the active page after a resize, so any
+  widget whose line data was wiped by a resize-race recovers
+  without the user having to press Reset. (260513-q7w)
+
+#### `tf = isWidgetLineWhite_(~, w)`
+
+ISWIDGETLINEWHITE_ True if the FastSenseWidget's first line has
+  no XData but its bound Tag clearly does — the visible
+  manifestation of the resize-race bug. Defensive: any
+  missing-handle / invalid-object case returns false to avoid
+  false-positive escalations.
+
 #### `triggerTimeSlidersChangedForTest(obj)`
 
 TRIGGERTIMESLIDERSCHANGEDFORTEST Test-only hook to invoke the slider
@@ -300,6 +372,29 @@ COMPUTEPREVIEWENVELOPEFORTEST Test-only wrapper around the
   assert shape/monotonicity without scraping the selector's
   patch handles. When nBuckets is omitted, uses the method's
   own width-derived default.
+
+#### `ws = activePageWidgets(obj)`
+
+ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
+  Returns obj.Pages{obj.ActivePage}.Widgets in multi-page mode,
+  or obj.Widgets in single-page mode.
+
+#### `ws = allPageWidgets(obj)`
+
+ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
+  Used for ReflowCallback injection and Follow toggle sweep.
+  When Pages is empty, returns obj.Widgets.
+
+#### `notifyEventsChanged(obj)`
+
+NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513-snt).
+  Called after CreateEventDialog persists a new event. Walks the
+  active page (recursing into GroupWidget children via
+  getNestedWidgets) and refreshes every EventTimelineWidget and
+  FastSenseWidget. Also re-aggregates the slider event-marker
+  overlay via computeEventMarkers and the slider preview lines via
+  computePreviewEnvelope so a freshly-added event becomes visible
+  on the slider strip without waiting for the next live tick.
 
 #### `str = formatTimeVal(~, t)`
 
@@ -528,7 +623,8 @@ obj = FastSenseWidget(varargin)
 | ShowThresholdLabels | `false` | show inline name labels on threshold lines |
 | ShowEventMarkers | `false` | Phase 1012 — toggle event round-marker overlay |
 | EventStore | `[]` | Phase 1012 — EventStore handle forwarded to inner FastSense |
-| LiveViewMode | `'reset'` |  |
+| LiveViewMode | `'preserve'` |  |
+| YLimitMode | `'auto-visible'` |  |
 
 ### Methods
 
@@ -547,6 +643,8 @@ UPDATE Incrementally update Tag data without full axes rebuild.
   Uses FastSenseObj.updateData() to replace data and re-downsample,
   avoiding the expensive delete/recreate cycle of refresh().
   Falls back to refresh() if FastSenseObj is not in a renderable state.
+  (260513-ovt) Per-tick Y autoscale removed from this path so
+  Live mode never silently mutates the user's Y view.
 
 #### `setEventMarkersVisible(obj, tf)`
 
@@ -555,6 +653,14 @@ SETEVENTMARKERSVISIBLE Pass-through to FastSense event-marker toggle.
   When rendered, delegates to FastSense.setShowEventMarkers
   which re-draws the overlay in place without disturbing
   zoom state or live refresh cadence.
+
+#### `setYLimitMode(obj, mode)`
+
+SETYLIMITMODE Set the Y-axis rescale strategy and re-fit if rendered.
+  mode is one of:
+    'auto-visible' - rescale to data inside the current X window
+    'auto-all'     - rescale to all data the bound Tag exposes
+    'locked'       - freeze YLim; no further rescale on tick/refresh
 
 #### `autoScaleY_(obj, y)`
 
@@ -565,8 +671,13 @@ AUTOSCALEY_ Rescale the Y axis to cover current data + thresholds.
   threshold values so MonitorTag lines stay visible) and updates
   the axes. Skipped when:
     - the widget has a user-pinned YLimits NV-pair, or
-    - the user manually zoomed Y via mouse (UserZoomedY),
-  so we never fight an explicit human interaction.
+    - the user manually zoomed Y via mouse (UserZoomedY), or
+    - the dashboard's Follow toggle is engaged
+      (FastSenseObj.LiveViewMode == 'follow') — Follow is an
+      explicit user intent to track the data tail in X only and
+      keep the rest of the view (including Y) frozen. (260513-ovt)
+    - YLimitMode == 'locked' — the user explicitly froze Y limits
+      via the L button on the WidgetButtonBar (260513-sfp).
 
 #### `onYLimChanged(obj)`
 
@@ -1062,6 +1173,7 @@ obj = DashboardLayout(varargin)
 | ScrollbarWidth | `0.015` |  |
 | OnScrollCallback | `[]` | function handle: @(topRow, bottomRow) |
 | DetachCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
+| CreateEventCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
 | VisibleRows | `[1 Inf]` | [topRow bottomRow] currently visible |
 | hFigure | `[]` | Figure handle for popup dismiss callbacks |
 | hInfoPopup | `[]` | Handle to active info popup uipanel (at most one) |
@@ -1168,6 +1280,23 @@ REFLOWCHROME_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
   relying on SizeChangedFcn firing under -batch.
   No-op when the cell has been deleted or chrome isn't there yet.
 
+#### `DashboardLayout.bg = chooseYLimitActiveBg_(theme)`
+
+CHOOSEYLIMITACTIVEBG_ Pick the highlight color for the active YLimit button.
+  Tries PressedBg / SelectedBg / AccentColor in order, falling
+  back to ToolbarBackground brightened by 0.15 per channel
+  (capped at 1) when none are present. No new theme fields are
+  introduced by 260513-sfp; future themes can opt into a
+  dedicated PressedBg token without touching layout code.
+
+#### `DashboardLayout.syncYLimitButtonsState_(bar, mode)`
+
+SYNCYLIMITBUTTONSSTATE_ Visually highlight the YLimit button matching mode.
+  The active button's BackgroundColor becomes the value stashed on
+  bar.UserData.YLimitActiveBg by addYLimitButtons_; the other two
+  revert to the theme's ToolbarBackground. Tolerates missing
+  buttons (no-op if the bar's UserData was never primed).
+
 #### `DashboardLayout.reflowButtonBar_(hCell, barH, inset)`
 
 REFLOWBUTTONBAR_ Deprecated alias — forwards to reflowChrome_.
@@ -1213,6 +1342,27 @@ SETLASTUPDATETIME Update the last-update label with a timestamp.
 #### `setLiveActiveIndicator(obj, isActive)`
 
 SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
+
+#### `onFollowToggle(obj, src)`
+
+ONFOLLOWTOGGLE Apply auto-pan to every FastSense widget in the dashboard.
+  isOn=true:  LiveViewMode='follow' on every FastSenseWidget's
+              FastSenseObj AND snap each chart to its current
+              data tail (one-shot jump-to-now).
+  isOn=false: LiveViewMode='preserve' on every FastSenseWidget's
+              FastSenseObj (the chart stops following).
+
+#### `setFollowActiveIndicator(obj, isActive)`
+
+SETFOLLOWACTIVEINDICATOR Show a blue surround when Follow is active.
+
+#### `applyFollowToWidgets_(obj, widgets, mode, snap)`
+
+APPLYFOLLOWTOWIDGETS_ Recursively apply LiveViewMode + optional snap.
+  Walks the widget tree (descends into GroupWidget children),
+  sets LiveViewMode on every FastSenseWidget's FastSenseObj,
+  and — when `snap` is true — calls snapToTail() on each to
+  immediately jump the view to the current data tail.
 
 #### `onEventsToggle(obj, src)`
 
@@ -1368,6 +1518,82 @@ TOSTRUCT Serialize widget to struct for JSON export.
 #### `ChipBarWidget.obj = fromStruct(s)`
 
 FROMSTRUCT Reconstruct ChipBarWidget from a saved struct.
+
+---
+
+## `CreateEventDialog` --- Modal dialog to create a manual annotation Event (260513-snt).
+
+> Inherits from: `handle`
+
+d = CreateEventDialog(fastSenseWidget, dashboardEngine)
+
+  Opens a modal figure pre-filled with the widget's current X view as
+  the event time range and the widget's bound Tag.Key as the tag
+  binding. On Save: appends an Event to engine.EventStore, registers
+  per-tag EventBinding entries, calls EventStore.save() and finally
+  engine.notifyEventsChanged() so EventTimelineWidget +
+  FastSenseWidget instances and the slider's event-marker overlay
+  refresh.
+
+  The dialog mirrors DashboardConfigDialog's pattern: classical
+  figure (NOT uifigure) with WindowStyle='modal', styled from the
+  engine's theme. All UI callbacks are wrapped in try/catch with
+  non-blocking errordlg so a bad input never tears down the dialog.
+
+  Properties (SetAccess = private):
+    Widget   - bound FastSenseWidget
+    Engine   - bound DashboardEngine
+    hFigure  - modal figure handle
+
+  Methods (public):
+    onSave   - validate, persist, notify, close dialog on success
+    onCancel - close dialog without writing
+    delete   - destructor, tears down figure
+
+  Methods (Static, public):
+    persistEventStatic(engine, tStart, tEnd, label, sev, cat, notes,
+                       keys, primaryName) - mock-friendly persistence
+      seam used by Task-3 tests; instance persistEvent_ delegates here.
+
+  Errors raised (all namespaced):
+    CreateEventDialog:invalidWidget    - widget is not a FastSenseWidget
+    CreateEventDialog:invalidEngine    - engine is not a DashboardEngine
+    CreateEventDialog:noStore          - engine.EventStore is empty
+    CreateEventDialog:invalidTimeRange - EndTime < StartTime (or
+                                         not finite)
+    CreateEventDialog:emptyLabel       - Label is empty after trim
+
+### Constructor
+
+```matlab
+obj = CreateEventDialog(widget, engine)
+```
+
+CREATEEVENTDIALOG Construct + show modal dialog.
+
+### Methods
+
+#### `onSave(obj, ~, ~)`
+
+ONSAVE Validate inputs, persist Event, refresh dashboard, close dialog.
+  Wraps the full pipeline in try/catch so any throw surfaces
+  via errordlg without tearing the dialog down — the user
+  can correct input and Save again. On success: deletes
+  the modal figure.
+
+#### `onCancel(obj, ~, ~)`
+
+ONCANCEL Close the dialog without writing.
+
+### Static Methods
+
+#### `CreateEventDialog.persistEventStatic(engine, tStart, tEnd, label, sev, cat, notes, keys, primaryName)`
+
+PERSISTEVENTSTATIC Persist a manual annotation Event into engine.EventStore (260513-snt).
+  Public static seam called by the instance persistEvent_
+  wrapper AND directly by Task-3 tests. Keeping the
+  write-side logic free of any figure handles makes it
+  trivially unit-testable.
 
 ---
 
@@ -2054,10 +2280,16 @@ TimeRangeSelector  Construct a selector attached to a uipanel.
 #### `setDataRange(obj, tMin, tMax)`
 
 setDataRange  Set the full extent the user can scrub over.
-  The current selection is rescaled proportionally so that a
-  50%-selected window remains 50% wide after the change.
-  Programmatic — does NOT fire OnRangeChanged; only user
-  drag interactions do.
+  When the new range fully contains the current selection,
+  the selection is preserved verbatim (its absolute time
+  values stay put). This is the "live mode pan-freeze" path
+  — every live tick extends the data range by ~1 s, and we
+  do not want that to shift the user's selected window.
+  Otherwise (range contraction or selection falls outside),
+  the selection is rescaled proportionally to keep its
+  relative position. Programmatic in either branch — does
+  NOT fire OnRangeChanged; only user drag interactions do.
+  (260512-live-mode-companion-adhoc-tail-spike)
 
 #### `setSelection(obj, tStart, tEnd)`
 
@@ -2072,11 +2304,15 @@ Reorder swapped bounds (tStart < tEnd).
 
 getSelection  Return the current selection as [tStart, tEnd].
 
-#### `setLabels(obj, leftText, rightText)`
+#### `setRangeLabels(obj, leftText, rightText, middleText)`
 
-setLabels  Update the inline edge labels that track the selection.
-  Pass empty strings to hide a side's label. The text sits at the
-  mid-height of the selector, inside each edge handle.
+setRangeLabels  Update the date/time labels shown BELOW the slider.
+  Updates three labels:
+    leftText   — slider's LEFT selection-edge time
+    rightText  — slider's RIGHT selection-edge time
+    middleText — (optional) selection duration string,
+                 shown centered between the edge labels.
+                 Omit or pass '' to leave the middle blank.
 
 #### `setEnvelope(obj, xC, yMin, yMax)`
 

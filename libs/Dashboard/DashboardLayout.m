@@ -22,6 +22,8 @@ classdef DashboardLayout < handle
         ScrollbarWidth  = 0.015
         OnScrollCallback = []       % function handle: @(topRow, bottomRow)
         DetachCallback   = []       % function handle: @(widget) — set by DashboardEngine
+        CreateEventCallback = []    % function handle: @(widget) — set by DashboardEngine
+                                    %   (260513-snt). Only invoked for FastSenseWidget.
         VisibleRows      = [1 Inf]  % [topRow bottomRow] currently visible
     end
 
@@ -360,8 +362,15 @@ classdef DashboardLayout < handle
             delete(ph);
 
             % Decide whether this widget needs chrome.
+            % 260513-sfp — widgets exposing setYLimitMode also need a bar
+            % to host the V/A/L YLimit cluster, even if they have neither
+            % a Description nor a DetachCallback. Today that's only
+            % FastSenseWidget, but the duck-type keeps the chrome generic.
             needsBar = ~isempty(widget.Description) || ...
-                       (~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget'));
+                       (~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')) || ...
+                       ismethod(widget, 'setYLimitMode') || ...
+                       (~isempty(obj.CreateEventCallback) && isa(widget, 'FastSenseWidget'));
+                       % ^^^ 260513-sfp duck-type for V/A buttons + 260513-snt '+Event' button.
 
             if needsBar
                 % 1. Create the full-width bar at the top of the cell panel.
@@ -377,9 +386,26 @@ classdef DashboardLayout < handle
                 if ~isempty(widget.Description)
                     obj.addInfoIcon(widget);
                 end
+                if ~isempty(obj.CreateEventCallback) && isa(widget, 'FastSenseWidget')
+                    % 260513-snt — sibling to Detach; positioned LEFT of '^'.
+                    obj.addCreateEventButton(widget);
+                end
                 if ~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')
                     obj.addDetachButton(widget);
                 end
+                % 260513-sfp — Y-limit-mode buttons. Duck-typed: only
+                % widgets that implement setYLimitMode opt in (today
+                % only FastSenseWidget). Lives strictly under needsBar
+                % because the cluster requires the WidgetButtonBar host.
+                if ismethod(widget, 'setYLimitMode')
+                    obj.addYLimitButtons_(widget);
+                end
+                % 260513-snt — settle final right-anchored button positions.
+                %   addInfoIcon runs BEFORE addCreateEventButton, so Info's
+                %   initial X collides with Create's slot. reflowChrome_ knows
+                %   the full layout (3-button vs 2-button right cluster + V/A
+                %   left cluster) and re-anchors everything in one pass.
+                DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
             else
                 % No chrome — render directly into the cell panel as before.
                 widget.render(widget.hCellPanel);
@@ -747,6 +773,149 @@ classdef DashboardLayout < handle
                 'TooltipString', 'Detach widget', ...
                 'Callback', @(~,~) obj.DetachCallback(widget));
         end
+
+        function addYLimitButtons_(obj, widget)
+        %ADDYLIMITBUTTONS_ Inject the 2-button Y-limit-mode cluster.
+        %   Only invoked from realizeWidget when ismethod(widget,'setYLimitMode').
+        %   Buttons (V, A) are left-anchored relative to the EXISTING
+        %   right-anchored Info/Create/Detach buttons, with a 4-px gap
+        %   between the clusters:
+        %     [V][A]  ...4px gap...  [Info][+][Detach]
+        %       24  24                 24  24   24
+        %
+        %   The 'locked' YLimitMode remains a valid programmatic mode on
+        %   FastSenseWidget (setYLimitMode('locked')) but has no UI button.
+        %
+        %   Active mode is visually highlighted (the button matching
+        %   widget.YLimitMode shows the "pressed" background). The active
+        %   background is computed from the theme via DashboardLayout's
+        %   chooseYLimitActiveBg_ helper, picking the first available of
+        %   {PressedBg, SelectedBg, AccentColor} and falling back to a
+        %   brightened ToolbarBackground when the theme exposes none.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            barPos = get(bar, 'Position');
+            barW = barPos(3);
+
+            % Layout (left-to-right):
+            %   [V][A]   ...4px gap...   [Info][+][Detach]
+            % Right cluster width: when the '+' button is present, the
+            % right cluster spans 3 buttons (Info + Create + Detach)
+            % rather than 2 (Info + Detach). The V/A cluster anchors to
+            % the LEFT of that, so add an extra (bw + gap) on top of the
+            % pre-260513-snt math when CreateEventButton is present.
+            bw  = 24;
+            gap = 4;
+            hasCreate = ~isempty(findobj(bar, 'Tag', 'CreateEventButton', '-depth', 1));
+            if hasCreate
+                xAll = barW - bw - gap - bw - gap - bw - gap - gap - bw;
+            else
+                xAll = barW - bw - gap - bw - gap - gap - bw;
+            end
+            xVisible = xAll - bw;
+
+            activeBg = DashboardLayout.chooseYLimitActiveBg_(theme);
+
+            obj.addYLimitButton_(bar, widget, 'auto-visible', xVisible, ...
+                'V', 'Auto-fit Y to visible X range', theme, 'YLimitVisibleBtn');
+            obj.addYLimitButton_(bar, widget, 'auto-all', xAll, ...
+                'A', 'Auto-fit Y to all data', theme, 'YLimitAllBtn');
+
+            % Stash the active-bg + widget handle on the bar's UserData so
+            % the static reflowChrome_ handler can restyle/re-anchor after
+            % a resize without re-resolving the theme. Weak ref — guarded
+            % with isvalid in syncYLimitButtonsState_ in case the widget
+            % gets deleted before the bar.
+            ud = get(bar, 'UserData');
+            if ~isstruct(ud), ud = struct(); end
+            ud.YLimitActiveBg = activeBg;
+            ud.YLimitWidget   = widget;
+            set(bar, 'UserData', ud);
+
+            % Highlight the button matching the current YLimitMode.
+            DashboardLayout.syncYLimitButtonsState_(bar, widget.YLimitMode);
+        end
+
+        function addYLimitButton_(obj, bar, widget, mode, x, glyph, tip, theme, tagName)
+        %ADDYLIMITBUTTON_ Create a single YLimit pushbutton (helper for addYLimitButtons_).
+        %   Callback dispatches through onYLimitButtonClicked_ which calls
+        %   widget.setYLimitMode(mode), then re-syncs the visual pressed state.
+            uicontrol('Parent', bar, ...
+                'Style', 'pushbutton', ...
+                'String', glyph, ...
+                'Units', 'pixels', ...
+                'Position', [x, 2, 24, 24], ...
+                'FontSize', 9, ...
+                'FontWeight', 'bold', ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'Tag', tagName, ...
+                'TooltipString', tip, ...
+                'Callback', @(~,~) obj.onYLimitButtonClicked_(widget, mode, bar));
+        end
+
+        function onYLimitButtonClicked_(obj, widget, mode, bar) %#ok<INUSL>
+        %ONYLIMITBUTTONCLICKED_ Button callback — set mode + sync pressed state.
+        %   Errors are warned (not thrown) so a single bad click never
+        %   crashes the dashboard refresh loop.
+            try
+                widget.setYLimitMode(mode);
+                DashboardLayout.syncYLimitButtonsState_(bar, mode);
+            catch ME
+                warning('DashboardLayout:yLimitClickFailed', ...
+                    'YLimit button click failed for mode ''%s'': %s', mode, ME.message);
+            end
+        end
+
+        function addCreateEventButton(obj, widget)
+        %ADDCREATEEVENTBUTTON Add a '+Event' button into the FastSenseWidget's button bar (260513-snt).
+        %   Sibling to InfoIconButton + DetachButton. Positioned LEFT of the
+        %   '^' Detach button: x = barW - 24 - 24 - 4 - 4 (24px wide button,
+        %   4px gap from Detach which sits 4px from the right edge).
+        %
+        %   The callback is wrapped through invokeCreateEventCallback_ so a
+        %   throwing dialog never crashes the bar — DashboardLayout logs a
+        %   namespaced warning instead.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            barPos = get(bar, 'Position');
+            xCreate = barPos(3) - 24 - 24 - 4 - 4;
+            uicontrol('Parent', bar, ...
+                'Style', 'pushbutton', ...
+                'String', '+', ...
+                'Units', 'pixels', ...
+                'Position', [xCreate 2 24 24], ...
+                'FontSize', 11, ...
+                'FontWeight', 'bold', ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'Tag', 'CreateEventButton', ...
+                'TooltipString', 'Create event from selection / current view', ...
+                'Callback', @(~,~) obj.invokeCreateEventCallback_(widget));
+        end
+
+        function invokeCreateEventCallback_(obj, widget)
+        %INVOKECREATEEVENTCALLBACK_ Defensive callback wrapper for the '+Event' button (260513-snt).
+        %   Any throw from the dialog flow is surfaced as a namespaced
+        %   warning ('DashboardLayout:createEventCallbackFailed') so the
+        %   widget chrome never goes down with a broken dialog. Mirrors
+        %   DashboardToolbar's onReset try/catch pattern.
+            if isempty(obj.CreateEventCallback), return; end
+            try
+                obj.CreateEventCallback(widget);
+            catch ME
+                warning('DashboardLayout:createEventCallbackFailed', ...
+                    'Create-Event callback failed: %s', ME.message);
+            end
+        end
     end
 
     methods (Static)
@@ -769,19 +938,124 @@ classdef DashboardLayout < handle
                 set(bar(1), 'Units', 'pixels', ...
                     'Position', [inset, pp(4) - barH - inset, barW, barH]);
                 % Re-anchor right-aligned buttons inside the bar.
-                det  = findobj(bar(1), 'Tag', 'DetachButton',   '-depth', 1);
-                info = findobj(bar(1), 'Tag', 'InfoIconButton', '-depth', 1);
+                % Layout right-to-left: DetachButton at the far right, then
+                % CreateEventButton 28px to its left (260513-snt), then
+                % InfoIconButton 28px to the left of that. When barW < ~120px
+                % the leftmost buttons may slide off the left edge — same
+                % failure mode as pre-260513-snt; documented and accepted.
+                det    = findobj(bar(1), 'Tag', 'DetachButton',      '-depth', 1);
+                create = findobj(bar(1), 'Tag', 'CreateEventButton', '-depth', 1);
+                info   = findobj(bar(1), 'Tag', 'InfoIconButton',    '-depth', 1);
                 if ~isempty(det) && ishandle(det(1))
                     set(det(1), 'Position', [barW - 24 - 4, 2, 24, 24]);
                 end
+                if ~isempty(create) && ishandle(create(1))
+                    set(create(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                end
                 if ~isempty(info) && ishandle(info(1))
-                    set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                    if ~isempty(create) && ishandle(create(1))
+                        % Info sits LEFT of Create: shift by another 28px.
+                        set(info(1), 'Position', [barW - 24 - 24 - 24 - 4 - 4 - 4, 2, 24, 24]);
+                    else
+                        % No Create button (non-FastSenseWidget): preserve
+                        % the legacy two-button layout (Info LEFT of Detach).
+                        set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                    end
+                end
+                % Re-anchor the V/A cluster. Math must match
+                % addYLimitButtons_ exactly so resize does not introduce
+                % drift. When the '+' button is present, the right cluster
+                % widens by one button (Info + Create + Detach instead of
+                % Info + Detach), so the V/A cluster shifts left by (bw+gap).
+                bw  = 24; gap = 4;
+                allBtn     = findobj(bar(1), 'Tag', 'YLimitAllBtn',     '-depth', 1);
+                visibleBtn = findobj(bar(1), 'Tag', 'YLimitVisibleBtn', '-depth', 1);
+                hasCreate  = ~isempty(create) && ishandle(create(1));
+                if hasCreate
+                    xAll = barW - bw - gap - bw - gap - bw - gap - gap - bw;
+                else
+                    xAll = barW - bw - gap - bw - gap - gap - bw;
+                end
+                xVisible = xAll - bw;
+                if ~isempty(allBtn)     && ishandle(allBtn(1))
+                    set(allBtn(1),     'Position', [xAll,     2, bw, bw]);
+                end
+                if ~isempty(visibleBtn) && ishandle(visibleBtn(1))
+                    set(visibleBtn(1), 'Position', [xVisible, 2, bw, bw]);
                 end
             end
             if ~isempty(content) && ishandle(content(1))
                 contentH = max(1, pp(4) - barH - inset);
                 set(content(1), 'Units', 'pixels', ...
                     'Position', [0, 0, pp(3), contentH]);
+            end
+        end
+
+        function bg = chooseYLimitActiveBg_(theme)
+        %CHOOSEYLIMITACTIVEBG_ Pick the highlight color for the active YLimit button.
+        %   Tries PressedBg / SelectedBg / AccentColor in order, falling
+        %   back to ToolbarBackground brightened by 0.15 per channel
+        %   (capped at 1) when none are present. No new theme fields are
+        %   introduced by 260513-sfp; future themes can opt into a
+        %   dedicated PressedBg token without touching layout code.
+            if isstruct(theme)
+                if isfield(theme, 'PressedBg')
+                    bg = theme.PressedBg;  return;
+                end
+                if isfield(theme, 'SelectedBg')
+                    bg = theme.SelectedBg; return;
+                end
+                if isfield(theme, 'AccentColor')
+                    bg = theme.AccentColor; return;
+                end
+                if isfield(theme, 'ToolbarBackground')
+                    bg = min(theme.ToolbarBackground + 0.15, 1);
+                    return;
+                end
+            end
+            % Defensive fallback — light grey.
+            bg = [0.85 0.85 0.85];
+        end
+
+        function syncYLimitButtonsState_(bar, mode)
+        %SYNCYLIMITBUTTONSSTATE_ Visually highlight the YLimit button matching mode.
+        %   The active button's BackgroundColor becomes the value stashed on
+        %   bar.UserData.YLimitActiveBg by addYLimitButtons_; the other two
+        %   revert to the theme's ToolbarBackground. Tolerates missing
+        %   buttons (no-op if the bar's UserData was never primed).
+            if isempty(bar) || ~ishandle(bar), return; end
+            ud = get(bar, 'UserData');
+            if ~isstruct(ud) || ~isfield(ud, 'YLimitActiveBg')
+                return;
+            end
+            activeBg = ud.YLimitActiveBg;
+            % Resolve the inactive background once. Prefer the widget's own
+            % ParentTheme (matches button construction); fall back to a
+            % default theme if the widget has been deleted out from under us.
+            inactiveBg = [];
+            if isfield(ud, 'YLimitWidget') && ~isempty(ud.YLimitWidget)
+                w = ud.YLimitWidget;
+                if isobject(w) && isvalid(w) && ...
+                        ~isempty(w.ParentTheme) && isstruct(w.ParentTheme) && ...
+                        isfield(w.ParentTheme, 'ToolbarBackground')
+                    inactiveBg = w.ParentTheme.ToolbarBackground;
+                end
+            end
+            if isempty(inactiveBg)
+                t = DashboardTheme('light');
+                inactiveBg = t.ToolbarBackground;
+            end
+            tagsAndModes = { ...
+                'YLimitVisibleBtn', 'auto-visible'; ...
+                'YLimitAllBtn',     'auto-all' };
+            for i = 1:size(tagsAndModes, 1)
+                btn = findobj(bar, 'Tag', tagsAndModes{i, 1}, '-depth', 1);
+                if isempty(btn) || ~ishandle(btn(1)), continue; end
+                if strcmp(mode, tagsAndModes{i, 2})
+                    set(btn(1), 'BackgroundColor', activeBg);
+                else
+                    set(btn(1), 'BackgroundColor', inactiveBg);
+                end
             end
         end
 
