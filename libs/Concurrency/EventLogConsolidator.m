@@ -121,8 +121,18 @@ classdef EventLogConsolidator < handle
             tStart = tic();
 
             % Attempt non-blocking leader-election lock acquire.
+            % Treat nestedLockAcquireForbidden (same-process key conflict) as a
+            % contention signal — the semantic is identical: skip silently.
             lock = FileLock(obj.LockKey_, 'LockDir', obj.LocksDir_);
-            [ok, ~] = lock.tryAcquire('Timeout', 0);
+            ok = false;
+            try
+                [ok, ~] = lock.tryAcquire('Timeout', 0);
+            catch ME
+                if ~strcmp(ME.identifier, 'Concurrency:nestedLockAcquireForbidden')
+                    rethrow(ME);
+                end
+                % Same-process nested acquire — treat as contention (ok stays false).
+            end
             if ~ok
                 % Another consolidator is running — skip silently.
                 info = lock.peek();
