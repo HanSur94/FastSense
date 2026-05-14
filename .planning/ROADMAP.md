@@ -128,8 +128,8 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
 | 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
-| 1029. Concurrency Foundation | v4.0 | 5/5 | Complete   | 2026-05-14 |
-| 1030. TagWriteCoordinator + LiveTagPipeline cluster mode | v4.0 | 0/? | Not started | — |
+| 1029. Concurrency Foundation | v4.0 | 5/5 | Complete    | 2026-05-14 |
+| 1030. TagWriteCoordinator + LiveTagPipeline cluster mode | v4.0 | 1/2 | In Progress|  |
 | 1031. EventLog + EventStore rollback-mode migration | v4.0 | 0/? | Not started | — |
 | 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 0/? | Not started | — |
 | 1033. Companion Integration + Acceptance Test | v4.0 | 0/? | Not started | — |
@@ -178,7 +178,10 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 4. **Lock contention on a tag** causes `processTag_` to skip-and-defer that tag to the next tick (NOT block the whole tick); a structured `LockContentionEvent` carries `{holder.user, holder.host, holder.age}` for downstream UI surfacing.
 5. **Single-user mode is byte-identical** — running `LiveTagPipeline` without `'SharedRoot'` NV-pair exercises zero Concurrency-library code paths (existing `tests/test_live_tag_pipeline.m` and `tests/suite/TestLiveTagPipeline.m` pass unchanged).
 
-**Plans:** TBD
+**Plans:** 1/2 plans executed
+
+- [x] 1030-01-tag-write-coordinator-PLAN.md — TagWriteCoordinator facade over FileLock with per-tag-key scope (Wave 1, no deps) (CONC-01 primitive)
+- [ ] 1030-02-live-tag-pipeline-cluster-mode-PLAN.md — Wire TagWriteCoordinator + AtomicWriter into LiveTagPipeline.processTag_; BusyMode="drop"; jittered scheduling; mtime change-detect; stillHeldByMe gate; LockContentionEvent emission (Wave 2, depends on 1030-01) (CONC-01 full)
 
 ### Phase 1031: EventLog (Append-Only NDJSON) + EventStore SQLite Rollback-Mode Migration
 
