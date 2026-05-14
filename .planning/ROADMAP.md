@@ -128,7 +128,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
 | 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
-| 1029. Concurrency Foundation | v4.0 | 4/5 | In Progress|  |
+| 1029. Concurrency Foundation | v4.0 | 5/5 | Complete   | 2026-05-14 |
 | 1030. TagWriteCoordinator + LiveTagPipeline cluster mode | v4.0 | 0/? | Not started | — |
 | 1031. EventLog + EventStore rollback-mode migration | v4.0 | 0/? | Not started | — |
 | 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 0/? | Not started | — |
@@ -154,13 +154,13 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 4. **Every shared write goes through `AtomicWriter`** — concurrent reader during temp+rename never observes zero-byte or torn content (with the reader-side 3-retry/50ms-backoff helper); CI grep guard rejects any `save(<sharedRoot>...)` calls outside `AtomicWriter`.
 5. **`userIdentity.m` returns a complete (user, host, pid) tuple** on MATLAB R2020b+ and Octave 7+ (including `--disable-java` Octave builds); in cluster mode, an unresolvable user or host throws `Concurrency:identityResolutionFailed` instead of returning `'unknown'`.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 - [x] 1029-01-identity-paths-PLAN.md — userIdentity + ClusterIdentity + ClusterConfig + SharedPaths (IDENT-01)
 - [x] 1029-02-lockfile-mex-PLAN.md — lockfile_mex.c cross-platform MEX + build_concurrency_mex.m (CONC-02 kernel)
 - [x] 1029-03-filelock-PLAN.md — FileLock.m with mtime-heartbeat + re-entrance guard + sidecar fallback (CONC-02)
 - [x] 1029-04-atomic-writer-PLAN.md — AtomicWriter.m + ndjsonEncode + CI grep guard (CONC-03)
-- [ ] 1029-05-wiring-and-probes-PLAN.md — install.m wiring + mksqlite probe + composition smoke (CONC-02 + CONC-03 + IDENT-01)
+- [x] 1029-05-wiring-and-probes-PLAN.md — install.m wiring + mksqlite probe + composition smoke (CONC-02 + CONC-03 + IDENT-01)
 
 ### Phase 1030: TagWriteCoordinator + LiveTagPipeline Cluster Mode
 

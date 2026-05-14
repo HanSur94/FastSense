@@ -13,7 +13,7 @@ Foundation layer — cross-host file locking, stale-lock recovery, atomic writes
 
 - [ ] **CONC-01**: User can run 2+ Companion sessions writing the same per-tag `.mat` file via the shared share without producing a corrupted MAT (verified by parallel-write integration test on real SMB share).
 - [x] **CONC-02**: When a Companion holding a per-tag write lock crashes (kill -9 or hard-power-off), another Companion takes over the lock within `staleTimeout + 5s` (default `staleTimeout = 90s`) without manual cleanup. Stale-lock recovery uses **server-side filesystem mtime**, not wall-clock TTL.
-- [ ] **CONC-03**: Every shared-file write (`.mat`, NDJSON log, snapshot, SQLite) uses atomic temp-file + rename so concurrent readers never observe partially-written data. CI lint forbids raw `save()` to shared paths.
+- [x] **CONC-03**: Every shared-file write (`.mat`, NDJSON log, snapshot, SQLite) uses atomic temp-file + rename so concurrent readers never observe partially-written data. CI lint forbids raw `save()` to shared paths.
 
 ### Identity & Audit (IDENT)
 
