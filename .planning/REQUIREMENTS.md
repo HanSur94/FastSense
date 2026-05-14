@@ -26,7 +26,7 @@ Who did what — sourced from OS, no login screen, FDA Part 11 §11.10(e) audit 
 
 Replace the single MAT-file EventStore with a concurrent-safe append-only NDJSON log + leader-elected snapshot consolidator. Reader merges log onto canonical snapshot.
 
-- [ ] **EVTLOG-01**: Events and acks are persisted as append-only NDJSON lines on the shared share. Appends are serialised through the per-tag `FileLock` (NOT `O_APPEND` atomicity, which is unreliable on SMB/NFS). On any `EventStore` save path on shared share, `journal_mode=DELETE` + `busy_timeout=10000` + `BEGIN IMMEDIATE` + application-level retry replaces WAL.
+- [x] **EVTLOG-01**: Events and acks are persisted as append-only NDJSON lines on the shared share. Appends are serialised through the per-tag `FileLock` (NOT `O_APPEND` atomicity, which is unreliable on SMB/NFS). On any `EventStore` save path on shared share, `journal_mode=DELETE` + `busy_timeout=10000` + `BEGIN IMMEDIATE` + application-level retry replaces WAL.
 - [x] **EVTLOG-02**: 50-process append stress test produces exactly the expected number of valid JSON lines; `EventLogReader` skips and counts any corrupt lines defensively.
 - [ ] **EVTLOG-03**: A reader observing a file being mid-rewritten (temp+rename in progress) either gets the previous version or the new version — never a parse error. Reader retries on transient parse failure with 50ms backoff; surfaces a persistent failure after 3 retries.
 

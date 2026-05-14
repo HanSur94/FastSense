@@ -130,7 +130,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
 | 1029. Concurrency Foundation | v4.0 | 5/5 | Complete    | 2026-05-14 |
 | 1030. TagWriteCoordinator + LiveTagPipeline cluster mode | v4.0 | 2/2 | Complete    | 2026-05-14 |
-| 1031. EventLog + EventStore rollback-mode migration | v4.0 | 1/4 | In Progress|  |
+| 1031. EventLog + EventStore rollback-mode migration | v4.0 | 2/4 | In Progress|  |
 | 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 0/? | Not started | — |
 | 1033. Companion Integration + Acceptance Test | v4.0 | 0/? | Not started | — |
 
@@ -202,10 +202,10 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 5. **`EventLogReader` mtime-cache invalidates correctly** — a re-read after a writer touches the log returns updated content; an unchanged file reuses the cached parse without re-reading.
 6. **Phase 1031 contingency budget acknowledged** — if SMB atomicity stress shows torn appends on the target file server, the phase budget includes time to re-architect to per-writer-file + merge instead of single-file append.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 - [x] 1031-01-ndjson-decode-PLAN.md — libs/Concurrency/ndjsonDecode.m sibling to ndjsonEncode (Wave 1, no deps) (EVTLOG-02 primitive)
-- [ ] 1031-02-event-log-PLAN.md — libs/Concurrency/EventLog.m lock-serialised append + magic header + 50-proc stress harness (Wave 2, depends on 01) (EVTLOG-01 + EVTLOG-02)
+- [x] 1031-02-event-log-PLAN.md — libs/Concurrency/EventLog.m lock-serialised append + magic header + 50-proc stress harness (Wave 2, depends on 01) (EVTLOG-01 + EVTLOG-02)
 - [ ] 1031-03-event-log-reader-PLAN.md — libs/Concurrency/EventLogReader.m with mtime cache + AtomicWriter.readWithRetry + corrupt-line tolerance (Wave 2, depends on 01) (EVTLOG-02 + EVTLOG-03)
 - [ ] 1031-04-event-store-cluster-mode-PLAN.md — libs/EventDetection/EventStore.m gains "SharedRoot" NV-pair + journal_mode=DELETE + busy_timeout=10000 + BEGIN IMMEDIATE + retry on "database is locked" (Wave 3, depends on 02; FastSenseDataStore UNCHANGED) (EVTLOG-01 full)
 
