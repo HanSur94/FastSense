@@ -99,6 +99,12 @@ classdef DashboardEngine < handle
         PlantLogStoreInternal_    = []  % PlantLogStore handle (or [])
         PlantLogLiveTailInternal_ = []  % PlantLogLiveTail handle (or [])
         PlantLogTickListener_     = []  % addlistener handle for PlantLogLiveTail.PlantLogTailTick
+        % Phase 1031 PLOG-VIZ-06: hover tooltip on plant-log slider markers.
+        % Lazily constructed in setPlantLogStoreForTest_ when a non-empty
+        % store is attached AND TimeRangeSelector_ is rendered. Torn down
+        % on every store change (so stale store-handle closures cannot
+        % survive a store swap), on store-detach, and in delete().
+        PlantLogSliderHover_      = []  % PlantLogSliderHover handle (or [])
     end
 
     methods (Access = public)
@@ -2126,6 +2132,14 @@ classdef DashboardEngine < handle
                 try delete(obj.FigureDestroyedListener_); catch, end
                 obj.FigureDestroyedListener_ = [];
             end
+            % Phase 1031 PLOG-VIZ-06: tear down hover BEFORE the selector.
+            % Hover saved the selector's chained WindowButtonMotionFcn at
+            % construction; restoring it must happen while the selector is
+            % still alive (otherwise the restored callback handle refers to
+            % a deleted TimeRangeSelector and the figure ends up with a
+            % stale closure). teardownPlantLogSliderHover_ is idempotent
+            % (safe to call again at the end of delete()).
+            obj.teardownPlantLogSliderHover_();
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
@@ -2179,6 +2193,9 @@ classdef DashboardEngine < handle
             catch
             end
             obj.PlantLogTickListener_ = [];
+            % Phase 1031 PLOG-VIZ-06: tear down plant-log slider hover.
+            % delete() restores prior WindowButtonMotionFcn unconditionally.
+            obj.teardownPlantLogSliderHover_();
         end
     end
 
@@ -2218,12 +2235,46 @@ classdef DashboardEngine < handle
         %   Inject a PlantLogStore (or [] to detach) and immediately recompute
         %   plant-log slider markers so callers can assert on the slider state
         %   right after attach without waiting for a refresh hook.
+        %
+        %   Phase 1031 PLOG-VIZ-06: every store change ALWAYS tears down +
+        %   (re-)builds the PlantLogSliderHover_ helper. Tearing down first
+        %   ensures stale closures (capturing an old store handle) cannot
+        %   survive a store swap; rebuilding requires a non-empty store AND
+        %   a rendered TimeRangeSelector_. The hover closure goes through
+        %   obj.lookupPlantLogEntries_ (NOT a captured-by-value store ref),
+        %   so subsequent store swaps reflect immediately even if the
+        %   rebuild branch is bypassed.
             if ~isempty(store) && ~isa(store, 'PlantLogStore')
                 error('DashboardEngine:invalidPlantLogStore', ...
                     'store must be empty or a PlantLogStore; got %s.', class(store));
             end
             obj.PlantLogStoreInternal_ = store;
             obj.computePlantLogMarkers();
+            % Phase 1031 PLOG-VIZ-06: always tear down any prior hover so
+            % closures capturing the previous store handle cannot survive.
+            obj.teardownPlantLogSliderHover_();
+            if ~isempty(store) ...
+                    && ~isempty(obj.TimeRangeSelector_) ...
+                    && isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                % Lazy-construct hover when the slider is rendered AND a
+                % store is attached. The lookup goes through the engine's
+                % helper (indirect indirection) so future store swaps are
+                % picked up without needing to rebuild the closure.
+                try
+                    ax = obj.TimeRangeSelector_.hAxes;
+                    fig = ancestor(ax, 'figure');
+                    if ~isempty(fig) && ishandle(fig)
+                        obj.PlantLogSliderHover_ = PlantLogSliderHover( ...
+                            fig, ax, ...
+                            @(t0, t1) obj.lookupPlantLogEntries_(t0, t1));
+                    end
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:plantLogHoverFailed', ...
+                            'PlantLogSliderHover construction failed: %s', err.message);
+                    end
+                end
+            end
         end
 
         function setPlantLogLiveTailForTest_(obj, tail)
@@ -2954,6 +3005,40 @@ classdef DashboardEngine < handle
             catch err
                 fprintf('[ENGINE WARN] computePlantLogMarkers: %s\n', err.message);
             end
+        end
+
+        function entries = lookupPlantLogEntries_(obj, t0, t1)
+        %LOOKUPPLANTLOGENTRIES_ Phase 1031 PLOG-VIZ-06 indirect store lookup.
+        %   Helper consumed by the PlantLogSliderHover closure. Re-reads
+        %   obj.PlantLogStoreInternal_ AT CALL TIME so subsequent store swaps
+        %   (via setPlantLogStoreForTest_(other)) are reflected immediately
+        %   without rebuilding the hover closure. Returns [] when no store
+        %   is attached or when the lookup throws.
+            entries = [];
+            if isempty(obj.PlantLogStoreInternal_) ...
+                    || ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                return;
+            end
+            try
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+            catch
+                entries = [];
+            end
+        end
+
+        function teardownPlantLogSliderHover_(obj)
+        %TEARDOWNPLANTLOGSLIDERHOVER_ Phase 1031 PLOG-VIZ-06 hover teardown.
+        %   Idempotent: safe to call when PlantLogSliderHover_ is empty,
+        %   already-deleted, or constructed but never installed. delete()
+        %   restores the prior WindowButtonMotionFcn.
+            try
+                if ~isempty(obj.PlantLogSliderHover_) ...
+                        && isvalid(obj.PlantLogSliderHover_)
+                    delete(obj.PlantLogSliderHover_);
+                end
+            catch
+            end
+            obj.PlantLogSliderHover_ = [];
         end
 
     end
