@@ -55,6 +55,7 @@ function varargout = install(varargin)
     addpath(fullfile(root, 'libs', 'Dashboard'));
     addpath(fullfile(root, 'libs', 'WebBridge'));
     addpath(fullfile(root, 'libs', 'FastSenseCompanion'));
+    addpath(fullfile(root, 'libs', 'Concurrency'));
 
     % Demo workspaces (Phase 1015+): add each demo dir so the entry-point
     % function (e.g. run_demo) is callable without manual addpath.
@@ -81,6 +82,7 @@ function varargout = install(varargin)
             fullfile(root, 'libs', 'FastSense', 'private',            ['octave-' octTag])
             fullfile(root, 'libs', 'FastSense',                        ['octave-' octTag])
             fullfile(root, 'libs', 'SensorThreshold', 'private',       ['octave-' octTag])
+            fullfile(root, 'libs', 'Concurrency', 'private',           ['octave-' octTag])
         };
         for k = 1:numel(candidates)
             if isfolder(candidates{k})
