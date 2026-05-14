@@ -77,6 +77,18 @@ classdef MonitorTag < Tag
     %     MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
     %     MonitorTag:invalidData              — appendData numeric/length mismatch
     %     MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
+    %     MonitorTag:emitEventBadKind         — emitEvent_ called with kind not in {start,closed,end}
+    %     MonitorTag:eventLogReentrantSkip    — (warning ID) cluster-mode emission skipped due to
+    %                                           re-entrant per-tag lock acquire (Plan 02 will handle)
+    %
+    %   Deferred-notify (Pitfall 13 prevention):
+    %     OnEventStart / OnEventEnd callbacks are NOT invoked during the emission body.
+    %     They are queued on pendingNotify_ and flushed by flushPendingNotify_() AFTER
+    %     the emission loop completes, with inEmission_ = false.
+    %     Pre-refactor: listeners fired synchronously DURING EventStore.append.
+    %     Post-refactor: listeners fire immediately AFTER appendData/getXY returns,
+    %     but OUTSIDE the emission window. The "event was emitted" semantic is preserved;
+    %     only the timing changes from synchronous-during-append to post-emission-batch.
     %
     %   Persistence (Phase 1007 MONITOR-09):
     %     Opt-in via Persist=true + DataStore. Staleness detection uses a
@@ -103,6 +115,7 @@ classdef MonitorTag < Tag
         OnEventEnd          = [] % function_handle @(event); [] disables callback
         Persist             = false  % MONITOR-09 opt-in (Pitfall 2 default-off)
         DataStore           = []     % FastSenseDataStore handle; required when Persist=true
+        EventLog            = []     % libs/Concurrency/EventLog.m handle; non-empty triggers cluster-mode emission
     end
 
     properties (Access = private)
@@ -115,6 +128,10 @@ classdef MonitorTag < Tag
         dirty_          = true     % true when cache needs rebuilding
         ParentKey_      = ''       % set in Pass-1 fromStruct; consumed by resolveRefs
         listeners_      = {}       % cell of listeners notified on invalidate()
+        % Phase 1032-01: emission state + deferred-notify queue (Pitfall 13)
+        IsClusterMode_  = false    % gate; true iff EventLog non-empty at emission time
+        pendingNotify_  = struct('kind', {}, 'event', {})   % empty struct array; entries queued during emission for post-flush firing
+        inEmission_     = false    % logical; true while inside fireEventsInTail_ / fireEventsOnRisingEdges_
     end
 
     properties (SetAccess = private)
@@ -176,6 +193,8 @@ classdef MonitorTag < Tag
                         obj.Persist = logical(monArgs{i+1});
                     case 'DataStore'
                         obj.DataStore = monArgs{i+1};
+                    case 'EventLog'
+                        obj.EventLog = monArgs{i+1};
                     otherwise
                         error('MonitorTag:unknownOption', ...
                             'Unknown option ''%s''.', monArgs{i});
@@ -317,6 +336,14 @@ classdef MonitorTag < Tag
             obj.listeners_{end+1} = m;
         end
 
+        function tf = getInEmission_(obj)
+            %GETINMISSION_ Test accessor: return true while inside an emission body.
+            %   Exists ONLY for test observability (deferred-notify proof in
+            %   TestListenerCannotAcquireLock). The trailing underscore marks it as
+            %   an internal accessor not intended for production callers.
+            tf = obj.inEmission_;
+        end
+
         function appendData(obj, newX, newY)
             %APPENDDATA Extend cached (X, Y) with new tail samples — no full recompute.
             %   Preserves hysteresis FSM state and MinDuration bookkeeping
@@ -445,6 +472,111 @@ classdef MonitorTag < Tag
     end
 
     methods (Access = private)
+
+        function emitEvent_(obj, ev, kind)
+            %EMITEVENT_ Single emission seam: cluster-mode routes to EventLog, single-user to EventStore.
+            %   kind is one of: 'start' (rising edge / open run), 'closed' (closed run;
+            %   fires OnEventStart + OnEventEnd), 'end' (falling edge only).
+            %
+            %   Deferred-notify (Pitfall 13): OnEventStart / OnEventEnd are QUEUED on
+            %   pendingNotify_, NOT invoked here. The caller (fireEventsInTail_ /
+            %   fireEventsOnRisingEdges_) calls flushPendingNotify_() at the END of its
+            %   emission loop to fire callbacks outside the emission body.
+            %
+            %   Persistence (cluster vs single-user):
+            %     - IsClusterMode_ (computed = ~isempty(obj.EventLog)):
+            %         (a) Call obj.EventLog.append(ev) which acquires the per-tag FileLock
+            %             internally (Phase 1031-02). On nestedLockAcquireForbidden (re-acquire
+            %             from same process while Plan 02 LiveEventPipeline tick holds the outer
+            %             lock), catch + log a one-line warning + skip the cluster write.
+            %             The in-memory EventStore (if bound) still records the event for
+            %             backward compat. Plan 02 will introduce a non-locking inner-write seam.
+            %         (b) Plan 02 will replace this with a non-locking inner seam if needed.
+            %     - Single-user (EventLog empty): write to obj.EventStore.append (existing path)
+            %       and perform TagKeys / EventBinding wiring identically to pre-refactor inline code.
+
+            % Re-check cluster-mode gate every call (users may attach/detach EventLog at runtime).
+            obj.IsClusterMode_ = ~isempty(obj.EventLog);
+
+            if obj.IsClusterMode_
+                % Cluster write — EventLog.append acquires the per-tag lock internally.
+                try
+                    obj.EventLog.append(ev);
+                catch ME
+                    if strcmp(ME.identifier, 'Concurrency:nestedLockAcquireForbidden')
+                        % Plan 02 will manage the outer-lock domain.  In Plan 01 we tolerate
+                        % the re-acquire by skipping the cluster write — the in-memory
+                        % EventStore (if bound) still records the event for backward compat.
+                        warning('MonitorTag:eventLogReentrantSkip', ...
+                            'Skipped cluster-mode EventLog.append on re-entrant per-tag lock for ''%s''.', ...
+                            char(obj.Key));
+                    else
+                        rethrow(ME);
+                    end
+                end
+            end
+
+            if ~isempty(obj.EventStore)
+                % Single-user path AND cluster-mode-back-compat path:
+                %   - append to in-memory EventStore (assigns Id, populates events_ array)
+                %   - wire TagKeys + EventBinding (Phase 1010 EVENT-01 invariant)
+                obj.EventStore.append(ev);
+                ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
+                EventBinding.attach(ev.Id, char(obj.Key));
+                EventBinding.attach(ev.Id, char(obj.Parent.Key));
+            end
+
+            % Queue callbacks for post-emission flush (Pitfall 13).
+            switch kind
+                case 'start'
+                    if ~isempty(obj.OnEventStart)
+                        obj.pendingNotify_(end+1) = struct('kind', 'start', 'event', ev);
+                    end
+                case 'closed'
+                    if ~isempty(obj.OnEventStart)
+                        obj.pendingNotify_(end+1) = struct('kind', 'start', 'event', ev);
+                    end
+                    if ~isempty(obj.OnEventEnd)
+                        obj.pendingNotify_(end+1) = struct('kind', 'end', 'event', ev);
+                    end
+                case 'end'
+                    if ~isempty(obj.OnEventEnd)
+                        obj.pendingNotify_(end+1) = struct('kind', 'end', 'event', ev);
+                    end
+                otherwise
+                    error('MonitorTag:emitEventBadKind', ...
+                        'emitEvent_ kind must be ''start''|''closed''|''end''; got ''%s''.', kind);
+            end
+        end
+
+        function flushPendingNotify_(obj)
+            %FLUSHPENDINGNOTIFY_ Fire queued OnEventStart/OnEventEnd callbacks (Pitfall 13).
+            %   Called at the END of fireEventsInTail_ / fireEventsOnRisingEdges_ — AFTER the
+            %   emission loop closes, with inEmission_ = false. Each callback is wrapped in
+            %   try/catch so a bad listener cannot wedge subsequent ones.
+            if isempty(obj.pendingNotify_), return; end
+            queue = obj.pendingNotify_;
+            obj.pendingNotify_ = struct('kind', {}, 'event', {});   % drain BEFORE firing so a listener
+                                       % that triggers a new emission cycle does not see stale entries.
+            for i = 1:numel(queue)
+                entry = queue(i);
+                try
+                    if strcmp(entry.kind, 'start') && ~isempty(obj.OnEventStart)
+                        obj.OnEventStart(entry.event);
+                    elseif strcmp(entry.kind, 'end') && ~isempty(obj.OnEventEnd)
+                        obj.OnEventEnd(entry.event);
+                    end
+                catch ME
+                    fprintf('[MonitorTag] listener for ''%s'' threw: %s\n', char(obj.Key), ME.message);
+                end
+            end
+        end
+
+        function endEmission_(obj)
+            %ENDEMISSION_ Reset inEmission_ flag — called by onCleanup in emission methods.
+            obj.inEmission_ = false;
+        end
+
         function notifyListeners_(obj)
             %NOTIFYLISTENERS_ Iterate listeners_ and call invalidate() on each.
             for i = 1:numel(obj.listeners_)
@@ -662,10 +794,19 @@ classdef MonitorTag < Tag
             %   Phase 1012: runs still open at tail end emit an IsOpen=true
             %   Event (was `continue` pre-phase). Falling edge calls
             %   EventStore.closeEvent(openEventId_, endT, finalStats).
+            %
+            %   Phase 1032-01: all EventStore.append call sites route through
+            %   emitEvent_; callbacks are deferred to flushPendingNotify_()
+            %   at method exit (Pitfall 13 prevention).
             if nargin < 6, newY = []; end
             if isempty(bin_new), return; end
-            hasHooks = ~isempty(obj.EventStore) || ~isempty(obj.OnEventStart) || ~isempty(obj.OnEventEnd);
+            hasHooks = ~isempty(obj.EventStore) || ~isempty(obj.EventLog) || ...
+                ~isempty(obj.OnEventStart) || ~isempty(obj.OnEventEnd);
             if ~hasHooks, return; end
+
+            % Phase 1032-01: mark emission start; onCleanup resets flag on early return.
+            obj.inEmission_ = true;
+            emissionCleaner = onCleanup(@() obj.endEmission_()); %#ok<NASGU>
 
             [sI, eI] = obj.findRuns_(bin_new);
 
@@ -708,7 +849,8 @@ classdef MonitorTag < Tag
                         evSnap = struct('Id', obj.cache_.openEventId_, ...
                             'StartTime', priorOngoingStart, 'EndTime', endT, ...
                             'IsOpen', false);
-                        obj.OnEventEnd(evSnap);
+                        % Queue deferred notify for OnEventEnd (Pitfall 13).
+                        obj.pendingNotify_(end+1) = struct('kind', 'end', 'event', evSnap);
                     end
                     obj.cache_.openEventId_ = '';
                     obj.cache_.openStats_   = MonitorTag.emptyOpenStats_();
@@ -733,14 +875,11 @@ classdef MonitorTag < Tag
                     if ~isempty(obj.cache_.openEventId_), continue; end
                     ev = Event(startT, NaN, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
                     ev.IsOpen = true;
+                    % Phase 1032-01: route through emitEvent_ (handles EventStore + EventLog + deferred notify).
+                    obj.emitEvent_(ev, 'start');
                     if ~isempty(obj.EventStore)
-                        obj.EventStore.append(ev);
-                        ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
-                        EventBinding.attach(ev.Id, char(obj.Key));
-                        EventBinding.attach(ev.Id, char(obj.Parent.Key));
                         obj.cache_.openEventId_ = ev.Id;
                     end
-                    if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
                     continue;
                 end
                 % Closed run — existing emission path.
@@ -757,16 +896,13 @@ classdef MonitorTag < Tag
                     ev.setStats(max(abs(yRun)), numel(yRun), min(yRun), max(yRun), ...
                         mean(yRun), sqrt(mean(yRun .^ 2)), std(yRun));
                 end
-                if ~isempty(obj.EventStore)
-                    obj.EventStore.append(ev);
-                    % Phase 1010 (EVENT-01): TagKeys + EventBinding after append (Id assigned)
-                    ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
-                    EventBinding.attach(ev.Id, char(obj.Key));
-                    EventBinding.attach(ev.Id, char(obj.Parent.Key));
-                end
-                if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
-                if ~isempty(obj.OnEventEnd),   obj.OnEventEnd(ev);   end
+                % Phase 1032-01: route through emitEvent_ (handles EventStore + EventLog + deferred notify).
+                obj.emitEvent_(ev, 'closed');
             end
+
+            % Phase 1032-01: flush deferred callbacks AFTER emission body, with inEmission_=false.
+            obj.inEmission_ = false;
+            obj.flushPendingNotify_();
         end
 
         % ---- MONITOR-09 persistence helpers (Phase 1007 Plan 02) ----
@@ -858,10 +994,20 @@ classdef MonitorTag < Tag
             %
             %   Persistence policy: NEVER calls EventStore.save (Pitfall 2).
             %   Only EventStore.append — consumers choose when to persist.
+            %
+            %   Phase 1032-01: all EventStore.append call sites route through
+            %   emitEvent_; callbacks are deferred to flushPendingNotify_()
+            %   at method exit (Pitfall 13 prevention).
             if isempty(bin), return; end
-            if isempty(obj.EventStore) && isempty(obj.OnEventStart) && isempty(obj.OnEventEnd)
+            if isempty(obj.EventStore) && isempty(obj.EventLog) && ...
+                    isempty(obj.OnEventStart) && isempty(obj.OnEventEnd)
                 return;
             end
+
+            % Phase 1032-01: mark emission start; onCleanup resets flag on early return.
+            obj.inEmission_ = true;
+            emissionCleaner = onCleanup(@() obj.endEmission_()); %#ok<NASGU>
+
             [sI, eI] = obj.findRuns_(bin);
             % Phase 1012: detect trailing open run (last run ends at last bin index)
             lastOpenRun = ~isempty(eI) && eI(end) == numel(bin);
@@ -927,31 +1073,27 @@ classdef MonitorTag < Tag
                     continue;
                 end
                 ev = Event(startT, endT, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
+                % Phase 1032-01: route through emitEvent_ (handles EventStore + EventLog + deferred notify).
+                obj.emitEvent_(ev, 'closed');
                 if ~isempty(obj.EventStore)
-                    obj.EventStore.append(ev);
-                    % Phase 1010 (EVENT-01): TagKeys + EventBinding after append (Id assigned)
-                    ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
-                    EventBinding.attach(ev.Id, char(obj.Key));
-                    EventBinding.attach(ev.Id, char(obj.Parent.Key));
                     existingStarts(end+1) = startT; %#ok<AGROW>
                 end
-                if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
-                if ~isempty(obj.OnEventEnd),   obj.OnEventEnd(ev);   end
             end
             % Phase 1012: open run (trailing) — emit IsOpen=true event
             if lastOpenRun && isempty(obj.cache_.openEventId_)
                 startT = px(sI(end));
                 if startsAlreadyEmitted(startT)
                     % Already emitted on a prior recompute_; nothing to do.
+                    % Phase 1032-01: still flush any pending notifications queued above.
+                    obj.inEmission_ = false;
+                    obj.flushPendingNotify_();
                     return;
                 end
                 ev = Event(startT, NaN, char(obj.Parent.Key), char(obj.Key), NaN, 'upper');
                 ev.IsOpen = true;
+                % Phase 1032-01: route through emitEvent_ (handles EventStore + EventLog + deferred notify).
+                obj.emitEvent_(ev, 'start');
                 if ~isempty(obj.EventStore)
-                    obj.EventStore.append(ev);
-                    ev.TagKeys = {char(obj.Key), char(obj.Parent.Key)};
-                    EventBinding.attach(ev.Id, char(obj.Key));
-                    EventBinding.attach(ev.Id, char(obj.Parent.Key));
                     obj.cache_.openEventId_ = ev.Id;
                     % Seed openStats_ from the run portion of the parent grid.
                     [px_parent, py_parent] = obj.Parent.getXY();
@@ -959,8 +1101,11 @@ classdef MonitorTag < Tag
                         obj.updateOpenStats_(px_parent(sI(end):eI(end)), py_parent(sI(end):eI(end)));
                     end
                 end
-                if ~isempty(obj.OnEventStart), obj.OnEventStart(ev); end
             end
+
+            % Phase 1032-01: flush deferred callbacks AFTER emission body, with inEmission_=false.
+            obj.inEmission_ = false;
+            obj.flushPendingNotify_();
         end
     end
 
@@ -1041,7 +1186,7 @@ classdef MonitorTag < Tag
                        'Metadata', 'Criticality', 'SourceRef'};
             monKeys = {'AlarmOffConditionFn', 'MinDuration', ...
                        'EventStore', 'OnEventStart', 'OnEventEnd', ...
-                       'Persist', 'DataStore'};
+                       'Persist', 'DataStore', 'EventLog'};
             tagArgs = {};
             monArgs = {};
             for i = 1:2:numel(args)
