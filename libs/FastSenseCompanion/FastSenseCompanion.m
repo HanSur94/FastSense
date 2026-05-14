@@ -999,7 +999,23 @@ classdef FastSenseCompanion < handle
                     % MATLAB screen y grows upward -- flip so row 1 is at the top.
                     y = gy + (rows - rIdx) * tileH;
                     try
-                        set(figs(k), 'Position', [x, y, tileW - 8, tileH - 8]);
+                        % distFig-style robustness: a maximized figure ignores
+                        % set(Position) silently, and normalized units would
+                        % treat our pixel rect as fractions of the screen --
+                        % both make Tile visually a no-op. Coerce both first.
+                        f = figs(k);
+                        try
+                            if isprop(f, 'WindowState') && ...
+                                    ~strcmp(get(f, 'WindowState'), 'normal')
+                                set(f, 'WindowState', 'normal');
+                            end
+                        catch
+                        end
+                        try
+                            set(f, 'Units', 'pixels');
+                        catch
+                        end
+                        set(f, 'Position', [x, y, tileW - 8, tileH - 8]);
                     catch
                         % Skip individual failures -- keep tiling the rest.
                     end
