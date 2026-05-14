@@ -17,6 +17,7 @@ classdef FastSenseCompanion < handle
 %     Theme      — 'dark' | 'light' (default: 'dark')
 %     LivePeriod — seconds between live refreshes (default: 1.0)
 %     EventStore — EventStore handle or [] (default: auto-discover from registry)
+%     SharedRoot — (cluster mode) path to shared filesystem root; default '' (single-user).
 %
 %   Public methods:
 %     setProject(dashboards, registry) — rebuild against new project
@@ -44,12 +45,14 @@ classdef FastSenseCompanion < handle
     end
 
     properties (SetAccess = private)
-        Dashboards = {}       % cell array of DashboardEngine passed by user
-        Registry   = []       % TagRegistry reference
-        Theme      = 'dark'   % preset string ('dark' | 'light')
-        LivePeriod = 1.0      % seconds; user-readable mirror of LivePeriod_
-        IsOpen     = false    % true while uifigure is valid
-        IsLive     = false    % true while LiveTimer_ is running (refreshes inspector)
+        Dashboards    = {}       % cell array of DashboardEngine passed by user
+        Registry      = []       % TagRegistry reference
+        Theme         = 'dark'   % preset string ('dark' | 'light')
+        LivePeriod    = 1.0      % seconds; user-readable mirror of LivePeriod_
+        IsOpen        = false    % true while uifigure is valid
+        IsLive        = false    % true while LiveTimer_ is running (refreshes inspector)
+        SharedRoot    = ''       % cluster shared filesystem root ('' in single-user mode)
+        IsClusterMode = false    % logical; true iff SharedRoot is non-empty
     end
 
     properties (GetAccess = public, SetAccess = ?CompanionSettingsDialog)
@@ -91,6 +94,10 @@ classdef FastSenseCompanion < handle
         OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
         EventStore_  = []   % EventStore handle resolved via constructor option or auto-discovery
         EventViewer_ = []   % CompanionEventViewer handle (single-instance) or [] (Task 13 wires it)
+        % Phase 1033 Plan 01 — cluster mode internal state
+        SharedRoot_               = ''    % internal mirror of public SharedRoot
+        IsClusterMode_            = false % internal cluster-mode gate
+        LastContentionNoticeText_ = ''    % most recent contention notice (Plan 04 surfaces in UI)
     end
 
     methods (Access = public)
@@ -112,6 +119,7 @@ classdef FastSenseCompanion < handle
             userTheme      = 'dark';
             userLivePeriod = 1.0;
             userEventStore = [];
+            userSharedRoot = '';
 
             % Step 2b — Override with stored prefdir values (if present and well-formed).
             % Priority: built-in default < prefdir < explicit Name-Value (Step 3).
@@ -159,10 +167,17 @@ classdef FastSenseCompanion < handle
                                 'EventStore must be an EventStore handle or [] (got %s).', class(v));
                         end
                         userEventStore = v;
+                    case 'SharedRoot'
+                        v = varargin{k+1};
+                        if ~isempty(v) && ~(ischar(v) || (isstring(v) && isscalar(v)))
+                            error('FastSenseCompanion:invalidSharedRoot', ...
+                                'SharedRoot must be a non-empty char/string or empty (got %s).', class(v));
+                        end
+                        userSharedRoot = char(v);
                     otherwise
                         error('FastSenseCompanion:unknownOption', ...
                             ['Unknown option ''%s''. Valid options: ', ...
-                             'Dashboards, Registry, Name, Theme, LivePeriod, EventStore.'], key);
+                             'Dashboards, Registry, Name, Theme, LivePeriod, EventStore, SharedRoot.'], key);
                 end
             end
 
@@ -192,13 +207,29 @@ classdef FastSenseCompanion < handle
             obj.LivePeriod_ = userLivePeriod;
             obj.LivePeriod  = userLivePeriod;
 
-            % Step 6b — Resolve EventStore: explicit override wins; otherwise
-            % auto-discover from the first MonitorTag with a non-empty EventStore.
-            if ~isempty(userEventStore)
-                obj.EventStore_ = userEventStore;
-            else
-                obj.EventStore_ = companionDiscoverEventStore();
+            % --- Cluster mode resolution (Phase 1033 Plan 01; OPS-01 partial) ---
+            obj.SharedRoot_     = userSharedRoot;
+            obj.SharedRoot      = userSharedRoot;
+            obj.IsClusterMode_  = ~isempty(userSharedRoot);
+            obj.IsClusterMode   = obj.IsClusterMode_;
+            if obj.IsClusterMode_
+                % Validate the shared root via ClusterConfig — throws
+                % Concurrency:sharedRootUnreachable on a non-existent folder.
+                ClusterConfig.resolve(struct('SharedRoot', userSharedRoot));
+                % Best-effort oplock smoke test — never throws; one-time warning
+                % via warning('Concurrency:smbOplockDetected', ...) on mismatch.
+                try
+                    ClusterConfig.checkSharedConfig(userSharedRoot);
+                catch
+                    % checkSharedConfig is documented to be best-effort and never
+                    % throw, but guard anyway so a stray error from a future
+                    % refactor cannot prevent the companion from opening.
+                end
             end
+
+            % Step 6b — Resolve EventStore: explicit override wins; otherwise
+            % auto-discover from the registry, with cluster-mode upgrade when SharedRoot is set.
+            obj.EventStore_ = companionDiscoverEventStore(obj.SharedRoot_, userEventStore);
 
             % Step 7 — Build uifigure (Visible='off' while building)
             obj.hFig_ = uifigure( ...
@@ -889,6 +920,23 @@ classdef FastSenseCompanion < handle
         %   option, OR the auto-discovered store from the registry, OR []
         %   if neither resolved.
             s = obj.EventStore_;
+        end
+
+        function r = getSharedRoot(obj)
+        %GETSHAREDROOT Return the resolved SharedRoot (or '' if single-user).
+            r = obj.SharedRoot_;
+        end
+
+        function tf = getIsClusterMode(obj)
+        %GETISCLUSTERMODE Return the cluster-mode gate.
+            tf = obj.IsClusterMode_;
+        end
+
+        function s = getLastContentionNoticeText(obj)
+        %GETLASTCONTENTIONNOTICETEXT Return the cluster contention banner text
+        %   (or '' when no contention has been observed since startup).
+        %   Plan 04 wires the live polling that populates this property.
+            s = obj.LastContentionNoticeText_;
         end
 
         function openEventViewer(obj)
