@@ -21,6 +21,12 @@ classdef EventStore < handle
     %     EventStore:notClusterMode      — cluster method called in single-user mode
     %     EventStore:invalidAckRecord    — rec is not a scalar struct
     %     EventStore:appendAckFailed     — INSERT retries exhausted on database lock
+    %     EventStore:retryExhausted      — busyRetryWrap_ ran 10 attempts and still hit 'database is locked'
+    %     EventStore:mergeShapeMismatch  — getEvents cluster-merge could not concatenate heterogeneous shapes (warning, not error)
+    %
+    %   busyRetryWrap_ is exposed as a public Static method so that test harnesses
+    %   can call it with synthetic fn arguments.  In production it is called only
+    %   from within EventStore cluster-mode transactions.
 
     properties
         FilePath        = ''
@@ -86,7 +92,29 @@ classdef EventStore < handle
         end
 
         function events = getEvents(obj)
+            %GETEVENTS Return all events.
+            %   Single-user mode: returns in-memory events_ (unchanged from pre-plan).
+            %   Cluster mode: merges in-memory events_ with per-tag NDJSON logs under
+            %   <sharedRoot>/events/*.events.ndjson via EventLogReader.readAll().
+            %   Best-effort merge — if NDJSON read fails, falls back to in-memory only.
             events = obj.events_;
+            if ~obj.IsClusterMode_, return; end
+            % Cluster mode: merge in per-tag NDJSON event logs under sharedRoot/events/
+            try
+                evDir = SharedPaths.eventsDir(obj.SharedRoot_);
+                d = dir(fullfile(evDir, '*.events.ndjson'));
+                for i = 1:numel(d)
+                    logPath = fullfile(evDir, d(i).name);
+                    reader = EventLogReader(logPath);
+                    tagEvents = reader.readAll();
+                    if ~isempty(tagEvents)
+                        events = EventStore.mergeEventStructs_(events, tagEvents);
+                    end
+                end
+            catch ME
+                fprintf('[EventStore] cluster-merge getEvents failed: %s\n', ME.message);
+                % Best-effort: fall back to in-memory snapshot
+            end
         end
 
         function closeEvent(obj, eventId, endTime, finalStats)
@@ -128,61 +156,82 @@ classdef EventStore < handle
         %   with non-empty Id (Phase 1010 EVENT-01/EVENT-03).
         %   Fallback path: carrier-field matching (SensorName/ThresholdLabel)
         %   for events without Id (backward compat, Pitfall 4).
+        %   Cluster mode: merges the in-memory/EventBinding result with events from
+        %   the per-tag NDJSON log (<sharedRoot>/events/<tagKey>.events.ndjson).
         %
         %   Errors:
         %     EventStore:invalidTagKey — tagKey not char / string
             events = [];
-            if isempty(obj.events_), return; end
+            if isempty(obj.events_) && ~obj.IsClusterMode_, return; end
             if ~ischar(tagKey) && ~isstring(tagKey)
                 error('EventStore:invalidTagKey', ...
                     'tagKey must be char or string; got %s.', class(tagKey));
             end
             tagKey = char(tagKey);
-            % Primary path: EventBinding-based lookup
-            boundEvents = EventBinding.getEventsForTag(tagKey, obj);
-            % Fallback path: carrier-field matching (SensorName/ThresholdLabel)
-            % for events NOT already found by EventBinding
-            keep = false(1, numel(obj.events_));
-            for i = 1:numel(obj.events_)
-                ev = obj.events_(i);
-                % Check if this event was already found by EventBinding (by Id)
-                alreadyBound = false;
-                evId = '';
-                if isa(ev, 'Event') && ~isempty(ev.Id)
-                    evId = ev.Id;
-                end
-                if ~isempty(evId)
-                    for bi = 1:numel(boundEvents)
-                        if strcmp(evId, boundEvents(bi).Id)
-                            alreadyBound = true;
-                            break;
+
+            if ~isempty(obj.events_)
+                % Primary path: EventBinding-based lookup
+                boundEvents = EventBinding.getEventsForTag(tagKey, obj);
+                % Fallback path: carrier-field matching (SensorName/ThresholdLabel)
+                % for events NOT already found by EventBinding
+                keep = false(1, numel(obj.events_));
+                for i = 1:numel(obj.events_)
+                    ev = obj.events_(i);
+                    % Check if this event was already found by EventBinding (by Id)
+                    alreadyBound = false;
+                    evId = '';
+                    if isa(ev, 'Event') && ~isempty(ev.Id)
+                        evId = ev.Id;
+                    end
+                    if ~isempty(evId)
+                        for bi = 1:numel(boundEvents)
+                            if strcmp(evId, boundEvents(bi).Id)
+                                alreadyBound = true;
+                                break;
+                            end
                         end
                     end
+                    if alreadyBound
+                        continue;
+                    end
+                    sn = '';
+                    tl = '';
+                    if isa(ev, 'Event')
+                        sn = ev.SensorName;
+                        tl = ev.ThresholdLabel;
+                    elseif isstruct(ev)
+                        if isfield(ev, 'SensorName'), sn = ev.SensorName; end
+                        if isfield(ev, 'ThresholdLabel'), tl = ev.ThresholdLabel; end
+                    end
+                    keep(i) = strcmp(sn, tagKey) || strcmp(tl, tagKey);
                 end
-                if alreadyBound
-                    continue;
+                carrierEvents = obj.events_(keep);
+                % Combine: EventBinding results + carrier fallback (dedup by handle ==)
+                if isempty(boundEvents) && isempty(carrierEvents)
+                    events = [];
+                elseif isempty(boundEvents)
+                    events = carrierEvents;
+                elseif isempty(carrierEvents)
+                    events = boundEvents;
+                else
+                    events = [boundEvents, carrierEvents];
                 end
-                sn = '';
-                tl = '';
-                if isa(ev, 'Event')
-                    sn = ev.SensorName;
-                    tl = ev.ThresholdLabel;
-                elseif isstruct(ev)
-                    if isfield(ev, 'SensorName'), sn = ev.SensorName; end
-                    if isfield(ev, 'ThresholdLabel'), tl = ev.ThresholdLabel; end
-                end
-                keep(i) = strcmp(sn, tagKey) || strcmp(tl, tagKey);
             end
-            carrierEvents = obj.events_(keep);
-            % Combine: EventBinding results + carrier fallback (dedup by handle ==)
-            if isempty(boundEvents) && isempty(carrierEvents)
-                events = [];
-            elseif isempty(boundEvents)
-                events = carrierEvents;
-            elseif isempty(carrierEvents)
-                events = boundEvents;
-            else
-                events = [boundEvents, carrierEvents];
+
+            % Cluster mode: merge per-tag NDJSON log into results.
+            if obj.IsClusterMode_
+                try
+                    evDir  = SharedPaths.eventsDir(obj.SharedRoot_);
+                    logPath = fullfile(evDir, [tagKey, '.events.ndjson']);
+                    reader = EventLogReader(logPath);
+                    tagEvents = reader.readAll();
+                    if ~isempty(tagEvents)
+                        events = EventStore.mergeEventStructs_(events, tagEvents);
+                    end
+                catch ME
+                    fprintf('[EventStore] cluster-merge getEventsForTag failed: %s\n', ME.message);
+                    % Best-effort
+                end
             end
         end
 
@@ -234,10 +283,10 @@ classdef EventStore < handle
         %   1032 ack workflow will route through this method only when
         %   running with 'SharedRoot' set.
         %
-        %   Cluster-mode retry: catches mksqlite:sqlError with
-        %   'database is locked' substring (per 1029-PROBES.md) and retries
-        %   3 times with 50/100/200ms backoff (PITFALLS Pitfall 6 —
-        %   busy_timeout alone is insufficient under deadlock-immediate BUSY).
+        %   Cluster-mode retry: delegates to busyRetryWrap_ which catches
+        %   mksqlite:sqlError with 'database is locked' substring (per
+        %   1029-PROBES.md) and retries up to 10 times with exponential
+        %   backoff 50/100/200/400/800/1600/2000ms capped (PITFALLS Pitfall 6).
             if ~obj.IsClusterMode_
                 error('EventStore:notClusterMode', ...
                     ['appendAckRecord is cluster-mode only.  ', ...
@@ -250,36 +299,17 @@ classdef EventStore < handle
             comment = '';
             if isfield(rec, 'comment'), comment = char(rec.comment); end
 
-            backoffs = [0.05, 0.10, 0.20];   % 50/100/200ms
-            lastErr  = MException('EventStore:appendAckFailed', 'unknown');
-            for attempt = 1:4
-                try
-                    mksqlite(obj.DbId_, 'BEGIN IMMEDIATE');
-                    mksqlite(obj.DbId_, ...
-                        'INSERT INTO ack_records VALUES (?,?,?,?,?)', ...
-                        char(rec.eventId), char(rec.by_user), ...
-                        char(rec.by_host), double(rec.epoch), comment);
-                    mksqlite(obj.DbId_, 'COMMIT');
-                    return;
-                catch ME
-                    try
-                        mksqlite(obj.DbId_, 'ROLLBACK');
-                    catch
-                    end
-                    lastErr = ME;
-                    isBusy = strcmp(ME.identifier, 'mksqlite:sqlError') && ...
-                             contains(ME.message, 'database is locked');
-                    if ~isBusy
-                        rethrow(ME);
-                    end
-                    if attempt <= numel(backoffs)
-                        pause(backoffs(attempt));
-                    end
+            try
+                EventStore.busyRetryWrap_(@() obj.doInsertAckRecord_(rec, comment));
+            catch ME
+                if strcmp(ME.identifier, 'EventStore:retryExhausted')
+                    % Re-wrap to the legacy error ID expected by existing tests.
+                    error('EventStore:appendAckFailed', ...
+                        'INSERT exhausted retries on database lock: %s', ME.message);
+                else
+                    rethrow(ME);
                 end
             end
-            error('EventStore:appendAckFailed', ...
-                'INSERT exhausted %d retries on database lock: %s', ...
-                numel(backoffs) + 1, lastErr.message);
         end
 
         function rows = getAckRecords(obj)
@@ -342,6 +372,66 @@ classdef EventStore < handle
             % Cache for future unchanged calls
             lastData(filePath) = struct('events', events, 'meta', meta);
         end
+
+        function out = busyRetryWrap_(fn)
+        %BUSYRETRYWRAP_ Generalised SQLite "database is locked" retry loop (Pitfall 6).
+        %   out = EventStore.busyRetryWrap_(@() doSomeMksqliteTransaction())
+        %
+        %   Retries on mksqlite errors whose message contains 'database is locked'
+        %   (per 1029-PROBES.md captured string). Backoff schedule (seconds):
+        %     0.05, 0.10, 0.20, 0.40, 0.80, 1.60, 2.00, 2.00, 2.00
+        %   Total: up to 10 attempts (9 backoff waits between them).
+        %   Other errors propagate immediately (no retry).
+        %
+        %   Throws EventStore:retryExhausted on final exhaustion.
+        %
+        %   This method is public-static so test harnesses can call it with
+        %   synthetic fn arguments (e.g. testRetryHelperBackoffSchedule).
+            backoffs  = [0.05, 0.10, 0.20, 0.40, 0.80, 1.60, 2.00, 2.00, 2.00]; % 9 waits = 10 attempts
+            lastErr   = MException('EventStore:retryExhausted', 'no prior attempt');
+            nAttempts = numel(backoffs) + 1;   % 10
+            for attempt = 1:nAttempts
+                try
+                    out = fn();
+                    return;
+                catch ME
+                    lastErr = ME;
+                    isBusy = strcmp(ME.identifier, 'mksqlite:sqlError') && ...
+                             contains(ME.message, 'database is locked');
+                    if ~isBusy
+                        rethrow(ME);   % unrelated errors propagate immediately
+                    end
+                    if attempt <= numel(backoffs)
+                        pause(backoffs(attempt));
+                    end
+                end
+            end
+            error('EventStore:retryExhausted', ...
+                'mksqlite transaction exhausted %d retries on database lock: %s', ...
+                nAttempts, lastErr.message);
+        end
+
+        function out = mergeEventStructs_(a, b)
+        %MERGEEVENTSTRUCTS_ Concatenate two event collections tolerating shape heterogeneity.
+        %   Best-effort concatenation — if types are incompatible (Event handle vs struct),
+        %   returns a unchanged with a warning.  Phase 1033's snapshot consolidator will
+        %   unify the shape canonically.
+            if isempty(a),    out = b;  return; end
+            if isempty(b),    out = a;  return; end
+            if ~strcmp(class(a), class(b))
+                warning('EventStore:mergeShapeMismatch', ...
+                    'Cannot merge %s and %s — returning first arg.', class(a), class(b));
+                out = a;
+                return;
+            end
+            try
+                out = [a, b];
+            catch
+                warning('EventStore:mergeShapeMismatch', ...
+                    'Concatenation failed — returning first arg.');
+                out = a;
+            end
+        end
     end
 
     methods (Access = private)
@@ -369,6 +459,32 @@ classdef EventStore < handle
             % canonicalises NDJSON-per-tag as the event write surface (EventLog).
             % This table is the ACK and audit-trail surface that Phase 1032's
             % single-source emission path uses for IDENT-02.
+        end
+
+        function out = doInsertAckRecord_(obj, rec, comment)
+        %DOINSERTACKRECORD_ Single attempt at INSERT inside BEGIN IMMEDIATE.
+        %   Called by busyRetryWrap_ — performs exactly one transaction attempt.
+        %   Rolls back on any error and rethrows so busyRetryWrap_ can classify
+        %   and retry (or propagate) the exception.
+        %
+        %   Returns a dummy value so it is callable from an LHS-assignment
+        %   context (e.g. `out = fn();` inside busyRetryWrap_). Without an
+        %   `out` argument, anonymous-wrapped invocation trips MATLAB:maxlhs.
+            try
+                mksqlite(obj.DbId_, 'BEGIN IMMEDIATE');
+                mksqlite(obj.DbId_, ...
+                    'INSERT INTO ack_records VALUES (?,?,?,?,?)', ...
+                    char(rec.eventId), char(rec.by_user), ...
+                    char(rec.by_host), double(rec.epoch), comment);
+                mksqlite(obj.DbId_, 'COMMIT');
+            catch ME
+                try
+                    mksqlite(obj.DbId_, 'ROLLBACK');
+                catch
+                end
+                rethrow(ME);
+            end
+            out = [];
         end
 
         function createBackup(obj)
