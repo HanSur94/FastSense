@@ -37,7 +37,7 @@ User-facing event acknowledgement workflow + single-source event emission across
 - [ ] **ACK-01**: When User A acknowledges an alarm, the ack becomes visible to the other 49 Companions within ~5 seconds (eventual-consistency target; UDP multicast hint accelerates propagation but disk state is canonical).
 - [ ] **ACK-02**: An event displays a distinct visual state for "acked but condition still active" vs "acked and cleared" vs "unacked active" (per ISA-18.2 / EEMUA 191 alarm-state model — condition state and ack state are orthogonal).
 - [ ] **ACK-03**: User can attach an optional free-text comment when acknowledging an event. Comment is persisted with the ack record.
-- [ ] **ACK-04**: A `MonitorTag` threshold violation produces exactly ONE event in the shared EventStore regardless of how many Companions are running. Single-source guarantee derives from "lock holder for tag data is sole emitter for tag events" — `LiveTagPipeline.processTag_` and `LiveEventPipeline.processMonitorTag_` share the same per-tag `FileLock` domain.
+- [x] **ACK-04**: A `MonitorTag` threshold violation produces exactly ONE event in the shared EventStore regardless of how many Companions are running. Single-source guarantee derives from "lock holder for tag data is sole emitter for tag events" — `LiveTagPipeline.processTag_` and `LiveEventPipeline.processMonitorTag_` share the same per-tag `FileLock` domain.
 
 ### Resilience & Operator Communication (OPS)
 
