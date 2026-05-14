@@ -216,6 +216,10 @@ classdef FastSenseCompanion < handle
                 % Validate the shared root via ClusterConfig — throws
                 % Concurrency:sharedRootUnreachable on a non-existent folder.
                 ClusterConfig.resolve(struct('SharedRoot', userSharedRoot));
+                % IDENT-01 fail-fast guard — throws Concurrency:identityResolutionFailed
+                % when the OS cannot resolve a usable username/hostname (mirrors
+                % EventStore cluster-mode init and LiveTagPipeline pattern).
+                ClusterIdentity.resolve('Strict', true);
                 % Best-effort oplock smoke test — never throws; one-time warning
                 % via warning('Concurrency:smbOplockDetected', ...) on mismatch.
                 try
