@@ -196,7 +196,7 @@ classdef EventLogReader < handle
             %   skipMap is a containers.Map handle (mutable reference).
             text = fileread(p);   % may throw mid-rename; readWithRetry catches
             [out, ps] = ndjsonDecode(text);
-            skipMap('count') = skipMap('count') + ps.SkippedLineCount;
+            skipMap('count') = skipMap('count') + ps.SkippedLineCount; %#ok<NASGU>
         end
 
         function out = trimTail_(events, n)
