@@ -64,7 +64,10 @@ classdef EventStore < handle
         function delete(obj)
             %DELETE Close mksqlite connection on object destruction.
             if obj.IsClusterMode_ && ~isempty(obj.DbId_)
-                try, mksqlite(obj.DbId_, 'close'); catch, end
+                try
+                    mksqlite(obj.DbId_, 'close');
+                catch
+                end
                 obj.DbId_ = [];
             end
         end
@@ -193,7 +196,7 @@ classdef EventStore < handle
 
             % Atomic write: save to temp, then rename
             tmpFile = [obj.FilePath '.tmp'];
-            events = obj.events_; %#ok<PROPLC>
+            events = obj.events_; %#ok<PROPLC,NASGU>
             lastUpdated = now; %#ok<NASGU>
             pipelineConfig = obj.PipelineConfig; %#ok<PROPLC,NASGU>
             sensorData = obj.SensorData; %#ok<PROPLC,NASGU>
@@ -259,7 +262,10 @@ classdef EventStore < handle
                     mksqlite(obj.DbId_, 'COMMIT');
                     return;
                 catch ME
-                    try, mksqlite(obj.DbId_, 'ROLLBACK'); catch, end
+                    try
+                        mksqlite(obj.DbId_, 'ROLLBACK');
+                    catch
+                    end
                     lastErr = ME;
                     isBusy = strcmp(ME.identifier, 'mksqlite:sqlError') && ...
                              contains(ME.message, 'database is locked');
