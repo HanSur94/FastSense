@@ -1,5 +1,26 @@
 classdef EventStore < handle
     % EventStore  Atomic read/write of events to a shared .mat file.
+    %
+    %   Single-user mode (default):
+    %     es = EventStore(filePath)
+    %     es = EventStore(filePath, 'MaxBackups', 3)
+    %   Events are stored in a MAT file via atomic temp+rename.  All
+    %   existing tests exercise this path unchanged.
+    %
+    %   Cluster mode (opt-in):
+    %     es = EventStore(filePath, 'SharedRoot', sharedMountPath)
+    %   Opens (or creates) <SharedRoot>/events/store.sqlite via mksqlite
+    %   with journal_mode=DELETE + busy_timeout=10000 + locking_mode=NORMAL.
+    %   All cluster writes use BEGIN IMMEDIATE + application-level retry on
+    %   'database is locked' (see STACK.md §2, PITFALLS Pitfall 6).
+    %   The local-per-user FastSenseDataStore continues to use WAL — only
+    %   the cluster-mode EventStore switches to rollback mode.
+    %
+    %   Errors (cluster mode only):
+    %     EventStore:mksqliteUnavailable — mksqlite MEX not compiled
+    %     EventStore:notClusterMode      — cluster method called in single-user mode
+    %     EventStore:invalidAckRecord    — rec is not a scalar struct
+    %     EventStore:appendAckFailed     — INSERT retries exhausted on database lock
 
     properties
         FilePath        = ''
@@ -11,16 +32,41 @@ classdef EventStore < handle
     end
 
     properties (Access = private)
-        events_     = []
-        nextId_     = 0
+        events_         = []
+        nextId_         = 0
+        IsClusterMode_  = false     % gate; true iff 'SharedRoot' NV-pair was non-empty
+        SharedRoot_     = ''        % char; copy of NV-pair for diagnostics
+        DbPath_         = ''        % char; cluster-mode SQLite path
+        DbId_           = []        % mksqlite handle (int64 db id) or []
     end
 
     methods
         function obj = EventStore(filePath, varargin)
             defaults.MaxBackups = 5;
+            defaults.SharedRoot = '';
             opts = parseOpts(defaults, varargin);
             obj.FilePath   = filePath;
             obj.MaxBackups = opts.MaxBackups;
+
+            if ~isempty(opts.SharedRoot)
+                % Cluster mode — open shared SQLite with rollback (DELETE) journaling.
+                obj.IsClusterMode_ = true;
+                obj.SharedRoot_    = char(opts.SharedRoot);
+                % IDENT-01 fail-fast guard (mirrors LiveTagPipeline cluster init).
+                ClusterIdentity.resolve('Strict', true);
+                evDir = SharedPaths.eventsDir(obj.SharedRoot_);
+                if ~isfolder(evDir), mkdir(evDir); end
+                obj.DbPath_ = fullfile(evDir, 'store.sqlite');
+                obj.openClusterDb_();
+            end
+        end
+
+        function delete(obj)
+            %DELETE Close mksqlite connection on object destruction.
+            if obj.IsClusterMode_ && ~isempty(obj.DbId_)
+                try, mksqlite(obj.DbId_, 'close'); catch, end
+                obj.DbId_ = [];
+            end
         end
 
         function append(obj, newEvents)
@@ -175,6 +221,75 @@ classdef EventStore < handle
         function n = numEvents(obj)
             n = numel(obj.events_);
         end
+
+        function appendAckRecord(obj, rec)
+        %APPENDACKRECORD Insert an ack/comment row in cluster mode.
+        %   rec — struct with fields: eventId (char), by_user (char),
+        %         by_host (char), epoch (double), comment (char, optional)
+        %
+        %   Single-user mode: throws EventStore:notClusterMode.  The Phase
+        %   1032 ack workflow will route through this method only when
+        %   running with 'SharedRoot' set.
+        %
+        %   Cluster-mode retry: catches mksqlite:sqlError with
+        %   'database is locked' substring (per 1029-PROBES.md) and retries
+        %   3 times with 50/100/200ms backoff (PITFALLS Pitfall 6 —
+        %   busy_timeout alone is insufficient under deadlock-immediate BUSY).
+            if ~obj.IsClusterMode_
+                error('EventStore:notClusterMode', ...
+                    ['appendAckRecord is cluster-mode only.  ', ...
+                     'Construct with ''SharedRoot'' NV-pair to enable.']);
+            end
+            if ~isstruct(rec) || ~isscalar(rec)
+                error('EventStore:invalidAckRecord', ...
+                    'rec must be a scalar struct.');
+            end
+            comment = '';
+            if isfield(rec, 'comment'), comment = char(rec.comment); end
+
+            backoffs = [0.05, 0.10, 0.20];   % 50/100/200ms
+            lastErr  = MException('EventStore:appendAckFailed', 'unknown');
+            for attempt = 1:4
+                try
+                    mksqlite(obj.DbId_, 'BEGIN IMMEDIATE');
+                    mksqlite(obj.DbId_, ...
+                        'INSERT INTO ack_records VALUES (?,?,?,?,?)', ...
+                        char(rec.eventId), char(rec.by_user), ...
+                        char(rec.by_host), double(rec.epoch), comment);
+                    mksqlite(obj.DbId_, 'COMMIT');
+                    return;
+                catch ME
+                    try, mksqlite(obj.DbId_, 'ROLLBACK'); catch, end
+                    lastErr = ME;
+                    isBusy = strcmp(ME.identifier, 'mksqlite:sqlError') && ...
+                             contains(ME.message, 'database is locked');
+                    if ~isBusy
+                        rethrow(ME);
+                    end
+                    if attempt <= numel(backoffs)
+                        pause(backoffs(attempt));
+                    end
+                end
+            end
+            error('EventStore:appendAckFailed', ...
+                'INSERT exhausted %d retries on database lock: %s', ...
+                numel(backoffs) + 1, lastErr.message);
+        end
+
+        function rows = getAckRecords(obj)
+        %GETACKRECORDS Return all ack rows from cluster-mode store.
+        %   Returns a struct array with fields: event_id, by_user, by_host,
+        %   epoch, comment.  Cluster mode only.
+        %
+        %   Errors:
+        %     EventStore:notClusterMode — called in single-user mode
+            if ~obj.IsClusterMode_
+                error('EventStore:notClusterMode', ...
+                    'getAckRecords is cluster-mode only.');
+            end
+            rows = mksqlite(obj.DbId_, ...
+                'SELECT event_id, by_user, by_host, epoch, comment FROM ack_records');
+        end
     end
 
     methods (Static)
@@ -224,6 +339,32 @@ classdef EventStore < handle
     end
 
     methods (Access = private)
+        function openClusterDb_(obj)
+        %OPENCLUSTERDB_ Open <SharedRoot>/events/store.sqlite in rollback mode.
+        %   Uses journal_mode=DELETE + busy_timeout=10000 + locking_mode=NORMAL,
+        %   per STACK.md §2 — the only mode SQLite docs document as workable
+        %   over network filesystems.
+        %
+        %   The local-per-user FastSenseDataStore continues to use WAL — only
+        %   the cluster-mode shared EventStore uses DELETE.
+            if exist('mksqlite', 'file') ~= 3
+                error('EventStore:mksqliteUnavailable', ...
+                    'Cluster-mode EventStore requires mksqlite MEX.');
+            end
+            obj.DbId_ = mksqlite('open', obj.DbPath_);
+            mksqlite(obj.DbId_, 'PRAGMA journal_mode = DELETE');
+            mksqlite(obj.DbId_, 'PRAGMA locking_mode = NORMAL');
+            mksqlite(obj.DbId_, 'PRAGMA busy_timeout = 10000');
+            mksqlite(obj.DbId_, ...
+                ['CREATE TABLE IF NOT EXISTS ack_records (', ...
+                 'event_id TEXT, by_user TEXT, by_host TEXT, ', ...
+                 'epoch REAL, comment TEXT)']);
+            % Note: 'events' table is intentionally NOT created here.  Phase 1031
+            % canonicalises NDJSON-per-tag as the event write surface (EventLog).
+            % This table is the ACK and audit-trail surface that Phase 1032's
+            % single-source emission path uses for IDENT-02.
+        end
+
         function createBackup(obj)
             [fdir, fname, fext] = fileparts(obj.FilePath);
             stamp = datestr(now, 'yyyymmdd_HHMMSS');
