@@ -130,7 +130,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1028. Tag update perf — MEX + SIMD | pending | 0/? | Not started | — |
 | 1029. Plant Log Storage Foundation | v3.1 | 3/3 | Complete    | 2026-05-13 |
 | 1030. CSV/XLSX Import + Mapping Dialog | v3.1 | 3/3 | Complete    | 2026-05-13 |
-| 1031. Live Tail + Slider Preview Overlay | v3.1 | 2/3 | In Progress|  |
+| 1031. Live Tail + Slider Preview Overlay | v3.1 | 3/3 | Complete   | 2026-05-14 |
 | 1032. Per-Widget Plant Log Overlay | v3.1 | 0/? | Not started | — |
 | 1033. Dashboard + Companion Integration & Serialization | v3.1 | 0/? | Not started | — |
 
@@ -183,10 +183,10 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
   3. Whenever a `PlantLogStore` is attached to a dashboard, the bottom slider preview track shows a 1px, full-opacity black vertical line for every entry within the slider's visible range — the existing sev1/2/3 colored markers remain unchanged and the black plant-log lines are visually distinguishable from them.
   4. Hovering a plant-log line on the slider preview pops a small tooltip showing the entry's timestamp and message; new live-tail rows appear on the slider preview without a full dashboard re-render.
   5. The line color is sourced from a new theme token `MarkerPlantLog` (default black on both light and dark themes), parse errors during live-tail re-read surface via non-blocking `uialert`/`warning` without crashing the dashboard or stopping the timer, and the slider-overlay insertion path reuses the existing event-marker hook in `TimeRangeSelector` (verified against the sev1/2/3 marker code path).
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 - [x] 1031-01-live-tail-class-PLAN.md — PlantLogLiveTail handle class with start/stop/setInterval/tick_ + PlantLogTailTick event + cross-runtime tests
 - [x] 1031-02-slider-integration-PLAN.md — TimeRangeSelector.setPlantLogMarkers + DashboardTheme.MarkerPlantLog token + DashboardEngine.computePlantLogMarkers + listener wire-up via test seams + tests
-- [ ] 1031-03-hover-tooltip-and-smoke-PLAN.md — PlantLogSliderHover (chained-WBM tooltip) + DashboardEngine lazy attach/detach + Phase 1031 end-to-end integration smoke
+- [x] 1031-03-hover-tooltip-and-smoke-PLAN.md — PlantLogSliderHover (chained-WBM tooltip) + DashboardEngine lazy attach/detach + Phase 1031 end-to-end integration smoke (completed 2026-05-14)
 **UI hint**: yes
 
 ### Phase 1032: Per-Widget Plant Log Overlay
