@@ -39,6 +39,9 @@ classdef EventStore < handle
 
     properties (Access = private)
         events_         = []
+        acks_           = []  % single-user: struct array of {eventId, by_user, by_host, epoch, comment, action='ack'}.
+                              % Cluster mode: in-memory mirror of SQLite ack_records (updated on every acknowledgeEvent
+                              % call AND on every getAckRecordsForEvent query).  Canonical source in cluster mode is SQLite.
         nextId_         = 0
         IsClusterMode_  = false     % gate; true iff 'SharedRoot' NV-pair was non-empty
         SharedRoot_     = ''        % char; copy of NV-pair for diagnostics
@@ -251,6 +254,7 @@ classdef EventStore < handle
             sensorData = obj.SensorData; %#ok<PROPLC,NASGU>
             thresholdColors = obj.ThresholdColors; %#ok<PROPLC,NASGU>
             timestamp = obj.Timestamp; %#ok<PROPLC,NASGU>
+            acks = obj.acks_; %#ok<PROPLC,NASGU>
 
             varList = {'events', 'lastUpdated', 'pipelineConfig'};
             if ~isempty(sensorData)
@@ -261,6 +265,9 @@ classdef EventStore < handle
             end
             if ~isempty(timestamp)
                 varList{end+1} = 'timestamp';
+            end
+            if ~isempty(acks)
+                varList{end+1} = 'acks';
             end
             if exist('OCTAVE_VERSION', 'builtin')
                 builtin('save', tmpFile, varList{:});
@@ -326,6 +333,131 @@ classdef EventStore < handle
             rows = mksqlite(obj.DbId_, ...
                 'SELECT event_id, by_user, by_host, epoch, comment FROM ack_records');
         end
+
+        function ack = acknowledgeEvent(obj, eventId, opts)
+            %ACKNOWLEDGEEVENT Record an acknowledgement for an event (ACK-01/03 + IDENT-02).
+            %   ack = es.acknowledgeEvent(eventId, opts)
+            %
+            %   opts struct fields (all optional):
+            %     comment — char (default '')
+            %     user    — char (default = ClusterIdentity.resolve().user; empty if unresolvable)
+            %     host    — char (default = ClusterIdentity.resolve().host)
+            %     epoch   — double (default = now)
+            %
+            %   Behavior:
+            %     - Single-user mode: appends to obj.acks_ AND mutates the in-memory Event
+            %       (sets AckedAt / AckedBy / AckComment). save() persists acks_ in the saved .mat.
+            %     - Cluster mode: calls appendAckRecord (Phase 1031-04, retry-wrapped via Plan 03).
+            %       Also mutates the in-memory Event for current-session reads (mirror).
+            %
+            %   Errors:
+            %     EventStore:unknownEventId — eventId not found in events_ (single-user only)
+            %
+            %   ACK-01 (~5s propagation): ack lands in SQLite (cluster) or events.mat (single-user).
+            %   ACK-02 (three-state visual): Event.AckedAt + Event.IsOpen drive computeDisplayState().
+            %   ACK-03 (comment): opts.comment plumbed end-to-end.
+            %   IDENT-02 (audit trail): every ack stamped with {user, host, epoch, comment}.
+            if nargin < 3, opts = struct(); end
+            eventId = char(eventId);
+
+            % Identity defaults — use ClusterIdentity if available, else empty (non-strict).
+            identityUser = ''; identityHost = ''; identityEpoch = now;
+            try
+                id = ClusterIdentity.resolve();   % non-strict; tolerates failure
+                if isstruct(id)
+                    if isfield(id, 'user'),  identityUser  = id.user;  end
+                    if isfield(id, 'host'),  identityHost  = id.host;  end
+                    if isfield(id, 'epoch')
+                        ep = id.epoch;
+                        if isa(ep, 'datetime')
+                            identityEpoch = datenum(ep);
+                        else
+                            identityEpoch = double(ep);
+                        end
+                    end
+                end
+            catch
+                % stay with defaults — single-user mode tolerates identity failure
+            end
+            if isfield(opts, 'user'),  identityUser  = char(opts.user);    end
+            if isfield(opts, 'host'),  identityHost  = char(opts.host);    end
+            if isfield(opts, 'epoch'), identityEpoch = double(opts.epoch); end
+            comment = '';
+            if isfield(opts, 'comment'), comment = char(opts.comment); end
+
+            ack = struct( ...
+                'eventId', eventId, ...
+                'by_user', identityUser, ...
+                'by_host', identityHost, ...
+                'epoch',   identityEpoch, ...
+                'comment', comment, ...
+                'action',  'ack');
+
+            % Find the Event and mutate AckedAt/AckedBy/AckComment (in-memory mirror).
+            found = false;
+            if ~isempty(obj.events_)
+                for i = 1:numel(obj.events_)
+                    ev = obj.events_(i);
+                    evId = '';
+                    if isa(ev, 'Event'),         evId = ev.Id;
+                    elseif isstruct(ev) && isfield(ev, 'Id'), evId = ev.Id; end
+                    if strcmp(evId, eventId)
+                        if isa(ev, 'Event')
+                            ev.AckedAt    = identityEpoch;
+                            ev.AckedBy    = struct('user', identityUser, 'host', identityHost, ...
+                                'epoch', identityEpoch, 'comment', comment);
+                            ev.AckComment = comment;
+                        end
+                        found = true;
+                        break;
+                    end
+                end
+            end
+
+            if ~found
+                % In cluster mode the event may live ONLY in the NDJSON log, not in events_.
+                % We tolerate "event not in memory" only when cluster mode is on; single-user
+                % strict mode throws.
+                if ~obj.IsClusterMode_
+                    error('EventStore:unknownEventId', ...
+                        'Event id ''%s'' not found in store.', eventId);
+                end
+            end
+
+            % Persist the ack.
+            if obj.IsClusterMode_
+                obj.appendAckRecord(ack);   % retry-wrapped via Plan 03
+            else
+                % Single-user: append to acks_ in-memory array (persisted by save()).
+                if isempty(obj.acks_)
+                    obj.acks_ = ack;
+                else
+                    obj.acks_(end+1) = ack; %#ok<AGROW>
+                end
+            end
+        end
+
+        function rows = getAckRecordsForEvent(obj, eventId)
+            %GETACKRECORDSFOREVENT Return ack records for a specific event.
+            %   Single-user: filters obj.acks_; cluster: queries SQLite WHERE event_id = ?.
+            eventId = char(eventId);
+            if obj.IsClusterMode_
+                rows = EventStore.busyRetryWrap_(@() ...
+                    mksqlite(obj.DbId_, ...
+                        ['SELECT event_id, by_user, by_host, epoch, comment ', ...
+                         'FROM ack_records WHERE event_id = ?'], eventId));
+            else
+                rows = [];
+                if isempty(obj.acks_), return; end
+                keep = false(1, numel(obj.acks_));
+                for i = 1:numel(obj.acks_)
+                    if strcmp(obj.acks_(i).eventId, eventId)
+                        keep(i) = true;
+                    end
+                end
+                rows = obj.acks_(keep);
+            end
+        end
     end
 
     methods (Static)
@@ -367,6 +499,9 @@ classdef EventStore < handle
             end
             if isfield(data, 'pipelineConfig')
                 meta.pipelineConfig = data.pipelineConfig;
+            end
+            if isfield(data, 'acks')
+                meta.acks = data.acks;
             end
 
             % Cache for future unchanged calls
