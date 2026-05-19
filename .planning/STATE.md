@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Plant Log Integration
-status: executing
-stopped_at: Completed 1033-02-serializer-and-load-PLAN.md
-last_updated: "2026-05-19T11:05:00.000Z"
+status: verifying
+stopped_at: Completed 1033-03-companion-toolbar-and-smoke-PLAN.md (Phase 1033 + milestone v3.1 EXECUTION COMPLETE)
+last_updated: "2026-05-19T11:45:54.125Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # State
@@ -26,10 +26,10 @@ toolbox dependencies.
 
 ## Current Position
 
-Phase: 1033 (Dashboard + Companion Integration & Serialization) — EXECUTING
-Plan: 3 of 3
-Milestone: v3.1 Plant Log Integration
-Status: Plan 02 complete — ready to execute Plan 03 (Companion toolbar + integration smoke)
+Phase: 1033 (Dashboard + Companion Integration & Serialization) — EXECUTION COMPLETE
+Plan: 3 of 3 — SHIPPED
+Milestone: v3.1 Plant Log Integration — EXECUTION COMPLETE, ready for verification
+Status: All 3 plans of Phase 1033 closed; Phase 1033 ready for /gsd:verify-phase 1033; milestone v3.1 ready for /gsd:complete-milestone
 Last activity: 2026-05-19
 
 ## Progress Bar
@@ -40,10 +40,10 @@ v3.1 Plant Log Integration:
 - [x] Phase 1030: CSV/XLSX Import + Mapping Dialog — 3/3 plans
 - [x] Phase 1031: Live Tail + Slider Preview Overlay — 3/3 plans
 - [x] Phase 1032: Per-Widget Plant Log Overlay — 3/3 plans
-- [ ] Phase 1033: Dashboard + Companion Integration & Serialization — 2/3 plans
+- [x] Phase 1033: Dashboard + Companion Integration & Serialization — 3/3 plans
 
-Phases complete: 4/5
-Plans complete: 14/15 (93%) — Plan 1033-02 closed 2026-05-19
+Phases complete: 5/5 (100%) — Plan 1033-03 closed 2026-05-19 — milestone v3.1 EXECUTION COMPLETE
+Plans complete: 15/15 (100%)
 
 ## Accumulated Context
 
@@ -155,59 +155,77 @@ separate REQ-IDs:
 
 ## Session Continuity
 
-- **Resume point:** Phase 1033 Plan 02 (DashboardSerializer + Load
-  round-trip) is **shipped** (2026-05-19). `DashboardSerializer.saveJSON`
-  splices a hand-encoded plantLog block bypassing jsonencode's
-  cell-of-cells ambiguity; the .m-script writers (`save` legacy +
-  `exportScript` + `exportScriptPages`) share `linesForPlantLog_` with
-  double-brace `metadataCols, {{...}}` literal; the `ShowPlantLog` NV
-  pair forks BOTH legacy single-line writer AND modern `linesForWidget`
-  across four fastsense sub-cases (sensor/file/data/otherwise +
-  no-source fallback). `DashboardEngine.attachPlantLog` gains a hidden
-  `ContinueOnReadError` opt (default false) that degrades
-  `PlantLogReader:fileNotFound` to
-  `warning('DashboardEngine:plantLogPathMissing', ...)`,
-  `PlantLogReader:unknownColumn` to mapping-mismatch recovery
-  (re-autoDetect + `warning('DashboardEngine:plantLogMappingMismatch',
-  ...)` + retry), and other read failures to
-  `warning('DashboardEngine:plantLogReadFailed', ...)`.
-  `DashboardEngine.load` JSON branch pre-flights `exist()` check for
-  the saved sourcePath, validates schema (raises
-  `error('DashboardSerializer:plantLogSchemaInvalid', ...)` on
-  malformed plantLog block missing sourcePath), and dispatches
-  `attachPlantLog` with `ContinueOnReadError=true`. Byte-identical
-  back-compat for v1.0-v3.0 dashboards verified via
-  `testSaveJsonBackCompatByteIdentical` (omit-when-empty rule fires
-  when `PlantLogStoreInternal_` empty OR `PlantLogSourcePath_` empty).
-  PLOG-INT-04 + PLOG-INT-05 unit + integration-proven (14
-  function-style + 17 class-based tests PASS, including 3 rendered
-  round-trip tests: `testRoundTripWidgetShowPlantLog`,
-  `testRoundTripPerWidgetShowPlantLogScriptPath`,
-  `testReAttachAfterLoadIsIdempotent`). Phase 1029-1032 regression
-  intact (TestPlantLogIntegrationSmoke 9/9 + TestPhase1031IntegrationSmoke
-  7/7 + TestPhase1032IntegrationSmoke 9/9 + TestDashboardEngineAttachPlantLog
-  18/18 + TestDashboardMSerializer 10/10). Next step: begin Phase 1033
-  Plan 03 (Companion toolbar + integration smoke).
+- **Resume point:** Phase 1033 Plan 03 (Companion toolbar + integration
+  smoke) is **shipped** (2026-05-19) — milestone v3.1 EXECUTION COMPLETE.
+  `PlantLogReader.openInteractive` now supports `[entries, varargout] =
+  openInteractive(...)` with the second optional output being the
+  confirmed mapping struct (echoed for headless; from dialog for
+  interactive; [] for cancel/empty-file). All four return sites guard
+  with `if nargout >= 2; varargout{1} = ...; end` so existing Phase
+  1030 + 1031 single-output callers continue to work unchanged.
+  `FastSenseCompanion` toolbar grid expanded from `[1 4]` `{110, 110,
+  '1x', 36}` to `[1 5]` `{110, 110, 130, '1x', 36}`. New `hPlantLogBtn_`
+  private property + new uibutton at col 3 with Tag=CompanionPlantLogBtn,
+  Text=`['Plant Log', char(8230)]` ("Plant Log…"), FontSize=11,
+  FontWeight=bold, Tooltip="Attach a plant log to every open dashboard".
+  Enable=on with >=1 engine + Enable=off with tooltip "No dashboards
+  open" otherwise. `hSettingsBtn_.Layout.Column` moved 4 -> 5. New
+  private `openPlantLogDialog_` method: outer try/catch +
+  final-safety-net uialert + empty-Engines_ branch + cancel branch +
+  empty-file branch + best-effort fan-out loop with per-engine try/catch
+  raising `FastSenseCompanion:plantLogAttachFailed` + partial-failure
+  uialert at loop end (success path silent). Public test shims
+  `openPlantLogDialogInternalForTest` + `getPlantLogBtnForTest_` mirror
+  the openEventViewer_internalForTest idiom. Four new test files: 9
+  function-style + 11 class-based toolbar tests (MATLAB-only with
+  Octave SKIP gate); 9 function-style + 13 class-based integration
+  smoke tests (cross-runtime where possible, Companion-touching tests
+  MATLAB-only). The v3.1 milestone capstone test
+  `testEndToEndDashboardLifecycle` exercises the FULL surface: attach
+  -> save JSON -> save .m -> load JSON -> load .m -> detach all ->
+  timerfindall back to baseline (zero orphans). Auto-fixed during
+  execution: (1) matlab.lang.OnOffSwitchState class mismatch in
+  verifyEqual (Rule 1 -- R2025b's Enable is enum, switched to
+  `verifyTrue(strcmp(char(btn.Enable), 'on'))`); (2) stale
+  `%#ok<NASGU>` + `catch ME` cleanup (Rule 2 hygiene). 209/209 PASS
+  across the full v3.1 plant-log surface (17 test classes); 64/64
+  existing TestFastSenseCompanion unchanged. PLOG-INT-03 complete.
+  Phase 1033 ready for `/gsd:verify-phase 1033`; milestone v3.1 ready
+  for `/gsd:complete-milestone`.
 
-- **Order of phases:** 1029 ✅ → 1030 ✅ → 1031 ✅ → 1032 ✅ → 1033 ⏳ (Plan 1+2 done, Plan 3 pending). Each phase depends on prior phases; no parallel execution paths.
+- **Order of phases:** 1029 ✅ → 1030 ✅ → 1031 ✅ → 1032 ✅ → 1033 ✅ (all 3 plans complete). Each phase depended on prior phases; no parallel execution paths.
 
-- **Coverage:** 32/32 active PLOG-* requirements mapped to phases — verified
-  during roadmap creation. PLOG-ST-01..05 (5/32) have unit + integration
-  proof (Phase 1029); PLOG-IM-01..05 (5/32) have headless-reader proof
-  (Phase 1030 Plan 01); PLOG-IM-06..08 (3/32) have modal-dialog proof
-  (Phase 1030 Plan 02); PLOG-IM-01 + 02 + 06 + 08 have additional
-  integration-level proof (Phase 1030 Plan 03 — openInteractive +
-  integration smoke). All PLOG-IM-* (8/32) integration-proven at runtime.
-  PLOG-VIZ-03 + PLOG-VIZ-04 + PLOG-VIZ-05 + PLOG-VIZ-07 (4/32) unit-proven
-  in Phase 1032 Plans 01 + 02 AND integration-proven end-to-end in
-  Phase 1032 Plan 03 (tests/test_phase_1032_integration_smoke.m +
-  TestPhase1032IntegrationSmoke.m — 17 tests covering toggle → overlay →
-  hover → live-tail fan-out → detach parity → cleanup).
-  Remaining requirements (Phase 1033): PLOG-VIZ-01 + 02 + 06 + 08 + 09 +
-  PLOG-INT-* etc. — see ROADMAP.md.
+- **Coverage:** 32/32 active PLOG-* requirements integration-proven end-to-end.
+  Phase 1029 (PLOG-ST-01..05) + Phase 1030 (PLOG-IM-01..08) + Phase 1031
+  (PLOG-LT-* + PLOG-VIZ-01/02/06/08/09) + Phase 1032 (PLOG-VIZ-03/04/05/07) +
+  Phase 1033 (PLOG-INT-01..05). Plan 03 closure adds PLOG-INT-03 (Companion
+  toolbar fan-out) on top of Plan 01 (PLOG-INT-01/02 attach/detach API) and
+  Plan 02 (PLOG-INT-04/05 serialization + load-time degrade-to-warning).
+  v3.1 milestone EXECUTION COMPLETE.
 
-- **Stopped at:** Completed 1033-02-serializer-and-load-PLAN.md
-  (Phase 1033 Plan 02 of 3 closed; Plan 03 pending). `DashboardSerializer`
+- **Stopped at:** Completed 1033-03-companion-toolbar-and-smoke-PLAN.md
+  (Phase 1033 Plan 03 of 3 closed; Phase 1033 + milestone v3.1
+  EXECUTION COMPLETE). `PlantLogReader.openInteractive` extended with
+  varargout second-output mapping; FastSenseCompanion toolbar gains
+  1x5 grid with new "Plant Log…" button at col 3; new
+  `openPlantLogDialog_` private callback wraps the file picker +
+  best-effort fan-out across `obj.Engines_` with per-engine try/catch
+  and namespaced warning routing. Phase 1033 end-to-end smoke
+  (`testEndToEndDashboardLifecycle`) proves the v3.1 capstone:
+  engine.attachPlantLog -> save JSON -> save .m -> load JSON -> load
+  .m -> detach all -> zero orphan timers. 209/209 PASS across the
+  full v3.1 plant-log test surface; PLOG-INT-03 + all 32/32 v3.1
+  requirements integration-proven end-to-end. Auto-fixed during
+  execution: (1) matlab.lang.OnOffSwitchState class mismatch on three
+  class-based `verifyEqual(btn.Enable, 'on')` calls (Rule 1 — switched
+  to `verifyTrue(strcmp(char(btn.Enable), 'on'))`); (2) checkcode
+  hygiene cleanup on stale `%#ok<NASGU>` + `catch ME` lines (Rule 2).
+  All four new test files checkcode-clean. Phase 1033 ready for
+  `/gsd:verify-phase 1033`; milestone v3.1 ready for
+  `/gsd:complete-milestone`.
+
+- **Plan 02 surface preserved (Phase 1033 Plan 02 historic note):** `DashboardSerializer`
+
   + `DashboardEngine` extended to round-trip the engine's plant-log state
   through JSON and .m-script paths with byte-identical back-compat for
   every v1.0-v3.0 dashboard. Save side: new `stampPlantLogIntoConfig_`
@@ -672,6 +690,7 @@ separate REQ-IDs:
   suppressions stripped from new `attachArgs{end+1}` lines (Rule 2
   hygiene -- R2025b no longer emits AGROW on these patterns, same
   Rule 2 fix Plans 1030-1032 applied uniformly). 14/14 function-style
+
   + 17/17 class-based PASS on MATLAB R2025b; Phase 1029-1032
   regression intact (TestPlantLogIntegrationSmoke 9/9 +
   TestPhase1031IntegrationSmoke 7/7 + TestPhase1032IntegrationSmoke
@@ -685,3 +704,73 @@ separate REQ-IDs:
   `testRoundTripPerWidgetShowPlantLogScriptPath`,
   `testReAttachAfterLoadIsIdempotent`). See
   `.planning/phases/1033-dashboard-companion-integration-serialization/1033-02-serializer-and-load-SUMMARY.md`.
+
+- **Plan 03 (companion toolbar + integration smoke, 2026-05-19)** —
+  Closed Phase 1033 + milestone v3.1 by shipping the Companion's
+  one-click "Plant Log…" toolbar entry + the Phase 1033 end-to-end
+  integration smoke. `PlantLogReader.openInteractive` extended with
+  `[entries, varargout] = openInteractive(filePath, varargin)`
+  signature; second optional output is the confirmed mapping struct
+  (echoed for `Headless=true`, from the dialog for interactive paths,
+  `[]` on cancel/empty-file). All four return sites guard with
+  `if nargout >= 2; varargout{1} = ...; end` so single-output Phase
+  1030 + 1031 callers continue to work unchanged (back-compat
+  preserved). `FastSenseCompanion` toolbar grid expanded from `[1 4]`
+  `{110, 110, '1x', 36}` to `[1 5]` `{110, 110, 130, '1x', 36}`. New
+  `hPlantLogBtn_` private property + new uibutton at col 3 with
+  `Tag='CompanionPlantLogBtn'`, `Text=['Plant Log', char(8230)]`
+  ("Plant Log…"), `FontSize=11`, `FontWeight='bold'`,
+  `Tooltip='Attach a plant log to every open dashboard'`. Enable=on
+  with ≥1 engine + Enable=off with tooltip 'No dashboards open'
+  otherwise. `hSettingsBtn_.Layout.Column` moved 4 → 5 (gear stays
+  rightmost). New private `openPlantLogDialog_` method: outer
+  try/catch + final-safety-net `uialert(obj.hFig_, ...)` so no
+  exception ever reaches the console; empty-`Engines_` branch fires
+  'No dashboards are open' uialert; calls
+  `[entries, confirmedMapping] = PlantLogReader.openInteractive('')`
+  (empty path triggers native uigetfile in the reader); cancel branch
+  (entries + mapping both empty) returns silently; empty-file branch
+  (entries empty, mapping non-empty) fires 'no parseable rows' uialert
+  and returns; fan-out loop iterates `obj.Engines_` with `isvalid`
+  check + per-engine try/catch around
+  `eng.attachPlantLog(filePath, 'Mapping', m, 'Interval', 5, 'StartTail', true)`,
+  records failures in a `failedNames` cell, fires
+  `warning('FastSenseCompanion:plantLogAttachFailed', ...)` per
+  failure, and reports a single partial-failure uialert at loop end.
+  Success path is silent (no toast). Public test shims
+  `openPlantLogDialogInternalForTest` + `getPlantLogBtnForTest_`
+  mirror the openEventViewer_internalForTest idiom. Four new test
+  files: 9 function-style + 11 class-based toolbar tests (MATLAB-only
+  with clean Octave SKIP gate); 9 function-style + 13 class-based
+  Phase 1033 end-to-end integration smoke tests (cross-runtime for
+  the headless save/load + Octave-skipped for Companion-touching
+  tests). The v3.1 milestone capstone test
+  `testEndToEndDashboardLifecycle` exercises the FULL surface: build
+  engine -> attach plant log -> save JSON -> save .m -> load JSON ->
+  load .m -> verify both reloaded stores have equivalent counts ->
+  detach all three -> `timerfindall` returns to baseline. The
+  varargout back-compat regression gate
+  (`testVarargoutBackCompatPreserved`) explicitly exercises both
+  single-output and two-output forms of openInteractive. Auto-fixed
+  during execution: (1) `matlab.lang.OnOffSwitchState` class
+  mismatch on three class-based `verifyEqual(btn.Enable, 'on')` calls
+  in R2025b (Rule 1 — Enable is enum, switched to
+  `verifyTrue(strcmp(char(btn.Enable), 'on'))` idiom); (2) checkcode
+  hygiene cleanup on stale `%#ok<NASGU>` + `catch ME` -> `catch` +
+  one `numel(x) == 1` -> `isscalar(x)` per ISCL (Rule 2 hygiene). All
+  four new test files checkcode-clean. 9/9 function-style + 11/11
+  class-based toolbar PASS; 9/9 function-style + 13/13 class-based
+  Phase 1033 smoke PASS; 209/209 PASS across the full v3.1 plant-log
+  test surface (17 test classes including TestPlantLogStore 21 +
+  Entry 10 + Reader 10 + LiveTail 11 + IntegrationSmoke 7 +
+  SliderHover 12 + SliderOverlay 10 + Phase1031Integration 7 +
+  FastSenseWidgetPlantLog 20 + WidgetHover 13 + LayoutToggle 12 +
+  Phase1032Integration 9 + DashboardEngineAttachPlantLog 18 +
+  DashboardSerializerPlantLog 17 + FastSenseCompanionPlantLogToolbar
+  11 + Phase1033IntegrationSmoke 13 + PlantLogImportSmoke 8); 64/64
+  existing TestFastSenseCompanion regression intact (toolbar
+  expansion did not regress Events/Live/Settings button paths).
+  PLOG-INT-03 + all 32/32 v3.1 PLOG-* requirements integration-proven
+  end-to-end. **Phase 1033 closed; milestone v3.1 EXECUTION COMPLETE;
+  ready for /gsd:verify-phase 1033 and /gsd:complete-milestone v3.1.**
+  See `.planning/phases/1033-dashboard-companion-integration-serialization/1033-03-companion-toolbar-and-smoke-SUMMARY.md`.
