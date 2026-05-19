@@ -2016,10 +2016,13 @@ classdef DashboardEngine < handle
                 return;
             end
             ws = obj.activePageWidgets();
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
             % --- Pass 1: cheap data re-push ---
             for i = 1:numel(ws)
                 w = ws{i};
-                if isempty(w) || ~isvalid(w)
+                % Octave 7+ has no isvalid() for classdef handles, so treat
+                % as valid there and rely on downstream guards / try-catch.
+                if isempty(w) || (~isOctave && ~isvalid(w))
                     continue;
                 end
                 if ~w.Realized || isempty(w.hPanel) || ~ishandle(w.hPanel)
@@ -2042,10 +2045,10 @@ classdef DashboardEngine < handle
             stillWhite = false;
             for i = 1:numel(ws)
                 w = ws{i};
-                if isempty(w) || ~isvalid(w) || ~isa(w, 'FastSenseWidget')
+                if isempty(w) || (~isOctave && ~isvalid(w)) || ~isa(w, 'FastSenseWidget')
                     continue;
                 end
-                if isempty(w.FastSenseObj) || ~isvalid(w.FastSenseObj) || ~w.FastSenseObj.IsRendered
+                if isempty(w.FastSenseObj) || (~isOctave && ~isvalid(w.FastSenseObj)) || ~w.FastSenseObj.IsRendered
                     continue;
                 end
                 if ~obj.isWidgetLineWhite_(w)
