@@ -186,5 +186,147 @@ classdef Tag < handle
             error('Tag:notImplemented', ...
                 'fromStruct must be provided by a concrete Tag subclass.');
         end
+
+        function invalidateBatch_(tagSet)
+            %INVALIDATEBATCH_ Coalesced invalidation across many tags (Phase 1028 plan 05).
+            %
+            %   Phase 1028 A1+A2 internal seam: walks the UNION of unique
+            %   listeners across `tagSet` and calls `invalidate()` on each
+            %   exactly once, rather than firing each tag's
+            %   `notifyListeners_()` cascade independently. Same listeners
+            %   notified — only WHEN (end-of-tick batch vs per-tag) changes.
+            %
+            %   tagSet : cell array of Tag handles. Empty -> no-op.
+            %
+            %   Semantics:
+            %     - Public `tag.invalidate()` is unchanged; this is the
+            %       INTERNAL seam used by `LiveTagPipeline.onTick_` at
+            %       end-of-tick to amortize per-tag cascade overhead when
+            %       many sensors have updated in the same tick.
+            %     - Each unique listener has its `invalidate()` method
+            %       called exactly once per batch (deduplicates duplicate
+            %       handles, deduplicates listeners shared by multiple
+            %       parents in `tagSet`).
+            %     - Subclasses expose their internal listener cell via the
+            %       Hidden `getListeners_()` accessor (SensorTag, StateTag,
+            %       MonitorTag, CompositeTag, DerivedTag). The Tag base
+            %       returns an empty cell (no listeners).
+            %     - Idempotent: `invalidateBatch_(tagSet)` followed by any
+            %       per-tag `tag.invalidate()` produces the same end state
+            %       as the per-tag-only path (every dirty_ flag is true;
+            %       cache_ is empty).
+            %
+            %   This method is `Static` because it operates over a
+            %   heterogeneous set of Tag-subclass handles. Marked Hidden
+            %   via the trailing-underscore name convention (D-10: not part
+            %   of the public surface). Callers outside the SensorThreshold
+            %   library MUST NOT depend on this method's existence or
+            %   signature; the public observer interface remains
+            %   `tag.invalidate()` and `tag.addListener()`.
+            %
+            %   See also Tag.invalidate, SensorTag.getListeners_,
+            %   MonitorTag.getListeners_, CompositeTag.getListeners_,
+            %   LiveTagPipeline.onTick_.
+
+            if nargin < 1 || isempty(tagSet)
+                return;
+            end
+            if ~iscell(tagSet)
+                error('Tag:invalidBatchInput', ...
+                    'invalidateBatch_ requires a cell array of Tag handles.');
+            end
+
+            % Collect unique listener handles across all tags in tagSet.
+            % Dedup strategy:
+            %   - On MATLAB: `handle == handle` is well-defined for
+            %     user-defined handle classes (via the implicit `eq`
+            %     method on `handle`).
+            %   - On Octave: `eq` is NOT implemented for user-defined
+            %     handle classes ("eq method not defined for ClassName").
+            %     Fall back to deduping by the listener's `Key` property
+            %     (every Tag subclass has a unique Key by construction).
+            %
+            % `isvalid` is MATLAB-only; on Octave it is not implemented for
+            % user-defined handle classes, so the guard reduces to an
+            % isempty + isa check (handle deletion is not part of the
+            % SensorThreshold lifecycle — TagRegistry holds strong refs).
+            isMatlab = (exist('OCTAVE_VERSION', 'builtin') == 0);
+            uniqueListeners = {};
+            seenKeys = {};
+            for i = 1:numel(tagSet)
+                t = tagSet{i};
+                if isempty(t) || ~isa(t, 'Tag')
+                    continue;
+                end
+                if isMatlab && ~isvalid(t)
+                    continue;
+                end
+                ll = t.getListeners_();
+                for j = 1:numel(ll)
+                    lh = ll{j};
+                    if isempty(lh)
+                        continue;
+                    end
+                    if isMatlab && ~isvalid(lh)
+                        continue;
+                    end
+                    isDup = false;
+                    if isMatlab
+                        for k = 1:numel(uniqueListeners)
+                            if uniqueListeners{k} == lh
+                                isDup = true;
+                                break;
+                            end
+                        end
+                    else
+                        % Octave fallback: dedup by Key. All listeners
+                        % inherit from Tag (which guarantees Key) so this
+                        % is well-defined within the SensorThreshold model.
+                        if isa(lh, 'Tag')
+                            lhKey = lh.Key;
+                            for k = 1:numel(seenKeys)
+                                if strcmp(seenKeys{k}, lhKey)
+                                    isDup = true;
+                                    break;
+                                end
+                            end
+                            if ~isDup
+                                seenKeys{end+1} = lhKey;   %#ok<AGROW>
+                            end
+                        end
+                    end
+                    if ~isDup
+                        uniqueListeners{end+1} = lh;   %#ok<AGROW>
+                    end
+                end
+            end
+
+            % Walk unique listeners exactly once.
+            for k = 1:numel(uniqueListeners)
+                lh = uniqueListeners{k};
+                if isMatlab && ~isvalid(lh)
+                    continue;
+                end
+                if ismethod(lh, 'invalidate')
+                    lh.invalidate();
+                end
+            end
+        end
+    end
+
+    methods (Hidden)
+        function ll = getListeners_(obj) %#ok<MANU>
+            %GETLISTENERS_ Default accessor returning empty cell (Phase 1028 plan 05).
+            %   Subclasses that maintain a listener cell (SensorTag,
+            %   StateTag, MonitorTag, CompositeTag, DerivedTag) override
+            %   this to expose their private `listeners_` property for
+            %   `Tag.invalidateBatch_` to walk. The Tag base returns {} —
+            %   abstract Tag has no listeners.
+            %
+            %   Hidden (D-10: internal-only seam). Mirrors the convention
+            %   used by `LiveTagPipeline.setWriteFnForTesting_` and
+            %   `setCacheActiveForTesting_`.
+            ll = {};
+        end
     end
 end

@@ -444,6 +444,16 @@ classdef MonitorTag < Tag
         end
     end
 
+    methods (Hidden)
+        function ll = getListeners_(obj)
+            %GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+            %   Returns the private listeners_ cell. Hidden so it does not
+            %   appear in tab-completion / doc(); not part of public API
+            %   (D-10).
+            ll = obj.listeners_;
+        end
+    end
+
     methods (Access = private)
         function notifyListeners_(obj)
             %NOTIFYLISTENERS_ Iterate listeners_ and call invalidate() on each.
