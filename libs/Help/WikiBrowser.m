@@ -63,6 +63,7 @@ classdef WikiBrowser < handle
         hCrumbGrid_     = []
         hBackBtn_       = []
         hFwdBtn_        = []
+        hHomeBtn_       = []      % "⌂" button — jumps to HomePage
         hCrumbLbl_      = []
         hBodyGrid_      = []      % [1 2] grid: sidebar | content
         hSidebarPanel_  = []
@@ -266,6 +267,8 @@ classdef WikiBrowser < handle
                     obj.hBackBtn_.FontColor           = t.ForegroundColor;
                     obj.hFwdBtn_.BackgroundColor      = t.WidgetBorderColor;
                     obj.hFwdBtn_.FontColor            = t.ForegroundColor;
+                    obj.hHomeBtn_.BackgroundColor     = t.WidgetBorderColor;
+                    obj.hHomeBtn_.FontColor           = t.ForegroundColor;
                 catch
                     % Restyle is best-effort — older releases / odd states
                     % can throw on individual property writes; ignore.
@@ -331,6 +334,7 @@ classdef WikiBrowser < handle
             obj.hCrumbGrid_    = [];
             obj.hBackBtn_      = [];
             obj.hFwdBtn_       = [];
+            obj.hHomeBtn_      = [];
             obj.hCrumbLbl_     = [];
             obj.hBodyGrid_     = [];
             obj.hSidebarPanel_ = [];
@@ -446,11 +450,11 @@ classdef WikiBrowser < handle
             obj.hRootGrid_.RowSpacing    = 6;
             obj.hRootGrid_.BackgroundColor = t.DashboardBackground;
 
-            % Breadcrumb strip: [< back | fwd > | crumb label (1x)].
-            obj.hCrumbGrid_ = uigridlayout(obj.hRootGrid_, [1 3]);
+            % Breadcrumb strip: [< back | fwd > | home ⌂ | crumb label (1x)].
+            obj.hCrumbGrid_ = uigridlayout(obj.hRootGrid_, [1 4]);
             obj.hCrumbGrid_.Layout.Row     = 1;
             obj.hCrumbGrid_.Layout.Column  = 1;
-            obj.hCrumbGrid_.ColumnWidth    = {32, 32, '1x'};
+            obj.hCrumbGrid_.ColumnWidth    = {32, 32, 32, '1x'};
             obj.hCrumbGrid_.RowHeight      = {'1x'};
             obj.hCrumbGrid_.Padding        = [0 0 0 0];
             obj.hCrumbGrid_.ColumnSpacing  = 4;
@@ -476,9 +480,19 @@ classdef WikiBrowser < handle
             obj.hFwdBtn_.Enable          = 'off';
             obj.hFwdBtn_.ButtonPushedFcn = @(~, ~) obj.forward();
 
+            obj.hHomeBtn_ = uibutton(obj.hCrumbGrid_, 'push');
+            obj.hHomeBtn_.Layout.Row    = 1;
+            obj.hHomeBtn_.Layout.Column = 3;
+            obj.hHomeBtn_.Text          = char(8962);   % ⌂ house with chimney
+            obj.hHomeBtn_.Tooltip       = 'Home (wiki/Home.md)';
+            obj.hHomeBtn_.FontSize      = 13;
+            obj.hHomeBtn_.BackgroundColor = t.WidgetBorderColor;
+            obj.hHomeBtn_.FontColor       = t.ForegroundColor;
+            obj.hHomeBtn_.ButtonPushedFcn = @(~, ~) obj.navigateTo('Home');
+
             obj.hCrumbLbl_ = uilabel(obj.hCrumbGrid_);
             obj.hCrumbLbl_.Layout.Row    = 1;
-            obj.hCrumbLbl_.Layout.Column = 3;
+            obj.hCrumbLbl_.Layout.Column = 4;
             obj.hCrumbLbl_.Text          = '';
             obj.hCrumbLbl_.FontWeight    = 'bold';
             obj.hCrumbLbl_.FontSize      = 12;
@@ -566,16 +580,19 @@ classdef WikiBrowser < handle
             obj.hContent_.Layout.Column = 2;
             obj.hContent_.HTMLSource    = ['<html><body style="font-family: sans-serif; padding: 20px;">' ...
                 '<p>Loading' char(8230) '</p></body></html>'];
-            % HTMLEventReceivedFcn: when the rendered HTML posts back data
-            % via htmlComponent.Data (the JS bridge injected by Task 4.3's
-            % rewriteCrossDocLinks_), treat it as a navigateTo request.
+            % DataChangedFcn: the rendered HTML's JS bridge (injected by
+            % rewriteCrossDocLinks_) sets `htmlComponent.Data = {page, ts}`
+            % when a wiki-internal anchor is clicked. Setting Data from JS
+            % fires DataChangedFcn on the MATLAB side (NOT
+            % HTMLEventReceivedFcn — that one only fires for the
+            % sendEventToMATLAB('eventName', data) API which we do not use).
             % External http(s):// and mailto: links remain un-rewritten
             % and the default uihtml behaviour opens them in the system
             % browser (CONTEXT.md D-10). Older MATLAB releases that lack
-            % HTMLEventReceivedFcn lose in-window navigation gracefully —
-            % all <a href> clicks open in the OS browser instead.
+            % DataChangedFcn lose in-window navigation gracefully — all
+            % <a href> clicks open in the OS browser instead.
             try
-                obj.hContent_.HTMLEventReceivedFcn = @(s, e) obj.onHtmlEvent_(s, e);
+                obj.hContent_.DataChangedFcn = @(s, e) obj.onHtmlEvent_(s, e);
             catch
                 % Best effort — silently fall back.
             end
@@ -663,18 +680,19 @@ classdef WikiBrowser < handle
             end
         end
 
-        function onHtmlEvent_(obj, ~, evt)
-        %ONHTMLEVENT_ uihtml HTMLEventReceivedFcn — bridge from JS.
-        %   The JS bridge injected by rewriteCrossDocLinks_ (Task 4.3)
-        %   intercepts clicks on a.wiki-internal and posts
-        %   {page, ts} to htmlComponent.Data. evt.Data carries that
-        %   struct; we forward to navigateTo. External http(s):// and
-        %   mailto: links are NOT rewritten — they keep the default
-        %   uihtml behaviour and open in the system browser
-        %   (CONTEXT.md D-10).
+        function onHtmlEvent_(obj, src, ~)
+        %ONHTMLEVENT_ uihtml DataChangedFcn — bridge from JS.
+        %   The JS bridge injected by rewriteCrossDocLinks_ intercepts
+        %   clicks on a.wiki-internal and sets htmlComponent.Data to
+        %   {page, ts}. The new value lives on src.Data (the uihtml
+        %   handle) — the event arg has Source + EventName only.
+        %   External http(s):// and mailto: links are NOT rewritten —
+        %   they keep the default uihtml behaviour and open in the
+        %   system browser (CONTEXT.md D-10).
             try
-                if isstruct(evt.Data) && isfield(evt.Data, 'page')
-                    obj.navigateTo(evt.Data.page);
+                d = src.Data;
+                if isstruct(d) && isfield(d, 'page') && ~isempty(d.page)
+                    obj.navigateTo(d.page);
                 end
             catch
                 % Best effort — silently ignore malformed payloads.

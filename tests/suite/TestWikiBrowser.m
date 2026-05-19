@@ -303,5 +303,42 @@ classdef TestWikiBrowser < matlab.unittest.TestCase
             testCase.verifyNotEmpty(strfind(src, 'htmlComponent.Data'), ...
                 'expected JS bridge to htmlComponent.Data');
         end
+
+        function testCrossDocLinkCallbackWiredToDataChangedFcn(testCase)
+            %TESTCROSSDOCLINKCALLBACKWIREDTODATACHANGEDFCN Regression for
+            %   the post-spot-check bug: the JS bridge sets
+            %   htmlComponent.Data, which only fires DataChangedFcn —
+            %   NOT HTMLEventReceivedFcn (that one is for
+            %   sendEventToMATLAB which we do not use). Verify the
+            %   correct callback is wired so JS-side clicks actually
+            %   round-trip back to navigateTo.
+            %
+            %   We can't fire a real JS click from headless MATLAB, so
+            %   this test inspects the wired callback handle directly.
+            %   The matching live-click round-trip is exercised in the
+            %   human-verify checkpoint (Plan 09).
+            wb = WikiBrowser('OpenTo', 'Companion-Overview', ...
+                'WikiDir', testCase.WikiDir_);
+            testCase.Wiki = wb;
+
+            hFig = findall(0, 'Type', 'figure', 'Tag', 'WikiBrowserRoot');
+            testCase.assertNotEmpty(hFig);
+            htmlObj = findobj(hFig(1), '-depth', 1, 'Type', 'uihtml');
+            if isempty(htmlObj)
+                htmlObj = findobj(hFig(1), 'Type', 'uihtml');
+            end
+            testCase.assertNotEmpty(htmlObj);
+
+            % The JS bridge sets htmlComponent.Data — only DataChangedFcn
+            % fires for that path. HTMLEventReceivedFcn is for
+            % sendEventToMATLAB and would never fire.
+            testCase.verifyClass(htmlObj(1).DataChangedFcn, ...
+                'function_handle', ...
+                ['DataChangedFcn must be a function handle — JS-bridge ' ...
+                'writes to htmlComponent.Data only fire DataChangedFcn']);
+            testCase.verifyEmpty(htmlObj(1).HTMLEventReceivedFcn, ...
+                ['HTMLEventReceivedFcn must be empty — wiring it would ' ...
+                'be a regression to the pre-fix bug (Plan 09 spot-check)']);
+        end
     end
 end
