@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Plant Log Integration
 status: executing
-stopped_at: Completed 1033-01-engine-public-api-PLAN.md
-last_updated: "2026-05-19T10:36:23.728Z"
+stopped_at: Completed 1033-02-serializer-and-load-PLAN.md
+last_updated: "2026-05-19T11:05:00.000Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # State
@@ -27,9 +27,9 @@ toolbox dependencies.
 ## Current Position
 
 Phase: 1033 (Dashboard + Companion Integration & Serialization) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Milestone: v3.1 Plant Log Integration
-Status: Ready to execute
+Status: Plan 02 complete — ready to execute Plan 03 (Companion toolbar + integration smoke)
 Last activity: 2026-05-19
 
 ## Progress Bar
@@ -40,10 +40,10 @@ v3.1 Plant Log Integration:
 - [x] Phase 1030: CSV/XLSX Import + Mapping Dialog — 3/3 plans
 - [x] Phase 1031: Live Tail + Slider Preview Overlay — 3/3 plans
 - [x] Phase 1032: Per-Widget Plant Log Overlay — 3/3 plans
-- [ ] Phase 1033: Dashboard + Companion Integration & Serialization — 0/? plans
+- [ ] Phase 1033: Dashboard + Companion Integration & Serialization — 2/3 plans
 
 Phases complete: 4/5
-Plans complete: 12/12 (100% of planned phases) — Phase 1032 closed 2026-05-19
+Plans complete: 14/15 (93%) — Plan 1033-02 closed 2026-05-19
 
 ## Accumulated Context
 
@@ -155,17 +155,41 @@ separate REQ-IDs:
 
 ## Session Continuity
 
-- **Resume point:** Phase 1033 Plan 01 (engine public API) is **shipped**
-  (2026-05-19). `DashboardEngine.attachPlantLog` + `detachPlantLog` public
-  methods replace the Phase 1031 test seam as production code path; four
-  new private serialization-state properties are ready for Plan 02
-  serializer read-through. PLOG-INT-01 + PLOG-INT-02 unit +
-  integration-proven (15 function-style + 18 class-based tests PASS).
-  Phase 1029-1032 regression intact. Next step: begin
-  Phase 1033 Plan 02 (DashboardSerializer + Load).
+- **Resume point:** Phase 1033 Plan 02 (DashboardSerializer + Load
+  round-trip) is **shipped** (2026-05-19). `DashboardSerializer.saveJSON`
+  splices a hand-encoded plantLog block bypassing jsonencode's
+  cell-of-cells ambiguity; the .m-script writers (`save` legacy +
+  `exportScript` + `exportScriptPages`) share `linesForPlantLog_` with
+  double-brace `metadataCols, {{...}}` literal; the `ShowPlantLog` NV
+  pair forks BOTH legacy single-line writer AND modern `linesForWidget`
+  across four fastsense sub-cases (sensor/file/data/otherwise +
+  no-source fallback). `DashboardEngine.attachPlantLog` gains a hidden
+  `ContinueOnReadError` opt (default false) that degrades
+  `PlantLogReader:fileNotFound` to
+  `warning('DashboardEngine:plantLogPathMissing', ...)`,
+  `PlantLogReader:unknownColumn` to mapping-mismatch recovery
+  (re-autoDetect + `warning('DashboardEngine:plantLogMappingMismatch',
+  ...)` + retry), and other read failures to
+  `warning('DashboardEngine:plantLogReadFailed', ...)`.
+  `DashboardEngine.load` JSON branch pre-flights `exist()` check for
+  the saved sourcePath, validates schema (raises
+  `error('DashboardSerializer:plantLogSchemaInvalid', ...)` on
+  malformed plantLog block missing sourcePath), and dispatches
+  `attachPlantLog` with `ContinueOnReadError=true`. Byte-identical
+  back-compat for v1.0-v3.0 dashboards verified via
+  `testSaveJsonBackCompatByteIdentical` (omit-when-empty rule fires
+  when `PlantLogStoreInternal_` empty OR `PlantLogSourcePath_` empty).
+  PLOG-INT-04 + PLOG-INT-05 unit + integration-proven (14
+  function-style + 17 class-based tests PASS, including 3 rendered
+  round-trip tests: `testRoundTripWidgetShowPlantLog`,
+  `testRoundTripPerWidgetShowPlantLogScriptPath`,
+  `testReAttachAfterLoadIsIdempotent`). Phase 1029-1032 regression
+  intact (TestPlantLogIntegrationSmoke 9/9 + TestPhase1031IntegrationSmoke
+  7/7 + TestPhase1032IntegrationSmoke 9/9 + TestDashboardEngineAttachPlantLog
+  18/18 + TestDashboardMSerializer 10/10). Next step: begin Phase 1033
+  Plan 03 (Companion toolbar + integration smoke).
 
-- **Order of phases:** 1029 ✅ → 1030 ✅ → 1031 → 1032 → 1033 (each phase depends on
-  prior phases; no parallel execution paths).
+- **Order of phases:** 1029 ✅ → 1030 ✅ → 1031 ✅ → 1032 ✅ → 1033 ⏳ (Plan 1+2 done, Plan 3 pending). Each phase depends on prior phases; no parallel execution paths.
 
 - **Coverage:** 32/32 active PLOG-* requirements mapped to phases — verified
   during roadmap creation. PLOG-ST-01..05 (5/32) have unit + integration
@@ -182,39 +206,55 @@ separate REQ-IDs:
   Remaining requirements (Phase 1033): PLOG-VIZ-01 + 02 + 06 + 08 + 09 +
   PLOG-INT-* etc. — see ROADMAP.md.
 
-- **Stopped at:** Completed 1033-01-engine-public-api-PLAN.md
-  (Phase 1032 closed; ready for `/gsd:verify-phase 1032`).
-  `DetachedMirror.restoreLiveRefs` extended to copy `ShowPlantLog` from
-  original to clone (belt-and-suspenders alongside the Plan 01
-  `toStruct`/`fromStruct` round-trip). `DashboardEngine.detachWidget` tail
-  re-invokes `cw.setShowPlantLog(true, obj)` on the mirror's cloned widget
-  so the standalone figure attaches an XLim listener, builds its own
-  `PlantLogWidgetHover`, and draws marker handles (Decision G full
-  parity). `removeDetached` + `removeDetachedByRef` BOTH call
-  `obj.detachPlantLogWidgetHover_` BEFORE the keep-filter applies so a
-  closing mirror cannot leak its hover. End-to-end smoke ships in two
-  files: `tests/test_phase_1032_integration_smoke.m` (8 sub-tests,
-  cross-runtime where possible) and
-  `tests/suite/TestPhase1032IntegrationSmoke.m` (9 Test methods including
-  `testRealTimerRoundTrip` exercising a real `PlantLogLiveTail` with
-  `Interval=0.2s` + `StartImmediately=true`). Smoke fixtures use
-  `SensorTag`-backed FastSenseWidget (matching the existing
-  `TestDashboardDetach.makeFastSenseWidget` pattern) because
-  `DetachedMirror.stripSensorRefs` unconditionally drops the `source`
-  field on the clone. 8/8 function-style + 9/9 class-based PASS on MATLAB
-  R2025b; full Phase 1029-1032 regression intact (143/143 PASS); checkcode
-  clean on `DetachedMirror.m` + both new test files; `DashboardEngine.m`
-  pre-existing 22 warnings unchanged (no NEW Error/Critical-level
-  diagnostics introduced). Auto-fixed during execution: SensorTag-backed
-  test widget (Rule 1 — stripSensorRefs drops inline XData/YData);
-  e.addWidget(w) added to fan-out asserting tests (Rule 1 — fan-out skips
-  widgets not in obj.Widgets); flattenTooltipString_ helper covers 4
-  uicontrol(text) String shapes (Rule 1 — strfind needs flat char);
-  real-timer CSV switched to `yyyy-mm-dd HH:MM:SS` formatted timestamps
-  (Rule 1 — Phase 1030 Plan 01 sanity-gates numeric < 1e5 as
-  non-datenum); checkcode-clean post-pass on both new test files (Rule 2
-  hygiene — ISCL → isscalar, NOCOMMA → multi-line, DATST suppression on
-  the call line).
+- **Stopped at:** Completed 1033-02-serializer-and-load-PLAN.md
+  (Phase 1033 Plan 02 of 3 closed; Plan 03 pending). `DashboardSerializer`
+  + `DashboardEngine` extended to round-trip the engine's plant-log state
+  through JSON and .m-script paths with byte-identical back-compat for
+  every v1.0-v3.0 dashboard. Save side: new `stampPlantLogIntoConfig_`
+  private helper on `DashboardEngine` writes the plantLog block onto cfg
+  AFTER widgetsToConfig builds it (omit-when-empty when
+  `PlantLogStoreInternal_` OR `PlantLogSourcePath_` is empty). New
+  `encodePlantLogBlock_` static helper on `DashboardSerializer`
+  hand-encodes the JSON object bypassing `jsonencode`'s cell-of-cells
+  ambiguity for `metadataCols`. New `linesForPlantLog_` static private
+  helper is shared by all three .m-script export paths
+  (`DashboardSerializer.save` legacy, `exportScript` modern,
+  `exportScriptPages` multi-page); uses double-brace
+  `metadataCols, {{...}}` literal so `struct()` preserves the cell shape
+  on feval reload. Per-widget `'ShowPlantLog', true` NV pair forks BOTH
+  the legacy single-line writer AND the modern `linesForWidget` case
+  'fastsense' across all four sub-cases (sensor/file/data/otherwise +
+  no-source fallback). Load side: `DashboardEngine.attachPlantLog`
+  accepts hidden `ContinueOnReadError` opt (default false). New
+  `surfacePlantLogLoadFailure_` private helper routes
+  `PlantLogReader:fileNotFound` to
+  `warning('DashboardEngine:plantLogPathMissing', ...)`, other read
+  failures to `warning('DashboardEngine:plantLogReadFailed', ...)`.
+  `PlantLogReader:unknownColumn` triggers inline mapping-mismatch
+  recovery: re-run `autoDetectFromFile`,
+  `warning('DashboardEngine:plantLogMappingMismatch', ...)`, retry
+  `openInteractive` with the new mapping; on second failure warn
+  plantLogReadFailed. `DashboardEngine.load` JSON branch pre-flights
+  `exist(sourcePath, 'file')` (covers the case where user supplied an
+  explicit Mapping that bypasses the autoDetect path), validates schema
+  (`error('DashboardSerializer:plantLogSchemaInvalid', ...)` on
+  malformed plantLog block), and dispatches `attachPlantLog` with
+  `ContinueOnReadError=true`. v1.0-v3.0 back-compat: missing plantLog
+  key skips entirely with zero warnings. 14/14 function-style + 17/17
+  class-based PASS on MATLAB R2025b (including 3 rendered round-trip
+  tests:`testRoundTripWidgetShowPlantLog`,
+  `testRoundTripPerWidgetShowPlantLogScriptPath`,
+  `testReAttachAfterLoadIsIdempotent`); Phase 1029-1032 regression
+  intact (TestPlantLogIntegrationSmoke 9/9 + TestPhase1031IntegrationSmoke
+  7/7 + TestPhase1032IntegrationSmoke 9/9 + TestDashboardEngineAttachPlantLog
+  18/18 + TestDashboardMSerializer 10/10); checkcode 4 advisory AGROW
+  warnings on new `wLines{end+1}` lines matching existing `linesForWidget`
+  style, zero NEW Error/Critical-level. Auto-fixed during execution:
+  dashboard name "TestWidgetNoShowPlantLog" → "TestWidgetDefault" (Rule 1
+  — substring match on dashboard name produced false-positive assertion
+  failure); 6 stale `%#ok<AGROW>` suppressions stripped from
+  `attachArgs{end+1}` lines (Rule 2 hygiene — R2025b no longer emits AGROW
+  on these patterns, same pattern as Plans 1030-1032).
 
 ## Decisions Log
 
@@ -585,3 +625,63 @@ separate REQ-IDs:
   NEW Error/Critical-level diagnostics). PLOG-INT-01 + PLOG-INT-02
   unit + integration-proven. See
   `.planning/phases/1033-dashboard-companion-integration-serialization/1033-01-engine-public-api-SUMMARY.md`.
+
+- **Plan 02 (serializer + load round-trip, 2026-05-19)** — Shipped the
+  full save + load round-trip for the engine's plant-log state through
+  both JSON and .m-script paths with byte-identical back-compat for
+  every v1.0-v3.0 dashboard. Save side: `stampPlantLogIntoConfig_`
+  private helper on `DashboardEngine` stamps the plantLog block onto
+  cfg AFTER widgetsToConfig builds it (omit-when-empty when store OR
+  sourcePath is empty -- test-seam-only attachments by design do NOT
+  serialize); `encodePlantLogBlock_` static helper on
+  `DashboardSerializer` hand-encodes the JSON object bypassing
+  jsonencode's cell-of-cells ambiguity for metadataCols;
+  `linesForPlantLog_` static private helper is shared by all three
+  .m-script export paths (`save`, `exportScript`, `exportScriptPages`)
+  with double-brace `metadataCols, {{...}}` literal so struct()
+  preserves the cell shape on feval reload. Per-widget
+  `'ShowPlantLog', true` NV pair forks BOTH the legacy single-line
+  fastsense writer (`DashboardSerializer.save` ~line 50) AND the
+  modern multi-line writer (`linesForWidget` case 'fastsense') across
+  all four sub-cases (sensor/file/data/otherwise + no-source
+  fallback). Load side: `DashboardEngine.attachPlantLog` accepts the
+  new hidden opt `ContinueOnReadError` (default false). New
+  `surfacePlantLogLoadFailure_` private helper routes
+  `PlantLogReader:fileNotFound` → `warning('DashboardEngine:plantLogPathMissing', ...)`,
+  other read failures → `warning('DashboardEngine:plantLogReadFailed', ...)`.
+  `PlantLogReader:unknownColumn` triggers inline mapping-mismatch
+  recovery: re-run `autoDetectFromFile`, warn
+  `DashboardEngine:plantLogMappingMismatch` showing before/after
+  columns, retry `openInteractive` with the new mapping; on second
+  failure warn plantLogReadFailed and return store=[].
+  `DashboardEngine.load` JSON branch pre-flights `exist(sourcePath,
+  'file')` check (covers the explicit-Mapping case that bypasses
+  autoDetect), validates schema via
+  `error('DashboardSerializer:plantLogSchemaInvalid', ...)` on
+  malformed plantLog block missing sourcePath, and dispatches
+  `attachPlantLog` with `ContinueOnReadError=true`. After successful
+  mapping-mismatch recovery, the `readerMappingToJsonShape_` tail of
+  attachPlantLog overwrites `engine.PlantLogMapping_` so the next
+  save round-trips the new auto-detected shape (CONTEXT.md D-12).
+  Byte-identical back-compat verified via
+  `testSaveJsonBackCompatByteIdentical` (two no-plant-log engines
+  produce identical JSON). Auto-fixed during execution: (1) dashboard
+  name "TestWidgetNoShowPlantLog" renamed to "TestWidgetDefault"
+  (Rule 1 -- substring match on dashboard name produced
+  false-positive assertion failure); (2) 6 stale `%#ok<AGROW>`
+  suppressions stripped from new `attachArgs{end+1}` lines (Rule 2
+  hygiene -- R2025b no longer emits AGROW on these patterns, same
+  Rule 2 fix Plans 1030-1032 applied uniformly). 14/14 function-style
+  + 17/17 class-based PASS on MATLAB R2025b; Phase 1029-1032
+  regression intact (TestPlantLogIntegrationSmoke 9/9 +
+  TestPhase1031IntegrationSmoke 7/7 + TestPhase1032IntegrationSmoke
+  9/9 + TestDashboardEngineAttachPlantLog 18/18 +
+  TestDashboardMSerializer 10/10); DashboardSerializer.m checkcode
+  +4 advisory AGROW warnings matching existing linesForWidget style
+  (zero NEW Error/Critical); DashboardEngine.m checkcode improvement
+  via stale-suppression cleanup. PLOG-INT-04 + PLOG-INT-05
+  unit + integration-proven (including 3 rendered round-trip tests:
+  `testRoundTripWidgetShowPlantLog`,
+  `testRoundTripPerWidgetShowPlantLogScriptPath`,
+  `testReAttachAfterLoadIsIdempotent`). See
+  `.planning/phases/1033-dashboard-companion-integration-serialization/1033-02-serializer-and-load-SUMMARY.md`.

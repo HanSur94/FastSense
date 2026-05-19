@@ -132,7 +132,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1030. CSV/XLSX Import + Mapping Dialog | v3.1 | 3/3 | Complete    | 2026-05-13 |
 | 1031. Live Tail + Slider Preview Overlay | v3.1 | 3/3 | Complete   | 2026-05-14 |
 | 1032. Per-Widget Plant Log Overlay | v3.1 | 3/3 | Complete    | 2026-05-19 |
-| 1033. Dashboard + Companion Integration & Serialization | v3.1 | 1/3 | In Progress|  |
+| 1033. Dashboard + Companion Integration & Serialization | v3.1 | 2/3 | In Progress|  |
 
 ## Phase Details (v3.1 Plant Log Integration)
 
@@ -219,9 +219,9 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
   3. Saving a dashboard via `DashboardSerializer` (both JSON and `.m` export) writes the plant-log source path, the column mapping (timestamp/message/metadata + explicit format if overridden), the live-tail interval, and each widget's `ShowPlantLog` flag — but does NOT serialize the imported entries themselves.
   4. Loading a serialized dashboard re-imports the plant log from the saved source path using the saved column mapping, restores each widget's `ShowPlantLog` state, and the slider overlay reappears with the freshly-imported entries; existing v1.0–v3.0 serialized dashboards (with no plant-log section) continue to load without error.
   5. All new public APIs raise `PlantLogStore:*` / `PlantLogReader:*` namespaced errors on invalid inputs, every Companion toolbar callback is wrapped in try/catch with non-blocking `uialert`, and the round-trip "attach → save → load → re-attach" path is covered by tests that pass on both MATLAB and Octave (with XLSX gated where necessary).
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 - [x] 1033-01-engine-public-api-PLAN.md — DashboardEngine.attachPlantLog / detachPlantLog public methods + four private serialization-state properties + idempotent re-attach + cross-runtime tests
-- [ ] 1033-02-serializer-and-load-PLAN.md — DashboardSerializer.save/load/.m-script extension for plantLog key (omit-when-empty + v1.0-v3.0 back-compat) + load-failure warning policy + per-widget ShowPlantLog .m-script emission
+- [x] 1033-02-serializer-and-load-PLAN.md — DashboardSerializer.save/load/.m-script extension for plantLog key (omit-when-empty + v1.0-v3.0 back-compat) + load-failure warning policy + per-widget ShowPlantLog .m-script emission
 - [ ] 1033-03-companion-toolbar-and-smoke-PLAN.md — FastSenseCompanion toolbar 1x5 expansion + Plant Log… button + openPlantLogDialog_ method + PlantLogReader.openInteractive varargout extension + Phase 1033 end-to-end integration smoke
 **UI hint**: yes
 
