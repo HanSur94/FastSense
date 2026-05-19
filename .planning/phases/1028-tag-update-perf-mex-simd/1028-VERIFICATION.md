@@ -463,6 +463,33 @@ target regions still bucket as 0 ms in the post-cache tBreakdown
 unless plans 03/04 add direct `tic/toc` probes per Plan 02b's
 recommendation.
 
+## Stage 2 Trigger Evaluation
+
+Plan 04 (K3/K4 composite kernels) was deferred per data — Plan 02d's tBreakdown showed
+K3/K4 target regions (composite_merge, aggregate) at 0 ms, well below the 5× speedup
+threshold. The Stage 2 trigger is therefore evaluated against Plan 02d's post-cache
+tBreakdown rather than a post-Plan-04 tickMin:
+
+- Post-cache WithIO tickMin: **3662 ms** (Plan 02d, CI run 25567022263, commit `5b622d1`)
+- Post-cache `other` bucket (smoke profile, WithIO cache-on): **~2447 ms = ~67%**
+  of cache-on WithIO total. This bucket contains the H8 (per-tag dispatch:
+  `@containers.Map/subsref`, `@LiveTagPipeline/processTag_`, `@containers.Map/isKey`,
+  `@containers.Map/subsasgn`) and H9/H10 (listener fan-out + per-tag filesystem
+  metadata: `dir`, `exist`, `fullfile`) costs that Plan 05's A1+A2 levers target.
+- Stage 2 threshold (per CONTEXT.md D-05 / RESEARCH §"Two-Stage Delivery"): the
+  combined H8+H9 share of post-Stage-1 tickMin must exceed **25%**.
+- Observed share (H8+H9 share of the post-cache WithIO tick): **~67%** — well above
+  the 25% threshold (more than 2.5× over).
+
+The cache also eliminated the read-side .mat I/O cost that previously dominated
+production tick, exposing the per-tag dispatch and listener cascade as the new
+dominant cost. Per Plan 02b's TL;DR ("the architectural changes from Wave 2 …
+have a much clearer line to the dominant cost than the kernel swaps") and Plan 02d's
+"Strategic implication for Plan 05" paragraph, A1 (listener fan-out coalescing) and
+A2 (batch invalidate API) are the right next levers.
+
+**Decision:** `approved`
+
 ## Stage 2 Final (plan 06)
 
 TBD or "deferred per Stage 2 Trigger".
