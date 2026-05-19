@@ -68,7 +68,6 @@ function [eng, widget, fig, btn] = build_widget_with_chrome_(attachStore)
 %BUILD_WIDGET_WITH_CHROME_ Construct an offscreen FastSenseWidget rendered
 %   through DashboardLayout's chrome path, then return the engine, widget,
 %   parent figure, and the L button uicontrol handle.
-    fig = figure('Visible', 'off', 'Units', 'pixels', 'Position', [10 10 700 500]);
     eng = DashboardEngine('layoutToggleTest');
     if attachStore
         store = PlantLogStore('x');
@@ -76,10 +75,14 @@ function [eng, widget, fig, btn] = build_widget_with_chrome_(attachStore)
             'Timestamp', 100, 'Message', 'msg', 'Metadata', struct()));
         eng.setPlantLogStoreForTest_(store);
     end
-    widget = FastSenseWidget('Title', 'wt', 'XData', 0:10, 'YData', sin(0:10));
+    widget = FastSenseWidget('Title', 'wt', ...
+        'Description', 'info text so the InfoIconButton renders alongside the L button', ...
+        'XData', 0:10, 'YData', sin(0:10));
     widget.Position = [1 1 6 2];
     eng.addWidget(widget);
-    eng.render(fig);
+    eng.render();
+    fig = eng.hFigure;
+    try set(fig, 'Visible', 'off'); catch, end
     % Resolve the L button after render.
     bar = findobj(widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
     btn = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
@@ -238,8 +241,10 @@ end
 
 function n = test_clear_panel_controls_protects_toggle()
     % Build a bare uipanel, populate with the three button-bar tags + a rogue
-    % uicontrol. Then invoke DashboardWidget.clearPanelControls (static
-    % protected — invoked through the engine widget). Verify rogues die.
+    % uicontrol. Invoke DashboardWidget.clearPanelControls (static protected)
+    % via Probe_DW_PanelClear (a test-only DashboardWidget subclass that
+    % re-exposes the protected static). Verify rogues die, protected tags
+    % survive.
     fig = figure('Visible', 'off');
     cleanupF = onCleanup(@() try_delete_h(fig));
     p = uipanel('Parent', fig);
@@ -247,22 +252,6 @@ function n = test_clear_panel_controls_protects_toggle()
     uicontrol('Parent', p, 'Tag', 'DetachButton',         'Style', 'pushbutton');
     uicontrol('Parent', p, 'Tag', 'PlantLogToggleButton', 'Style', 'pushbutton');
     uicontrol('Parent', p, 'Tag', 'RogueControl',         'Style', 'pushbutton');
-    % Drive the clearPanelControls path through a real widget delete cycle
-    % isn't trivial; we use a TestableDashboardWidget subclass via a local
-    % anonymous probe — the static is protected, so we leverage the
-    % PanelClearProbe helper class shipped alongside the engine. Reflection
-    % fallback: invoke via the same path that GroupWidget.refresh uses.
-    %
-    % Cleaner approach: use a NumberWidget on which we manually re-render via
-    % refresh — its render path calls clearPanelControls on its hPanel.
-    nw = NumberWidget('Title', 'probe', 'Value', 0);
-    nw.hPanel = p;
-    nw.ParentTheme = DashboardTheme('light');
-    nw.render(p);
-    nw.refresh();
-    % After refresh, the rogue (still present, since render only touches its
-    % own children — NumberWidget creates text controls). The simpler way:
-    % invoke the static directly via a subclass that exposes it.
     Probe_DW_PanelClear.clear(p);
     rogue = findobj(p, 'Tag', 'RogueControl', '-depth', 1);
     assert(isempty(rogue) || all(~ishandle(rogue)), ...

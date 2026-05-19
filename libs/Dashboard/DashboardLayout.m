@@ -23,6 +23,7 @@ classdef DashboardLayout < handle
         OnScrollCallback = []       % function handle: @(topRow, bottomRow)
         DetachCallback   = []       % function handle: @(widget) — set by DashboardEngine
         VisibleRows      = [1 Inf]  % [topRow bottomRow] currently visible
+        EngineRef        = []       % Phase 1032 PLOG-VIZ-05 — back-reference to DashboardEngine for chrome callbacks (addPlantLogToggle)
     end
 
     properties (SetAccess = private)
@@ -380,6 +381,16 @@ classdef DashboardLayout < handle
                 if ~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')
                     obj.addDetachButton(widget);
                 end
+                % Phase 1032 PLOG-VIZ-05: plant-log toggle on FastSenseWidget only.
+                if isa(widget, 'FastSenseWidget')
+                    try
+                        engineRef = obj.EngineRef;
+                        obj.addPlantLogToggle(widget, engineRef);
+                    catch ME
+                        warning('DashboardLayout:plantLogToggleParentMissing', ...
+                            'addPlantLogToggle failed during realizeWidget: %s', ME.message);
+                    end
+                end
             else
                 % No chrome — render directly into the cell panel as before.
                 widget.render(widget.hCellPanel);
@@ -586,6 +597,123 @@ classdef DashboardLayout < handle
             end
         end
 
+        function addPlantLogToggle(obj, widget, engine)
+        %ADDPLANTLOGTOGGLE Add the per-widget plant-log overlay toggle (Phase 1032 PLOG-VIZ-05).
+        %   The toggle is always created (Decision B: always render, disable
+        %   when no store); clicking it calls
+        %   widget.setShowPlantLog(~widget.ShowPlantLog, engine).
+        %   The engine handle is captured by the callback closure.
+        %
+        %   Idempotent: any prior PlantLogToggleButton on the same bar is
+        %   deleted before the new uicontrol is created.
+        %
+        %   Visibility / pressed-state colors:
+        %     - No store attached: Enable='off',  tooltip 'No plant log attached'
+        %     - Store, ShowPlantLog=false: Enable='on', tooltip 'Show plant log lines',
+        %         bg=theme.ToolbarBackground, fg=theme.ToolbarFontColor
+        %     - Store, ShowPlantLog=true:  Enable='on', tooltip 'Hide plant log lines',
+        %         bg=theme.MarkerPlantLog ([0 0 0]), fg=[1 1 1]
+        %
+        %   Errors namespaced 'DashboardLayout:plantLogToggleParentMissing'
+        %   for callback-time parent-missing failures.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            % Idempotent: clear any prior PlantLogToggleButton on this bar.
+            prior = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+            if ~isempty(prior)
+                try delete(prior); catch, end
+            end
+            barPos = get(bar, 'Position');
+            % Position from right edge: Detach (offset 4 + 24-wide) + 4 gap +
+            % Info (24-wide) + 4 gap + PlantLog (24-wide). LeftMost button x:
+            %   x = barW - 24 - 4 - 24 - 4 - 24 - 4 = barW - 84
+            xPL = barPos(3) - 24 - 4 - 24 - 4 - 24 - 4;
+            % Resolve enabled/disabled state from the engine store.
+            storeAttached = false;
+            if ~isempty(engine) && isa(engine, 'DashboardEngine')
+                try
+                    storeAttached = ~isempty(engine.PlantLogStoreInternal_) && ...
+                        isa(engine.PlantLogStoreInternal_, 'PlantLogStore');
+                catch
+                    storeAttached = false;
+                end
+            end
+            if storeAttached
+                enableState = 'on';
+                if isa(widget, 'FastSenseWidget') && widget.ShowPlantLog
+                    tipStr  = 'Hide plant log lines';
+                    bgColor = [0 0 0];
+                    if isfield(theme, 'MarkerPlantLog')
+                        bgColor = theme.MarkerPlantLog;
+                    end
+                    fgColor = [1 1 1];
+                else
+                    tipStr  = 'Show plant log lines';
+                    bgColor = theme.ToolbarBackground;
+                    fgColor = theme.ToolbarFontColor;
+                end
+            else
+                enableState = 'off';
+                tipStr  = 'No plant log attached';
+                bgColor = theme.ToolbarBackground;
+                fgColor = theme.ToolbarFontColor;
+            end
+            uicontrol('Parent', bar, ...
+                'Style',           'pushbutton', ...
+                'String',          'L', ...
+                'Units',           'pixels', ...
+                'Position',        [xPL 2 24 24], ...
+                'FontSize',        9, ...
+                'FontWeight',      'bold', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', bgColor, ...
+                'Enable',          enableState, ...
+                'Tag',             'PlantLogToggleButton', ...
+                'TooltipString',   tipStr, ...
+                'Callback',        @(s, ~) obj.onPlantLogTogglePressed_(s, widget, engine));
+        end
+
+        function onPlantLogTogglePressed_(obj, src, widget, engine)
+        %ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with try/catch (Phase 1032 PLOG-VIZ-05).
+        %   Programmatic force-call paths (tests, automation) need a
+        %   software-level guard for Enable='off' because uicontrols only
+        %   honor Enable natively for user-driven mouse clicks.
+            try
+                % Software-level Enable guard: if the button was constructed
+                % with Enable='off' (no store), force-calls must be no-ops.
+                if ~isempty(src) && ishandle(src)
+                    try
+                        if strcmp(get(src, 'Enable'), 'off')
+                            return;
+                        end
+                    catch
+                    end
+                end
+                if ~isa(widget, 'FastSenseWidget')
+                    error('DashboardLayout:plantLogToggleParentMissing', ...
+                        'PlantLog toggle requires a FastSenseWidget parent.');
+                end
+                widget.setShowPlantLog(~widget.ShowPlantLog, engine);
+                % Rebuild the button look (pressed-state colors + tooltip).
+                obj.addPlantLogToggle(widget, engine);
+            catch ME
+                warning('DashboardLayout:plantLogToggleParentMissing', ...
+                    'Plant-log toggle callback failed: %s', ME.message);
+                % Best-effort: non-blocking uialert if a uifigure ancestor exists.
+                try
+                    fig = ancestor(src, 'figure');
+                    if ~isempty(fig) && ishandle(fig) && isa(fig, 'matlab.ui.Figure')
+                        uialert(fig, ME.message, 'Plant log toggle failed', 'Icon', 'error');
+                    end
+                catch
+                end
+            end
+        end
+
     end
 
     methods (Access = private)
@@ -776,6 +904,12 @@ classdef DashboardLayout < handle
                 end
                 if ~isempty(info) && ishandle(info(1))
                     set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
+                end
+                pl = findobj(bar(1), 'Tag', 'PlantLogToggleButton', '-depth', 1);  % Phase 1032 PLOG-VIZ-05
+                if ~isempty(pl) && ishandle(pl(1))
+                    % Leftmost of the three from the right edge:
+                    %   24 detach + 4 + 24 info + 4 + 24 plantlog + 4 = 84.
+                    set(pl(1), 'Position', [barW - 24 - 4 - 24 - 4 - 24 - 4, 2, 24, 24]);
                 end
             end
             if ~isempty(content) && ishandle(content(1))

@@ -39,7 +39,6 @@ classdef TestDashboardLayoutPlantLogToggle < matlab.unittest.TestCase
 
     methods (Access = private)
         function buildWidgetWithChrome(testCase, attachStore)
-            testCase.Fig = figure('Visible', 'off', 'Units', 'pixels', 'Position', [10 10 700 500]);
             testCase.Eng = DashboardEngine('layoutToggleTest');
             if attachStore
                 store = PlantLogStore('x');
@@ -47,10 +46,14 @@ classdef TestDashboardLayoutPlantLogToggle < matlab.unittest.TestCase
                     'Timestamp', 100, 'Message', 'msg', 'Metadata', struct()));
                 testCase.Eng.setPlantLogStoreForTest_(store);
             end
-            testCase.Widget = FastSenseWidget('Title', 'wt', 'XData', 0:10, 'YData', sin(0:10));
+            testCase.Widget = FastSenseWidget('Title', 'wt', ...
+                'Description', 'info text so the InfoIconButton renders alongside the L button', ...
+                'XData', 0:10, 'YData', sin(0:10));
             testCase.Widget.Position = [1 1 6 2];
             testCase.Eng.addWidget(testCase.Widget);
-            testCase.Eng.render(testCase.Fig);
+            testCase.Eng.render();
+            testCase.Fig = testCase.Eng.hFigure;
+            try set(testCase.Fig, 'Visible', 'off'); catch, end
             bar = findobj(testCase.Widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
             testCase.Btn = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
         end

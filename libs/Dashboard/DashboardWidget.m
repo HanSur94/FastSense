@@ -138,7 +138,9 @@ classdef DashboardWidget < handle
         %   since 260508 — but the legacy tags are kept in case any pre-bar
         %   widgets still parent the buttons directly to hPanel.
             if isempty(hPanel) || ~ishandle(hPanel), return; end
-            protectedTags = {'InfoIconButton', 'DetachButton', 'WidgetButtonBar'};
+            % Phase 1032 PLOG-VIZ-05 — protect plant-log toggle from re-render sweeps.
+            protectedTags = {'InfoIconButton', 'DetachButton', 'WidgetButtonBar', ...
+                'PlantLogToggleButton'};
             % Sweep depth-1 uicontrols (legacy-positioned buttons).
             kids = findobj(hPanel, '-depth', 1, 'Type', 'uicontrol');
             for i = 1:numel(kids)
