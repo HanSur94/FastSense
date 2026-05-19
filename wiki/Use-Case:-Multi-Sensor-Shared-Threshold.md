@@ -2,180 +2,157 @@
 
 # Use Case: Multi-Sensor Shared Threshold
 
-Plot multiple sensors on a single tile with one shared threshold, see violation markers for all sensors, and run event detection.
-
-**When to use:** You have several sensors that share the same physical limit (e.g., max temperature across zones, pressure across channels) and want a single threshold line with violations and events computed for each sensor.
+**Problem:** You have several sensors that share the same physical limit (e.g., a maximum temperature across multiple zones, or a pressure ceiling for independent channels). You want a single threshold definition, independent violation tracking per sensor, and event detection that attributes each exceedance to its originating sensor — without duplicating configuration.
 
 ---
 
 ## Quick Example
 
-```matlab
-install;
+Create four `SensorTag` objects, each with its own time series, then attach a `MonitorTag` with the same condition function to each. The monitors work independently, giving you per‑sensor violation signals and extractable event segments.
 
-%% Create sensors with identical threshold rules
-sensors = cell(1, 4);
-names = {'Zone A', 'Zone B', 'Zone C', 'Zone D'};
-x = linspace(0, 60, 500000);
+```matlab
+%% Setup: define a shared limit and per‑zone sensors
+keys   = {'zone_A','zone_B','zone_C','zone_D'};
+names  = {'Zone A','Zone B','Zone C','Zone D'};
+limit  = 4.5;
+sensors  = cell(1,4);
+monitors = cell(1,4);
 
 for i = 1:4
-    s = Sensor(sprintf('zone_%d', i), 'Name', names{i});
-    s.X = x;
-    s.Y = sin(x * 2 * pi * i / 20) + 0.3 * randn(1, numel(x)) + 3;
+    x = linspace(0, 60, 5000);
+    y = sin(x * 2 * pi * i / 20) + 0.3 * randn(1, numel(x)) + 3;
 
-    % Same threshold rule for every sensor
-    s.addThresholdRule(struct(), 4.5, 'Direction', 'upper', 'Label', 'Max Temp');
-    s.resolve();
+    st = SensorTag(keys{i}, 'Name', names{i}, 'X', x, 'Y', y);
+    mt = MonitorTag([keys{i} '_hi'], st, @(x,y) y > limit, ...
+                    'Name', [names{i} ' HI'], 'Description', 'Shared limit exceedance');
 
-    sensors{i} = s;
+    sensors{i}  = st;
+    monitors{i} = mt;
 end
 
-%% Plot all sensors on a single tile
-fp = FastSense();
-for i = 1:numel(sensors)
-    % Show threshold line only for the first sensor to avoid duplicates
-    fp.addSensor(sensors{i}, 'ShowThresholds', (i == 1));
-end
-fp.render();
-title(fp.hAxes, 'Multi-Sensor — Shared Threshold');
-legend(fp.hAxes, 'show');
+%% Event detection: walk each monitor’s binary series
+function events = detectEvents(monitor, sensor)
+    [mx, my] = monitor.getXY();
+    events = struct([]);
+    if isempty(mx), return; end
 
-%% Detect events for all sensors
-detector = EventDetector('MinDuration', 0.5);
-allEvents = [];
-for i = 1:numel(sensors)
-    evts = detectEventsFromSensor(sensors{i}, detector);
-    if ~isempty(evts)
-        allEvents = [allEvents, evts];
+    inEvent = false; eventStart = NaN; peakY = NaN;
+    for idx = 1:numel(mx)
+        if my(idx) && ~inEvent
+            inEvent = true;
+            eventStart = mx(idx);
+            peakY = sensor.Y(idx);
+        elseif my(idx) && inEvent
+            peakY = max(peakY, sensor.Y(idx));
+        elseif ~my(idx) && inEvent
+            inEvent = false;
+            events(end+1) = struct('SensorName', sensor.Name, ...
+                'StartTime', eventStart, 'EndTime', mx(idx-1), ...
+                'PeakValue', peakY, 'ThresholdLabel', monitor.Name);
+        end
+    end
+    if inEvent  % close event that runs to the end of the signal
+        events(end+1) = struct('SensorName', sensor.Name, ...
+            'StartTime', eventStart, 'EndTime', mx(end), ...
+            'PeakValue', peakY, 'ThresholdLabel', monitor.Name);
     end
 end
+
+%% Apply to all monitors
+allEvents = [];
+for i = 1:numel(monitors)
+    evts = detectEvents(monitors{i}, sensors{i});
+    allEvents = [allEvents, evts];
+end
+
 fprintf('Detected %d events across %d sensors.\n', numel(allEvents), numel(sensors));
+for e = allEvents
+    fprintf('  %s: %.1fs – %.1fs (peak %.2f)\n', ...
+        e.SensorName, e.StartTime, e.EndTime, e.PeakValue);
+end
 ```
 
 ---
 
 ## How It Works
 
-### 1. Threshold on the Sensor, not just the plot
+### 1. Threshold via `MonitorTag` (not a rule on the sensor itself)
 
-Each `Sensor` gets the same `ThresholdRule`. When you call `resolve()`, each sensor independently computes:
-- **ResolvedThresholds** — the threshold step-function line
-- **ResolvedViolations** — the (X, Y) points that exceed the limit
-
-This means every sensor carries its own violation data, which is required for event detection.
-
-### 2. Avoid duplicate threshold lines
-
-When calling `addSensor()`, pass `'ShowThresholds', true` only for the **first** sensor. All subsequent sensors use `'ShowThresholds', false`. This draws the threshold line once while still computing violations for every sensor.
-
-Alternatively, skip `ShowThresholds` entirely and add the threshold manually:
+Each `SensorTag` carries raw time‑series data.  A `MonitorTag` is a **derived binary tag** that evaluates a condition function on its parent’s `(X, Y)`:
 
 ```matlab
-for i = 1:numel(sensors)
-    fp.addSensor(sensors{i}, 'ShowThresholds', false);
-end
-fp.addThreshold(4.5, 'Direction', 'upper', 'ShowViolations', true, ...
-    'Label', 'Max Temp', 'Color', 'r');
+mt = MonitorTag('zone_A_hi', st, @(x,y) y > 4.5);
 ```
 
-This approach draws a single shared threshold line and FastSense computes violation markers against **all lines** on the tile during rendering (see `updateViolations` in FastSense.m).
+Calling `mt.getXY()` returns a `0/1` vector aligned to the parent’s time grid.  The same `ConditionFn` is used for every sensor, giving you a **single shared threshold** while keeping violation computation tied to each sensor’s data.
 
-### 3. Event detection works per-sensor
+### 2. Independent, isolated violation tracking
 
-`detectEventsFromSensor()` reads each sensor's `ResolvedViolations` and groups consecutive violation points into `Event` objects. Since each sensor resolved independently, events are attributed to the correct sensor:
+Because each `MonitorTag` is bound to a different `SensorTag`, the binary series are **computed per‑sensor**; they do **not** interfere with each other.   Changing the data of one sensor invalidates only that sensor’s monitor (via the listener chain), leaving the others untouched.
 
-```matlab
-% Each event knows which sensor it came from
-for i = 1:numel(allEvents)
-    fprintf('  %s: %.1fs – %.1fs (peak %.2f)\n', ...
-        allEvents(i).SensorName, ...
-        allEvents(i).StartTime, allEvents(i).EndTime, ...
-        allEvents(i).PeakValue);
-end
-```
+### 3. Event detection directly from the binary output
+
+`MonitorTag` provides no built‑in event grouping, but you can easily extract contiguous exceedance segments by iterating over the binary output.  The `detectEvents` helper above does this and records the peak value from the original sensor data.  This is fully self‑contained — no external `EventDetector` or `EventStore` required.
+
+### 4. Duplicate threshold “line” is avoided by design
+
+There is no plot‑level threshold line to worry about; the threshold lives in the `MonitorTag` condition.  When you later visualize the signals, you can add a single horizontal reference line without worrying about duplicates.
 
 ---
 
-## With State-Dependent Thresholds
+## With State‑Dependent Thresholds
 
-The shared threshold can also be state-dependent. Attach the same `StateChannel` and conditional `ThresholdRule` to each sensor:
+You can make the shared threshold conditional on an external state (e.g., machine mode) by chaining a `StateTag` into the monitor’s condition.  For example, attach a `StateTag` representing the operating mode, then write a condition that only triggers during a specific state:
 
 ```matlab
-for i = 1:numel(sensors)
-    sc = StateChannel('mode');
-    sc.X = modeX;
-    sc.Y = modeValues;   % same state for all sensors
-    sensors{i}.addStateChannel(sc);
+% Create a state tag (mode transitions)
+modeSt = StateTag('system_mode', 'X', [0 30 60 90], 'Y', [0 1 1 0]);
 
-    % Threshold only active during 'run' mode
-    sensors{i}.addThresholdRule(struct('mode', 'run'), 4.5, ...
-        'Direction', 'upper', 'Label', 'Run HI');
-    sensors{i}.resolve();
-end
+% Sensor
+st = SensorTag('temp', 'X', t, 'Y', tempData);
+
+% Monitor with combined condition
+mt = MonitorTag('temp_alert', st, ...
+    @(x,y) y > 4.5 && modeSt.valueAt(x) == 1, ...
+    'Name', 'Active HI');
 ```
 
-Each sensor evaluates the same state conditions independently, so thresholds activate/deactivate synchronously across all sensors while maintaining individual violation tracking.
+Each `MonitorTag` evaluates the same state independently — thresholds activate/deactivate synchronously across all sensors while preserving per‑sensor event attribution.
 
 ---
 
-## Complete Multi-Zone Example
+## Complete Multi‑Zone Example
 
 ```matlab
-%% Multi-zone temperature monitoring with shared alarm level
-sensors = cell(1, 3);
-zones = {'North', 'Central', 'South'};
-t = linspace(0, 120, 50000);
-
-% Create state channel for system mode
-modeX = [0, 30, 60, 90];
-modeY = [0, 1, 1, 0];  % 0=idle, 1=active
+%% Multi‑zone monitoring with a shared alarm level
+zones   = {'North', 'Central', 'South'};
+keys    = {'temp_north', 'temp_central', 'temp_south'};
+limit   = 30;   % °C shared upper limit
+t       = linspace(0, 120, 50000);
+sensors  = cell(1, 3);
+monitors = cell(1, 3);
 
 for i = 1:3
-    s = Sensor(sprintf('temp_zone_%d', i), 'Name', sprintf('Zone %s', zones{i}));
-    s.X = t;
-    
-    % Each zone has different baseline but similar patterns
-    baseline = 20 + i * 2;
-    s.Y = baseline + 5*sin(2*pi*t/40) + 2*randn(1, numel(t));
-    
-    % Add state channel
-    sc = StateChannel('system_mode');
-    sc.X = modeX;
-    sc.Y = modeY;
-    s.addStateChannel(sc);
-    
-    % Shared threshold rules
-    s.addThresholdRule(struct(), 30, 'Direction', 'upper', 'Label', 'Max Temp (any mode)');
-    s.addThresholdRule(struct('system_mode', 1), 28, 'Direction', 'upper', 'Label', 'Max Temp (active)');
-    s.resolve();
-    
-    sensors{i} = s;
+    baseline = 20 + i*2;
+    y = baseline + 5*sin(2*pi*t/40) + 2*randn(1, numel(t));
+    st = SensorTag(keys{i}, 'Name', zones{i}, 'X', t, 'Y', y);
+    mt = MonitorTag([keys{i} '_hi'], st, @(x,y) y > limit, ...
+                    'Name', [zones{i} ' HI'], 'Units', '°C');
+    sensors{i}  = st;
+    monitors{i} = mt;
 end
 
-%% Plot with shared thresholds
-fp = FastSense();
-for i = 1:numel(sensors)
-    fp.addSensor(sensors{i}, 'ShowThresholds', (i == 1));
-end
-fp.render();
-title('Multi-Zone Temperature Monitoring');
-xlabel('Time (s)');
-ylabel('Temperature (°C)');
-legend('show');
-
-%% Event detection
-detector = EventDetector('MinDuration', 2.0);
+%% Extract events (using the same detectEvents helper as above)
 allEvents = [];
-for i = 1:numel(sensors)
-    evts = detectEventsFromSensor(sensors{i}, detector);
+for i = 1:numel(monitors)
+    evts = detectEvents(monitors{i}, sensors{i});
     allEvents = [allEvents, evts];
 end
 
 fprintf('\n=== Event Summary ===\n');
-for i = 1:numel(allEvents)
-    fprintf('%s: %s violation at %.1f-%.1fs (peak %.2f°C)\n', ...
-        allEvents(i).SensorName, allEvents(i).ThresholdLabel, ...
-        allEvents(i).StartTime, allEvents(i).EndTime, allEvents(i).PeakValue);
+for e = allEvents
+    fprintf('%s: %s violation at %.1f–%.1fs (peak %.2f°C)\n', ...
+        e.SensorName, e.ThresholdLabel, e.StartTime, e.EndTime, e.PeakValue);
 end
 ```
 
@@ -185,14 +162,15 @@ end
 
 | Aspect | Behavior |
 |--------|----------|
-| **Threshold line** | Drawn once (first sensor or manual `addThreshold`) |
-| **Violation markers** | Computed for every line on the tile |
-| **Event detection** | Per-sensor via `detectEventsFromSensor()` — requires `resolve()` on each sensor |
-| **State-dependent thresholds** | Supported — attach identical `StateChannel` + `ThresholdRule` to each sensor |
-| **EventViewer** | Shows events from all sensors, attributed by name |
+| **Threshold definition** | A single condition function (e.g., `@(x,y) y > limit`) shared across all monitors |
+| **Violation signals** | Each `MonitorTag.getXY()` returns a 0/1 vector aligned to its parent sensor |
+| **Event detection** | Custom code (or a helper function) groups consecutive 1’s to extract start/end/peak |
+| **State‑dependent thresholds** | Combine `StateTag.valueAt(t)` inside the `ConditionFn` — each monitor evaluates state independently |
+| **Plotting** | Add a single horizontal reference line; no need to suppress duplicate threshold traces |
+| **Cleanup** | Unregister tags via `TagRegistry.unregister(key)` when done |
 
 ## See Also
 
-- [[Sensors|API Reference: Sensors]] — `Sensor`, `ThresholdRule`, `StateChannel`
-- [[Event Detection|API Reference: Event Detection]] — `EventDetector`, `detectEventsFromSensor`, `EventViewer`
-- [[Examples]] — `example_multi_sensor_linked`, `example_sensor_threshold`, `example_sensor_multi_state`
+- [[Sensors|API Reference: Sensors]] — `SensorTag`, `MonitorTag`, `StateTag`
+- [[Event Detection|API Reference: Event Detection]] — alternative `EventStore`‑based emission with `MonitorTag.EventStore`
+- [[Examples]] — `example_sensor_tag_monitor`, `example_multi_zone`
