@@ -9,6 +9,16 @@
 e = Event(startTime, endTime, sensorName, thresholdLabel, thresholdValue, direction)
   e.setStats(peakValue, numPoints, minVal, maxVal, meanVal, rmsVal, stdVal)
 
+  Phase 1032 additions:
+    Identity (struct, default empty)        — IDENT-02 audit trail; populated at emission
+    AckedAt  (numeric, default [])          — datenum of ack; [] = unacked
+    AckedBy  (struct, default empty struct) — {user, host, epoch, comment}; populated by EventStore.acknowledgeEvent
+    AckComment (char, default '')           — convenience alias for AckedBy.comment
+  Method:
+    computeDisplayState — returns 'unacked-active' | 'acked-active' | 'acked-cleared' | 'unacked-cleared' (ISA-18.2 §5.4)
+  Static helper:
+    Event.fromStructSafe(s)  — promote legacy struct to Event with safe field defaults
+
 ### Constructor
 
 ```matlab
@@ -25,6 +35,10 @@ obj = Event(startTime, endTime, sensorName, thresholdLabel, thresholdValue, dire
 | Id | `''` | char: unique id assigned by EventStore.append (EVENT-02) |
 | IsOpen | `false` | logical: true while event is still open (EndTime = NaN) — Phase 1012 |
 | Notes | `''` | char: free-form user annotation edited via details popup — Phase 1012 |
+| Identity | `struct()` |  |
+| AckedAt | `[]` | numeric epoch (datenum); [] means unacked. Set by EventStore.acknowledgeEvent |
+| AckedBy | `struct()` | {user, host, epoch, comment}; populated by EventStore.acknowledgeEvent |
+| AckComment | `''` | char: convenience alias; mirrors AckedBy.comment after acknowledgeEvent |
 | DIRECTIONS | `{'upper', 'lower'}` |  |
 
 ### Methods
@@ -46,11 +60,60 @@ CLOSE Close an open event in place; update EndTime, Duration, and optional runni
 
 ESCALATETOP Escalate event to a higher severity threshold.
 
+#### `s = computeDisplayState(obj)`
+
+COMPUTEDISPLAYSTATE Return the ISA-18.2 / EEMUA-191 three-state alarm visual state name.
+  States:
+    'unacked-active'  — event is still open (IsOpen=true) AND not acked
+    'acked-active'    — event is still open AND acked (operator saw it but condition persists)
+    'acked-cleared'   — event has been closed AND acked (normal happy-path closure)
+    'unacked-cleared' — event closed but never acked (audit-trail anomaly; UI may render distinctly)
+
+### Static Methods
+
+#### `Event.ev = fromStructSafe(s)`
+
+FROMSTRUCTSAFE Promote a struct (legacy or v4.0) to an Event instance with field defaults.
+  Used by EventStore.getEvents() merge code AND by Phase 1033 consolidator
+  to unify mixed struct/Event arrays.  Missing fields default safely:
+    Identity   = struct()
+    AckedAt    = []
+    AckedBy    = struct()
+    AckComment = ''
+  (i.e., the same defaults as the property declarations).
+
 ---
 
 ## `EventStore` --- Atomic read/write of events to a shared .mat file.
 
 > Inherits from: `handle`
+
+Single-user mode (default):
+    es = EventStore(filePath)
+    es = EventStore(filePath, 'MaxBackups', 3)
+  Events are stored in a MAT file via atomic temp+rename.  All
+  existing tests exercise this path unchanged.
+
+  Cluster mode (opt-in):
+    es = EventStore(filePath, 'SharedRoot', sharedMountPath)
+  Opens (or creates) <SharedRoot>/events/store.sqlite via mksqlite
+  with journal_mode=DELETE + busy_timeout=10000 + locking_mode=NORMAL.
+  All cluster writes use BEGIN IMMEDIATE + application-level retry on
+  'database is locked' (see STACK.md §2, PITFALLS Pitfall 6).
+  The local-per-user FastSenseDataStore continues to use WAL — only
+  the cluster-mode EventStore switches to rollback mode.
+
+  Errors (cluster mode only):
+    EventStore:mksqliteUnavailable — mksqlite MEX not compiled
+    EventStore:notClusterMode      — cluster method called in single-user mode
+    EventStore:invalidAckRecord    — rec is not a scalar struct
+    EventStore:appendAckFailed     — INSERT retries exhausted on database lock
+    EventStore:retryExhausted      — busyRetryWrap_ ran 10 attempts and still hit 'database is locked'
+    EventStore:mergeShapeMismatch  — getEvents cluster-merge could not concatenate heterogeneous shapes (warning, not error)
+
+  busyRetryWrap_ is exposed as a public Static method so that test harnesses
+  can call it with synthetic fn arguments.  In production it is called only
+  from within EventStore cluster-mode transactions.
 
 ### Constructor
 
@@ -75,6 +138,12 @@ obj = EventStore(filePath, varargin)
 
 #### `events = getEvents(obj)`
 
+GETEVENTS Return all events.
+  Single-user mode: returns in-memory events_ (unchanged from pre-plan).
+  Cluster mode: merges in-memory events_ with per-tag NDJSON logs under
+  <sharedRoot>/events/*.events.ndjson via EventLogReader.readAll().
+  Best-effort merge — if NDJSON read fails, falls back to in-memory only.
+
 #### `closeEvent(obj, eventId, endTime, finalStats)`
 
 CLOSEEVENT Close an open event in place.
@@ -91,14 +160,50 @@ GETEVENTSFORTAG Return events bound to tagKey via EventBinding + carrier fallbac
   with non-empty Id (Phase 1010 EVENT-01/EVENT-03).
   Fallback path: carrier-field matching (SensorName/ThresholdLabel)
   for events without Id (backward compat, Pitfall 4).
+  Cluster mode: merges the in-memory/EventBinding result with events from
+  the per-tag NDJSON log (<sharedRoot>/events/<tagKey>.events.ndjson).
 
 #### `save(obj)`
 
 #### `n = numEvents(obj)`
 
+#### `appendAckRecord(obj, rec)`
+
+APPENDACKRECORD Insert an ack/comment row in cluster mode.
+  rec — struct with fields: eventId (char), by_user (char),
+        by_host (char), epoch (double), comment (char, optional)
+
+#### `rows = getAckRecords(obj)`
+
+GETACKRECORDS Return all ack rows from cluster-mode store.
+  Returns a struct array with fields: event_id, by_user, by_host,
+  epoch, comment.  Cluster mode only.
+
+#### `ack = acknowledgeEvent(obj, eventId, opts)`
+
+ACKNOWLEDGEEVENT Record an acknowledgement for an event (ACK-01/03 + IDENT-02).
+  ack = es.acknowledgeEvent(eventId, opts)
+
+#### `rows = getAckRecordsForEvent(obj, eventId)`
+
+GETACKRECORDSFOREVENT Return ack records for a specific event.
+  Single-user: filters obj.acks_; cluster: queries SQLite WHERE event_id = ?.
+
 ### Static Methods
 
 #### `EventStore.[events, meta, changed] = loadFile(filePath)`
+
+#### `EventStore.out = busyRetryWrap_(fn)`
+
+BUSYRETRYWRAP_ Generalised SQLite "database is locked" retry loop (Pitfall 6).
+  out = EventStore.busyRetryWrap_(@() doSomeMksqliteTransaction())
+
+#### `EventStore.out = mergeEventStructs_(a, b)`
+
+MERGEEVENTSTRUCTS_ Concatenate two event collections tolerating shape heterogeneity.
+  Best-effort concatenation — if types are incompatible (Event handle vs struct),
+  returns a unchanged with a warning.  Phase 1033's snapshot consolidator will
+  unify the shape canonically.
 
 ---
 
@@ -180,6 +285,24 @@ Uses MonitorTargets — containers.Map of key -> MonitorTag;
   cold path recomputes against a stale parent grid.  See the docstring
   at libs/SensorThreshold/MonitorTag.m lines 330-334 for the contract.
 
+  Cluster mode (Phase 1032, Plan 02):
+    - Enabled by passing 'SharedRoot' NV-pair to constructor.
+    - processMonitorTag_ acquires the per-monitor FileLock via
+      TagWriteCoordinator BEFORE parent.updateData + monitor.appendData.
+    - On lock contention (ok=false), the monitor is skipped this tick;
+      SkippedMonitorCount is incremented and LastLockContentionEvent is
+      populated.
+    - BusyMode='drop' is forced in cluster-mode timer (Pitfall 7).
+    - EventLog handles are wired into each MonitorTag at construction
+      so MonitorTag.emitEvent_ routes cluster-mode writes to the NDJSON log.
+    - Single-user mode (no SharedRoot) exercises ZERO Concurrency-library
+      code paths (byte-identical guarantee).
+
+  Cluster-mode observability:
+    SkippedMonitorCount      — incremented on lock contention per-monitor per-tick
+    LastTickDurationSec      — wall-clock duration of most recent runCycle
+    LastLockContentionEvent  — {tagKey, holder.{user,host,age}} struct for Phase 1033 UI
+
 ### Constructor
 
 ```matlab
@@ -208,6 +331,10 @@ obj = LiveEventPipeline(monitors, dataSourceMap, varargin)
 #### `stop(obj)`
 
 #### `runCycle(obj)`
+
+RUNCYCLE Execute one poll cycle synchronously (exposed for tests + timer callback).
+  Phase 1032-02: tic/toc for LastTickDurationSec (Pitfall 7 ops surface);
+  drawnow limitrate nocallbacks in cluster mode (Pitfall 7 reentrancy guard).
 
 ---
 

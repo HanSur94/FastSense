@@ -494,12 +494,30 @@ Mirrors MatFileDataSource's modTime + lastIndex state machine
     - Per-tag try/catch: one tag's failure does NOT abort the tick.
     - tagState_ entries GC'd each tick for tags no longer eligible.
 
+  Cluster mode (Phase 1030, Plan 02):
+    - Enabled by passing 'SharedRoot' NV-pair to constructor.
+    - All shared .mat writes routed through TagWriteCoordinator +
+      AtomicWriter for safe multi-process access (REQ CONC-01).
+    - Single-user mode (no SharedRoot) exercises ZERO Concurrency-
+      library code paths (Success Criterion 5 / byte-identical guarantee).
+    - BusyMode='drop' is forced in cluster mode (Pitfall 7).
+    - Timer period is jittered +-25% in cluster mode (Pitfall 11).
+    - Lock contention causes per-tag skip-and-defer, not whole-tick block.
+
   Observability (Major-2 / revision-1):
     - LastFileParseCount: public SetAccess=private property recording the
       number of DISTINCT files parsed in the most recent tick. Captured
       BEFORE the per-tick tickCache goes out of scope. Mirrors
       BatchTagPipeline's mechanism so tests can assert dedup behavior
       via direct property read rather than wrapping readRawDelimited_.
+
+  Cluster-mode observability (Phase 1030 Plan 02):
+    - SkippedTickCount: public SetAccess=private; incremented on lock
+      contention or BusyMode='drop' skip.
+    - LastTickDurationSec: public SetAccess=private; wall-clock duration
+      of the last onTick_ invocation.
+    - LastLockContentionEvent: public SetAccess=private; most recent
+      contention event struct {tagKey, holder.{user, host, age}}.
 
   Shares readRawDelimited_ / selectTimeAndValue_ / writeTagMat_ with
   BatchTagPipeline -- single source of truth for parse + shape + write.
@@ -514,6 +532,8 @@ LIVETAGPIPELINE Construct with OutputDir (required) + options.
   p = LiveTagPipeline('OutputDir', dir)
   p = LiveTagPipeline('OutputDir', dir, 'Interval', 5, 'Verbose', true)
   p = LiveTagPipeline('OutputDir', dir, 'ErrorFcn', @(ex) ...)
+  p = LiveTagPipeline('OutputDir', dir, 'SharedRoot', root)  % cluster mode
+  p = LiveTagPipeline('OutputDir', dir, 'SharedRoot', root, 'LockTimeout', 10)
 
 ### Properties
 
@@ -632,6 +652,18 @@ MonitorTag produces a binary alarm/ok signal by evaluating a
     MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
     MonitorTag:invalidData              — appendData numeric/length mismatch
     MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
+    MonitorTag:emitEventBadKind         — emitEvent_ called with kind not in {start,closed,end}
+    MonitorTag:eventLogReentrantSkip    — (warning ID) cluster-mode emission skipped due to
+                                          re-entrant per-tag lock acquire (Plan 02 will handle)
+
+  Deferred-notify (Pitfall 13 prevention):
+    OnEventStart / OnEventEnd callbacks are NOT invoked during the emission body.
+    They are queued on pendingNotify_ and flushed by flushPendingNotify_() AFTER
+    the emission loop completes, with inEmission_ = false.
+    Pre-refactor: listeners fired synchronously DURING EventStore.append.
+    Post-refactor: listeners fire immediately AFTER appendData/getXY returns,
+    but OUTSIDE the emission window. The "event was emitted" semantic is preserved;
+    only the timing changes from synchronous-during-append to post-emission-batch.
 
   Persistence (Phase 1007 MONITOR-09):
     Opt-in via Persist=true + DataStore. Staleness detection uses a
@@ -662,6 +694,7 @@ MONITORTAG Construct a MonitorTag.
 | OnEventEnd | `[]` | function_handle @(event); [] disables callback |
 | Persist | `false` | MONITOR-09 opt-in (Pitfall 2 default-off) |
 | DataStore | `[]` | FastSenseDataStore handle; required when Persist=true |
+| EventLog | `[]` | libs/Concurrency/EventLog.m handle; non-empty triggers cluster-mode emission |
 
 ### Methods
 
@@ -718,6 +751,13 @@ ADDLISTENER Register a listener notified when this monitor invalidates.
   Enables recursive MonitorTag chains — an outer MonitorTag
   that wraps an inner MonitorTag registers as the inner's
   listener so that root-parent updates cascade through.
+
+#### `tf = getInEmission_(obj)`
+
+GETINMISSION_ Test accessor: return true while inside an emission body.
+  Exists ONLY for test observability (deferred-notify proof in
+  TestListenerCannotAcquireLock). The trailing underscore marks it as
+  an internal accessor not intended for production callers.
 
 #### `appendData(obj, newX, newY)`
 

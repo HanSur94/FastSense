@@ -335,6 +335,26 @@ function build_mex()
         end
     end
     % --- end SensorThreshold kernels ------------------------------------
+
+    % --- Concurrency library MEX (Phase 1029) ---
+    % build_concurrency_mex lives under libs/Concurrency/.  Try to compile
+    % it on the same pass so users only invoke build_mex once.  Best-effort:
+    % failure here does not abort the FastSense MEX build.
+    try
+        concDir = fullfile(fileparts(rootDir), 'Concurrency');
+        if isfolder(concDir)
+            prevPath = path();
+            pathCleaner = onCleanup(@() path(prevPath)); %#ok<NASGU>
+            addpath(concDir);
+            if exist('build_concurrency_mex', 'file') == 2
+                fprintf('\n[Concurrency] ');
+                build_concurrency_mex();
+            end
+        end
+    catch concErr
+        warning('build_mex:concurrencyMexFailed', ...
+            'Concurrency MEX build failed (non-fatal): %s', concErr.message);
+    end
 end
 
 function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler, extra_srcs)

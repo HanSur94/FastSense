@@ -9,16 +9,28 @@
 - ✅ **v2.0 Tag-Based Domain Model** — Phases 1004-1011 (shipped 2026-04-17)
 - 📋 **v2.1 Tag-API Tech Debt Cleanup** — Phases 1012-1017 (carry-forward, parallel — not active)
 - ✅ **v3.0 FastSense Companion** — Phases 1018-1023 + 1023.1 gap closure (shipped 2026-04-30)
-- 🚧 **Pending milestone** — Phases 1025-1028 (promoted from backlog 2026-05-08, awaiting milestone scoping; 1024 closed via quick task 260508-d7k)
+- 🚧 **Pending milestone** — Phases 1025-1028 (promoted from backlog 2026-05-08, awaiting milestone scoping; 1024 closed via quick task 260508-d7k; 1025/1026 substantially addressed via quick tasks 260508-d8y/260508-das)
+- 🚧 **v4.0 Multi-User LAN Concurrency** — Phases 1029-1033 (active, started 2026-05-13)
 
 ## Phases
 
 <details open>
+<summary>🚧 v4.0 Multi-User LAN Concurrency (Phases 1029-1033) — ACTIVE 2026-05-13</summary>
+
+- [ ] **Phase 1029: Concurrency Foundation** — Identity + Paths + FileLock primitive + AtomicWriter, with OFD locks, mtime heartbeat, atomic temp+rename
+- [ ] **Phase 1030: TagWriteCoordinator + LiveTagPipeline cluster mode** — per-tag lock around raw→.mat write; timer hardening; jitter; mtime change-detect
+- [ ] **Phase 1031: EventLog (Append-Only NDJSON) + EventStore SQLite rollback-mode migration** — lock-serialised appends; reader resilience; SMB-atomicity stress test
+- [ ] **Phase 1032: Single-Source MonitorTag Event Emission + ack workflow** — exactly-once event generation via per-tag lock; ack/comment/visual-state; deferred listener notify; SQLite retry wrapper
+- [ ] **Phase 1033: Companion Integration + Snapshot Consolidator + Operator Docs + 50-Companion Acceptance Test** — wire SharedRoot through Companion; leader-elected snapshot; ops setup README; full acceptance gate
+
+</details>
+
+<details>
 <summary>🚧 Pending milestone (Phases 1025-1028) — promoted from backlog 2026-05-08</summary>
 
 - [x] Phase 1024: Fix companion app dark mode — closed via quick task [260508-d7k](./quick/260508-d7k-fix-companion-app-dark-mode-switching-th/) (2026-05-08)
-- [ ] Phase 1025: FastSense hover crosshair + datatip
-- [ ] Phase 1026: Dashboard time slider preview
+- [ ] Phase 1025: FastSense hover crosshair + datatip (largely addressed via quick task 260508-d8y)
+- [ ] Phase 1026: Dashboard time slider preview (addressed via quick task 260508-das)
 - [x] Phase 1027: Companion detachable log window — completed 2026-05-08
 - [ ] Phase 1027.1: Independent events/live log detach (gap closure)
 - [x] Phase 1028: Tag update perf — MEX + SIMD — completed 2026-05-19
@@ -116,6 +128,144 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
 | 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
 | 1028. Tag update perf — MEX + SIMD | pending | 6/6 | Complete | 2026-05-19 |
+| 1029. Concurrency Foundation | v4.0 | 5/5 | Complete    | 2026-05-14 |
+| 1030. TagWriteCoordinator + LiveTagPipeline cluster mode | v4.0 | 2/2 | Complete    | 2026-05-14 |
+| 1031. EventLog + EventStore rollback-mode migration | v4.0 | 4/4 | Complete    | 2026-05-14 |
+| 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 5/5 | Complete    | 2026-05-14 |
+| 1033. Companion Integration + Acceptance Test | v4.0 | 4/4 | Complete   | 2026-05-14 |
+
+## Phase Details (v4.0 Multi-User LAN Concurrency)
+
+### Phase 1029: Concurrency Foundation (Identity + Paths + FileLock + AtomicWriter)
+
+**Goal:** Lay down the four cross-cutting primitives every subsequent phase depends on — process identity, cluster-mode resolution, cross-host advisory locks (OFD on Linux, LockFileEx on Win32), and atomic temp+rename writes — with the three PITFALLS.md design corrections (OFD locks, mtime heartbeat, lock-serialised semantics) baked in from the start.
+
+**Depends on:** Nothing (foundation; sits next to existing libraries as new `libs/Concurrency/`).
+
+**Requirements covered:**
+- CONC-02 (stale-lock recovery via mtime heartbeat, ≥90s staleTimeout, kill-9 takeover within `staleTimeout + 5s`)
+- CONC-03 (atomic temp+rename for all shared writes; CI lint forbids raw `save()` to shared paths)
+- IDENT-01 (`userIdentity.m` resolves user@host (pid, epoch); cluster mode fails loudly on identity failure — no silent `'unknown'`)
+
+**Success Criteria** (what must be TRUE):
+1. **50 concurrent MATLAB processes** can acquire and release the same per-key lockfile on the target SMB share without deadlock, corruption, or split-brain (`TestFileLock` 50-process stress harness).
+2. **Closing a second FD on a held lockfile does NOT release the lock** — proven by `TestFileLock.testCloseDoesNotReleaseLock` on Linux (OFD lock contract) and Windows (LockFileEx process-scope contract).
+3. **Stale-lock takeover** after `kill -9` of the holder completes within `staleTimeout + 5s` (default 90s timeout) using server-side filesystem **mtime** (not wall-clock TTL), verified by `TestFileLock.testStaleLockAfterProcessKill` and `TestFileLock.testNegativeWallClockDeltaIgnored`.
+4. **Every shared write goes through `AtomicWriter`** — concurrent reader during temp+rename never observes zero-byte or torn content (with the reader-side 3-retry/50ms-backoff helper); CI grep guard rejects any `save(<sharedRoot>...)` calls outside `AtomicWriter`.
+5. **`userIdentity.m` returns a complete (user, host, pid) tuple** on MATLAB R2020b+ and Octave 7+ (including `--disable-java` Octave builds); in cluster mode, an unresolvable user or host throws `Concurrency:identityResolutionFailed` instead of returning `'unknown'`.
+
+**Plans:** 5/5 plans complete
+
+- [x] 1029-01-identity-paths-PLAN.md — userIdentity + ClusterIdentity + ClusterConfig + SharedPaths (IDENT-01)
+- [x] 1029-02-lockfile-mex-PLAN.md — lockfile_mex.c cross-platform MEX + build_concurrency_mex.m (CONC-02 kernel)
+- [x] 1029-03-filelock-PLAN.md — FileLock.m with mtime-heartbeat + re-entrance guard + sidecar fallback (CONC-02)
+- [x] 1029-04-atomic-writer-PLAN.md — AtomicWriter.m + ndjsonEncode + CI grep guard (CONC-03)
+- [x] 1029-05-wiring-and-probes-PLAN.md — install.m wiring + mksqlite probe + composition smoke (CONC-02 + CONC-03 + IDENT-01)
+
+### Phase 1030: TagWriteCoordinator + LiveTagPipeline Cluster Mode
+
+**Goal:** Wire the Phase 1029 `FileLock` primitive into the existing `LiveTagPipeline.processTag_` raw→.mat write path via a new `TagWriteCoordinator` facade — enabling two or more Companions to write the same per-tag `.mat` file on a shared share without corruption. This is the simplest non-trivial consumer of `FileLock`, hardening the single-writer-per-tag contract before EventLog ships.
+
+**Depends on:** Phase 1029 (uses `FileLock`, `AtomicWriter`, `SharedPaths`, `ClusterIdentity`).
+
+**Requirements covered:**
+- CONC-01 (2+ Companions can write the same per-tag `.mat` via the shared share without corruption, verified by parallel-write integration test on real SMB share)
+
+**Success Criteria** (what must be TRUE):
+1. **Two-process write race** on the same `<tag.Key>.mat` produces a valid merged file with rows from both writers — no torn data, no last-writer-wins data loss (`TestLiveTagPipelineCluster.testTwoProcessWriteRace`).
+2. **50-process thundering-herd scenario** (all Companions started within 1s, default `Interval=15s`) keeps per-tick latency p99 bounded under 5s and per-Companion SMB request rate bounded — verified via jittered scheduling (`Interval × (1 + 0.5*(rand-0.5))`) and mtime change-detect skipping unchanged tags.
+3. **Slow share (5s mock I/O) at `Period=2s`** does NOT cause MATLAB session OOM or unbounded timer-callback queue — `BusyMode='drop'` is forced in cluster mode and `pipeline.SkippedTickCount` exposes the skip count for ops monitoring.
+4. **Lock contention on a tag** causes `processTag_` to skip-and-defer that tag to the next tick (NOT block the whole tick); a structured `LockContentionEvent` carries `{holder.user, holder.host, holder.age}` for downstream UI surfacing.
+5. **Single-user mode is byte-identical** — running `LiveTagPipeline` without `'SharedRoot'` NV-pair exercises zero Concurrency-library code paths (existing `tests/test_live_tag_pipeline.m` and `tests/suite/TestLiveTagPipeline.m` pass unchanged).
+
+**Plans:** 2/2 plans complete
+
+- [x] 1030-01-tag-write-coordinator-PLAN.md — TagWriteCoordinator facade over FileLock with per-tag-key scope (Wave 1, no deps) (CONC-01 primitive)
+- [x] 1030-02-live-tag-pipeline-cluster-mode-PLAN.md — Wire TagWriteCoordinator + AtomicWriter into LiveTagPipeline.processTag_; BusyMode="drop"; jittered scheduling; mtime change-detect; stillHeldByMe gate; LockContentionEvent emission (Wave 2, depends on 1030-01) (CONC-01 full)
+
+### Phase 1031: EventLog (Append-Only NDJSON) + EventStore SQLite Rollback-Mode Migration
+
+**Goal:** Introduce the new per-tag append-only NDJSON event-log format — built in isolation so the SMB-atomicity reality of the target file server is validated empirically before MonitorTag and EventStore depend on it. Also migrate shared `EventStore` SQLite usage from WAL to rollback mode (`journal_mode=DELETE` + `busy_timeout=10000` + `BEGIN IMMEDIATE`), the only documented-safe mode over network filesystems.
+
+**Depends on:** Phase 1029 (uses `FileLock`, `AtomicWriter`, `ClusterIdentity`), Phase 1030 (uses `TagWriteCoordinator` for the lock-serialised append contract).
+
+**Requirements covered:**
+- EVTLOG-01 (NDJSON appends serialised through per-tag `FileLock` — NOT `O_APPEND` atomicity, which is unreliable on SMB/NFS — and shared SQLite EventStore migrates to `journal_mode=DELETE` + `busy_timeout=10000` + `BEGIN IMMEDIATE` + app-level retry)
+- EVTLOG-02 (50-process append stress test produces exactly the expected number of valid JSON lines; `EventLogReader` skips and counts any corrupt lines defensively)
+- EVTLOG-03 (read-path resilience — readers observing a file mid-rewrite either see the previous or new version, never a parse error; transient parse failures trigger 50ms-backoff retry up to 3 times)
+
+**Success Criteria** (what must be TRUE):
+1. **50 concurrent MATLAB processes** each appending 1,000 events to the same `<key>.events.ndjson` via `EventLog.append` produce a file containing **exactly 50,000 valid JSON lines** — verified by `TestEventLogConcurrent` running through Phase 1030's `TagWriteCoordinator`.
+2. **`EventLogReader.tail()` tolerates corrupt lines** — a deliberately injected malformed line is skipped, counted on `SkippedLineCount`, and the parse continues; never aborts the read.
+3. **Reader retry-loop converts torn-rename windows into brief stalls** — a writer in a tight `temp+rename` loop with 5 concurrent readers produces <0.1% user-facing parse errors (with retry) vs <5% (without retry); never propagated as a hard error.
+4. **Shared `EventStore` SQLite in `journal_mode=DELETE` mode** survives 20 concurrent writers each committing 100 inserts with zero "database is locked" errors propagated to user code; total row count exactly 2,000.
+5. **`EventLogReader` mtime-cache invalidates correctly** — a re-read after a writer touches the log returns updated content; an unchanged file reuses the cached parse without re-reading.
+6. **Phase 1031 contingency budget acknowledged** — if SMB atomicity stress shows torn appends on the target file server, the phase budget includes time to re-architect to per-writer-file + merge instead of single-file append.
+
+**Plans:** 4/4 plans complete
+
+- [x] 1031-01-ndjson-decode-PLAN.md — libs/Concurrency/ndjsonDecode.m sibling to ndjsonEncode (Wave 1, no deps) (EVTLOG-02 primitive)
+- [x] 1031-02-event-log-PLAN.md — libs/Concurrency/EventLog.m lock-serialised append + magic header + 50-proc stress harness (Wave 2, depends on 01) (EVTLOG-01 + EVTLOG-02)
+- [x] 1031-03-event-log-reader-PLAN.md — libs/Concurrency/EventLogReader.m with mtime cache + AtomicWriter.readWithRetry + corrupt-line tolerance (Wave 2, depends on 01) (EVTLOG-02 + EVTLOG-03)
+- [x] 1031-04-event-store-cluster-mode-PLAN.md — libs/EventDetection/EventStore.m gains "SharedRoot" NV-pair + journal_mode=DELETE + busy_timeout=10000 + BEGIN IMMEDIATE + retry on "database is locked" (Wave 3, depends on 02; FastSenseDataStore UNCHANGED) (EVTLOG-01 full)
+
+### Phase 1032: Single-Source MonitorTag Event Emission + Ack Workflow
+
+**Goal:** Achieve the "exactly once" event-emission guarantee across 50 Companions by routing `LiveEventPipeline.processMonitorTag_` through the **same** per-tag `FileLock` that `LiveTagPipeline.processTag_` uses — making the lock holder the sole emitter for that tag's events. Layer the user-facing ack/comment/visual-state workflow on top of identity-stamped writes. Also lands the deferred-listener-notify refactor (PITFALLS Pitfall 13) and the SQLite retry wrapper (PITFALLS Pitfall 6).
+
+**Depends on:** Phase 1029 (identity, lock, atomic writer), Phase 1030 (per-tag lock domain established), Phase 1031 (EventLog + rollback-mode SQLite available).
+
+**Requirements covered:**
+- ACK-04 (a `MonitorTag` threshold violation produces exactly ONE event in the shared EventStore regardless of how many Companions are running; single-source guarantee from lock-holder-as-sole-emitter)
+- ACK-01 (when User A acks an alarm, the ack becomes visible to other Companions within ~5s — eventual-consistency target; UDP multicast hint accelerates propagation but disk state is canonical)
+- ACK-02 (event displays distinct visual state for "acked but condition still active" vs "acked and cleared" vs "unacked active" per ISA-18.2 / EEMUA 191 — condition state and ack state orthogonal)
+- ACK-03 (user can attach an optional free-text comment when acknowledging; comment persisted with ack record)
+- IDENT-02 (every event acknowledgement records user, host, timestamp, action, target event-id; audit trail queryable and viewable in Companion event log column)
+
+**Success Criteria** (what must be TRUE):
+1. **4-node simulated cluster** (via `parfeval` or shelled-out `matlab -batch`) polling the same `MonitorTag` produces **exactly N events for N rising edges** — verified by `TestMonitorTagSingleSource.testFourNodeRisingEdges` merged-view assertion.
+2. **A `MonitorTag` listener that tries to acquire a second tag's lock from inside an `EventAppended` callback** either errors loudly with `Concurrency:nestedLockAcquireForbidden` (test mode) or fires post-release with no deadlock (production mode) — `MonitorTag.fireEventsOnRisingEdges_` deferred-notify refactor verified by `TestListenerCannotAcquireLock`.
+3. **Ack from User A on Companion X is visible to User B on Companion Y within ~5 seconds** — eventual-consistency target met; the ack record carries `{user, host, timestamp, action, target event-id, optional comment}`; UI shows the three orthogonal visual states (unacked-active / acked-active / acked-cleared) per ISA-18.2.
+4. **SQLite `SQLITE_BUSY_SNAPSHOT` retry wrapper** handles 20-writer ack-contention stress with zero user-facing "database is locked" errors and zero double-ack records (`TestEventStoreConcurrency.testRetryOnBusySnapshot`).
+5. **SMB-oplocks smoke test at startup** (`ClusterConfig.checkSharedConfig`) detects torn reads on the EventStore directory and emits a one-time operator warning when oplocks appear enabled — best-effort detection per PITFALLS Pitfall 14.
+
+**Plans:** 5/5 plans complete
+
+- [x] 1032-01-monitor-tag-emit-helper-PLAN.md — MonitorTag.emitEvent_ helper + deferred-notify refactor (Pitfall 13) for OnEventStart/OnEventEnd; routes all 4 EventStore.append call sites in fireEventsInTail_/fireEventsOnRisingEdges_ through emitEvent_; cluster mode (IsClusterMode_) writes to EventLog (1031-02), single-user writes to EventStore (Wave 1, no deps) (ACK-04 partial)
+- [x] 1032-02-live-event-pipeline-cluster-PLAN.md — LiveEventPipeline.processMonitorTag_ acquires per-tag FileLock via TagWriteCoordinator BEFORE parent.updateData + monitor.appendData (Pitfall 13 lock-domain unification with LiveTagPipeline); skip-and-defer on contention (SkippedMonitorCount); BusyMode=drop (Pitfall 7); mirrors 1030-02 cluster pattern. Plus TestMonitorTagSingleSource (4-node parfeval/matlab -batch cluster test) (Wave 2, depends on 1032-01) (ACK-04 full)
+- [x] 1032-03-event-store-retry-and-merge-PLAN.md — EventStore busyRetryWrap_ helper (extends 1031-04 retry into reusable 10-attempt exponential backoff up to 2s; Pitfall 6); refactors appendAckRecord through it; getEvents()/getEventsForTag() in cluster mode merge in-memory + EventLogReader.tail() so reads pull from BOTH SQLite snapshot AND live NDJSON. Plus TestEventStoreConcurrency (20-writer in-process ack-contention smoke) (Wave 1, no deps) (IDENT-02 indirect, ACK-04 indirect)
+- [x] 1032-04-ack-workflow-PLAN.md — Event optional Identity + AckedAt + AckedBy fields (defaults empty; backward-compat fromStructSafe) + computeDisplayState() for ISA-18.2 three-state (unacked-active|acked-active|acked-cleared); EventStore.acknowledgeEvent(eventId, opts) routes single-user → acks_ array, cluster → appendAckRecord (1031-04). Plus TestEventAcknowledgement (Wave 2, depends on 1032-01) (ACK-01, ACK-02, ACK-03, IDENT-02)
+- [x] 1032-05-oplock-smoke-test-PLAN.md — ClusterConfig.checkSharedConfig(sharedRoot) best-effort SMB-oplock canary smoke test (Pitfall 14); single-process write-and-immediate-read of 1024 deterministic bytes; one-time warning(Concurrency:smbOplockDetected, ...) on mismatch; never throws (advisory); operator-fix guidance in warning text (Set-SmbServerConfiguration, smb.conf). Plus TestClusterConfigOplocks (Wave 1, no deps) (operational hardening; no REQ-IDs)
+
+**UI hint**: yes
+
+### Phase 1033: Companion Integration + Snapshot Consolidator + Operator Docs + 50-Companion Acceptance Test
+
+**Goal:** Wire the new `'SharedRoot'` opt through `FastSenseCompanion` and its `companionDiscoverEventStore` private helper; add the optional leader-elected `EventLogConsolidator` that periodically rolls per-tag NDJSON logs into the canonical `events.mat` snapshot; surface lock contention and skipped ticks in the Companion UI; write the operator-facing cluster-setup README; and run the full 50-Companion acceptance test against a real SMB share. This is the composition phase — no new primitives, only wiring — which makes the acceptance test meaningful.
+
+**Depends on:** Phases 1029, 1030, 1031, 1032 (uses every primitive and integration produced upstream).
+
+**Requirements covered:**
+- OPS-01 (temporary loss of the shared file share does not crash any Companion — Companions enter a degraded "read-only / waiting for share" state, retry transparently, and resume on share return; existing single-user `.m` scripts run unchanged with no shared share)
+- OPS-02 (operator-facing document specifies: (a) eventual-consistency contract "ack propagation lag up to ~5s"; (b) SMB-over-NFS recommendation on mixed-OS LANs; (c) SMB-oplocks-must-be-disabled-on-EventStore-directory with Windows-Server and Samba syntax; (d) multicast firewall rule for `udpport` notification hints; (e) NFSv3-detection startup warning)
+
+**Success Criteria** (what must be TRUE):
+1. **50 Companions running concurrently on a real SMB share** for the acceptance test produce **zero data corruption, zero lost acks, zero duplicate events**, with per-Companion responsiveness within **2× the single-user baseline** — verified by `tests/suite/Test50CompanionAcceptance.m` (gated behind `FASTSENSE_RUN_ACCEPTANCE=1`).
+2. **Specific p50/p95/p99 per-tick latency** is recorded for cluster sizes **1, 10, 25, and 50 Companions** and surfaced in the phase completion artifact, replacing the coarse "2× baseline" gate with actionable numbers.
+3. **Temporary shared-share loss** (simulated via firewall block) causes every Companion to enter a documented "read-only / waiting for share" state — no crashes, no orphan timers; on share return, live mode resumes within one tick of the next successful share read.
+4. **Operator can follow `examples/cluster-setup/README.md`** to configure a fresh shared share (SMB oplocks disabled on EventStore directory, multicast firewall rule open, NFSv3 warning understood) and bring up the cluster end-to-end without consulting source code.
+5. **Lock contention surfaces in the Companion UI** as a non-blocking notice ("Tag P-101 is being updated by alice@plant-a (5s ago)") and `pipeline.SkippedTickCount` is visible as a status badge — verified by `TestFastSenseCompanion.testClusterStatusSurface`.
+6. **Existing single-user `.m` scripts and examples run unchanged** with no `'SharedRoot'` set — every cluster code path is structurally dormant (gated behind `if obj.IsClusterMode_`).
+
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 1033-01-companion-shared-root-PLAN.md — FastSenseCompanion 'SharedRoot' NV-pair + companionDiscoverEventStore cluster upgrade + 4 SharedRoot regression tests (Wave 1, no deps) (OPS-01 partial)
+- [x] 1033-02-event-log-consolidator-PLAN.md — libs/Concurrency/EventLogConsolidator.m leader-elected NDJSON→snapshot writer + 5-test suite (Wave 1, no deps)
+- [x] 1033-03-operator-docs-PLAN.md — examples/cluster-setup/{README,smb-disable-oplocks.ps1,smb-disable-oplocks.conf,multicast-firewall.md} + ClusterConfig NFSv3 detection + TestClusterConfigNfsv3 (Wave 1, no deps) (OPS-02 full)
+- [x] 1033-04-acceptance-and-recovery-PLAN.md — Companion pipeline-observer + share-loss state machine + TestShareLossRecovery + gated Test50CompanionAcceptance with p50/p95/p99 at 1/10/25/50 (Wave 2, depends on 01 + 02) (OPS-01 full)
+
+**UI hint**: yes
 
 ## Phase Details (Pending Milestone)
 
@@ -224,4 +374,14 @@ Plans:
 
 ## Backlog
 
-(empty — last 5 items promoted to phases 1024-1028 on 2026-05-08)
+### Phase 999.1: Unified in-app help / user-manual / wiki system (BACKLOG)
+
+**Goal:** [Captured for future planning] Build a project-wide help system so every pane / widget / window can expose an Info button that opens a `uifigure` modal rendering markdown from `docs/help/<area>/<feature>.md`. Reuses `libs/Dashboard/MarkdownRenderer.m` and the existing Dashboard Info modal (260508-n8h). Scope includes: directory layout `docs/help/{companion,dashboard,webbridge,fastsense,sensor-threshold,event-detection}/`, index page with navigation, theme-aware rendering, search-across-docs, optional cross-link resolution, optional hooks into `scripts/generate_wiki.py`.
+
+**Source:** Quick task 260519-bs4 (Tag Status Table) — user requested an info button + markdown; on reflection we agreed a one-off button would be premature; the proper solution is its own milestone-sized piece of work.
+**Decisions to nail later:** repo location of help files (`docs/help/` vs. co-located under `libs/`); whether to ship a build-time wiki bundle or render at runtime; theming contract; how/whether to auto-generate from API docs (`scripts/generate_wiki.py` already exists).
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)

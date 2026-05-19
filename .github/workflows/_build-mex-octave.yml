@@ -29,7 +29,10 @@ jobs:
             libs/SensorThreshold/private/*.mex
             libs/SensorThreshold/private/octave-linux-x86_64/*.mex
             libs/FastSense/mksqlite.mex
-          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m', 'libs/FastSense/private/.mex-version') }}
+            # v4.0 Phase 1029: lockfile_mex (Octave) — root + platform-tag subdir
+            libs/Concurrency/*.mex
+            libs/Concurrency/octave-linux-x86_64/*.mex
+          key: mex-linux-${{ hashFiles('libs/FastSense/private/mex_src/**', 'libs/FastSense/build_mex.m', 'libs/FastSense/private/.mex-version', 'libs/Concurrency/private/mex_src/**', 'libs/Concurrency/build_concurrency_mex.m') }}
 
       - name: Compile MEX files
         if: steps.cache-mex.outputs.cache-hit != 'true'
@@ -46,4 +49,7 @@ jobs:
             libs/SensorThreshold/private/*.mex
             libs/SensorThreshold/private/octave-linux-x86_64/*.mex
             libs/FastSense/mksqlite.mex
+            # v4.0 Phase 1029: lockfile_mex (Octave) — root + platform-tag subdir
+            libs/Concurrency/*.mex
+            libs/Concurrency/octave-linux-x86_64/*.mex
           retention-days: 1

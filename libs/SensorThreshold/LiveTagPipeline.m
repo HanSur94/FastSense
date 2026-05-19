@@ -14,6 +14,16 @@ classdef LiveTagPipeline < handle
     %     - Per-tag try/catch: one tag's failure does NOT abort the tick.
     %     - tagState_ entries GC'd each tick for tags no longer eligible.
     %
+    %   Cluster mode (Phase 1030, Plan 02):
+    %     - Enabled by passing 'SharedRoot' NV-pair to constructor.
+    %     - All shared .mat writes routed through TagWriteCoordinator +
+    %       AtomicWriter for safe multi-process access (REQ CONC-01).
+    %     - Single-user mode (no SharedRoot) exercises ZERO Concurrency-
+    %       library code paths (Success Criterion 5 / byte-identical guarantee).
+    %     - BusyMode='drop' is forced in cluster mode (Pitfall 7).
+    %     - Timer period is jittered +-25% in cluster mode (Pitfall 11).
+    %     - Lock contention causes per-tag skip-and-defer, not whole-tick block.
+    %
     %   Observability (Major-2 / revision-1):
     %     - LastFileParseCount: public SetAccess=private property recording the
     %       number of DISTINCT files parsed in the most recent tick. Captured
@@ -21,21 +31,37 @@ classdef LiveTagPipeline < handle
     %       BatchTagPipeline's mechanism so tests can assert dedup behavior
     %       via direct property read rather than wrapping readRawDelimited_.
     %
+    %   Cluster-mode observability (Phase 1030 Plan 02):
+    %     - SkippedTickCount: public SetAccess=private; incremented on lock
+    %       contention or BusyMode='drop' skip.
+    %     - LastTickDurationSec: public SetAccess=private; wall-clock duration
+    %       of the last onTick_ invocation.
+    %     - LastLockContentionEvent: public SetAccess=private; most recent
+    %       contention event struct {tagKey, holder.{user, host, age}}.
+    %
     %   Shares readRawDelimited_ / selectTimeAndValue_ / writeTagMat_ with
     %   BatchTagPipeline -- single source of truth for parse + shape + write.
     %
-    %   Example:
+    %   Example (single-user, unchanged):
     %     SensorTag('p_a', 'RawSource', struct('file', 'live.csv', 'column', 'pressure_a'));
     %     p = LiveTagPipeline('OutputDir', 'out/', 'Interval', 5);
     %     p.start();
     %     % ... while the writer process appends to live.csv, p updates out/p_a.mat ...
     %     p.stop();
     %
+    %   Example (cluster mode):
+    %     SensorTag('p_a', 'RawSource', struct('file', 'live.csv', 'column', 'pressure_a'));
+    %     p = LiveTagPipeline('OutputDir', 'out/', 'SharedRoot', '/mnt/shared/fastsense');
+    %     p.start();
+    %     % Shared writes land at /mnt/shared/fastsense/tags/p_a.mat via AtomicWriter.
+    %     p.stop();
+    %
     %   Errors:
     %     TagPipeline:invalidOutputDir, TagPipeline:cannotCreateOutputDir
     %     (at construction). In-tick errors are per-tag-isolated and logged.
     %
-    %   See also BatchTagPipeline, SensorTag, StateTag, TagRegistry.
+    %   See also BatchTagPipeline, SensorTag, StateTag, TagRegistry,
+    %            TagWriteCoordinator, AtomicWriter, FileLock.
     %   (MatFileDataSource in libs/EventDetection is the structural reference
     %   for the modTime+lastIndex pattern this class adapts to raw text files;
     %   the timer skeleton in libs/EventDetection is the reference for
@@ -58,6 +84,10 @@ classdef LiveTagPipeline < handle
                                  %   With fsCoalesceActive_=false this equals the number of per-tag
                                  %   exist+dir calls (≈ 2 × #eligible-tags). Captured BEFORE the per-tick
                                  %   fsCache goes out of scope. Mirrors LastFileParseCount.
+        % Phase 1030 Plan 02 cluster-mode observability (Pitfall 7 / Pitfall 11)
+        SkippedTickCount        = 0    % incremented on lock contention OR BusyMode='drop' skip
+        LastTickDurationSec     = 0    % wall-clock duration of last onTick_ (Pitfall 7 ops surface)
+        LastLockContentionEvent = []   % struct {tagKey, holder.{user,host,age}} (Phase 1033 UI hook)
     end
 
     properties (Dependent)
@@ -125,6 +155,12 @@ classdef LiveTagPipeline < handle
                                     %   --fs-coalesce-off regression measurement; production is on.
                                     %   Mirrors Plan 02b setWriteFnForTesting_ / Plan 02d
                                     %   setCacheActiveForTesting_ / Plan 05 setCoalesceActiveForTesting_.
+        % Phase 1030 Plan 02 cluster-mode private state
+        IsClusterMode_  = false    % gate for cluster-mode code paths (Pitfall 11 design)
+        Coordinator_    = []       % TagWriteCoordinator handle (cluster mode only)
+        SharedRoot_     = ''       % char; cluster shared root
+        LockTimeout_    = 5.0      % seconds; per-tag acquire timeout
+        tagMtimeCache_             % containers.Map: abspath -> last-seen mtime (Pitfall 11 mtime change-detect)
     end
 
     methods
@@ -133,12 +169,15 @@ classdef LiveTagPipeline < handle
             %   p = LiveTagPipeline('OutputDir', dir)
             %   p = LiveTagPipeline('OutputDir', dir, 'Interval', 5, 'Verbose', true)
             %   p = LiveTagPipeline('OutputDir', dir, 'ErrorFcn', @(ex) ...)
+            %   p = LiveTagPipeline('OutputDir', dir, 'SharedRoot', root)  % cluster mode
+            %   p = LiveTagPipeline('OutputDir', dir, 'SharedRoot', root, 'LockTimeout', 10)
             %
             %   Errors:
             %     TagPipeline:invalidOutputDir      -- OutputDir missing/empty/non-char
             %     TagPipeline:cannotCreateOutputDir -- mkdir failed
             opts = struct('OutputDir', '', 'Interval', 15, ...
-                'ErrorFcn', [], 'Verbose', false);
+                'ErrorFcn', [], 'Verbose', false, ...
+                'SharedRoot', '', 'LockTimeout', 5.0);
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if k + 1 > numel(varargin) || ~ischar(key)
@@ -154,6 +193,10 @@ classdef LiveTagPipeline < handle
                         opts.ErrorFcn = varargin{k+1};
                     case 'Verbose'
                         opts.Verbose = logical(varargin{k+1});
+                    case 'SharedRoot'
+                        opts.SharedRoot = char(varargin{k+1});
+                    case 'LockTimeout'
+                        opts.LockTimeout = double(varargin{k+1});
                     otherwise
                         error('TagPipeline:invalidOutputDir', ...
                             'Unknown option ''%s''.', key);
@@ -177,17 +220,48 @@ classdef LiveTagPipeline < handle
             obj.Verbose   = opts.Verbose;
             obj.tagState_  = containers.Map('KeyType', 'char', 'ValueType', 'any');
             obj.priorState_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
+            % --- Cluster mode resolution (Phase 1030 Plan 02; CONTEXT.md scope) ---
+            obj.SharedRoot_    = opts.SharedRoot;
+            obj.LockTimeout_   = opts.LockTimeout;
+            obj.IsClusterMode_ = ~isempty(opts.SharedRoot);
+            obj.tagMtimeCache_ = containers.Map('KeyType', 'char', 'ValueType', 'double');
+            if obj.IsClusterMode_
+                % Resolve identity strictly -- fail fast on missing user/host (IDENT-01).
+                ClusterIdentity.resolve('Strict', true);
+                % Ensure shared tags/ and locks/ dirs exist.
+                tagsD = SharedPaths.tagsDir(opts.SharedRoot);
+                locksD = SharedPaths.locksDir(opts.SharedRoot);
+                if ~exist(tagsD, 'dir')
+                    mkdir(tagsD);
+                end
+                if ~exist(locksD, 'dir')
+                    mkdir(locksD);
+                end
+                obj.Coordinator_ = TagWriteCoordinator(opts.SharedRoot);
+            end
         end
 
         function start(obj)
             %START Launch the polling timer and set Status='running'.
             if strcmp(obj.Status, 'running'), return; end
             obj.Status = 'running';
-            obj.timer_ = timer('ExecutionMode', 'fixedSpacing', ...
-                'Period',    obj.Interval, ...
-                'Tag',       'LiveTagPipeline', ...
-                'TimerFcn',  @(~,~) obj.onTick_(), ...
-                'ErrorFcn',  @(~,~) obj.onTimerError_());
+            if obj.IsClusterMode_
+                % Force BusyMode='drop' in cluster mode (Pitfall 7 -- prevents
+                % timer queue buildup when share I/O is slow).
+                obj.timer_ = timer('ExecutionMode', 'fixedSpacing', ...
+                    'Period',    obj.Interval, ...
+                    'BusyMode',  'drop', ...
+                    'Tag',       'LiveTagPipeline', ...
+                    'TimerFcn',  @(~,~) obj.onTick_(), ...
+                    'ErrorFcn',  @(~,~) obj.onTimerError_());
+            else
+                obj.timer_ = timer('ExecutionMode', 'fixedSpacing', ...
+                    'Period',    obj.Interval, ...
+                    'Tag',       'LiveTagPipeline', ...
+                    'TimerFcn',  @(~,~) obj.onTick_(), ...
+                    'ErrorFcn',  @(~,~) obj.onTimerError_());
+            end
             start(obj.timer_);
             if obj.Verbose
                 fprintf('[LIVE-TAG-PIPELINE] Started (interval=%ds)\n', obj.Interval);
@@ -373,6 +447,15 @@ classdef LiveTagPipeline < handle
             %   path. See VERIFICATION.md §"Post-Plan-05 tBreakdown"
             %   for measured cost numbers and the plan-06 follow-up
             %   pointer (in-memory propagation refactor).
+            %
+            %   Phase 1030 Plan 02 additions (cluster mode only):
+            %     - drawnow limitrate nocallbacks at start (Pitfall 7 reentrancy guard)
+            %     - tic/toc measurement for LastTickDurationSec
+            %     - Jittered period update at end (Pitfall 11)
+            tickStart_ = tic();
+            if obj.IsClusterMode_
+                drawnow limitrate nocallbacks;  % Pitfall 7 reentrancy guard
+            end
             report = struct('succeeded', {{}}, 'failed', struct([]));
             tickCache = containers.Map('KeyType', 'char', 'ValueType', 'any');
             % Phase 1028 plan 06: per-tick fs-stat cache. Keyed by parent
@@ -446,6 +529,19 @@ classdef LiveTagPipeline < handle
             % vs the O(#tags) un-coalesced baseline.
             obj.LastFsStatCount    = fsStatCount;
             obj.LastTickReport     = report;
+            % Phase 1030 Plan 02: record tick duration (Pitfall 7 ops surface).
+            obj.LastTickDurationSec = toc(tickStart_);
+            % Pitfall 11 -- jitter next firing in cluster mode to decorrelate
+            % thundering-herd timer callbacks across multiple Companions.
+            if obj.IsClusterMode_ && ~isempty(obj.timer_) && isvalid(obj.timer_)
+                nextPeriod = obj.Interval * (1 + 0.5 * (rand() - 0.5));
+                try
+                    obj.timer_.Period = max(0.1, nextPeriod);
+                catch
+                    % Some MATLAB versions disallow Period mutation while running;
+                    % swallow -- next start cycle picks up the un-jittered value.
+                end
+            end
         end
 
         function [processed, fsStatCount] = processTag_(obj, t, rs, key, tickCache, fsCache, fsStatCount)
@@ -458,6 +554,13 @@ classdef LiveTagPipeline < handle
             %   ('mtime', datenum, 'fullpath', abspath). When fsCoalesceActive_
             %   is false, the per-tag exist+dir fallback path runs (legacy
             %   behaviour, used by the bench --fs-coalesce-off measurement).
+            %
+            %   Phase 1030 Plan 02 additions (cluster mode only):
+            %     - Pitfall 11 mtime cache check (before parse gate)
+            %     - Lock acquisition via TagWriteCoordinator
+            %     - AtomicWriter.write for the locked section
+            %     - tagMtimeCache_ update after successful write
+            %   Single-user mode is byte-identical to pre-Phase-1030 behaviour.
             processed = false;
             abspath = obj.absPath_(rs.file);
 
@@ -476,6 +579,16 @@ classdef LiveTagPipeline < handle
             end
             if modTime <= state.lastModTime
                 return;
+            end
+
+            % Pitfall 11 mtime change-detect (cluster mode only -- additional layer
+            % on top of the existing lastModTime guard; prevents redundant dir()
+            % stats from being expensive on SMB when many tags share the same raw
+            % source file and the per-tick tickCache hasn't been primed yet).
+            if obj.IsClusterMode_ && obj.tagMtimeCache_.isKey(abspath)
+                if obj.tagMtimeCache_(abspath) == modTime
+                    return;  % no change since last tick -- skip read
+                end
             end
 
             % Parse (de-duped across tags for this tick -- D-07).
@@ -502,61 +615,74 @@ classdef LiveTagPipeline < handle
             newX = x(newRange);
             newY = y(newRange);
 
-            % Phase 1028 plan 02d: prefer the cached append path when the cache
-            % is active AND we have a warm entry for this tag. Cold cache (first
-            % write per tag) AND cache-off both fall through to the writeFn_
-            % path, which is the same load+concat+save sequence as before. The
-            % cache is then refreshed from the merged result so the next tick
-            % takes the warm path. Because writeTagMatCached_ produces byte-equal
-            % .mat files to writeTagMat_('append',...) for the same priorX/priorY,
-            % crash-recovery semantics at the tick boundary are preserved (D-12).
-            % Phase 1028 plan 02d cache strategy:
-            %   - Warm cache hit  -> writeTagMatCached_ (no load, save only).
-            %   - Cold cache, no on-disk file -> writeFn_('append',...) which
-            %     for a missing file just saves newX/newY (no load happens
-            %     inside writeTagMat_ for this branch — `exist(outPath,'file')`
-            %     is false so the load is skipped). Cache seeded from (newX,
-            %     newY) since that is exactly what was just written.
-            %   - Cold cache, existing on-disk file (process restart, cache
-            %     eviction): writeFn_('append',...) does its own load+save.
-            %     Cache seeded by reading the merged file once. This is the
-            %     ONLY load() the cache adds beyond the production tick path,
-            %     and it happens at most once per tag per pipeline-instance
-            %     lifetime.
-            useCache = obj.cacheActive_ && ...
-                obj.writeFnIsProduction_ && ...
-                obj.priorState_.isKey(key);
-            if useCache
-                prior = obj.priorState_(key);
-                [mergedX, mergedY] = obj.cachedWriteFn_( ...
-                    obj.OutputDir, t, newX, newY, prior.X, prior.Y);
-                obj.priorState_(key) = struct('X', mergedX, 'Y', mergedY);
+            if obj.IsClusterMode_
+                % --- Cluster-mode locked write path (Phase 1030 Plan 02) ---
+                [lock, ok] = obj.Coordinator_.acquireTag(key, ...
+                    struct('Timeout', obj.LockTimeout_));
+                if ~ok
+                    % Lock contention -- skip-and-defer this tag (NOT block whole tick).
+                    % Populate LockContentionEvent for Phase 1033 Companion UI.
+                    obj.SkippedTickCount = obj.SkippedTickCount + 1;
+                    obj.LastLockContentionEvent = ...
+                        LiveTagPipeline.buildContentionEvent_(key, lock);
+                    return;
+                end
+                cleaner = onCleanup(@() lock.release()); %#ok<NASGU>
+
+                % Build the merged payload (replicates writeTagMat_'s 'append' branch)
+                % inside the locked section so the temp+rename is atomic and
+                % Pitfall-10a-gated via StillHeldByMe predicate.
+                outPath  = fullfile(SharedPaths.tagsDir(obj.SharedRoot_), [key, '.mat']);
+                identity = ClusterIdentity.resolve();
+                AtomicWriter.write(outPath, ...
+                    @(p) LiveTagPipeline.writeMergedTagMat_(p, key, outPath, newX, newY), ...
+                    identity, ...
+                    struct('StillHeldByMe', @() lock.stillHeldByMe()));
             else
-                outPath = fullfile(obj.OutputDir, [key '.mat']);
-                fileExistedBefore = (exist(outPath, 'file') == 2);
-                obj.writeFn_(obj.OutputDir, t, newX, newY, 'append');
-                if obj.cacheActive_ && obj.writeFnIsProduction_
-                    if ~fileExistedBefore
-                        % Fresh file: writeTagMat_('append',...) just saved
-                        % (newX, newY) without loading anything. Seed the
-                        % cache directly — no extra disk read.
-                        obj.priorState_(key) = struct('X', newX(:), 'Y', newY(:));
-                    else
-                        % Existing file (process restart / cache eviction):
-                        % read back the merged file once to seed. This load
-                        % happens at most once per tag per pipeline-instance
-                        % lifetime; subsequent ticks skip load() entirely.
-                        try
-                            loaded = load(outPath);
-                            if isfield(loaded, key) && isstruct(loaded.(key)) && ...
-                                    isfield(loaded.(key), 'x') && isfield(loaded.(key), 'y')
-                                obj.priorState_(key) = struct( ...
-                                    'X', loaded.(key).x, ...
-                                    'Y', loaded.(key).y);
+                % --- Single-user path with Phase 1028 plan 02d cache + Plan 06 fs-coalesce ---
+                % Phase 1028 plan 02d: prefer the cached append path when the cache
+                % is active AND we have a warm entry for this tag. Cold cache (first
+                % write per tag) AND cache-off both fall through to the writeFn_
+                % path, which is the same load+concat+save sequence as before. The
+                % cache is then refreshed from the merged result so the next tick
+                % takes the warm path. Because writeTagMatCached_ produces byte-equal
+                % .mat files to writeTagMat_('append',...) for the same priorX/priorY,
+                % crash-recovery semantics at the tick boundary are preserved (D-12).
+                useCache = obj.cacheActive_ && ...
+                    obj.writeFnIsProduction_ && ...
+                    obj.priorState_.isKey(key);
+                if useCache
+                    prior = obj.priorState_(key);
+                    [mergedX, mergedY] = obj.cachedWriteFn_( ...
+                        obj.OutputDir, t, newX, newY, prior.X, prior.Y);
+                    obj.priorState_(key) = struct('X', mergedX, 'Y', mergedY);
+                else
+                    outPath = fullfile(obj.OutputDir, [key '.mat']);
+                    fileExistedBefore = (exist(outPath, 'file') == 2);
+                    obj.writeFn_(obj.OutputDir, t, newX, newY, 'append');
+                    if obj.cacheActive_ && obj.writeFnIsProduction_
+                        if ~fileExistedBefore
+                            % Fresh file: writeTagMat_('append',...) just saved
+                            % (newX, newY) without loading anything. Seed the
+                            % cache directly — no extra disk read.
+                            obj.priorState_(key) = struct('X', newX(:), 'Y', newY(:));
+                        else
+                            % Existing file (process restart / cache eviction):
+                            % read back the merged file once to seed. This load
+                            % happens at most once per tag per pipeline-instance
+                            % lifetime; subsequent ticks skip load() entirely.
+                            try
+                                loaded = load(outPath);
+                                if isfield(loaded, key) && isstruct(loaded.(key)) && ...
+                                        isfield(loaded.(key), 'x') && isfield(loaded.(key), 'y')
+                                    obj.priorState_(key) = struct( ...
+                                        'X', loaded.(key).x, ...
+                                        'Y', loaded.(key).y);
+                                end
+                            catch
+                                % Best-effort: if seed read fails the next tick
+                                % retries the cold path, which is correct.
                             end
-                        catch
-                            % Best-effort: if seed read fails the next tick
-                            % retries the cold path, which is correct.
                         end
                     end
                 end
@@ -565,6 +691,10 @@ classdef LiveTagPipeline < handle
             state.lastModTime = modTime;
             state.lastIndex   = total;
             obj.tagState_(key) = state;
+            % Phase 1030 Plan 02: update mtime cache after successful write (cluster mode).
+            if obj.IsClusterMode_
+                obj.tagMtimeCache_(abspath) = modTime;
+            end
             processed = true;
         end
 
@@ -704,6 +834,86 @@ classdef LiveTagPipeline < handle
             obj.Status = 'error';
             fprintf(2, '[LIVE-TAG-PIPELINE] Timer error -- Status=error\n');
         end
+    end
+
+    methods (Static, Access = private)
+
+        function ev = buildContentionEvent_(tagKey, lock)
+            %BUILDCONTENTIONEVENT_ Construct a LockContentionEvent struct.
+            %   Used by processTag_ on ok=false to populate the
+            %   LastLockContentionEvent property for downstream UI (Phase 1033).
+            %   Best-effort: struct is well-formed even when peek() fails.
+            ev = struct('tagKey', tagKey, ...
+                'holder', struct('user', '', 'host', '', 'age', NaN));
+            ev.timestamp = now(); %#ok<TNOW1>
+            try
+                info = lock.peek();
+                if ~isempty(info) && isfield(info, 'user')
+                    ev.holder.user = info.user;
+                    ev.holder.host = info.host;
+                    % Age derived from heartbeat_at when available; else NaN.
+                    if isfield(info, 'heartbeat_at') && ~isempty(info.heartbeat_at)
+                        try
+                            hbDT = datetime(info.heartbeat_at, ...
+                                'InputFormat', 'yyyy-MM-dd''T''HH:mm:ss.SSS''Z''', ...
+                                'TimeZone', 'UTC');
+                            nowDT = datetime('now', 'TimeZone', 'UTC');
+                            ev.holder.age = seconds(nowDT - hbDT);
+                        catch
+                            ev.holder.age = NaN;
+                        end
+                    end
+                end
+            catch
+                % Best-effort; structure is still well-formed on peek failure.
+            end
+        end
+
+        function writeMergedTagMat_(tempPath, key, finalPath, newX, newY)
+            %WRITEMERGEDTAGMAT_ Replicate writeTagMat_'s 'append' branch into temp path.
+            %   This is the cluster-mode write payload -- load the existing shared
+            %   file, merge new rows, save into temp (caller wraps in
+            %   AtomicWriter.write for atomic rename + lock re-validation via
+            %   Pitfall-10a StillHeldByMe predicate).
+            %
+            %   Input:
+            %     tempPath  — char; temp file path provided by AtomicWriter.write
+            %     key       — char; tag key (MAT variable name)
+            %     finalPath — char; the shared .mat path (to load existing prior rows)
+            %     newX      — numeric column vector; new time rows
+            %     newY      — numeric or cell column vector; new value rows
+            priorX = [];
+            priorY = [];
+            if exist(finalPath, 'file')
+                prior = load(finalPath);
+                if isfield(prior, key)
+                    old = prior.(key);
+                    if isstruct(old)
+                        if isfield(old, 'x'), priorX = old.x; end
+                        if isfield(old, 'y'), priorY = old.y; end
+                    end
+                end
+            end
+            % Concatenate, handling cellstr (StateTag) and numeric uniformly.
+            if iscell(priorY) || iscell(newY)
+                if ~iscell(priorY), priorY = num2cell(priorY(:)); end
+                if ~iscell(newY),   newY   = num2cell(newY(:));   end
+                mergedY = [priorY(:); newY(:)];
+            else
+                mergedY = [priorY(:); newY(:)];
+            end
+            mergedX = [priorX(:); newX(:)];
+            % Build payload matching writeTagMat_ contract (struct with x,y fields).
+            if iscell(mergedY)
+                payload = struct('x', mergedX, 'y', {mergedY});
+            else
+                payload = struct('x', mergedX, 'y', mergedY);
+            end
+            wrap = struct();
+            wrap.(key) = payload;
+            save(tempPath, '-struct', 'wrap');
+        end
+
     end
 
 end
