@@ -49,6 +49,7 @@ classdef TagStatusTableWindow < handle
         hHeaderLbl_   = []        % "Tags" right-side header label
         hLastRefreshLbl_ = []     % "Last refreshed: HH:MM:SS" label (260519-bs4-04 patch)
         hPauseBtn_       = []     % "Pause polling"/"Resume polling" uicontrol pushbutton (260519-bs4-05 patch)
+        hWikiBtn_        = []     % uicontrol pushbutton: open Wiki -> Tag-Status-Table.md (Phase 1034)
         PollingActive_   = true   % true = RefreshTimer_ running + markTagsDirty live; false = frozen (260519-bs4-05 patch)
         hChipsType_     = []      % 1x5 array of uicontrol pushbuttons (Sensor/Monitor/Composite/State/Derived)
         hChipsCrit_     = []      % 1x4 array of uicontrol pushbuttons (Low/Medium/High/Safety)
@@ -155,20 +156,34 @@ classdef TagStatusTableWindow < handle
                 'FontName',            'Menlo', ...
                 'FontSize',            10);
 
-            % --- Pause/Resume polling button (right edge, same row). ---
-            % Same widget family as the other controls (uicontrol pushbutton)
-            % so the classical-figure window stays consistent. Initial label
-            % matches the default PollingActive_=true state ("Pause polling").
-            % 260519-bs4-05 patch.
+            % --- Pause/Resume polling button (shifted left to make room
+            %     for the new Wiki button on the right edge). 260519-bs4-05
+            %     placement; Phase 1034 shifted Position[0] from 0.87 to 0.74.
             obj.hPauseBtn_ = uicontrol(obj.hFig_, ...
                 'Style',               'pushbutton', ...
                 'Units',               'normalized', ...
-                'Position',            [0.87 0.945 0.12 0.04], ...
+                'Position',            [0.74 0.945 0.12 0.04], ...
                 'String',              'Pause polling', ...
                 'BackgroundColor',     t.WidgetBackground, ...
                 'ForegroundColor',     t.ForegroundColor, ...
                 'FontSize',            10, ...
                 'Callback',            @(~,~) obj.setPollingActive(~obj.PollingActive_));
+
+            % --- Wiki button (Phase 1034). ---
+            % Sits on the right edge, in the slot previously occupied by
+            % Pause/Resume. Routes through the Companion's shared
+            % WikiBrowser via the openWiki entry point (Plan 06 task 6.2),
+            % defaulting to the Tag-Status-Table.md page.
+            obj.hWikiBtn_ = uicontrol(obj.hFig_, ...
+                'Style',               'pushbutton', ...
+                'Units',               'normalized', ...
+                'Position',            [0.87 0.945 0.12 0.04], ...
+                'String',              ['Wiki ', char(8689)], ...
+                'TooltipString',       'Open Wiki: Tag Status Table', ...
+                'BackgroundColor',     t.WidgetBackground, ...
+                'ForegroundColor',     t.ForegroundColor, ...
+                'FontSize',            10, ...
+                'Callback',            @(~,~) obj.openWiki_());
 
             % --- Search strip ---
             obj.hSearchLbl_ = uicontrol(obj.hFig_, ...
@@ -336,6 +351,10 @@ classdef TagStatusTableWindow < handle
                 if ~isempty(obj.hPauseBtn_) && isvalid(obj.hPauseBtn_)
                     obj.hPauseBtn_.BackgroundColor = t.WidgetBackground;
                     obj.hPauseBtn_.ForegroundColor = t.ForegroundColor;
+                end
+                if ~isempty(obj.hWikiBtn_) && isvalid(obj.hWikiBtn_)
+                    obj.hWikiBtn_.BackgroundColor = t.WidgetBackground;
+                    obj.hWikiBtn_.ForegroundColor = t.ForegroundColor;
                 end
                 % Re-apply chip active/inactive styling -- pulls Accent
                 % from the freshly-stored theme.
@@ -532,6 +551,7 @@ classdef TagStatusTableWindow < handle
             obj.hHeaderLbl_      = [];
             obj.hLastRefreshLbl_ = [];
             obj.hPauseBtn_       = [];
+            obj.hWikiBtn_        = [];
             obj.hChipsType_      = [];
             obj.hChipsCrit_      = [];
             obj.hChipsActivity_  = [];
@@ -879,6 +899,32 @@ classdef TagStatusTableWindow < handle
                 % Teardown must never throw.
             end
             obj.RefreshTimer_ = [];
+        end
+
+        function openWiki_(obj)
+        %OPENWIKI_ Route to the Companion's shared WikiBrowser; fall back to standalone.
+        %   Phase 1034 -- Wiki button click handler. Prefers routing through
+        %   the parent Companion's openWiki entry point so a single
+        %   WikiBrowser handle is reused across the session. Falls back to
+        %   constructing a standalone WikiBrowser if the companion handle
+        %   is missing / invalid (defensive; under normal use the companion
+        %   is always set via openWith()).
+            try
+                if ~isempty(obj.Companion_) && isvalid(obj.Companion_) && ...
+                        isa(obj.Companion_, 'FastSenseCompanion') && ...
+                        ismethod(obj.Companion_, 'openWiki')
+                    obj.Companion_.openWiki('Tag-Status-Table');
+                    return;
+                end
+                % Fallback (no companion handle): construct a standalone Wiki window.
+                WikiBrowser('OpenTo', 'Tag-Status-Table');
+            catch ME
+                try
+                    errordlg(sprintf('Failed to open Wiki: %s', ME.message), 'Wiki');
+                catch
+                    fprintf(2, '[TagStatusTableWindow] openWiki_ failed: %s\n', ME.message);
+                end
+            end
         end
 
         function onRefreshTick_(obj)
