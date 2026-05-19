@@ -118,6 +118,9 @@ classdef FastSenseCompanion < handle
                              % Pruned of invalid handles before each iteration.
         hTileBtn_      = []  % toolbar uibutton: Tile windows
         hCloseAllBtn_  = []  % toolbar uibutton: Close all
+        % Phase 1034 — Wiki button + shared WikiBrowser handle.
+        hWikiBtn_     = []   % toolbar uibutton: Wiki / Help launch
+        WikiBrowser_  = []   % shared WikiBrowser handle (or [])
     end
 
     methods (Access = public)
@@ -306,16 +309,17 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x7 grid:
+            % Inner 1x8 grid (Phase 1034 — Wiki button added at col 6):
             %   col 1 = Events viewer button (Task 13)            (110)
             %   col 2 = Live: ON/OFF button                       (110)
             %   col 3 = Tags table launch (quick task 260519-bs4) (110)
             %   col 4 = Tile windows (S0Y-01)                     ( 70)
             %   col 5 = Close all (S0Y-02)                        ( 90)
-            %   col 6 = flex spacer                               ('1x')
-            %   col 7 = Settings gear                             ( 36)
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 7]);
-            hToolbarGrid.ColumnWidth     = {110, 110, 110, 70, 90, '1x', 36};
+            %   col 6 = Wiki / Help launch (Phase 1034)           ( 70)
+            %   col 7 = flex spacer                               ('1x')
+            %   col 8 = Settings gear                             ( 36)
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 8]);
+            hToolbarGrid.ColumnWidth     = {110, 110, 110, 70, 90, 70, '1x', 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -381,10 +385,25 @@ classdef FastSenseCompanion < handle
             obj.hCloseAllBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hCloseAllBtn_.ButtonPushedFcn = @(~,~) obj.closeAllOpenedWindows();
 
-            % Col 7 — Settings gear.
+            % Col 6 — Wiki / Help launch (Phase 1034). Opens the shared WikiBrowser
+            % to Companion-Overview.md. Re-clicks focus + re-navigate the existing
+            % window per CONTEXT.md D-06.
+            obj.hWikiBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hWikiBtn_.Layout.Row    = 1;
+            obj.hWikiBtn_.Layout.Column = 6;
+            obj.hWikiBtn_.Text          = ['Wiki ', char(8689)];   % up-arrow with bar (pop-out)
+            obj.hWikiBtn_.FontSize      = 11;
+            obj.hWikiBtn_.FontWeight    = 'bold';
+            obj.hWikiBtn_.Tag           = 'CompanionWikiBtn';
+            obj.hWikiBtn_.Tooltip       = 'Open the FastSense Wiki / Help';
+            obj.hWikiBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+            obj.hWikiBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hWikiBtn_.ButtonPushedFcn = @(~,~) obj.openWiki_('Companion-Overview');
+
+            % Col 8 — Settings gear (was col 7 before Phase 1034).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 7;
+            obj.hSettingsBtn_.Layout.Column = 8;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
