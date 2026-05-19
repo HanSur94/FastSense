@@ -108,6 +108,13 @@ classdef FastSenseCompanion < handle
         LiveTagPipelines_         = {}    % cell of LiveTagPipeline handles observed via onLiveTick_
         LiveEventPipelines_       = {}    % cell of LiveEventPipeline handles observed via onLiveTick_
         LastShareStatus_          = 'ok'  % 'ok' | 'unreachable'; tracks share-loss transitions
+        % S0Y-01/02 (merged from main #143) — companion-opened figure tracking.
+        OpenedFigures_ = []  % column vector of figure handles the companion opened
+                             % (dashboards via onOpenDashboardRequested_,
+                             %  ad-hoc plots via onOpenAdHocPlotRequested_).
+                             % Pruned of invalid handles before each iteration.
+        hTileBtn_      = []  % toolbar uibutton: Tile windows
+        hCloseAllBtn_  = []  % toolbar uibutton: Close all
     end
 
     methods (Access = public)
@@ -296,11 +303,15 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x4 grid — col 1 = Events viewer button (Task 13);
-            % col 2 = Live: ON/OFF button; col 3 = flex spacer;
-            % col 4 = gear button.
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 4]);
-            hToolbarGrid.ColumnWidth     = {110, 110, '1x', 36};
+            % Inner 1x6 grid:
+            %   col 1 = Events viewer button (Task 13)   (110)
+            %   col 2 = Live: ON/OFF button              (110)
+            %   col 3 = Tile windows (S0Y-01)            ( 70)
+            %   col 4 = Close all (S0Y-02)               ( 90)
+            %   col 5 = flex spacer                      ('1x')
+            %   col 6 = Settings gear                    ( 36)
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 6]);
+            hToolbarGrid.ColumnWidth     = {110, 110, 70, 90, '1x', 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -331,10 +342,34 @@ classdef FastSenseCompanion < handle
             obj.hLiveBtn_.Tooltip       = 'Toggle live refresh of the inspector';
             obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
 
-            % Col 4 — Settings gear.
+            % Col 3 — Tile windows (S0Y-01).
+            obj.hTileBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hTileBtn_.Layout.Row    = 1;
+            obj.hTileBtn_.Layout.Column = 3;
+            obj.hTileBtn_.Text          = 'Tile';
+            obj.hTileBtn_.FontSize      = 11;
+            obj.hTileBtn_.FontWeight    = 'bold';
+            obj.hTileBtn_.Tooltip       = 'Arrange companion-opened windows in a grid';
+            obj.hTileBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+            obj.hTileBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hTileBtn_.ButtonPushedFcn = @(~,~) obj.tileOpenedWindows();
+
+            % Col 4 — Close all (S0Y-02). Uses Accent color to signal destructive action.
+            obj.hCloseAllBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hCloseAllBtn_.Layout.Row    = 1;
+            obj.hCloseAllBtn_.Layout.Column = 4;
+            obj.hCloseAllBtn_.Text          = 'Close all';
+            obj.hCloseAllBtn_.FontSize      = 11;
+            obj.hCloseAllBtn_.FontWeight    = 'bold';
+            obj.hCloseAllBtn_.Tooltip       = 'Close every window the companion opened';
+            obj.hCloseAllBtn_.BackgroundColor = obj.Theme_.Accent;
+            obj.hCloseAllBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hCloseAllBtn_.ButtonPushedFcn = @(~,~) obj.closeAllOpenedWindows();
+
+            % Col 6 — Settings gear.
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 4;
+            obj.hSettingsBtn_.Layout.Column = 6;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -985,6 +1020,144 @@ classdef FastSenseCompanion < handle
             obj.openEventViewer_();
         end
 
+        function trackOpenedFigure(obj, hFig)
+        %TRACKOPENEDFIGURE Register a figure the companion opened so Tile / Close all see it.
+        %   Public hook for code paths that spawn figures DIRECTLY (bypassing the
+        %   OpenAdHocPlotRequested event flow) — for example InspectorPane's single-tag
+        %   "Open Detail" handler, which calls openAdHocPlot inline. Pass the returned
+        %   classical figure handle and the companion will dedupe + prune-aware-append
+        %   it to OpenedFigures_.
+        %
+        %   Silently no-ops on empty / invalid handles.
+            obj.trackOpenedFigure_(hFig);
+        end
+
+        function tileOpenedWindows(obj)
+        %TILEOPENEDWINDOWS Arrange every figure the companion opened in a grid.
+        %   Computes a roughly-square ceil(sqrt(N)) tiling on the monitor the
+        %   companion lives on (or the primary monitor if that can't be determined),
+        %   then sets each tracked figure's Position so the windows do not overlap.
+        %   Figures opened outside the companion are not touched. Closed handles
+        %   are pruned silently.
+        %
+        %   No-op when no tracked figures exist (logs an info line for feedback).
+        %
+        %   Errors: surfaced via uialert + log entry; never throws.
+            try
+                obj.syncOpenedFigures_();
+                figs = obj.OpenedFigures_;
+                n = numel(figs);
+                if n == 0
+                    obj.addLogEntry('info', 'Tile: no companion-opened windows.');
+                    return;
+                end
+
+                % Monitor selection -- use the monitor that contains the companion.
+                mons = get(groot, 'MonitorPositions');   % rows: [x y w h]
+                screenRect = mons(1, :);                 % default = primary
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    cp = obj.hFig_.Position;             % [x y w h]
+                    cx = cp(1) + cp(3)/2; cy = cp(2) + cp(4)/2;
+                    for m = 1:size(mons, 1)
+                        r = mons(m, :);
+                        if cx >= r(1) && cx < r(1)+r(3) && cy >= r(2) && cy < r(2)+r(4)
+                            screenRect = r;
+                            break;
+                        end
+                    end
+                end
+
+                % Reserve a margin so windows aren't flush with screen edges.
+                margin = 24;
+                gx = screenRect(1) + margin;
+                gy = screenRect(2) + margin;
+                gw = max(200, screenRect(3) - 2*margin);
+                gh = max(200, screenRect(4) - 2*margin);
+
+                % Roughly-square grid: cols = ceil(sqrt(n)), rows = ceil(n/cols).
+                cols = ceil(sqrt(n));
+                rows = ceil(n / cols);
+                tileW = floor(gw / cols);
+                tileH = floor(gh / rows);
+
+                for k = 1:n
+                    % Row-major fill, top-down so window 1 ends up top-left.
+                    rIdx = ceil(k / cols);            % 1..rows from top
+                    cIdx = mod(k - 1, cols) + 1;      % 1..cols from left
+                    x = gx + (cIdx - 1) * tileW;
+                    % MATLAB screen y grows upward -- flip so row 1 is at the top.
+                    y = gy + (rows - rIdx) * tileH;
+                    try
+                        % distFig-style robustness: a maximized figure ignores
+                        % set(Position) silently, and normalized units would
+                        % treat our pixel rect as fractions of the screen --
+                        % both make Tile visually a no-op. Coerce both first.
+                        f = figs(k);
+                        try
+                            if isprop(f, 'WindowState') && ...
+                                    ~strcmp(get(f, 'WindowState'), 'normal')
+                                set(f, 'WindowState', 'normal');
+                            end
+                        catch
+                        end
+                        try
+                            set(f, 'Units', 'pixels');
+                        catch
+                        end
+                        set(f, 'Position', [x, y, tileW - 8, tileH - 8]);
+                    catch
+                        % Skip individual failures -- keep tiling the rest.
+                    end
+                end
+                obj.addLogEntry('info', sprintf('Tiled %d window(s).', n));
+            catch err
+                obj.addLogEntry('error', sprintf('Tile failed: %s', err.message));
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, ...
+                        sprintf('Failed to tile windows: %s', err.message), ...
+                        'FastSense Companion', 'Icon', 'error');
+                end
+            end
+        end
+
+        function closeAllOpenedWindows(obj)
+        %CLOSEALLOPENEDWINDOWS Close every figure the companion opened, then clear tracking.
+        %   Iterates a SNAPSHOT of OpenedFigures_ and calls close(h) per handle --
+        %   honoring the figure's CloseRequestFcn (DashboardEngine's stops live +
+        %   deletes the figure; openAdHocPlot's closeFcn_ does the same). Closed
+        %   handles drop out via pruneOpenedFigures_ at the end.
+        %
+        %   Figures opened outside the companion are not affected -- tracking is
+        %   the only source of truth.
+            try
+                obj.syncOpenedFigures_();
+                figs = obj.OpenedFigures_;    % snapshot -- close() callbacks may mutate
+                n = numel(figs);
+                if n == 0
+                    obj.addLogEntry('info', 'Close all: no companion-opened windows.');
+                    return;
+                end
+                for k = 1:n
+                    try
+                        if ishandle(figs(k))
+                            close(figs(k));
+                        end
+                    catch
+                        % Per-figure failure -- continue with the rest.
+                    end
+                end
+                obj.pruneOpenedFigures_();
+                obj.addLogEntry('info', sprintf('Closed %d window(s).', n));
+            catch err
+                obj.addLogEntry('error', sprintf('Close all failed: %s', err.message));
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, ...
+                        sprintf('Failed to close windows: %s', err.message), ...
+                        'FastSense Companion', 'Icon', 'error');
+                end
+            end
+        end
+
         function openEventViewer_internalForTest(obj)
         %OPENEVENTVIEWER_INTERNALFORTEST Test shim: call openEventViewer_ directly.
             obj.openEventViewer_();
@@ -998,6 +1171,24 @@ classdef FastSenseCompanion < handle
         function f = getFigForTest_(obj)
         %GETFIGFORTEST_ Test helper: return the companion uifigure handle.
             f = obj.hFig_;
+        end
+
+        function figs = getOpenedFiguresForTest_(obj)
+        %GETOPENEDFIGURESFORTEST_ Test helper: return the OpenedFigures_ tracking list.
+        %   Used by test_companion_tile_close_buttons. Returns the raw column
+        %   vector of figure handles (post-prune so callers see only valid
+        %   handles). Do NOT call from production code -- this is a friend
+        %   accessor for the test suite only.
+            obj.pruneOpenedFigures_();
+            figs = obj.OpenedFigures_;
+        end
+
+        function trackOpenedFigureForTest_(obj, hFig)
+        %TRACKOPENEDFIGUREFORTEST_ Test helper: drive the private trackOpenedFigure_.
+        %   Lets test_companion_tile_close_buttons feed figure handles into
+        %   OpenedFigures_ without spinning up a real DashboardListPane. Same
+        %   dedupe + prune semantics as the production path.
+            obj.trackOpenedFigure_(hFig);
         end
 
     end
@@ -1317,6 +1508,14 @@ classdef FastSenseCompanion < handle
                 obj.resolveInspectorState_();
                 obj.addLogEntry('info', sprintf('Opened dashboard: %s', ...
                     char(ed.Engine.Name)));
+                % S0Y-01: track the freshly opened dashboard figure so Tile / Close all see it.
+                try
+                    if ~isempty(ed.Engine) && isvalid(ed.Engine) && ...
+                            ~isempty(ed.Engine.hFigure) && ishandle(ed.Engine.hFigure)
+                        obj.trackOpenedFigure_(ed.Engine.hFigure);
+                    end
+                catch
+                end
             catch err
                 obj.addLogEntry('error', sprintf('Open dashboard failed: %s', err.message));
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
@@ -1443,6 +1642,57 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function trackOpenedFigure_(obj, hFig)
+        %TRACKOPENEDFIGURE_ Append a figure handle to OpenedFigures_ (deduped, valid only).
+            if isempty(hFig) || ~ishandle(hFig); return; end
+            % Prune dead handles first; then dedupe by handle equality.
+            obj.pruneOpenedFigures_();
+            for k = 1:numel(obj.OpenedFigures_)
+                if obj.OpenedFigures_(k) == hFig
+                    return;   % already tracked
+                end
+            end
+            obj.OpenedFigures_(end+1, 1) = hFig;
+        end
+
+        function pruneOpenedFigures_(obj)
+        %PRUNEOPENEDFIGURES_ Drop closed / deleted handles from the tracking list.
+            if isempty(obj.OpenedFigures_); return; end
+            keep = arrayfun(@(h) ishandle(h) && isgraphics(h, 'figure'), ...
+                obj.OpenedFigures_);
+            obj.OpenedFigures_ = obj.OpenedFigures_(keep);
+        end
+
+        function syncOpenedFigures_(obj)
+        %SYNCOPENEDFIGURES_ Reconcile OpenedFigures_ with reality before iterating.
+        %   Two reasons we need this before every Tile / Close-all click:
+        %     1. DashboardListPane fires OpenDashboardRequested BEFORE it calls
+        %        engine.render(), so the synchronous listener sees hFigure=[]
+        %        and can't track on first open.
+        %     2. Engines passed into the constructor (or attached via setProject)
+        %        may have already been rendered by the caller — they were never
+        %        opened "through" the companion at all.
+        %   Both cases are covered by pulling every Engines_{k}.hFigure that is
+        %   currently alive into OpenedFigures_. Dead handles are pruned first;
+        %   already-tracked handles are skipped (handle-equality dedupe).
+            obj.pruneOpenedFigures_();
+            for k = 1:numel(obj.Engines_)
+                e = obj.Engines_{k};
+                if isempty(e) || ~isvalid(e); continue; end
+                hFig = e.hFigure;
+                if isempty(hFig) || ~ishandle(hFig); continue; end
+                already = false;
+                for j = 1:numel(obj.OpenedFigures_)
+                    if obj.OpenedFigures_(j) == hFig
+                        already = true; break;
+                    end
+                end
+                if ~already
+                    obj.OpenedFigures_(end+1, 1) = hFig;
+                end
+            end
+        end
+
         function onOpenAdHocPlotRequested_(obj, ~, evt)
         %ONOPENADHOCPLOTREQUESTED_ Listener for OpenAdHocPlotRequested event.
         %   Resolves AdHocPlotEventData.TagKeys to Tag handles via Registry_,
@@ -1478,7 +1728,12 @@ classdef FastSenseCompanion < handle
                         tags{end+1} = obj.Registry_.get(keys{k}); %#ok<AGROW>
                     end
                 end
-                [~, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                [hFig, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                % S0Y-01: track the ad-hoc figure so Tile / Close all see it.
+                try
+                    obj.trackOpenedFigure_(hFig);
+                catch
+                end
                 obj.addLogEntry('info', sprintf( ...
                     'Opened ad-hoc plot: %d tag(s) [%s]', ...
                     numel(tags), char(mode)));

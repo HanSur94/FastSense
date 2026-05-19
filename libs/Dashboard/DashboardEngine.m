@@ -34,6 +34,13 @@ classdef DashboardEngine < handle
         % shift down by BannerHeight. Single source of truth for the banner
         % strip height (260508-jyh).
         BannerHeight  = 0.035
+        % 260513-snt — EventStore handle for manual-event creation via the
+        % per-FastSenseWidget '+Event' button. Defaults []; lazily
+        % auto-discovered from any EventTimelineWidget exposing
+        % EventStoreObj on the dashboard the first time the dialog is
+        % opened. Runtime handle only — NOT written through
+        % DashboardSerializer; serialized dashboards round-trip unchanged.
+        EventStore    = []
     end
 
     properties (SetAccess = private)
@@ -70,7 +77,10 @@ classdef DashboardEngine < handle
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
         ResizeDebounceTimer = []   % MATLAB timer for coalescing rapid resize events (260513-q7w)
         ResizeFinalRedrawTimer = [] % Longer-period backstop timer: unconditional rerenderWidgets after resize fully settles (260513-q7w fu)
-        IsRerendering_ = false   % true while rerenderWidgets is in flight — suppresses spurious resize-timer scheduling that the panel teardown/recreate cascade would otherwise trigger (260513-q7w fu2)
+        % 260513-q7w fu2: true while rerenderWidgets is in flight — suppresses
+        % spurious resize-timer scheduling that the panel teardown/recreate
+        % cascade would otherwise trigger.
+        IsRerendering_ = false
         TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
         % [tStart tEnd] cache of most recent broadcast (260508-llw); used by
         % switchPage to re-apply the current synced window to widgets that
@@ -422,6 +432,8 @@ classdef DashboardEngine < handle
             obj.Layout.ContentArea = [0, effTimeH, ...
                 1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % 260513-snt — wire the per-FastSenseWidget '+Event' button.
+            obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
             obj.Layout.ensureViewport(obj.hFigure, themeStruct);
@@ -1340,6 +1352,8 @@ classdef DashboardEngine < handle
             obj.Progress_ = [];
             % Re-wire detach callback after panel recreation (Pitfall 3 in RESEARCH.md)
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % 260513-snt — re-wire Create-Event callback for the same reason.
+            obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
         end
 
         function updateGlobalTimeRange(obj)
@@ -2002,10 +2016,13 @@ classdef DashboardEngine < handle
                 return;
             end
             ws = obj.activePageWidgets();
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
             % --- Pass 1: cheap data re-push ---
             for i = 1:numel(ws)
                 w = ws{i};
-                if isempty(w) || ~isvalid(w)
+                % Octave 7+ has no isvalid() for classdef handles, so treat
+                % as valid there and rely on downstream guards / try-catch.
+                if isempty(w) || (~isOctave && ~isvalid(w))
                     continue;
                 end
                 if ~w.Realized || isempty(w.hPanel) || ~ishandle(w.hPanel)
@@ -2028,10 +2045,10 @@ classdef DashboardEngine < handle
             stillWhite = false;
             for i = 1:numel(ws)
                 w = ws{i};
-                if isempty(w) || ~isvalid(w) || ~isa(w, 'FastSenseWidget')
+                if isempty(w) || (~isOctave && ~isvalid(w)) || ~isa(w, 'FastSenseWidget')
                     continue;
                 end
-                if isempty(w.FastSenseObj) || ~isvalid(w.FastSenseObj) || ~w.FastSenseObj.IsRendered
+                if isempty(w.FastSenseObj) || (~isOctave && ~isvalid(w.FastSenseObj)) || ~w.FastSenseObj.IsRendered
                     continue;
                 end
                 if ~obj.isWidgetLineWhite_(w)
@@ -2210,6 +2227,65 @@ classdef DashboardEngine < handle
                 ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
             end
         end
+
+        function notifyEventsChanged(obj)
+        %NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513-snt).
+        %   Called after CreateEventDialog persists a new event. Walks the
+        %   active page (recursing into GroupWidget children via
+        %   getNestedWidgets) and refreshes every EventTimelineWidget and
+        %   FastSenseWidget. Also re-aggregates the slider event-marker
+        %   overlay via computeEventMarkers and the slider preview lines via
+        %   computePreviewEnvelope so a freshly-added event becomes visible
+        %   on the slider strip without waiting for the next live tick.
+        %
+        %   Per-widget refresh() calls are wrapped in try/catch so a single
+        %   broken widget does not kill the sweep. The outer call is also
+        %   wrapped so the dialog's Save handler can swallow non-fatal
+        %   failures without leaving the dialog in a half-saved state.
+        %
+        %   Errors namespaced DashboardEngine:notifyEventsChangedFailed.
+            try
+                ws = obj.activePageWidgets();
+                flat = obj.flattenEventAwareWidgets_(ws);
+                for i = 1:numel(flat)
+                    w = flat{i};
+                    if ~isa(w, 'EventTimelineWidget') && ~isa(w, 'FastSenseWidget')
+                        continue;
+                    end
+                    if ~w.Realized, continue; end
+                    if isempty(w.hPanel) || ~ishandle(w.hPanel), continue; end
+                    try
+                        w.refresh();
+                    catch ME
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'Widget "%s" refresh failed: %s', w.Title, ME.message);
+                    end
+                end
+                % Re-aggregate slider event markers + preview lines so the
+                % new event shows up on the bottom strip. computeEventMarkers
+                % / computePreviewEnvelope are no-ops without a
+                % TimeRangeSelector, so safe to call before render too.
+                try
+                    obj.computeEventMarkers();
+                catch ME
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'computeEventMarkers failed: %s', ME.message);
+                    end
+                end
+                try
+                    obj.computePreviewEnvelope();
+                catch ME
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'computePreviewEnvelope failed: %s', ME.message);
+                    end
+                end
+            catch ME
+                warning('DashboardEngine:notifyEventsChangedFailed', ...
+                    'notifyEventsChanged failed: %s', ME.message);
+            end
+        end
     end
 
     methods (Access = private)
@@ -2343,6 +2419,108 @@ classdef DashboardEngine < handle
                 else
                     flat = [flat, obj.flattenWidgetsForPreview_(nested, depth + 1)]; %#ok<AGROW>
                 end
+            end
+        end
+
+        function flat = flattenEventAwareWidgets_(obj, widgets, depth)
+        %FLATTENEVENTAWAREWIDGETS_ Flatten widget tree for event-aware refresh sweep (260513-snt).
+        %   Mirrors flattenWidgetsForPreview_ but kept as a separate helper
+        %   for clarity at the call site — notifyEventsChanged iterates this
+        %   flat list to call refresh() on EventTimelineWidget /
+        %   FastSenseWidget instances regardless of GroupWidget nesting.
+        %   Defensive depth cap of 10 mirrors flattenWidgetsForPreview_.
+            if nargin < 3, depth = 0; end
+            flat = {};
+            if depth >= 10
+                flat = widgets;
+                return;
+            end
+            for i = 1:numel(widgets)
+                w = widgets{i};
+                nested = {};
+                try
+                    nested = w.getNestedWidgets();
+                catch
+                    nested = {};
+                end
+                if isempty(nested)
+                    flat = [flat, {w}]; %#ok<AGROW>
+                else
+                    flat = [flat, obj.flattenEventAwareWidgets_(nested, depth + 1)]; %#ok<AGROW>
+                end
+            end
+        end
+
+        function store = resolveEventStore_(obj)
+        %RESOLVEEVENTSTORE_ Return the engine's EventStore, auto-discovering it if unset (260513-snt).
+        %   Strategy: if obj.EventStore is already set, return it. Otherwise
+        %   walk obj.allPageWidgets() (recursing into GroupWidget children
+        %   via flattenEventAwareWidgets_) for the first
+        %   EventTimelineWidget with a non-empty EventStoreObj, cache that
+        %   handle onto obj.EventStore, and return it. Returns [] when
+        %   nothing was found — caller is responsible for surfacing the
+        %   no-store error to the user.
+        %
+        %   Note: when multiple EventTimelineWidgets bind different stores,
+        %   the first one walked wins. Setting engine.EventStore explicitly
+        %   is the user's escape hatch.
+            if ~isempty(obj.EventStore)
+                store = obj.EventStore;
+                return;
+            end
+            store = [];
+            ws = obj.allPageWidgets();
+            flat = obj.flattenEventAwareWidgets_(ws);
+            for i = 1:numel(flat)
+                w = flat{i};
+                if isa(w, 'EventTimelineWidget') && ~isempty(w.EventStoreObj)
+                    obj.EventStore = w.EventStoreObj;
+                    store = obj.EventStore;
+                    return;
+                end
+            end
+        end
+
+        function openCreateEventDialog_(obj, widget)
+        %OPENCREATEEVENTDIALOG_ Entry point invoked by the FastSenseWidget '+Event' button.
+        %   260513-snt shipped this as a modal dialog. 260513-v69 supersedes
+        %   that trigger with a two-click pick-on-chart flow:
+        %     1. Resolve EventStore via resolveEventStore_ (auto-discovery
+        %        from EventTimelineWidget if obj.EventStore is empty).
+        %     2. If no store: non-blocking errordlg, return.
+        %     3. Otherwise: hand off to widget.FastSenseObj.startEventPick_(obj).
+        %        The FastSense instance owns the state machine; this engine
+        %        method only gates on store availability and forwards.
+        %   The CreateEventDialog class remains importable as a programmatic
+        %   API (e.g., CreateEventDialog(widget, engine)) but is no longer the
+        %   default '+' button entry point. The persistEventStatic helper is
+        %   still the single source of truth for persistence and is reused by
+        %   FastSense.completeEventPick_.
+            try
+                if ~isa(widget, 'FastSenseWidget')
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'openCreateEventDialog_ requires a FastSenseWidget; got %s.', class(widget));
+                    return;
+                end
+                fs = widget.FastSenseObj;
+                if isempty(fs) || ~isa(fs, 'FastSense') || ~fs.IsRendered
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'FastSenseWidget has no rendered FastSense instance.');
+                    return;
+                end
+                store = obj.resolveEventStore_();
+                if isempty(store)
+                    msg = ['No EventStore is bound to this dashboard. ', ...
+                           'Set engine.EventStore = EventStore(path) ', ...
+                           'or add an EventTimelineWidget with ', ...
+                           'EventStoreObj set to enable event creation.'];
+                    errordlg(msg, 'Create Event');
+                    return;
+                end
+                fs.startEventPick_(obj);
+            catch ME
+                warning('DashboardEngine:openCreateEventDialogFailed', ...
+                    'openCreateEventDialog_ failed: %s', ME.message);
             end
         end
 

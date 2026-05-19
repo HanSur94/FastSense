@@ -1262,6 +1262,18 @@ classdef CompanionEventViewer < handle
             end
 
             obj.bringFigureToFront_(d.hFigure);
+
+            % Register with the companion so the Tile / Close all buttons treat
+            % the event-detail dashboard like any other companion-opened window.
+            % The DashboardEngine is ephemeral (not in Companion_.Engines_), so
+            % syncOpenedFigures_ won't find it on its own.
+            try
+                if ~isempty(obj.Companion_) && isvalid(obj.Companion_) && ...
+                        ismethod(obj.Companion_, 'trackOpenedFigure')
+                    obj.Companion_.trackOpenedFigure(d.hFigure);
+                end
+            catch
+            end
         end
 
         function onTableRowSelectionChanged_(obj, evt)

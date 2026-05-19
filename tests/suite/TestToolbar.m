@@ -37,8 +37,8 @@ classdef TestToolbar < matlab.unittest.TestCase
             children = get(tb.hToolbar, 'Children');
             % Buttons created in createToolbar(): cursor, crosshair, grid,
             % legend, autoscale, exportPNG, exportData, refresh, live,
-            % metadata, violations, theme = 12.
-            testCase.verifyEqual(numel(children), 12, ...
+            % follow, metadata, violations, theme = 13.
+            testCase.verifyEqual(numel(children), 13, ...
                 sprintf('testToolbarHasAllButtons: got %d', numel(children)));
         end
 

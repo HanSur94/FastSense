@@ -849,7 +849,16 @@ classdef InspectorPane < handle
                         ~isempty(obj.Orchestrator_.Theme)
                     preset = char(obj.Orchestrator_.Theme);
                 end
-                openAdHocPlot({tag}, 'LinkedGrid', preset);
+                hFig = openAdHocPlot({tag}, 'LinkedGrid', preset);
+                % Register with the orchestrator so the companion's Tile / Close all
+                % buttons treat single-tag detail plots like any other opened window.
+                try
+                    if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) && ...
+                            ismethod(obj.Orchestrator_, 'trackOpenedFigure')
+                        obj.Orchestrator_.trackOpenedFigure(hFig);
+                    end
+                catch
+                end
                 obj.log_('info', sprintf('Opened detail plot: %s', char(tag.Key)));
             catch ME
                 obj.log_('error', sprintf('Open detail failed (%s): %s', char(tag.Key), ME.message));
