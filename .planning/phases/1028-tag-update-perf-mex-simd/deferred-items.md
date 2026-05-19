@@ -114,3 +114,17 @@ The Tests workflow on commit `345667c` (plan 05's CI-unblock merge of main) show
 **Severity:** LOW for plan 05. None of these failures are caused by plan 05's Tag.invalidateBatch_ / listener-coalescing changes. The Benchmark workflow (D-08 gates + harness coalesce-on/off) is the relevant gate for plan 05 — it ran independently. plan 05's new `TestListenerCoalesceOrdering` (4 tests) ran inside the Octave Tests phase and passed (visible as `Running TestListenerCoalesceOrdering ... PASSED` in the run log; not enumerated here).
 
 **Mitigation:** Surface to user via this entry and SUMMARY.md. The eight pre-existing items are out-of-scope per the GSD scope_boundary rule. Recommended follow-up: a sweep quick task to address the Octave private-property and PostSet issues, plus update `test_toolbar` for the new button count.
+
+---
+
+## Pre-existing CI failure observed during Plan 1028-06 (NOT introduced by this plan)
+
+The Tests workflow on commit `aa92d65` (Plan 06's docs commit; identical test surface to Plan 05's last commit `345667c` plus a new `TestFsStatCoalesce` test file) shows ONE additional MATLAB-specific failure inherited from Plan 05's test seam:
+
+- `TestListenerCoalesceOrdering/testIdempotency`: errors with `MATLAB:noSuchMethodOrField` on `s1.invalidate()` (line 184). `SensorTag` does not define an `invalidate()` method — listeners (downstream `MonitorTag`/`CompositeTag`) implement `invalidate` per the contract in `SensorTag.addListener` (line 258 `if ~ismethod(m, 'invalidate')`). Octave's looser method-lookup lets the call resolve to no-op silently; MATLAB R2021b's stricter check rejects it. Pre-existing on Plan 05 (visible in Plan 05's CI run `26086360933` MATLAB Tests J-P batch); Plan 05's SUMMARY only noted Octave 4/4 success, leaving the MATLAB R2021b 4/5 (testIdempotency errors) undocumented. Plan 06 surfaces it here for honesty.
+
+`TestFsStatCoalesce` itself passes 5/5 on MATLAB R2021b (`Running TestFsStatCoalesce ..... Done` in batch E-I) — Plan 06's new test does not contribute to the Tests workflow failure.
+
+**Severity:** LOW for plan 06. The Octave Tests phase covers `TestListenerCoalesceOrdering` 4/4 (per Plan 05's confirmation), and Plan 06 introduces no new test failures. The pre-existing inherited failures and this one Plan 05-introduced MATLAB method-lookup mismatch are all eligible for a follow-up `fix:` quick task.
+
+**Recommended fix (quick task scope):** the `testIdempotency` test should trigger the cascade via the documented public API (`SensorTag.updateData()` then `Tag.invalidateBatch_({...})` end-of-tick) rather than via the non-existent-on-SensorTag `invalidate()` method. The other listener subclasses (`MonitorTag.invalidate`, `CompositeTag.invalidate`) DO exist; the test was likely written against the listener-side contract by mistake.
