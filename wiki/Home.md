@@ -10,7 +10,7 @@ Ultra-fast time series plotting for MATLAB and GNU Octave with dynamic downsampl
 |--------|-------|
 | 10M point zoom cycle | 4.7 ms (212 FPS) |
 | Point reduction | 99.96% (10M to ~4K displayed) |
-| GPU memory (10M pts) | 0.06 MB vs 153 MB for plot() |
+| GPU memory (10M pts) | 0.06 MB vs 153 MB for `plot()` |
 | Implementation | Pure MATLAB + optional C MEX (AVX2/NEON SIMD) |
 
 ## Library Components
@@ -32,7 +32,7 @@ FastPlot consists of five integrated libraries:
 - **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB
 - **Dashboard layouts** — tiled grids (FastSenseGrid) and tabbed containers (FastSenseDock)
 - **Interactive toolbar** — data cursor, crosshair, grid/legend toggle, autoscale, PNG export
-- **6 built-in themes** — default, dark, light, industrial, scientific, ocean
+- **Light and dark themes** with legacy aliases (`default`, `industrial`, `scientific`, `ocean`) for backward compatibility
 - **Linked axes** — synchronized zoom/pan across subplots
 - **Sensor system** — state-dependent thresholds with condition-based rules and violation markers
 - **Event detection** — group violations into events with statistics, Gantt viewer, click-to-plot
@@ -42,7 +42,7 @@ FastPlot consists of five integrated libraries:
 ## Quick Start
 
 ```matlab
-install;
+install;  % one-time setup (add paths, optionally compile MEX)
 
 % Basic plot with 10M points
 fp = FastSense('Theme', 'dark');
@@ -112,3 +112,10 @@ Start with the [[Installation]] guide to set up FastPlot and compile MEX acceler
 - [[Dashboard Engine Guide]] — DashboardEngine with widget-based dashboards
 - [[Datetime Guide]] — working with time series data
 - [[Examples]] — 40+ categorized runnable examples
+
+## See Also
+
+- [[Architecture]] — internal design and data flow
+- [[MEX Acceleration]] — SIMD compilation and performance tuning
+- [[Performance]] — benchmark methodology and results
+- [[Use Case: Multi-Sensor Shared Threshold]] — advanced sensor configuration
