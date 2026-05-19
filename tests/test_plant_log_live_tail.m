@@ -377,6 +377,11 @@ function n = test_start_stop_cleanup()
     % Use Interval=5 so no real tick fires during the 0.05s pause -- avoids
     % spurious warnings about the dummy CSV path (the test goal is timer
     % lifecycle, not tick semantics).
+    if exist('OCTAVE_VERSION', 'builtin') && isempty(which('timerfindall'))
+        fprintf('  SKIP: test_start_stop_cleanup (Octave: timerfindall unavailable).\n');
+        n = 0;
+        return;
+    end
     s = PlantLogStore('x');
     m = default_mapping_();
     t = PlantLogLiveTail(s, '/tmp/dummy.csv', m, 'Interval', 5);
