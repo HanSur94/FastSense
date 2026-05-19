@@ -105,6 +105,13 @@ classdef DashboardEngine < handle
         % on every store change (so stale store-handle closures cannot
         % survive a store swap), on store-detach, and in delete().
         PlantLogSliderHover_      = []  % PlantLogSliderHover handle (or [])
+        % Phase 1033 PLOG-INT-01/04: serializer read-through state.
+        % Populated by attachPlantLog (public API); cleared by detachPlantLog.
+        % DashboardSerializer reads these via friend access in Plan 02.
+        PlantLogSourcePath_       = ''  % char -- source file path passed to attachPlantLog
+        PlantLogMapping_          = []  % struct (CONTEXT.md JSON-schema shape) or []
+        PlantLogInterval_         = []  % numeric scalar (seconds) or []
+        PlantLogStartTail_        = []  % logical scalar or []
     end
 
     % Phase 1032 PLOG-VIZ-07: per-widget hover tooltips. Cell of
@@ -561,6 +568,243 @@ classdef DashboardEngine < handle
                 try delete(obj.SliderDebounceTimer); catch, end
                 obj.SliderDebounceTimer = [];
             end
+        end
+
+        function store = attachPlantLog(obj, filePath, varargin)
+        %ATTACHPLANTLOG Attach a plant log to this dashboard (PLOG-INT-01).
+        %   store = engine.attachPlantLog(filePath) reads filePath using
+        %   PlantLogReader.autoDetect for the column mapping, ingests every
+        %   parseable row into a new PlantLogStore, starts a PlantLogLiveTail
+        %   timer (default Interval=5s, StartTail=true), wires the slider +
+        %   per-widget overlay refresh path, and returns the store handle.
+        %
+        %   store = engine.attachPlantLog(filePath, ...
+        %       'Mapping',   struct('timestampCol','Time','messageCol','Msg',...
+        %                           'metadataCols',{{'Unit','Shift'}},'format',''), ...
+        %       'Interval',  5, ...
+        %       'StartTail', true) overrides defaults.
+        %
+        %   Re-attach is idempotent: if a store is already attached, this
+        %   method internally calls detachPlantLog() to release the prior
+        %   store + timer + overlays + hovers, then attaches the new one.
+        %   No error, no warning.
+        %
+        %   Mapping struct field names accepted (CONTEXT.md JSON-schema shape):
+        %     timestampCol, messageCol, metadataCols, format
+        %   These are translated internally into the PlantLogReader.mapping
+        %   shape (TimestampColumn, MessageColumn, TimestampFormat).
+        %
+        %   Errors raised:
+        %     DashboardEngine:invalidPlantLogOption  - bad opt name or value
+        %     PlantLogReader:*                       - propagated from reader
+        %     PlantLogStore:*                        - propagated from store
+        %
+        %   See also detachPlantLog, PlantLogReader.openInteractive, PlantLogStore.
+
+            % --- Validate filePath ---
+            if isstring(filePath); filePath = char(filePath); end
+            if ~ischar(filePath) || isempty(filePath)
+                error('PlantLogReader:invalidInput', ...
+                    'filePath must be a non-empty char/string.');
+            end
+
+            % --- Parse name-value opts (per CONTEXT.md D-02) ---
+            opts = struct('Mapping', [], 'Interval', 5, 'StartTail', true);
+            if mod(numel(varargin), 2) ~= 0
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'attachPlantLog name-value args must come in pairs; got %d.', numel(varargin));
+            end
+            validKeys = fieldnames(opts);
+            for k = 1:2:numel(varargin)
+                key = varargin{k};
+                if isstring(key); key = char(key); end
+                if ~ischar(key)
+                    error('DashboardEngine:invalidPlantLogOption', ...
+                        'Option key at position %d must be char.', k);
+                end
+                idx = find(strcmpi(validKeys, key), 1);
+                if isempty(idx)
+                    error('DashboardEngine:invalidPlantLogOption', ...
+                        'Unknown attachPlantLog option ''%s''. Valid: %s.', ...
+                        key, strjoin(validKeys, ', '));
+                end
+                opts.(validKeys{idx}) = varargin{k + 1};
+            end
+
+            % --- Validate Interval ---
+            if ~isnumeric(opts.Interval) || ~isscalar(opts.Interval) || ...
+                    ~isfinite(opts.Interval) || opts.Interval <= 0
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'Interval must be a positive finite numeric scalar (seconds).');
+            end
+
+            % --- Validate StartTail ---
+            if ~islogical(opts.StartTail) && ~isnumeric(opts.StartTail)
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'StartTail must be logical scalar.');
+            end
+            if ~isscalar(opts.StartTail)
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'StartTail must be logical scalar.');
+            end
+            startTail = logical(opts.StartTail);
+
+            % --- Idempotent re-attach: detach any prior store FIRST ---
+            % Per CONTEXT.md D-04: "first call detachPlantLog() internally
+            % to clean up the prior store + tail + listeners + overlays,
+            % then attach new. No error, no user prompt."
+            if ~isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isempty(obj.PlantLogLiveTailInternal_)
+                obj.detachPlantLog();
+            end
+
+            % --- Translate mapping from JSON-schema shape -> PlantLogReader shape ---
+            if isstruct(opts.Mapping)
+                readerMapping = obj.plantLogMappingToReaderShape_(opts.Mapping);
+            else
+                % No mapping supplied -> autoDetect
+                rawTable = readtablePortable(filePath);
+                readerMapping = PlantLogReader.autoDetect(rawTable);
+            end
+
+            % --- Ingest via headless reader ---
+            entries = PlantLogReader.openInteractive(filePath, ...
+                'Headless', true, ...
+                'Mapping',  readerMapping);
+
+            % --- Build store + populate ---
+            store = PlantLogStore(filePath);
+            if ~isempty(entries)
+                store.addEntries(entries);
+            end
+
+            % --- Persist serialization-state properties (PLOG-INT-04 prep) ---
+            % Set BEFORE setPlantLogStoreForTest_ so any tick callback that
+            % fires during wire-up sees the populated state.
+            obj.PlantLogSourcePath_ = filePath;
+            obj.PlantLogMapping_    = obj.readerMappingToJsonShape_(readerMapping);
+            obj.PlantLogInterval_   = double(opts.Interval);
+            obj.PlantLogStartTail_  = startTail;
+
+            % --- Wire slider overlay + slider hover (existing seam) ---
+            % setPlantLogStoreForTest_ tears down + rebuilds PlantLogSliderHover_
+            % and runs computePlantLogMarkers; we reuse it here so the
+            % production path goes through the same wire-up code.
+            obj.setPlantLogStoreForTest_(store);
+
+            % --- Start live tail (PLOG-LT-01..04) when requested ---
+            if startTail
+                tail = PlantLogLiveTail(store, filePath, readerMapping, ...
+                    'Interval',         opts.Interval, ...
+                    'StartImmediately', true);
+                obj.setPlantLogLiveTailForTest_(tail);   % wires PlantLogTickListener_
+            end
+
+            % --- Re-wire ShowPlantLog=true widgets so overlay/hover attach ---
+            % Per CONTEXT.md D-09: after attachPlantLog runs, the engine
+            % iterates Widgets and calls setShowPlantLog(true, engine) on
+            % every ShowPlantLog=true FastSenseWidget so the engine ref +
+            % XLim listener + hover are rewired. fromStruct alone only
+            % flips the boolean; this triggers the engine-side draw wire-up.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try
+                        w.setShowPlantLog(true, obj);
+                    catch ME
+                        warning('DashboardEngine:plantLogOverlayFailed', ...
+                            'attachPlantLog: setShowPlantLog on widget "%s" failed: %s', ...
+                            w.Title, ME.message);
+                    end
+                end
+            end
+        end
+
+        function detachPlantLog(obj)
+        %DETACHPLANTLOG Remove the attached plant log + all overlays + live tail (PLOG-INT-02).
+        %   Idempotent: calling on an engine with no plant log attached is a no-op.
+        %
+        %   Teardown order (per CONTEXT.md D-04, all guarded by isvalid checks):
+        %     1. Stop + delete the PlantLogLiveTail timer (if running).
+        %     2. Tear down the PlantLogTickListener_ (live-tail listener).
+        %     3. Clear slider overlay markers via setPlantLogStoreForTest_([])
+        %        (this also tears down the PlantLogSliderHover_).
+        %     4. Clear widget overlays via clearPlantLogOverlaysOnAllWidgets_
+        %        + tear down WidgetHovers_.
+        %     5. Null PlantLogStoreInternal_ + PlantLogLiveTailInternal_.
+        %     6. Clear PlantLogSourcePath_, PlantLogMapping_, PlantLogInterval_,
+        %        PlantLogStartTail_.
+        %
+        %   See also attachPlantLog, PlantLogStore, PlantLogLiveTail.
+
+            % Idempotent guard -- already detached, return silently after
+            % wiping any partial state from a failed attach.
+            if isempty(obj.PlantLogStoreInternal_) && isempty(obj.PlantLogLiveTailInternal_) && ...
+                    isempty(obj.PlantLogTickListener_) && isempty(obj.PlantLogSliderHover_) && ...
+                    isempty(obj.WidgetHovers_)
+                % Clear the serialization-state props in case attach failed mid-way.
+                obj.PlantLogSourcePath_ = '';
+                obj.PlantLogMapping_    = [];
+                obj.PlantLogInterval_   = [];
+                obj.PlantLogStartTail_  = [];
+                return;
+            end
+
+            % Step 1 -- stop + delete the live-tail timer.
+            if ~isempty(obj.PlantLogLiveTailInternal_)
+                try
+                    if isvalid(obj.PlantLogLiveTailInternal_)
+                        % Prefer the class's own stop(); fall back to direct delete().
+                        if ismethod(obj.PlantLogLiveTailInternal_, 'stop')
+                            try obj.PlantLogLiveTailInternal_.stop(); catch, end
+                        end
+                        try delete(obj.PlantLogLiveTailInternal_); catch, end
+                    end
+                catch
+                end
+            end
+            obj.PlantLogLiveTailInternal_ = [];
+
+            % Step 2 -- tear down the tick listener.
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+
+            % Step 3 -- clear slider overlay + tear down slider hover.
+            % setPlantLogStoreForTest_([]) tears down PlantLogSliderHover_
+            % unconditionally and runs computePlantLogMarkers which clears
+            % xlines when store is empty.
+            try obj.setPlantLogStoreForTest_([]); catch, end
+
+            % Step 4 -- clear per-widget overlays + tear down WidgetHovers_.
+            try obj.clearPlantLogOverlaysOnAllWidgets_(); catch, end
+            for i = 1:numel(obj.WidgetHovers_)
+                pair = obj.WidgetHovers_{i};
+                if iscell(pair) && numel(pair) >= 2
+                    try
+                        if isa(pair{2}, 'handle') && isvalid(pair{2})
+                            delete(pair{2});
+                        end
+                    catch
+                    end
+                end
+            end
+            obj.WidgetHovers_ = {};
+
+            % Step 5 -- null the store (already implicitly done by step 3,
+            % but the explicit null is the contract for the success criterion).
+            obj.PlantLogStoreInternal_ = [];
+
+            % Step 6 -- clear serialization-state properties.
+            obj.PlantLogSourcePath_ = '';
+            obj.PlantLogMapping_    = [];
+            obj.PlantLogInterval_   = [];
+            obj.PlantLogStartTail_  = [];
         end
 
         function save(obj, filepath)
@@ -2247,6 +2491,9 @@ classdef DashboardEngine < handle
             % Phase 1031 PLOG-VIZ-06: tear down plant-log slider hover.
             % delete() restores prior WindowButtonMotionFcn unconditionally.
             obj.teardownPlantLogSliderHover_();
+            % Phase 1033 PLOG-INT-02: full teardown of plant-log API surface
+            % (idempotent -- no-op if everything already torn down above).
+            try obj.detachPlantLog(); catch, end
         end
     end
 
@@ -3370,6 +3617,47 @@ classdef DashboardEngine < handle
             catch
             end
             obj.PlantLogSliderHover_ = [];
+        end
+
+        function readerMapping = plantLogMappingToReaderShape_(~, jsonMapping)
+        %PLANTLOGMAPPINGTOREADERSHAPE_ Convert CONTEXT.md JSON-schema mapping to PlantLogReader shape.
+        %   jsonMapping fields: timestampCol, messageCol, metadataCols, format
+        %   readerMapping fields: TimestampColumn, MessageColumn, TimestampFormat
+        %   metadataCols is informational only -- PlantLogReader infers metadata
+        %   columns as "every non-timestamp/non-message column" at read time.
+            readerMapping = struct('TimestampColumn', '', 'MessageColumn', '', 'TimestampFormat', '');
+            if isfield(jsonMapping, 'timestampCol')
+                readerMapping.TimestampColumn = char(jsonMapping.timestampCol);
+            end
+            if isfield(jsonMapping, 'messageCol')
+                readerMapping.MessageColumn = char(jsonMapping.messageCol);
+            end
+            if isfield(jsonMapping, 'format')
+                readerMapping.TimestampFormat = char(jsonMapping.format);
+            end
+            % Back-compat: accept PascalCase if caller passed reader-shape directly.
+            if isfield(jsonMapping, 'TimestampColumn')
+                readerMapping.TimestampColumn = char(jsonMapping.TimestampColumn);
+            end
+            if isfield(jsonMapping, 'MessageColumn')
+                readerMapping.MessageColumn = char(jsonMapping.MessageColumn);
+            end
+            if isfield(jsonMapping, 'TimestampFormat')
+                readerMapping.TimestampFormat = char(jsonMapping.TimestampFormat);
+            end
+        end
+
+        function jsonMapping = readerMappingToJsonShape_(~, readerMapping)
+        %READERMAPPINGTOJSONSHAPE_ Convert PlantLogReader mapping shape to JSON-schema for serialization.
+        %   metadataCols is computed from the source file at read time but
+        %   stored as a cell array on the engine -- read from a freshly
+        %   parsed file or left empty (Plan 02 serializer also persists it
+        %   as a cellstr; empty is acceptable).
+            jsonMapping = struct( ...
+                'timestampCol', readerMapping.TimestampColumn, ...
+                'messageCol',   readerMapping.MessageColumn, ...
+                'metadataCols', {{}}, ...
+                'format',       readerMapping.TimestampFormat);
         end
 
     end
