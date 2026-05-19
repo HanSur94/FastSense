@@ -191,4 +191,14 @@ Plans:
 
 ## Backlog
 
-(empty — last 5 items promoted to phases 1024-1028 on 2026-05-08)
+### Phase 999.1: Unified in-app help / user-manual / wiki system (BACKLOG)
+
+**Goal:** [Captured for future planning] Build a project-wide help system so every pane / widget / window can expose an Info button that opens a `uifigure` modal rendering markdown from `docs/help/<area>/<feature>.md`. Reuses `libs/Dashboard/MarkdownRenderer.m` and the existing Dashboard Info modal (260508-n8h). Scope includes: directory layout `docs/help/{companion,dashboard,webbridge,fastsense,sensor-threshold,event-detection}/`, index page with navigation, theme-aware rendering, search-across-docs, optional cross-link resolution, optional hooks into `scripts/generate_wiki.py`.
+
+**Source:** Quick task 260519-bs4 (Tag Status Table) — user requested an info button + markdown; on reflection we agreed a one-off button would be premature; the proper solution is its own milestone-sized piece of work.
+**Decisions to nail later:** repo location of help files (`docs/help/` vs. co-located under `libs/`); whether to ship a build-time wiki bundle or render at runtime; theming contract; how/whether to auto-generate from API docs (`scripts/generate_wiki.py` already exists).
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)

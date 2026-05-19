@@ -539,8 +539,8 @@ function assertEqual_(actual, expected, label)
     if ischar(actual) && ischar(expected) && strcmp(actual, expected)
         return;
     end
-    if isnumeric(actual) && isscalar(actual) && isnumeric(expected) && isscalar(expected) ...
-            && actual == expected
+    if isnumeric(actual) && isscalar(actual) && isnumeric(expected) && isscalar(expected) && ...
+            actual == expected
         return;
     end
     if isequal(actual, expected)

@@ -901,8 +901,8 @@ classdef FastSenseCompanion < handle
         %OPENTAGSTATUSTABLE Open or focus the singleton TagStatusTableWindow.
         %   Returns the handle so tests and external callers can drive it.
         %   Quick task 260519-bs4.
-            if ~isempty(obj.TagStatusTableWindow_) && isvalid(obj.TagStatusTableWindow_) ...
-                    && obj.TagStatusTableWindow_.IsOpen
+            if ~isempty(obj.TagStatusTableWindow_) && isvalid(obj.TagStatusTableWindow_) && ...
+                    obj.TagStatusTableWindow_.IsOpen
                 w = obj.TagStatusTableWindow_;
                 % Bring the existing classical figure to the front.
                 try
@@ -1421,8 +1421,8 @@ classdef FastSenseCompanion < handle
                         end
                         % Live log emission is intentionally scoped to Sensor /
                         % State (the existing audience for the live log).
-                        if last > 0 && (isa(tg, 'SensorTag') || isa(tg, 'StateTag')) ...
-                                && ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
+                        if last > 0 && (isa(tg, 'SensorTag') || isa(tg, 'StateTag')) && ...
+                                ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
                             obj.LiveLogPane_.addLiveLogEntry(key, delta, latestY);
                         end
                         obj.LiveSampleCount_(key) = n;
@@ -1438,9 +1438,9 @@ classdef FastSenseCompanion < handle
 
         function tf = shouldScanForStatusTable_(obj)
         %SHOULDSCANFORSTATUSTABLE_ True when a TagStatusTableWindow is attached + open.
-            tf = ~isempty(obj.TagStatusTableWindow_) ...
-                && isvalid(obj.TagStatusTableWindow_) ...
-                && obj.TagStatusTableWindow_.IsOpen;
+            tf = ~isempty(obj.TagStatusTableWindow_) && ...
+                isvalid(obj.TagStatusTableWindow_) && ...
+                obj.TagStatusTableWindow_.IsOpen;
         end
 
         function attachStatusTable_(obj, w)
