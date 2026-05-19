@@ -4077,15 +4077,15 @@ classdef DashboardEngine < handle
                     else
                         attachArgs = {};
                         if isstruct(mapping)
-                            attachArgs{end+1} = 'Mapping';      %#ok<AGROW>
-                            attachArgs{end+1} = mapping;        %#ok<AGROW>
+                            attachArgs{end+1} = 'Mapping';
+                            attachArgs{end+1} = mapping;
                         end
-                        attachArgs{end+1} = 'Interval';      %#ok<AGROW>
-                        attachArgs{end+1} = interval;        %#ok<AGROW>
-                        attachArgs{end+1} = 'StartTail';     %#ok<AGROW>
-                        attachArgs{end+1} = startTail;       %#ok<AGROW>
-                        attachArgs{end+1} = 'ContinueOnReadError'; %#ok<AGROW>
-                        attachArgs{end+1} = true;            %#ok<AGROW>
+                        attachArgs{end+1} = 'Interval';
+                        attachArgs{end+1} = interval;
+                        attachArgs{end+1} = 'StartTail';
+                        attachArgs{end+1} = startTail;
+                        attachArgs{end+1} = 'ContinueOnReadError';
+                        attachArgs{end+1} = true;
                         try
                             obj.attachPlantLog(sourcePath, attachArgs{:});
                         catch attachErr
