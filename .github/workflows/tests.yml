@@ -469,6 +469,11 @@ jobs:
           echo "=== matlab job batch ${{ matrix.batch.name }}: pre-test mksqlite diagnostic ==="
           echo "--- files on disk after artifact download ---"
           ls -la libs/FastSense/mksqlite.* 2>&1 || echo "(no mksqlite files on disk)"
+          echo "--- libs/Concurrency/ contents (v4.0 lockfile_mex check) ---"
+          ls -la libs/Concurrency/ 2>&1 || echo "(no libs/Concurrency/ dir)"
+          echo "--- repo-rooted alternative paths (if upload-artifact stripped libs/) ---"
+          ls -la Concurrency/ 2>&1 | head -5 || echo "(no Concurrency/ at workspace root)"
+          ls -la FastSense/mksqlite.* 2>&1 | head -5 || echo "(no FastSense/ at workspace root)"
 
       - name: MATLAB which-mksqlite check
         if: always()
