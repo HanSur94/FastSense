@@ -21,6 +21,7 @@ classdef FastSenseWidget < DashboardWidget
         ShowThresholdLabels = false % show inline name labels on threshold lines
         ShowEventMarkers    = false % Phase 1012 — toggle event round-marker overlay
         EventStore          = []    % Phase 1012 — EventStore handle forwarded to inner FastSense
+        ShowPlantLog        = false % Phase 1032 PLOG-VIZ-03 — opt-in per-widget plant-log vertical-line overlay
         % Forwarded to FastSense.LiveViewMode on render:
         %   'preserve' — DEFAULT (260513-ovt). Frozen at the initial X
         %                range: live ticks append data without changing
@@ -79,6 +80,16 @@ classdef FastSenseWidget < DashboardWidget
         LastEventSeverity_ = []    % Phase 1012 — numeric array parallel to LastEventIds_
         PreviewCache_      = []    % 260508-das — cached getPreviewSeries result
         PreviewCacheKey_   = []    % [numel(x), x(1), x(end), nBucketsEff] sentinel
+    end
+
+    % Phase 1032 — XLim listener slot. Public READ (tests + engine
+    % observe); WRITE via the Hidden setPlantLogXLimListenerForEngine_
+    % setter just below. Plain SetAccess = private avoids the
+    % friend-access classdef syntax that Octave's parser is fussy with
+    % (mirrors the FastSenseDataStore Octave-safe idiom — Hidden over
+    % {?ClassName}).
+    properties (SetAccess = private)
+        PlantLogXLimListener_ = [] % Phase 1032 — addlistener handle for XLim PostSet refresh; non-empty when ShowPlantLog=true and widget is rendered
     end
 
     properties (Access = private, Constant)
@@ -368,6 +379,137 @@ classdef FastSenseWidget < DashboardWidget
                     warning('FastSenseWidget:eventMarkerToggleFailed', ...
                         'Failed to toggle event markers: %s', ME.message);
                 end
+            end
+        end
+
+        % Phase 1032 PLOG-VIZ-04
+        function setPlantLogMarkers(obj, times, entries) %#ok<INUSD>
+            %SETPLANTLOGMARKERS Draw or clear per-widget plant-log vertical lines.
+            %   Phase 1032 PLOG-VIZ-04. Draws one xline per finite timestamp
+            %   on the widget's inner FastSense axes (Tag = 'WidgetPlantLogMarker',
+            %   1 px solid line with theme.MarkerPlantLog color, default
+            %   [0 0 0]). Empty / no-arg input clears every existing marker
+            %   via tag-based delete. Non-finite timestamps are silently
+            %   dropped (mirrors TimeRangeSelector.setPlantLogMarkers shape).
+            %
+            %   `entries` is currently unused at the draw layer (hover
+            %   lookup goes through the live store, not this snapshot —
+            %   see Plan 02). Accepted in the signature for forward-compat
+            %   with the engine's refresh helper call site and the Plan 02
+            %   hover wiring.
+            %
+            %   Z-order: after drawing, plant-log lines are pushed to the
+            %   BOTTOM (above sensor trace via FastSense draw-order, below
+            %   any FastSenseEventMarker which is re-stacked to the top).
+            %   Net stack: sensor trace (back) -> plant-log lines (middle)
+            %   -> event badges (front).
+            %
+            %   On failure, fires the namespaced warning
+            %   FastSenseWidget:plantLogToggleFailed (mirrors the
+            %   setEventMarkersVisible error-handling style) and returns.
+            try
+                if isempty(obj.FastSenseObj) || ...
+                        ~isa(obj.FastSenseObj, 'FastSense') || ...
+                        ~obj.FastSenseObj.IsRendered
+                    return;
+                end
+                ax = obj.FastSenseObj.hAxes;
+                if isempty(ax) || ~ishandle(ax)
+                    return;
+                end
+                % Tag-based delete of stale markers (mirrors FastSense
+                % renderEventLayer_'s FastSenseEventMarker pattern).
+                delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker'));
+                if nargin < 2 || isempty(times)
+                    return;
+                end
+                times = times(:).';
+                times = times(isfinite(times));
+                if isempty(times)
+                    return;
+                end
+                % Resolve marker color from theme; default black per
+                % CONTEXT.md decision C ("crisp dividers, not subtle
+                % highlights" — full opacity, no dashing).
+                theme = obj.getTheme();
+                markerColor = [0 0 0];
+                if isstruct(theme) && isfield(theme, 'MarkerPlantLog')
+                    markerColor = theme.MarkerPlantLog;
+                end
+                % Draw one xline per timestamp. HitTest='on' +
+                % PickableParts='all' so Plan 02's hover helper can pick
+                % the line.
+                for i = 1:numel(times)
+                    xline(ax, times(i), '-', ...
+                        'Color', markerColor, ...
+                        'LineWidth', 1, ...
+                        'Tag', 'WidgetPlantLogMarker', ...
+                        'HitTest', 'on', ...
+                        'PickableParts', 'all');
+                end
+                % Z-order: send plant-log lines below event badges (CONTEXT
+                % decision H). uistack('bottom') puts them behind everything
+                % drawn afterwards; explicit uistack('top') on
+                % FastSenseEventMarker keeps badges visible above plant-log
+                % lines for every (entry, badge) crossing.
+                h = findobj(ax, 'Tag', 'WidgetPlantLogMarker');
+                if ~isempty(h)
+                    uistack(h, 'bottom');
+                    evt = findobj(ax, 'Tag', 'FastSenseEventMarker');
+                    if ~isempty(evt)
+                        uistack(evt, 'top');
+                    end
+                end
+            catch ME
+                warning('FastSenseWidget:plantLogToggleFailed', ...
+                    'setPlantLogMarkers failed: %s', ME.message);
+            end
+        end
+
+        % Hidden — DashboardEngine writes PlantLogXLimListener_ via this
+        % seam since the property is SetAccess=private. Hidden methods
+        % are callable from anywhere (Octave-safe idiom from
+        % FastSenseDataStore). The listener handle is opaque to the
+        % widget; the engine owns its lifecycle.
+        function setPlantLogXLimListenerForEngine_(obj, lis)
+            obj.PlantLogXLimListener_ = lis;
+        end
+
+        function setShowPlantLog(obj, tf, engine)
+        %SETSHOWPLANTLOG Toggle the per-widget plant-log overlay (Phase 1032 PLOG-VIZ-03).
+        %   tf     — boolean; true enables overlay + attaches XLim listener,
+        %            false disables overlay + tears down listener + clears markers.
+        %   engine — DashboardEngine handle; required so refresh + listener
+        %            wiring can route through engine.refreshPlantLogOverlayForWidget_
+        %            and engine.attachPlantLogXLimListener_.
+        %
+        %   On failure, ShowPlantLog is REVERTED to its prior value and a
+        %   non-blocking warning fires with namespace
+        %   FastSenseWidget:plantLogToggleFailed (matches existing
+        %   setEventMarkersVisible error-handling style).
+            priorState = obj.ShowPlantLog;
+            try
+                if isempty(engine) || ~isa(engine, 'DashboardEngine')
+                    error('FastSenseWidget:plantLogToggleFailed', ...
+                        'engine must be a DashboardEngine handle.');
+                end
+                obj.ShowPlantLog = logical(tf);
+                if obj.ShowPlantLog
+                    engine.attachPlantLogXLimListener_(obj);
+                    engine.refreshPlantLogOverlayForWidget_(obj);
+                    engine.attachPlantLogWidgetHover_(obj);  % Phase 1032 PLOG-VIZ-07
+                else
+                    if ~isempty(obj.PlantLogXLimListener_)
+                        try delete(obj.PlantLogXLimListener_); catch, end
+                        obj.PlantLogXLimListener_ = [];
+                    end
+                    engine.detachPlantLogWidgetHover_(obj);  % Phase 1032 PLOG-VIZ-07
+                    obj.setPlantLogMarkers([], []);  % clear without engine round-trip
+                end
+            catch ME
+                obj.ShowPlantLog = priorState;
+                warning('FastSenseWidget:plantLogToggleFailed', ...
+                    'setShowPlantLog(%s) failed: %s', mat2str(logical(tf)), ME.message);
             end
         end
 
@@ -989,7 +1131,8 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.YLimits), s.yLimits = obj.YLimits; end
             if obj.ShowThresholdLabels, s.showThresholdLabels = true; end
             if obj.ShowEventMarkers, s.showEventMarkers = true; end
-            % Emit yLimitMode only when non-default so pre-260513-sfp JSON
+            if obj.ShowPlantLog, s.showPlantLog = true; end  % v3.1 Phase 1032 PLOG-VIZ-03
+            % v4.0 — emit yLimitMode only when non-default so pre-260513-sfp JSON
             % stays byte-identical (keeps diffs invisible for old
             % dashboards that never opted into a mode).
             if ~strcmp(obj.YLimitMode, 'auto-visible')
@@ -1009,6 +1152,12 @@ classdef FastSenseWidget < DashboardWidget
         end
 
         function delete(obj)
+            % Phase 1032 — release XLim PostSet listener before FastSenseObj
+            % teardown deletes the axes the listener is bound to.
+            if ~isempty(obj.PlantLogXLimListener_)
+                try delete(obj.PlantLogXLimListener_); catch, end
+                obj.PlantLogXLimListener_ = [];
+            end
             % Explicitly stop FastSense timers (hRefineTimer, LiveTimer,
             % DeferredTimer) before the base-class delete() destroys hPanel.
             % Without this, an errored singleShot hRefineTimer can survive
@@ -1330,7 +1479,10 @@ classdef FastSenseWidget < DashboardWidget
             if isfield(s, 'showEventMarkers')
                 obj.ShowEventMarkers = s.showEventMarkers;
             end
-            % 260513-sfp — restore YLimitMode if serialized. Absent means
+            if isfield(s, 'showPlantLog')  % v3.1 Phase 1032 PLOG-VIZ-03
+                obj.ShowPlantLog = s.showPlantLog;
+            end
+            % v4.0 260513-sfp — restore YLimitMode if serialized. Absent means
             % "legacy dashboard, default to 'auto-visible'" so behaviour
             % is byte-identical for old configs.
             if isfield(s, 'yLimitMode')

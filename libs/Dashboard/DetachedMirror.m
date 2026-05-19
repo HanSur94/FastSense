@@ -268,6 +268,15 @@ classdef DetachedMirror < handle
             if isprop(cloned, 'EventStore') && ~isempty(original.EventStore)
                 cloned.EventStore = original.EventStore;
             end
+            % Phase 1032 PLOG-VIZ-03 — copy ShowPlantLog boolean from original
+            % to clone. toStruct/fromStruct round-trip (Plan 01) already
+            % preserves the key, but this explicit copy is a belt-and-
+            % suspenders so an accidental future regression in serialization
+            % doesn't silently break detach parity (CONTEXT.md Decision G).
+            if isa(cloned, 'FastSenseWidget') && isa(original, 'FastSenseWidget') && ...
+                    isprop(original, 'ShowPlantLog')
+                cloned.ShowPlantLog = original.ShowPlantLog;
+            end
         end
 
         function s = stripSensorRefs(s)

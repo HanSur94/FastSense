@@ -67,6 +67,7 @@ function d = getDashboardDefaults(preset)
             d.GroupBorderColor    = [0.25 0.30 0.40];
             d.TabActiveBg         = [0.16 0.22 0.34];
             d.TabInactiveBg       = [0.10 0.12 0.18];
+            d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
         otherwise % 'light' (also: legacy aliases default/industrial/scientific/ocean)
             d.DashboardBackground = [0.96 0.96 0.97];
             d.WidgetBackground    = [1.00 1.00 1.00];
@@ -81,6 +82,7 @@ function d = getDashboardDefaults(preset)
             d.GroupBorderColor    = [0.80 0.82 0.85];
             d.TabActiveBg         = [0.90 0.92 0.95];
             d.TabInactiveBg       = [0.82 0.84 0.88];
+            d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
     end
 
     % Axis label/tick color — derive from toolbar font (readable on widget bg)

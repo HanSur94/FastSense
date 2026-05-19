@@ -102,6 +102,47 @@ classdef DashboardEngine < handle
         EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
         PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
         FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
+        % Phase 1031 PLOG-VIZ-01..09: plant-log slider overlay test seam.
+        % These three properties are the temporary integration point used by
+        % setPlantLogStoreForTest_ / setPlantLogLiveTailForTest_; Phase 1033
+        % will replace the seam with the public attachPlantLog/detachPlantLog API.
+        PlantLogStoreInternal_    = []  % PlantLogStore handle (or [])
+        PlantLogLiveTailInternal_ = []  % PlantLogLiveTail handle (or [])
+        PlantLogTickListener_     = []  % addlistener handle for PlantLogLiveTail.PlantLogTailTick
+        % Phase 1031 PLOG-VIZ-06: hover tooltip on plant-log slider markers.
+        % Lazily constructed in setPlantLogStoreForTest_ when a non-empty
+        % store is attached AND TimeRangeSelector_ is rendered. Torn down
+        % on every store change (so stale store-handle closures cannot
+        % survive a store swap), on store-detach, and in delete().
+        PlantLogSliderHover_      = []  % PlantLogSliderHover handle (or [])
+        % Phase 1033 PLOG-INT-01/04: serializer read-through state.
+        % Populated by attachPlantLog (public API); cleared by detachPlantLog.
+        % DashboardSerializer reads these via friend access in Plan 02.
+        PlantLogSourcePath_       = ''  % char -- source file path passed to attachPlantLog
+        PlantLogMapping_          = []  % struct (CONTEXT.md JSON-schema shape) or []
+        PlantLogInterval_         = []  % numeric scalar (seconds) or []
+        PlantLogStartTail_        = []  % logical scalar or []
+    end
+
+    % Phase 1032 PLOG-VIZ-07: per-widget hover tooltips. Cell of
+    % {widget, PlantLogWidgetHover} pairs. Lazily populated in
+    % attachPlantLogWidgetHover_ when widget.setShowPlantLog(true, engine)
+    % runs against a widget whose engine has a store attached. Torn down
+    % by detachPlantLogWidgetHover_ on setShowPlantLog(false, engine) AND
+    % in delete() BEFORE the TRS teardown (matching the Phase 1031
+    % hover-before-selector ordering rule).
+    %
+    % Public READ + restricted WRITE: tests + downstream consumers can
+    % observe attached hovers, but only the engine itself + FastSenseWidget
+    % (via the friend access list) can mutate the cell.
+    % SetAccess limited to engine + widget. Tests that need direct
+    % mutation use the existing setPlantLogStoreForTest_ /
+    % setPlantLogLiveTailForTest_ hooks (Hidden, Octave-safe).
+    % matlab.unittest.TestCase is intentionally NOT listed because
+    % Octave has no matlab.unittest namespace and the classdef would
+    % fail to parse entirely.
+    properties (SetAccess = {?DashboardEngine, ?FastSenseWidget})
+        WidgetHovers_             = {}
     end
 
     methods (Access = public)
@@ -119,6 +160,7 @@ classdef DashboardEngine < handle
                 obj.(key) = varargin{k+1};
             end
             obj.Layout = DashboardLayout();
+            obj.Layout.EngineRef = obj;  % Phase 1032 PLOG-VIZ-05 — used by addPlantLogToggle callback
             obj.WidgetTypeMap_ = containers.Map({ ...
                 'fastsense',   'number',     'status',    'text', ...
                 'gauge',       'table',      'rawaxes',   'timeline', ...
@@ -155,6 +197,10 @@ classdef DashboardEngine < handle
             try obj.computeEventMarkers();    catch err
                 if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
             end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function setEventMarkersVisible(obj, tf)
@@ -186,6 +232,10 @@ classdef DashboardEngine < handle
             % reflected in the time-panel track too (260508 follow-up).
             try obj.computeEventMarkers(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
         end
 
@@ -298,6 +348,10 @@ classdef DashboardEngine < handle
             end
             try obj.computeEventMarkers();    catch err
                 if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
         end
 
@@ -534,6 +588,304 @@ classdef DashboardEngine < handle
             end
         end
 
+        function store = attachPlantLog(obj, filePath, varargin)
+        %ATTACHPLANTLOG Attach a plant log to this dashboard (PLOG-INT-01).
+        %   store = engine.attachPlantLog(filePath) reads filePath using
+        %   PlantLogReader.autoDetect for the column mapping, ingests every
+        %   parseable row into a new PlantLogStore, starts a PlantLogLiveTail
+        %   timer (default Interval=5s, StartTail=true), wires the slider +
+        %   per-widget overlay refresh path, and returns the store handle.
+        %
+        %   store = engine.attachPlantLog(filePath, ...
+        %       'Mapping',   struct('timestampCol','Time','messageCol','Msg',...
+        %                           'metadataCols',{{'Unit','Shift'}},'format',''), ...
+        %       'Interval',  5, ...
+        %       'StartTail', true) overrides defaults.
+        %
+        %   Re-attach is idempotent: if a store is already attached, this
+        %   method internally calls detachPlantLog() to release the prior
+        %   store + timer + overlays + hovers, then attaches the new one.
+        %   No error, no warning.
+        %
+        %   Mapping struct field names accepted (CONTEXT.md JSON-schema shape):
+        %     timestampCol, messageCol, metadataCols, format
+        %   These are translated internally into the PlantLogReader.mapping
+        %   shape (TimestampColumn, MessageColumn, TimestampFormat).
+        %
+        %   Errors raised:
+        %     DashboardEngine:invalidPlantLogOption  - bad opt name or value
+        %     PlantLogReader:*                       - propagated from reader
+        %     PlantLogStore:*                        - propagated from store
+        %
+        %   See also detachPlantLog, PlantLogReader.openInteractive, PlantLogStore.
+
+            % --- Validate filePath ---
+            if isstring(filePath); filePath = char(filePath); end
+            if ~ischar(filePath) || isempty(filePath)
+                error('PlantLogReader:invalidInput', ...
+                    'filePath must be a non-empty char/string.');
+            end
+
+            % --- Parse name-value opts (per CONTEXT.md D-02) ---
+            % Hidden opt ContinueOnReadError (default false): when true,
+            % PlantLogReader:fileNotFound + PlantLogReader:unknownColumn +
+            % PlantLogReader:readError are caught and re-emitted as the
+            % three new namespaced warnings instead of propagating. Used
+            % exclusively by DashboardEngine.load to honour the
+            % CONTEXT.md D-12 "degrade-to-warning" load-failure contract.
+            opts = struct('Mapping', [], 'Interval', 5, 'StartTail', true, ...
+                          'ContinueOnReadError', false);
+            if mod(numel(varargin), 2) ~= 0
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'attachPlantLog name-value args must come in pairs; got %d.', numel(varargin));
+            end
+            validKeys = fieldnames(opts);
+            for k = 1:2:numel(varargin)
+                key = varargin{k};
+                if isstring(key); key = char(key); end
+                if ~ischar(key)
+                    error('DashboardEngine:invalidPlantLogOption', ...
+                        'Option key at position %d must be char.', k);
+                end
+                idx = find(strcmpi(validKeys, key), 1);
+                if isempty(idx)
+                    error('DashboardEngine:invalidPlantLogOption', ...
+                        'Unknown attachPlantLog option ''%s''. Valid: %s.', ...
+                        key, strjoin(validKeys, ', '));
+                end
+                opts.(validKeys{idx}) = varargin{k + 1};
+            end
+
+            % --- Validate Interval ---
+            if ~isnumeric(opts.Interval) || ~isscalar(opts.Interval) || ...
+                    ~isfinite(opts.Interval) || opts.Interval <= 0
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'Interval must be a positive finite numeric scalar (seconds).');
+            end
+
+            % --- Validate StartTail ---
+            if ~islogical(opts.StartTail) && ~isnumeric(opts.StartTail)
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'StartTail must be logical scalar.');
+            end
+            if ~isscalar(opts.StartTail)
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'StartTail must be logical scalar.');
+            end
+            startTail = logical(opts.StartTail);
+
+            % --- Idempotent re-attach: detach any prior store FIRST ---
+            % Per CONTEXT.md D-04: "first call detachPlantLog() internally
+            % to clean up the prior store + tail + listeners + overlays,
+            % then attach new. No error, no user prompt."
+            if ~isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isempty(obj.PlantLogLiveTailInternal_)
+                obj.detachPlantLog();
+            end
+
+            % --- Translate mapping from JSON-schema shape -> PlantLogReader shape ---
+            if isstruct(opts.Mapping)
+                readerMapping = obj.plantLogMappingToReaderShape_(opts.Mapping);
+            else
+                % No mapping supplied -> autoDetect via the public helper
+                % (DashboardEngine cannot reach libs/PlantLog/private, so
+                % PlantLogReader.autoDetectFromFile is the integration point).
+                try
+                    readerMapping = PlantLogReader.autoDetectFromFile(filePath);
+                catch autoME
+                    if opts.ContinueOnReadError
+                        [recovered, store] = obj.surfacePlantLogLoadFailure_(autoME, filePath);
+                        if ~recovered, return; end
+                        % If recovery succeeded inside surfacePlantLogLoadFailure_,
+                        % store is set and we should NOT continue with the
+                        % normal attach path. surfacePlantLogLoadFailure_
+                        % returns recovered=false for fileNotFound /
+                        % readError; recovered=true with store=[] never
+                        % happens (it always returns store=[] when
+                        % recovered=false). Defensive return below.
+                        return;
+                    else
+                        rethrow(autoME);
+                    end
+                end
+            end
+
+            % --- Ingest via headless reader ---
+            try
+                entries = PlantLogReader.openInteractive(filePath, ...
+                    'Headless', true, ...
+                    'Mapping',  readerMapping);
+            catch readME
+                if opts.ContinueOnReadError
+                    if strcmp(readME.identifier, 'PlantLogReader:unknownColumn')
+                        % Mapping mismatch -- re-run autoDetect, warn, retry once.
+                        try
+                            newMapping = PlantLogReader.autoDetectFromFile(filePath);
+                            warning('DashboardEngine:plantLogMappingMismatch', ...
+                                ['Saved plant-log mapping (timestamp=%s, ' ...
+                                 'message=%s) no longer matches file columns; ' ...
+                                 'using auto-detected mapping (timestamp=%s, ' ...
+                                 'message=%s) instead.'], ...
+                                readerMapping.TimestampColumn, readerMapping.MessageColumn, ...
+                                newMapping.TimestampColumn, newMapping.MessageColumn);
+                            readerMapping = newMapping;
+                            entries = PlantLogReader.openInteractive(filePath, ...
+                                'Headless', true, ...
+                                'Mapping',  readerMapping);
+                        catch retryME
+                            warning('DashboardEngine:plantLogReadFailed', ...
+                                ['Saved plant-log re-import failed after ' ...
+                                 'mapping-mismatch recovery: %s; ' ...
+                                 'dashboard loaded without overlay.'], ...
+                                retryME.message);
+                            store = [];
+                            return;
+                        end
+                    else
+                        [~, ~] = obj.surfacePlantLogLoadFailure_(readME, filePath);
+                        store = [];
+                        return;
+                    end
+                else
+                    rethrow(readME);
+                end
+            end
+
+            % --- Build store + populate ---
+            store = PlantLogStore(filePath);
+            if ~isempty(entries)
+                store.addEntries(entries);
+            end
+
+            % --- Persist serialization-state properties (PLOG-INT-04 prep) ---
+            % Set BEFORE setPlantLogStoreForTest_ so any tick callback that
+            % fires during wire-up sees the populated state.
+            obj.PlantLogSourcePath_ = filePath;
+            obj.PlantLogMapping_    = obj.readerMappingToJsonShape_(readerMapping);
+            obj.PlantLogInterval_   = double(opts.Interval);
+            obj.PlantLogStartTail_  = startTail;
+
+            % --- Wire slider overlay + slider hover (existing seam) ---
+            % setPlantLogStoreForTest_ tears down + rebuilds PlantLogSliderHover_
+            % and runs computePlantLogMarkers; we reuse it here so the
+            % production path goes through the same wire-up code.
+            obj.setPlantLogStoreForTest_(store);
+
+            % --- Start live tail (PLOG-LT-01..04) when requested ---
+            if startTail
+                tail = PlantLogLiveTail(store, filePath, readerMapping, ...
+                    'Interval',         opts.Interval, ...
+                    'StartImmediately', true);
+                obj.setPlantLogLiveTailForTest_(tail);   % wires PlantLogTickListener_
+            end
+
+            % --- Re-wire ShowPlantLog=true widgets so overlay/hover attach ---
+            % Per CONTEXT.md D-09: after attachPlantLog runs, the engine
+            % iterates Widgets and calls setShowPlantLog(true, engine) on
+            % every ShowPlantLog=true FastSenseWidget so the engine ref +
+            % XLim listener + hover are rewired. fromStruct alone only
+            % flips the boolean; this triggers the engine-side draw wire-up.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try
+                        w.setShowPlantLog(true, obj);
+                    catch ME
+                        warning('DashboardEngine:plantLogOverlayFailed', ...
+                            'attachPlantLog: setShowPlantLog on widget "%s" failed: %s', ...
+                            w.Title, ME.message);
+                    end
+                end
+            end
+        end
+
+        function detachPlantLog(obj)
+        %DETACHPLANTLOG Remove the attached plant log + all overlays + live tail (PLOG-INT-02).
+        %   Idempotent: calling on an engine with no plant log attached is a no-op.
+        %
+        %   Teardown order (per CONTEXT.md D-04, all guarded by isvalid checks):
+        %     1. Stop + delete the PlantLogLiveTail timer (if running).
+        %     2. Tear down the PlantLogTickListener_ (live-tail listener).
+        %     3. Clear slider overlay markers via setPlantLogStoreForTest_([])
+        %        (this also tears down the PlantLogSliderHover_).
+        %     4. Clear widget overlays via clearPlantLogOverlaysOnAllWidgets_
+        %        + tear down WidgetHovers_.
+        %     5. Null PlantLogStoreInternal_ + PlantLogLiveTailInternal_.
+        %     6. Clear PlantLogSourcePath_, PlantLogMapping_, PlantLogInterval_,
+        %        PlantLogStartTail_.
+        %
+        %   See also attachPlantLog, PlantLogStore, PlantLogLiveTail.
+
+            % Idempotent guard -- already detached, return silently after
+            % wiping any partial state from a failed attach.
+            if isempty(obj.PlantLogStoreInternal_) && isempty(obj.PlantLogLiveTailInternal_) && ...
+                    isempty(obj.PlantLogTickListener_) && isempty(obj.PlantLogSliderHover_) && ...
+                    isempty(obj.WidgetHovers_)
+                % Clear the serialization-state props in case attach failed mid-way.
+                obj.PlantLogSourcePath_ = '';
+                obj.PlantLogMapping_    = [];
+                obj.PlantLogInterval_   = [];
+                obj.PlantLogStartTail_  = [];
+                return;
+            end
+
+            % Step 1 -- stop + delete the live-tail timer.
+            if ~isempty(obj.PlantLogLiveTailInternal_)
+                try
+                    if isvalid(obj.PlantLogLiveTailInternal_)
+                        % Prefer the class's own stop(); fall back to direct delete().
+                        if ismethod(obj.PlantLogLiveTailInternal_, 'stop')
+                            try obj.PlantLogLiveTailInternal_.stop(); catch, end
+                        end
+                        try delete(obj.PlantLogLiveTailInternal_); catch, end
+                    end
+                catch
+                end
+            end
+            obj.PlantLogLiveTailInternal_ = [];
+
+            % Step 2 -- tear down the tick listener.
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+
+            % Step 3 -- clear slider overlay + tear down slider hover.
+            % setPlantLogStoreForTest_([]) tears down PlantLogSliderHover_
+            % unconditionally and runs computePlantLogMarkers which clears
+            % xlines when store is empty.
+            try obj.setPlantLogStoreForTest_([]); catch, end
+
+            % Step 4 -- clear per-widget overlays + tear down WidgetHovers_.
+            try obj.clearPlantLogOverlaysOnAllWidgets_(); catch, end
+            for i = 1:numel(obj.WidgetHovers_)
+                pair = obj.WidgetHovers_{i};
+                if iscell(pair) && numel(pair) >= 2
+                    try
+                        if isa(pair{2}, 'handle') && isvalid(pair{2})
+                            delete(pair{2});
+                        end
+                    catch
+                    end
+                end
+            end
+            obj.WidgetHovers_ = {};
+
+            % Step 5 -- null the store (already implicitly done by step 3,
+            % but the explicit null is the contract for the success criterion).
+            obj.PlantLogStoreInternal_ = [];
+
+            % Step 6 -- clear serialization-state properties.
+            obj.PlantLogSourcePath_ = '';
+            obj.PlantLogMapping_    = [];
+            obj.PlantLogInterval_   = [];
+            obj.PlantLogStartTail_  = [];
+        end
+
         function save(obj, filepath)
             [~, ~, ext] = fileparts(filepath);
             isMultiPage = numel(obj.Pages) > 1;
@@ -543,6 +895,7 @@ classdef DashboardEngine < handle
                 activePageName = obj.Pages{obj.ActivePage}.Name;
                 cfg = DashboardSerializer.widgetsPagesToConfig( ...
                     obj.Name, obj.Theme, obj.LiveInterval, obj.Pages, activePageName, obj.InfoFile);
+                cfg = obj.stampPlantLogIntoConfig_(cfg);   % Phase 1033 PLOG-INT-04
                 if strcmp(ext, '.json')
                     DashboardSerializer.saveJSON(cfg, filepath);
                 else
@@ -556,6 +909,7 @@ classdef DashboardEngine < handle
                     cfg = DashboardSerializer.widgetsToConfig( ...
                         obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
                 end
+                cfg = obj.stampPlantLogIntoConfig_(cfg);   % Phase 1033 PLOG-INT-04
                 if strcmp(ext, '.json')
                     DashboardSerializer.saveJSON(cfg, filepath);
                 else
@@ -563,6 +917,47 @@ classdef DashboardEngine < handle
                 end
             end
             obj.FilePath = filepath;
+        end
+
+        function cfg = stampPlantLogIntoConfig_(obj, cfg)
+        %STAMPPLANTLOGINTOCONFIG_ Phase 1033 PLOG-INT-04: add plantLog key when attached.
+        %   When no plant log is attached, cfg is returned unchanged
+        %   (omit-when-empty contract -- byte-identical back-compat for
+        %   v1.0-v3.0 dashboards).
+        %
+        %   Also skipped when only the test seam (setPlantLogStoreForTest_)
+        %   populated the store -- that path does not set PlantLogSourcePath_
+        %   and is by design NOT serialized.
+            if isempty(obj.PlantLogStoreInternal_)
+                return;
+            end
+            if isempty(obj.PlantLogSourcePath_)
+                % Test-seam injection (setPlantLogStoreForTest_) did not
+                % populate SourcePath_ -- that path is NOT serialized.
+                return;
+            end
+            pl = struct();
+            pl.sourcePath = obj.PlantLogSourcePath_;
+            if isstruct(obj.PlantLogMapping_)
+                pl.mapping = obj.PlantLogMapping_;
+            else
+                pl.mapping = struct( ...
+                    'timestampCol', '', ...
+                    'messageCol',   '', ...
+                    'metadataCols', {{}}, ...
+                    'format',       '');
+            end
+            if isempty(obj.PlantLogInterval_)
+                pl.interval = 5;
+            else
+                pl.interval = double(obj.PlantLogInterval_);
+            end
+            if isempty(obj.PlantLogStartTail_)
+                pl.startTail = true;
+            else
+                pl.startTail = logical(obj.PlantLogStartTail_);
+            end
+            cfg.plantLog = pl;
         end
 
         function exportScript(obj, filepath)
@@ -1127,6 +1522,22 @@ classdef DashboardEngine < handle
             mirror = DetachedMirror(widget, themeStruct, removeCallback);
             mirrorHolder('mirror') = mirror;
             obj.DetachedMirrors{end+1} = mirror;
+            % Phase 1032 PLOG-VIZ-03/04/07 — re-attach plant-log wire-up on
+            % the mirror's cloned widget so the standalone figure draws lines
+            % + has a hover. The cloned widget has ShowPlantLog already set
+            % (via DetachedMirror.restoreLiveRefs); calling
+            % setShowPlantLog(currentValue, obj) is a no-op for the property
+            % itself but triggers the listener attach + hover construct +
+            % marker draw on the mirror's axes. CONTEXT.md Decision G.
+            try
+                cw = mirror.Widget;
+                if isa(cw, 'FastSenseWidget') && cw.ShowPlantLog
+                    cw.setShowPlantLog(true, obj);
+                end
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'detachWidget plant-log re-attach failed: %s', err.message);
+            end
         end
 
         function removeDetached(obj)
@@ -1139,8 +1550,14 @@ classdef DashboardEngine < handle
 
             keep = true(1, numel(obj.DetachedMirrors));
             for i = 1:numel(obj.DetachedMirrors)
-                if obj.DetachedMirrors{i}.isStale()
+                m = obj.DetachedMirrors{i};
+                if m.isStale()
                     keep(i) = false;
+                    % Phase 1032 PLOG-VIZ-07 — sweep the mirror's hover from
+                    % WidgetHovers_ when the mirror's figure goes stale. Without
+                    % this, closed-but-not-deregistered mirrors leave dangling
+                    % PlantLogWidgetHover instances + stale closures.
+                    try obj.detachPlantLogWidgetHover_(m.Widget); catch, end
                 end
             end
             obj.DetachedMirrors = obj.DetachedMirrors(keep);
@@ -1386,6 +1803,10 @@ classdef DashboardEngine < handle
             end
             try obj.computeEventMarkers();    catch err
                 if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
         end
 
@@ -1784,6 +2205,10 @@ classdef DashboardEngine < handle
             try obj.computeEventMarkers();    catch err
                 if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
             end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function markAllDirty(obj)
@@ -2116,6 +2541,27 @@ classdef DashboardEngine < handle
                 try delete(obj.FigureDestroyedListener_); catch, end
                 obj.FigureDestroyedListener_ = [];
             end
+            % Phase 1031 PLOG-VIZ-06: tear down hover BEFORE the selector.
+            % Hover saved the selector's chained WindowButtonMotionFcn at
+            % construction; restoring it must happen while the selector is
+            % still alive (otherwise the restored callback handle refers to
+            % a deleted TimeRangeSelector and the figure ends up with a
+            % stale closure). teardownPlantLogSliderHover_ is idempotent
+            % (safe to call again at the end of delete()).
+            obj.teardownPlantLogSliderHover_();
+            % Phase 1032 PLOG-VIZ-07: tear down per-widget hovers BEFORE TRS
+            % so any chained WBMFcn restore lands on a still-alive figure
+            % and selector. Mirrors the slider-hover ordering rule.
+            for hi = 1:numel(obj.WidgetHovers_)
+                try
+                    pair = obj.WidgetHovers_{hi};
+                    if numel(pair) == 2 && ~isempty(pair{2}) && isvalid(pair{2})
+                        delete(pair{2});
+                    end
+                catch
+                end
+            end
+            obj.WidgetHovers_ = {};
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
@@ -2161,6 +2607,20 @@ classdef DashboardEngine < handle
                 try delete(obj.InfoModalFigure_); catch, end
             end
             obj.InfoModalFigure_ = [];
+            % Phase 1031 PLOG-VIZ-08: tear down plant-log live-tail listener.
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+            % Phase 1031 PLOG-VIZ-06: tear down plant-log slider hover.
+            % delete() restores prior WindowButtonMotionFcn unconditionally.
+            obj.teardownPlantLogSliderHover_();
+            % Phase 1033 PLOG-INT-02: full teardown of plant-log API surface
+            % (idempotent -- no-op if everything already torn down above).
+            try obj.detachPlantLog(); catch, end
         end
     end
 
@@ -2193,6 +2653,117 @@ classdef DashboardEngine < handle
         %   own width-derived default.
             if nargin < 2, nBuckets = []; end
             env = obj.computePreviewEnvelopeReturning_(nBuckets);
+        end
+
+        function setPlantLogStoreForTest_(obj, store)
+        %SETPLANTLOGSTOREFORTEST_ Phase 1031 test seam — replaced by attachPlantLog in Phase 1033.
+        %   Inject a PlantLogStore (or [] to detach) and immediately recompute
+        %   plant-log slider markers so callers can assert on the slider state
+        %   right after attach without waiting for a refresh hook.
+        %
+        %   Phase 1031 PLOG-VIZ-06: every store change ALWAYS tears down +
+        %   (re-)builds the PlantLogSliderHover_ helper. Tearing down first
+        %   ensures stale closures (capturing an old store handle) cannot
+        %   survive a store swap; rebuilding requires a non-empty store AND
+        %   a rendered TimeRangeSelector_. The hover closure goes through
+        %   obj.lookupPlantLogEntries_ (NOT a captured-by-value store ref),
+        %   so subsequent store swaps reflect immediately even if the
+        %   rebuild branch is bypassed.
+            if ~isempty(store) && ~isa(store, 'PlantLogStore')
+                error('DashboardEngine:invalidPlantLogStore', ...
+                    'store must be empty or a PlantLogStore; got %s.', class(store));
+            end
+            obj.PlantLogStoreInternal_ = store;
+            obj.computePlantLogMarkers();
+            % Phase 1031 PLOG-VIZ-06: always tear down any prior hover so
+            % closures capturing the previous store handle cannot survive.
+            obj.teardownPlantLogSliderHover_();
+            if ~isempty(store) && ...
+                    ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                % Lazy-construct hover when the slider is rendered AND a
+                % store is attached. The lookup goes through the engine's
+                % helper (indirect indirection) so future store swaps are
+                % picked up without needing to rebuild the closure.
+                try
+                    ax = obj.TimeRangeSelector_.hAxes;
+                    fig = ancestor(ax, 'figure');
+                    if ~isempty(fig) && ishandle(fig)
+                        obj.PlantLogSliderHover_ = PlantLogSliderHover( ...
+                            fig, ax, ...
+                            @(t0, t1) obj.lookupPlantLogEntries_(t0, t1));
+                    end
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:plantLogHoverFailed', ...
+                            'PlantLogSliderHover construction failed: %s', err.message);
+                    end
+                end
+            end
+        end
+
+        function setPlantLogLiveTailForTest_(obj, tail)
+        %SETPLANTLOGLIVETAILFORTEST_ Phase 1031 test seam — wires PlantLogTailTick to refresh.
+        %   Inject a PlantLogLiveTail (or [] to detach + tear down listener).
+        %   When non-empty, installs an addlistener that calls
+        %   computePlantLogMarkers on every PlantLogTailTick so the slider
+        %   refreshes without a full dashboard re-render (PLOG-VIZ-08).
+            if ~isempty(tail) && ~isa(tail, 'PlantLogLiveTail')
+                error('DashboardEngine:invalidPlantLogLiveTail', ...
+                    'tail must be empty or a PlantLogLiveTail; got %s.', class(tail));
+            end
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+            obj.PlantLogLiveTailInternal_ = tail;
+            if ~isempty(tail)
+                % Phase 1032 PLOG-VIZ-08: route ticks through
+                % onPlantLogTailTick_ so slider AND per-widget overlays
+                % refresh on every tail tick (fan-out covers Pages,
+                % single-page Widgets, and DetachedMirrors).
+                obj.PlantLogTickListener_ = addlistener(tail, 'PlantLogTailTick', ...
+                    @(~,~) obj.onPlantLogTailTick_());
+            end
+        end
+
+        function refreshPlantLogOverlayForWidgetForTest_(obj, widget)
+        %REFRESHPLANTLOGOVERLAYFORWIDGETFORTEST_ Phase 1032 test seam.
+        %   Routes to refreshPlantLogOverlayForWidget_ from function-style
+        %   tests (which can't satisfy the {?FastSenseWidget, ?matlab.unittest.TestCase}
+        %   access list). Hidden so it doesn't show up in methods(obj).
+            obj.refreshPlantLogOverlayForWidget_(widget);
+        end
+
+        function clearPlantLogOverlaysOnAllWidgetsForTest_(obj)
+        %CLEARPLANTLOGOVERLAYSONALLWIDGETSFORTEST_ Phase 1032 test seam.
+        %   Routes to clearPlantLogOverlaysOnAllWidgets_ from function-style
+        %   tests. Hidden test seam mirroring the Phase 1031 idiom.
+            obj.clearPlantLogOverlaysOnAllWidgets_();
+        end
+
+        function attachPlantLogXLimListenerForTest_(obj, widget)
+        %ATTACHPLANTLOGXLIMLISTENERFORTEST_ Phase 1032 test seam.
+        %   Routes to attachPlantLogXLimListener_ from function-style tests.
+            obj.attachPlantLogXLimListener_(widget);
+        end
+
+        function setTimeRangeSelectorForTest_(obj, sel)
+        %SETTIMERANGESELECTORFORTEST_ Phase 1031 test seam — inject a
+        %   TimeRangeSelector handle without going through render(). Used by
+        %   TestPlantLogSliderOverlay to assert hPlantLogMarkers state without
+        %   paying full-dashboard render cost. The TimeRangeSelector_ property
+        %   is Access = private, so direct assignment from a test is impossible
+        %   — this hidden setter is the documented seam. Phase 1033's review
+        %   may remove it once render() pathways cover the new test cases.
+            if ~isempty(sel) && ~isa(sel, 'TimeRangeSelector')
+                error('DashboardEngine:invalidTimeRangeSelector', ...
+                    'sel must be empty or a TimeRangeSelector; got %s.', class(sel));
+            end
+            obj.TimeRangeSelector_ = sel;
         end
     end
 
@@ -2288,6 +2859,227 @@ classdef DashboardEngine < handle
         end
     end
 
+    % Phase 1032 PLOG-VIZ-03 + PLOG-VIZ-04: per-widget plant-log overlay
+    % helpers. Access restricted to FastSenseWidget so the widget's
+    % setShowPlantLog setter can call these without exposing them as
+    % public API.
+    %
+    % Hidden (not Access = {?FastSenseWidget, ?matlab.unittest.TestCase})
+    % so Octave parsing survives — Octave has no matlab.unittest namespace.
+    % Same Octave-safe idiom FastSenseDataStore.ensureOpenForTest uses.
+    % These remain "internal" — not in tab-complete or methods() — while
+    % still being callable from FastSenseWidget (consumer of all four),
+    % the engine's own helpers, and class-based or function-style tests
+    % across MATLAB + Octave.
+    methods (Hidden)
+
+        function refreshPlantLogOverlayForWidget_(obj, widget)
+        %REFRESHPLANTLOGOVERLAYFORWIDGET_ Recompute plant-log overlay for one widget (Phase 1032 PLOG-VIZ-04 + PLOG-VIZ-08).
+        %   Idempotent: safe to call when widget.ShowPlantLog=false (clears
+        %   markers), when the engine has no store (clears markers), or
+        %   when the widget's FastSenseObj is not rendered (no-op).
+        %
+        %   1. Validate widget and inner FastSense are rendered.
+        %   2. Clear all WidgetPlantLogMarker handles on the widget's axes.
+        %   3. Early return when ShowPlantLog=false (clear-only path).
+        %   4. Early return when store is empty / not a PlantLogStore.
+        %   5. Read XLim from the widget's axes.
+        %   6. getEntriesInRange(t0, t1) from PlantLogStoreInternal_.
+        %   7. Sub-pixel coalesce: bucket entries by
+        %      floor(t * pixelsPerDataUnit) and keep one entry per
+        %      unique bucket (stable). pixelsPerDataUnit derived from
+        %      getpixelposition(ax, true).
+        %   8. setPlantLogMarkers(coalescedTimes, coalescedEntries).
+        %
+        %   On failure, fires DashboardEngine:plantLogOverlayFailed warning.
+            try
+                if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+                if isempty(widget.FastSenseObj) || ...
+                        ~isa(widget.FastSenseObj, 'FastSense') || ...
+                        ~widget.FastSenseObj.IsRendered
+                    return;
+                end
+                ax = widget.FastSenseObj.hAxes;
+                if isempty(ax) || ~ishandle(ax), return; end
+                % Clear stale markers first (idempotent).
+                delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker'));
+                if ~widget.ShowPlantLog, return; end
+                if isempty(obj.PlantLogStoreInternal_) || ...
+                        ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                    return;
+                end
+                xl = get(ax, 'XLim');
+                t0 = xl(1);
+                t1 = xl(2);
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+                if isempty(entries), return; end
+                times = [entries.Timestamp];
+                % Sub-pixel coalesce (decision D): bucket entries by their
+                % floored pixel index so two timestamps that land in the
+                % same screen pixel render a single line. Hover lookup
+                % uses the full store, not these coalesced timestamps.
+                try
+                    axPosPx = getpixelposition(ax, true);
+                    ax_width_px = max(axPosPx(3), 1);
+                catch
+                    ax_width_px = 600;  % conservative default
+                end
+                pixelsPerDataUnit = ax_width_px / max(t1 - t0, eps);
+                buckets = floor(double(times) * pixelsPerDataUnit);
+                [~, ia] = unique(buckets, 'stable');
+                coalescedTimes = times(ia);
+                coalescedEntries = entries(ia);
+                widget.setPlantLogMarkers(coalescedTimes, coalescedEntries);
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'refreshPlantLogOverlayForWidget_ failed: %s', err.message);
+            end
+        end
+
+        function clearPlantLogOverlaysOnAllWidgets_(obj)
+        %CLEARPLANTLOGOVERLAYSONALLWIDGETS_ Wipe markers on every widget + every detached mirror (Phase 1032).
+        %   Does NOT flip ShowPlantLog on any widget — user state is
+        %   preserved for re-attach. Called from Phase 1033's
+        %   detachPlantLog() entry point and from store swaps that need
+        %   to nuke stale per-widget markers.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && ~isempty(w.FastSenseObj) && ...
+                        isa(w.FastSenseObj, 'FastSense') && w.FastSenseObj.IsRendered
+                    ax = w.FastSenseObj.hAxes;
+                    if ~isempty(ax) && ishandle(ax)
+                        try delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker')); catch, end
+                    end
+                end
+            end
+            for k = 1:numel(obj.DetachedMirrors)
+                m = obj.DetachedMirrors{k};
+                if isempty(m) || ~isvalid(m), continue; end
+                w = m.Widget;
+                if isa(w, 'FastSenseWidget') && ~isempty(w.FastSenseObj) && ...
+                        isa(w.FastSenseObj, 'FastSense') && w.FastSenseObj.IsRendered
+                    ax = w.FastSenseObj.hAxes;
+                    if ~isempty(ax) && ishandle(ax)
+                        try delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker')); catch, end
+                    end
+                end
+            end
+        end
+
+        function attachPlantLogXLimListener_(obj, widget)
+        %ATTACHPLANTLOGXLIMLISTENER_ Wire an XLim PostSet listener on the widget's axes (Phase 1032).
+        %   Stored in widget.PlantLogXLimListener_; deleted by
+        %   setShowPlantLog(false) AND by widget.delete(). Idempotent:
+        %   replaces any prior listener.
+            if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+            if ~isempty(widget.PlantLogXLimListener_)
+                try delete(widget.PlantLogXLimListener_); catch, end
+                widget.setPlantLogXLimListenerForEngine_([]);
+            end
+            if isempty(widget.FastSenseObj) || ~widget.FastSenseObj.IsRendered
+                return;
+            end
+            ax = widget.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax), return; end
+            % Octave's addlistener does not support the 4-arg
+            % (object, propName, 'PostSet', callback) form — third arg
+            % must be a callback. Skip the listener on Octave; the
+            % engine's PlantLogTickListener_ + the slider redraw on
+            % render still provide refresh on Octave.
+            if exist('OCTAVE_VERSION', 'builtin')
+                return;
+            end
+            try
+                lis = addlistener(ax, 'XLim', 'PostSet', ...
+                    @(~,~) obj.refreshPlantLogOverlayForWidget_(widget));
+                widget.setPlantLogXLimListenerForEngine_(lis);
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'attachPlantLogXLimListener_ failed: %s', err.message);
+            end
+        end
+
+        function attachPlantLogWidgetHover_(obj, widget)
+        %ATTACHPLANTLOGWIDGETHOVER_ Lazy-construct a PlantLogWidgetHover for one widget (Phase 1032 PLOG-VIZ-07).
+        %   Tears down any prior hover for this widget first (idempotent),
+        %   then builds a new PlantLogWidgetHover parented to the widget's
+        %   uifigure ancestor and storing the lookup closure that routes
+        %   through obj.lookupPlantLogEntries_ (re-reads the store at call
+        %   time so subsequent swaps are reflected immediately).
+        %
+        %   Early returns:
+        %     - widget is empty or not a FastSenseWidget
+        %     - widget.FastSenseObj is empty / not rendered
+        %     - engine has no PlantLogStoreInternal_
+        %     - widget.FastSenseObj.hAxes is missing / invalid
+        %
+        %   On failure, fires DashboardEngine:plantLogOverlayFailed warning.
+            if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+            if isempty(widget.FastSenseObj) || ~widget.FastSenseObj.IsRendered
+                return;
+            end
+            % Tear down any prior hover for this widget.
+            obj.detachPlantLogWidgetHover_(widget);
+            % Require a store attached.
+            if isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                return;
+            end
+            try
+                ax = widget.FastSenseObj.hAxes;
+                if isempty(ax) || ~ishandle(ax), return; end
+                fig = ancestor(ax, 'figure');
+                if isempty(fig) || ~ishandle(fig), return; end
+                hover = PlantLogWidgetHover(fig, ax, ...
+                    @(t0, t1) obj.lookupPlantLogEntries_(t0, t1));
+                obj.WidgetHovers_{end+1} = {widget, hover};
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'attachPlantLogWidgetHover_ failed: %s', err.message);
+            end
+        end
+
+        function detachPlantLogWidgetHover_(obj, widget)
+        %DETACHPLANTLOGWIDGETHOVER_ Tear down + remove a widget's hover (Phase 1032 PLOG-VIZ-07).
+        %   Idempotent: safe when widget has no hover currently registered.
+        %   Also sweeps stale-widget pairs (widget already destroyed) so the
+        %   WidgetHovers_ list stays compact.
+            if isempty(widget), return; end
+            keep = true(1, numel(obj.WidgetHovers_));
+            for i = 1:numel(obj.WidgetHovers_)
+                pair = obj.WidgetHovers_{i};
+                if isempty(pair) || numel(pair) ~= 2
+                    keep(i) = false;
+                    continue;
+                end
+                pairWidget = pair{1};
+                pairHover  = pair{2};
+                if isempty(pairWidget) || ~isvalid(pairWidget)
+                    try
+                        if ~isempty(pairHover) && isvalid(pairHover)
+                            delete(pairHover);
+                        end
+                    catch
+                    end
+                    keep(i) = false;
+                    continue;
+                end
+                if pairWidget == widget
+                    try
+                        if ~isempty(pairHover) && isvalid(pairHover)
+                            delete(pairHover);
+                        end
+                    catch
+                    end
+                    keep(i) = false;
+                end
+            end
+            obj.WidgetHovers_ = obj.WidgetHovers_(keep);
+        end
+
+    end
+
     methods (Access = private)
 
         function tf = isObjValid_(obj)
@@ -2375,6 +3167,18 @@ classdef DashboardEngine < handle
             target = mirrorHolder('mirror');
             if isempty(target)
                 return;
+            end
+            % Phase 1032 PLOG-VIZ-07 — sweep the closing mirror's hover from
+            % WidgetHovers_ before removing it from DetachedMirrors. We do this
+            % up front (inside the isvalid check) so that even if the
+            % keep-filter loop encounters a stale handle, the cleanup already
+            % ran. The detach helper is idempotent on missing widgets.
+            try
+                if isa(target, 'DetachedMirror') && ...
+                        isa(target.Widget, 'FastSenseWidget')
+                    obj.detachPlantLogWidgetHover_(target.Widget);
+                end
+            catch
             end
             keep = true(1, numel(obj.DetachedMirrors));
             for i = 1:numel(obj.DetachedMirrors)
@@ -3009,6 +3813,180 @@ classdef DashboardEngine < handle
             obj.TimeRangeSelector_.setEventMarkers(uTimes, uColors);
         end
 
+        function computePlantLogMarkers(obj)
+        %COMPUTEPLANTLOGMARKERS Push current plant-log entry timestamps onto the slider.
+        %   Phase 1031 PLOG-VIZ-01..02 + 08: plant-log overlay on TimeRangeSelector.
+        %   Mirrors computeEventMarkers' guard pattern (no-op before render or when
+        %   no store is attached). When PlantLogStoreInternal_ is empty the markers
+        %   are explicitly cleared so detach takes effect immediately.
+        %
+        %   Called at the same hook sites as computeEventMarkers (addPage,
+        %   setEventMarkersVisible, rerenderWidgets, both live-tick paths) plus
+        %   from setPlantLogStoreForTest_ and from the PlantLogTickListener_
+        %   callback installed by setPlantLogLiveTailForTest_.
+            if isempty(obj.TimeRangeSelector_) || ...
+                    ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
+            end
+            if isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                try
+                    obj.TimeRangeSelector_.setPlantLogMarkers([]);
+                catch
+                end
+                return;
+            end
+            try
+                t0 = obj.TimeRangeSelector_.DataRange(1);
+                t1 = obj.TimeRangeSelector_.DataRange(2);
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+                if isempty(entries)
+                    obj.TimeRangeSelector_.setPlantLogMarkers([]);
+                    return;
+                end
+                times = [entries.Timestamp];
+                obj.TimeRangeSelector_.setPlantLogMarkers(times);
+            catch err
+                fprintf('[ENGINE WARN] computePlantLogMarkers: %s\n', err.message);
+            end
+        end
+
+        function onPlantLogTailTick_(obj)
+        %ONPLANTLOGTAILTICK_ PlantLogTailTick callback — fan out slider + widgets + mirrors (Phase 1032 PLOG-VIZ-08).
+        %   Wraps the existing computePlantLogMarkers (slider path) and
+        %   adds the per-widget refresh fan-out for every ShowPlantLog=true
+        %   widget across pages AND every DetachedMirror (decision G —
+        %   full parity).
+            try
+                obj.computePlantLogMarkers();
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'computePlantLogMarkers (tick): %s', err.message);
+            end
+            % Fan out to attached widgets.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try obj.refreshPlantLogOverlayForWidget_(w); catch, end
+                end
+            end
+            % Fan out to detached mirrors (decision G — full parity).
+            for k = 1:numel(obj.DetachedMirrors)
+                m = obj.DetachedMirrors{k};
+                if isempty(m) || ~isvalid(m), continue; end
+                w = m.Widget;
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try obj.refreshPlantLogOverlayForWidget_(w); catch, end
+                end
+            end
+        end
+
+        function entries = lookupPlantLogEntries_(obj, t0, t1)
+        %LOOKUPPLANTLOGENTRIES_ Phase 1031 PLOG-VIZ-06 indirect store lookup.
+        %   Helper consumed by the PlantLogSliderHover closure. Re-reads
+        %   obj.PlantLogStoreInternal_ AT CALL TIME so subsequent store swaps
+        %   (via setPlantLogStoreForTest_(other)) are reflected immediately
+        %   without rebuilding the hover closure. Returns [] when no store
+        %   is attached or when the lookup throws.
+            entries = [];
+            if isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                return;
+            end
+            try
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+            catch
+                entries = [];
+            end
+        end
+
+        function teardownPlantLogSliderHover_(obj)
+        %TEARDOWNPLANTLOGSLIDERHOVER_ Phase 1031 PLOG-VIZ-06 hover teardown.
+        %   Idempotent: safe to call when PlantLogSliderHover_ is empty,
+        %   already-deleted, or constructed but never installed. delete()
+        %   restores the prior WindowButtonMotionFcn.
+            try
+                if ~isempty(obj.PlantLogSliderHover_) && ...
+                        isvalid(obj.PlantLogSliderHover_)
+                    delete(obj.PlantLogSliderHover_);
+                end
+            catch
+            end
+            obj.PlantLogSliderHover_ = [];
+        end
+
+        function [recovered, store] = surfacePlantLogLoadFailure_(~, ME, filePath)
+        %SURFACEPLANTLOGLOADFAILURE_ Phase 1033 PLOG-INT-05 load-failure warning router.
+        %   Inspects ME.identifier and emits the appropriate namespaced
+        %   warning per CONTEXT.md D-12:
+        %     PlantLogReader:fileNotFound    -> DashboardEngine:plantLogPathMissing
+        %     PlantLogReader:readError       -> DashboardEngine:plantLogReadFailed
+        %     PlantLogReader:unsupportedFormat -> DashboardEngine:plantLogReadFailed
+        %     PlantLogReader:xlsxUnavailable -> DashboardEngine:plantLogReadFailed
+        %     other                          -> DashboardEngine:plantLogReadFailed
+        %
+        %   Returns recovered=false + store=[] in every case. The caller
+        %   is responsible for returning from attachPlantLog so the
+        %   dashboard load proceeds without an overlay.
+            recovered = false;
+            store     = [];
+            switch ME.identifier
+                case 'PlantLogReader:fileNotFound'
+                    warning('DashboardEngine:plantLogPathMissing', ...
+                        ['Saved plant-log path %s no longer exists; ' ...
+                         'dashboard loaded without overlay. Re-attach via ' ...
+                         'DashboardEngine.attachPlantLog or the FastSenseCompanion toolbar.'], ...
+                        filePath);
+                otherwise
+                    warning('DashboardEngine:plantLogReadFailed', ...
+                        ['Saved plant-log re-import failed: %s; ' ...
+                         'dashboard loaded without overlay.'], ...
+                        ME.message);
+            end
+        end
+
+        function readerMapping = plantLogMappingToReaderShape_(~, jsonMapping)
+        %PLANTLOGMAPPINGTOREADERSHAPE_ Convert CONTEXT.md JSON-schema mapping to PlantLogReader shape.
+        %   jsonMapping fields: timestampCol, messageCol, metadataCols, format
+        %   readerMapping fields: TimestampColumn, MessageColumn, TimestampFormat
+        %   metadataCols is informational only -- PlantLogReader infers metadata
+        %   columns as "every non-timestamp/non-message column" at read time.
+            readerMapping = struct('TimestampColumn', '', 'MessageColumn', '', 'TimestampFormat', '');
+            if isfield(jsonMapping, 'timestampCol')
+                readerMapping.TimestampColumn = char(jsonMapping.timestampCol);
+            end
+            if isfield(jsonMapping, 'messageCol')
+                readerMapping.MessageColumn = char(jsonMapping.messageCol);
+            end
+            if isfield(jsonMapping, 'format')
+                readerMapping.TimestampFormat = char(jsonMapping.format);
+            end
+            % Back-compat: accept PascalCase if caller passed reader-shape directly.
+            if isfield(jsonMapping, 'TimestampColumn')
+                readerMapping.TimestampColumn = char(jsonMapping.TimestampColumn);
+            end
+            if isfield(jsonMapping, 'MessageColumn')
+                readerMapping.MessageColumn = char(jsonMapping.MessageColumn);
+            end
+            if isfield(jsonMapping, 'TimestampFormat')
+                readerMapping.TimestampFormat = char(jsonMapping.TimestampFormat);
+            end
+        end
+
+        function jsonMapping = readerMappingToJsonShape_(~, readerMapping)
+        %READERMAPPINGTOJSONSHAPE_ Convert PlantLogReader mapping shape to JSON-schema for serialization.
+        %   metadataCols is computed from the source file at read time but
+        %   stored as a cell array on the engine -- read from a freshly
+        %   parsed file or left empty (Plan 02 serializer also persists it
+        %   as a cellstr; empty is acceptable).
+            jsonMapping = struct( ...
+                'timestampCol', readerMapping.TimestampColumn, ...
+                'messageCol',   readerMapping.MessageColumn, ...
+                'metadataCols', {{}}, ...
+                'format',       readerMapping.TimestampFormat);
+        end
+
     end
 
     methods (Access = public)
@@ -3249,6 +4227,65 @@ classdef DashboardEngine < handle
                         wi = obj.Widgets{i};
                         if isa(wi, 'GroupWidget') && strcmp(wi.Mode, 'collapsible')
                             wi.ReflowCallback = @() obj.reflowAfterCollapse();
+                        end
+                    end
+                end
+
+                % --- Phase 1033 PLOG-INT-05: re-attach plant log when present ---
+                % Per CONTEXT.md D-10..D-13: when config.plantLog is
+                % present, call attachPlantLog with ContinueOnReadError=true
+                % so any saved-path/mapping/read failure degrades to a
+                % warning and the dashboard load completes. When absent,
+                % v1.0-v3.0 dashboards load cleanly with zero warnings.
+                if isfield(config, 'plantLog') && ~isempty(config.plantLog)
+                    pl = config.plantLog;
+                    % Schema validation: sourcePath is required.
+                    if ~isfield(pl, 'sourcePath') || isempty(pl.sourcePath)
+                        error('DashboardSerializer:plantLogSchemaInvalid', ...
+                            'plantLog block must contain a non-empty sourcePath.');
+                    end
+                    sourcePath = char(pl.sourcePath);
+                    mapping  = [];
+                    if isfield(pl, 'mapping') && ~isempty(pl.mapping)
+                        mapping = pl.mapping;
+                    end
+                    interval = 5;
+                    if isfield(pl, 'interval') && ~isempty(pl.interval)
+                        interval = double(pl.interval);
+                    end
+                    startTail = true;
+                    if isfield(pl, 'startTail') && ~isempty(pl.startTail)
+                        startTail = logical(pl.startTail);
+                    end
+                    % Pre-flight: if file is missing, surface the warning
+                    % BEFORE attachPlantLog so callers see the warn even
+                    % when the autoDetect path is bypassed (i.e. caller
+                    % supplied a mapping).
+                    if exist(sourcePath, 'file') ~= 2
+                        warning('DashboardEngine:plantLogPathMissing', ...
+                            ['Saved plant-log path %s no longer exists; ' ...
+                             'dashboard loaded without overlay. Re-attach via ' ...
+                             'DashboardEngine.attachPlantLog or the FastSenseCompanion toolbar.'], ...
+                            sourcePath);
+                    else
+                        attachArgs = {};
+                        if isstruct(mapping)
+                            attachArgs{end+1} = 'Mapping';
+                            attachArgs{end+1} = mapping;
+                        end
+                        attachArgs{end+1} = 'Interval';
+                        attachArgs{end+1} = interval;
+                        attachArgs{end+1} = 'StartTail';
+                        attachArgs{end+1} = startTail;
+                        attachArgs{end+1} = 'ContinueOnReadError';
+                        attachArgs{end+1} = true;
+                        try
+                            obj.attachPlantLog(sourcePath, attachArgs{:});
+                        catch attachErr
+                            warning('DashboardEngine:plantLogReadFailed', ...
+                                ['Saved plant-log re-import failed: %s; ' ...
+                                 'dashboard loaded without overlay.'], ...
+                                attachErr.message);
                         end
                     end
                 end

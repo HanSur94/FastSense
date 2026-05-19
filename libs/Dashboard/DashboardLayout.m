@@ -25,6 +25,7 @@ classdef DashboardLayout < handle
         CreateEventCallback = []    % function handle: @(widget) — set by DashboardEngine
                                     %   (260513-snt). Only invoked for FastSenseWidget.
         VisibleRows      = [1 Inf]  % [topRow bottomRow] currently visible
+        EngineRef        = []       % Phase 1032 PLOG-VIZ-05 — back-reference to DashboardEngine for chrome callbacks (addPlantLogToggle)
     end
 
     properties (SetAccess = private)
@@ -393,18 +394,29 @@ classdef DashboardLayout < handle
                 if ~isempty(obj.DetachCallback) && ~isa(widget, 'DividerWidget')
                     obj.addDetachButton(widget);
                 end
-                % 260513-sfp — Y-limit-mode buttons. Duck-typed: only
+                % v4.0 260513-sfp — Y-limit-mode buttons. Duck-typed: only
                 % widgets that implement setYLimitMode opt in (today
                 % only FastSenseWidget). Lives strictly under needsBar
                 % because the cluster requires the WidgetButtonBar host.
                 if ismethod(widget, 'setYLimitMode')
                     obj.addYLimitButtons_(widget);
                 end
-                % 260513-snt — settle final right-anchored button positions.
+                % v3.1 Phase 1032 PLOG-VIZ-05: plant-log toggle on FastSenseWidget only.
+                if isa(widget, 'FastSenseWidget')
+                    try
+                        engineRef = obj.EngineRef;
+                        obj.addPlantLogToggle(widget, engineRef);
+                    catch ME
+                        warning('DashboardLayout:plantLogToggleParentMissing', ...
+                            'addPlantLogToggle failed during realizeWidget: %s', ME.message);
+                    end
+                end
+                % v4.0 260513-snt — settle final right-anchored button positions.
                 %   addInfoIcon runs BEFORE addCreateEventButton, so Info's
                 %   initial X collides with Create's slot. reflowChrome_ knows
-                %   the full layout (3-button vs 2-button right cluster + V/A
-                %   left cluster) and re-anchors everything in one pass.
+                %   the full layout (V/A left cluster + Info/Create/Detach right
+                %   cluster + Plant Log toggle) and re-anchors everything in one
+                %   pass.
                 DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
             else
                 % No chrome — render directly into the cell panel as before.
@@ -609,6 +621,123 @@ classdef DashboardLayout < handle
         %ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
             if strcmp(eventData.Key, 'escape')
                 obj.closeInfoPopup();
+            end
+        end
+
+        function addPlantLogToggle(obj, widget, engine)
+        %ADDPLANTLOGTOGGLE Add the per-widget plant-log overlay toggle (Phase 1032 PLOG-VIZ-05).
+        %   The toggle is always created (Decision B: always render, disable
+        %   when no store); clicking it calls
+        %   widget.setShowPlantLog(~widget.ShowPlantLog, engine).
+        %   The engine handle is captured by the callback closure.
+        %
+        %   Idempotent: any prior PlantLogToggleButton on the same bar is
+        %   deleted before the new uicontrol is created.
+        %
+        %   Visibility / pressed-state colors:
+        %     - No store attached: Enable='off',  tooltip 'No plant log attached'
+        %     - Store, ShowPlantLog=false: Enable='on', tooltip 'Show plant log lines',
+        %         bg=theme.ToolbarBackground, fg=theme.ToolbarFontColor
+        %     - Store, ShowPlantLog=true:  Enable='on', tooltip 'Hide plant log lines',
+        %         bg=theme.MarkerPlantLog ([0 0 0]), fg=[1 1 1]
+        %
+        %   Errors namespaced 'DashboardLayout:plantLogToggleParentMissing'
+        %   for callback-time parent-missing failures.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            % Idempotent: clear any prior PlantLogToggleButton on this bar.
+            prior = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+            if ~isempty(prior)
+                try delete(prior); catch, end
+            end
+            barPos = get(bar, 'Position');
+            % Position from right edge: Detach (offset 4 + 24-wide) + 4 gap +
+            % Info (24-wide) + 4 gap + PlantLog (24-wide). LeftMost button x:
+            %   x = barW - 24 - 4 - 24 - 4 - 24 - 4 = barW - 84
+            xPL = barPos(3) - 24 - 4 - 24 - 4 - 24 - 4;
+            % Resolve enabled/disabled state from the engine store.
+            storeAttached = false;
+            if ~isempty(engine) && isa(engine, 'DashboardEngine')
+                try
+                    storeAttached = ~isempty(engine.PlantLogStoreInternal_) && ...
+                        isa(engine.PlantLogStoreInternal_, 'PlantLogStore');
+                catch
+                    storeAttached = false;
+                end
+            end
+            if storeAttached
+                enableState = 'on';
+                if isa(widget, 'FastSenseWidget') && widget.ShowPlantLog
+                    tipStr  = 'Hide plant log lines';
+                    bgColor = [0 0 0];
+                    if isfield(theme, 'MarkerPlantLog')
+                        bgColor = theme.MarkerPlantLog;
+                    end
+                    fgColor = [1 1 1];
+                else
+                    tipStr  = 'Show plant log lines';
+                    bgColor = theme.ToolbarBackground;
+                    fgColor = theme.ToolbarFontColor;
+                end
+            else
+                enableState = 'off';
+                tipStr  = 'No plant log attached';
+                bgColor = theme.ToolbarBackground;
+                fgColor = theme.ToolbarFontColor;
+            end
+            uicontrol('Parent', bar, ...
+                'Style',           'pushbutton', ...
+                'String',          'L', ...
+                'Units',           'pixels', ...
+                'Position',        [xPL 2 24 24], ...
+                'FontSize',        9, ...
+                'FontWeight',      'bold', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', bgColor, ...
+                'Enable',          enableState, ...
+                'Tag',             'PlantLogToggleButton', ...
+                'TooltipString',   tipStr, ...
+                'Callback',        @(s, ~) obj.onPlantLogTogglePressed_(s, widget, engine));
+        end
+
+        function onPlantLogTogglePressed_(obj, src, widget, engine)
+        %ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with try/catch (Phase 1032 PLOG-VIZ-05).
+        %   Programmatic force-call paths (tests, automation) need a
+        %   software-level guard for Enable='off' because uicontrols only
+        %   honor Enable natively for user-driven mouse clicks.
+            try
+                % Software-level Enable guard: if the button was constructed
+                % with Enable='off' (no store), force-calls must be no-ops.
+                if ~isempty(src) && ishandle(src)
+                    try
+                        if strcmp(get(src, 'Enable'), 'off')
+                            return;
+                        end
+                    catch
+                    end
+                end
+                if ~isa(widget, 'FastSenseWidget')
+                    error('DashboardLayout:plantLogToggleParentMissing', ...
+                        'PlantLog toggle requires a FastSenseWidget parent.');
+                end
+                widget.setShowPlantLog(~widget.ShowPlantLog, engine);
+                % Rebuild the button look (pressed-state colors + tooltip).
+                obj.addPlantLogToggle(widget, engine);
+            catch ME
+                warning('DashboardLayout:plantLogToggleParentMissing', ...
+                    'Plant-log toggle callback failed: %s', ME.message);
+                % Best-effort: non-blocking uialert if a uifigure ancestor exists.
+                try
+                    fig = ancestor(src, 'figure');
+                    if ~isempty(fig) && ishandle(fig) && isa(fig, 'matlab.ui.Figure')
+                        uialert(fig, ME.message, 'Plant log toggle failed', 'Icon', 'error');
+                    end
+                catch
+                end
             end
         end
 
@@ -962,19 +1091,35 @@ classdef DashboardLayout < handle
                         set(info(1), 'Position', [barW - 24 - 24 - 4 - 4, 2, 24, 24]);
                     end
                 end
-                % Re-anchor the V/A cluster. Math must match
-                % addYLimitButtons_ exactly so resize does not introduce
-                % drift. When the '+' button is present, the right cluster
-                % widens by one button (Info + Create + Detach instead of
-                % Info + Detach), so the V/A cluster shifts left by (bw+gap).
+                % Re-anchor the v3.1 PlantLogToggleButton + the v4.0 V/A
+                % cluster. The PlantLog button sits LEFTMOST in the
+                % right-anchored cluster (Detach + Create + Info + PlantLog),
+                % then the V/A cluster sits to the LEFT of PlantLog.
                 bw  = 24; gap = 4;
                 allBtn     = findobj(bar(1), 'Tag', 'YLimitAllBtn',     '-depth', 1);
                 visibleBtn = findobj(bar(1), 'Tag', 'YLimitVisibleBtn', '-depth', 1);
+                pl         = findobj(bar(1), 'Tag', 'PlantLogToggleButton', '-depth', 1);
                 hasCreate  = ~isempty(create) && ishandle(create(1));
-                if hasCreate
-                    xAll = barW - bw - gap - bw - gap - bw - gap - gap - bw;
+                hasPlantLog = ~isempty(pl) && ishandle(pl(1));
+                if hasPlantLog
+                    if hasCreate
+                        % 4-button right cluster (Detach + Create + Info + PlantLog).
+                        xPl = barW - 4*bw - 4*gap;
+                    else
+                        % 3-button right cluster (Detach + Info + PlantLog).
+                        xPl = barW - 3*bw - 3*gap;
+                    end
+                    set(pl(1), 'Position', [xPl, 2, bw, bw]);
+                end
+                % V/A cluster: sit immediately LEFT of the leftmost right-
+                % cluster button (PlantLog when present, else Info). Same
+                % gap convention (4px between right cluster and A).
+                if hasPlantLog
+                    xAll = xPl - gap - bw;
+                elseif hasCreate
+                    xAll = barW - 3*bw - 3*gap - gap - bw;   % left of Info
                 else
-                    xAll = barW - bw - gap - bw - gap - gap - bw;
+                    xAll = barW - 2*bw - 2*gap - gap - bw;   % left of Info (no Create)
                 end
                 xVisible = xAll - bw;
                 if ~isempty(allBtn)     && ishandle(allBtn(1))

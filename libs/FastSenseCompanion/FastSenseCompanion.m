@@ -71,6 +71,7 @@ classdef FastSenseCompanion < handle
         hToolbarPanel_ = []   % top toolbar uipanel (row 1, spans cols [1 3])
         hSettingsBtn_  = []   % gear button inside hToolbarPanel_ (right-aligned)
         hEventsBtn_    = []   % toolbar uibutton: Events viewer launch
+        hPlantLogBtn_  = []   % Phase 1033 PLOG-INT-03: Plant Log… toolbar button (col 3 in the 1x5 grid)
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
@@ -309,17 +310,18 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x8 grid (Phase 1034 — Wiki button added at col 6):
-            %   col 1 = Events viewer button (Task 13)            (110)
-            %   col 2 = Live: ON/OFF button                       (110)
-            %   col 3 = Tags table launch (quick task 260519-bs4) (110)
-            %   col 4 = Tile windows (S0Y-01)                     ( 70)
-            %   col 5 = Close all (S0Y-02)                        ( 90)
-            %   col 6 = Wiki / Help launch (Phase 1034)           ( 70)
-            %   col 7 = flex spacer                               ('1x')
-            %   col 8 = Settings gear                             ( 36)
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 8]);
-            hToolbarGrid.ColumnWidth     = {110, 110, 110, 70, 90, 70, '1x', 36};
+            % Inner 1x9 grid (v3.1 Plant Log + v4.0 Wiki Browser merged):
+            %   col 1 = Events viewer button (Task 13)                  (110)
+            %   col 2 = Live: ON/OFF button                             (110)
+            %   col 3 = Tags table launch (quick task 260519-bs4)       (110)
+            %   col 4 = Plant Log… button (v3.1 Phase 1033 PLOG-INT-03) (130)
+            %   col 5 = Tile windows (v4.0 S0Y-01)                      ( 70)
+            %   col 6 = Close all (v4.0 S0Y-02)                         ( 90)
+            %   col 7 = Wiki / Help launch (v4.0 Phase 1034)            ( 70)
+            %   col 8 = flex spacer                                     ('1x')
+            %   col 9 = Settings gear                                   ( 36)
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 9]);
+            hToolbarGrid.ColumnWidth     = {110, 110, 110, 130, 70, 90, 70, '1x', 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -350,7 +352,7 @@ classdef FastSenseCompanion < handle
             obj.hLiveBtn_.Tooltip       = 'Toggle live refresh of the inspector';
             obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
 
-            % Col 3 — Tag Status table launch (quick task 260519-bs4).
+            % Col 3 — v4.0 Tag Status table launch (quick task 260519-bs4).
             obj.hTagStatusBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hTagStatusBtn_.Layout.Row    = 1;
             obj.hTagStatusBtn_.Layout.Column = 3;
@@ -361,10 +363,25 @@ classdef FastSenseCompanion < handle
             obj.hTagStatusBtn_.Tooltip       = 'Open the tag status table';
             obj.hTagStatusBtn_.ButtonPushedFcn = @(~,~) obj.openTagStatusTable();
 
-            % Col 4 — Tile windows (S0Y-01).
+            % Col 4 — v3.1 Phase 1033 PLOG-INT-03: Plant Log… toolbar button.
+            obj.hPlantLogBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hPlantLogBtn_.Layout.Row    = 1;
+            obj.hPlantLogBtn_.Layout.Column = 4;
+            obj.hPlantLogBtn_.Text          = ['Plant Log', char(8230)];   % "Plant Log…"
+            obj.hPlantLogBtn_.FontSize      = 11;
+            obj.hPlantLogBtn_.FontWeight    = 'bold';
+            obj.hPlantLogBtn_.Tag           = 'CompanionPlantLogBtn';
+            obj.hPlantLogBtn_.Tooltip       = 'Attach a plant log to every open dashboard';
+            obj.hPlantLogBtn_.ButtonPushedFcn = @(~,~) obj.openPlantLogDialog_();
+            if isempty(obj.Engines_)
+                obj.hPlantLogBtn_.Enable  = 'off';
+                obj.hPlantLogBtn_.Tooltip = 'No dashboards open';
+            end
+
+            % Col 5 — v4.0 Tile windows (S0Y-01).
             obj.hTileBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hTileBtn_.Layout.Row    = 1;
-            obj.hTileBtn_.Layout.Column = 4;
+            obj.hTileBtn_.Layout.Column = 5;
             obj.hTileBtn_.Text          = 'Tile';
             obj.hTileBtn_.FontSize      = 11;
             obj.hTileBtn_.FontWeight    = 'bold';
@@ -373,10 +390,10 @@ classdef FastSenseCompanion < handle
             obj.hTileBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hTileBtn_.ButtonPushedFcn = @(~,~) obj.tileOpenedWindows();
 
-            % Col 5 — Close all (S0Y-02). Uses Accent color to signal destructive action.
+            % Col 6 — v4.0 Close all (S0Y-02). Uses Accent color to signal destructive action.
             obj.hCloseAllBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hCloseAllBtn_.Layout.Row    = 1;
-            obj.hCloseAllBtn_.Layout.Column = 5;
+            obj.hCloseAllBtn_.Layout.Column = 6;
             obj.hCloseAllBtn_.Text          = 'Close all';
             obj.hCloseAllBtn_.FontSize      = 11;
             obj.hCloseAllBtn_.FontWeight    = 'bold';
@@ -385,12 +402,12 @@ classdef FastSenseCompanion < handle
             obj.hCloseAllBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hCloseAllBtn_.ButtonPushedFcn = @(~,~) obj.closeAllOpenedWindows();
 
-            % Col 6 — Wiki / Help launch (Phase 1034). Opens the shared WikiBrowser
-            % to Companion-Overview.md. Re-clicks focus + re-navigate the existing
-            % window per CONTEXT.md D-06.
+            % Col 7 — v4.0 Wiki / Help launch (Phase 1034). Opens the shared
+            % WikiBrowser to Companion-Overview.md. Re-clicks focus + re-navigate
+            % the existing window per CONTEXT.md D-06.
             obj.hWikiBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hWikiBtn_.Layout.Row    = 1;
-            obj.hWikiBtn_.Layout.Column = 6;
+            obj.hWikiBtn_.Layout.Column = 7;
             obj.hWikiBtn_.Text          = ['Wiki ', char(8689)];   % up-arrow with bar (pop-out)
             obj.hWikiBtn_.FontSize      = 11;
             obj.hWikiBtn_.FontWeight    = 'bold';
@@ -400,10 +417,10 @@ classdef FastSenseCompanion < handle
             obj.hWikiBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hWikiBtn_.ButtonPushedFcn = @(~,~) obj.openWiki_('Companion-Overview');
 
-            % Col 8 — Settings gear (was col 7 before Phase 1034).
+            % Col 9 — Settings gear (moved as new buttons accumulated).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 8;
+            obj.hSettingsBtn_.Layout.Column = 9;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -1292,6 +1309,19 @@ classdef FastSenseCompanion < handle
             obj.openEventViewer_();
         end
 
+        function openPlantLogDialogInternalForTest(obj)
+        %OPENPLANTLOGDIALOGINTERNALFORTEST Test shim: call openPlantLogDialog_ directly.
+        %   Phase 1033 PLOG-INT-03: mirrors the openEventViewer_internalForTest
+        %   idiom so test files can invoke the toolbar callback without
+        %   simulating a uibutton click.
+            obj.openPlantLogDialog_();
+        end
+
+        function b = getPlantLogBtnForTest_(obj)
+        %GETPLANTLOGBTNFORTEST_ Test helper: return the Plant Log button handle.
+            b = obj.hPlantLogBtn_;
+        end
+
         function v = getEventViewerForTest_(obj)
         %GETEVENTVIEWERFORTEST_ Test helper: return the EventViewer_ handle or [].
             v = obj.EventViewer_;
@@ -1817,6 +1847,106 @@ classdef FastSenseCompanion < handle
             if ~isempty(obj.hEventsBtn_) && isvalid(obj.hEventsBtn_)
                 obj.hEventsBtn_.Enable  = 'off';
                 obj.hEventsBtn_.Tooltip = 'Event viewer is open';
+            end
+        end
+
+        function openPlantLogDialog_(obj)
+        %OPENPLANTLOGDIALOG_ Phase 1033 PLOG-INT-03: Companion "Plant Log…" toolbar callback.
+        %   1. Calls PlantLogReader.openInteractive('') — the empty path triggers
+        %      the existing native uigetfile in the reader (Phase 1030 Plan 03
+        %      behavior).
+        %   2. On user cancel, returns silently (no error).
+        %   3. On confirm, iterates obj.Engines_ and calls each engine's
+        %      attachPlantLog with the confirmed mapping. Best-effort fan-out:
+        %      if any engine fails, surfaces a uialert listing the failures
+        %      but continues with the rest.
+        %   4. Wraps the entire body in try/catch + uialert(obj.hFig_, ...) so
+        %      no exception ever reaches the MATLAB console (CONTEXT.md D-17).
+        %
+        %   Per CONTEXT.md decision (line 244-247): "Per Companion session, one
+        %   shared plant log across all managed dashboards. Re-clicking 'Plant
+        %   Log…' with a different file detaches the prior shared store from
+        %   every dashboard and attaches the new one (matches the engine-level
+        %   idempotent attachPlantLog contract)."
+            try
+                if isempty(obj.Engines_)
+                    uialert(obj.hFig_, ...
+                        ['No dashboards are open. Register at least one ', ...
+                         'DashboardEngine before attaching a plant log.'], ...
+                        'Plant Log');
+                    return;
+                end
+
+                % Step 1 — open the file picker + mapping dialog.
+                % Empty path triggers native uigetfile in PlantLogReader.openInteractive.
+                [entries, confirmedMapping] = PlantLogReader.openInteractive('');
+
+                % Step 2 — cancel branch (entries empty AND mapping empty).
+                if isempty(entries) && (isempty(confirmedMapping) || ~isstruct(confirmedMapping))
+                    return;
+                end
+
+                % Step 3 — empty file branch: surface a uialert and bail.
+                if isempty(entries)
+                    uialert(obj.hFig_, ...
+                        ['Selected plant-log file contains no parseable rows. ', ...
+                         'Nothing was attached.'], ...
+                        'Plant Log');
+                    return;
+                end
+
+                % Harvest the resolved file path from the first entry; the reader
+                % normalizes filePath into every entry's SourceFile property.
+                filePath = entries(1).SourceFile;
+
+                % Step 4 — fan out attachPlantLog across every managed engine.
+                failedNames = {};
+                for i = 1:numel(obj.Engines_)
+                    eng = obj.Engines_{i};
+                    if ~isa(eng, 'DashboardEngine')
+                        continue;
+                    end
+                    if ~isvalid(eng)
+                        failedNames{end+1} = sprintf('engine %d (invalid handle)', i); %#ok<AGROW>
+                        continue;
+                    end
+                    try
+                        eng.attachPlantLog(filePath, ...
+                            'Mapping',   confirmedMapping, ...
+                            'Interval',  5, ...
+                            'StartTail', true);
+                    catch ME
+                        warning('FastSenseCompanion:plantLogAttachFailed', ...
+                            'attachPlantLog on dashboard "%s" failed: %s', ...
+                            eng.Name, ME.message);
+                        failedNames{end+1} = sprintf('%s (%s)', eng.Name, ME.message); %#ok<AGROW>
+                    end
+                end
+
+                % Step 5 — report partial failure via uialert (success path is silent).
+                if ~isempty(failedNames)
+                    uialert(obj.hFig_, ...
+                        sprintf(['Plant log attached to %d/%d dashboards. ', ...
+                            'Failures:\n  %s'], ...
+                            numel(obj.Engines_) - numel(failedNames), ...
+                            numel(obj.Engines_), ...
+                            strjoin(failedNames, sprintf('\n  '))), ...
+                        'Plant Log — Partial Failure', 'Icon', 'warning');
+                end
+            catch ME
+                % Final safety net — should not normally reach here because every
+                % inner call is already guarded. Belt-and-suspenders per
+                % CONTEXT.md D-17 success criterion 5.
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    try
+                        uialert(obj.hFig_, ME.message, ...
+                            'Plant Log — Unexpected Error');
+                    catch
+                    end
+                else
+                    warning('FastSenseCompanion:plantLogAttachFailed', ...
+                        'openPlantLogDialog_ failed: %s', ME.message);
+                end
             end
         end
 
