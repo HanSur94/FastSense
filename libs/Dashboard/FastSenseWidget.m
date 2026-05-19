@@ -88,7 +88,12 @@ classdef FastSenseWidget < DashboardWidget
     % setShowPlantLog + delete) can mutate the handle. matlab.unittest.TestCase
     % is included so class-based suite tests can verify lifecycle by
     % direct assignment; function-style tests observe via read-only access.
-    properties (SetAccess = {?DashboardEngine, ?FastSenseWidget, ?matlab.unittest.TestCase})
+    % SetAccess limited to engine + widget itself. Tests that need to
+    % poke this directly route through Hidden setters (mirrors the
+    % Octave-safe idiom used in FastSenseDataStore — Octave has no
+    % matlab.unittest, so {?matlab.unittest.TestCase} breaks classdef
+    % parsing entirely).
+    properties (SetAccess = {?DashboardEngine, ?FastSenseWidget})
         PlantLogXLimListener_ = [] % Phase 1032 — addlistener handle for XLim PostSet refresh; non-empty when ShowPlantLog=true and widget is rendered
     end
 

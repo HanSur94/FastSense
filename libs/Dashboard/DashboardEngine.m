@@ -135,7 +135,13 @@ classdef DashboardEngine < handle
     % Public READ + restricted WRITE: tests + downstream consumers can
     % observe attached hovers, but only the engine itself + FastSenseWidget
     % (via the friend access list) can mutate the cell.
-    properties (SetAccess = {?DashboardEngine, ?FastSenseWidget, ?matlab.unittest.TestCase})
+    % SetAccess limited to engine + widget. Tests that need direct
+    % mutation use the existing setPlantLogStoreForTest_ /
+    % setPlantLogLiveTailForTest_ hooks (Hidden, Octave-safe).
+    % matlab.unittest.TestCase is intentionally NOT listed because
+    % Octave has no matlab.unittest namespace and the classdef would
+    % fail to parse entirely.
+    properties (SetAccess = {?DashboardEngine, ?FastSenseWidget})
         WidgetHovers_             = {}
     end
 
@@ -2856,16 +2862,16 @@ classdef DashboardEngine < handle
     % Phase 1032 PLOG-VIZ-03 + PLOG-VIZ-04: per-widget plant-log overlay
     % helpers. Access restricted to FastSenseWidget so the widget's
     % setShowPlantLog setter can call these without exposing them as
-    % public API. matlab.unittest.TestCase is included so class-based
-    % suite tests can call these directly without going through the
-    % public surface; function-style tests route through the public
-    % FastSenseWidget.setShowPlantLog setter instead.
+    % public API.
     %
-    % The engine itself can still invoke them via obj.method_().
-    % Octave parsing note: this access spec works on MATLAB R2020b+; the
-    % class-based suite is MATLAB-only (function-style test SKIPs Octave
-    % entirely, so the parse-time check on matlab.unittest is moot).
-    methods (Access = {?FastSenseWidget, ?matlab.unittest.TestCase})
+    % Hidden (not Access = {?FastSenseWidget, ?matlab.unittest.TestCase})
+    % so Octave parsing survives — Octave has no matlab.unittest namespace.
+    % Same Octave-safe idiom FastSenseDataStore.ensureOpenForTest uses.
+    % These remain "internal" — not in tab-complete or methods() — while
+    % still being callable from FastSenseWidget (consumer of all four),
+    % the engine's own helpers, and class-based or function-style tests
+    % across MATLAB + Octave.
+    methods (Hidden)
 
         function refreshPlantLogOverlayForWidget_(obj, widget)
         %REFRESHPLANTLOGOVERLAYFORWIDGET_ Recompute plant-log overlay for one widget (Phase 1032 PLOG-VIZ-04 + PLOG-VIZ-08).
