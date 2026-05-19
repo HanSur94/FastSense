@@ -104,6 +104,7 @@ classdef CompanionEventViewer < handle
         RightGrid_    = []   % 3x1 uigridlayout: [filter bar; view; slider]
         LeftPanel_    = []   % uipanel hosting the left-column contents
         LeftHeaderPanel_  = []   % Thin uipanel above the catalog hosting the view-mode switch
+        hWikiBtn_   = []   % uibutton: Open Wiki -> Event-Viewer.md (Phase 1034)
         LeftCatalogPanel_ = []   % uipanel that the TagCatalogPane attaches into
         CatalogPane_  = []   % TagCatalogPane reused from main companion app
         TablePanel_   = []   % uipanel hosting the uitable view
@@ -383,6 +384,7 @@ classdef CompanionEventViewer < handle
             obj.TableToolbarPanel_ = [];
             obj.SelectedTableRows_ = [];
             obj.ViewSwitch_        = [];
+            obj.hWikiBtn_          = [];
             obj.TablePanel_        = [];
             obj.LeftHeaderPanel_   = [];
             obj.LeftCatalogPanel_  = [];
@@ -515,10 +517,12 @@ classdef CompanionEventViewer < handle
             obj.LeftCatalogPanel_.BackgroundColor = t.WidgetBackground;
             obj.LeftCatalogPanel_.BorderType      = 'none';
 
-            % --- View-mode switch in the left header (above the catalog) ---
-            hLeftHeaderGrid = uigridlayout(obj.LeftHeaderPanel_, [1 3]);
+            % --- View-mode switch + Wiki button in the left header
+            %     (above the catalog). Phase 1034 added a 4th column hosting
+            %     the Wiki button; columns 3 and 5 are small spacers.
+            hLeftHeaderGrid = uigridlayout(obj.LeftHeaderPanel_, [1 5]);
             hLeftHeaderGrid.RowHeight       = {'1x'};
-            hLeftHeaderGrid.ColumnWidth     = {8, '1x', 8};   % small pad | switch fills | small pad
+            hLeftHeaderGrid.ColumnWidth     = {8, '1x', 8, 70, 8};
             hLeftHeaderGrid.Padding         = [0 4 0 4];
             hLeftHeaderGrid.BackgroundColor = t.WidgetBackground;
 
@@ -530,6 +534,19 @@ classdef CompanionEventViewer < handle
             obj.ViewSwitch_.Tag             = 'ViewModeSwitch';
             obj.ViewSwitch_.FontColor       = t.ForegroundColor;
             obj.ViewSwitch_.ValueChangedFcn = @(src, ~) obj.onViewSwitchChanged_(src.Value);
+
+            % --- Wiki button (Phase 1034). ---
+            % Routes through the Companion's shared WikiBrowser via
+            % openWiki(...). Default page is Event-Viewer.md.
+            obj.hWikiBtn_ = uibutton(hLeftHeaderGrid, 'push');
+            obj.hWikiBtn_.Layout.Row      = 1;
+            obj.hWikiBtn_.Layout.Column   = 4;
+            obj.hWikiBtn_.Text            = ['Wiki ', char(8689)];
+            obj.hWikiBtn_.FontSize        = 10;
+            obj.hWikiBtn_.Tooltip         = 'Open Wiki: Event Viewer';
+            obj.hWikiBtn_.BackgroundColor = t.WidgetBorderColor;
+            obj.hWikiBtn_.FontColor       = t.ForegroundColor;
+            obj.hWikiBtn_.ButtonPushedFcn = @(~,~) obj.openWiki_();
 
             % Right column: 3-row nested grid (filter bar | view | slider).
             obj.RightGrid_ = uigridlayout(obj.RootGrid_, [3 1]);
@@ -1443,6 +1460,25 @@ classdef CompanionEventViewer < handle
                 obj.ViewMode = 'table';
             else
                 obj.ViewMode = 'gantt';
+            end
+        end
+
+        function openWiki_(obj)
+        %OPENWIKI_ Route to the Companion's shared WikiBrowser; fall back to standalone.
+        %   Phase 1034 -- Wiki button click handler. Companion_ is always
+        %   non-empty here because the constructor (line 124) errors out
+        %   when companion is empty -- so under normal use we take the
+        %   Companion_.openWiki path. The fallback is defensive.
+            try
+                if ~isempty(obj.Companion_) && isvalid(obj.Companion_) && ...
+                        isa(obj.Companion_, 'FastSenseCompanion') && ...
+                        ismethod(obj.Companion_, 'openWiki')
+                    obj.Companion_.openWiki('Event-Viewer');
+                    return;
+                end
+                WikiBrowser('OpenTo', 'Event-Viewer');
+            catch ME
+                fprintf(2, '[CompanionEventViewer] openWiki_ failed: %s\n', ME.message);
             end
         end
 
