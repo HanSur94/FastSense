@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779203868650,
+  "lastUpdate": 1779204806609,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -89484,6 +89484,430 @@ window.BENCHMARK_DATA = {
           {
             "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
             "value": 2813.689,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ecb4c82c79d28f299f259c402f8d0515ce98de4",
+          "message": "Phase 1028 follow-ups: 5 deferred items from PR #114 (#155)\n\n* test(post-1028): rewrite TestListenerCoalesceOrdering/testIdempotency to use Tag.invalidateBatch_\n\n`SensorTag` has no `invalidate()` method — sensors are data sources;\ntheir listeners (MonitorTag/CompositeTag) implement invalidate per the\ncontract in `SensorTag.addListener` line 258. Octave's looser lookup\nlet the call resolve to a no-op silently; MATLAB R2021b's stricter\ncheck rejects with `MATLAB:noSuchMethodOrField`.\n\nRewrite the idempotency contract using a double-batch comparison:\n- Path 1: `Tag.invalidateBatch_({s1})` twice in a row\n- Path 2: `Tag.invalidateBatch_({s1})` once\n\nBoth paths must yield identical (x, y) and exactly one downstream\nrecompute (the second batch call in path 1 is a no-op because dirty_\nis already true). Adds a verification that rcPath1==1 to make the\n\"no-op\" contract explicit.\n\nRefs deferred-items.md \"Pre-existing CI failure observed during\nPlan 1028-06\".\n\n* fix(post-1028): repair bench_consumer_migration_tick v2.0 migration leftover\n\n`appendLegacy_` referenced an undefined variable `s_x_` (a stale local\nfrom the data-access fallback at line 111) when computing the sample\ncount for the next append. The function never ran successfully because\n`numel(s_x_)` errored before the updateData call.\n\nReplace with `numel(s.X)` — the obvious read via SensorTag's dependent\n.X property (the \"legacy path\" the bench is supposed to measure).\nappendTag_, the twin, already uses `getXY()` to read its current count.\n\nThis unblocks `TestTagPerfRegression/testConsumerMigrationTickGate`\nwhich previously errored (`Octave:undefined-function` / MATLAB\nequivalent) and was NOT caught by the test's pre-existing-bug\nassume-skip filter (the skip list only matches `MonitorTag:invalidParent`,\n`SensorTag:unknownOption`, `TagPipeline:invalidRawSource`).\n\nThe bench's intent remains intact: compare the \"legacy\" property-access\npath (s.X / s.Y) against the v2.0 \"tag\" method-dispatch path\n(getXY()). Both halves operate on SensorTag instances in v2.0+; the\n.X/.Y dependent-property getters are still public (Sensor.m back-compat).\n\nRefs deferred-items.md \"Pre-existing benchmark brokenness exposed by\nTestTagPerfRegression\".\n\n* ci(post-1028): raise benchmark alert-threshold from 110% to 200% (false-positives on sub-ms benches)\n\nThe `github-action-benchmark` action was firing performance-regression\nalerts on sub-millisecond FastSense rendering benchmarks (Render /\nDownsample / Zoom / Instantiation at 5M–100M points). Baseline values\nare 0.4–0.7 ms; current run values 2–6 ms; ratios 1.2×–10.1×.\n\nRoot cause is JIT cache state variance on shared CI runners, not a\nreal regression — the only FastSense diff between compared commits\n(PR #114) was +20 lines in build_mex.m wiring the SensorThreshold\nMEX block; no rendering code changed.\n\nRaise the alert-threshold to 200% (2×) globally. The action only\nsupports a single global threshold, so we choose the smallest value\nthat absorbs observed JIT variance (2–6×) without blocking real\nregression detection (historically 5–10×).\n\nInline workflow comment cites PR #114 as the trigger for the bump.\n\nRefs deferred-items.md \"PR #114 bot review feedback (2026-05-19,\nstatus-check sweep)\".\n\n* test(post-1028): add TestTagInvalidateBatch covering empty/single/multi/error paths\n\nPR #114 codecov flagged `libs/SensorThreshold/Tag.m` `_invalidateBatch_`\nat 63.6% patch coverage. The existing TestListenerCoalesceOrdering\nexercises the cascade end-to-end (Sensor→Monitor→Composite chain) but\ndoes not directly target the dispatch logic.\n\nThis adds direct unit coverage of 8 contract paths:\n- Empty cell `{}` and empty numeric `[]` → no-op (both isempty guards)\n- Single tag, single listener → invalidate() called exactly 1×\n- Three tags, three distinct listeners → each invalidated 1×\n- Shared listener handle across two tags → invalidated 1× (the core\n  coalescing guarantee)\n- SensorTag + StateTag mixed batch → getListeners_ walked per kind\n- Non-cell tagSet → raises Tag:invalidBatchInput\n- Listener that throws → error propagates; earlier listeners were\n  processed; later listeners skipped (pins the documented\n  non-fault-tolerance contract — Tag.m lines 304-313 has no try/catch\n  around the per-listener invalidate call)\n\nAdds two minimal mock helpers (tests/suite/):\n- CountingListener — counts invalidate() calls\n- ThrowingListener — invalidate() throws ThrowingListener:intentional\n\nBoth mocks are plain `handle` subclasses implementing the minimal\nlistener contract (`ismethod(m, 'invalidate')` per SensorTag.addListener\nline 258). They are NOT Tag subclasses — the broader contract is that\nany handle responding to invalidate() can observe.\n\nRefs deferred-items.md \"PR #114 bot review feedback ... Codecov patch\ncoverage 51.2%\".\n\n* fix(post-1028): Octave-skip the PostSet-dependent sub-test in YLimitMode suite\n\n`test_set_y_limit_mode_clears_user_zoomed_y` has a precondition that\n`set(ax,'YLim',[-5 5])` followed by a `drawnow` latches\n`UserZoomedY=true` via the YLim PostSet listener installed in\n`FastSenseWidget.render()`.\n\nOctave does not implement PostSet for graphics axes properties.\n`addlistener(ax,'YLim','PostSet',cb)` errors with `'PostSet' undefined`\ninside `FastSenseWidget.render()`; the call is wrapped in a try/catch\nso render() completes, but no listener is registered. The latch stays\nfalse on Octave by design. The precondition assert then fails.\n\nSkip the single sub-test on Octave with a comment matching the\npattern already used by `test_dashboard_time_sync_all_pages` (same\nroot cause). Equivalent coverage of the auto-visible rescale +\nsetYLimitMode latch-clear interaction is provided by the other\nsub-tests in this file which do NOT depend on the PostSet listener\nfiring.\n\nDEFERRED — full `private/observePropertyChange_.m` shim helper (Task 5\nscope): all 9 `addlistener(...,'PostSet',...)` call sites in libs/ are\non **graphics axes** properties (XLim/YLim/XLimMode), not on\nuser-defined Tag properties. The shim approach proposed in the\nfollow-up scope would wrap `addlistener` itself, but Octave's\ngraphics-axes PostSet failure is internal — even if we shimmed our\ncall to a no-op on Octave (which is effectively what the existing\ntry/catch achieves), the underlying behavior wouldn't change. The only\nuseful fix is to skip tests that rely on PostSet firing, which is what\nthis commit does. A future Octave compat layer that synthesizes PostSet\nbehavior via wrapped `set` calls is possible but is a dedicated phase,\nnot a follow-up cleanup task.\n\nRefs deferred-items.md \"Pre-existing CI failures observed during\nPlan 1028-05\" entry on `test_fastsense_widget_ylimit_modes`.\n\n* ci(post-1028): disable PR comment-on-alert (200% threshold still false-positives 11x)\n\nThe FastSense rendering benches at 5M-100M points produce 5-11x JIT\nvariance run-over-run independent of code changes. PR #155 itself\ntriggered the alert with 11.10x on Downsample 100M and 11.60x on\nInstantiation 100M -- even though the only changes were test-file\nedits and a YAML threshold bump.\n\nThreshold ratcheting (110% → 200% in commit 325c96f) doesn't fix\nthe underlying noise floor. The bench action still UPLOADS results\nto the gh-pages dashboard (auto-push: true), so real regressions\nremain visible as a trend on the chart. PR comments were the wrong\nnotification surface for sub-ms metrics.\n\nIf a future phase introduces stable >100ms benches (e.g., the\n1000-tag harness's WithIO tickMin at ~3.6s from Phase 1028),\nthose should live in a separate benchmark action invocation with\ntheir own alerting.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-05-19T17:08:41+02:00",
+          "tree_id": "9d9413ad419b2d322afcc46a2f68cab07c3eadfc",
+          "url": "https://github.com/HanSur94/FastSense/commit/5ecb4c82c79d28f299f259c402f8d0515ce98de4"
+        },
+        "date": 1779204804001,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.16,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.005,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 155.098,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 4.073,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 244.002,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 2.418,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 15.221,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.653,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.593,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.02,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 174.722,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 1.161,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 257.44,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 3.049,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 15.774,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.738,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 15.636,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.066,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 196.547,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 1.244,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 254.765,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 1.033,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 14.659,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.572,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 80.406,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.317,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1288.666,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 5.932,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 247.348,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 1.783,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 14.713,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.855,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 152.687,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.976,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2379.443,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 167.885,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 251.186,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 2.976,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 14.776,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.552,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 768.053,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 3.731,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22704.049,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 643.023,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 356.326,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 64.351,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 15.373,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.211,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 1143.468,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 63.455,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 170.926,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 1.154,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 169.409,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 1.122,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.072,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.028,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_min_ms",
+            "value": 2763.367,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_median_ms",
+            "value": 3466.137,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_min_ms",
+            "value": 3898.36,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_min_ms",
+            "value": 3898.36,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_min_ms",
+            "value": 5731.027,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_on_min_ms",
+            "value": 3898.36,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_off_min_ms",
+            "value": 3759.69,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_min_ms",
+            "value": 3898.36,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_min_ms",
+            "value": 3739.519,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_lastfsstat_count",
+            "value": 1,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_lastfsstat_count",
+            "value": 1600,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_parse_ms_per_tick",
+            "value": 196.857,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_mat_write_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_select_ms_per_tick",
+            "value": 62.308,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_other_ms_per_tick",
+            "value": 2398.185,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_monitor_recompute_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_composite_merge_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_aggregate_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_listener_fanout_ms_per_tick",
+            "value": 82.44,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_total_profiled_ms_per_tick",
+            "value": 2739.789,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick",
+            "value": 658.057,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick",
+            "value": 2691.662,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick",
+            "value": 1986.926,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
+            "value": 2724.311,
             "unit": "ms"
           }
         ]
