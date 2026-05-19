@@ -15,6 +15,8 @@ function result = bench_tag_pipeline_1k(varargin)
     %     bench_tag_pipeline_1k('--cache-off')       % regression check / Plan 02b WithIO baseline
     %     bench_tag_pipeline_1k('--coalesce-on')     % default — production listener coalescing (Plan 05 A1+A2)
     %     bench_tag_pipeline_1k('--coalesce-off')    % isolate cost of end-of-tick batch invalidate
+    %     bench_tag_pipeline_1k('--fs-coalesce-on')  % default — production per-tick fs-stat coalescing (Plan 06)
+    %     bench_tag_pipeline_1k('--fs-coalesce-off') % isolate cost of per-tag exist/dir syscalls
     %     result = bench_tag_pipeline_1k(...)        % returns struct with timings
     %
     %   Phase 1028 plan 02d: --cache-on (default) routes per-tick appends
@@ -22,6 +24,21 @@ function result = bench_tag_pipeline_1k(varargin)
     %   writeTagMat_('append',...). --cache-off forces every append to do
     %   load+concat+save (the Plan 02b WithIO behavior). Both modes record
     %   tickMin / tBreakdown so VERIFICATION.md can show before/after.
+    %
+    %   Phase 1028 plan 06: --fs-coalesce-on (default) enables per-tick
+    %   filesystem-stat coalescing inside LiveTagPipeline.onTick_: ONE
+    %   dir(parentDir) call per unique raw-source parent directory builds
+    %   a basename->mtime map that processTag_ consults instead of issuing
+    %   per-tag exist+dir syscalls. At 1000-tag scale with 8 source CSVs
+    %   the bench fixture has exactly 1 parent directory (all 8 csvs in
+    %   one tempdir), so coalesce-on issues 1 dir() per tick; coalesce-off
+    %   issues 2×1000=2000 syscalls per tick. The delta isolates the
+    %   per-tag MATLAB-dispatch cost of `exist`/`dir`/`fullfile` inside
+    %   the post-cache `other` bucket (Plan 02d post-cache breakdown
+    %   showed ~67% of WithIO tick lives in `other`, of which
+    %   Plan 02b's top-N profile attributed ~0.5 s/tick to dir/exist).
+    %   result.fsCoalesceActive + result.lastFsStatCount are recorded so
+    %   the CI artifact carries unambiguous before/after numbers.
     %
     %   Phase 1028 plan 05: --coalesce-on (default) enables the A1+A2
     %   end-of-tick Tag.invalidateBatch_(updatedSet) call inside
@@ -112,6 +129,7 @@ function result = bench_tag_pipeline_1k(varargin)
     profileMode = false;
     cacheActive = true;       % Phase 1028 plan 02d: production default.
     coalesceActive = true;    % Phase 1028 plan 05: production default for A1+A2 listener coalescing.
+    fsCoalesceActive = true;  % Phase 1028 plan 06: production default for per-tick fs-stat coalescing.
     i = 1;
     while i <= numel(varargin)
         arg = varargin{i};
@@ -133,6 +151,12 @@ function result = bench_tag_pipeline_1k(varargin)
         elseif ischar(arg) && strcmp(arg, '--coalesce-off')
             coalesceActive = false;
             i = i + 1;
+        elseif ischar(arg) && strcmp(arg, '--fs-coalesce-on')
+            fsCoalesceActive = true;
+            i = i + 1;
+        elseif ischar(arg) && strcmp(arg, '--fs-coalesce-off')
+            fsCoalesceActive = false;
+            i = i + 1;
         elseif ischar(arg) && strcmpi(arg, 'Mode')
             if i + 1 > numel(varargin)
                 error('bench_tag_pipeline_1k:badArgs', ...
@@ -143,7 +167,8 @@ function result = bench_tag_pipeline_1k(varargin)
         else
             error('bench_tag_pipeline_1k:badArgs', ...
                 ['Unknown argument %s. Expected ''--smoke'', ''--profile'', ' ...
-                '''--cache-on'', ''--cache-off'', ''--coalesce-on'', ''--coalesce-off'', or ''Mode''.'], ...
+                '''--cache-on'', ''--cache-off'', ''--coalesce-on'', ''--coalesce-off'', ' ...
+                '''--fs-coalesce-on'', ''--fs-coalesce-off'', or ''Mode''.'], ...
                 disp_(arg));
         end
     end
@@ -222,9 +247,14 @@ function result = bench_tag_pipeline_1k(varargin)
     else
         coalesceLbl = 'coalesce=off';
     end
-    fprintf('\n== bench_tag_pipeline_1k: %d tags (%d sensors + %d state + %d monitor + %d composite), %d machines, mode=%s, %s, %s%s ==\n', ...
+    if fsCoalesceActive
+        fsCoalesceLbl = 'fs-coalesce=on';
+    else
+        fsCoalesceLbl = 'fs-coalesce=off';
+    end
+    fprintf('\n== bench_tag_pipeline_1k: %d tags (%d sensors + %d state + %d monitor + %d composite), %d machines, mode=%s, %s, %s, %s%s ==\n', ...
         nSensors + nState + nMonitor + nComposite, nSensors, nState, nMonitor, nComposite, ...
-        nMachines, mode, cacheLbl, coalesceLbl, char(repmat('  [SMOKE]', 1, double(smoke))));
+        nMachines, mode, cacheLbl, coalesceLbl, fsCoalesceLbl, char(repmat('  [SMOKE]', 1, double(smoke))));
 
     % --------- Setup: temp dirs (NoIO is now wired post-construction via DI seam) ---------
     rawDir = setupTempRawDir_('bench_tp1k_raw');
@@ -278,6 +308,17 @@ function result = bench_tag_pipeline_1k(varargin)
     % accumulation + the call itself, which is expected to be sub-1 ms/tick.
     if ~coalesceActive
         p.setCoalesceActiveForTesting_(false);
+    end
+    % Phase 1028 plan 06: opt-out of per-tick filesystem-stat coalescing
+    % when --fs-coalesce-off. Default fsCoalesceActive_=true reflects the
+    % production path; --fs-coalesce-off measures the per-tag exist+dir
+    % syscall baseline. In the 1000-tag bench the 8 raw CSVs share one
+    % parent directory (single tempdir per run), so coalesce-on issues
+    % 1 dir() per tick whereas coalesce-off issues 2*1000=2000 syscalls
+    % per tick. The delta measures the dispatch cost MATLAB attributes
+    % to dir/exist/fullfile in the Plan 02d post-cache `other` bucket.
+    if ~fsCoalesceActive
+        p.setFsCoalesceForTesting_(false);
     end
 
     tickTimes = nan(1, nTicks);
@@ -334,6 +375,8 @@ function result = bench_tag_pipeline_1k(varargin)
     result.mode       = mode;
     result.cacheActive = cacheActive;   % Phase 1028 plan 02d: record so artifact diffs are unambiguous.
     result.coalesceActive = coalesceActive;   % Phase 1028 plan 05: record coalesce mode for artifact comparison.
+    result.fsCoalesceActive = fsCoalesceActive;   % Phase 1028 plan 06: record fs-coalesce mode.
+    result.lastFsStatCount = p.LastFsStatCount;   % Phase 1028 plan 06: from the FINAL measured tick.
     result.wallTotal  = wallTotal;
     result.nTagsTotal = nTagsTotal;
     result.profiled   = profileMode;
@@ -341,6 +384,8 @@ function result = bench_tag_pipeline_1k(varargin)
 
     fprintf('  tickMin    : %.4f s\n', result.tickMin);
     fprintf('  tickMedian : %.4f s\n', result.tickMedian);
+    fprintf('  lastFsStat : %d syscalls (final tick; coalesce-on expects ~#parent-dirs, coalesce-off expects ~2*#tags)\n', ...
+        result.lastFsStatCount);
     fprintf('  wallTotal  : %.2f s (budget: <%.0f s)\n', wallTotal, walletBudget);
 
     if profileMode
