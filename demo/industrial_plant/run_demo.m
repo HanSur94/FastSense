@@ -46,14 +46,17 @@ function ctx = run_demo(varargin)
 
     % Parse name-value options (matches FastSenseCompanion's varargin parser convention).
     useCompanion = true;
+    stressMode   = 'off';   % off | small | medium | large -- see stressFleets()
     for k = 1:2:numel(varargin)
         key = varargin{k};
         switch key
             case 'Companion'
                 useCompanion = logical(varargin{k+1});
+            case 'StressMode'
+                stressMode = varargin{k+1};
             otherwise
                 error('run_demo:unknownOption', ...
-                    'Unknown option ''%s''. Valid options: Companion.', key);
+                    'Unknown option ''%s''. Valid options: Companion, StressMode.', key);
         end
     end
 
@@ -70,6 +73,12 @@ function ctx = run_demo(varargin)
     % find a target on the very first tick.
     [store, plantHealthKey] = registerPlantTags(rawDir);
 
+    % Stress fleets (opt-in): register extra synthetic SensorTags backed by
+    % shared multi-column .dat files so LiveTagPipeline can be exercised at
+    % scale (K << N case where K=files, N=tags). No-op for default 'off'.
+    fleets = stressFleets(stressMode);
+    fleetTagKeys = registerStressFleetTags(rawDir, fleets);
+
     % Preload one week of synthetic 1 Hz history into every SensorTag /
     % StateTag, drive the MonitorTag detector over that history so the
     % EventStore is populated with real (not injected) events, and
@@ -79,7 +88,7 @@ function ctx = run_demo(varargin)
     seedHistory(store, plantConfig());
 
     % Build the writer timer (unstarted), then the pipeline, then start both.
-    writerTimer = makeDataGenerator(rawDir);
+    writerTimer = makeDataGenerator(rawDir, 'Fleets', fleets);
     start(writerTimer);
     pipeline = startLivePipeline(rawDir, tagsDir);
 
@@ -97,7 +106,9 @@ function ctx = run_demo(varargin)
         'store',          store, ...
         'plantHealthKey', plantHealthKey, ...
         'rawDir',         rawDir, ...
-        'tagsDir',        tagsDir);
+        'tagsDir',        tagsDir, ...
+        'stressMode',     stressMode, ...
+        'fleetTagKeys',   {fleetTagKeys});
 
     % Plan 02 hook: build the full dashboard on top of the plumbing.
     % buildDashboard creates the DashboardEngine, renders the figure,

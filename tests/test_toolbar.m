@@ -25,13 +25,16 @@ function test_toolbar()
     assert(~isempty(tb.hToolbar), 'testConstructorWithFPFigure: hToolbar');
     close(fig.hFigure);
 
-    % testToolbarHasAllButtons (cursor, crosshair, grid, legend, autoscale, export, refresh, live, metadata, theme)
+    % testToolbarHasAllButtons (cursor, crosshair, grid, legend, autoscale,
+    % export PNG, export data, refresh, live, follow, metadata, violations, theme)
+    % Count bumped 12 -> 13 to reflect the Follow toolbar button added by
+    % the auto-pan-to-data-tail feature (commit 31d04b7, PR #133).
     fp = FastSense();
     fp.addLine(1:100, rand(1,100));
     fp.render();
     tb = FastSenseToolbar(fp);
     children = get(tb.hToolbar, 'Children');
-    assert(numel(children) == 12, ...
+    assert(numel(children) == 13, ...
         sprintf('testToolbarHasAllButtons: got %d', numel(children)));
     close(fp.hFigure);
 

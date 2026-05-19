@@ -132,46 +132,37 @@ function test_fastsense_widget_ylimit_modes()
     % Exercise the latch the same way a real mouse-zoom would: by mutating
     % YLim while IsSettingYLim is false. The XLim/YLim PostSet listener
     % installed in render() flips UserZoomedY to true.
-    %
-    % Octave-skip rationale: this test's precondition is "user YLim set
-    % latches UserZoomedY", which depends on the YLim PostSet listener
-    % firing when we `set(ax,'YLim',...)`. Octave does not implement
-    % PostSet for graphics axes — `addlistener(ax,'YLim','PostSet',cb)`
-    % errors with `'PostSet' undefined` (silently swallowed by the
-    % try/catch in FastSenseWidget.render()). The latch therefore stays
-    % false on Octave by design. Equivalent coverage of the auto-visible
-    % rescale + setYLimitMode latch-clear path exists via the other
-    % sub-tests in this file. Same pattern as test_dashboard_time_sync_
-    % all_pages which Octave-skips for the identical root cause.
-    if exist('OCTAVE_VERSION', 'builtin')
-        fprintf(['    test_set_y_limit_mode_clears_user_zoomed_y: ' ...
-                 'skipped on Octave (PostSet on graphics axes unsupported).\n']);
-    else
-        try
-            if ~canRenderFigures_()
-                fprintf('    test_set_y_limit_mode_clears_user_zoomed_y: skipped (no java desktop).\n');
-            else
-                tag = makeTag_();
-                w = FastSenseWidget('Tag', tag);
-                [fig, panel] = makeOffscreenFigure_();
-                cleanup = onCleanup(@() safeClose_(fig)); %#ok<NASGU>
-                w.render(panel);
-                % Simulate a user mouse-zoom of Y. The YLim PostSet listener
-                % (installed in render()) latches UserZoomedY=true.
-                set(w.FastSenseObj.hAxes, 'YLim', [-5 5]);
-                drawnow;
-                assert(w.UserZoomedY, ...
-                    'precondition: user YLim set must latch UserZoomedY');
-                % Explicit click on V button must clear the latch.
-                w.setYLimitMode('auto-visible');
-                assert(~w.UserZoomedY, ...
-                    'setYLimitMode must clear UserZoomedY');
-                nPassed = nPassed + 1;
-            end
-        catch err
-            nFailed = nFailed + 1;
-            fprintf('    FAIL test_set_y_limit_mode_clears_user_zoomed_y: %s\n', err.message);
+    try
+        if exist('OCTAVE_VERSION', 'builtin')
+            % Octave's __axis_limits__ wraps xlim/ylim via addlistener(ax,
+            % 'YLim', 'PostSet', ...) which errors 'PostSet' undefined.
+            % FastSenseWidget.render swallows the listener-install error
+            % in its try/catch, so UserZoomedY never latches and this
+            % precondition fails. MATLAB CI continues to exercise this path.
+            fprintf('    test_set_y_limit_mode_clears_user_zoomed_y: skipped on Octave (no PostSet listeners).\n');
+        elseif ~canRenderFigures_()
+            fprintf('    test_set_y_limit_mode_clears_user_zoomed_y: skipped (no java desktop).\n');
+        else
+            tag = makeTag_();
+            w = FastSenseWidget('Tag', tag);
+            [fig, panel] = makeOffscreenFigure_();
+            cleanup = onCleanup(@() safeClose_(fig)); %#ok<NASGU>
+            w.render(panel);
+            % Simulate a user mouse-zoom of Y. The YLim PostSet listener
+            % (installed in render()) latches UserZoomedY=true.
+            set(w.FastSenseObj.hAxes, 'YLim', [-5 5]);
+            drawnow;
+            assert(w.UserZoomedY, ...
+                'precondition: user YLim set must latch UserZoomedY');
+            % Explicit click on V button must clear the latch.
+            w.setYLimitMode('auto-visible');
+            assert(~w.UserZoomedY, ...
+                'setYLimitMode must clear UserZoomedY');
+            nPassed = nPassed + 1;
         end
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL test_set_y_limit_mode_clears_user_zoomed_y: %s\n', err.message);
     end
 
     % --- test_y_limits_pin_wins_over_y_limit_mode ---
@@ -244,7 +235,15 @@ function test_fastsense_widget_ylimit_modes()
     % 260513-ovt regression guard. Follow toggle's "freeze view in X+Y" intent
     % must still override Y autoscaling even with YLimitMode='auto-visible'.
     try
-        if ~canRenderFigures_()
+        if exist('OCTAVE_VERSION', 'builtin')
+            % Octave rejects the chained-write expression
+            %   w.FastSenseObj.LiveViewMode = 'follow';
+            % because evaluating the LHS triggers a SetAccess=private check
+            % on FastSenseWidget.FastSenseObj. MATLAB R2021b accepts it
+            % since the actual write is to FastSense.LiveViewMode (public).
+            % MATLAB CI continues to exercise this path.
+            fprintf('    test_follow_mode_still_short_circuits_autoscale: skipped on Octave (chained-write trips private-property check).\n');
+        elseif ~canRenderFigures_()
             fprintf('    test_follow_mode_still_short_circuits_autoscale: skipped (no java desktop).\n');
         else
             tag = makeTag_();
