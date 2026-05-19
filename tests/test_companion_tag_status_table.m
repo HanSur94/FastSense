@@ -27,7 +27,12 @@ function test_companion_tag_status_table()
         @testBuildRowForDerivedTag, ...
         @testBuildRow_getXYThrows, ...
         @testFilterRows_caseInsensitive, ...
-        @testFilterRows_matchesKeyOrName };
+        @testFilterRows_matchesKeyOrName, ...
+        @testActivityLive_recentPosixTimestamp, ...
+        @testActivityInactive_oldDatenumTimestamp, ...
+        @testActivityInactive_emptyXY, ...
+        @testActivityInactive_futureTimestamp, ...
+        @testFilterRows_subsetFixture };
     for i = 1:numel(tests)
         name = func2str(tests{i});
         try
@@ -55,7 +60,7 @@ function testBuildRowForSensorTag_basic()
     tag.updateData([1 2 3], [10 20 30]);
 
     row = TagStatusTableWindow.buildRow_(tag);
-    assertSize_(row, [1 10]);
+    assertSize_(row, [1 11]);
     em = char(8212);
     assertEqual_(row{1}, 'k',           'Key');
     assertEqual_(row{2}, 'SensorName',  'Name');
@@ -69,8 +74,12 @@ function testBuildRowForSensorTag_basic()
     % datetime interprets the scalar 3 as a datenum — Year 1 (or similar)
     % is OUT of the [1971, 2100] band, so the formatter falls back to %.3f.
     assertEqual_(row{8}, sprintf('%.3f', 3), 'Last updated (numeric fallback)');
-    assertEqual_(row{9}, '3',           'Samples');
-    assertEqual_(row{10}, '',           'Labels');
+    % Activity is "Inactive" because X(end)=3 is below 7e5 (the
+    % datenum-or-posix anchor threshold in computeActivity_), so we cannot
+    % map it to a wall-clock time and defensively render "Inactive".
+    assertEqual_(row{9}, 'Inactive',    'Activity (unanchored X)');
+    assertEqual_(row{10}, '3',          'Samples');
+    assertEqual_(row{11}, '',           'Labels');
 end
 
 function testBuildRowForSensorTag_emptyData()
@@ -79,11 +88,12 @@ function testBuildRowForSensorTag_emptyData()
 
     row = TagStatusTableWindow.buildRow_(tag);
     em = char(8212);
-    assertEqual_(row{1}, 'k_empty', 'Key');
-    assertEqual_(row{6}, em,        'Latest');
-    assertEqual_(row{7}, em,        'Status');
-    assertEqual_(row{8}, em,        'Last updated');
-    assertEqual_(row{9}, '0',       'Samples');
+    assertEqual_(row{1}, 'k_empty',  'Key');
+    assertEqual_(row{6}, em,         'Latest');
+    assertEqual_(row{7}, em,         'Status');
+    assertEqual_(row{8}, em,         'Last updated');
+    assertEqual_(row{9}, 'Inactive', 'Activity (empty XY)');
+    assertEqual_(row{10}, '0',       'Samples');
 end
 
 function testBuildRowForMonitorTag_alarm()
@@ -134,10 +144,11 @@ function testBuildRowForStateTag_emptyValueAt()
 
     row = TagStatusTableWindow.buildRow_(st);
     em = char(8212);
-    assertEqual_(row{6}, em,  'Latest');
-    assertEqual_(row{7}, em,  'Status');
-    assertEqual_(row{8}, em,  'Last updated');
-    assertEqual_(row{9}, '0', 'Samples');
+    assertEqual_(row{6}, em,         'Latest');
+    assertEqual_(row{7}, em,         'Status');
+    assertEqual_(row{8}, em,         'Last updated');
+    assertEqual_(row{9}, 'Inactive', 'Activity (empty state)');
+    assertEqual_(row{10}, '0',       'Samples');
 end
 
 function testBuildRowForCompositeTag()
@@ -175,18 +186,19 @@ function testBuildRow_getXYThrows()
 
     row = TagStatusTableWindow.buildRow_(stub);
     em = char(8212);
-    assertEqual_(row{1}, 'throw_tag', 'Key');
+    assertEqual_(row{1}, 'throw_tag',  'Key');
     % Type/Crit/Units/Labels are from the stub's properties — still readable.
-    assertEqual_(row{6}, em, 'Latest');
-    assertEqual_(row{7}, em, 'Status');
-    assertEqual_(row{8}, em, 'Last updated');
-    assertEqual_(row{9}, '0', 'Samples');
+    assertEqual_(row{6}, em,           'Latest');
+    assertEqual_(row{7}, em,           'Status');
+    assertEqual_(row{8}, em,           'Last updated');
+    assertEqual_(row{9}, 'Inactive',   'Activity (throwing getXY)');
+    assertEqual_(row{10}, '0',         'Samples');
 end
 
 function testFilterRows_caseInsensitive()
     rows = { ...
-        'press_a', 'Pressure A', 'Sensor', 'medium', '', '', '', '', '', ''; ...
-        'temp_b',  'Temp B',     'Sensor', 'medium', '', '', '', '', '', '' };
+        'press_a', 'Pressure A', 'Sensor', 'medium', '', '', '', '', '', '', ''; ...
+        'temp_b',  'Temp B',     'Sensor', 'medium', '', '', '', '', '', '', '' };
 
     kept = TagStatusTableWindow.filterRows_(rows, 'PRESS');
     assertEqual_(size(kept, 1), 1, 'filter PRESS keeps 1 row');
@@ -200,7 +212,7 @@ function testFilterRows_caseInsensitive()
 end
 
 function testFilterRows_matchesKeyOrName()
-    rows = {'tag_x', 'Foo', 'Sensor', '', '', '', '', '', '', ''};
+    rows = {'tag_x', 'Foo', 'Sensor', '', '', '', '', '', '', '', ''};
 
     keptName = TagStatusTableWindow.filterRows_(rows, 'foo');
     assertEqual_(size(keptName, 1), 1, 'filter ''foo'' matches Name');
@@ -210,6 +222,81 @@ function testFilterRows_matchesKeyOrName()
 
     keptNone = TagStatusTableWindow.filterRows_(rows, 'zzz');
     assertEqual_(size(keptNone, 1), 0, 'filter ''zzz'' matches nothing');
+end
+
+% ===================== Activity column (260519-bs4 patch) =====================
+
+function testActivityLive_recentPosixTimestamp()
+    % SensorTag whose X(end) is a recent posix-time timestamp -> Activity='Live'.
+    % Use a fake "now" we control via the nowSeconds optional arg.
+    resetRegistry_();
+    tag = SensorTag('live_recent', 'Name', 'Live Recent');
+    nowSec  = 1.7e9;             % posix-time-ish (definitely > 1e9)
+    xLast   = nowSec - 30;       % 30 s ago, well under 300 s threshold
+    tag.updateData([xLast - 2, xLast - 1, xLast], [1 2 3]);
+
+    row = TagStatusTableWindow.buildRow_(tag, nowSec);
+    assertEqual_(row{9}, 'Live', 'Activity should be Live for recent posix X');
+end
+
+function testActivityInactive_oldDatenumTimestamp()
+    % SensorTag with X(end) ~ 10 minutes old in datenum days -> Activity='Inactive'.
+    resetRegistry_();
+    tag = SensorTag('inactive_old', 'Name', 'Inactive Old');
+    nowSec  = 1.7e9;
+    % Build datenum days such that (xPosix = (xDays - epoch)*86400) is 10min behind nowSec.
+    epochDays = datenum(1970, 1, 1);
+    xDays   = epochDays + (nowSec - 600) / 86400;  % 10 min < 300 s threshold? NO, 600 > 300.
+    tag.updateData([xDays - 1, xDays], [1 2]);
+
+    row = TagStatusTableWindow.buildRow_(tag, nowSec);
+    assertEqual_(row{9}, 'Inactive', 'Activity should be Inactive for 10min-old datenum X');
+end
+
+function testActivityInactive_emptyXY()
+    % SensorTag with no data -> Activity='Inactive' (samples=0 branch).
+    resetRegistry_();
+    tag = SensorTag('no_data', 'Name', 'No Data');
+
+    row = TagStatusTableWindow.buildRow_(tag, 1.7e9);
+    assertEqual_(row{9},  'Inactive', 'Activity should be Inactive when XY is empty');
+    assertEqual_(row{10}, '0',         'Samples should be 0');
+end
+
+function testActivityInactive_futureTimestamp()
+    % X(end) in the future (clock skew) -> defensively render Inactive.
+    resetRegistry_();
+    tag = SensorTag('future_ts', 'Name', 'Future TS');
+    nowSec  = 1.7e9;
+    xLast   = nowSec + 60;       % 60 s in the future
+    tag.updateData([xLast - 1, xLast], [1 2]);
+
+    row = TagStatusTableWindow.buildRow_(tag, nowSec);
+    assertEqual_(row{9}, 'Inactive', 'Activity should be Inactive for future X (defensive)');
+end
+
+function testFilterRows_subsetFixture()
+    % Regression guard for the search field: filter on a multi-row fixture
+    % and confirm we get exactly the expected subset.
+    rows = { ...
+        'pressure_inlet',  'Pressure Inlet',  'Sensor',  '', '', '', '', '', '', '', ''; ...
+        'pressure_outlet', 'Pressure Outlet', 'Sensor',  '', '', '', '', '', '', '', ''; ...
+        'temp_a',          'Temperature A',   'Sensor',  '', '', '', '', '', '', '', ''; ...
+        'state_machine',   'State Machine',   'State',   '', '', '', '', '', '', '', ''; ...
+        'alarm_high',      'Alarm High',      'Monitor', '', '', '', '', '', '', '', '' };
+
+    kept = TagStatusTableWindow.filterRows_(rows, 'pressure');
+    assertEqual_(size(kept, 1), 2, 'filter ''pressure'' keeps 2 rows');
+    assertEqual_(kept{1, 1}, 'pressure_inlet',  'first kept Key');
+    assertEqual_(kept{2, 1}, 'pressure_outlet', 'second kept Key');
+
+    keptUpper = TagStatusTableWindow.filterRows_(rows, 'TEMP');
+    assertEqual_(size(keptUpper, 1), 1, 'filter ''TEMP'' case-insensitive');
+    assertEqual_(keptUpper{1, 1}, 'temp_a', 'matched Key for ''TEMP''');
+
+    keptNameOnly = TagStatusTableWindow.filterRows_(rows, 'machine');
+    assertEqual_(size(keptNameOnly, 1), 1, 'filter ''machine'' matches Name');
+    assertEqual_(keptNameOnly{1, 1}, 'state_machine', 'matched via Name field');
 end
 
 % ===================== Helpers =====================

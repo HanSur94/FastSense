@@ -109,12 +109,13 @@ classdef TestTagStatusTableWindow < matlab.unittest.TestCase
 
             app.scanLiveTagUpdatesForTest_();
 
-            % Find tag_a row in the buffer; samples column (index 9) should
-            % now read '5' and latest (index 6) should reflect 55.
+            % Find tag_a row in the buffer; samples column (now index 10 after
+            % Activity column was inserted at 9) should read '5' and latest
+            % (index 6) should reflect 55.
             rowA = findRowByKey_(w, 'tag_a');
             testCase.verifyNotEmpty(rowA, ...
                 'testMarkTagsDirty_updatesRow: tag_a row must exist in buffer');
-            testCase.verifyEqual(rowA{9}, '5', ...
+            testCase.verifyEqual(rowA{10}, '5', ...
                 'testMarkTagsDirty_updatesRow: Samples must reflect new count after tick');
             testCase.verifyTrue(any(strcmp(rowA{6}, {'55.00', '55', '55.000'})), ...
                 sprintf(['testMarkTagsDirty_updatesRow: Latest must reflect new ' ...
@@ -186,6 +187,55 @@ classdef TestTagStatusTableWindow < matlab.unittest.TestCase
                 'testButtonExistsOnToolbar: exactly one CompanionTagStatusBtn must exist');
         end
 
+        function testActivityFlipsWithoutLiveMode(testCase)
+            %TESTACTIVITYFLIPSWITHOUTLIVEMODE buildRow_ flips Live->Inactive as nowSeconds advances.
+            %   This is the integration-level proxy for "window's own timer keeps
+            %   Activity accurate when companion is NOT in Live mode": we drive
+            %   the pure-logic seam (buildRow_'s nowSeconds parameter) the same
+            %   way the timer's onRefreshTick_ does internally.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            tag = SensorTag('ax', 'Name', 'Anchor X');
+            xLast = 1.7e9;                         % posix-time-ish anchor
+            tag.updateData([xLast - 1, xLast], [1 2]);
+
+            % t = xLast + 10s -> within threshold -> Live.
+            rowLive = TagStatusTableWindow.buildRow_(tag, xLast + 10);
+            testCase.verifyEqual(rowLive{9}, 'Live', ...
+                'testActivityFlipsWithoutLiveMode: must be Live at +10s');
+
+            % t = xLast + 301s -> beyond threshold (300s) -> Inactive.
+            rowInactive = TagStatusTableWindow.buildRow_(tag, xLast + 301);
+            testCase.verifyEqual(rowInactive{9}, 'Inactive', ...
+                'testActivityFlipsWithoutLiveMode: must be Inactive at +301s');
+        end
+
+        function testRefreshTimerStoppedAndDeletedOnClose(testCase)
+            %TESTREFRESHTIMERSTOPPEDANDDELETEDONCLOSE Window close must stop AND delete its timer.
+            registerTwoSensors_();
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() safeClose_(app));
+            testCase.addTeardown(@() TagRegistry.clear());
+            testCase.addTeardown(@() cleanupLeakedTimers_());
+
+            w = app.openTagStatusTable();
+
+            % Snapshot the window's timer set immediately after open.
+            timersBefore = findStatusTableTimers_();
+            testCase.verifyNotEmpty(timersBefore, ...
+                ['testRefreshTimerStoppedAndDeletedOnClose: a TagStatusTable-* ' ...
+                'timer must exist after openWith']);
+
+            w.close();
+
+            % After close, no TagStatusTable-* timers should remain.
+            timersAfter = findStatusTableTimers_();
+            testCase.verifyEmpty(timersAfter, ...
+                ['testRefreshTimerStoppedAndDeletedOnClose: all TagStatusTable-* ' ...
+                'timers must be stopped+deleted after close']);
+        end
+
     end
 end
 
@@ -218,5 +268,49 @@ function row = findRowByKey_(w, key)
             row = r;
             return;
         end
+    end
+end
+
+function cleanupLeakedTimers_()
+    % Defensive sweep: stop+delete any TagStatusTable-* timers that survived
+    % a test failure mid-execution. Required because timers persist across
+    % MATLAB scope (root-owned), so a panic'd test could otherwise leave
+    % the next test's findStatusTableTimers_ polluted.
+    try
+        leaked = findStatusTableTimers_();
+        for k = 1:numel(leaked)
+            try
+                stop(leaked(k));
+            catch
+            end
+            try
+                delete(leaked(k));
+            catch
+            end
+        end
+    catch
+    end
+end
+
+function out = findStatusTableTimers_()
+    % timerfindall does not accept '-regexp', so we get all timers and
+    % filter by Name prefix. Returns an empty array if nothing matches.
+    out = [];
+    try
+        all = timerfindall;
+        if isempty(all); return; end
+        keep = false(1, numel(all));
+        for k = 1:numel(all)
+            try
+                nm = get(all(k), 'Name');
+                if ischar(nm) && strncmp(nm, 'TagStatusTable-', 15)
+                    keep(k) = true;
+                end
+            catch
+            end
+        end
+        out = all(keep);
+    catch
+        out = [];
     end
 end

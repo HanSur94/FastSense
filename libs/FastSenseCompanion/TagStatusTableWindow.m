@@ -3,15 +3,27 @@ classdef TagStatusTableWindow < handle
 %
 %   Standalone classical `figure` (NOT a uifigure -- the companion owns the
 %   only uifigure). Constructed by FastSenseCompanion.openTagStatusTable().
-%   Pulls the initial row set from TagRegistry, then refreshes only dirty
-%   rows when the companion's scanLiveTagUpdates_ calls markTagsDirty(keys).
+%   Pulls the initial row set from TagRegistry, then refreshes rows via TWO
+%   complementary mechanisms:
+%     1. Push-on-write: companion.scanLiveTagUpdates_ calls markTagsDirty(keys)
+%        whenever sample counts grow (zero-cost when window is closed).
+%     2. Window-owned RefreshTimer_: ticks every RefreshPeriod_ seconds while
+%        the window is open and re-queries every tracked tag. This guarantees
+%        the table reflects reality even when the companion is NOT in Live
+%        mode (e.g. user just wants to monitor activity without running the
+%        full live pipeline). Quick task 260519-bs4 follow-up patch.
+%
+%   The "Activity" column (between "Last updated" and "Samples") shows
+%   "Live" when X(end) is within InactiveThresholdSeconds_ of the current
+%   wall-clock time (using the same time-base conversion as
+%   formatLastUpdated_ -- datenum or posixtime). Otherwise "Inactive".
 %
 %   Lifecycle:
 %     w = TagStatusTableWindow();
-%     w.openWith(registry, theme, companion);   % builds the figure, fills the table
+%     w.openWith(registry, theme, companion);   % builds the figure, fills the table, starts timer
 %     w.markTagsDirty({'press_a','temp_b'});    % rebuild only those rows; re-apply filter
 %     w.applyTheme(theme);                      % live theme switch
-%     w.close();                                % programmatic close; fires DetachClosed
+%     w.close();                                % programmatic close; stops timer; fires DetachClosed
 %
 %   Events fired:
 %     DetachClosed -- fired exactly once when the window closes (user X click,
@@ -38,15 +50,22 @@ classdef TagStatusTableWindow < handle
         Registry_     = []        % TagRegistry handle (or class name placeholder)
         Theme_        = []        % resolved CompanionTheme struct
         Companion_    = []        % FastSenseCompanion handle (uialert parent + detach)
-        RowBuffer_    = cell(0, 10)
+        RowBuffer_    = cell(0, 11)
         KeyToRow_     = []        % containers.Map(key -> row index into RowBuffer_)
         Listeners_    = {}        % addlistener handles; deleted in close()
+        RefreshTimer_ = []        % timer driving periodic re-query (window-owned; 260519-bs4 patch)
+        RefreshErrCount_ = 0      % consecutive errors in onRefreshTick_; auto-stops at 2
+    end
+
+    properties (Constant, Access = private)
+        RefreshPeriod_           = 1.0    % seconds between RefreshTimer_ ticks
+        InactiveThresholdSeconds_ = 300   % >= 5 min since last sample -> Activity = "Inactive"
     end
 
     methods (Access = public)
 
         function obj = TagStatusTableWindow()
-            obj.RowBuffer_ = cell(0, 10);
+            obj.RowBuffer_ = cell(0, 11);
             obj.KeyToRow_  = containers.Map('KeyType', 'char', 'ValueType', 'double');
         end
 
@@ -122,19 +141,21 @@ classdef TagStatusTableWindow < handle
             stripePair = obj.stripePairFromTheme_(t);
 
             % --- Center uitable. ---
+            % 11 columns: Activity is column 9 (between Last updated and Samples).
             obj.hTable_ = uitable(obj.hFig_, ...
                 'Units',           'normalized', ...
                 'Position',        [0.01 0.06 0.98 0.86], ...
                 'ColumnName',      {'Key', 'Name', 'Type', 'Criticality', 'Units', ...
-                                    'Latest', 'Status', 'Last updated', 'Samples', 'Labels'}, ...
-                'ColumnWidth',     {130, 200, 75, 80, 60, 90, 80, 140, 70, 'auto'}, ...
-                'ColumnEditable',  false(1, 10), ...
+                                    'Latest', 'Status', 'Last updated', 'Activity', ...
+                                    'Samples', 'Labels'}, ...
+                'ColumnWidth',     {130, 200, 75, 80, 60, 90, 80, 140, 70, 70, 'auto'}, ...
+                'ColumnEditable',  false(1, 11), ...
                 'RowName',         {}, ...
                 'FontName',        'Menlo', ...
                 'FontSize',        10, ...
                 'BackgroundColor', stripePair, ...
                 'ForegroundColor', t.ForegroundColor, ...
-                'Data',            cell(0, 10));
+                'Data',            cell(0, 11));
 
             % --- Footer "N tags" label. ---
             obj.hStatusLbl_ = uicontrol(obj.hFig_, ...
@@ -152,6 +173,11 @@ classdef TagStatusTableWindow < handle
             obj.applyFilter_();
 
             obj.IsOpen = true;
+
+            % --- Start the window-owned refresh timer. ---
+            % Independent of companion Live mode so Activity / Last updated
+            % stay accurate even when the companion is idle. 260519-bs4 patch.
+            obj.startRefreshTimer_();
         end
 
         function markTagsDirty(obj, keys)
@@ -163,13 +189,14 @@ classdef TagStatusTableWindow < handle
             if ischar(keys); keys = {keys}; end
             if ~iscell(keys); return; end
             try
+                nowSec = TagStatusTableWindow.nowSeconds_();
                 changed = false;
                 for k = 1:numel(keys)
                     key = char(keys{k});
                     if isempty(key); continue; end
                     tag = obj.resolveTag_(key);
                     if isempty(tag); continue; end
-                    row = TagStatusTableWindow.buildRow_(tag);
+                    row = TagStatusTableWindow.buildRow_(tag, nowSec);
                     if obj.KeyToRow_.isKey(key)
                         idx = obj.KeyToRow_(key);
                         obj.RowBuffer_(idx, :) = row;
@@ -262,7 +289,11 @@ classdef TagStatusTableWindow < handle
     methods (Access = private)
 
         function onCloseRequest_(obj)
-        %ONCLOSEREQUEST_ Order: drop listeners -> notify DetachClosed -> delete figure.
+        %ONCLOSEREQUEST_ Order: stop+delete timer -> drop listeners -> notify DetachClosed -> delete figure.
+            % --- Stop and delete the refresh timer BEFORE listener cleanup. ---
+            % stop(t) then delete(t) order is required by the project's
+            % cross-cutting engineering constraint (Phase 1018 lock).
+            obj.stopRefreshTimer_();
             try
                 for ii = 1:numel(obj.Listeners_)
                     try
@@ -297,7 +328,7 @@ classdef TagStatusTableWindow < handle
 
         function rebuildAll_(obj)
         %REBUILDALL_ Replace RowBuffer_ with one row per registered tag (sorted).
-            obj.RowBuffer_ = cell(0, 10);
+            obj.RowBuffer_ = cell(0, 11);
             obj.KeyToRow_  = containers.Map('KeyType', 'char', 'ValueType', 'double');
             try
                 tags = TagRegistry.find(@(t) true);
@@ -321,9 +352,10 @@ classdef TagStatusTableWindow < handle
             tags = tags(ord);
             % Preallocate the buffer up front.
             nTags = numel(tags);
-            obj.RowBuffer_ = cell(nTags, 10);
+            obj.RowBuffer_ = cell(nTags, 11);
+            nowSec = TagStatusTableWindow.nowSeconds_();
             for k = 1:nTags
-                obj.RowBuffer_(k, :) = TagStatusTableWindow.buildRow_(tags{k});
+                obj.RowBuffer_(k, :) = TagStatusTableWindow.buildRow_(tags{k}, nowSec);
                 obj.KeyToRow_(keysSorted{k}) = k;
             end
         end
@@ -362,16 +394,124 @@ classdef TagStatusTableWindow < handle
             end
         end
 
+        function startRefreshTimer_(obj)
+        %STARTREFRESHTIMER_ Create and start the window-owned refresh timer.
+        %   Independent of companion Live mode -- guarantees the table
+        %   re-queries every tag every RefreshPeriod_ seconds while open,
+        %   so Activity / Last updated stay accurate even when the
+        %   companion is idle. Wrapped in try/catch; failure to construct
+        %   the timer (e.g. on a stripped-down environment) is non-fatal:
+        %   the push-on-write path from scanLiveTagUpdates_ still works.
+        %   260519-bs4 patch.
+            obj.RefreshErrCount_ = 0;
+            try
+                if ~isempty(obj.RefreshTimer_) && isvalid(obj.RefreshTimer_)
+                    stop(obj.RefreshTimer_);
+                    delete(obj.RefreshTimer_);
+                end
+                % Unique name so orphan timers from crashed tests can be
+                % discovered via timerfindall and cleaned up.
+                tName = sprintf('TagStatusTable-%s', randomTimerSuffix_());
+                obj.RefreshTimer_ = timer( ...
+                    'Name',          tName, ...
+                    'Period',        obj.RefreshPeriod_, ...
+                    'ExecutionMode', 'fixedSpacing', ...
+                    'BusyMode',      'drop', ...
+                    'TimerFcn',      @(~, ~) obj.onRefreshTick_());
+                start(obj.RefreshTimer_);
+            catch err
+                warning('FastSenseCompanion:tagStatusTableTimerStart', ...
+                    'TagStatusTableWindow: failed to start refresh timer: %s', ...
+                    err.message);
+                obj.RefreshTimer_ = [];
+            end
+        end
+
+        function stopRefreshTimer_(obj)
+        %STOPREFRESHTIMER_ Stop and delete the refresh timer in stop+delete order.
+            try
+                if ~isempty(obj.RefreshTimer_) && isvalid(obj.RefreshTimer_)
+                    try
+                        stop(obj.RefreshTimer_);
+                    catch
+                    end
+                    delete(obj.RefreshTimer_);
+                end
+            catch
+                % Teardown must never throw.
+            end
+            obj.RefreshTimer_ = [];
+        end
+
+        function onRefreshTick_(obj)
+        %ONREFRESHTICK_ Re-query every tracked tag; only repaint when data changed.
+        %   Wrapped in try/catch; logs via `warning` rather than uialert
+        %   (uialert per tick would be noise-storm). After 2 consecutive
+        %   ticks throw, the timer self-stops to prevent log flooding.
+            if ~obj.IsOpen
+                return;
+            end
+            try
+                nowSec = TagStatusTableWindow.nowSeconds_();
+                changed = false;
+                keys = obj.KeyToRow_.keys();
+                for k = 1:numel(keys)
+                    key = keys{k};
+                    if ~obj.KeyToRow_.isKey(key); continue; end
+                    idx = obj.KeyToRow_(key);
+                    tag = obj.resolveTag_(key);
+                    if isempty(tag); continue; end
+                    newRow = TagStatusTableWindow.buildRow_(tag, nowSec);
+                    oldRow = obj.RowBuffer_(idx, :);
+                    if ~isequal(newRow, oldRow)
+                        obj.RowBuffer_(idx, :) = newRow;
+                        changed = true;
+                    end
+                end
+                if changed
+                    obj.applyFilter_();
+                end
+                obj.RefreshErrCount_ = 0;   % reset on a clean tick
+            catch err
+                obj.RefreshErrCount_ = obj.RefreshErrCount_ + 1;
+                warning('FastSenseCompanion:tagStatusTableTickFailed', ...
+                    'TagStatusTableWindow refresh tick failed: %s', err.message);
+                if obj.RefreshErrCount_ >= 2
+                    warning('FastSenseCompanion:tagStatusTableTickAborted', ...
+                        ['TagStatusTableWindow refresh timer self-stopped ' ...
+                        'after 2 consecutive failures.']);
+                    obj.stopRefreshTimer_();
+                end
+            end
+        end
+
     end
 
     methods (Static, Access = public)
 
-        function row = buildRow_(tag)
-        %BUILDROW_ Return a 1x10 cell row describing tag's current status.
+        function row = buildRow_(tag, nowSeconds)
+        %BUILDROW_ Return a 1x11 cell row describing tag's current status.
         %   Columns: Key, Name, Type, Criticality, Units, Latest, Status,
-        %            Last updated, Samples, Labels.
+        %            Last updated, Activity, Samples, Labels.
+        %
+        %   Inputs:
+        %     tag        -- Tag handle (any subclass; tolerant of throws)
+        %     nowSeconds -- (optional) current wall-clock time as posix
+        %                   seconds, used for the Activity column. When
+        %                   omitted, TagStatusTableWindow.nowSeconds_() is
+        %                   queried (slightly more expensive). Tests pass
+        %                   an explicit value for determinism. 260519-bs4 patch.
+        %
+        %   The Activity column is "Live" when X(end) is within
+        %   InactiveThresholdSeconds_ (5 minutes) of nowSeconds in the same
+        %   time base, else "Inactive". Empty / unconvertible / future X
+        %   defensively renders "Inactive".
+        %
         %   Never throws -- a tag whose getXY/valueAt fails renders em-dash
-        %   placeholders for the dynamic columns.
+        %   placeholders for the dynamic columns AND "Inactive" for Activity.
+            if nargin < 2 || isempty(nowSeconds)
+                nowSeconds = TagStatusTableWindow.nowSeconds_();
+            end
             em       = char(8212);
             key      = '';
             name     = '';
@@ -396,6 +536,7 @@ classdef TagStatusTableWindow < handle
             latestTxt      = em;
             statusTxt      = em;
             lastUpdatedTxt = em;
+            activityTxt    = 'Inactive';
             samplesTxt     = '0';
 
             try
@@ -409,9 +550,11 @@ classdef TagStatusTableWindow < handle
                     elseif isnumeric(Y) && isfinite(Y(end))
                         latestTxt = formatNumber_(Y(end));
                     end
-                    % --- Last updated ---
+                    % --- Last updated + Activity ---
                     if isnumeric(X) && isfinite(X(end))
                         lastUpdatedTxt = formatLastUpdated_(X(end));
+                        activityTxt    = computeActivity_(X(end), nowSeconds, ...
+                            TagStatusTableWindow.InactiveThresholdSeconds_);
                     end
                     % --- Status (kind-aware) ---
                     switch kind
@@ -447,7 +590,27 @@ classdef TagStatusTableWindow < handle
             end
 
             row = {key, name, typeLabel, crit, units, ...
-                   latestTxt, statusTxt, lastUpdatedTxt, samplesTxt, labelStr};
+                   latestTxt, statusTxt, lastUpdatedTxt, activityTxt, ...
+                   samplesTxt, labelStr};
+        end
+
+        function s = nowSeconds_()
+        %NOWSECONDS_ Return current wall-clock time as posix seconds.
+        %   Used as the reference for the Activity column. Posix-seconds
+        %   is chosen because it composes cleanly with both posixtime
+        %   (s > 1e9) and datenum (s > 7e5) X bases via computeActivity_.
+        %   Falls back to 0 if datetime/posixtime are not available, in
+        %   which case all rows render "Inactive" (defensive). 260519-bs4.
+            try
+                s = posixtime(datetime('now'));
+            catch
+                try
+                    % Octave fallback: compute posix from now() (datenum).
+                    s = (now - datenum(1970, 1, 1)) * 86400;
+                catch
+                    s = 0;
+                end
+            end
         end
 
         function out = filterRows_(rows, query)
@@ -531,5 +694,53 @@ function s = formatLastUpdated_(x)
         end
     catch
         % Keep numeric fallback.
+    end
+end
+
+function s = computeActivity_(xLast, nowSec, thresholdSec)
+%COMPUTEACTIVITY_ Return 'Live' or 'Inactive' based on xLast vs nowSec.
+%   Time-base inference mirrors InspectorPane.formatXTick_:
+%     xLast > 1e9 -> posixtime seconds (compare directly to nowSec)
+%     xLast > 7e5 -> MATLAB datenum days (convert to posix seconds)
+%     else        -> "seconds-since-something" we cannot anchor; Inactive.
+%   Defensive cases: NaN / non-finite / future timestamp -> Inactive.
+%   260519-bs4 patch.
+    s = 'Inactive';
+    if ~isnumeric(xLast) || ~isscalar(xLast) || ~isfinite(xLast)
+        return;
+    end
+    if ~isnumeric(nowSec) || ~isscalar(nowSec) || ~isfinite(nowSec) || nowSec <= 0
+        return;
+    end
+    xPosix = NaN;
+    if xLast > 1e9
+        xPosix = xLast;
+    elseif xLast > 7e5
+        % datenum days -> posix seconds.
+        xPosix = (xLast - datenum(1970, 1, 1)) * 86400;
+    end
+    if ~isfinite(xPosix)
+        return;
+    end
+    deltaSec = nowSec - xPosix;
+    % Negative delta = future timestamp (clock skew or test fixture);
+    % treat defensively as Inactive.
+    if deltaSec < 0
+        return;
+    end
+    if deltaSec < thresholdSec
+        s = 'Live';
+    end
+end
+
+function s = randomTimerSuffix_()
+%RANDOMTIMERSUFFIX_ Short unique suffix for the refresh timer name.
+%   Used so multiple concurrent windows / orphans from crashed tests can
+%   be discovered via `timerfindall('Name','TagStatusTable-*')`.
+    try
+        s = char(java.util.UUID.randomUUID().toString());
+    catch
+        % Fallback: timestamp + random digits (no Java).
+        s = sprintf('%.0f-%d', now * 86400, randi(1e6));
     end
 end
