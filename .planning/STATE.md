@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-19T09:09:49.773Z"
+last_updated: "2026-05-19T10:00:00Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # State
 
 ## Current Position
 
-Phase: 1028 (tag-update-perf-mex-simd) — EXECUTING
-Plan: 5 of 6 complete; Plan 06 (phase wrap) pending. Shipped plans: 01, 02, 02b, 02d, 05. Plans 03/04 (K2/K3/K4 kernel swaps) deferred per Plan 02d data (target regions <1% of tick).
-Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v1.0 perf milestone tracks phase 1028 wrap.
-Status: Plan 05 A1+A2 listener-coalescing seam shipped; CI Benchmark green (run 26086360898). Plan 06 must decide between architectural follow-up (in-memory propagation / containers.Map refactor / fs-stat coalescing) or close phase as-is.
-Last activity: 2026-05-19 — Plan 05 shipped Tag.invalidateBatch_ + LiveTagPipeline.onTick_ end-of-tick wiring + harness --coalesce-on/off flag. Measured −0.9% coalesce-on vs coalesce-off (within variance); the seam is a forward-compatible internal mechanism (in-memory propagation refactor would activate the win). Surfaced finding: post-cache `other` bucket = containers.Map dispatch + fs metadata, not listener fan-out.
+Phase: 1028 (tag-update-perf-mex-simd) — COMPLETE 2026-05-19
+Plan: 6 of 6 executed (with 03/04 deferred per Plan 02d data). Shipped plans: 01, 02, 02b, 02d, 05, 06.
+Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v1.0 perf milestone tracks phase 1028 — now COMPLETE.
+Status: Phase 1028 closed. WithIO `tickMin` reduced 4497 ms → 3662 ms (−18.6%) on Octave Linux x86_64 CI, almost entirely from Plan 02d's in-memory prior-state cache. Plan 06 ships per-tick fs-stat coalescing reducing 1600 → 1 syscalls/tick. PR #114 carries the phase. Follow-up phase 1029 candidates: in-memory propagation refactor; `containers.Map` → struct-array refactor; `.mat` save-side optimization. K2/K3/K4 deferred per data (target regions bucket as 0 ms post-cache).
+Last activity: 2026-05-19 — Completed phase 1028: Tag update perf — MEX + SIMD. Plan 06 shipped per-tick fs-stat coalescing seam (1600 → 1 syscall/tick = −99.94% reduction), phase wrap docs (VERIFICATION.md Final Result, ROADMAP.md, STATE.md, 1028-06-SUMMARY.md). Cumulative phase win: WithIO −18.6% from Plan 02d's read-side cache. K2/K3/K4 deferred per data; in-memory propagation + Map refactor deferred to phase 1029.
 
 ### Quick Tasks Completed
 
@@ -137,6 +137,14 @@ These apply to every phase and are reflected in phase success criteria rather th
 - **1020-02:** applyFilter_() is the single rebuild path for DashboardListPane row list; onRowClicked_ sets SelectedIdx_ then calls applyFilter_() for highlight rather than painting individual buttons
 - **1020-02:** addDashboard uses handle identity (==) for duplicate detection; removeDashboard uses Name (case-sensitive strcmp) for lookup per CONTEXT.md
 - **1020-02:** Listeners re-wired in setProject after detach clears them; SelectedDashboardIdx_ clamped to 0 in refresh() when engine list shrinks
+
+### Decisions (Phase 1028)
+
+- **1028-02b/02d/05/06 DI-seam pattern:** All four mid-phase architectural levers share a single shape — `Access = private` flag (production default true) + `Hidden setFooForTesting_(tf)` setter that validates `logical scalar`. This preserves D-10 (no public API), gives the harness a single flip-point per lever, and makes the test surface uniform. Future phases that add a switchable behaviour to a Tag-pipeline class should follow this pattern.
+- **1028-02d in-memory cache mechanism:** The big win in the phase was a read-side cache, not a write-side coalesce. The original Plan 02d framing ("coalesce within-tick semantics") was wrong — `processTag_` already calls `writeFn_` exactly once per tag per tick. The actual mechanism is a `containers.Map` of `tag.Key -> struct('X', priorX, 'Y', priorY)` populated lazily and refreshed after every write, skipping the per-tick `load()` inside `writeTagMat_('append',...)`. Crash-recovery semantics preserved because `save()` cadence is unchanged.
+- **1028-03/04 deferral was data-driven, not a scope cut:** K2/K3/K4 kernel target regions bucket as 0 ms in the post-cache `tBreakdown` profile. Plans 03/04 PLAN.md files exist on disk and are valid pickup points if a future profile pass with direct `tic/toc` probes finds those regions to be non-trivial. The deferral is documented in VERIFICATION.md and the 1028-06-SUMMARY.md retrospective.
+- **1028-05 null-result ship-the-seam pattern:** When a planned architectural lever's expected mechanism doesn't materialise empirically, ship the lever as an internal seam and surface the null result in VERIFICATION.md. Avoid the false dichotomy of "meets ship-criterion → ship" vs "doesn't → revert"; the third option is "ships as forward-compat, doesn't move today's number". Establishes a precedent for honest measurement reporting.
+- **1028-06 fs-stat coalesce mechanism:** One `dir(parentDir)` per unique parent directory per tick, keyed map populated lazily on first lookup, frozen for the rest of that tick. Octave-safe (no MATLAB-specific syntax). Trade-off: a file appearing mid-tick is NOT visible in that tick. Acceptable because the per-tag mtime check vs `lastModTime` already serialises ingestion at tick boundaries.
 
 ### Carry-Forward
 

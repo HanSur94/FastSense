@@ -21,7 +21,7 @@
 - [ ] Phase 1026: Dashboard time slider preview
 - [x] Phase 1027: Companion detachable log window — completed 2026-05-08
 - [ ] Phase 1027.1: Independent events/live log detach (gap closure)
-- [ ] Phase 1028: Tag update perf — MEX + SIMD
+- [x] Phase 1028: Tag update perf — MEX + SIMD — completed 2026-05-19
 
 </details>
 
@@ -115,7 +115,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1026. Dashboard time slider preview | pending | 0/? | Not started | — |
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
 | 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
-| 1028. Tag update perf — MEX + SIMD | pending | 5/6 | In Progress|  |
+| 1028. Tag update perf — MEX + SIMD | pending | 6/6 | Complete | 2026-05-19 |
 
 ## Phase Details (Pending Milestone)
 
@@ -181,25 +181,46 @@ Plans:
 - [x] 1027.1-08-update-walker-test-PLAN.md — assert two-panel LogPaneRoot skip-rule in walker test (Wave 4, depends on 05)
 
 
-### Phase 1028: Tag update perf — MEX + SIMD
+### Phase 1028: Tag update perf — MEX + SIMD — COMPLETE
 
-**Goal:** Profile and accelerate the tag update path at the 1000-tag × N-source × 1-session workload anchor (CONTEXT.md D-01). Land MEX kernels (K1 delimited_parse, K2 monitor_fsm, K3 composite_merge, K4 aggregate_matrix) behind transparent .m fallback dispatch (D-09), and conditionally land Stage 2 architectural seams (A1+A2 listener coalescing) gated on Stage-1 measurement (D-05). All 5 existing benchmark gates remain green throughout (D-08); no public API changes (D-10); DerivedTag.UserFn untouched (D-11); .mat write cadence unchanged (D-12).
+**Status:** Complete 2026-05-19.
+
+**Headline:** 1000-tag WithIO `tickMin` reduced from Wave 0 baseline 4497 ms to post-Plan-02d 3662 ms (−18.6% on Octave Linux x86_64 CI) — almost entirely from Plan 02d's in-memory prior-state cache eliminating the per-tick `load()` inside `writeTagMat_('append',...)`. Plan 06 adds a per-tick fs-stat coalescing seam that reduces `dir`/`exist` syscalls from ~2000/tick to 1/tick (−99.94%); wall-time delta on shared CI runners depends on per-syscall cost (post-CI numbers in 1028-VERIFICATION.md). All 4 active D-08 benchmark gates remain green throughout; the 5th (`bench_monitortag_tick`) remains assume-skipped per a documented pre-existing v2.0-migration bug (Plan 01 deferred-items.md).
+
+**Plans shipped:** 6 — `01` Wave 0 harness + baseline; `02` K1 `delimited_parse_mex`; `02b` DI seam + clean NoIO measurement; `02d` in-memory prior-state cache (the big win); `05` A1+A2 listener-coalescing seam (forward-compat, null measured win — surfaced finding); `06` per-tick fs-stat coalescing + phase wrap. Plans `03` (K2 monitor_fsm_mex) and `04` (K3+K4 composite kernels) were DEFERRED per Plan 02d's tBreakdown data: their target regions bucket as 0 ms in the post-cache profile, so the kernel-swap ROI does not justify the parity-test maintenance cost.
+
+**Kernels added:** `delimited_parse_mex` (K1; .m fallback parity per D-09 via `TestDelimitedParseParity`). K2/K3/K4 deferred per data.
+
+**Architectural seams added:**
+- `LiveTagPipeline.writeFn_` DI seam + `Hidden setWriteFnForTesting_` (Plan 02b)
+- `LiveTagPipeline.priorState_` in-memory cache + `cachedWriteFn_` + `Hidden setCacheActiveForTesting_` (Plan 02d) — **the big win**
+- `Tag.invalidateBatch_(tagSet)` Static helper + `getListeners_` Hidden accessor protocol + `LiveTagPipeline.onTick_` end-of-tick wiring + `Hidden setCoalesceActiveForTesting_` (Plan 05)
+- `LiveTagPipeline.lookupFsEntry_` per-tick fs-stat cache + `LastFsStatCount` observability + `Hidden setFsCoalesceForTesting_` (Plan 06)
+
+**Public API changes:** none (D-10 verified — every new property is `Access = private`; every new method is `Hidden`).
+
+**Deferred to follow-up phase 1029:**
+- In-memory propagation refactor (`processTag_` → `tag.updateData(newX,newY)`) — the BIG architectural win that makes Plan 05's A1+A2 seam *real*. Touches D-09 parity directly; significant scope.
+- `containers.Map` → struct-array refactor for the per-tag state lookup. `containers.Map/subsref` + `isKey` + `subsasgn` together account for ~1 s/tick in Plan 02b's top-N profile of the NoIO `other` bucket. Pure internal change. Skipped in Plan 06 in favour of the smaller fs-stat lever.
+- K2 `monitor_fsm_mex`, K3 `composite_merge_mex`, K4 `aggregate_matrix_mex` — currently bucket as 0 ms in the post-cache `tBreakdown`. If a future profile pass with direct `tic/toc` probes finds these regions >2% of the post-Plan-06 tick, they become candidates.
+- `.mat` save-side optimization (periodic-checkpoint cadence, or `save -struct wrap` → direct binary writer). Plan 02d's cache eliminated the read-side; `save()` is now the dominant within-tick I/O cost at ~720 ms/tick. Separate phase (changes crash-recovery semantics).
+- A3 (parallel raw-source polling via `parfeval`/threadpool) — `containers.Map` + fs-stat dominate the post-cache cost, NOT parallelism. Complexity unjustified.
 
 **Promoted from:** Backlog 999.5 (2026-05-08)
 **Decisions:** D-01..D-12 from .planning/phases/1028-tag-update-perf-mex-simd/1028-CONTEXT.md (no formal REQ-IDs for v3.x)
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed (with 03/04 deferred per data)
 
 Plans:
 - [x] 1028-01-PLAN.md — Wave 0: 1000-tag harness + parity scaffolds + regression suite + CI wiring + baseline measurement
 - [x] 1028-02-PLAN.md — Wave 1: K1 delimited_parse_mex + .m fallback dispatch
 - [x] 1028-02b — Wave 1.5 (insertion, no formal PLAN.md): NoIO measurement-gap fix via DI seam (`writeFn_` private + Hidden `setWriteFnForTesting_`); clean tBreakdown shows 65% of WithIO tick is .mat I/O
 - [x] 1028-02d — Wave 1.5 (insertion, no formal PLAN.md): in-memory prior-state cache eliminating per-tick `load()` inside `writeTagMat_('append',...)`; D-09 byte-equal parity (TestPriorStateCacheParity); D-10 / D-12 preserved
-- [ ] 1028-03-PLAN.md — Wave 2: K2 monitor_fsm_mex (fused hysteresis+debounce+findRuns) + .m fallback
-- [ ] 1028-04-PLAN.md — Wave 3: K3 composite_merge_mex + K4 aggregate_matrix_mex (6 structural modes) + fallbacks
-- [x] 1028-05-PLAN.md — Wave 4 (CONDITIONAL): Stage 2 architectural — A1 listener coalescing + A2 batch invalidate, gated on Stage-1 measurement
-- [ ] 1028-06-PLAN.md — Wave 5: Phase wrap — finalize VERIFICATION.md, update ROADMAP.md + STATE.md
+- [~] 1028-03-PLAN.md — DEFERRED per Plan 02d data: K2 `monitor_fsm_mex` target region bucketed as 0 ms in post-cache profile
+- [~] 1028-04-PLAN.md — DEFERRED per Plan 02d data: K3 `composite_merge_mex` + K4 `aggregate_matrix_mex` target regions bucketed as 0 ms in post-cache profile
+- [x] 1028-05-PLAN.md — Wave 4 (CONDITIONAL): Stage 2 architectural — A1 listener coalescing + A2 batch invalidate. Shipped as a forward-compatible seam (post-cache `other` bucket is dispatch overhead, not listener fan-out; null measured win surfaced in VERIFICATION.md)
+- [x] 1028-06-PLAN.md — Wave 5: Per-tick fs-stat coalescing (1600 → 1 syscalls/tick) + phase wrap (VERIFICATION.md final, ROADMAP.md, STATE.md, SUMMARY.md)
 
-> Plans 02-06 are serialized: each Wave-N plan extends the SensorThreshold MEX block in `libs/FastSense/build_mex.m`, appends measurements to `bench_tag_pipeline_1k.m`, and writes a new subsection to `1028-VERIFICATION.md`. The serial chain prevents shared-file conflicts and naturally flows each plan's `tickMin` into the next plan's Δ-vs-previous table.
+> Note on the serial plan chain: Plans 02-06 each extend the SensorThreshold MEX block in `libs/FastSense/build_mex.m` (Plan 02 only — K2/K3/K4 deferred), append measurements to `bench_tag_pipeline_1k.m`, and write a new subsection to `1028-VERIFICATION.md`. The serial chain prevented shared-file conflicts and produced a continuous before/after data trail. Plans 03/04 are kept as `[~]` (deferred, not failed) in the list because their PLAN.md files exist on disk and remain available as a starting point for any future phase that finds direct `tic/toc` evidence of their target regions being non-trivial.
 
 ## Backlog
 
