@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Plant Log Integration
-status: verifying
-stopped_at: Completed 1032-03-detached-mirror-and-smoke-PLAN.md
-last_updated: "2026-05-19T09:52:09.127Z"
+status: executing
+stopped_at: Completed 1033-01-engine-public-api-PLAN.md
+last_updated: "2026-05-19T10:36:23.728Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 15
+  completed_plans: 13
 ---
 
 # State
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (created 2026-05-13)
 **Core value:** Engineers can render millions of sensor points smoothly, organize
 them into navigable dashboards, and surface anomalies — all in pure MATLAB with no
 toolbox dependencies.
-**Current focus:** Phase 1032 — Per-Widget Plant Log Overlay
+**Current focus:** Phase 1033 — Dashboard + Companion Integration & Serialization
 
 ## Current Position
 
-Phase: 1033
-Plan: Not started
+Phase: 1033 (Dashboard + Companion Integration & Serialization) — EXECUTING
+Plan: 2 of 3
 Milestone: v3.1 Plant Log Integration
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-05-19
 
 ## Progress Bar
@@ -155,11 +155,14 @@ separate REQ-IDs:
 
 ## Session Continuity
 
-- **Resume point:** Phase 1032 Plan 03 (detached mirror parity + smoke) is
-  **shipped** (2026-05-19). Phase 1032 is **closed** — all 3 plans complete,
-  all 4 PLOG-VIZ-* requirements (03/04/05/07) integration-proven end-to-end.
-  Next step: run `/gsd:verify-phase 1032` to validate the phase exit,
-  then begin Phase 1033 (Dashboard + Companion Integration & Serialization).
+- **Resume point:** Phase 1033 Plan 01 (engine public API) is **shipped**
+  (2026-05-19). `DashboardEngine.attachPlantLog` + `detachPlantLog` public
+  methods replace the Phase 1031 test seam as production code path; four
+  new private serialization-state properties are ready for Plan 02
+  serializer read-through. PLOG-INT-01 + PLOG-INT-02 unit +
+  integration-proven (15 function-style + 18 class-based tests PASS).
+  Phase 1029-1032 regression intact. Next step: begin
+  Phase 1033 Plan 02 (DashboardSerializer + Load).
 
 - **Order of phases:** 1029 ✅ → 1030 ✅ → 1031 → 1032 → 1033 (each phase depends on
   prior phases; no parallel execution paths).
@@ -179,7 +182,7 @@ separate REQ-IDs:
   Remaining requirements (Phase 1033): PLOG-VIZ-01 + 02 + 06 + 08 + 09 +
   PLOG-INT-* etc. — see ROADMAP.md.
 
-- **Stopped at:** Completed 1032-03-detached-mirror-and-smoke-PLAN.md
+- **Stopped at:** Completed 1033-01-engine-public-api-PLAN.md
   (Phase 1032 closed; ready for `/gsd:verify-phase 1032`).
   `DetachedMirror.restoreLiveRefs` extended to copy `ShowPlantLog` from
   original to clone (belt-and-suspenders alongside the Plan 01
@@ -542,3 +545,43 @@ separate REQ-IDs:
   requirements (03/04/05/07) integration-proven end-to-end. **Phase
   1032 closed; ready for /gsd:verify-phase 1032.** See
   `.planning/phases/1032-per-widget-plant-log-overlay/1032-03-detached-mirror-and-smoke-SUMMARY.md`.
+
+### Phase 1033 — Dashboard + Companion Integration & Serialization
+
+- **Plan 01 (engine public API, 2026-05-19)** — Shipped
+  `DashboardEngine.attachPlantLog` + `detachPlantLog` public methods
+  replacing the Phase 1031 test seam as the production code path. Four
+  new private serialization-state properties
+  (`PlantLogSourcePath_`/`PlantLogMapping_`/`PlantLogInterval_`/`PlantLogStartTail_`)
+  populated by attach + cleared by detach, ready for Plan 02 serializer
+  read-through via friend access (CONTEXT.md D-01). Idempotent re-attach:
+  `attachPlantLog` calls `detachPlantLog` internally when a prior store
+  exists (D-04). Two new private mapping translation helpers
+  (`plantLogMappingToReaderShape_` + `readerMappingToJsonShape_`) bridge
+  the CONTEXT.md JSON-schema names (`timestampCol`/`messageCol`/`format`)
+  <-> PlantLogReader PascalCase shape with back-compat acceptance of
+  either shape (D-05). Destructor extended with
+  `try obj.detachPlantLog(); catch, end` as the final plant-log teardown
+  step. Phase 1031 test seams `setPlantLogStoreForTest_` +
+  `setPlantLogLiveTailForTest_` preserved on disk -- production
+  `attachPlantLog` REUSES them internally so wire-up code stays
+  single-source-of-truth. After-attach widget rewire (D-09): iterate
+  Widgets and call `setShowPlantLog(true, engine)` on every
+  `ShowPlantLog=true` `FastSenseWidget` so XLim listener + hover attach
+  even when the property was set by `fromStruct`. Auto-fixed during
+  execution: (1) `PlantLogStore` constructor requires `sourceFile` arg
+  (Rule 3 -- plan example `PlantLogStore()` throws
+  `PlantLogStore:invalidInput`; use `PlantLogStore(filePath)` so the
+  store records the source path); (2) Added
+  `PlantLogReader.autoDetectFromFile(filePath)` static helper because
+  `DashboardEngine` cannot reach `libs/PlantLog/private/readtablePortable.m`
+  (Rule 3 -- minimal additive helper, does not conflict with Plan 03's
+  planned `openInteractive` extension); (3) `StartTail` scalar
+  validation added (Rule 2 -- `[true true]` would have passed the
+  type check). 15/15 function-style + 18/18 class-based PASS on MATLAB
+  R2025b; Phase 1029-1032 regression intact (23/23 integration smoke +
+  52/52 plant-log unit surface); checkcode clean on both new test
+  files; `DashboardEngine.m` pre-existing 23 warnings unchanged (zero
+  NEW Error/Critical-level diagnostics). PLOG-INT-01 + PLOG-INT-02
+  unit + integration-proven. See
+  `.planning/phases/1033-dashboard-companion-integration-serialization/1033-01-engine-public-api-SUMMARY.md`.

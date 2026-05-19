@@ -51,8 +51,8 @@ Requirements for the v3.1 milestone. Each maps to roadmap phases in
 
 ### Integration
 
-- [ ] **PLOG-INT-01**: User can attach a plant log to a `DashboardEngine` via `engine.attachPlantLog(filePath, opts)` and the slider preview overlay activates immediately.
-- [ ] **PLOG-INT-02**: User can detach a plant log via `engine.detachPlantLog()`; all slider and widget overlays disappear and any active live tail stops cleanly.
+- [x] **PLOG-INT-01**: User can attach a plant log to a `DashboardEngine` via `engine.attachPlantLog(filePath, opts)` and the slider preview overlay activates immediately.
+- [x] **PLOG-INT-02**: User can detach a plant log via `engine.detachPlantLog()`; all slider and widget overlays disappear and any active live tail stops cleanly.
 - [ ] **PLOG-INT-03**: User can open a plant log from `FastSenseCompanion`'s toolbar via an "Open Plant Log…" entry, which imports the file and attaches the resulting store to every open `DashboardEngine` instance the companion is managing.
 - [ ] **PLOG-INT-04**: Saving a dashboard via `DashboardSerializer` (JSON and `.m` export) persists the plant-log source path, the column mapping, the live-tail interval, and each widget's `ShowPlantLog` flag.
 - [ ] **PLOG-INT-05**: Loading a serialized dashboard re-imports the plant log from the saved source path using the saved column mapping and restores each widget's `ShowPlantLog` state; entries themselves are not persisted in the JSON/`.m` export.
@@ -122,8 +122,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLOG-VIZ-07 | 1032 | Complete |
 | PLOG-VIZ-08 | 1031 | Complete |
 | PLOG-VIZ-09 | 1031 | Complete |
-| PLOG-INT-01 | 1033 | Pending |
-| PLOG-INT-02 | 1033 | Pending |
+| PLOG-INT-01 | 1033 | Complete |
+| PLOG-INT-02 | 1033 | Complete |
 | PLOG-INT-03 | 1033 | Pending |
 | PLOG-INT-04 | 1033 | Pending |
 | PLOG-INT-05 | 1033 | Pending |
