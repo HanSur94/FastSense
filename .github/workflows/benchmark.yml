@@ -67,7 +67,17 @@ jobs:
           output-file-path: benchmark-results.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
-          alert-threshold: '110%'
+          # alert-threshold: 200% — raised from 110% per Phase 1028 follow-up.
+          # The FastSense rendering benches (Render/Downsample/Zoom at
+          # 5M–100M points) have mean wall-times of 0.4–0.7 ms on shared
+          # CI runners. JIT-cached incremental update paths produce
+          # 2–6x variance run-over-run independent of any code change.
+          # At 110%, every PR false-positive-alerts on these sub-ms
+          # metrics. 200% is the smallest threshold that absorbs the
+          # observed JIT variance while still catching real regressions
+          # (which historically show as 5–10x slowdowns, not 2x).
+          # See PR #114 (2026-05-19) for the false-positive evidence.
+          alert-threshold: '200%'
           comment-on-alert: true
           fail-on-alert: false
           alert-comment-cc-users: '@HanSur94'
