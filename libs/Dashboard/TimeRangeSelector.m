@@ -104,16 +104,11 @@ classdef TimeRangeSelector < handle
             end
             obj.hPanel = hPanel;
             obj.hFigure = ancestor(hPanel, 'figure');
-            % Detect whether the hosting figure was created via uifigure(...).
-            % uicontrol is not supported under uifigure, so buildGraphics_ must
-            % use uilabel and pixel-based positions instead. The cheapest
-            % runtime probe is isprop(hAncFig, 'AutoResizeChildren') — that
-            % property exists on uifigures only; classical figure() handles
-            % lack it even though their class is also matlab.ui.Figure on
-            % R2020b+.
-            obj.IsUIFigureParent_ = ~isempty(obj.hFigure) && ...
-                ishandle(obj.hFigure) && ...
-                isprop(obj.hFigure, 'AutoResizeChildren');
+            % IsUIFigureParent_ is detected lazily inside buildGraphics_ via
+            % a hidden uicontrol probe -- isprop heuristics (e.g. on
+            % AutoResizeChildren, MenuBar) are unreliable on R2020b+ because
+            % classical figure() and uifigure() share the same
+            % matlab.ui.Figure class and report identical property sets.
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if ischar(key)
@@ -746,6 +741,26 @@ classdef TimeRangeSelector < handle
             fgColor = [0.20 0.20 0.20];
             if isstruct(obj.Theme) && isfield(obj.Theme, 'ToolbarFontColor')
                 fgColor = obj.Theme.ToolbarFontColor;
+            end
+            % Probe-based detection: try a hidden uicontrol on hPanel. If
+            % MATLAB rejects it because the ancestor figure is a uifigure,
+            % switch to the uilabel path. This is bulletproof across MATLAB
+            % releases -- isprop heuristics fail on R2020b+ because classical
+            % and uifigure share matlab.ui.Figure and expose identical props.
+            obj.IsUIFigureParent_ = false;
+            try
+                probe = uicontrol('Parent', obj.hPanel, ...
+                    'Style', 'text', 'String', '', 'Visible', 'off');
+                delete(probe);
+            catch err
+                if contains(err.message, ...
+                        'Functionality not supported with figures created with the uifigure function') ...
+                        || contains(err.identifier, 'UnsupportedFor') ...
+                        || contains(err.identifier, 'NotSupportedFor')
+                    obj.IsUIFigureParent_ = true;
+                else
+                    rethrow(err);
+                end
             end
             if obj.IsUIFigureParent_
                 obj.buildLabelsUIFigure_(fgColor, panelBg);
