@@ -406,6 +406,11 @@ function n = test_start_stop_cleanup()
 end
 
 function n = test_setinterval_while_running_restarts()
+    if exist('OCTAVE_VERSION', 'builtin') && isempty(which('timer'))
+        fprintf('  SKIP: test_setinterval_while_running_restarts (Octave: timer unavailable).\n');
+        n = 0;
+        return;
+    end
     s = PlantLogStore('x');
     m = default_mapping_();
     t = PlantLogLiveTail(s, '/tmp/dummy.csv', m, 'Interval', 5);
