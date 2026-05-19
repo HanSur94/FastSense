@@ -1,12 +1,16 @@
 classdef PlantLogReader < handle
 %PLANTLOGREADER CSV/XLSX file reader for plant-log entries (PLOG-IM-01..05).
-%   PlantLogReader is a handle class with three static methods:
-%     PlantLogReader.openInteractive(filePath, varargin) -- Plan 03 wiring,
-%       full pipeline with dialog. NOT IMPLEMENTED in this plan; Plan 03 adds it.
+%   PlantLogReader is a handle class with four static methods:
+%     PlantLogReader.openInteractive(filePath, varargin) -- full pipeline
+%       with dialog (Phase 1030 Plan 03). Phase 1033 PLOG-INT-03 extension:
+%       supports a second optional output [entries, mapping] = openInteractive(...)
+%       returning the confirmed mapping struct (varargout back-compat).
 %     PlantLogReader.readFile(filePath, mapping) -- headless variant: parse
 %       a file using a known mapping struct, return PlantLogEntry[].
 %     mapping = PlantLogReader.autoDetect(rawTable) -- score columns and
 %       return a mapping struct suggesting timestamp/message columns.
+%     mapping = PlantLogReader.autoDetectFromFile(filePath) -- read+autoDetect
+%       in one call (Phase 1033 helper for callers outside libs/PlantLog/).
 %
 %   Mapping struct shape (caller decides; the dialog in Plan 02 produces this):
 %     mapping.TimestampColumn  char  variable name in the table
@@ -217,7 +221,7 @@ classdef PlantLogReader < handle
             end
         end
 
-        function entries = openInteractive(filePath, varargin)
+        function [entries, varargout] = openInteractive(filePath, varargin)
             %OPENINTERACTIVE Full pipeline: parse + auto-detect + dialog + return entries.
             %
             %   entries = PlantLogReader.openInteractive(filePath) opens the
@@ -230,6 +234,15 @@ classdef PlantLogReader < handle
             %   bypasses the dialog and runs readFile directly with the
             %   given mapping. Used by Phase 1031 live-tail re-reads and
             %   by every test that doesn't want to pop a uifigure.
+            %
+            %   [entries, mapping] = PlantLogReader.openInteractive(...)
+            %     -- Phase 1033 PLOG-INT-03 extension. Returns the confirmed
+            %     mapping struct as a second optional output. For Headless=true,
+            %     this is the input Mapping (echoed). For interactive paths,
+            %     this is the mapping the user confirmed in the dialog (or []
+            %     on Cancel / close / empty-file). Existing single-output
+            %     callers (Phase 1030 + Phase 1031) continue to work unchanged
+            %     via the varargout back-compat contract.
             %
             %   Optional name-value:
             %     'Theme'   -- 'dark' | 'light' (default 'dark', forwarded to the dialog)
@@ -286,6 +299,9 @@ classdef PlantLogReader < handle
                         'Headless=true requires a Mapping struct.');
                 end
                 entries = PlantLogReader.readFile(filePath, opts.Mapping);
+                if nargout >= 2
+                    varargout{1} = opts.Mapping;  % Phase 1033 PLOG-INT-03 — echo the input mapping
+                end
                 return;
             end
 
@@ -311,6 +327,9 @@ classdef PlantLogReader < handle
                         'No parseable rows found in %s', filePath);
                 end
                 entries = [];
+                if nargout >= 2
+                    varargout{1} = [];  % Phase 1033 PLOG-INT-03 — no confirmed mapping on empty file
+                end
                 return;
             end
 
@@ -343,9 +362,15 @@ classdef PlantLogReader < handle
             % --- Post-dialog: Cancel returns [], Confirm runs readFile ---
             if isempty(confirmedMapping) || ~isstruct(confirmedMapping)
                 entries = [];
+                if nargout >= 2
+                    varargout{1} = [];  % Phase 1033 PLOG-INT-03 — Cancel path: no confirmed mapping
+                end
                 return;
             end
             entries = PlantLogReader.readFile(filePath, confirmedMapping);
+            if nargout >= 2
+                varargout{1} = confirmedMapping;  % Phase 1033 PLOG-INT-03 — confirmed mapping from dialog
+            end
         end
 
     end
