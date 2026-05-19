@@ -21,7 +21,7 @@ FastPlot consists of five integrated libraries:
 |---------|-------------|
 | **FastSense** | Core plotting engine with dynamic downsampling, dashboard layouts (FastSenseGrid, FastSenseDock), interactive toolbar, themes, and disk-backed storage via FastSenseDataStore |
 | **Dashboard** | Widget-based dashboard engine with 8 widget types, 24-column responsive grid, edit mode, and JSON persistence |
-| **SensorThreshold** | Sensor data containers with state-dependent threshold rules, violation detection, and SensorRegistry catalog |
+| **SensorThreshold** | Tag-based sensor data containers (SensorTag, StateTag) with threshold monitoring (MonitorTag, CompositeTag), violation detection, and TagRegistry catalog |
 | **EventDetection** | Event detection from threshold violations, EventViewer with Gantt timeline, live pipeline with notifications |
 | **WebBridge** | TCP server for web-based visualization with NDJSON protocol |
 
@@ -32,10 +32,10 @@ FastPlot consists of five integrated libraries:
 - **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB
 - **Dashboard layouts** — tiled grids (FastSenseGrid) and tabbed containers (FastSenseDock)
 - **Interactive toolbar** — data cursor, crosshair, grid/legend toggle, autoscale, PNG export
-- **6 built-in themes** — default, dark, light, industrial, scientific, ocean
-- **Linked axes** — synchronized zoom/pan across subplots
-- **Sensor system** — state-dependent thresholds with condition-based rules and violation markers
-- **Event detection** — group violations into events with statistics, Gantt viewer, click-to-plot
+- **6 built-in themes** — light, dark, with palette presets (vibrant, muted, colorblind, ocean)
+- **Linked axes** — synchronized zoom/pan across subplots via LinkGroup
+- **Tag‑based sensor system** — SensorTag, StateTag, MonitorTag, CompositeTag for rich data modeling
+- **Event detection** — MonitorTag emits events, statistics, severity; EventStore persists them
 - **Live mode** — file polling with auto-refresh (preserve/follow/reset view modes)
 - **Disk-backed storage** — SQLite-backed chunked DataStore for 100M+ point datasets
 
@@ -44,7 +44,7 @@ FastPlot consists of five integrated libraries:
 ```matlab
 install;
 
-% Basic plot with 10M points
+% Basic plot with 10M points and a threshold
 fp = FastSense('Theme', 'dark');
 x = linspace(0, 100, 1e7);
 y = sin(x) + 0.1 * randn(size(x));
@@ -71,20 +71,11 @@ fig.renderAll();
 ```
 
 ```matlab
-% Sensor with state-dependent thresholds
-s = Sensor('pressure', 'Name', 'Chamber Pressure');
-s.X = linspace(0, 100, 1e6);
-s.Y = randn(1, 1e6) * 10 + 50;
-
-sc = StateChannel('machine');
-sc.X = [0 30 60 80]; sc.Y = [0 1 2 1];
-s.addStateChannel(sc);
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.resolve();
-
-fp = FastSense('Theme', 'industrial');
-fp.addSensor(s, 'ShowThresholds', true);
+% Live mode – poll a .mat file for changes
+fp = FastSense();
+fp.addLine(x, y, 'DisplayName', 'LiveData');
 fp.render();
+fp.startLive('data.mat', @(fp, s) fp.updateData(1, s.x, s.y));
 ```
 
 ## Requirements
@@ -101,11 +92,11 @@ Start with the [[Installation]] guide to set up FastPlot and compile MEX acceler
 
 **Core Classes**
 - [[API Reference: FastPlot]] — main plotting engine with dynamic downsampling
-- [[API Reference: Dashboard]] — FastSenseGrid, FastSenseDock, FastSenseToolbar
-- [[API Reference: Sensors]] — Sensor, StateChannel, ThresholdRule, SensorRegistry
-- [[API Reference: Event Detection]] — EventDetector, EventViewer, LiveEventPipeline
+- [[API Reference: Dashboard]] — FastSenseGrid, FastSenseDock, FastSenseToolbar, and widget types
+- [[API Reference: Sensors]] — SensorTag, StateTag, MonitorTag, CompositeTag, TagRegistry
+- [[API Reference: Event Detection]] — Event, EventStore, EventViewer, LiveEventPipeline
 - [[API Reference: Themes]] — theme presets, customization, color palettes
-- [[API Reference: Utilities]] — ConsoleProgressBar, FastSenseDefaults
+- [[API Reference: Utilities]] — ConsoleProgressBar, FastSenseDefaults, binary_search
 
 **Specialized Guides**
 - [[Live Mode Guide]] — file polling, view modes, live dashboards
