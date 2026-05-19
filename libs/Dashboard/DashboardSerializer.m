@@ -34,27 +34,53 @@ classdef DashboardSerializer
 
                 switch ws.type
                     case 'fastsense'
+                        showPl = isfield(ws, 'showPlantLog') && ws.showPlantLog;
                         if isfield(ws, 'source')
                             switch ws.source.type
                                 case 'sensor'
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.name);
+                                    if showPl
+                                        lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''), ...', ws.source.name);
+                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
+                                    else
+                                        lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.name);
+                                    end
                                 case 'file'
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
-                                        ws.source.path, ws.source.xVar, ws.source.yVar);
+                                    if showPl
+                                        lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'', ...', ...
+                                            ws.source.path, ws.source.xVar, ws.source.yVar);
+                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
+                                    else
+                                        lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
+                                            ws.source.path, ws.source.xVar, ws.source.yVar);
+                                    end
                                 case 'data'
                                     lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
                                     lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s);', ...
-                                        mat2str(ws.source.x), mat2str(ws.source.y));
+                                    if showPl
+                                        lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s, ...', ...
+                                            mat2str(ws.source.x), mat2str(ws.source.y));
+                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
+                                    else
+                                        lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s);', ...
+                                            mat2str(ws.source.x), mat2str(ws.source.y));
+                                    end
                                 otherwise
-                                    lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                                    if showPl
+                                        lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', ws.title, pos);
+                                    else
+                                        lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                                    end
                             end
                         else
-                            lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                            if showPl
+                                lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', ws.title, pos);
+                            else
+                                lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
+                            end
                         end
                     case 'number'
                         line = sprintf('    d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
@@ -129,6 +155,10 @@ classdef DashboardSerializer
                 lines{end+1} = '';
             end
 
+            % Phase 1033 PLOG-INT-04 -- emit attachPlantLog block when present
+            plantLogLines = DashboardSerializer.linesForPlantLog_(config, '    ');
+            lines = [lines, plantLogLines];
+
             lines{end+1} = 'end';
 
             fid = fopen(filepath, 'w');
@@ -144,6 +174,23 @@ classdef DashboardSerializer
             %  Handles both single-page (widgets field) and multi-page (pages field).
             %  Widgets/pages may have heterogeneous fields, so encode each entry
             %  individually and assemble the JSON array by hand.
+            %
+            %  Phase 1033 PLOG-INT-04: when config.plantLog is present,
+            %  the plant-log block is hand-encoded and spliced in so the
+            %  metadataCols cell-array preserves its [...] JSON shape.
+            %  Omitted entirely when config has no plantLog field
+            %  (byte-identical back-compat for v1.0-v3.0 dashboards).
+
+            % --- Strip plantLog from the top-level struct BEFORE jsonencode
+            % so jsonencode never sees the cell-of-cells shape (which can
+            % be ambiguous across MATLAB versions). We splice it back in
+            % below.
+            hasPlantLog = isfield(config, 'plantLog');
+            if hasPlantLog
+                plantLogBlock = config.plantLog;
+                config = rmfield(config, 'plantLog');
+            end
+
             if isfield(config, 'pages')
                 % Multi-page path: encode each page individually
                 pageParts = cell(1, numel(config.pages));
@@ -177,12 +224,72 @@ classdef DashboardSerializer
                 topJson = [topJson(1:end-1), ',"widgets":', widgetsJson, '}'];
             end
 
+            % --- Phase 1033 PLOG-INT-04: splice plantLog block at the end
+            % of topJson (just before the closing brace).
+            if hasPlantLog
+                plantLogJson = DashboardSerializer.encodePlantLogBlock_(plantLogBlock);
+                topJson = [topJson(1:end-1), ',"plantLog":', plantLogJson, '}'];
+            end
+
             fid = fopen(filepath, 'w');
             if fid == -1
                 error('DashboardSerializer:fileError', 'Cannot open file: %s', filepath);
             end
             fwrite(fid, topJson);
             fclose(fid);
+        end
+
+        function jsonStr = encodePlantLogBlock_(pl)
+            %ENCODEPLANTLOGBLOCK_ Hand-encode the plantLog block as a JSON object.
+            %   Used by saveJSON to preserve the metadataCols cell-array
+            %   shape (jsonencode of {} is ambiguous across MATLAB versions).
+            %   Returns a JSON object string with sourcePath, mapping,
+            %   interval, and startTail keys in stable order.
+            tsCol  = '';
+            msgCol = '';
+            fmt    = '';
+            mc     = {};
+            if isfield(pl, 'mapping') && isstruct(pl.mapping)
+                m = pl.mapping;
+                if isfield(m, 'timestampCol'); tsCol  = char(m.timestampCol); end
+                if isfield(m, 'messageCol');   msgCol = char(m.messageCol);   end
+                if isfield(m, 'format');       fmt    = char(m.format);       end
+                if isfield(m, 'metadataCols') && iscell(m.metadataCols)
+                    mc = m.metadataCols;
+                end
+            end
+            if isempty(mc)
+                metaJson = '[]';
+            else
+                mcParts = cell(1, numel(mc));
+                for mci = 1:numel(mc)
+                    mcParts{mci} = ['"', strrep(char(mc{mci}), '"', '\"'), '"'];
+                end
+                metaJson = ['[', strjoin(mcParts, ','), ']'];
+            end
+            mappingJson = sprintf( ...
+                '{"timestampCol":"%s","messageCol":"%s","metadataCols":%s,"format":"%s"}', ...
+                strrep(tsCol,  '"', '\"'), ...
+                strrep(msgCol, '"', '\"'), ...
+                metaJson, ...
+                strrep(fmt,    '"', '\"'));
+            sourcePath = '';
+            if isfield(pl, 'sourcePath'); sourcePath = char(pl.sourcePath); end
+            interval = 5;
+            if isfield(pl, 'interval');   interval = double(pl.interval);   end
+            startTail = true;
+            if isfield(pl, 'startTail');  startTail = logical(pl.startTail); end
+            if startTail
+                startTailStr = 'true';
+            else
+                startTailStr = 'false';
+            end
+            jsonStr = sprintf( ...
+                '{"sourcePath":"%s","mapping":%s,"interval":%g,"startTail":%s}', ...
+                strrep(sourcePath, '"', '\"'), ...
+                mappingJson, ...
+                interval, ...
+                startTailStr);
         end
 
         function result = load(filepath)
@@ -382,6 +489,10 @@ classdef DashboardSerializer
                 lines{end+1} = '';
             end
 
+            % Phase 1033 PLOG-INT-04 -- emit attachPlantLog block when present
+            plantLogLines = DashboardSerializer.linesForPlantLog_(config, '');
+            lines = [lines, plantLogLines];
+
             lines{end+1} = 'd.render();';
 
             fid = fopen(filepath, 'w');
@@ -442,6 +553,10 @@ classdef DashboardSerializer
                 end
                 lines{end+1} = '';
             end
+
+            % Phase 1033 PLOG-INT-04 -- emit attachPlantLog block when present
+            plantLogLines = DashboardSerializer.linesForPlantLog_(config, '    ');
+            lines = [lines, plantLogLines];
 
             lines{end+1} = '    d.render();';
             lines{end+1} = 'end';
@@ -585,6 +700,74 @@ classdef DashboardSerializer
     end
 
     methods (Static, Access = private)
+        function plLines = linesForPlantLog_(config, indent)
+            %LINESFORPLANTLOG_ Phase 1033 PLOG-INT-04 .m-script attachPlantLog emitter.
+            %   Returns the cell array of lines to insert before the
+            %   closing d.render() / end of a .m-script export. When
+            %   config.plantLog is absent or empty, returns an empty cell
+            %   array so the .m-script output stays byte-identical to
+            %   pre-1033 for v1.0-v3.0 dashboards.
+            %
+            %   The metadataCols field uses double-brace {{...}} syntax so
+            %   struct() preserves the cell-array shape when the .m-script
+            %   re-creates the mapping at load time.
+            plLines = {};
+            if ~isfield(config, 'plantLog') || isempty(config.plantLog)
+                return;
+            end
+            pl = config.plantLog;
+            if ~isfield(pl, 'sourcePath') || isempty(pl.sourcePath)
+                return;
+            end
+            mc = {};
+            if isfield(pl, 'mapping') && isstruct(pl.mapping) ...
+                    && isfield(pl.mapping, 'metadataCols') ...
+                    && iscell(pl.mapping.metadataCols)
+                mc = pl.mapping.metadataCols;
+            end
+            if isempty(mc)
+                metaCellLit = '{{}}';
+            else
+                mcQuoted = cell(1, numel(mc));
+                for mci = 1:numel(mc)
+                    mcQuoted{mci} = ['''', strrep(char(mc{mci}), '''', ''''''), ''''];
+                end
+                metaCellLit = ['{{', strjoin(mcQuoted, ','), '}}'];
+            end
+            tsCol  = '';
+            msgCol = '';
+            fmt    = '';
+            if isfield(pl, 'mapping') && isstruct(pl.mapping)
+                m = pl.mapping;
+                if isfield(m, 'timestampCol'); tsCol  = char(m.timestampCol); end
+                if isfield(m, 'messageCol');   msgCol = char(m.messageCol);   end
+                if isfield(m, 'format');       fmt    = char(m.format);       end
+            end
+            interval = 5;
+            if isfield(pl, 'interval'); interval = double(pl.interval); end
+            startTail = true;
+            if isfield(pl, 'startTail'); startTail = logical(pl.startTail); end
+            if startTail
+                startTailStr = 'true';
+            else
+                startTailStr = 'false';
+            end
+            plLines{end+1} = '';
+            plLines{end+1} = sprintf('%s%% Phase 1033 PLOG-INT-04 -- plant log attachment', indent);
+            plLines{end+1} = sprintf('%sd.attachPlantLog(''%s'', ...', indent, ...
+                strrep(char(pl.sourcePath), '''', ''''''));
+            plLines{end+1} = sprintf('%s    ''Mapping'', struct( ...', indent);
+            plLines{end+1} = sprintf('%s        ''timestampCol'', ''%s'', ...', indent, ...
+                strrep(tsCol, '''', ''''''));
+            plLines{end+1} = sprintf('%s        ''messageCol'',   ''%s'', ...', indent, ...
+                strrep(msgCol, '''', ''''''));
+            plLines{end+1} = sprintf('%s        ''metadataCols'', %s, ...', indent, metaCellLit);
+            plLines{end+1} = sprintf('%s        ''format'',       ''%s''), ...', indent, ...
+                strrep(fmt, '''', ''''''));
+            plLines{end+1} = sprintf('%s    ''Interval'',  %g, ...', indent, interval);
+            plLines{end+1} = sprintf('%s    ''StartTail'', %s);', indent, startTailStr);
+        end
+
         function wLines = linesForWidget(ws, pos, indent)
         %LINESFORWIDGET Generate addWidget code lines for a single widget struct.
         %   ws     - widget config struct
@@ -594,27 +777,55 @@ classdef DashboardSerializer
             wLines = {};
             switch ws.type
                 case 'fastsense'
+                    % Phase 1033 PLOG-INT-04: emit ShowPlantLog NV pair on
+                    % widgets whose toStruct returned showPlantLog=true.
+                    showPl = isfield(ws, 'showPlantLog') && ws.showPlantLog;
                     if isfield(ws, 'source')
                         switch ws.source.type
                             case 'sensor'
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
-                                wLines{end+1} = sprintf('%s    ''Tag'', TagRegistry.get(''%s''));', indent, ws.source.name);
+                                if showPl
+                                    wLines{end+1} = sprintf('%s    ''Tag'', TagRegistry.get(''%s''), ...', indent, ws.source.name);
+                                    wLines{end+1} = sprintf('%s    ''ShowPlantLog'', true);', indent);
+                                else
+                                    wLines{end+1} = sprintf('%s    ''Tag'', TagRegistry.get(''%s''));', indent, ws.source.name);
+                                end
                             case 'file'
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
-                                wLines{end+1} = sprintf('%s    ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
-                                    indent, ws.source.path, ws.source.xVar, ws.source.yVar);
+                                if showPl
+                                    wLines{end+1} = sprintf('%s    ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'', ...', ...
+                                        indent, ws.source.path, ws.source.xVar, ws.source.yVar);
+                                    wLines{end+1} = sprintf('%s    ''ShowPlantLog'', true);', indent);
+                                else
+                                    wLines{end+1} = sprintf('%s    ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
+                                        indent, ws.source.path, ws.source.xVar, ws.source.yVar);
+                                end
                             case 'data'
                                 wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ...', indent, ws.title);
                                 wLines{end+1} = sprintf('%s    ''Position'', %s, ...', indent, pos);
-                                wLines{end+1} = sprintf('%s    ''XData'', %s, ''YData'', %s);', ...
-                                    indent, mat2str(ws.source.x), mat2str(ws.source.y));
+                                if showPl
+                                    wLines{end+1} = sprintf('%s    ''XData'', %s, ''YData'', %s, ...', ...
+                                        indent, mat2str(ws.source.x), mat2str(ws.source.y));
+                                    wLines{end+1} = sprintf('%s    ''ShowPlantLog'', true);', indent);
+                                else
+                                    wLines{end+1} = sprintf('%s    ''XData'', %s, ''YData'', %s);', ...
+                                        indent, mat2str(ws.source.x), mat2str(ws.source.y));
+                                end
                             otherwise
-                                wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                                if showPl
+                                    wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', indent, ws.title, pos);
+                                else
+                                    wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                                end
                         end
                     else
-                        wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                        if showPl
+                            wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', indent, ws.title, pos);
+                        else
+                            wLines{end+1} = sprintf('%sd.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', indent, ws.title, pos);
+                        end
                     end
                 case 'number'
                     line = sprintf('%sd.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', indent, ws.title, pos);

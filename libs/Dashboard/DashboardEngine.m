@@ -817,6 +817,7 @@ classdef DashboardEngine < handle
                 activePageName = obj.Pages{obj.ActivePage}.Name;
                 cfg = DashboardSerializer.widgetsPagesToConfig( ...
                     obj.Name, obj.Theme, obj.LiveInterval, obj.Pages, activePageName, obj.InfoFile);
+                cfg = obj.stampPlantLogIntoConfig_(cfg);   % Phase 1033 PLOG-INT-04
                 if strcmp(ext, '.json')
                     DashboardSerializer.saveJSON(cfg, filepath);
                 else
@@ -830,6 +831,7 @@ classdef DashboardEngine < handle
                     cfg = DashboardSerializer.widgetsToConfig( ...
                         obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
                 end
+                cfg = obj.stampPlantLogIntoConfig_(cfg);   % Phase 1033 PLOG-INT-04
                 if strcmp(ext, '.json')
                     DashboardSerializer.saveJSON(cfg, filepath);
                 else
@@ -837,6 +839,47 @@ classdef DashboardEngine < handle
                 end
             end
             obj.FilePath = filepath;
+        end
+
+        function cfg = stampPlantLogIntoConfig_(obj, cfg)
+        %STAMPPLANTLOGINTOCONFIG_ Phase 1033 PLOG-INT-04: add plantLog key when attached.
+        %   When no plant log is attached, cfg is returned unchanged
+        %   (omit-when-empty contract -- byte-identical back-compat for
+        %   v1.0-v3.0 dashboards).
+        %
+        %   Also skipped when only the test seam (setPlantLogStoreForTest_)
+        %   populated the store -- that path does not set PlantLogSourcePath_
+        %   and is by design NOT serialized.
+            if isempty(obj.PlantLogStoreInternal_)
+                return;
+            end
+            if isempty(obj.PlantLogSourcePath_)
+                % Test-seam injection (setPlantLogStoreForTest_) did not
+                % populate SourcePath_ -- that path is NOT serialized.
+                return;
+            end
+            pl = struct();
+            pl.sourcePath = obj.PlantLogSourcePath_;
+            if isstruct(obj.PlantLogMapping_)
+                pl.mapping = obj.PlantLogMapping_;
+            else
+                pl.mapping = struct( ...
+                    'timestampCol', '', ...
+                    'messageCol',   '', ...
+                    'metadataCols', {{}}, ...
+                    'format',       '');
+            end
+            if isempty(obj.PlantLogInterval_)
+                pl.interval = 5;
+            else
+                pl.interval = double(obj.PlantLogInterval_);
+            end
+            if isempty(obj.PlantLogStartTail_)
+                pl.startTail = true;
+            else
+                pl.startTail = logical(obj.PlantLogStartTail_);
+            end
+            cfg.plantLog = pl;
         end
 
         function exportScript(obj, filepath)
