@@ -25,6 +25,25 @@ classdef TestLiveTagPipelineCluster < matlab.unittest.TestCase
     end
 
     methods (TestClassSetup)
+        function gateMacosCi(testCase)
+            %GATEMACOSCI Skip on macOS CI (Rosetta MEX dispatch crash).
+            %   MATLAB R2021b on macos-14 ARM64 runs under Rosetta (maci64
+            %   binary). The class setup hits an Illegal instruction fault
+            %   in libmwmcr.dylib / libmwm_dispatcher mid-test execution,
+            %   before any of the actual SC1-SC5 assertions can run. The
+            %   sentinel-file mechanism in tests.yml's macos-14 cell can't
+            %   absorb the crash because it happens during test execution
+            %   rather than at shutdown. Linux CI (matlab: + concurrency-
+            %   smoke ubuntu-latest cells) continues to exercise SC1-SC5.
+            %   The macos-14 cell's purpose — exercising the F_SETLK
+            %   fallback branch of lockfile_mex.c — is still covered by
+            %   TestFileLock, TestAtomicWriter, TestClusterConfig*,
+            %   TestTagWriteCoordinator, and TestConcurrencyIntegration.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeFalse(ismac() && ~usejava('desktop'), ...
+                'TestLiveTagPipelineCluster crashes MATLAB Rosetta on macos-14 CI — covered by Linux concurrency smoke');
+        end
+
         function addPaths(testCase) %#ok<MANU>
             root = fullfile(fileparts(mfilename('fullpath')), '..', '..');
             addpath(root);
