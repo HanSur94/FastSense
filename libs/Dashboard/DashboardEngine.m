@@ -34,6 +34,13 @@ classdef DashboardEngine < handle
         % shift down by BannerHeight. Single source of truth for the banner
         % strip height (260508-jyh).
         BannerHeight  = 0.035
+        % 260513-snt — EventStore handle for manual-event creation via the
+        % per-FastSenseWidget '+Event' button. Defaults []; lazily
+        % auto-discovered from any EventTimelineWidget exposing
+        % EventStoreObj on the dashboard the first time the dialog is
+        % opened. Runtime handle only — NOT written through
+        % DashboardSerializer; serialized dashboards round-trip unchanged.
+        EventStore    = []
     end
 
     properties (SetAccess = private)
@@ -59,7 +66,7 @@ classdef DashboardEngine < handle
         % Widget dispatch table
         WidgetTypeMap_     = []  % containers.Map: type string -> constructor function handle
         % Time control
-        TimePanelHeight = 0.06
+        TimePanelHeight = 0.085   % bumped from 0.06 to fit data-range labels below slider (260512-hrn-followup)
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
         hTimePanel      = []
         hTimeSliderL    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
@@ -68,8 +75,17 @@ classdef DashboardEngine < handle
         hTimeEnd        = []
         hTimeResetBtn   = []       % Reset button on time panel (260508-f7p — needed for theme switch)
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
+        ResizeDebounceTimer = []   % MATLAB timer for coalescing rapid resize events (260513-q7w)
+        ResizeFinalRedrawTimer = [] % Longer-period backstop timer: unconditional rerenderWidgets after resize fully settles (260513-q7w fu)
+        % 260513-q7w fu2: true while rerenderWidgets is in flight — suppresses
+        % spurious resize-timer scheduling that the panel teardown/recreate
+        % cascade would otherwise trigger.
+        IsRerendering_ = false
         TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
-        LastSyncedTimeRange_ = []  % [tStart tEnd] cache of most recent broadcast (260508-llw); used by switchPage to re-apply current synced window to widgets realized on tab-switch
+        % [tStart tEnd] cache of most recent broadcast (260508-llw); used by
+        % switchPage to re-apply the current synced window to widgets that
+        % get realized on tab-switch.
+        LastSyncedTimeRange_ = []
         Progress_           = []   % DashboardProgress instance (active during render)
         % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
         hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
@@ -77,6 +93,15 @@ classdef DashboardEngine < handle
         hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
         LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
         StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
+        PreviewNBuckets_     = 0   % Cached nBuckets from last figure-pixel query; 0 = uncached
+        % Slider overlay caches — avoid deleting/recreating line handles when
+        % the underlying data hasn't changed between ticks (260508-slider-stuck).
+        % Each cache stores the last value passed to the selector so the
+        % comparisons below can skip the expensive delete/recreate cycle.
+        EventMarkerTimesCache_  = []   % last uTimes passed to setEventMarkers
+        EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
+        PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
+        FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
     end
 
     methods (Access = public)
@@ -167,8 +192,33 @@ classdef DashboardEngine < handle
         function switchPage(obj, pageIdx)
         %SWITCHPAGE Switch the active page using panel visibility toggling.
         %   d.switchPage(2) sets ActivePage = 2 and toggles panel visibility.
+            if ~obj.isObjValid_()
+                return;  % uicontrol callback fired after engine was deleted
+            end
             if pageIdx < 1 || pageIdx > numel(obj.Pages)
                 return;
+            end
+            % Cancel any pending resize-debounce timers from a prior resize.
+            % If the user resized then immediately clicked a different tab,
+            % the in-flight backstop would fire ~1.2s later and rerender
+            % the wrong page (the NEW active page), destroying its
+            % freshly-realized panels mid-flight and leaving widgets
+            % white. (260513-q7w fu2)
+            obj.cancelResizeTimers_();
+            % If a rerenderWidgets is currently in flight (the backstop
+            % fired and is mid-flight, with internal drawnow calls letting
+            % this uicontrol callback interrupt it), serialize: spin
+            % drawnow until the rerender completes. Running switchPage
+            % INSIDE a rerender races with the realizeWidget loop and
+            % leaves the previous page's widgets visible (chrome created
+            % inside their outer cells AFTER switchPage hid them) and
+            % the new page's widgets white. Spin with a 3 s safety
+            % timeout. (260513-q7w fu3)
+            if obj.IsRerendering_
+                waitStart = tic;
+                while obj.IsRerendering_ && toc(waitStart) < 3
+                    drawnow;
+                end
             end
             obj.ActivePage = pageIdx;
             % Update button colors if PageBar exists
@@ -233,6 +283,16 @@ classdef DashboardEngine < handle
                 obj.broadcastTimeRange(rng(1), rng(2));
             end
             % Refresh the preview envelope on the newly active page (D-07).
+            % Do NOT clear the slider overlay caches before calling compute.
+            % The dirty-check in computePreviewEnvelopeReturning_ and
+            % computeEventMarkers uses isequal() to detect whether the new
+            % page's data differs from what's currently drawn. If it differs
+            % (different widgets, different events), the compute functions
+            % invoke setPreviewLines/setEventMarkers automatically. Clearing
+            % the caches here was redundant and harmful: it forced a full
+            % delete/recreate of 129+ line handles synchronously inside
+            % switchPage(), blocking the MATLAB event queue long enough to
+            % drop the user's next mouse event (slider drag). (260508-slider-stuck)
             try obj.computePreviewEnvelope(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:previewFailed', 'computePreviewEnvelope: %s', err.message); end
             end
@@ -327,6 +387,16 @@ classdef DashboardEngine < handle
                 'Units', 'normalized', ...
                 'OuterPosition', [0.05 0.05 0.9 0.9], ...
                 'CloseRequestFcn', @(~,~) obj.onClose());
+            % Safety net: any figure-destruction path (delete(hf), close all force,
+            % parent teardown) must also stop the live timer. CloseRequestFcn ->
+            % onClose() already handles the normal close path; this listener
+            % covers everything else (260511-mjb).
+            try
+                obj.FigureDestroyedListener_ = addlistener(obj.hFigure, ...
+                    'ObjectBeingDestroyed', @(~,~) obj.onFigureDestroyed_());
+            catch
+                obj.FigureDestroyedListener_ = [];
+            end
             set(obj.hFigure, 'ResizeFcn', @(~,~) obj.onResize());
 
             obj.Toolbar = DashboardToolbar(obj, obj.hFigure, themeStruct);
@@ -362,6 +432,8 @@ classdef DashboardEngine < handle
             obj.Layout.ContentArea = [0, effTimeH, ...
                 1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % 260513-snt — wire the per-FastSenseWidget '+Event' button.
+            obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
             obj.Layout.ensureViewport(obj.hFigure, themeStruct);
@@ -1209,13 +1281,63 @@ classdef DashboardEngine < handle
 
         function rerenderWidgets(obj)
         %RERENDERWIDGETS Delete all widget panels and recreate them.
+            % Mark in-flight so the SizeChangedFcn that fires during
+            % panel teardown/recreate doesn't schedule new resize-debounce
+            % timers — that would cause a recursive rerender cascade.
+            % Also cancel any timers that ARE currently scheduled — they
+            % are about to be invalidated by this rerender anyway.
+            % (260513-q7w fu2)
+            obj.IsRerendering_ = true;
+            obj.cancelResizeTimers_();
+            rerenderCleanup = onCleanup(@() obj.clearRerenderFlag_());
             theme = obj.getCachedTheme();
             ws = obj.activePageWidgets();
             for i = 1:numel(ws)
                 w = ws{i};
                 w.markUnrealized();
-                if ~isempty(w.hPanel) && ishandle(w.hPanel)
-                    delete(w.hPanel);
+                % Delete the OUTER cell panel. After realization,
+                % w.hPanel was reassigned to the INNER content panel
+                % (line 356 of DashboardLayout.realizeWidget), so
+                % deleting only w.hPanel leaves the outer cell —
+                % which still owns the WidgetButtonBar — alive on
+                % the canvas as a ZOMBIE. Stacked across multiple
+                % rerenders these zombies covered the canvas at
+                % overlapping z-positions and painted over freshly
+                % switched-to pages (visible symptom: a tab change
+                % shows panels with chrome i/^ buttons but blank
+                % white content). hCellPanel is the outer handle
+                % when set; falls back to hPanel for pre-realization
+                % widgets where hPanel IS the outer cell.
+                % (260513-q7w fu4)
+                outer = w.hCellPanel;
+                if isempty(outer) || ~ishandle(outer)
+                    outer = w.hPanel;
+                end
+                if ~isempty(outer) && ishandle(outer)
+                    delete(outer);
+                end
+                w.hPanel = [];
+                w.hCellPanel = [];
+            end
+            % Reinstall TimeRangeSelector callbacks NOW — with a clean WBM root
+            % — BEFORE new HoverCrosshairs install on top in Layout.realizeWidget
+            % below. Each new HC's constructor saves the figure's CURRENT WBM as
+            % its PrevWBMFcn_ and replaces WBM with its own onFigureMove_. If we
+            % reinstall AFTER the realizeWidget loop (as 260512-egv did) we
+            % wipe out the newly-installed HC chain and break per-widget
+            % HoverCrosshair. Reinstalling HERE makes WBM = trs.onButtonMotion_
+            % so new HCs save the clean trs handler as PrevWBMFcn_ and chain
+            % on top — final chain: newHcN → ... → newHc1 → trs.onButtonMotion_.
+            % Both slider drag (forwards down chain) and HoverCrosshair (each
+            % HC's onFigureMove_ on the chain) work. (260512-eu2; supersedes
+            % the end-of-method placement from 260512-egv.)
+            if ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                try
+                    obj.TimeRangeSelector_.reinstallCallbacks();
+                catch err
+                    warning('DashboardEngine:trsReinstallFailed', ...
+                        'TimeRangeSelector.reinstallCallbacks failed: %s', err.message);
                 end
             end
             totalPages = max(1, numel(obj.Pages));
@@ -1230,6 +1352,8 @@ classdef DashboardEngine < handle
             obj.Progress_ = [];
             % Re-wire detach callback after panel recreation (Pitfall 3 in RESEARCH.md)
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % 260513-snt — re-wire Create-Event callback for the same reason.
+            obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
         end
 
         function updateGlobalTimeRange(obj)
@@ -1373,13 +1497,18 @@ classdef DashboardEngine < handle
             end
             msg = obj.buildStaleMessage(staleTitles, intervalStr);
             set(obj.hStaleBannerText, 'String', msg);
+            % Only raise to front on first show (when transitioning from hidden
+            % to visible). Calling uistack on every tick is expensive (~10 ms
+            % in uifigure due to WebComponentController updates) and unnecessary
+            % once the banner is already visible and at the top.
+            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
             set(obj.hStaleBanner, 'Visible', 'on');
-            % Widget panels are created after the banner, so they render on top
-            % by default. Raise the banner to the front so it is actually seen.
-            try
-                uistack(obj.hStaleBanner, 'top');
-            catch
-                % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+            if wasHidden
+                try
+                    uistack(obj.hStaleBanner, 'top');
+                catch
+                    % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+                end
             end
         end
 
@@ -1538,6 +1667,9 @@ classdef DashboardEngine < handle
         end
 
         function onLiveTick(obj)
+            if ~obj.isObjValid_()
+                return;  % live timer fired after engine was deleted
+            end
             if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
                 return;
             end
@@ -1626,7 +1758,19 @@ classdef DashboardEngine < handle
                 obj.TimeRangeSelector_.setDataRange( ...
                     obj.DataTimeRange(1), obj.DataTimeRange(2));
                 [tStart, tEnd] = obj.TimeRangeSelector_.getSelection();
-                obj.broadcastTimeRange(tStart, tEnd);
+                % broadcastTimeRange(tStart, tEnd) removed (260513-ovt):
+                % live ticks must not silently push the slider selection
+                % onto every widget's XLim — that resets the user's X
+                % view every tick. User-driven broadcast paths
+                % (slider drag debounce timer, broadcastTimeRangeNow
+                % public API, "Sync all" button) remain wired up.
+                % Refresh BOTH label rows (in-axes selection labels +
+                % below-slider edge labels) with the current selection.
+                % Usually no-op because the preserve-selection fix keeps
+                % Selection unchanged across live ticks; defensive against
+                % programmatic re-selection (range contraction etc.).
+                % (260512-hrn-followup)
+                obj.updateTimeLabels(tStart, tEnd);
             end
 
             % Clear dirty flags AFTER slider broadcast to avoid re-dirtying
@@ -1652,13 +1796,326 @@ classdef DashboardEngine < handle
 
         function onResize(obj)
         %ONRESIZE Handle figure resize: reposition all widget panels.
+            if ~obj.isObjValid_()
+                return;  % SizeChangedFcn fired after engine was deleted
+            end
+            % If a rerenderWidgets is currently in flight, the panel
+            % teardown + recreate cascade fires its own SizeChangedFcn
+            % events. Scheduling new debounce timers from inside that
+            % cascade leads to recursive rerenders. Skip the entire
+            % onResize body — the in-progress rerenderWidgets will leave
+            % the layout consistent. (260513-q7w fu2)
+            if obj.IsRerendering_
+                return;
+            end
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 obj.repositionPanels();
                 obj.repositionStaleBanner_();
+                % Invalidate the cached nBuckets so the next preview computation
+                % re-derives it from the new figure pixel width.
+                obj.PreviewNBuckets_ = 0;
+                % Invalidate slider overlay caches: nBuckets is derived from
+                % figure width, so a resize changes the bucket count and both
+                % preview lines and (potentially) event markers must refresh.
+                % (260508-slider-stuck)
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
+                obj.PreviewLinesCache_      = {};
+                % Schedule a debounced data-refresh sweep across active-page
+                % widgets so any FastSenseWidget that lost its line data to a
+                % resize-race ends up redrawing without the user having to
+                % press the toolbar's Reset button. (260513-q7w)
+                obj.scheduleResizeRefresh_();
+                % Schedule a separate longer-period backstop that fires
+                % unconditionally — equivalent to the user pressing Reset
+                % once they have clearly stopped resizing. Catches failure
+                % modes the cheap update pass doesn't (degenerate axes
+                % after long holds at very small window sizes, destroyed
+                % line handles, etc.). (260513-q7w fu)
+                obj.scheduleResizeFinalRedraw_();
+            end
+        end
+
+        function clearRerenderFlag_(obj)
+        %CLEARRERENDERFLAG_ Reset IsRerendering_ via onCleanup so it
+        %   always lands false even if rerenderWidgets throws.
+        %   (260513-q7w fu2)
+            try
+                if isvalid(obj)
+                    obj.IsRerendering_ = false;
+                end
+            catch
+            end
+        end
+
+        function cancelResizeTimers_(obj)
+        %CANCELRESIZETIMERS_ Stop + delete both resize-related debounce
+        %   timers. Called from switchPage so a stale backstop scheduled
+        %   for the previous page doesn't fire after the user has moved
+        %   to a different tab; also called from rerenderWidgets so the
+        %   spurious SizeChangedFcn that fires during panel teardown
+        %   doesn't reschedule us into a cascade.
+        %   (260513-q7w fu2)
+            if ~isempty(obj.ResizeDebounceTimer)
+                try
+                    if isvalid(obj.ResizeDebounceTimer)
+                        stop(obj.ResizeDebounceTimer);
+                        delete(obj.ResizeDebounceTimer);
+                    end
+                catch
+                end
+                obj.ResizeDebounceTimer = [];
+            end
+            if ~isempty(obj.ResizeFinalRedrawTimer)
+                try
+                    if isvalid(obj.ResizeFinalRedrawTimer)
+                        stop(obj.ResizeFinalRedrawTimer);
+                        delete(obj.ResizeFinalRedrawTimer);
+                    end
+                catch
+                end
+                obj.ResizeFinalRedrawTimer = [];
+            end
+        end
+
+        function scheduleResizeRefresh_(obj)
+        %SCHEDULERESIZEREFRESH_ Coalesce rapid resize events into a single
+        %   deferred refresh, mirroring the SliderDebounceTimer pattern.
+        %   Drag-resize on macOS fires many SizeChangedFcn events per
+        %   second; doing a full widget refresh on each would be expensive
+        %   and visibly stutter. Instead, restart a 300 ms one-shot timer
+        %   on every resize event — once the user stops dragging, the
+        %   timer fires and refreshes all active-page widgets one time.
+        %   (260513-q7w)
+            if ~isempty(obj.ResizeDebounceTimer)
+                try
+                    if isvalid(obj.ResizeDebounceTimer)
+                        stop(obj.ResizeDebounceTimer);
+                        delete(obj.ResizeDebounceTimer);
+                    end
+                catch
+                end
+                obj.ResizeDebounceTimer = [];
+            end
+            try
+                obj.ResizeDebounceTimer = timer( ...
+                    'ExecutionMode', 'singleShot', ...
+                    'StartDelay',    0.3, ...
+                    'Tag',           'DashboardEngineResizeDebounce', ...
+                    'TimerFcn',      @(~,~) obj.refreshActivePageWidgetsAfterResize_());
+                start(obj.ResizeDebounceTimer);
+            catch err
+                % Timer creation can fail (e.g. headless / -batch / Octave).
+                % Fall back to an immediate refresh in that case — better
+                % to do the work synchronously than to skip it entirely.
+                if obj.DebugPreview_
+                    warning('DashboardEngine:resizeDebounceTimerFailed', ...
+                        'scheduleResizeRefresh_: timer failed (%s), running inline.', err.message);
+                end
+                obj.refreshActivePageWidgetsAfterResize_();
+            end
+        end
+
+        function scheduleResizeFinalRedraw_(obj)
+        %SCHEDULERESIZEFINALREDRAW_ Longer-period backstop debouncer that
+        %   fires once the user has clearly stopped resizing for
+        %   ~1.2 seconds, and unconditionally calls rerenderWidgets() —
+        %   the same operation the user would have invoked manually via
+        %   the toolbar's Reset button. Runs IN PARALLEL with the cheap
+        %   scheduleResizeRefresh_ (300 ms): both timers restart on every
+        %   resize event, so during continuous drag neither fires; the
+        %   moment dragging stops, the 300 ms cheap pass runs first and
+        %   handles most cases, then this 1.2 s backstop catches any
+        %   residual failure mode (degenerate axes after holding at very
+        %   small sizes, destroyed line handles, etc.).
+        %   (260513-q7w fu)
+            if ~isempty(obj.ResizeFinalRedrawTimer)
+                try
+                    if isvalid(obj.ResizeFinalRedrawTimer)
+                        stop(obj.ResizeFinalRedrawTimer);
+                        delete(obj.ResizeFinalRedrawTimer);
+                    end
+                catch
+                end
+                obj.ResizeFinalRedrawTimer = [];
+            end
+            try
+                obj.ResizeFinalRedrawTimer = timer( ...
+                    'ExecutionMode', 'singleShot', ...
+                    'StartDelay',    1.2, ...
+                    'Tag',           'DashboardEngineResizeFinalRedraw', ...
+                    'TimerFcn',      @(~,~) obj.finalRedrawAfterResize_());
+                start(obj.ResizeFinalRedrawTimer);
+            catch err
+                % Timer creation failure (headless / -batch / Octave):
+                % fall back to immediate execution.
+                if obj.DebugPreview_
+                    warning('DashboardEngine:resizeFinalRedrawTimerFailed', ...
+                        'scheduleResizeFinalRedraw_: timer failed (%s), running inline.', err.message);
+                end
+                obj.finalRedrawAfterResize_();
+            end
+        end
+
+        function finalRedrawAfterResize_(obj)
+        %FINALREDRAWAFTERRESIZE_ Unconditional full rebuild of all panels
+        %   on the active page after resize fully settles. Equivalent to
+        %   the user pressing the toolbar's Reset button. Bulletproof
+        %   catch-all for any failure mode the cheap two-pass refresh
+        %   missed. (260513-q7w fu)
+            if ~obj.isObjValid_()
+                return;
+            end
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            % Re-entrancy guard: if a render is currently in flight
+            % (Progress_ non-empty), or rerenderWidgets is mid-flight,
+            % bail entirely — the in-progress operation will leave the
+            % layout consistent. Self-rescheduling here was the original
+            % design but interacted badly with switchPage: the deferred
+            % backstop kept landing AFTER the user navigated, on the
+            % wrong page. (260513-q7w fu2)
+            if ~isempty(obj.Progress_) || obj.IsRerendering_
+                return;
+            end
+            try
+                obj.rerenderWidgets();
+            catch err
+                if obj.DebugPreview_
+                    warning('DashboardEngine:finalRedrawFailed', ...
+                        'finalRedrawAfterResize_ rerenderWidgets failed: %s', err.message);
+                end
+            end
+            try drawnow; catch, end
+        end
+
+        function refreshActivePageWidgetsAfterResize_(obj)
+        %REFRESHACTIVEPAGEWIDGETSAFTERRESIZE_ Re-push data through every
+        %   realized widget on the active page after a resize, so any
+        %   widget whose line data was wiped by a resize-race recovers
+        %   without the user having to press Reset. (260513-q7w)
+        %
+        %   Two-pass design:
+        %     1. Cheap pass — call update()/refresh() on each widget.
+        %        For most cases this re-pushes data through updateLines
+        %        and restores the line.
+        %     2. Detection + escalation — re-check each FastSenseWidget's
+        %        first line. If XData is still empty (e.g. the user
+        %        shrunk the window so small that the axes XLim got
+        %        clobbered, so lineVisibleData returns empty), fall
+        %        back to per-widget refresh() (rebuildForTag_); if that
+        %        still doesn't fix it, escalate the whole active page
+        %        to rerenderWidgets() — the same heavy hammer the user
+        %        would have pressed manually via the toolbar's Reset
+        %        button.
+            if ~obj.isObjValid_()
+                return;
+            end
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            ws = obj.activePageWidgets();
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            % --- Pass 1: cheap data re-push ---
+            for i = 1:numel(ws)
+                w = ws{i};
+                % Octave 7+ has no isvalid() for classdef handles, so treat
+                % as valid there and rely on downstream guards / try-catch.
+                if isempty(w) || (~isOctave && ~isvalid(w))
+                    continue;
+                end
+                if ~w.Realized || isempty(w.hPanel) || ~ishandle(w.hPanel)
+                    continue;
+                end
+                try
+                    if isa(w, 'FastSenseWidget')
+                        w.update();
+                    else
+                        w.refresh();
+                    end
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:postResizeRefreshFailed', ...
+                            'post-resize refresh failed for "%s": %s', w.Title, err.message);
+                    end
+                end
+            end
+            % --- Pass 2: detect any still-white FastSenseWidget and escalate ---
+            stillWhite = false;
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isempty(w) || (~isOctave && ~isvalid(w)) || ~isa(w, 'FastSenseWidget')
+                    continue;
+                end
+                if isempty(w.FastSenseObj) || (~isOctave && ~isvalid(w.FastSenseObj)) || ~w.FastSenseObj.IsRendered
+                    continue;
+                end
+                if ~obj.isWidgetLineWhite_(w)
+                    continue;
+                end
+                % Try per-widget refresh() (full rebuildForTag_) first
+                try
+                    w.refresh();
+                catch
+                end
+                if obj.isWidgetLineWhite_(w)
+                    stillWhite = true;
+                    break;  % one is enough to justify escalation
+                end
+            end
+            if stillWhite
+                % Heavy hammer — equivalent to the user pressing Reset.
+                try
+                    obj.rerenderWidgets();
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:postResizeRerenderFailed', ...
+                            'post-resize rerenderWidgets failed: %s', err.message);
+                    end
+                end
+            end
+            try drawnow; catch, end
+        end
+
+        function tf = isWidgetLineWhite_(~, w)
+        %ISWIDGETLINEWHITE_ True if the FastSenseWidget's first line has
+        %   no XData but its bound Tag clearly does — the visible
+        %   manifestation of the resize-race bug. Defensive: any
+        %   missing-handle / invalid-object case returns false to avoid
+        %   false-positive escalations.
+            tf = false;
+            try
+                if isempty(w) || ~isvalid(w) || ~isa(w, 'FastSenseWidget'); return; end
+                if isempty(w.FastSenseObj) || ~isvalid(w.FastSenseObj); return; end
+                fp = w.FastSenseObj;
+                if ~fp.IsRendered || isempty(fp.Lines); return; end
+                hL = fp.Lines(1).hLine;
+                if ~ishandle(hL); return; end
+                xd = get(hL, 'XData');
+                if ~isempty(xd); return; end
+                % Line is empty; only flag as "white" if the source Tag
+                % actually has samples to display. Tag-less widgets or
+                % truly empty sensors should not trigger an escalation.
+                if isempty(w.Tag); return; end
+                try
+                    [tx, ~] = w.Tag.getXY();
+                    tf = ~isempty(tx);
+                catch
+                end
+            catch
             end
         end
 
         function delete(obj)
+            % Remove the figure-destroyed safety-net listener BEFORE any
+            % other teardown so it cannot fire on a partially-destroyed
+            % obj during MATLAB GC. Prevents R2021b segfault when the
+            % engine handle is collected before its hFigure (260511-n1r).
+            if ~isempty(obj.FigureDestroyedListener_)
+                try delete(obj.FigureDestroyedListener_); catch, end
+                obj.FigureDestroyedListener_ = [];
+            end
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
@@ -1674,6 +2131,16 @@ classdef DashboardEngine < handle
                 try stop(obj.SliderDebounceTimer); catch, end
                 try delete(obj.SliderDebounceTimer); catch, end
                 obj.SliderDebounceTimer = [];
+            end
+            if ~isempty(obj.ResizeDebounceTimer)
+                try stop(obj.ResizeDebounceTimer); catch, end
+                try delete(obj.ResizeDebounceTimer); catch, end
+                obj.ResizeDebounceTimer = [];
+            end
+            if ~isempty(obj.ResizeFinalRedrawTimer)
+                try stop(obj.ResizeFinalRedrawTimer); catch, end
+                try delete(obj.ResizeFinalRedrawTimer); catch, end
+                obj.ResizeFinalRedrawTimer = [];
             end
             obj.stopLive();
             % Explicitly delete all widgets in every page so that
@@ -1729,7 +2196,120 @@ classdef DashboardEngine < handle
         end
     end
 
+    % Public page/widget accessors — moved out of the private block in
+    % 260513-ovt so DashboardToolbar (and other peers) can iterate
+    % widgets across all pages without triggering MethodRestricted
+    % errors. (Was the root cause of "Follow toggle doesn't work" on
+    % multi-page dashboards: the toolbar's try/catch silently
+    % swallowed the access error.)
+    methods (Access = public)
+        function ws = activePageWidgets(obj)
+        %ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
+        %   Returns obj.Pages{obj.ActivePage}.Widgets in multi-page mode,
+        %   or obj.Widgets in single-page mode.
+            if ~isempty(obj.Pages) && obj.ActivePage >= 1
+                ws = obj.Pages{obj.ActivePage}.Widgets;
+            else
+                ws = obj.Widgets;
+            end
+        end
+
+        function ws = allPageWidgets(obj)
+        %ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
+        %   Used for ReflowCallback injection and Follow toggle sweep.
+        %   When Pages is empty, returns obj.Widgets.
+            if isempty(obj.Pages)
+                ws = obj.Widgets;
+                return;
+            end
+            ws = {};
+            for i = 1:numel(obj.Pages)
+                ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
+            end
+        end
+
+        function notifyEventsChanged(obj)
+        %NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513-snt).
+        %   Called after CreateEventDialog persists a new event. Walks the
+        %   active page (recursing into GroupWidget children via
+        %   getNestedWidgets) and refreshes every EventTimelineWidget and
+        %   FastSenseWidget. Also re-aggregates the slider event-marker
+        %   overlay via computeEventMarkers and the slider preview lines via
+        %   computePreviewEnvelope so a freshly-added event becomes visible
+        %   on the slider strip without waiting for the next live tick.
+        %
+        %   Per-widget refresh() calls are wrapped in try/catch so a single
+        %   broken widget does not kill the sweep. The outer call is also
+        %   wrapped so the dialog's Save handler can swallow non-fatal
+        %   failures without leaving the dialog in a half-saved state.
+        %
+        %   Errors namespaced DashboardEngine:notifyEventsChangedFailed.
+            try
+                ws = obj.activePageWidgets();
+                flat = obj.flattenEventAwareWidgets_(ws);
+                for i = 1:numel(flat)
+                    w = flat{i};
+                    if ~isa(w, 'EventTimelineWidget') && ~isa(w, 'FastSenseWidget')
+                        continue;
+                    end
+                    if ~w.Realized, continue; end
+                    if isempty(w.hPanel) || ~ishandle(w.hPanel), continue; end
+                    try
+                        w.refresh();
+                    catch ME
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'Widget "%s" refresh failed: %s', w.Title, ME.message);
+                    end
+                end
+                % Re-aggregate slider event markers + preview lines so the
+                % new event shows up on the bottom strip. computeEventMarkers
+                % / computePreviewEnvelope are no-ops without a
+                % TimeRangeSelector, so safe to call before render too.
+                try
+                    obj.computeEventMarkers();
+                catch ME
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'computeEventMarkers failed: %s', ME.message);
+                    end
+                end
+                try
+                    obj.computePreviewEnvelope();
+                catch ME
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'computePreviewEnvelope failed: %s', ME.message);
+                    end
+                end
+            catch ME
+                warning('DashboardEngine:notifyEventsChangedFailed', ...
+                    'notifyEventsChanged failed: %s', ME.message);
+            end
+        end
+    end
+
     methods (Access = private)
+
+        function tf = isObjValid_(obj)
+        %ISOBJVALID_ Cross-platform "is this handle still alive?" check.
+        %   MATLAB: delegates to builtin isvalid().
+        %   Octave 7+: isvalid() is not implemented for classdef handles,
+        %   so the call itself throws; fall through to a property-access
+        %   probe — accessing a property of a deleted handle throws on
+        %   both runtimes, so the inner try/catch is the portable test.
+            try
+                tf = isvalid(obj);
+                return;
+            catch
+                % Octave: isvalid undefined for classdef handles.
+            end
+            try
+                obj.hFigure; %#ok<VUNUS>
+                tf = true;
+            catch
+                tf = false;
+            end
+        end
 
         function repositionPanels(obj)
         %REPOSITIONPANELS Reposition existing widget panels in-place after resize.
@@ -1805,30 +2385,6 @@ classdef DashboardEngine < handle
             obj.DetachedMirrors = obj.DetachedMirrors(keep);
         end
 
-        function ws = activePageWidgets(obj)
-        %ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
-        %   Returns obj.Pages{obj.ActivePage}.Widgets in multi-page mode,
-        %   or obj.Widgets in single-page mode.
-            if ~isempty(obj.Pages) && obj.ActivePage >= 1
-                ws = obj.Pages{obj.ActivePage}.Widgets;
-            else
-                ws = obj.Widgets;
-            end
-        end
-
-        function ws = allPageWidgets(obj)
-        %ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
-        %   Used for ReflowCallback injection. When Pages is empty, returns obj.Widgets.
-            if isempty(obj.Pages)
-                ws = obj.Widgets;
-                return;
-            end
-            ws = {};
-            for i = 1:numel(obj.Pages)
-                ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
-            end
-        end
-
         function flat = flattenWidgetsForPreview_(obj, widgets, depth)
         %FLATTENWIDGETSFORPREVIEW_ Depth-first flatten of a widget list.
         %   Unwraps any container widget that returns a non-empty
@@ -1863,6 +2419,108 @@ classdef DashboardEngine < handle
                 else
                     flat = [flat, obj.flattenWidgetsForPreview_(nested, depth + 1)]; %#ok<AGROW>
                 end
+            end
+        end
+
+        function flat = flattenEventAwareWidgets_(obj, widgets, depth)
+        %FLATTENEVENTAWAREWIDGETS_ Flatten widget tree for event-aware refresh sweep (260513-snt).
+        %   Mirrors flattenWidgetsForPreview_ but kept as a separate helper
+        %   for clarity at the call site — notifyEventsChanged iterates this
+        %   flat list to call refresh() on EventTimelineWidget /
+        %   FastSenseWidget instances regardless of GroupWidget nesting.
+        %   Defensive depth cap of 10 mirrors flattenWidgetsForPreview_.
+            if nargin < 3, depth = 0; end
+            flat = {};
+            if depth >= 10
+                flat = widgets;
+                return;
+            end
+            for i = 1:numel(widgets)
+                w = widgets{i};
+                nested = {};
+                try
+                    nested = w.getNestedWidgets();
+                catch
+                    nested = {};
+                end
+                if isempty(nested)
+                    flat = [flat, {w}]; %#ok<AGROW>
+                else
+                    flat = [flat, obj.flattenEventAwareWidgets_(nested, depth + 1)]; %#ok<AGROW>
+                end
+            end
+        end
+
+        function store = resolveEventStore_(obj)
+        %RESOLVEEVENTSTORE_ Return the engine's EventStore, auto-discovering it if unset (260513-snt).
+        %   Strategy: if obj.EventStore is already set, return it. Otherwise
+        %   walk obj.allPageWidgets() (recursing into GroupWidget children
+        %   via flattenEventAwareWidgets_) for the first
+        %   EventTimelineWidget with a non-empty EventStoreObj, cache that
+        %   handle onto obj.EventStore, and return it. Returns [] when
+        %   nothing was found — caller is responsible for surfacing the
+        %   no-store error to the user.
+        %
+        %   Note: when multiple EventTimelineWidgets bind different stores,
+        %   the first one walked wins. Setting engine.EventStore explicitly
+        %   is the user's escape hatch.
+            if ~isempty(obj.EventStore)
+                store = obj.EventStore;
+                return;
+            end
+            store = [];
+            ws = obj.allPageWidgets();
+            flat = obj.flattenEventAwareWidgets_(ws);
+            for i = 1:numel(flat)
+                w = flat{i};
+                if isa(w, 'EventTimelineWidget') && ~isempty(w.EventStoreObj)
+                    obj.EventStore = w.EventStoreObj;
+                    store = obj.EventStore;
+                    return;
+                end
+            end
+        end
+
+        function openCreateEventDialog_(obj, widget)
+        %OPENCREATEEVENTDIALOG_ Entry point invoked by the FastSenseWidget '+Event' button.
+        %   260513-snt shipped this as a modal dialog. 260513-v69 supersedes
+        %   that trigger with a two-click pick-on-chart flow:
+        %     1. Resolve EventStore via resolveEventStore_ (auto-discovery
+        %        from EventTimelineWidget if obj.EventStore is empty).
+        %     2. If no store: non-blocking errordlg, return.
+        %     3. Otherwise: hand off to widget.FastSenseObj.startEventPick_(obj).
+        %        The FastSense instance owns the state machine; this engine
+        %        method only gates on store availability and forwards.
+        %   The CreateEventDialog class remains importable as a programmatic
+        %   API (e.g., CreateEventDialog(widget, engine)) but is no longer the
+        %   default '+' button entry point. The persistEventStatic helper is
+        %   still the single source of truth for persistence and is reused by
+        %   FastSense.completeEventPick_.
+            try
+                if ~isa(widget, 'FastSenseWidget')
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'openCreateEventDialog_ requires a FastSenseWidget; got %s.', class(widget));
+                    return;
+                end
+                fs = widget.FastSenseObj;
+                if isempty(fs) || ~isa(fs, 'FastSense') || ~fs.IsRendered
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'FastSenseWidget has no rendered FastSense instance.');
+                    return;
+                end
+                store = obj.resolveEventStore_();
+                if isempty(store)
+                    msg = ['No EventStore is bound to this dashboard. ', ...
+                           'Set engine.EventStore = EventStore(path) ', ...
+                           'or add an EventTimelineWidget with ', ...
+                           'EventStoreObj set to enable event creation.'];
+                    errordlg(msg, 'Create Event');
+                    return;
+                end
+                fs.startEventPick_(obj);
+            catch ME
+                warning('DashboardEngine:openCreateEventDialogFailed', ...
+                    'openCreateEventDialog_ failed: %s', ME.message);
             end
         end
 
@@ -2007,13 +2665,48 @@ classdef DashboardEngine < handle
         end
 
         function updateTimeLabels(obj, tStart, tEnd)
+            %UPDATETIMELABELS Push the slider selection-edge timestamps and duration.
+            %   Updates the three uicontrol text labels BELOW the slider:
+            %     LEFT   — slider's LEFT selection-edge time
+            %     MIDDLE — selection duration (e.g. "7d", "3h 25m", "45 s")
+            %     RIGHT  — slider's RIGHT selection-edge time
+            %   The in-axes selection labels were removed in 260512-hrn-followup;
+            %   all time information now lives in the panel below the slider
+            %   strip so it stays readable regardless of selection width.
             if isempty(obj.TimeRangeSelector_) || ...
                     ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
                 return;
             end
-            obj.TimeRangeSelector_.setLabels( ...
-                obj.formatTimeVal(tStart), ...
-                obj.formatTimeVal(tEnd));
+            leftStr   = obj.formatTimeVal(tStart);
+            rightStr  = obj.formatTimeVal(tEnd);
+            middleStr = obj.formatDuration_(tEnd - tStart);
+            obj.TimeRangeSelector_.setRangeLabels(leftStr, rightStr, middleStr);
+        end
+
+        function s = formatDuration_(~, durDays)
+            %FORMATDURATION_ Render a datenum-day span as a full "Xd Yh Zm Ws" string.
+            %   Always shows all four units (days, hours, minutes,
+            %   seconds) so the user sees the complete granularity of
+            %   the selected window at a glance. Sub-second spans fall
+            %   back to a single "N.NN s" reading.
+            %   (260512-hrn-followup)
+            if ~isfinite(durDays) || durDays < 0
+                s = '';
+                return;
+            end
+            durSec = durDays * 86400;
+            if durSec < 1
+                s = sprintf('%.2f s', durSec);
+                return;
+            end
+            totalSec = round(durSec);
+            d = floor(totalSec / 86400);
+            r = mod(totalSec, 86400);
+            h = floor(r / 3600);
+            r = mod(r, 3600);
+            m = floor(r / 60);
+            ss = mod(r, 60);
+            s = sprintf('%dd %dh %dm %ds', d, h, m, ss);
         end
 
         function computePreviewEnvelope(obj, nBuckets)
@@ -2043,15 +2736,22 @@ classdef DashboardEngine < handle
             end
             if isempty(nBuckets)
                 % Derive nBuckets from figure pixel width; clamp to [50, 400].
-                nBuckets = 200;
-                try
-                    oldU = get(obj.hFigure, 'Units');
-                    set(obj.hFigure, 'Units', 'pixels');
-                    figPx = get(obj.hFigure, 'Position');
-                    set(obj.hFigure, 'Units', oldU);
-                    axWpx = figPx(3) * 0.94;
-                    nBuckets = max(50, min(400, floor(axWpx / 2)));
-                catch
+                % Cache the computed value so we avoid get/set Units on every
+                % live tick (figure size rarely changes between ticks).
+                if obj.PreviewNBuckets_ > 0
+                    nBuckets = obj.PreviewNBuckets_;
+                else
+                    nBuckets = 200;
+                    try
+                        oldU = get(obj.hFigure, 'Units');
+                        set(obj.hFigure, 'Units', 'pixels');
+                        figPx = get(obj.hFigure, 'Position');
+                        set(obj.hFigure, 'Units', oldU);
+                        axWpx = figPx(3) * 0.94;
+                        nBuckets = max(50, min(400, floor(axWpx / 2)));
+                    catch
+                    end
+                    obj.PreviewNBuckets_ = nBuckets;
                 end
             end
             ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
@@ -2108,11 +2808,27 @@ classdef DashboardEngine < handle
                 end
             end
             if isempty(linesList)
+                % Cache check for the empty case.
+                if isempty(obj.PreviewLinesCache_)
+                    env = struct('xCenters', [], 'yMin', [], 'yMax', []);
+                    return;
+                end
+                obj.PreviewLinesCache_ = {};
                 obj.TimeRangeSelector_.setPreviewLines({});
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
                 return;
             end
-            obj.TimeRangeSelector_.setPreviewLines(linesList);
+            % Cache check: if linesList is identical to the previous call
+            % (cache hits in every FastSenseWidget.getPreviewSeries return
+            % the same struct — isequal compares N*200 doubles, which is fast
+            % and avoids the expensive delete/recreate of N line handles per
+            % tick when data hasn't changed). (260508-slider-stuck)
+            if isequal(linesList, obj.PreviewLinesCache_)
+                % Preview lines unchanged — skip the delete/recreate cycle.
+            else
+                obj.PreviewLinesCache_ = linesList;
+                obj.TimeRangeSelector_.setPreviewLines(linesList);
+            end
             if ~haveAggSeries
                 % No widget produced exactly nBuckets buckets — return an
                 % empty envelope but keep the per-widget lines we drew.
@@ -2159,7 +2875,11 @@ classdef DashboardEngine < handle
             end
             % Honor the global Events toggle: when off, clear any existing
             % slider markers and bail before doing the per-widget aggregation.
+            % Also reset the marker cache so re-enabling the toggle forces a
+            % full redraw on the next call (260508-slider-stuck).
             if ~obj.EventMarkersVisible
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
                 obj.TimeRangeSelector_.setEventMarkers([]);
                 return;
             end
@@ -2248,6 +2968,12 @@ classdef DashboardEngine < handle
             end
 
             if isempty(allTimes)
+                % Cache check for the empty case.
+                if isempty(obj.EventMarkerTimesCache_)
+                    return;  % already empty — no need to clear markers again
+                end
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
                 obj.TimeRangeSelector_.setEventMarkers([]);
                 return;
             end
@@ -2267,6 +2993,19 @@ classdef DashboardEngine < handle
                 end
             end
 
+            % Cache check: skip the expensive delete/recreate cycle in
+            % setEventMarkers when the marker set hasn't changed since the
+            % last tick. Historical events are stable between ticks; only new
+            % live events would invalidate the cache. isequal is fast on small
+            % numeric arrays (129 events = 129 doubles + 129x3 RGB matrix).
+            % (260508-slider-stuck: creating 129+ line handles every 1-second
+            % tick blocked the MATLAB event loop long enough to cause null drags.)
+            if isequal(uTimes, obj.EventMarkerTimesCache_) && ...
+                    isequal(uColors, obj.EventMarkerColorsCache_)
+                return;  % marker set unchanged — no need to redraw
+            end
+            obj.EventMarkerTimesCache_  = uTimes;
+            obj.EventMarkerColorsCache_ = uColors;
             obj.TimeRangeSelector_.setEventMarkers(uTimes, uColors);
         end
 
@@ -2277,9 +3016,15 @@ classdef DashboardEngine < handle
         function str = formatTimeVal(~, t)
         %FORMATTIMEVAL Format a numeric time value as a human-readable string.
         %   Supports three numeric ranges:
-        %     posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
-        %     MATLAB datenum (t > 700000, not posix) — uses datestr directly
-        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix
+        %     posix epoch seconds (9e8 < t < 5e9) — fast arithmetic via datevec
+        %     MATLAB datenum (t > 700000, not posix) — fast via datevec
+        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix via sprintf
+        %
+        %   Hot-path note: this is called twice per live tick. Uses datevec
+        %   (no string format parsing) instead of datestr (which invokes
+        %   timefun/private/dateformverify on every call) to avoid ~7 ms
+        %   per-call overhead. datetime constructor is also slow (~16 ms) so
+        %   datevec is preferred here too.
         %
         %   The posix bracket is evaluated BEFORE the datenum bracket because
         %   posix seconds for modern dates (year 2001-2128) are also > 700000
@@ -2287,15 +3032,38 @@ classdef DashboardEngine < handle
             % Order matters: posix epoch seconds (year 2000-2128) are > 700000,
             % so the posix bracket must be evaluated BEFORE the datenum bracket.
             if t > 9e8 && t < 5e9
-                % Posix epoch seconds (year ~2000 - 2128)
-                str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
-                              'yyyy-mm-dd HH:MM');
+                % Posix epoch seconds (year ~2000 - 2128).
+                % Add posix offset (days from year 0 to 1970-01-01) and convert
+                % via datevec, which is faster than datestr (no format parsing).
+                % Seconds included so live ticks are visible in slider labels.
+                % (260512-hrn-followup)
+                try
+                    dv = datevec(datenum(1970, 1, 1) + t / 86400);
+                    str = sprintf('%04d-%02d-%02d %02d:%02d:%02d', ...
+                        dv(1), dv(2), dv(3), dv(4), dv(5), floor(dv(6)));
+                catch
+                    % Fallback for Octave or edge inputs.
+                    str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
+                                  'yyyy-mm-dd HH:MM:SS');
+                end
             elseif t > 700000
-                % MATLAB datenum (days since year 0000)
-                if t > 730000
-                    str = datestr(t, 'yyyy-mm-dd HH:MM');
-                else
-                    str = datestr(t, 'HH:MM:SS');
+                % MATLAB datenum (days since year 0000).
+                % Seconds included for live-tick visibility (260512-hrn-followup).
+                try
+                    dv = datevec(t);
+                    if t > 730000
+                        str = sprintf('%04d-%02d-%02d %02d:%02d:%02d', ...
+                            dv(1), dv(2), dv(3), dv(4), dv(5), floor(dv(6)));
+                    else
+                        str = sprintf('%02d:%02d:%02d', dv(4), dv(5), floor(dv(6)));
+                    end
+                catch
+                    % Fallback for Octave or edge inputs.
+                    if t > 730000
+                        str = datestr(t, 'yyyy-mm-dd HH:MM:SS');
+                    else
+                        str = datestr(t, 'HH:MM:SS');
+                    end
                 end
             else
                 % Raw numeric (seconds, samples, etc.)
@@ -2352,6 +3120,25 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.rerenderWidgets();
+        end
+
+        function onFigureDestroyed_(obj)
+        %ONFIGUREDESTROYED_ Safety-net handler invoked when hFigure is destroyed.
+        %   Fires for ANY destruction path (delete(hf), close all force, parent
+        %   teardown). The normal close-via-X path goes through CloseRequestFcn
+        %   -> onClose(), which has already called stopLive() and cleared
+        %   hFigure by the time we get here — both operations below are
+        %   idempotent and benign in that case. Listener MUST NOT throw, so
+        %   every operation is wrapped in try/catch (260511-mjb).
+            try
+                obj.stopLive();
+            catch
+                % best-effort: stopLive is already try/catch internally
+            end
+            try
+                obj.hFigure = [];
+            catch
+            end
         end
 
     end

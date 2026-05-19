@@ -176,6 +176,116 @@ classdef TestMonitorTagEvents < matlab.unittest.TestCase
                 'Cache-hit getXY must NOT re-emit events');
         end
 
+        function testNoDuplicateEventsOnRecomputeAfterInvalidate(testCase)
+            %TESTNODUPLICATEEVENTSONRECOMPUTEAFTERINVALIDATE
+            %   Regression: in live mode, parent.updateData fires invalidate
+            %   on the MonitorTag listener, which wipes cache_ and forces a
+            %   full recompute_ on the next getXY. recompute_ must NOT
+            %   re-emit events that were emitted on a prior recompute (which
+            %   happened the very first time the user dumped the EventStore
+            %   from the running industrial-plant demo: ~30x duplicates of
+            %   each closed event).
+            x = 1:10;
+            y = [0 0 0 10 10 10 0 0 0 0];
+            parent = SensorTag('p', 'X', x, 'Y', y);
+            store = EventStore('');
+            m = MonitorTag('m', parent, @(xx, yy) yy > 5, 'EventStore', store);
+            [~, ~] = m.getXY();
+            n1 = numel(store.getEvents());
+            testCase.verifyEqual(n1, 1, 'first getXY must emit exactly 1 event');
+
+            % Simulate parent.updateData → cascade-invalidate to monitor.
+            m.invalidate();
+
+            % Next getXY triggers a full recompute_ over the parent's
+            % unchanged history. Must NOT re-emit the same event.
+            [~, ~] = m.getXY();
+            n2 = numel(store.getEvents());
+            testCase.verifyEqual(n2, 1, ...
+                'recompute_ after invalidate must NOT duplicate already-emitted events');
+
+            % Idempotent under repeated invalidate/getXY cycles.
+            for i = 1:5
+                m.invalidate();
+                [~, ~] = m.getXY();
+            end
+            n3 = numel(store.getEvents());
+            testCase.verifyEqual(n3, 1, ...
+                'multiple invalidate/getXY cycles must not accumulate duplicates');
+        end
+
+        function testRecomputeWithOpenRunDoesNotDuplicate(testCase)
+            %TESTRECOMPUTEWITHOPENRUNDOESNOTDUPLICATE
+            %   Counterpart to the closed-run dedup test: a trailing OPEN
+            %   run (Phase 1012 IsOpen=true emission path) must also not
+            %   re-emit on recompute_ after invalidate.
+            x = 1:6;
+            y = [0 0 0 10 10 10];   % trailing run still open at the end
+            parent = SensorTag('p', 'X', x, 'Y', y);
+            store = EventStore('');
+            m = MonitorTag('m', parent, @(xx, yy) yy > 5, 'EventStore', store);
+
+            [~, ~] = m.getXY();
+            evs1 = store.getEvents();
+            testCase.verifyEqual(numel(evs1), 1, 'first getXY must emit 1 open event');
+            testCase.verifyTrue(evs1(1).IsOpen, 'event must be IsOpen=true');
+
+            % Invalidate (simulates parent.updateData cascade) and recompute.
+            m.invalidate();
+            [~, ~] = m.getXY();
+            evs2 = store.getEvents();
+            testCase.verifyEqual(numel(evs2), 1, ...
+                'open-event recompute must NOT append a duplicate');
+            testCase.verifyTrue(evs2(1).IsOpen, ...
+                'existing event must remain open');
+
+            % Multiple invalidate/getXY cycles still stable.
+            for i = 1:3
+                m.invalidate();
+                [~, ~] = m.getXY();
+            end
+            testCase.verifyEqual(numel(store.getEvents()), 1, ...
+                'repeated open-run recomputes must not accumulate duplicates');
+        end
+
+        function testRecomputeClosesExistingOpenEventInPlace(testCase)
+            %TESTRECOMPUTECLOSESEXISTINGOPENEVENTINPLACE
+            %   When a recompute_ sees a run that was previously stored as
+            %   open but has now closed (because the parent grew with new
+            %   samples that ended the run), the existing open event must
+            %   be closed in place via EventStore.closeEvent — NOT appended
+            %   as a separate duplicate closed event.
+            parent = SensorTag('p', 'X', 1:6, 'Y', [0 0 0 10 10 10]);
+            store = EventStore('');
+            m = MonitorTag('m', parent, @(xx, yy) yy > 5, 'EventStore', store);
+
+            [~, ~] = m.getXY();
+            evs1 = store.getEvents();
+            testCase.verifyEqual(numel(evs1), 1);
+            testCase.verifyTrue(evs1(1).IsOpen, 'precondition: stored as open');
+            openId = char(evs1(1).Id);
+
+            % Parent grows: replace the entire grid with the original run
+            % followed by samples that drop back below threshold. SensorTag
+            % updateData REPLACES the data wholesale — not append. This is
+            % what the live pipeline does when it re-publishes the full
+            % data file. updateData fires invalidate on the monitor, which
+            % wipes cache_ (including openEventId_) and forces the next
+            % getXY into a full recompute_ over the new grid.
+            parent.updateData(1:10, [0 0 0 10 10 10 0 0 0 0]);
+            [~, ~] = m.getXY();   % triggers recompute_ on the full grid
+
+            evs2 = store.getEvents();
+            testCase.verifyEqual(numel(evs2), 1, ...
+                'open->closed transition must NOT append a duplicate event');
+            testCase.verifyFalse(evs2(1).IsOpen, ...
+                'existing open event must now be closed in place');
+            testCase.verifyEqual(char(evs2(1).Id), openId, ...
+                'event Id must be preserved (close in place, not re-append)');
+            testCase.verifyEqual(evs2(1).EndTime, 6, ...
+                'EndTime must reflect the last in-run sample (x=6)');
+        end
+
         % ---- Native parent-X units ----
 
         function testEventStartEndTimesUseNativeParentUnits(testCase)

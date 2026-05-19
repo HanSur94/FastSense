@@ -88,28 +88,29 @@ classdef ChipBarWidget < DashboardWidget
             set(parentPanel, 'Units', oldUnits);
             pxH = pxPos(4);
 
-            % Single axes spanning full panel
+            % Single axes spanning full panel.
+            % DataAspectRatio=[1 1 1] forces equal data units in pixels so
+            % circles drawn with cos/sin stay circular regardless of how
+            % the panel resizes. MATLAB letterboxes the axes if needed; the
+            % chips remain centered at their integer x-slots.
             obj.hAx = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
                 'Position', [0 0 1 1], ...
                 'Visible', 'off', ...
                 'HitTest', 'off', ...
                 'XLim', [0 nChips], ...
-                'YLim', [0 1]);
+                'YLim', [0 1], ...
+                'DataAspectRatio', [1 1 1]);
             try set(obj.hAx, 'PickableParts', 'none'); catch, end
             try disableDefaultInteractivity(obj.hAx); catch, end
             hold(obj.hAx, 'on');
 
-            % Compute aspect ratio correction so circles don't stretch
-            % Axes spans [0, nChips] x [0, 1] but panel is wider than tall,
-            % so x-radius must be shrunk relative to y-radius.
-            pxW = pxPos(3);
-            ry = 0.22;  % radius in y-axis units
-            if pxW > 0 && pxH > 0
-                rx = ry * (pxH / pxW) * nChips;  % scale x-radius by panel aspect
-            else
-                rx = ry;
-            end
+            % Equal x/y radii in data units — axes DataAspectRatio handles
+            % the visual circularity. ry = 0.22 in y-data units (YLim=[0 1])
+            % gives chips of diameter 0.44 with comfortable spacing relative
+            % to the per-chip x-slot of width 1.
+            ry = 0.22;
+            rx = ry;
             theta = linspace(0, 2*pi, 60);
             chipFontSz = max(6, min(9, round(pxH * 0.18)));
 

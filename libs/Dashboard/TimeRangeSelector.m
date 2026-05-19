@@ -65,10 +65,12 @@ classdef TimeRangeSelector < handle
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
-        hLabelLeft  = []   % text object attached to left edge
-        hLabelRight = []   % text object attached to right edge
-        LeftLabelText  = ''
-        RightLabelText = ''
+        hRangeLabelLeft   = []   % text label BELOW slider — slider LEFT selection-edge timestamp (260512-hrn-followup)
+        hRangeLabelMiddle = []   % text label BELOW slider — selection duration (e.g. "3d 12h")
+        hRangeLabelRight  = []   % text label BELOW slider — slider RIGHT selection-edge timestamp
+        RangeLeftText   = ''     % formatted timestamp shown in hRangeLabelLeft
+        RangeMiddleText = ''     % formatted duration string in hRangeLabelMiddle
+        RangeRightText  = ''     % formatted timestamp shown in hRangeLabelRight
         DataRange   = [0 1]
         Selection   = [0 1]
         DragState   = 'idle'       % 'idle' | 'panning' | 'resizeLeft' | 'resizeRight'
@@ -83,6 +85,14 @@ classdef TimeRangeSelector < handle
         % NOTE: No OldResizeFcn. Resize events are not observed by this class —
         % all pixel/data conversions are computed on demand from current geometry,
         % so there is no cached resize-dependent state to invalidate.
+        IsUIFigureParent_ = false  % true when ancestor figure was created via uifigure(...)
+        % uicontrol is unsupported under uifigure, so when this flag is true the
+        % label handles are uilabel instances and the property name accessed by
+        % setLabelText_ switches from 'String' to 'Text'. Detected once in the
+        % constructor via isprop(hAncFig, 'AutoResizeChildren'), which is the
+        % uifigure-only property — classical figures lack it even though both
+        % paths report class matlab.ui.Figure on R2020b+. (uifigure-compat fix)
+        OldPanelSizeChangedFcn_ = []  % saved hPanel.SizeChangedFcn for cleanup (uifigure path only)
     end
 
     methods (Access = public)
@@ -94,6 +104,11 @@ classdef TimeRangeSelector < handle
             end
             obj.hPanel = hPanel;
             obj.hFigure = ancestor(hPanel, 'figure');
+            % IsUIFigureParent_ is detected lazily inside buildGraphics_ via
+            % a hidden uicontrol probe -- isprop heuristics (e.g. on
+            % AutoResizeChildren, MenuBar) are unreliable on R2020b+ because
+            % classical figure() and uifigure() share the same
+            % matlab.ui.Figure class and report identical property sets.
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if ischar(key)
@@ -116,13 +131,27 @@ classdef TimeRangeSelector < handle
 
         function setDataRange(obj, tMin, tMax)
             %setDataRange  Set the full extent the user can scrub over.
-            %   The current selection is rescaled proportionally so that a
-            %   50%-selected window remains 50% wide after the change.
-            %   Programmatic — does NOT fire OnRangeChanged; only user
-            %   drag interactions do.
+            %   When the new range fully contains the current selection,
+            %   the selection is preserved verbatim (its absolute time
+            %   values stay put). This is the "live mode pan-freeze" path
+            %   — every live tick extends the data range by ~1 s, and we
+            %   do not want that to shift the user's selected window.
+            %   Otherwise (range contraction or selection falls outside),
+            %   the selection is rescaled proportionally to keep its
+            %   relative position. Programmatic in either branch — does
+            %   NOT fire OnRangeChanged; only user drag interactions do.
+            %   (260512-live-mode-companion-adhoc-tail-spike)
             if ~(isfinite(tMin) && isfinite(tMax)) || tMax <= tMin
                 error('TimeRangeSelector:invalidRange', ...
                       'DataRange requires finite tMax > tMin.');
+            end
+            sel = obj.Selection;
+            if sel(1) >= tMin && sel(2) <= tMax
+                % Selection survives a strict superset extension —
+                % keep it; just refresh the bounds and redraw the track.
+                obj.DataRange = [tMin tMax];
+                obj.redraw_();
+                return;
             end
             oldSpan = obj.DataRange(2) - obj.DataRange(1);
             if oldSpan > 0
@@ -182,15 +211,27 @@ classdef TimeRangeSelector < handle
             tEnd   = obj.Selection(2);
         end
 
-        function setLabels(obj, leftText, rightText)
-            %setLabels  Update the inline edge labels that track the selection.
-            %   Pass empty strings to hide a side's label. The text sits at the
-            %   mid-height of the selector, inside each edge handle.
-            if nargin < 2 || isempty(leftText),  leftText  = ''; end
-            if nargin < 3 || isempty(rightText), rightText = ''; end
-            obj.LeftLabelText  = char(leftText);
-            obj.RightLabelText = char(rightText);
-            obj.redraw_();
+        function setRangeLabels(obj, leftText, rightText, middleText)
+            %setRangeLabels  Update the date/time labels shown BELOW the slider.
+            %   Updates three labels:
+            %     leftText   — slider's LEFT selection-edge time
+            %     rightText  — slider's RIGHT selection-edge time
+            %     middleText — (optional) selection duration string,
+            %                  shown centered between the edge labels.
+            %                  Omit or pass '' to leave the middle blank.
+            %
+            %   (260512-hrn-followup) Pushed from DashboardEngine.updateTimeLabels
+            %   together with the in-axes setLabels so both label rows stay
+            %   in sync with the slider's drag handles.
+            if nargin < 2 || isempty(leftText),   leftText   = ''; end
+            if nargin < 3 || isempty(rightText),  rightText  = ''; end
+            if nargin < 4 || isempty(middleText), middleText = ''; end
+            obj.RangeLeftText   = char(leftText);
+            obj.RangeRightText  = char(rightText);
+            obj.RangeMiddleText = char(middleText);
+            obj.setLabelText_(obj.hRangeLabelLeft,   obj.RangeLeftText);
+            obj.setLabelText_(obj.hRangeLabelMiddle, obj.RangeMiddleText);
+            obj.setLabelText_(obj.hRangeLabelRight,  obj.RangeRightText);
         end
 
         function setEnvelope(obj, xC, yMin, yMax)
@@ -214,16 +255,15 @@ classdef TimeRangeSelector < handle
             %   Each line is rendered with a distinct color from a fixed
             %   palette, placed behind the selection rectangle so drag
             %   interactions remain unaffected.
-            % Clear previous preview lines.
-            for k = 1:numel(obj.hPreviewLines)
-                if ishandle(obj.hPreviewLines(k))
-                    delete(obj.hPreviewLines(k));
-                end
-            end
-            obj.hPreviewLines = [];
-            % Hide the legacy envelope patch.
-            set(obj.hEnvelope, 'Visible', 'off');
-            if isempty(lines), return; end
+            %
+            %   Performance note (260508-slider-stuck): when the widget count
+            %   is stable (same number of lines as the existing handles), this
+            %   method updates XData/YData in-place on the existing line handles
+            %   instead of deleting and recreating them. Live ticks that deliver
+            %   one new sample per second produce a different linesList (new x
+            %   endpoint) but the same number of widget lines, so the in-place
+            %   path fires every tick and avoids the delete/recreate cycle that
+            %   blocked the MATLAB event queue.
             palette = [ ...
                 0.00 0.45 0.70    % blue
                 0.90 0.40 0.20    % orange
@@ -232,13 +272,60 @@ classdef TimeRangeSelector < handle
                 0.85 0.70 0.20    % mustard
                 0.30 0.70 0.70    % teal
                 0.70 0.30 0.30]; % brick
-            handles = [];
+            % Hide the legacy envelope patch regardless of path taken.
+            set(obj.hEnvelope, 'Visible', 'off');
+            if isempty(lines)
+                % Clear all preview lines.
+                for k = 1:numel(obj.hPreviewLines)
+                    if ishandle(obj.hPreviewLines(k))
+                        delete(obj.hPreviewLines(k));
+                    end
+                end
+                obj.hPreviewLines = [];
+                return;
+            end
+            % Build validated (x,y) data for each incoming series.
+            validX = {};
+            validY = {};
             for i = 1:numel(lines)
                 L = lines{i};
                 if ~isstruct(L) || ~isfield(L, 'x') || ~isfield(L, 'y'), continue; end
                 if isempty(L.x) || isempty(L.y) || numel(L.x) ~= numel(L.y), continue; end
+                validX{end + 1} = L.x(:).'; %#ok<AGROW>
+                validY{end + 1} = L.y(:).'; %#ok<AGROW>
+            end
+            nValid = numel(validX);
+            nExist = numel(obj.hPreviewLines);
+            allHandlesValid = nExist > 0;
+            if allHandlesValid
+                for k = 1:nExist
+                    if ~ishandle(obj.hPreviewLines(k))
+                        allHandlesValid = false;
+                        break;
+                    end
+                end
+            end
+            if nValid == nExist && allHandlesValid
+                % In-place update: same widget count — update XData/YData on
+                % existing handles without delete/recreate. This is the common
+                % case every live tick when only sample values change.
+                for i = 1:nValid
+                    set(obj.hPreviewLines(i), 'XData', validX{i}, 'YData', validY{i});
+                end
+                return;
+            end
+            % Widget count changed or handles are stale — full recreate.
+            for k = 1:nExist
+                if ishandle(obj.hPreviewLines(k))
+                    delete(obj.hPreviewLines(k));
+                end
+            end
+            obj.hPreviewLines = [];
+            if nValid == 0, return; end
+            handles = [];
+            for i = 1:nValid
                 c = palette(mod(i - 1, size(palette, 1)) + 1, :);
-                h = line(obj.hAxes, L.x(:).', L.y(:).', ...
+                h = line(obj.hAxes, validX{i}, validY{i}, ...
                     'Color', c, 'LineWidth', 1, ...
                     'HitTest', 'off', 'PickableParts', 'none');
                 handles(end + 1) = h; %#ok<AGROW>
@@ -259,6 +346,11 @@ classdef TimeRangeSelector < handle
 
         function setEventMarkers(obj, times, colors)
             %setEventMarkers  Draw a faint full-height line per event time.
+            %
+            %   NOTE: mutually exclusive with setEventBands — both methods share
+            %         the hEventMarkers storage slot, so calling either one
+            %         clears any handles created by the other.
+            %
             %   setEventMarkers(times) clears any existing markers and draws
             %   one vertical line per finite time in `times`. Non-finite
             %   values (NaN, +/-Inf) are silently dropped. Empty input just
@@ -344,24 +436,62 @@ classdef TimeRangeSelector < handle
                 end
             end
 
-            handles = [];
-            for i = 1:numel(times)
-                t = times(i);
-                if usePerColor
-                    % Per-event-color path: skip the AxesColor blend so the
-                    % severity color reads at full saturation. The blend was
-                    % designed for the uniform-faint marker case; under a dark
-                    % theme it crushed sev colors into near-background shades.
-                    lineColor = colors(i, :);
-                    lineWidth = 1.4;
-                else
-                    lineColor = markerColor;
-                    lineWidth = 1;
+            % NaN-separator polyline strategy (260508-slider-stuck):
+            % Instead of one line() handle per event (N handles for N events),
+            % group events by their RGB color and draw one NaN-separated
+            % polyline per unique color. For the demo's 129+ events with 4
+            % severity levels this reduces 129 handles to at most 4 handles,
+            % making setEventMarkers O(N_colors) in graphics objects instead
+            % of O(N_events). The NaN breaks ensure MATLAB treats the
+            % sub-segments as disconnected vertical marks.
+            if usePerColor
+                % Group event times by rounded color triplet so all events
+                % sharing the same severity color are packed into a single
+                % NaN-separated polyline. unique(...,'rows') returns one row
+                % per unique color; the loop then extracts each group's times.
+                colorKey = round(colors * 255);  % Nx3 integer triplets for row-compare
+                uniqueKeys = unique(colorKey, 'rows', 'stable');
+                nGroups = size(uniqueKeys, 1);
+                handles = [];
+                for g = 1:nGroups
+                    mask = all(colorKey == uniqueKeys(g, :), 2);
+                    tGroup = times(mask);
+                    % Use first-occurrence float color to avoid round-trip error.
+                    lineColor = colors(find(mask, 1), :);
+                    % Build NaN-separated [t t NaN t t NaN ...] pattern.
+                    nG = numel(tGroup);
+                    xv = nan(1, 3 * nG);
+                    yv = nan(1, 3 * nG);
+                    for gi = 1:nG
+                        idx3 = (gi - 1) * 3;
+                        xv(idx3 + 1) = tGroup(gi);
+                        xv(idx3 + 2) = tGroup(gi);
+                        % xv(idx3+3) stays NaN (separator)
+                        yv(idx3 + 1) = 0;
+                        yv(idx3 + 2) = 1;
+                        % yv(idx3+3) stays NaN (separator)
+                    end
+                    h = line(obj.hAxes, xv, yv, ...
+                        'Color', lineColor, 'LineWidth', 1.4, ...
+                        'HitTest', 'off', 'PickableParts', 'none');
+                    handles(end + 1) = h; %#ok<AGROW>
                 end
-                h = line(obj.hAxes, [t t], [0 1], ...
-                    'Color', lineColor, 'LineWidth', lineWidth, ...
+            else
+                % Uniform color: single NaN-separated polyline for all markers.
+                nT = numel(times);
+                xv = nan(1, 3 * nT);
+                yv = nan(1, 3 * nT);
+                for i = 1:nT
+                    idx3 = (i - 1) * 3;
+                    xv(idx3 + 1) = times(i);
+                    xv(idx3 + 2) = times(i);
+                    yv(idx3 + 1) = 0;
+                    yv(idx3 + 2) = 1;
+                end
+                h = line(obj.hAxes, xv, yv, ...
+                    'Color', markerColor, 'LineWidth', 1, ...
                     'HitTest', 'off', 'PickableParts', 'none');
-                handles(end + 1) = h; %#ok<AGROW>
+                handles = h;
             end
             obj.hEventMarkers = handles;
             % Z-order: per-color markers go in FRONT of preview lines so the
@@ -381,6 +511,141 @@ classdef TimeRangeSelector < handle
                     set(obj.hAxes, 'Children', [others(:); handles(:)]);
                 end
             end
+        end
+
+        function setEventBands(obj, starts, ends, colors)
+            %setEventBands  Draw a translucent rectangle per event spanning start→end.
+            %   setEventBands(starts, ends) clears any existing bands and
+            %   draws one semi-transparent rectangle per event, spanning
+            %   the start time to the end time. Non-finite values (NaN,
+            %   ±Inf) are silently dropped.
+            %
+            %   setEventBands(starts, ends, colors) accepts an optional
+            %   Nx3 RGB matrix index-matched to events. Each row supplies
+            %   the base color blended with the axes background for a
+            %   translucent fill. If `colors` is omitted, a default subtle
+            %   axes-foreground tint is used.
+            %
+            %   Bands have HitTest='off' and PickableParts='none' so they
+            %   never intercept selection-rectangle drag/pan/resize. They
+            %   are sent to the BACK of the axes children list so the
+            %   selection patch and edges remain visible on top.
+            %
+            %   This is the natural extension of setEventMarkers for
+            %   events that have a duration (start ≠ end). Empty input
+            %   simply clears the bands.
+            % Clear previous bands (reuses the hEventMarkers field — mutually
+            % exclusive with setEventMarkers; calling one clears the other).
+            for k = 1:numel(obj.hEventMarkers)
+                if ishandle(obj.hEventMarkers(k))
+                    delete(obj.hEventMarkers(k));
+                end
+            end
+            obj.hEventMarkers = [];
+
+            if nargin < 3 || isempty(starts) || isempty(ends); return; end
+            starts = starts(:);
+            ends   = ends(:);
+            if numel(starts) ~= numel(ends)
+                warning('TimeRangeSelector:bandSizeMismatch', ...
+                    'setEventBands: starts and ends must be same length; bands skipped.');
+                return;
+            end
+
+            haveColors = (nargin >= 4) && ~isempty(colors);
+            if haveColors
+                if size(colors, 1) ~= numel(starts) || size(colors, 2) ~= 3
+                    warning('TimeRangeSelector:colorSizeMismatch', ...
+                        'setEventBands: colors must be Nx3 matching starts; falling back to uniform.');
+                    haveColors = false;
+                end
+            end
+
+            % YLim of the slider axes is fixed at [0 1] by buildGraphics_.
+            % Bands span the full vertical extent.
+            yBox = [0 0 1 1];
+
+            ax = obj.hAxes;
+            if isempty(ax) || ~ishandle(ax); return; end
+
+            % Default tint: blend axes foreground with axes background.
+            try
+                axBg = get(ax, 'Color');
+                axFg = get(ax, 'XColor');
+            catch
+                axBg = [1 1 1];
+                axFg = [0 0 0];
+            end
+            defaultRGB = 0.65 * axBg + 0.35 * axFg;
+
+            handles = [];
+            for i = 1:numel(starts)
+                s = starts(i);
+                e = ends(i);
+                if ~isfinite(s); continue; end
+                if ~isfinite(e); e = obj.DataRange(2); end
+                if e < s; continue; end
+                % Clip to DataRange so off-screen bands don't widen the axes.
+                s = max(s, obj.DataRange(1));
+                e = min(e, obj.DataRange(2));
+                if e <= s; continue; end
+                if haveColors
+                    base = colors(i, :);
+                    rgb  = 0.55 * axBg + 0.45 * base;
+                else
+                    rgb = defaultRGB;
+                end
+                xv = [s e e s];
+                h = patch(ax, xv, yBox, rgb, ...
+                    'EdgeColor', 'none', ...
+                    'FaceAlpha', 0.4, ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'Tag', 'EventBand');
+                handles(end + 1) = h; %#ok<AGROW>
+            end
+            obj.hEventMarkers = handles;
+
+            % Send bands to the BACK so the selection patch / edges stay on top.
+            if ~isempty(handles)
+                ch = get(ax, 'Children');
+                mask = true(size(ch));
+                for k = 1:numel(handles)
+                    mask(ch == handles(k)) = false;
+                end
+                others = ch(mask);
+                set(ax, 'Children', [others(:); handles(:)]);
+            end
+        end
+
+        function reinstallCallbacks(obj)
+            %reinstallCallbacks  Re-install the figure WindowButton* handlers.
+            %   Public wrapper around the private installCallbacks_ used by
+            %   DashboardEngine.rerenderWidgets to force the selector back
+            %   to the OUTERMOST position on the figure's WindowButton
+            %   handlers after a Reset. Required because rerenderWidgets
+            %   tears down widget panels in install-order, and each
+            %   per-widget HoverCrosshair.delete() unconditionally restores
+            %   its saved PrevWBMFcn_ — when sibling HCs delete in
+            %   install-order (not reverse), the chain leaves a dangling
+            %   closure on the figure's WindowButtonMotionFcn whose
+            %   `~isvalid` guard silently no-ops every motion event, so the
+            %   slider's onButtonMotion_ is never reached and bracket
+            %   drag/resize freezes. (260512-egv)
+            %
+            %   This method intentionally does NOT preserve any previously
+            %   installed callbacks beyond what installCallbacks_ already
+            %   captures into Old* — calling code (rerenderWidgets) accepts
+            %   the side effect that widget HoverCrosshair chained motion
+            %   handlers become inert after this call. They will reattach
+            %   on the NEXT HoverCrosshair construction.
+            %
+            %   Safe to call when the figure is invalid — guarded with
+            %   isempty + ishandle before delegating to installCallbacks_.
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            obj.installCallbacks_();
         end
 
         function delete(obj)
@@ -411,9 +676,16 @@ classdef TimeRangeSelector < handle
 
         function buildGraphics_(obj)
             %buildGraphics_  Construct axes and graphics handles inside hPanel.
+            % Slider axes height reduced (was 0.85) so three date/time labels
+            % can sit below the slider strip showing the data-range edges
+            % (260512-hrn-followup). The text labels live in the same panel
+            % and update on every live tick from the engine. The widget used
+            % depends on the parent figure type — classical figures get
+            % uicontrol('Style','text', ...), uifigure parents get uilabel
+            % (uicontrol is unsupported under uifigure).
             obj.hAxes = axes('Parent', obj.hPanel, ...
                 'Units', 'normalized', ...
-                'Position', [0.045 0.1 0.94 0.85], ...
+                'Position', [0.045 0.42 0.94 0.55], ...
                 'XTick', [], 'YTick', [], ...
                 'Box', 'on', ...
                 'YLim', [0 1], 'XLim', obj.DataRange + [-1, 1] * 0.05 * (obj.DataRange(2) - obj.DataRange(1)));
@@ -444,25 +716,203 @@ classdef TimeRangeSelector < handle
             obj.hEdgeRight = line(obj.hAxes, [NaN NaN], [0 1], ...
                 'Color', selColor, 'LineWidth', 2, ...
                 'HitTest', 'off', 'PickableParts', 'none');
-            % Edge-tracking time labels: small text objects that follow
-            % the selection edges as the user drags. Positioned at the
-            % middle of the selector height; anchored so they sit to the
-            % right of the left handle and to the left of the right handle.
-            % Color: ALWAYS near-black, independent of theme — the slider
-            % axes background is always white (so it can host the colorful
-            % preview lines + event markers cleanly), so a theme-derived
-            % light label would be invisible in dark mode.
-            labelColor = [0.05 0.05 0.05];
-            obj.hLabelLeft = text(obj.hAxes, 0, 0.5, '', ...
-                'Color', labelColor, 'FontSize', 9, ...
-                'HorizontalAlignment', 'left', 'VerticalAlignment', 'middle', ...
-                'BackgroundColor', 'none', ...
-                'HitTest', 'off', 'PickableParts', 'none');
-            obj.hLabelRight = text(obj.hAxes, 0, 0.5, '', ...
-                'Color', labelColor, 'FontSize', 9, ...
-                'HorizontalAlignment', 'right', 'VerticalAlignment', 'middle', ...
-                'BackgroundColor', 'none', ...
-                'HitTest', 'off', 'PickableParts', 'none');
+            % Date/time labels BELOW the slider strip:
+            %   - LEFT  : slider's LEFT selection-edge timestamp
+            %   - MIDDLE: selection duration (e.g. "7d", "3h 25m", "45 s")
+            %   - RIGHT : slider's RIGHT selection-edge timestamp
+            % The label widgets read the panel background (not the always-white
+            % axes background) and are updated whenever
+            % DashboardEngine.updateTimeLabels fires (drag or programmatic
+            % selection change). (260512-hrn-followup)
+            %
+            % Classical figure parents host uicontrol('Style','text', ...)
+            % with normalized positions; uifigure parents host uilabel(...)
+            % with pixel positions because uicontrol is unsupported under
+            % uifigure (it errors "Functionality not supported with figures
+            % created with the uifigure function."). The pixel positions are
+            % recomputed on every hPanel size change via a SizeChangedFcn
+            % installed below — matches MultiStatusWidget / IconCardWidget /
+            % TextWidget which use the same pattern. (uifigure-compat fix)
+            try
+                panelBg = get(obj.hPanel, 'BackgroundColor');
+            catch
+                panelBg = [0.94 0.94 0.94];
+            end
+            fgColor = [0.20 0.20 0.20];
+            if isstruct(obj.Theme) && isfield(obj.Theme, 'ToolbarFontColor')
+                fgColor = obj.Theme.ToolbarFontColor;
+            end
+            % Probe-based detection: try a hidden uicontrol on hPanel. If
+            % MATLAB rejects it because the ancestor figure is a uifigure,
+            % switch to the uilabel path. This is bulletproof across MATLAB
+            % releases -- isprop heuristics fail on R2020b+ because classical
+            % and uifigure share matlab.ui.Figure and expose identical props.
+            obj.IsUIFigureParent_ = false;
+            try
+                probe = uicontrol('Parent', obj.hPanel, ...
+                    'Style', 'text', 'String', '', 'Visible', 'off');
+                delete(probe);
+            catch err
+                if contains(err.message, ...
+                        'Functionality not supported with figures created with the uifigure function') || ...
+                        contains(err.identifier, 'UnsupportedFor') || ...
+                        contains(err.identifier, 'NotSupportedFor')
+                    obj.IsUIFigureParent_ = true;
+                else
+                    rethrow(err);
+                end
+            end
+            if obj.IsUIFigureParent_
+                obj.buildLabelsUIFigure_(fgColor, panelBg);
+            else
+                obj.buildLabelsClassical_(fgColor, panelBg);
+            end
+        end
+
+        function buildLabelsClassical_(obj, fgColor, panelBg)
+            %buildLabelsClassical_  uicontrol-text labels (normalized) for classical figure parents.
+            obj.hRangeLabelLeft = uicontrol('Parent', obj.hPanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.045 0.05 0.30 0.32], ...
+                'String', '', ...
+                'FontSize', 9, ...
+                'HorizontalAlignment', 'left', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.hRangeLabelMiddle = uicontrol('Parent', obj.hPanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.36 0.05 0.28 0.32], ...
+                'String', '', ...
+                'FontSize', 9, ...
+                'FontWeight', 'bold', ...
+                'HorizontalAlignment', 'center', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.hRangeLabelRight = uicontrol('Parent', obj.hPanel, ...
+                'Style', 'text', ...
+                'Units', 'normalized', ...
+                'Position', [0.66 0.05 0.30 0.32], ...
+                'String', '', ...
+                'FontSize', 9, ...
+                'HorizontalAlignment', 'right', ...
+                'ForegroundColor', fgColor, ...
+                'BackgroundColor', panelBg);
+        end
+
+        function buildLabelsUIFigure_(obj, fgColor, panelBg)
+            %buildLabelsUIFigure_  uilabel labels (pixel) for uifigure parents.
+            %   uilabel has no Units property and Position is always in pixels.
+            %   The pixel rectangles match the normalized layout used by the
+            %   classical path ([0.045 0.05 0.30 0.32], [0.36 ...], [0.66 ...])
+            %   and are recomputed on every hPanel size change so the labels
+            %   track the panel as the user resizes the figure.
+            obj.hRangeLabelLeft = uilabel(obj.hPanel, ...
+                'Text', '', ...
+                'FontSize', 9, ...
+                'HorizontalAlignment', 'left', ...
+                'FontColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.hRangeLabelMiddle = uilabel(obj.hPanel, ...
+                'Text', '', ...
+                'FontSize', 9, ...
+                'FontWeight', 'bold', ...
+                'HorizontalAlignment', 'center', ...
+                'FontColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.hRangeLabelRight = uilabel(obj.hPanel, ...
+                'Text', '', ...
+                'FontSize', 9, ...
+                'HorizontalAlignment', 'right', ...
+                'FontColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.layoutUIFigureLabels_();
+            % Chain any existing SizeChangedFcn rather than clobbering it so
+            % siblings that already listen to panel resize (e.g. parent
+            % widgets) keep working. The saved handle is restored in delete.
+            try
+                obj.OldPanelSizeChangedFcn_ = get(obj.hPanel, 'SizeChangedFcn');
+            catch
+                obj.OldPanelSizeChangedFcn_ = [];
+            end
+            try
+                set(obj.hPanel, 'SizeChangedFcn', @(~,~) obj.onPanelResized_());
+            catch
+                % Some parents (uigridlayout cells) may refuse SizeChangedFcn —
+                % treat as best-effort. The labels stay at their initial pixel
+                % positions in that case which is acceptable for a fixed-height
+                % slider strip.
+            end
+        end
+
+        function layoutUIFigureLabels_(obj)
+            %layoutUIFigureLabels_  Recompute uilabel pixel positions from current hPanel size.
+            %   Mirrors the normalized layout used by the classical uicontrol
+            %   path so both runtimes render the labels in the same place
+            %   relative to the slider axes above them.
+            if ~ishandle(obj.hPanel); return; end
+            px = getpixelposition(obj.hPanel);
+            w = px(3); h = px(4);
+            if w <= 0 || h <= 0; return; end
+            yPx = round(0.05 * h);
+            hPx = max(1, round(0.32 * h));
+            leftRect   = [round(0.045 * w), yPx, round(0.30 * w), hPx];
+            middleRect = [round(0.36  * w), yPx, round(0.28 * w), hPx];
+            rightRect  = [round(0.66  * w), yPx, round(0.30 * w), hPx];
+            if ~isempty(obj.hRangeLabelLeft) && ishandle(obj.hRangeLabelLeft)
+                obj.hRangeLabelLeft.Position = leftRect;
+            end
+            if ~isempty(obj.hRangeLabelMiddle) && ishandle(obj.hRangeLabelMiddle)
+                obj.hRangeLabelMiddle.Position = middleRect;
+            end
+            if ~isempty(obj.hRangeLabelRight) && ishandle(obj.hRangeLabelRight)
+                obj.hRangeLabelRight.Position = rightRect;
+            end
+        end
+
+        function onPanelResized_(obj)
+            %onPanelResized_  Re-layout uifigure labels and chain to any saved handler.
+            try
+                obj.layoutUIFigureLabels_();
+            catch
+                % Swallow layout errors — never let resize handling break the
+                % rest of the figure's event chain.
+            end
+            cb = obj.OldPanelSizeChangedFcn_;
+            if isempty(cb); return; end
+            try
+                if isa(cb, 'function_handle')
+                    feval(cb, obj.hPanel, []);
+                elseif iscell(cb) && ~isempty(cb) && isa(cb{1}, 'function_handle')
+                    feval(cb{1}, obj.hPanel, [], cb{2:end});
+                end
+            catch
+                % Defensive: a prior SizeChangedFcn that errors must not
+                % cascade into TimeRangeSelector's own resize handling.
+            end
+        end
+
+        function setLabelText_(obj, hLabel, str)
+            %setLabelText_  Set label text using the correct property for the widget type.
+            %   uilabel uses Text; uicontrol-text uses String. Single dispatch
+            %   point keeps setRangeLabels free of branching.
+            if isempty(hLabel) || ~ishandle(hLabel); return; end
+            if obj.IsUIFigureParent_
+                try
+                    hLabel.Text = char(str);
+                catch
+                    % Fallback to String (e.g. if a future refactor parents a
+                    % uicontrol under a uifigure-detected panel somehow).
+                    try set(hLabel, 'String', char(str)); catch, end
+                end
+            else
+                try
+                    set(hLabel, 'String', char(str));
+                catch
+                    try hLabel.Text = char(str); catch, end
+                end
+            end
         end
 
         function redraw_(obj)
@@ -478,16 +928,10 @@ classdef TimeRangeSelector < handle
             set(obj.hSelection, 'XData', [xL xL xR xR], 'YData', [0 1 1 0]);
             set(obj.hEdgeLeft,  'XData', [xL xL], 'YData', [0 1]);
             set(obj.hEdgeRight, 'XData', [xR xR], 'YData', [0 1]);
-            % Place edge labels just inside each selection edge so they
-            % stay visible even when the selection is at the full range.
-            if ishandle(obj.hLabelLeft)
-                set(obj.hLabelLeft, 'Position', [xL, 0.5, 0], ...
-                    'String', obj.LeftLabelText);
-            end
-            if ishandle(obj.hLabelRight)
-                set(obj.hLabelRight, 'Position', [xR, 0.5, 0], ...
-                    'String', obj.RightLabelText);
-            end
+            % Inline in-axes edge labels removed (260512-hrn-followup).
+            % Edge timestamps now live in the text labels BELOW the slider —
+            % populated via setRangeLabels from the engine. Widget kind is
+            % uicontrol-text (classical figure) or uilabel (uifigure).
         end
 
         function installCallbacks_(obj)
@@ -507,43 +951,36 @@ classdef TimeRangeSelector < handle
                 set(obj.hFigure, 'WindowButtonMotionFcn', obj.OldWindowButtonMotionFcn);
                 set(obj.hFigure, 'WindowButtonUpFcn',     obj.OldWindowButtonUpFcn);
             end
+            % Restore the panel SizeChangedFcn if we hijacked it for uilabel
+            % positioning. Guarded — only fires on the uifigure-parent path,
+            % and only when the panel is still alive.
+            if obj.IsUIFigureParent_ && ~isempty(obj.hPanel) && ishandle(obj.hPanel)
+                try
+                    set(obj.hPanel, 'SizeChangedFcn', obj.OldPanelSizeChangedFcn_);
+                catch
+                end
+            end
         end
 
         function [inAxes, xData] = pointerInAxes_(obj)
             %pointerInAxes_  Convert figure CurrentPoint to axes data units.
             %   Returns inAxes=false if the pointer is outside the axes'
-            %   normalized bounding box. Works in both MATLAB and Octave by
-            %   normalizing the figure units on demand.
-            cp = get(obj.hFigure, 'CurrentPoint');           % figure units
-            figUnits = get(obj.hFigure, 'Units');
-            % Get axes position in figure-normalized coords.
-            oldUnitsA = get(obj.hAxes, 'Units');
-            set(obj.hAxes, 'Units', 'normalized');
-            axPos = get(obj.hAxes, 'Position');              % relative to parent panel
-            set(obj.hAxes, 'Units', oldUnitsA);
-            % Compose panel position into figure coords.
-            oldUnitsP = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'normalized');
-            pnPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnitsP);
-            axX = pnPos(1) + axPos(1) * pnPos(3);
-            axY = pnPos(2) + axPos(2) * pnPos(4);
-            axW = axPos(3) * pnPos(3);
-            axH = axPos(4) * pnPos(4);
+            %   pixel-bounded area. Uses getpixelposition(obj.hAxes, true)
+            %   so the math works regardless of how deeply the hosting
+            %   panel is nested in uigridlayouts (uifigure case).
+            % Pointer position in figure pixels.
+            oldUnitsF = get(obj.hFigure, 'Units');
+            set(obj.hFigure, 'Units', 'pixels');
+            cp = get(obj.hFigure, 'CurrentPoint');
+            set(obj.hFigure, 'Units', oldUnitsF);
             fx = cp(1); fy = cp(2);
-            % fig units may be pixels; normalize if so.
-            if ~strcmp(figUnits, 'normalized')
-                oldUnitsF = get(obj.hFigure, 'Units');
-                set(obj.hFigure, 'Units', 'normalized');
-                cpN = get(obj.hFigure, 'CurrentPoint');
-                set(obj.hFigure, 'Units', oldUnitsF);
-                fx = cpN(1); fy = cpN(2);
-            end
-            inAxes = (fx >= axX) && (fx <= axX + axW) && ...
-                     (fy >= axY) && (fy <= axY + axH);
+            % Axes position in figure pixels (recursive=true walks parents).
+            axPx = getpixelposition(obj.hAxes, true);  % [x y w h]
+            inAxes = (fx >= axPx(1)) && (fx <= axPx(1) + axPx(3)) && ...
+                     (fy >= axPx(2)) && (fy <= axPx(2) + axPx(4));
             frac = 0;
-            if axW > 0
-                frac = (fx - axX) / axW;
+            if axPx(3) > 0
+                frac = (fx - axPx(1)) / axPx(3);
             end
             % Map the axes-relative fraction through the CURRENT XLim —
             % not DataRange — because redraw_ pads the XLim by 5% on each
@@ -555,20 +992,11 @@ classdef TimeRangeSelector < handle
         end
 
         function tolData = edgeTolData_(obj)
-            %edgeTolData_  Convert EdgeTolPx to data units for current figure size.
-            oldUnits = get(obj.hFigure, 'Units');
-            set(obj.hFigure, 'Units', 'pixels');
-            figPx = get(obj.hFigure, 'Position');
-            set(obj.hFigure, 'Units', oldUnits);
-            oldUnitsA = get(obj.hAxes, 'Units');
-            set(obj.hAxes, 'Units', 'normalized');
-            axPos = get(obj.hAxes, 'Position');
-            set(obj.hAxes, 'Units', oldUnitsA);
-            oldUnitsP = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'normalized');
-            pnPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnitsP);
-            axWpx = axPos(3) * pnPos(3) * figPx(3);
+            %edgeTolData_  Convert EdgeTolPx to data units for current axes pixel width.
+            %   Uses getpixelposition(obj.hAxes, true) so it works regardless
+            %   of layout nesting depth.
+            axPx = getpixelposition(obj.hAxes, true);  % [x y w h]
+            axWpx = axPx(3);
             span  = obj.DataRange(2) - obj.DataRange(1);
             if axWpx <= 0
                 tolData = span * 0.01;

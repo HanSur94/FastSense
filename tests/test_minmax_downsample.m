@@ -4,12 +4,16 @@ function test_minmax_downsample()
     addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
     add_fastsense_private_path();
 
-    % testBasicReduction: 10 buckets -> 20 output points
+    % testBasicReduction: 10 buckets -> 20 output points (or 21 with tail anchor)
     x = 1:100;
     y = sin(linspace(0, 4*pi, 100));
     [xOut, yOut] = minmax_downsample(x, y, 10);
-    assert(numel(xOut) == 20, 'testBasicReduction xOut: expected 20, got %d', numel(xOut));
-    assert(numel(yOut) == 20, 'testBasicReduction yOut: expected 20, got %d', numel(yOut));
+    % Tail-anchor (260512-c5x): downsampler may emit one extra
+    % point (segX(end), segY(end)) — accept 2*nb or 2*nb+1.
+    assert(numel(xOut) == 20 || numel(xOut) == 21, ...
+        'testBasicReduction xOut: expected 20 or 21 (tail anchor), got %d', numel(xOut));
+    assert(numel(yOut) == 20 || numel(yOut) == 21, ...
+        'testBasicReduction yOut: expected 20 or 21, got %d', numel(yOut));
 
     % testPreservesExtremes: spike and valley must survive
     x = 1:1000;
@@ -51,11 +55,13 @@ function test_minmax_downsample()
         end
     end
 
-    % testUnevenSpacing: 3 buckets of 3 elements -> 6 output points
+    % testUnevenSpacing: 3 buckets of 3 elements -> 6 output points (or 7 with tail anchor)
     x = [1 2 3 100 200 300 1000 2000 3000];
     y = [1 2 3 4   5   6   7    8    9];
     [xOut, yOut] = minmax_downsample(x, y, 3);
-    assert(numel(xOut) == 6, 'testUnevenSpacing: expected 6, got %d', numel(xOut));
+    % Tail-anchor (260512-c5x): accept 2*nb or 2*nb+1.
+    assert(numel(xOut) == 6 || numel(xOut) == 7, ...
+        'testUnevenSpacing: expected 6 or 7 (tail anchor), got %d', numel(xOut));
 
     % testAllNaN
     x = 1:10;
@@ -70,7 +76,9 @@ function test_minmax_downsample()
     tic;
     [xOut, yOut] = minmax_downsample(x, y, 1000);
     elapsed = toc;
-    assert(numel(xOut) == 2000, 'testLargeData: expected 2000, got %d', numel(xOut));
+    % Tail-anchor (260512-c5x): accept 2*nb or 2*nb+1.
+    assert(numel(xOut) == 2000 || numel(xOut) == 2001, ...
+        'testLargeData: expected 2000 or 2001 (tail anchor), got %d', numel(xOut));
     assert(elapsed < 1.0, 'testLargeData: took %.3f s, must be < 1s', elapsed);
 
     fprintf('    All 8 minmax_downsample tests passed.\n');

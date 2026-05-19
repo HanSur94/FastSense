@@ -15,23 +15,28 @@ classdef FastSenseCompanion < handle
 %     Registry   — TagRegistry instance (default: TagRegistry singleton)
 %     Name       — window title string (default: 'FastSense Companion')
 %     Theme      — 'dark' | 'light' (default: 'dark')
+%     LivePeriod — seconds between live refreshes (default: 1.0)
+%     EventStore — EventStore handle or [] (default: auto-discover from registry)
 %
 %   Public methods:
 %     setProject(dashboards, registry) — rebuild against new project
 %     addDashboard(d)                  - append a DashboardEngine; refresh browser
 %     removeDashboard(key)             - remove by Name; reset inspector if it was selected
 %     refreshCatalog()                 — re-snapshot tags and rebuild catalog
+%     getEventStore()                  — resolved EventStore handle or []
 %     close()                          — idempotent teardown
 %
 %   Events fired:
 %     InspectorStateChanged    payload: InspectorStateEventData(state, payload)
 %     OpenAdHocPlotRequested   payload: AdHocPlotEventData(tagKeys, mode) — fired by InspectorPane
+%     LiveModeChanged          no payload — fires on startLiveMode/stopLiveMode after IsLive is updated
 %
 %   See also DashboardEngine, TagRegistry, CompanionTheme.
 
     events
         InspectorStateChanged
         OpenAdHocPlotRequested
+        LiveModeChanged
     end
 
     properties (Access = public)
@@ -56,6 +61,7 @@ classdef FastSenseCompanion < handle
         hLayout_       = []   % root uigridlayout handle
         hToolbarPanel_ = []   % top toolbar uipanel (row 1, spans cols [1 3])
         hSettingsBtn_  = []   % gear button inside hToolbarPanel_ (right-aligned)
+        hEventsBtn_    = []   % toolbar uibutton: Events viewer launch
         hLeftPanel_    = []   % left pane uipanel
         hMidPanel_     = []   % middle pane uipanel
         hRightPanel_   = []   % right pane uipanel
@@ -77,21 +83,28 @@ classdef FastSenseCompanion < handle
         % Phase 1027.1 — independent EventsLogPane + LiveLogPane integration
         EventsLogPane_        = []     % EventsLogPane instance
         LiveLogPane_          = []     % LiveLogPane instance
-        hEventsLogStateDD_    = []     % toolbar dropdown for events log {'Inline','Detached','Hidden'}
-        hLiveLogStateDD_      = []     % toolbar dropdown for live log   {'Inline','Detached','Hidden'}
         hDetachedEventsFig_   = []     % uifigure when events state == 'Detached', else []
         hDetachedLiveFig_     = []     % uifigure when live state   == 'Detached', else []
         hLogStripGrid_        = []     % inner uigridlayout([2 1]) hosting both sub-panels in row 3
         hEventsLogPanel_      = []     % sub-panel (LogPaneRoot-tagged) for events pane
         hLiveLogPanel_        = []     % sub-panel (LogPaneRoot-tagged) for live pane
         OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
+        EventStore_  = []   % EventStore handle resolved via constructor option or auto-discovery
+        EventViewer_ = []   % CompanionEventViewer handle (single-instance) or [] (Task 13 wires it)
+        % S0Y-01/02 -- companion-opened figure tracking.
+        OpenedFigures_ = []  % column vector of figure handles the companion opened
+                             % (dashboards via onOpenDashboardRequested_,
+                             %  ad-hoc plots via onOpenAdHocPlotRequested_).
+                             % Pruned of invalid handles before each iteration.
+        hTileBtn_      = []  % toolbar uibutton: Tile windows
+        hCloseAllBtn_  = []  % toolbar uibutton: Close all
     end
 
     methods (Access = public)
 
         function obj = FastSenseCompanion(varargin)
         %FASTSENSECOMPANION Constructor. Opens a themed three-pane uifigure immediately.
-        %   Name-value pairs: 'Dashboards', 'Registry', 'Name', 'Theme'.
+        %   Name-value pairs: 'Dashboards', 'Registry', 'Name', 'Theme', 'LivePeriod', 'EventStore'.
 
             % Step 1 — Octave guard (FIRST, before any other work)
             if exist('OCTAVE_VERSION', 'builtin') ~= 0
@@ -105,6 +118,7 @@ classdef FastSenseCompanion < handle
             userName       = 'FastSense Companion';
             userTheme      = 'dark';
             userLivePeriod = 1.0;
+            userEventStore = [];
 
             % Step 2b — Override with stored prefdir values (if present and well-formed).
             % Priority: built-in default < prefdir < explicit Name-Value (Step 3).
@@ -145,10 +159,17 @@ classdef FastSenseCompanion < handle
                                 'LivePeriod must be a positive finite scalar (seconds).');
                         end
                         userLivePeriod = double(v);
+                    case 'EventStore'
+                        v = varargin{k+1};
+                        if ~isempty(v) && ~isa(v, 'EventStore')
+                            error('FastSenseCompanion:invalidEventStore', ...
+                                'EventStore must be an EventStore handle or [] (got %s).', class(v));
+                        end
+                        userEventStore = v;
                     otherwise
                         error('FastSenseCompanion:unknownOption', ...
                             ['Unknown option ''%s''. Valid options: ', ...
-                             'Dashboards, Registry, Name, Theme, LivePeriod.'], key);
+                             'Dashboards, Registry, Name, Theme, LivePeriod, EventStore.'], key);
                 end
             end
 
@@ -178,6 +199,14 @@ classdef FastSenseCompanion < handle
             obj.LivePeriod_ = userLivePeriod;
             obj.LivePeriod  = userLivePeriod;
 
+            % Step 6b — Resolve EventStore: explicit override wins; otherwise
+            % auto-discover from the first MonitorTag with a non-empty EventStore.
+            if ~isempty(userEventStore)
+                obj.EventStore_ = userEventStore;
+            else
+                obj.EventStore_ = companionDiscoverEventStore();
+            end
+
             % Step 7 — Build uifigure (Visible='off' while building)
             obj.hFig_ = uifigure( ...
                 'Name',               userName, ...
@@ -202,16 +231,34 @@ classdef FastSenseCompanion < handle
             obj.hToolbarPanel_.Layout.Column = [1 3];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
-            % Inner 1x5 grid — col 1 reserved for future toolbar items;
-            % col 2 = Live: ON/OFF button; col 3 = Events log dropdown
-            % (Phase 1027.1); col 4 = Live log dropdown (Phase 1027.1);
-            % col 5 = gear button.
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 5]);
-            hToolbarGrid.ColumnWidth     = {'1x', 110, 150, 150, 36};
+            % Inner 1x6 grid:
+            %   col 1 = Events viewer button (Task 13)   (110)
+            %   col 2 = Live: ON/OFF button              (110)
+            %   col 3 = Tile windows (S0Y-01)            ( 70)
+            %   col 4 = Close all (S0Y-02)               ( 90)
+            %   col 5 = flex spacer                      ('1x')
+            %   col 6 = Settings gear                    ( 36)
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 6]);
+            hToolbarGrid.ColumnWidth     = {110, 110, 70, 90, '1x', 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
             hToolbarGrid.BackgroundColor = obj.Theme_.WidgetBackground;
+
+            % Col 1 — Events viewer launch (Task 13).
+            obj.hEventsBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hEventsBtn_.Layout.Row    = 1;
+            obj.hEventsBtn_.Layout.Column = 1;
+            obj.hEventsBtn_.Text          = ['Events ', char(8599)];   % ↗
+            obj.hEventsBtn_.FontSize      = 11;
+            obj.hEventsBtn_.FontWeight    = 'bold';
+            obj.hEventsBtn_.Tag           = 'CompanionEventsBtn';
+            obj.hEventsBtn_.Tooltip       = 'Open the event viewer';
+            obj.hEventsBtn_.ButtonPushedFcn = @(~,~) obj.openEventViewer_();
+            if isempty(obj.EventStore_)
+                obj.hEventsBtn_.Enable  = 'off';
+                obj.hEventsBtn_.Tooltip = 'No EventStore registered';
+            end
 
             % Col 2 — Live: ON/OFF button (Phase 1027: moved from log header).
             obj.hLiveBtn_ = uibutton(hToolbarGrid, 'push');
@@ -223,62 +270,34 @@ classdef FastSenseCompanion < handle
             obj.hLiveBtn_.Tooltip       = 'Toggle live refresh of the inspector';
             obj.hLiveBtn_.ButtonPushedFcn = @(~,~) obj.toggleLiveMode();
 
-            % Phase 1027.1 — Col 3: Events log dropdown.
-            hEvtDDGrid = uigridlayout(hToolbarGrid, [1 2]);
-            hEvtDDGrid.Layout.Row     = 1;
-            hEvtDDGrid.Layout.Column  = 3;
-            hEvtDDGrid.ColumnWidth    = {72, '1x'};
-            hEvtDDGrid.RowHeight      = {'1x'};
-            hEvtDDGrid.Padding        = [0 0 0 0];
-            hEvtDDGrid.ColumnSpacing  = 4;
-            hEvtDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
-            hEvtLbl = uilabel(hEvtDDGrid);
-            hEvtLbl.Layout.Row    = 1;
-            hEvtLbl.Layout.Column = 1;
-            hEvtLbl.Text          = 'Events log:';
-            hEvtLbl.FontSize      = 11;
-            hEvtLbl.FontColor     = obj.Theme_.ForegroundColor;
-            hEvtLbl.HorizontalAlignment = 'right';
-            hEvtLbl.VerticalAlignment   = 'center';
-            obj.hEventsLogStateDD_ = uidropdown(hEvtDDGrid);
-            obj.hEventsLogStateDD_.Layout.Row    = 1;
-            obj.hEventsLogStateDD_.Layout.Column = 2;
-            obj.hEventsLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
-            obj.hEventsLogStateDD_.Value   = 'Inline';
-            obj.hEventsLogStateDD_.FontSize = 11;
-            obj.hEventsLogStateDD_.Tooltip  = 'Events log window state';
-            obj.hEventsLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_('events', dd.Value);
+            % Col 3 — Tile windows (S0Y-01).
+            obj.hTileBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hTileBtn_.Layout.Row    = 1;
+            obj.hTileBtn_.Layout.Column = 3;
+            obj.hTileBtn_.Text          = 'Tile';
+            obj.hTileBtn_.FontSize      = 11;
+            obj.hTileBtn_.FontWeight    = 'bold';
+            obj.hTileBtn_.Tooltip       = 'Arrange companion-opened windows in a grid';
+            obj.hTileBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+            obj.hTileBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hTileBtn_.ButtonPushedFcn = @(~,~) obj.tileOpenedWindows();
 
-            % Phase 1027.1 — Col 4: Live log dropdown.
-            hLiveDDGrid = uigridlayout(hToolbarGrid, [1 2]);
-            hLiveDDGrid.Layout.Row     = 1;
-            hLiveDDGrid.Layout.Column  = 4;
-            hLiveDDGrid.ColumnWidth    = {64, '1x'};
-            hLiveDDGrid.RowHeight      = {'1x'};
-            hLiveDDGrid.Padding        = [0 0 0 0];
-            hLiveDDGrid.ColumnSpacing  = 4;
-            hLiveDDGrid.BackgroundColor = obj.Theme_.WidgetBackground;
-            hLiveLbl = uilabel(hLiveDDGrid);
-            hLiveLbl.Layout.Row    = 1;
-            hLiveLbl.Layout.Column = 1;
-            hLiveLbl.Text          = 'Live log:';
-            hLiveLbl.FontSize      = 11;
-            hLiveLbl.FontColor     = obj.Theme_.ForegroundColor;
-            hLiveLbl.HorizontalAlignment = 'right';
-            hLiveLbl.VerticalAlignment   = 'center';
-            obj.hLiveLogStateDD_ = uidropdown(hLiveDDGrid);
-            obj.hLiveLogStateDD_.Layout.Row    = 1;
-            obj.hLiveLogStateDD_.Layout.Column = 2;
-            obj.hLiveLogStateDD_.Items   = {'Inline', 'Detached', 'Hidden'};
-            obj.hLiveLogStateDD_.Value   = 'Inline';
-            obj.hLiveLogStateDD_.FontSize = 11;
-            obj.hLiveLogStateDD_.Tooltip  = 'Live log window state';
-            obj.hLiveLogStateDD_.ValueChangedFcn = @(dd, ~) obj.setLogState_('live', dd.Value);
+            % Col 4 — Close all (S0Y-02). Uses Accent color to signal destructive action.
+            obj.hCloseAllBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hCloseAllBtn_.Layout.Row    = 1;
+            obj.hCloseAllBtn_.Layout.Column = 4;
+            obj.hCloseAllBtn_.Text          = 'Close all';
+            obj.hCloseAllBtn_.FontSize      = 11;
+            obj.hCloseAllBtn_.FontWeight    = 'bold';
+            obj.hCloseAllBtn_.Tooltip       = 'Close every window the companion opened';
+            obj.hCloseAllBtn_.BackgroundColor = obj.Theme_.Accent;
+            obj.hCloseAllBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hCloseAllBtn_.ButtonPushedFcn = @(~,~) obj.closeAllOpenedWindows();
 
-            % Col 5 — Settings gear (existing).
+            % Col 6 — Settings gear.
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 5;
+            obj.hSettingsBtn_.Layout.Column = 6;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -381,9 +400,6 @@ classdef FastSenseCompanion < handle
             movegui(obj.hFig_, 'center');
             obj.hFig_.Visible = 'on';
             obj.IsOpen = true;
-
-            % Step 13 — Default to Live mode ON (refreshes inspector at LivePeriod_).
-            obj.startLiveMode();
         end
 
         function close(obj)
@@ -404,6 +420,17 @@ classdef FastSenseCompanion < handle
             end
             % Diagnostic — confirms the X click reached close().
             fprintf('[FastSenseCompanion] close() invoked, tearing down...\n');
+            % Tear down the event viewer first so its listener doesn't fire
+            % into a half-deleted companion. Independent try/catch — viewer
+            % failure must not block the rest of teardown.
+            try
+                if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_)
+                    obj.EventViewer_.close();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] EventViewer cleanup failed: %s\n', err.message);
+            end
+            obj.EventViewer_ = [];
             % Stop and delete live timer first so no tick fires mid-teardown.
             try
                 if ~isempty(obj.LiveTimer_) && isvalid(obj.LiveTimer_)
@@ -668,6 +695,7 @@ classdef FastSenseCompanion < handle
                 obj.IsLive = true;
                 obj.updateLiveButton_();
                 obj.addLogEntry('info', sprintf('Live mode ON (period %gs)', obj.LivePeriod_));
+                notify(obj, 'LiveModeChanged');
             catch err
                 obj.addLogEntry('error', sprintf('Live start failed: %s', err.message));
             end
@@ -686,6 +714,7 @@ classdef FastSenseCompanion < handle
             obj.IsLive = false;
             obj.updateLiveButton_();
             obj.addLogEntry('info', 'Live mode OFF');
+            notify(obj, 'LiveModeChanged');
         end
 
         function toggleLiveMode(obj)
@@ -849,21 +878,15 @@ classdef FastSenseCompanion < handle
         end
 
         function v = getEventsLogStateValue(obj)
-        %GETEVENTSLOGSTATEVALUE Test helper: return events log dropdown value (or '').
-            if isempty(obj.hEventsLogStateDD_) || ~isvalid(obj.hEventsLogStateDD_)
-                v = '';
-            else
-                v = obj.hEventsLogStateDD_.Value;
-            end
+        %GETEVENTSLOGSTATEVALUE Test helper: return current events log state ('Inline'|'Detached'|'Hidden'|'').
+        %   Derives state from pane attachment + detached-figure validity (dropdowns removed).
+            v = obj.deriveLogState_('events');
         end
 
         function v = getLiveLogStateValue(obj)
-        %GETLIVELOGSTATEVALUE Test helper: return live log dropdown value (or '').
-            if isempty(obj.hLiveLogStateDD_) || ~isvalid(obj.hLiveLogStateDD_)
-                v = '';
-            else
-                v = obj.hLiveLogStateDD_.Value;
-            end
+        %GETLIVELOGSTATEVALUE Test helper: return current live log state ('Inline'|'Detached'|'Hidden'|'').
+        %   Derives state from pane attachment + detached-figure validity (dropdowns removed).
+            v = obj.deriveLogState_('live');
         end
 
         function hf = getDetachedEventsFig(obj)
@@ -895,6 +918,190 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function s = getEventStore(obj)
+        %GETEVENTSTORE Return the resolved EventStore handle (or [] if none).
+        %   Returns whatever was passed via the 'EventStore' constructor
+        %   option, OR the auto-discovered store from the registry, OR []
+        %   if neither resolved.
+            s = obj.EventStore_;
+        end
+
+        function openEventViewer(obj)
+        %OPENEVENTVIEWER Public alias for the toolbar callback (used by tests / scripting).
+            obj.openEventViewer_();
+        end
+
+        function trackOpenedFigure(obj, hFig)
+        %TRACKOPENEDFIGURE Register a figure the companion opened so Tile / Close all see it.
+        %   Public hook for code paths that spawn figures DIRECTLY (bypassing the
+        %   OpenAdHocPlotRequested event flow) — for example InspectorPane's single-tag
+        %   "Open Detail" handler, which calls openAdHocPlot inline. Pass the returned
+        %   classical figure handle and the companion will dedupe + prune-aware-append
+        %   it to OpenedFigures_.
+        %
+        %   Silently no-ops on empty / invalid handles.
+            obj.trackOpenedFigure_(hFig);
+        end
+
+        function tileOpenedWindows(obj)
+        %TILEOPENEDWINDOWS Arrange every figure the companion opened in a grid.
+        %   Computes a roughly-square ceil(sqrt(N)) tiling on the monitor the
+        %   companion lives on (or the primary monitor if that can't be determined),
+        %   then sets each tracked figure's Position so the windows do not overlap.
+        %   Figures opened outside the companion are not touched. Closed handles
+        %   are pruned silently.
+        %
+        %   No-op when no tracked figures exist (logs an info line for feedback).
+        %
+        %   Errors: surfaced via uialert + log entry; never throws.
+            try
+                obj.syncOpenedFigures_();
+                figs = obj.OpenedFigures_;
+                n = numel(figs);
+                if n == 0
+                    obj.addLogEntry('info', 'Tile: no companion-opened windows.');
+                    return;
+                end
+
+                % Monitor selection -- use the monitor that contains the companion.
+                mons = get(groot, 'MonitorPositions');   % rows: [x y w h]
+                screenRect = mons(1, :);                 % default = primary
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    cp = obj.hFig_.Position;             % [x y w h]
+                    cx = cp(1) + cp(3)/2; cy = cp(2) + cp(4)/2;
+                    for m = 1:size(mons, 1)
+                        r = mons(m, :);
+                        if cx >= r(1) && cx < r(1)+r(3) && cy >= r(2) && cy < r(2)+r(4)
+                            screenRect = r;
+                            break;
+                        end
+                    end
+                end
+
+                % Reserve a margin so windows aren't flush with screen edges.
+                margin = 24;
+                gx = screenRect(1) + margin;
+                gy = screenRect(2) + margin;
+                gw = max(200, screenRect(3) - 2*margin);
+                gh = max(200, screenRect(4) - 2*margin);
+
+                % Roughly-square grid: cols = ceil(sqrt(n)), rows = ceil(n/cols).
+                cols = ceil(sqrt(n));
+                rows = ceil(n / cols);
+                tileW = floor(gw / cols);
+                tileH = floor(gh / rows);
+
+                for k = 1:n
+                    % Row-major fill, top-down so window 1 ends up top-left.
+                    rIdx = ceil(k / cols);            % 1..rows from top
+                    cIdx = mod(k - 1, cols) + 1;      % 1..cols from left
+                    x = gx + (cIdx - 1) * tileW;
+                    % MATLAB screen y grows upward -- flip so row 1 is at the top.
+                    y = gy + (rows - rIdx) * tileH;
+                    try
+                        % distFig-style robustness: a maximized figure ignores
+                        % set(Position) silently, and normalized units would
+                        % treat our pixel rect as fractions of the screen --
+                        % both make Tile visually a no-op. Coerce both first.
+                        f = figs(k);
+                        try
+                            if isprop(f, 'WindowState') && ...
+                                    ~strcmp(get(f, 'WindowState'), 'normal')
+                                set(f, 'WindowState', 'normal');
+                            end
+                        catch
+                        end
+                        try
+                            set(f, 'Units', 'pixels');
+                        catch
+                        end
+                        set(f, 'Position', [x, y, tileW - 8, tileH - 8]);
+                    catch
+                        % Skip individual failures -- keep tiling the rest.
+                    end
+                end
+                obj.addLogEntry('info', sprintf('Tiled %d window(s).', n));
+            catch err
+                obj.addLogEntry('error', sprintf('Tile failed: %s', err.message));
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, ...
+                        sprintf('Failed to tile windows: %s', err.message), ...
+                        'FastSense Companion', 'Icon', 'error');
+                end
+            end
+        end
+
+        function closeAllOpenedWindows(obj)
+        %CLOSEALLOPENEDWINDOWS Close every figure the companion opened, then clear tracking.
+        %   Iterates a SNAPSHOT of OpenedFigures_ and calls close(h) per handle --
+        %   honoring the figure's CloseRequestFcn (DashboardEngine's stops live +
+        %   deletes the figure; openAdHocPlot's closeFcn_ does the same). Closed
+        %   handles drop out via pruneOpenedFigures_ at the end.
+        %
+        %   Figures opened outside the companion are not affected -- tracking is
+        %   the only source of truth.
+            try
+                obj.syncOpenedFigures_();
+                figs = obj.OpenedFigures_;    % snapshot -- close() callbacks may mutate
+                n = numel(figs);
+                if n == 0
+                    obj.addLogEntry('info', 'Close all: no companion-opened windows.');
+                    return;
+                end
+                for k = 1:n
+                    try
+                        if ishandle(figs(k))
+                            close(figs(k));
+                        end
+                    catch
+                        % Per-figure failure -- continue with the rest.
+                    end
+                end
+                obj.pruneOpenedFigures_();
+                obj.addLogEntry('info', sprintf('Closed %d window(s).', n));
+            catch err
+                obj.addLogEntry('error', sprintf('Close all failed: %s', err.message));
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, ...
+                        sprintf('Failed to close windows: %s', err.message), ...
+                        'FastSense Companion', 'Icon', 'error');
+                end
+            end
+        end
+
+        function openEventViewer_internalForTest(obj)
+        %OPENEVENTVIEWER_INTERNALFORTEST Test shim: call openEventViewer_ directly.
+            obj.openEventViewer_();
+        end
+
+        function v = getEventViewerForTest_(obj)
+        %GETEVENTVIEWERFORTEST_ Test helper: return the EventViewer_ handle or [].
+            v = obj.EventViewer_;
+        end
+
+        function f = getFigForTest_(obj)
+        %GETFIGFORTEST_ Test helper: return the companion uifigure handle.
+            f = obj.hFig_;
+        end
+
+        function figs = getOpenedFiguresForTest_(obj)
+        %GETOPENEDFIGURESFORTEST_ Test helper: return the OpenedFigures_ tracking list.
+        %   Used by test_companion_tile_close_buttons. Returns the raw column
+        %   vector of figure handles (post-prune so callers see only valid
+        %   handles). Do NOT call from production code -- this is a friend
+        %   accessor for the test suite only.
+            obj.pruneOpenedFigures_();
+            figs = obj.OpenedFigures_;
+        end
+
+        function trackOpenedFigureForTest_(obj, hFig)
+        %TRACKOPENEDFIGUREFORTEST_ Test helper: drive the private trackOpenedFigure_.
+        %   Lets test_companion_tile_close_buttons feed figure handles into
+        %   OpenedFigures_ without spinning up a real DashboardListPane. Same
+        %   dedupe + prune semantics as the production path.
+            obj.trackOpenedFigure_(hFig);
+        end
+
     end
 
     methods (Access = private)
@@ -907,17 +1114,40 @@ classdef FastSenseCompanion < handle
             companionPrefs('save', prefs);
         end
 
+        function v = deriveLogState_(obj, which)
+        %DERIVELOGSTATE_ Return the actual state of a log pane as a char.
+        %   which — 'events' | 'live'
+        %   Returns 'Inline' | 'Detached' | 'Hidden' | '' (if pane invalid).
+            if strcmp(which, 'events')
+                pane    = obj.EventsLogPane_;
+                detFig  = obj.hDetachedEventsFig_;
+            else
+                pane    = obj.LiveLogPane_;
+                detFig  = obj.hDetachedLiveFig_;
+            end
+            if isempty(pane) || ~isvalid(pane)
+                v = '';
+                return;
+            end
+            attached    = pane.IsAttached;
+            hasDetached = ~isempty(detFig) && isvalid(detFig);
+            if attached && ~hasDetached
+                v = 'Inline';
+            elseif hasDetached
+                v = 'Detached';
+            else
+                v = 'Hidden';
+            end
+        end
+
         function setLogState_(obj, which, newState)
         %SETLOGSTATE_ Transition one log pane between Inline / Detached / Hidden.
         %   Single transition function called from:
-        %     - hEventsLogStateDD_/hLiveLogStateDD_.ValueChangedFcn
         %     - EventsLogPane_/LiveLogPane_.DetachRequested listeners
         %     - hDetachedEventsFig_/hDetachedLiveFig_.CloseRequestFcn
         %   Idempotent: derives current state from the pane's own attachment
-        %   plus the corresponding hDetached*Fig_ validity (NOT from the
-        %   dropdown -- that's set programmatically before each pane is
-        %   built during bootstrap). Same lesson as Phase 1027 fix-commit
-        %   3e6c155.
+        %   plus the corresponding hDetached*Fig_ validity. Same lesson as
+        %   Phase 1027 fix-commit 3e6c155.
         %
         %   which    -- char: 'events' | 'live'
         %   newState -- char: 'Inline' | 'Detached' | 'Hidden'
@@ -941,17 +1171,15 @@ classdef FastSenseCompanion < handle
                     newState);
             end
 
-            % Resolve which pane / dropdown / parent / detached handle to use.
+            % Resolve which pane / parent / detached handle to use.
             if strcmp(which, 'events')
                 pane     = obj.EventsLogPane_;
-                dd       = obj.hEventsLogStateDD_;
                 panel    = obj.hEventsLogPanel_;
                 detName  = 'hDetachedEventsFig_';
                 figTitle = sprintf('FastSense Companion %s Events Log', char(8212));
                 figSize  = [720 480];
             else
                 pane     = obj.LiveLogPane_;
-                dd       = obj.hLiveLogStateDD_;
                 panel    = obj.hLiveLogPanel_;
                 detName  = 'hDetachedLiveFig_';
                 figTitle = sprintf('FastSense Companion %s Live Log', char(8212));
@@ -1015,10 +1243,6 @@ classdef FastSenseCompanion < handle
                         if pane.IsAttached
                             pane.detach();
                         end
-                end
-                % Sync dropdown (programmatic assignment is silent per MATLAB convention).
-                if ~isempty(dd) && isvalid(dd)
-                    dd.Value = newState;
                 end
                 obj.rebalanceLogStrip_();
             catch err
@@ -1188,6 +1412,14 @@ classdef FastSenseCompanion < handle
                 obj.resolveInspectorState_();
                 obj.addLogEntry('info', sprintf('Opened dashboard: %s', ...
                     char(ed.Engine.Name)));
+                % S0Y-01: track the freshly opened dashboard figure so Tile / Close all see it.
+                try
+                    if ~isempty(ed.Engine) && isvalid(ed.Engine) && ...
+                            ~isempty(ed.Engine.hFigure) && ishandle(ed.Engine.hFigure)
+                        obj.trackOpenedFigure_(ed.Engine.hFigure);
+                    end
+                catch
+                end
             catch err
                 obj.addLogEntry('error', sprintf('Open dashboard failed: %s', err.message));
                 uialert(obj.hFig_, err.message, 'FastSense Companion');
@@ -1266,6 +1498,105 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function openEventViewer_(obj)
+        %OPENEVENTVIEWER_ Open the singleton CompanionEventViewer.
+        %   No-op when EventStore_ is empty. While the viewer is open, the
+        %   toolbar Events button is disabled — closing the viewer re-enables it.
+            if isempty(obj.EventStore_); return; end
+            if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_) && ...
+                    ~isempty(obj.EventViewer_.hFigure) && isgraphics(obj.EventViewer_.hFigure)
+                obj.EventViewer_.bringToFront();
+                return;
+            end
+            obj.EventViewer_ = CompanionEventViewer(obj.EventStore_, obj.Registry_, obj);
+            % Listen on BOTH the viewer's figure AND the viewer object:
+            %   - Figure listener (commit 18906f7): fires when the user
+            %     closes the window or anyone calls viewer.close() — the
+            %     viewer object survives in EventViewer_ so its own
+            %     ObjectBeingDestroyed never fires that way.
+            %   - Object listener: fires on programmatic delete(v) without
+            %     a prior close() — keeps the existing
+            %     testViewerObjectBeingDestroyedClearsHandle contract.
+            % Either path clears EventViewer_ and re-enables the toolbar button.
+            obj.Listeners_{end+1} = addlistener(obj.EventViewer_.hFigure, 'ObjectBeingDestroyed', ...
+                @(~,~) obj.clearEventViewerHandle_());
+            obj.Listeners_{end+1} = addlistener(obj.EventViewer_, 'ObjectBeingDestroyed', ...
+                @(~,~) obj.clearEventViewerHandle_());
+            % Disable the launch button so it visually reflects that the viewer
+            % is currently open. The destruction listener re-enables it.
+            if ~isempty(obj.hEventsBtn_) && isvalid(obj.hEventsBtn_)
+                obj.hEventsBtn_.Enable  = 'off';
+                obj.hEventsBtn_.Tooltip = 'Event viewer is open';
+            end
+        end
+
+        function clearEventViewerHandle_(obj)
+        %CLEAREVENTVIEWERHANDLE_ ObjectBeingDestroyed callback: clear the stale
+        %   handle and re-enable the launch button. Guarded against being fired
+        %   after the companion itself has been destroyed (which can happen
+        %   during shutdown when both objects' destructors race).
+            if ~isvalid(obj); return; end
+            try
+                obj.EventViewer_ = [];
+            catch
+            end
+            if ~isempty(obj.hEventsBtn_) && isvalid(obj.hEventsBtn_)
+                obj.hEventsBtn_.Enable  = 'on';
+                obj.hEventsBtn_.Tooltip = 'Open the event viewer';
+            end
+        end
+
+        function trackOpenedFigure_(obj, hFig)
+        %TRACKOPENEDFIGURE_ Append a figure handle to OpenedFigures_ (deduped, valid only).
+            if isempty(hFig) || ~ishandle(hFig); return; end
+            % Prune dead handles first; then dedupe by handle equality.
+            obj.pruneOpenedFigures_();
+            for k = 1:numel(obj.OpenedFigures_)
+                if obj.OpenedFigures_(k) == hFig
+                    return;   % already tracked
+                end
+            end
+            obj.OpenedFigures_(end+1, 1) = hFig;
+        end
+
+        function pruneOpenedFigures_(obj)
+        %PRUNEOPENEDFIGURES_ Drop closed / deleted handles from the tracking list.
+            if isempty(obj.OpenedFigures_); return; end
+            keep = arrayfun(@(h) ishandle(h) && isgraphics(h, 'figure'), ...
+                obj.OpenedFigures_);
+            obj.OpenedFigures_ = obj.OpenedFigures_(keep);
+        end
+
+        function syncOpenedFigures_(obj)
+        %SYNCOPENEDFIGURES_ Reconcile OpenedFigures_ with reality before iterating.
+        %   Two reasons we need this before every Tile / Close-all click:
+        %     1. DashboardListPane fires OpenDashboardRequested BEFORE it calls
+        %        engine.render(), so the synchronous listener sees hFigure=[]
+        %        and can't track on first open.
+        %     2. Engines passed into the constructor (or attached via setProject)
+        %        may have already been rendered by the caller — they were never
+        %        opened "through" the companion at all.
+        %   Both cases are covered by pulling every Engines_{k}.hFigure that is
+        %   currently alive into OpenedFigures_. Dead handles are pruned first;
+        %   already-tracked handles are skipped (handle-equality dedupe).
+            obj.pruneOpenedFigures_();
+            for k = 1:numel(obj.Engines_)
+                e = obj.Engines_{k};
+                if isempty(e) || ~isvalid(e); continue; end
+                hFig = e.hFigure;
+                if isempty(hFig) || ~ishandle(hFig); continue; end
+                already = false;
+                for j = 1:numel(obj.OpenedFigures_)
+                    if obj.OpenedFigures_(j) == hFig
+                        already = true; break;
+                    end
+                end
+                if ~already
+                    obj.OpenedFigures_(end+1, 1) = hFig;
+                end
+            end
+        end
+
         function onOpenAdHocPlotRequested_(obj, ~, evt)
         %ONOPENADHOCPLOTREQUESTED_ Listener for OpenAdHocPlotRequested event.
         %   Resolves AdHocPlotEventData.TagKeys to Tag handles via Registry_,
@@ -1301,7 +1632,12 @@ classdef FastSenseCompanion < handle
                         tags{end+1} = obj.Registry_.get(keys{k}); %#ok<AGROW>
                     end
                 end
-                [~, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                [hFig, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                % S0Y-01: track the ad-hoc figure so Tile / Close all see it.
+                try
+                    obj.trackOpenedFigure_(hFig);
+                catch
+                end
                 obj.addLogEntry('info', sprintf( ...
                     'Opened ad-hoc plot: %d tag(s) [%s]', ...
                     numel(tags), char(mode)));

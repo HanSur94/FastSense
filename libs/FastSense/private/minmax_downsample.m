@@ -113,8 +113,10 @@ function [xOut, yOut] = minmax_downsample(x, y, numBuckets, hasNaN, logX)
     segLens = segEnds - segStarts + 1;
     segBuckets = max(1, round(numBuckets * segLens / totalValid));
 
-    % Pre-allocate output arrays with NaN (NaN separators come for free)
-    maxOut = sum(segBuckets) * 2 + (numSegs - 1);
+    % Pre-allocate output arrays with NaN (NaN separators come for free).
+    % Tail-anchor (260512-c5x): each segment may append one extra (segX(end),
+    % segY(end)) point after its final bucket — widen by numSegs to fit.
+    maxOut = sum(segBuckets) * 2 + numSegs + (numSegs - 1);
     xOut = NaN(1, maxOut);
     yOut = NaN(1, maxOut);
     pos = 0;
@@ -189,6 +191,27 @@ function [xOut, yOut] = minmax_core(segX, segY, nb)
 
     segLen = numel(segY);
     bucketSize = floor(segLen / nb);
+    if bucketSize < 1
+        bucketSize = 1;
+    end
+
+    % Bump nb so the remainder stays strictly less than one bucket
+    % (260512-live-mode-companion-adhoc-tail-spike). Previously the
+    % algorithm computed bucketSize = floor(n/nb) and folded the
+    % (n - bucketSize*nb) leftover samples into the LAST bucket. When
+    % the caller passed nb such that nb*bucketSize was significantly
+    % less than n — e.g., nb = round(n/100) for n=604889 gives nb=6049
+    % and bucketSize=99 leaving a 6038-sample remainder — that fold
+    % produced a "wide last bucket" whose min/max emissions sprawled
+    % across hours of data and rendered as a fake tail spike on the
+    % chart. By bumping nb to floor(n/bucketSize) we keep every bucket
+    % the same width (bucketSize samples) and the remainder shrinks to
+    % the natural <bucketSize tail that the fold logic below handles
+    % without distortion.
+    nb_eff = floor(segLen / bucketSize);
+    if nb_eff > nb
+        nb = nb_eff;
+    end
 
     % Reshape into matrix: each column is one bucket for vectorized min/max
     usable = bucketSize * nb;
@@ -203,7 +226,9 @@ function [xOut, yOut] = minmax_core(segX, segY, nb)
     gMax = iMax + offsets;
 
     % Handle remainder points that don't fill a complete bucket:
-    % fold them into the last bucket and update extremes if needed
+    % fold them into the last bucket and update extremes if needed.
+    % After the nb_eff bump above, this remainder is strictly less than
+    % bucketSize, so the fold no longer widens the last bucket.
     if usable < segLen
         remY = segY(usable+1:end);
         [remMinVal, remMinIdx] = min(remY);
@@ -243,6 +268,15 @@ function [xOut, yOut] = minmax_core(segX, segY, nb)
     yOut(odd(~minFirst))  = yMaxVals(~minFirst);
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
+
+    % Tail-anchor (260512-c5x): see minmax_core_mex.c for rationale.
+    % Append (segX(end), segY(end)) iff its X strictly exceeds the last
+    % emitted X — pins the rendered line to the data tail without
+    % breaking monotonicity. Output length: 2*nb or 2*nb+1.
+    if segX(end) > xOut(end)
+        xOut(end + 1) = segX(end);
+        yOut(end + 1) = segY(end);
+    end
 end
 
 function [xOut, yOut] = minmax_core_logx(segX, segY, nb)
@@ -314,4 +348,13 @@ function [xOut, yOut] = minmax_core_logx(segX, segY, nb)
     % Trim unused pre-allocated tail
     xOut = xOut(1:pos);
     yOut = yOut(1:pos);
+
+    % Tail-anchor (260512-c5x): see minmax_core_mex.c for rationale.
+    % The log-X path may emit fewer than 2*nb due to empty buckets,
+    % but the same right-edge truncation can occur — anchor against
+    % whatever the current xOut(end) happens to be.
+    if pos > 0 && segX(end) > xOut(end)
+        xOut(end + 1) = segX(end);
+        yOut(end + 1) = segY(end);
+    end
 end

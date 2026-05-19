@@ -1,8 +1,21 @@
-function run_tests_with_coverage(pattern)
+function run_tests_with_coverage(pattern, batchPattern)
 %RUN_TESTS_WITH_COVERAGE Run tests with code coverage and generate Cobertura XML.
 %   run_tests_with_coverage(PATTERN) restricts the run to test files whose
 %   short name matches the regular expression PATTERN. Empty/missing PATTERN
 %   runs the full suite. Used by CI for path-filtered PR runs.
+%
+%   run_tests_with_coverage(PATTERN, BATCHPATTERN) additionally filters by
+%   BATCHPATTERN (also a regex). A test is run only when its short name
+%   matches BOTH patterns. CI uses this to split the suite across multiple
+%   matrix jobs so each MATLAB process sees a bounded test load — a
+%   workaround for cumulative R2021b headless-Linux state corruption that
+%   surfaces as segfaults late in long runs. Empty/missing BATCHPATTERN
+%   means "no batch filter applied" (compatible with the legacy 1-arg
+%   signature).
+%
+%   Coverage XML is emitted to coverage.xml (the workflow uploads it to
+%   Codecov with a batch-tagged flag so partial coverage across batches
+%   merges cleanly on the Codecov side).
     import matlab.unittest.TestSuite
     import matlab.unittest.TestRunner
     import matlab.unittest.plugins.CodeCoveragePlugin
@@ -10,6 +23,9 @@ function run_tests_with_coverage(pattern)
 
     if nargin < 1 || isempty(pattern)
         pattern = '';
+    end
+    if nargin < 2 || isempty(batchPattern)
+        batchPattern = '';
     end
 
     test_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'tests');
@@ -39,9 +55,24 @@ function run_tests_with_coverage(pattern)
         suite = suite(keep);
         if isempty(suite)
             fprintf('No tests matched pattern; nothing to run.\n');
+            % Still write the sentinel so the CI step succeeds — an empty
+            % match after narrowing is a valid no-op, not a failure.
+            writeSentinel_(repo_root);
             return;
         end
         fprintf('Running %d test methods after filtering.\n', numel(suite));
+    end
+    if ~isempty(batchPattern)
+        fprintf('Applying batch filter: %s\n', batchPattern);
+        names = {suite.Name};
+        keep = ~cellfun(@isempty, regexp(names, batchPattern, 'once'));
+        suite = suite(keep);
+        if isempty(suite)
+            fprintf('No tests matched batch pattern; nothing to run.\n');
+            writeSentinel_(repo_root);
+            return;
+        end
+        fprintf('Running %d test methods in this batch.\n', numel(suite));
     end
     runner = TestRunner.withTextOutput;
 
@@ -80,6 +111,15 @@ function run_tests_with_coverage(pattern)
     % clean. The CI workflow checks this sentinel file after the
     % matlab-actions step (with continue-on-error) and decides
     % pass/fail based on its presence.
+    writeSentinel_(repo_root);
+end
+
+function writeSentinel_(repo_root)
+%WRITESENTINEL_ Write the .matlab-tests-passed sentinel file.
+%   Factored out so both the all-passed exit and the empty-match exits
+%   (after filtering produces no tests) write the same sentinel — both
+%   are valid "no failures" outcomes from CI's perspective.
+    sentinelFile = fullfile(repo_root, '.matlab-tests-passed');
     fid = fopen(sentinelFile, 'w');
     if fid ~= -1
         fprintf(fid, 'pass\n');

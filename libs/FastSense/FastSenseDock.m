@@ -174,6 +174,7 @@ classdef FastSenseDock < handle
 
             % Create shared toolbar for first tab
             obj.Toolbar = FastSenseToolbar(obj.Tabs(1).Figure);
+            setappdata(obj.hFigure, 'FastSenseToolbar', obj.Toolbar);
 
             % Show the first tab
             obj.selectTab(1);
@@ -226,6 +227,7 @@ classdef FastSenseDock < handle
 
             % Create shared toolbar, then show tab 1
             obj.Toolbar = FastSenseToolbar(obj.Tabs(1).Figure);
+            setappdata(obj.hFigure, 'FastSenseToolbar', obj.Toolbar);
             obj.selectTab(1);
 
             set(obj.hFigure, 'Visible', 'on');
@@ -262,6 +264,7 @@ classdef FastSenseDock < handle
                 obj.Toolbar.rebind(obj.Tabs(n).Figure);
             else
                 obj.Toolbar = FastSenseToolbar(obj.Tabs(n).Figure);
+                setappdata(obj.hFigure, 'FastSenseToolbar', obj.Toolbar);
             end
 
             % Hide current tab
@@ -416,7 +419,8 @@ classdef FastSenseDock < handle
             obj.hUndockButtons(n) = [];
 
             % Create toolbar on the new standalone figure
-            FastSenseToolbar(fig);
+            tbDock = FastSenseToolbar(fig);
+            setappdata(newFig, 'FastSenseToolbar', tbDock);
 
             % Show the new figure (suppress MATLAB R2025b reparenting warnings)
             set(newFig, 'Visible', 'on');

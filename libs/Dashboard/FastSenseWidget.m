@@ -22,14 +22,47 @@ classdef FastSenseWidget < DashboardWidget
         ShowEventMarkers    = false % Phase 1012 — toggle event round-marker overlay
         EventStore          = []    % Phase 1012 — EventStore handle forwarded to inner FastSense
         % Forwarded to FastSense.LiveViewMode on render:
-        %   'reset'    — window covers the full X range every tick (default:
-        %                matches dashboard-demo expectation that users see
-        %                every sample since session start)
+        %   'preserve' — DEFAULT (260513-ovt). Frozen at the initial X
+        %                range: live ticks append data without changing
+        %                XLim. The user opts into seeing new data via the
+        %                Follow toggle, by dragging the slider, or by
+        %                clicking the toolbar's Reset/Sync-All button.
+        %                This makes Live mode a "data flows in, my view
+        %                stays put" experience.
         %   'follow'   — window of current width tracks the latest sample
         %                (use for long-running deployments where the full
-        %                range would exhaust memory / downsampling budget)
-        %   'preserve' — frozen at the initial X range (legacy behaviour)
-        LiveViewMode = 'reset'
+        %                range would exhaust memory / downsampling budget;
+        %                also what the Follow toolbar toggle switches to)
+        %   'reset'    — window covers the full X range every tick (former
+        %                default; XLim grows automatically to show every
+        %                sample since session start — useful for short
+        %                demos where you want to see the chart fill up)
+        LiveViewMode = 'preserve'
+
+        % YLimitMode — Y-axis rescale strategy applied by autoScaleY_:
+        %   'auto-visible' (DEFAULT) — rescale to cover data inside the
+        %                              current X window. Reproduces the
+        %                              pre-260513-sfp behaviour exactly
+        %                              (so old dashboards behave identically).
+        %   'auto-all'              — rescale to cover ALL data the bound
+        %                              Tag exposes, regardless of current
+        %                              XLim. Equivalent to a global "fit Y
+        %                              to the whole timeline" command.
+        %   'locked'                — freeze current YLim. Live ticks /
+        %                              refresh / update no longer call
+        %                              set(ax, 'YLim', ...).
+        %
+        % Precedence (autoScaleY_ guards, top-to-bottom):
+        %   1. Non-empty YLimits pin -> always wins (explicit numeric pin).
+        %   2. UserZoomedY latch     -> mouse-zoom freezes autoscale until
+        %                               user explicitly re-clicks a mode
+        %                               (setYLimitMode clears this latch).
+        %   3. FastSenseObj.LiveViewMode == 'follow' -> Follow toggle wins
+        %                               (260513-ovt: tail-track in X only,
+        %                               keep Y frozen).
+        %   4. YLimitMode dispatch:    'locked' -> no-op; otherwise
+        %                              auto-visible / auto-all branches run.
+        YLimitMode = 'auto-visible'
     end
     %   (Tag property now lives on the DashboardWidget base class — Plan 1009-02.)
 
@@ -118,12 +151,12 @@ classdef FastSenseWidget < DashboardWidget
             end
 
             % Slide the X window as new samples arrive on updateData().
-            % Forwarded from the widget-level LiveViewMode property so
-            % callers can swap between 'reset' (default: window grows to
-            % cover all samples — best for short demos), 'follow' (fixed-
-            % width window tracking the latest sample — best for long-
-            % running deployments), and 'preserve' (frozen at the initial
-            % X range — legacy behaviour).
+            % Forwarded from the widget-level LiveViewMode property:
+            %   'preserve' — DEFAULT (260513-ovt): frozen at the initial
+            %                X range; live ticks append data only
+            %   'follow'   — fixed-width window tracking the latest sample
+            %   'reset'    — window grows to cover all samples since
+            %                session start (former default)
             fp.LiveViewMode = obj.LiveViewMode;
 
             % Bind data — Tag-first dispatch (v2.0).
@@ -271,7 +304,9 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — the user's Y view is preserved
+                    % unless they explicitly pan/zoom or pin YLimits.
                     obj.updateTimeRangeCache();
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
@@ -290,6 +325,8 @@ classdef FastSenseWidget < DashboardWidget
         %   Uses FastSenseObj.updateData() to replace data and re-downsample,
         %   avoiding the expensive delete/recreate cycle of refresh().
         %   Falls back to refresh() if FastSenseObj is not in a renderable state.
+        %   (260513-ovt) Per-tick Y autoscale removed from this path so
+        %   Live mode never silently mutates the user's Y view.
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
@@ -297,7 +334,8 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — see refresh() above for rationale.
                     obj.updateTimeRangeCache();
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
@@ -333,6 +371,55 @@ classdef FastSenseWidget < DashboardWidget
             end
         end
 
+        function setYLimitMode(obj, mode)
+        %SETYLIMITMODE Set the Y-axis rescale strategy and re-fit if rendered.
+        %   mode is one of:
+        %     'auto-visible' - rescale to data inside the current X window
+        %     'auto-all'     - rescale to all data the bound Tag exposes
+        %     'locked'       - freeze YLim; no further rescale on tick/refresh
+        %
+        %   Side effects (260513-sfp):
+        %     - Clears UserZoomedY so an explicit click re-engages autoscale
+        %       (the latch is treated as "I want to override autoscale" — a
+        %       deliberate click on the V/A/L buttons reverses that intent).
+        %     - Fetches the appropriate y window for the new mode and calls
+        %       autoScaleY_(y) so the Y axis snaps immediately. 'locked' mode
+        %       passes empty y; autoScaleY_'s mode dispatch short-circuits.
+        %
+        %   Does NOT override the YLimits pin (autoScaleY_'s guards stay).
+            valid = {'auto-visible', 'auto-all', 'locked'};
+            if ~(ischar(mode) || (isstring(mode) && isscalar(mode))) || ...
+                    ~ismember(char(mode), valid)
+                error('FastSenseWidget:invalidYLimitMode', ...
+                    'YLimitMode must be one of {''auto-visible'',''auto-all'',''locked''}.');
+            end
+            obj.YLimitMode = char(mode);
+
+            % Explicit click clears the user-zoom latch. The latch exists
+            % to stop autoScaleY_ from fighting a mouse-zoom; a deliberate
+            % click on V/A/L is the user re-engaging autoscale on purpose,
+            % which means the latch must drop.
+            obj.UserZoomedY = false;
+
+            % Snap Y immediately so the user sees the click take effect
+            % (no need to wait for the next refresh tick). Only meaningful
+            % when the widget has been rendered.
+            if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered
+                return;
+            end
+            switch obj.YLimitMode
+                case 'auto-visible'
+                    y = obj.getYInVisibleXWindow_();
+                    obj.autoScaleY_(y);
+                case 'auto-all'
+                    y = obj.getYFromTagOrInline_();
+                    obj.autoScaleY_(y);
+                case 'locked'
+                    % autoScaleY_'s mode dispatch treats 'locked' as no-op.
+                    obj.autoScaleY_([]);
+            end
+        end
+
         function autoScaleY_(obj, y)
         %AUTOSCALEY_ Rescale the Y axis to cover current data + thresholds.
         %   FastSense locks YLim to manual mode at first render, so new
@@ -341,12 +428,34 @@ classdef FastSenseWidget < DashboardWidget
         %   threshold values so MonitorTag lines stay visible) and updates
         %   the axes. Skipped when:
         %     - the widget has a user-pinned YLimits NV-pair, or
-        %     - the user manually zoomed Y via mouse (UserZoomedY),
-        %   so we never fight an explicit human interaction.
+        %     - the user manually zoomed Y via mouse (UserZoomedY), or
+        %     - the dashboard's Follow toggle is engaged
+        %       (FastSenseObj.LiveViewMode == 'follow') — Follow is an
+        %       explicit user intent to track the data tail in X only and
+        %       keep the rest of the view (including Y) frozen. (260513-ovt)
+        %     - YLimitMode == 'locked' — the user explicitly froze Y limits
+        %       via the L button on the WidgetButtonBar (260513-sfp).
+        %
+        %   Mode dispatch (after the guards above pass):
+        %     'auto-visible' - use y as given (legacy behaviour). The caller
+        %                      either passes data already filtered to the
+        %                      visible X window, or full data — both work.
+        %     'auto-all'     - replace y with full data from
+        %                      getYFromTagOrInline_() so "fit all" ignores
+        %                      whatever window the caller filtered to.
+        %     'locked'       - return without rescaling.
             if ~isempty(obj.YLimits)
                 return;
             end
             if obj.UserZoomedY
+                return;
+            end
+            % Octave 7+ has no isvalid() for classdef handles, so treat the
+            % FastSense handle as valid there and let downstream property
+            % access surface real failures.
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            if ~isempty(obj.FastSenseObj) && (isOctave || isvalid(obj.FastSenseObj)) && ...
+                    strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
                 return;
             end
             if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered
@@ -355,6 +464,20 @@ classdef FastSenseWidget < DashboardWidget
             ax = obj.FastSenseObj.hAxes;
             if isempty(ax) || ~ishandle(ax)
                 return;
+            end
+            % Mode dispatch (260513-sfp). 'locked' short-circuits regardless
+            % of the y argument; 'auto-all' replaces y with full data so the
+            % caller's window filter is bypassed.
+            switch obj.YLimitMode
+                case 'locked'
+                    return;
+                case 'auto-all'
+                    yAll = obj.getYFromTagOrInline_();
+                    if ~isempty(yAll)
+                        y = yAll;
+                    end
+                otherwise
+                    % 'auto-visible' (default) — use y argument as-is.
             end
             if isempty(y)
                 return;
@@ -408,12 +531,14 @@ classdef FastSenseWidget < DashboardWidget
             end
             if ~isempty(obj.FastSenseObj)
                 try
-                    ax = obj.FastSenseObj.hAxes;
-                    if ~isempty(ax) && ishandle(ax)
-                        obj.IsSettingTime = true;
-                        xlim(ax, [tStart tEnd]);
-                        obj.IsSettingTime = false;
-                    end
+                    obj.IsSettingTime = true;
+                    % Use setXLimQuiet to suppress the XLimMode PostSet
+                    % listener (onXLimModeChanged -> scheduleDeferredXLimCheck
+                    % -> timer creation) that fires on every plain xlim() call.
+                    % This avoids ~4 ms of timer-creation overhead per widget
+                    % per live tick when the dashboard broadcasts a time sync.
+                    obj.FastSenseObj.setXLimQuiet(tStart, tEnd);
+                    obj.IsSettingTime = false;
                 catch
                     obj.IsSettingTime = false;
                 end
@@ -540,6 +665,33 @@ classdef FastSenseWidget < DashboardWidget
                     [xOut, yOut] = localMinMaxBuckets_(x, y, nBucketsEff);
                 end
 
+                % Accept BOTH 2*nb (no tail anchor) and 2*nb+1 (anchor
+                % appended by minmax cores — 260512-c5x). The slider
+                % preview only needs paired (min, max) per bucket; the
+                % anchor is informational for the main chart and is
+                % safely dropped here before the reshape (drops the
+                % single trailing anchor (x, y) pair tail).
+                %
+                % 260512-cxc: capture the tail anchor BEFORE the drop so we
+                % can thread it through to xCenters(end). The drop itself
+                % is still required because reshape(xOut, 2, nb) below
+                % needs an even-length vector. Without this capture, the
+                % slider preview's last bucket freezes at the interior
+                % min/max midpoint and never advances under live data
+                % growth (visible "stuck preview tail" on the industrial
+                % plant demo's reactor.pressure widget).
+                anchorX = [];
+                anchorY = []; %#ok<NASGU>  % captured for future symmetry;
+                                           % yMinB/yMaxB already include
+                                           % the anchor's y because
+                                           % minmax_core_mex scans the
+                                           % full last bucket.
+                if numel(xOut) == 2 * nBucketsEff + 1 && numel(yOut) == 2 * nBucketsEff + 1
+                    anchorX = xOut(end);
+                    anchorY = yOut(end); %#ok<NASGU>
+                    xOut = xOut(1:end - 1);
+                    yOut = yOut(1:end - 1);
+                end
                 if numel(xOut) ~= 2 * nBucketsEff || numel(yOut) ~= 2 * nBucketsEff
                     return;
                 end
@@ -550,6 +702,20 @@ classdef FastSenseWidget < DashboardWidget
                 yMinB  = min(yPairs, [], 1);
                 yMaxB  = max(yPairs, [], 1);
                 xCenters = (xPairs(1, :) + xPairs(2, :)) / 2;
+
+                % 260512-cxc: snap the trailing xCenter to the tail anchor
+                % when the downsampler appended one. The bucket's interior
+                % (min-X, max-X) midpoint can be hundreds of seconds
+                % behind segX(end) under steady-state live data — the
+                % main chart's tail-anchor fix (260512-c5x) made the
+                % rendered line advance, but the slider preview was still
+                % reading the interior midpoint. Guard against
+                % anchorX <= xCenters(end) to preserve strict monotonicity
+                % (the drop-and-override is purely additive in the X
+                % dimension).
+                if ~isempty(anchorX) && anchorX > xCenters(end)
+                    xCenters(end) = anchorX;
+                end
 
                 % Determine y-range: prefer current axes YLim; fallback to data.
                 yRange = [];
@@ -823,6 +989,12 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.YLimits), s.yLimits = obj.YLimits; end
             if obj.ShowThresholdLabels, s.showThresholdLabels = true; end
             if obj.ShowEventMarkers, s.showEventMarkers = true; end
+            % Emit yLimitMode only when non-default so pre-260513-sfp JSON
+            % stays byte-identical (keeps diffs invisible for old
+            % dashboards that never opted into a mode).
+            if ~strcmp(obj.YLimitMode, 'auto-visible')
+                s.yLimitMode = obj.YLimitMode;
+            end
             % NOTE: EventStore is a runtime handle — intentionally NOT serialized (Pitfall E).
 
             if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
@@ -850,6 +1022,70 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function y = getYFromTagOrInline_(obj)
+        %GETYFROMTAGORINLINE_ Full y vector from Tag (preferred) or inline YData.
+        %   Returns [] when neither source yields data. Used by the
+        %   'auto-all' branch of autoScaleY_ / setYLimitMode so the rescale
+        %   spans the entire timeline regardless of the current X window.
+            y = [];
+            if ~isempty(obj.Tag)
+                try
+                    [~, y] = obj.Tag.getXY();
+                catch
+                    y = [];
+                end
+                return;
+            end
+            if ~isempty(obj.YData)
+                y = obj.YData;
+            end
+        end
+
+        function y = getYInVisibleXWindow_(obj)
+        %GETYINVISIBLEXWINDOW_ y values whose x is inside the current XLim.
+        %   Used by the 'auto-visible' branch of setYLimitMode so an
+        %   explicit click on the V button rescales to the data the user
+        %   can actually see right now. Falls back to the full y vector
+        %   when the axes XLim is unavailable, when the data is too sparse
+        %   to filter meaningfully, or when no samples fall inside the
+        %   window (e.g. live data has not yet caught up with a panned-
+        %   ahead XLim).
+            y = obj.getYFromTagOrInline_();
+            if isempty(y) || isempty(obj.FastSenseObj) || ...
+                    ~obj.FastSenseObj.IsRendered
+                return;
+            end
+            ax = obj.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax)
+                return;
+            end
+            try
+                xl = get(ax, 'XLim');
+            catch
+                return;
+            end
+            if numel(xl) ~= 2 || ~all(isfinite(xl)) || xl(2) <= xl(1)
+                return;
+            end
+            x = [];
+            if ~isempty(obj.Tag)
+                try
+                    [x, ~] = obj.Tag.getXY();
+                catch
+                    x = [];
+                end
+            elseif ~isempty(obj.XData)
+                x = obj.XData;
+            end
+            if isempty(x) || numel(x) ~= numel(y)
+                return;
+            end
+            mask = x >= xl(1) & x <= xl(2);
+            if any(mask)
+                y = y(mask);
+            end
+        end
+
         function refreshEventMarkers_(obj)
             %REFRESHEVENTMARKERS_ Diff LastEventIds_/LastEventOpen_ vs current EventStore state.
             %   Triggers inner FastSense.refreshEventLayer() on any change: added/removed
@@ -1094,6 +1330,16 @@ classdef FastSenseWidget < DashboardWidget
             if isfield(s, 'showEventMarkers')
                 obj.ShowEventMarkers = s.showEventMarkers;
             end
+            % 260513-sfp — restore YLimitMode if serialized. Absent means
+            % "legacy dashboard, default to 'auto-visible'" so behaviour
+            % is byte-identical for old configs.
+            if isfield(s, 'yLimitMode')
+                try
+                    obj.setYLimitMode(s.yLimitMode);
+                catch
+                    % Invalid serialized value; keep default 'auto-visible'.
+                end
+            end
         end
     end
 end
@@ -1193,4 +1439,13 @@ function [xOut, yOut] = localMinMaxBuckets_(x, y, nb)
     yOut(odd(~minFirst))  = yMaxVals(~minFirst);
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
+
+    % Tail-anchor (260512-c5x): mirrors minmax_core_mex.c — append
+    % (x(end), y(end)) iff its X strictly exceeds the last emitted X
+    % so the rendered line pins to the data tail. Output length:
+    % 2*nb or 2*nb+1.
+    if x(end) > xOut(end)
+        xOut(end + 1) = x(end);
+        yOut(end + 1) = y(end);
+    end
 end

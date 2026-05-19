@@ -2,13 +2,18 @@ function engine = buildDashboard(ctx)
 %BUILDDASHBOARD Construct the Phase 1015 demo dashboard.
 %   engine = buildDashboard(ctx) creates the DashboardEngine, adds six
 %   themed pages, delegates per-page widget composition to the build*Page
-%   helpers, renders the figure, starts the live timer, and wires a
-%   CloseRequestFcn so closing the figure invokes teardownDemo(ctx).
+%   helpers, renders the figure, and wires a CloseRequestFcn so closing
+%   the figure invokes teardownDemo(ctx). Live mode is OFF by default
+%   (260512-fd9); the user opts in via the "Live" button on the top
+%   toolbar — this matches FastSenseCompanion's IsLive=false default and
+%   keeps the demo idle until the user explicitly asks for live ticks.
 %   (Earlier revisions auto-detached the reactor pressure plot into its
 %   own figure on startup; that was removed on user feedback.)
 %
 %   Plan-vs-API notes (deviations documented in 1015-02-SUMMARY.md):
-%     - DashboardEngine has no 'Live' NV-pair; startLive() starts the timer.
+%     - DashboardEngine has no 'Live' NV-pair; Live mode is opt-in via the
+%       top-toolbar "Live" button (260512-fd9). startLive() was called
+%       here historically; removed so the demo opens idle.
 %     - render() takes no args -- engine creates its own figure.
 %     - allPageWidgets() is private; we iterate engine.Pages{i}.Widgets
 %       directly (Pages has SetAccess=private but is publicly readable).
@@ -23,6 +28,11 @@ function engine = buildDashboard(ctx)
 
     engine = DashboardEngine('FastSense Industrial Plant Demo', ...
         'Theme', 'light', 'LiveInterval', 1.0);
+
+    % Wire EventStore so the per-widget "+" Create-Event button on every
+    % FastSenseWidget writes manual annotations into the same store the
+    % Events page (EventTimelineWidget) reads from (260513-snt).
+    engine.EventStore = ctx.store;
 
     engine.addPage('Overview');
     engine.addPage('Feed Line');
@@ -47,8 +57,9 @@ function engine = buildDashboard(ctx)
     % Re-attach / Detach button on each FastSenseWidget still lets users
     % pop a plot out manually.)
 
-    % Start live refresh timer.
-    engine.startLive();
+    % Live mode is OFF on startup (260512-fd9). Users opt in via the
+    % "Live" button on the top toolbar — matches FastSenseCompanion's
+    % IsLive=false default so both windows start idle.
 
     % Update ctx in caller's scope via the fig's UserData so CloseRequestFcn
     % can reach the updated engine handle. Also store on fig directly.

@@ -52,6 +52,24 @@ classdef ScatterWidget < DashboardWidget
             end
             if isempty(xData), return; end
 
+            % In-place update: avoid cla() + full object recreation on every tick.
+            % A live scatter grows by appending new samples, so we can update
+            % XData/YData on the existing graphics object rather than destroying
+            % and rebuilding it.  Fall back to full rebuild when:
+            %   - no existing handle yet (first render, or handle was deleted)
+            %   - SensorColor is wired (CData must stay consistent with new n;
+            %     simpler to rebuild than splice in new color rows)
+            canUpdateInPlace = ~isempty(obj.hScatter) && ishandle(obj.hScatter) && ...
+                isempty(obj.SensorColor);
+            if canUpdateInPlace
+                try
+                    set(obj.hScatter, 'XData', xData, 'YData', yData);
+                    return;
+                catch
+                    % Handle invalidated — fall through to full rebuild.
+                end
+            end
+
             cla(obj.hAxes);
             if ~isempty(obj.SensorColor) && ~isempty(obj.SensorColor.Y)
                 cData = obj.SensorColor.Y(1:min(numel(obj.SensorColor.Y), numel(xData)));
@@ -68,6 +86,7 @@ classdef ScatterWidget < DashboardWidget
             end
 
             % Auto-derive axis labels from SensorX/SensorY if present.
+            % Only set them on first build (not on every in-place update).
             if ~isempty(obj.SensorX)
                 xl = obj.axisLabelForSensor_(obj.SensorX);
                 if ~isempty(xl), xlabel(obj.hAxes, xl); end

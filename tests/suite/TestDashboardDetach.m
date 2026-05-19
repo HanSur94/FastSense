@@ -86,7 +86,7 @@ classdef TestDashboardDetach < matlab.unittest.TestCase
             testCase.addTeardown(@() close(d.hFigure));
 
             w = d.Widgets{1};
-            btn = findobj(w.hPanel, 'Tag', 'DetachButton');
+            btn = findobj(w.hCellPanel, 'Tag', 'DetachButton');
             testCase.verifyNotEmpty(btn, ...
                 'DetachButton uicontrol should be injected into every widget panel after render()');
         end
