@@ -21,7 +21,7 @@ FastPlot consists of five integrated libraries:
 |---------|-------------|
 | **FastSense** | Core plotting engine with dynamic downsampling, dashboard layouts (FastSenseGrid, FastSenseDock), interactive toolbar, themes, and disk-backed storage via FastSenseDataStore |
 | **Dashboard** | Widget-based dashboard engine with 8 widget types, 24-column responsive grid, edit mode, and JSON persistence |
-| **SensorThreshold** | Sensor data containers with state-dependent threshold rules, violation detection, and SensorRegistry catalog |
+| **SensorThreshold** | Tag-based sensor data containers, state-dependent threshold rules via MonitorTag, violation detection, and TagRegistry catalog |
 | **EventDetection** | Event detection from threshold violations, EventViewer with Gantt timeline, live pipeline with notifications |
 | **WebBridge** | TCP server for web-based visualization with NDJSON protocol |
 
@@ -32,9 +32,9 @@ FastPlot consists of five integrated libraries:
 - **MEX acceleration** — optional C with SIMD (AVX2/NEON), auto-fallback to pure MATLAB
 - **Dashboard layouts** — tiled grids (FastSenseGrid) and tabbed containers (FastSenseDock)
 - **Interactive toolbar** — data cursor, crosshair, grid/legend toggle, autoscale, PNG export
-- **6 built-in themes** — default, dark, light, industrial, scientific, ocean
+- **2 built-in themes** — light and dark (legacy aliases for backward compatibility)
 - **Linked axes** — synchronized zoom/pan across subplots
-- **Sensor system** — state-dependent thresholds with condition-based rules and violation markers
+- **Tag-based sensor system** — unified data model (SensorTag, StateTag, MonitorTag) with state-dependent thresholds and listener-driven cache invalidation
 - **Event detection** — group violations into events with statistics, Gantt viewer, click-to-plot
 - **Live mode** — file polling with auto-refresh (preserve/follow/reset view modes)
 - **Disk-backed storage** — SQLite-backed chunked DataStore for 100M+ point datasets
@@ -71,19 +71,11 @@ fig.renderAll();
 ```
 
 ```matlab
-% Sensor with state-dependent thresholds
-s = Sensor('pressure', 'Name', 'Chamber Pressure');
-s.X = linspace(0, 100, 1e6);
-s.Y = randn(1, 1e6) * 10 + 50;
-
-sc = StateChannel('machine');
-sc.X = [0 30 60 80]; sc.Y = [0 1 2 1];
-s.addStateChannel(sc);
-s.addThresholdRule(struct('machine', 1), 70, 'Direction', 'upper', 'Label', 'Run HI');
-s.resolve();
-
+% Tag-based sensor data with threshold
+st = SensorTag('pressure', 'X', 1:1000, 'Y', randn(1,1000)*10+50);
 fp = FastSense('Theme', 'industrial');
-fp.addSensor(s, 'ShowThresholds', true);
+fp.addTag(st);
+fp.addThreshold(60, 'Direction', 'upper', 'ShowViolations', true, 'Label', 'Limit');
 fp.render();
 ```
 
@@ -102,7 +94,7 @@ Start with the [[Installation]] guide to set up FastPlot and compile MEX acceler
 **Core Classes**
 - [[API Reference: FastPlot]] — main plotting engine with dynamic downsampling
 - [[API Reference: Dashboard]] — FastSenseGrid, FastSenseDock, FastSenseToolbar
-- [[API Reference: Sensors]] — Sensor, StateChannel, ThresholdRule, SensorRegistry
+- [[API Reference: Sensors]] — SensorTag, StateTag, MonitorTag, TagRegistry
 - [[API Reference: Event Detection]] — EventDetector, EventViewer, LiveEventPipeline
 - [[API Reference: Themes]] — theme presets, customization, color palettes
 - [[API Reference: Utilities]] — ConsoleProgressBar, FastSenseDefaults
