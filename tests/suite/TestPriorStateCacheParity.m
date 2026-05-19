@@ -10,8 +10,14 @@ classdef TestPriorStateCacheParity < matlab.unittest.TestCase
     %     1. Build a small synthetic CSV-fed tag graph (3 source files, 12
     %        SensorTags, 3 StateTags — small enough for fast tests, large
     %        enough to exercise both numeric and cellstr Y).
-    %     2. Run the pipeline ≥10 ticks twice — once with cacheActive_=true,
+    %     2. Run the pipeline 3 ticks twice — once with cacheActive_=true,
     %        once with cacheActive_=false — into two separate output dirs.
+    %        Tick 1 cold-seeds the cache; ticks 2-3 exercise the warm path.
+    %        A pause(1.1) sits between each tick because R2021b Linux
+    %        `dir().datenum` has 1-second resolution and the pipeline's
+    %        modTime<=lastModTime guard would otherwise silently skip
+    %        ticks that land in the same wallclock second (see commit
+    %        5cd6b23 for the same fix in TestFsStatCoalesce).
     %     3. For every tag, load both .mat files and assert isequal on x and
     %        y arrays. (Binary-equality of the .mat container itself is not
     %        enforced because save() may legitimately reorder unimportant
@@ -65,10 +71,28 @@ classdef TestPriorStateCacheParity < matlab.unittest.TestCase
 
     methods (Test)
         function testCacheOnOffByteEqualSensors(testCase)
-            % Numeric SensorTag fan-out, 10 ticks, append mode.
+            % Numeric SensorTag fan-out, 3 ticks (was 10), append mode.
+            %
+            % Tick count reduction + per-tick pause(1.1) below address an
+            % R2021b Linux mtime-granularity flake (same root cause as
+            % commit 5cd6b23's TestFsStatCoalesce fix). On Linux R2021b CI,
+            % `dir().datenum` has 1-second resolution. The pipeline's
+            % mtime guard (LiveTagPipeline.processTag_ line 580) skips
+            % a tick when `modTime <= state.lastModTime`. Cache-on ticks
+            % run faster than cache-off ticks (the entire point of Plan 02d
+            % — cache-on skips load+save), so cache-on completes its loop
+            % within a single wallclock second more often than cache-off,
+            % producing fewer processed ticks. The asymmetric skip counts
+            % yielded different on-disk row counts even though the cache
+            % mechanism itself is byte-equal to the disk path.
+            %
+            % Three ticks is enough to exercise the warm-cache path
+            % (tick 1 = cold seed; ticks 2-3 = warm); the parity contract
+            % does not require many ticks, only that the warm path runs
+            % at least once.
             nFiles  = 3;
             nTags   = 12;
-            nTicks  = 10;
+            nTicks  = 3;
             nPrefill = 50;
             nAppend  = 20;
             nCols    = 6;
@@ -92,9 +116,10 @@ classdef TestPriorStateCacheParity < matlab.unittest.TestCase
 
         function testCacheOnOffByteEqualStateTags(testCase)
             % StateTag exercises the cellstr-Y branch of writeTagMatCached_.
-            % Run a smaller fixture but include states.
+            % Run a smaller fixture but include states. Same 3-tick + pause
+            % R2021b-mtime-granularity fix as testCacheOnOffByteEqualSensors.
             nFiles  = 2;
-            nTicks  = 6;
+            nTicks  = 3;
             nPrefill = 30;
             nAppend  = 10;
             nCols    = 5;
@@ -230,6 +255,19 @@ function runPipelinePass_(csvPaths, outDir, nTags, nCols, nTicks, nAppend, cache
     p.setCacheActiveForTesting_(cacheOn);
 
     for k = 1:nTicks
+        if k > 1
+            % R2021b Linux dir().datenum has 1-second resolution. Without
+            % this pause, fast appends in the same wallclock second produce
+            % an unchanged mtime and the pipeline's modTime<=lastModTime
+            % guard (LiveTagPipeline.processTag_ line 580) silently skips
+            % the tick. The cache-on path runs faster than cache-off (the
+            % whole point of Plan 02d), so cache-on completes more ticks
+            % within a single second than cache-off, yielding asymmetric
+            % skip counts and different on-disk row counts. Pausing >1s
+            % between appends guarantees the mtime advances strictly.
+            % See commit 5cd6b23 for the equivalent TestFsStatCoalesce fix.
+            pause(1.1);
+        end
         for f = 1:numel(csvPaths)
             appendCsv_(csvPaths{f}, nCols, nAppend);
         end
@@ -266,6 +304,10 @@ function runStatePipelinePass_(csvPaths, outDir, nCols, nTicks, nAppend, cacheOn
     p.setCacheActiveForTesting_(cacheOn);
 
     for k = 1:nTicks
+        if k > 1
+            % See runPipelinePass_ for the R2021b mtime-granularity rationale.
+            pause(1.1);
+        end
         for f = 1:numel(csvPaths)
             appendCsv_(csvPaths{f}, nCols, nAppend);
         end
