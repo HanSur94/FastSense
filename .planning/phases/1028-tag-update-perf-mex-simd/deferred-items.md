@@ -95,3 +95,22 @@ The Tests workflow on commit `8977707` (plan 02d's CI-unblock merge) shows three
 **Severity:** LOW for plan 02d. None of these failures are caused by plan 02d's cache changes. The TestPriorStateCacheParity suite passed (4/4). The Benchmark workflow (D-08 gates) is the relevant gate; it ran independently and is the source of truth for plan 02d's "all 4 active D-08 gates green" success criterion.
 
 **Mitigation:** Surface to user. Follow-up quick tasks for #1 and #2 (both pre-existing main issues). #3 was already documented and accepted as a known infrastructure quirk by Plan 02b.
+
+---
+
+## Pre-existing CI failures observed during Plan 1028-05 (NOT introduced by this plan)
+
+The Tests workflow on commit `345667c` (plan 05's CI-unblock merge of main) shows the following pre-existing failures inherited from `origin/main` (all visible in main-branch CI runs prior to this merge — see e.g. https://github.com/HanSur94/FastSense/actions/runs/26083388897 on main `bd01d63`):
+
+- `test_event_pick_mode`: 12/12 fail with `subsasgn: property 'FastSenseObj' has private access` / `LastTagRef`. Introduced by quick task `260513-v69`/`260513-voo` (event-pick mode). Pure Octave private-property visibility quirk against MATLAB; pre-existing on main.
+- `test_fastsense_widget_ylimit_modes`: 2/11 fail with `'PostSet' undefined`. Octave has no `PostSet` listener support. Pre-existing — same root cause as `test_dashboard_time_sync_all_pages` (Plan 02d entry).
+- `test_minmax_tail_anchor`: tail-anchor numerical assertion (`xo(end)=9981 expected 10000`). Pre-existing on main.
+- `test_preview_xcenters_advance`: same tail-anchor numerical drift. Pre-existing.
+- `test_time_range_selector`: scale assertion (`a=20 expected 40`). Pre-existing.
+- `test_time_range_selector_reinstall_after_rerender`: `FastSenseObj` private access. Same Octave quirk as `test_event_pick_mode`.
+- `test_toolbar`: `testToolbarHasAllButtons: got 13` (test asserts a different count). Caused by the new Tile + Close buttons added in PR #143; pre-existing on main.
+- MATLAB Tests (J-P, Q-Z) Verify sentinel: pre-existing MATLAB R2021b shutdown segfault documented in Plan 02b/02d entries.
+
+**Severity:** LOW for plan 05. None of these failures are caused by plan 05's Tag.invalidateBatch_ / listener-coalescing changes. The Benchmark workflow (D-08 gates + harness coalesce-on/off) is the relevant gate for plan 05 — it ran independently. plan 05's new `TestListenerCoalesceOrdering` (4 tests) ran inside the Octave Tests phase and passed (visible as `Running TestListenerCoalesceOrdering ... PASSED` in the run log; not enumerated here).
+
+**Mitigation:** Surface to user via this entry and SUMMARY.md. The eight pre-existing items are out-of-scope per the GSD scope_boundary rule. Recommended follow-up: a sweep quick task to address the Octave private-property and PostSet issues, plus update `test_toolbar` for the new button count.

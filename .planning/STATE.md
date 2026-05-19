@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-19T08:30:00.000Z"
-last_activity: 2026-05-19 -- Plan 05 (Wave 4) A1+A2 listener-coalescing seam shipped (Tag.invalidateBatch_ + Hidden getListeners_ accessors + LiveTagPipeline end-of-tick wire-up). v3.0 milestone separately reached SHIPPED on main 2026-05-14; phase 1028 (v1.0 perf milestone) continues against main.
+last_updated: "2026-05-19T09:09:49.773Z"
+last_activity: 2026-05-19
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 9
 ---
 
 # State
@@ -17,10 +17,10 @@ progress:
 ## Current Position
 
 Phase: 1028 (tag-update-perf-mex-simd) — EXECUTING
-Plan: 3 of 6 (Plans 01 + 02 + 02b + 02d complete; 02b/02d are mid-phase Wave-1.5 insertions for measurement gap and .mat read-side cache)
-Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30
-Status: Plan 05 (Wave 4) A1+A2 listener-coalescing seam shipped; CI pending for VERIFICATION.md numbers; Plan 06 (phase wrap) pending.
-Last activity: 2026-05-19 — Plan 05 shipped Tag.invalidateBatch_ static helper + LiveTagPipeline.onTick_ end-of-tick wiring + harness --coalesce-on/off flag. Per Plan 02d strategic implication and Plan 05 measured no-op: the seam is forward-compat; the real `other` bucket (~67% of post-cache WithIO) is dominated by `containers.Map` dispatch and per-tag fs metadata, not listener fan-out. Plan 06 (phase wrap) should consider attacking those directly.
+Plan: 5 of 6 complete; Plan 06 (phase wrap) pending. Shipped plans: 01, 02, 02b, 02d, 05. Plans 03/04 (K2/K3/K4 kernel swaps) deferred per Plan 02d data (target regions <1% of tick).
+Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v1.0 perf milestone tracks phase 1028 wrap.
+Status: Plan 05 A1+A2 listener-coalescing seam shipped; CI Benchmark green (run 26086360898). Plan 06 must decide between architectural follow-up (in-memory propagation / containers.Map refactor / fs-stat coalescing) or close phase as-is.
+Last activity: 2026-05-19 — Plan 05 shipped Tag.invalidateBatch_ + LiveTagPipeline.onTick_ end-of-tick wiring + harness --coalesce-on/off flag. Measured −0.9% coalesce-on vs coalesce-off (within variance); the seam is a forward-compatible internal mechanism (in-memory propagation refactor would activate the win). Surfaced finding: post-cache `other` bucket = containers.Map dispatch + fs metadata, not listener fan-out.
 
 ### Quick Tasks Completed
 

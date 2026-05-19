@@ -115,7 +115,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1026. Dashboard time slider preview | pending | 0/? | Not started | — |
 | 1027. Companion detachable log window | pending | 5/5 | Complete    | 2026-05-08 |
 | 1027.1. Independent events/live log detach | pending | 8/8 | Complete    | 2026-05-08 |
-| 1028. Tag update perf — MEX + SIMD | pending | 3/6 (+ 02b/02d insertions) | In Progress | Wave-1.5 cache lands; Plans 03/04/05 ahead |
+| 1028. Tag update perf — MEX + SIMD | pending | 5/6 | In Progress|  |
 
 ## Phase Details (Pending Milestone)
 
@@ -187,7 +187,7 @@ Plans:
 
 **Promoted from:** Backlog 999.5 (2026-05-08)
 **Decisions:** D-01..D-12 from .planning/phases/1028-tag-update-perf-mex-simd/1028-CONTEXT.md (no formal REQ-IDs for v3.x)
-**Plans:** 2/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 - [x] 1028-01-PLAN.md — Wave 0: 1000-tag harness + parity scaffolds + regression suite + CI wiring + baseline measurement
@@ -196,7 +196,7 @@ Plans:
 - [x] 1028-02d — Wave 1.5 (insertion, no formal PLAN.md): in-memory prior-state cache eliminating per-tick `load()` inside `writeTagMat_('append',...)`; D-09 byte-equal parity (TestPriorStateCacheParity); D-10 / D-12 preserved
 - [ ] 1028-03-PLAN.md — Wave 2: K2 monitor_fsm_mex (fused hysteresis+debounce+findRuns) + .m fallback
 - [ ] 1028-04-PLAN.md — Wave 3: K3 composite_merge_mex + K4 aggregate_matrix_mex (6 structural modes) + fallbacks
-- [ ] 1028-05-PLAN.md — Wave 4 (CONDITIONAL): Stage 2 architectural — A1 listener coalescing + A2 batch invalidate, gated on Stage-1 measurement
+- [x] 1028-05-PLAN.md — Wave 4 (CONDITIONAL): Stage 2 architectural — A1 listener coalescing + A2 batch invalidate, gated on Stage-1 measurement
 - [ ] 1028-06-PLAN.md — Wave 5: Phase wrap — finalize VERIFICATION.md, update ROADMAP.md + STATE.md
 
 > Plans 02-06 are serialized: each Wave-N plan extends the SensorThreshold MEX block in `libs/FastSense/build_mex.m`, appends measurements to `bench_tag_pipeline_1k.m`, and writes a new subsection to `1028-VERIFICATION.md`. The serial chain prevents shared-file conflicts and naturally flows each plan's `tickMin` into the next plan's Δ-vs-previous table.

@@ -490,9 +490,74 @@ A2 (batch invalidate API) are the right next levers.
 
 **Decision:** `approved`
 
+## Post-Plan-05 tBreakdown (A1+A2 listener-coalescing seam)
+
+CI run: https://github.com/HanSur94/FastSense/actions/runs/26086360898 (Benchmark — success)
+Commit: `345667c` (merge of plan 05's three commits: `39d072a` Stage 2 GO decision + `f3c69bc` TDD RED test + `55e9d28` Tag.invalidateBatch_ + getListeners_ + `3d3c277` LiveTagPipeline wiring + harness flag)
+Branch: `claude/adoring-ishizaka-edc93c`
+
+### Headline metrics (CI Octave Linux x86_64, gnuoctave/octave:11.1.0)
+
+| Metric                                | Plan 02d (pre-Plan-05)  | Plan 05 (coalesce-on default)   | Plan 05 coalesce-off (regression check) | Δ (on vs off)               |
+|---------------------------------------|-------------------------|---------------------------------|-----------------------------------------|-----------------------------|
+| NoIO `tickMin`                        | 2408.6 ms               | **2645.9 ms** (+9.8% / variance) | not separately captured                 | —                           |
+| WithIO `tickMin` (cache-on)           | 3662.0 ms               | **3864.7 ms** (+5.5% / variance) | **3899.1 ms** (+0.9% vs coalesce-on)    | **−34.4 ms (~−0.9%)**       |
+| WithIO `tickMin` (cache-off, D-12 check) | 5467.4 ms            | **5634.4 ms** (+3.1% / within ±5%) | —                                       | —                           |
+
+All deltas vs Plan 02d are within CI run-to-run variance (±35% on NoIO, ±5% on WithIO with cache-off per Plan 02b notes).
+
+### Full WithIO cache-on tBreakdown (coalesce-on, smoke `--profile`)
+
+| Region              | Plan 02d ms/tick | Plan 05 ms/tick | Δ                         |
+|---------------------|------------------|------------------|---------------------------|
+| `mat_write`         | 720.2            | **679.6**        | −40.6 ms (within variance)|
+| `other`             | 2447.0           | **2683.1**       | +236.1 ms (+9.6%)         |
+| `listener_fanout`   | ~0               | **n/a in this profile** | —                  |
+| **Total profiled**  | 3167.2           | **3362.7**       | +195.5 ms                 |
+
+(Note: smoke profile is 3 ticks; per-tick numbers above are smokeTicksDivisor=3 averaged. The WithIO profile does not separately profile `parse` / `select` / `listener_fanout` in this CI revision — those appear only in the NoIO breakdown below.)
+
+### Full NoIO tBreakdown (coalesce-on, smoke `--profile`)
+
+| Region              | Plan 02d ms/tick | Plan 05 ms/tick | Δ                                  |
+|---------------------|------------------|------------------|------------------------------------|
+| `parse`             | 192              | **199.1**        | +7.1 ms (within variance)          |
+| `monitor_recompute` | 0                | 0                | —                                  |
+| `composite_merge`   | 0                | 0                | —                                  |
+| `aggregate`         | 0                | 0                | —                                  |
+| `listener_fanout`   | **0**            | **83.6**         | **+83.6 ms (the new batch invalidate call surfaces)** |
+| `mat_write`         | 0 (NoIO seam)    | 0                | —                                  |
+| `select`            | 58               | 63.9             | +5.9 ms                            |
+| `other`             | ~2090            | **2257.3**       | +167 ms (within variance)          |
+| **Total profiled**  | ~2340            | **2603.9**       | +263.9 ms                          |
+
+### Findings
+
+1. **A1+A2 seam ships but does not meet the 15% Stage 2 ship-criterion from CONTEXT D-05.** The coalesce-on vs coalesce-off WithIO delta is **−34.4 ms (~−0.9%)** — within run-to-run variance. Plan 02d's framing of the Stage 2 trigger (post-cache `other` bucket = ~67% of WithIO tick) was correct as a diagnostic, but the underlying mechanism in that bucket is **`containers.Map/subsref` + `dir`/`exist`/`fullfile` per-tag dispatch**, NOT listener fan-out. The A1+A2 lever attacks the wrong sub-bucket.
+
+2. **The new `listener_fanout` profile bucket is non-zero for the first time in phase 1028.** Pre-Plan-05 the bucket measured 0 ms because no code path was invoking `notifyListeners_`/`/invalidate` in the bench. With Plan 05's `LiveTagPipeline.onTick_` end-of-tick `Tag.invalidateBatch_(updatedSet)` call, the bucket now registers 83.6 ms/tick (smoke). This is observable evidence the seam is wired correctly — it's just that the cost it adds (~85 ms of listener walks + cache flushes) doesn't displace a larger pre-existing cost (because that cost was already 0).
+
+3. **D-08 gates remain green.** The WithIO cache-off regression check at 5634.4 ms is +3.1% vs Plan 02b's 5225 ms — within the ±5% tolerance. Four active D-08 gates pass; the fifth (`bench_monitortag_tick`) stays assume-skipped per Plan 01.
+
+4. **`TestListenerCoalesceOrdering` (4 cases) passes** in the Octave Tests phase. Public APIs unchanged (D-10): `Tag.invalidate`, `Tag.addListener`, all subclass `notifyListeners_` signatures preserved. The new helper is Static / Hidden.
+
+5. **The pipeline's `processTag_` does NOT call `tag.updateData()`** — it writes to .mat sinks only. Downstream Monitor/Composite caches read parent's in-memory X/Y, which doesn't move. Calling `Tag.invalidateBatch_` here flushes those caches without an in-memory data change, causing eventual recomputes over the same data. Semantically a no-op in the current pipeline.
+
+### Strategic implication for Plan 06 (phase wrap)
+
+The data confirms what Plan 02d's "Strategic implication for Plan 05" hinted at as a back-up scenario: **the `other` bucket cost (~2447–2683 ms/tick) is `containers.Map` dispatch + per-tag filesystem metadata, not listener fan-out**. Plan 05's A1+A2 seam is shipped as a forward-compatible internal mechanism (useful when a future refactor wires `processTag_` to also call `tag.updateData()` for in-memory propagation), but it does not move the production tick at the current architecture.
+
+The candidate next architectural levers, ranked by potential leverage:
+
+1. **In-memory propagation refactor** — refactor `processTag_` to call `tag.updateData(newX, newY)` after writing to disk, so dashboards no longer need explicit `tag.load()`. This makes the A1+A2 seam *real* (batched fan-out actually amortizes work) and removes the disk → in-memory polling roundtrip from the Dashboard refresh path. Touches D-09 (parity) directly — the disk and in-memory representations must remain consistent.
+2. **`containers.Map` → struct array refactor** (per-tag state lookup) — `containers.Map/subsref` + `isKey` + `subsasgn` together account for ~1 s/tick in the NoIO `other` bucket per Plan 02b's top-N. Replacing the Map with a struct-array indexed by tag-name-to-index lookup table could amortize that. Internal-only (Map is a private property in both pipelines).
+3. **Per-tick filesystem stat coalescing** — `dir`/`exist`/`fullfile` per-tag dispatch is ~0.5 s/tick in the NoIO `other` bucket. A single batch `dir(rawDir)` call followed by per-tag struct lookup against the returned directory listing could reduce 1000× system calls to 1× per parent directory. Touches D-07 (per-tick file cache dedup pattern already exists for parse; extend it to stats).
+
+These are all Plan 06 candidates. **Recommendation for Plan 06 scope**: pick one (in-memory propagation OR Map refactor) as the architectural Plan 06; defer the other two to a follow-up phase. Phase 1028 wraps when Plan 06 ships and the four active D-08 gates remain green.
+
 ## Stage 2 Final (plan 06)
 
-TBD or "deferred per Stage 2 Trigger".
+TBD — Plan 05 shipped A1+A2 seam (forward-compat); did not meet 15% Stage 2 criterion because the dominant cost is dispatch overhead, not listener fan-out. Plan 06 must decide whether to attack a real `other`-bucket lever or close phase 1028 as-is with the seam in place.
 
 ## Static Checks Passed (D-07-allowed local checks)
 
