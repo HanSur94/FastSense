@@ -1035,7 +1035,10 @@ classdef DashboardLayout < handle
             inactiveBg = [];
             if isfield(ud, 'YLimitWidget') && ~isempty(ud.YLimitWidget)
                 w = ud.YLimitWidget;
-                if isobject(w) && isvalid(w) && ...
+                % Octave 7+ has no isvalid() for classdef handles; treat as
+                % valid there and rely on the property-access guards below.
+                isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+                if isobject(w) && (isOctave || isvalid(w)) && ...
                         ~isempty(w.ParentTheme) && isstruct(w.ParentTheme) && ...
                         isfield(w.ParentTheme, 'ToolbarBackground')
                     inactiveBg = w.ParentTheme.ToolbarBackground;

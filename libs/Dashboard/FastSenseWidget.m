@@ -450,7 +450,11 @@ classdef FastSenseWidget < DashboardWidget
             if obj.UserZoomedY
                 return;
             end
-            if ~isempty(obj.FastSenseObj) && isvalid(obj.FastSenseObj) && ...
+            % Octave 7+ has no isvalid() for classdef handles, so treat the
+            % FastSense handle as valid there and let downstream property
+            % access surface real failures.
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            if ~isempty(obj.FastSenseObj) && (isOctave || isvalid(obj.FastSenseObj)) && ...
                     strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
                 return;
             end

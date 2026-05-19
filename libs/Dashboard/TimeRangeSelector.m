@@ -65,9 +65,9 @@ classdef TimeRangeSelector < handle
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
-        hRangeLabelLeft   = []   % uicontrol text BELOW slider — slider LEFT selection-edge timestamp (260512-hrn-followup)
-        hRangeLabelMiddle = []   % uicontrol text BELOW slider — selection duration (e.g. "3d 12h")
-        hRangeLabelRight  = []   % uicontrol text BELOW slider — slider RIGHT selection-edge timestamp
+        hRangeLabelLeft   = []   % text label BELOW slider — slider LEFT selection-edge timestamp (260512-hrn-followup)
+        hRangeLabelMiddle = []   % text label BELOW slider — selection duration (e.g. "3d 12h")
+        hRangeLabelRight  = []   % text label BELOW slider — slider RIGHT selection-edge timestamp
         RangeLeftText   = ''     % formatted timestamp shown in hRangeLabelLeft
         RangeMiddleText = ''     % formatted duration string in hRangeLabelMiddle
         RangeRightText  = ''     % formatted timestamp shown in hRangeLabelRight
@@ -85,6 +85,14 @@ classdef TimeRangeSelector < handle
         % NOTE: No OldResizeFcn. Resize events are not observed by this class —
         % all pixel/data conversions are computed on demand from current geometry,
         % so there is no cached resize-dependent state to invalidate.
+        IsUIFigureParent_ = false  % true when ancestor figure was created via uifigure(...)
+        % uicontrol is unsupported under uifigure, so when this flag is true the
+        % label handles are uilabel instances and the property name accessed by
+        % setLabelText_ switches from 'String' to 'Text'. Detected once in the
+        % constructor via isprop(hAncFig, 'AutoResizeChildren'), which is the
+        % uifigure-only property — classical figures lack it even though both
+        % paths report class matlab.ui.Figure on R2020b+. (uifigure-compat fix)
+        OldPanelSizeChangedFcn_ = []  % saved hPanel.SizeChangedFcn for cleanup (uifigure path only)
     end
 
     methods (Access = public)
@@ -96,6 +104,11 @@ classdef TimeRangeSelector < handle
             end
             obj.hPanel = hPanel;
             obj.hFigure = ancestor(hPanel, 'figure');
+            % IsUIFigureParent_ is detected lazily inside buildGraphics_ via
+            % a hidden uicontrol probe -- isprop heuristics (e.g. on
+            % AutoResizeChildren, MenuBar) are unreliable on R2020b+ because
+            % classical figure() and uifigure() share the same
+            % matlab.ui.Figure class and report identical property sets.
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if ischar(key)
@@ -216,15 +229,9 @@ classdef TimeRangeSelector < handle
             obj.RangeLeftText   = char(leftText);
             obj.RangeRightText  = char(rightText);
             obj.RangeMiddleText = char(middleText);
-            if ~isempty(obj.hRangeLabelLeft) && ishandle(obj.hRangeLabelLeft)
-                set(obj.hRangeLabelLeft,  'String', obj.RangeLeftText);
-            end
-            if ~isempty(obj.hRangeLabelMiddle) && ishandle(obj.hRangeLabelMiddle)
-                set(obj.hRangeLabelMiddle, 'String', obj.RangeMiddleText);
-            end
-            if ~isempty(obj.hRangeLabelRight) && ishandle(obj.hRangeLabelRight)
-                set(obj.hRangeLabelRight, 'String', obj.RangeRightText);
-            end
+            obj.setLabelText_(obj.hRangeLabelLeft,   obj.RangeLeftText);
+            obj.setLabelText_(obj.hRangeLabelMiddle, obj.RangeMiddleText);
+            obj.setLabelText_(obj.hRangeLabelRight,  obj.RangeRightText);
         end
 
         function setEnvelope(obj, xC, yMin, yMax)
@@ -669,10 +676,13 @@ classdef TimeRangeSelector < handle
 
         function buildGraphics_(obj)
             %buildGraphics_  Construct axes and graphics handles inside hPanel.
-            % Slider axes height reduced (was 0.85) so two date/time labels
+            % Slider axes height reduced (was 0.85) so three date/time labels
             % can sit below the slider strip showing the data-range edges
-            % (260512-hrn-followup). The two uicontrol text labels live in
-            % the same panel and update on every live tick from the engine.
+            % (260512-hrn-followup). The text labels live in the same panel
+            % and update on every live tick from the engine. The widget used
+            % depends on the parent figure type — classical figures get
+            % uicontrol('Style','text', ...), uifigure parents get uilabel
+            % (uicontrol is unsupported under uifigure).
             obj.hAxes = axes('Parent', obj.hPanel, ...
                 'Units', 'normalized', ...
                 'Position', [0.045 0.42 0.94 0.55], ...
@@ -710,10 +720,19 @@ classdef TimeRangeSelector < handle
             %   - LEFT  : slider's LEFT selection-edge timestamp
             %   - MIDDLE: selection duration (e.g. "7d", "3h 25m", "45 s")
             %   - RIGHT : slider's RIGHT selection-edge timestamp
-            % uicontrol text so they read the panel background (not the
-            % always-white axes background). Updated whenever
-            % DashboardEngine.updateTimeLabels fires (drag or
-            % programmatic selection change). (260512-hrn-followup)
+            % The label widgets read the panel background (not the always-white
+            % axes background) and are updated whenever
+            % DashboardEngine.updateTimeLabels fires (drag or programmatic
+            % selection change). (260512-hrn-followup)
+            %
+            % Classical figure parents host uicontrol('Style','text', ...)
+            % with normalized positions; uifigure parents host uilabel(...)
+            % with pixel positions because uicontrol is unsupported under
+            % uifigure (it errors "Functionality not supported with figures
+            % created with the uifigure function."). The pixel positions are
+            % recomputed on every hPanel size change via a SizeChangedFcn
+            % installed below — matches MultiStatusWidget / IconCardWidget /
+            % TextWidget which use the same pattern. (uifigure-compat fix)
             try
                 panelBg = get(obj.hPanel, 'BackgroundColor');
             catch
@@ -723,6 +742,35 @@ classdef TimeRangeSelector < handle
             if isstruct(obj.Theme) && isfield(obj.Theme, 'ToolbarFontColor')
                 fgColor = obj.Theme.ToolbarFontColor;
             end
+            % Probe-based detection: try a hidden uicontrol on hPanel. If
+            % MATLAB rejects it because the ancestor figure is a uifigure,
+            % switch to the uilabel path. This is bulletproof across MATLAB
+            % releases -- isprop heuristics fail on R2020b+ because classical
+            % and uifigure share matlab.ui.Figure and expose identical props.
+            obj.IsUIFigureParent_ = false;
+            try
+                probe = uicontrol('Parent', obj.hPanel, ...
+                    'Style', 'text', 'String', '', 'Visible', 'off');
+                delete(probe);
+            catch err
+                if contains(err.message, ...
+                        'Functionality not supported with figures created with the uifigure function') || ...
+                        contains(err.identifier, 'UnsupportedFor') || ...
+                        contains(err.identifier, 'NotSupportedFor')
+                    obj.IsUIFigureParent_ = true;
+                else
+                    rethrow(err);
+                end
+            end
+            if obj.IsUIFigureParent_
+                obj.buildLabelsUIFigure_(fgColor, panelBg);
+            else
+                obj.buildLabelsClassical_(fgColor, panelBg);
+            end
+        end
+
+        function buildLabelsClassical_(obj, fgColor, panelBg)
+            %buildLabelsClassical_  uicontrol-text labels (normalized) for classical figure parents.
             obj.hRangeLabelLeft = uicontrol('Parent', obj.hPanel, ...
                 'Style', 'text', ...
                 'Units', 'normalized', ...
@@ -753,6 +801,120 @@ classdef TimeRangeSelector < handle
                 'BackgroundColor', panelBg);
         end
 
+        function buildLabelsUIFigure_(obj, fgColor, panelBg)
+            %buildLabelsUIFigure_  uilabel labels (pixel) for uifigure parents.
+            %   uilabel has no Units property and Position is always in pixels.
+            %   The pixel rectangles match the normalized layout used by the
+            %   classical path ([0.045 0.05 0.30 0.32], [0.36 ...], [0.66 ...])
+            %   and are recomputed on every hPanel size change so the labels
+            %   track the panel as the user resizes the figure.
+            obj.hRangeLabelLeft = uilabel(obj.hPanel, ...
+                'Text', '', ...
+                'FontSize', 9, ...
+                'HorizontalAlignment', 'left', ...
+                'FontColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.hRangeLabelMiddle = uilabel(obj.hPanel, ...
+                'Text', '', ...
+                'FontSize', 9, ...
+                'FontWeight', 'bold', ...
+                'HorizontalAlignment', 'center', ...
+                'FontColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.hRangeLabelRight = uilabel(obj.hPanel, ...
+                'Text', '', ...
+                'FontSize', 9, ...
+                'HorizontalAlignment', 'right', ...
+                'FontColor', fgColor, ...
+                'BackgroundColor', panelBg);
+            obj.layoutUIFigureLabels_();
+            % Chain any existing SizeChangedFcn rather than clobbering it so
+            % siblings that already listen to panel resize (e.g. parent
+            % widgets) keep working. The saved handle is restored in delete.
+            try
+                obj.OldPanelSizeChangedFcn_ = get(obj.hPanel, 'SizeChangedFcn');
+            catch
+                obj.OldPanelSizeChangedFcn_ = [];
+            end
+            try
+                set(obj.hPanel, 'SizeChangedFcn', @(~,~) obj.onPanelResized_());
+            catch
+                % Some parents (uigridlayout cells) may refuse SizeChangedFcn —
+                % treat as best-effort. The labels stay at their initial pixel
+                % positions in that case which is acceptable for a fixed-height
+                % slider strip.
+            end
+        end
+
+        function layoutUIFigureLabels_(obj)
+            %layoutUIFigureLabels_  Recompute uilabel pixel positions from current hPanel size.
+            %   Mirrors the normalized layout used by the classical uicontrol
+            %   path so both runtimes render the labels in the same place
+            %   relative to the slider axes above them.
+            if ~ishandle(obj.hPanel); return; end
+            px = getpixelposition(obj.hPanel);
+            w = px(3); h = px(4);
+            if w <= 0 || h <= 0; return; end
+            yPx = round(0.05 * h);
+            hPx = max(1, round(0.32 * h));
+            leftRect   = [round(0.045 * w), yPx, round(0.30 * w), hPx];
+            middleRect = [round(0.36  * w), yPx, round(0.28 * w), hPx];
+            rightRect  = [round(0.66  * w), yPx, round(0.30 * w), hPx];
+            if ~isempty(obj.hRangeLabelLeft) && ishandle(obj.hRangeLabelLeft)
+                obj.hRangeLabelLeft.Position = leftRect;
+            end
+            if ~isempty(obj.hRangeLabelMiddle) && ishandle(obj.hRangeLabelMiddle)
+                obj.hRangeLabelMiddle.Position = middleRect;
+            end
+            if ~isempty(obj.hRangeLabelRight) && ishandle(obj.hRangeLabelRight)
+                obj.hRangeLabelRight.Position = rightRect;
+            end
+        end
+
+        function onPanelResized_(obj)
+            %onPanelResized_  Re-layout uifigure labels and chain to any saved handler.
+            try
+                obj.layoutUIFigureLabels_();
+            catch
+                % Swallow layout errors — never let resize handling break the
+                % rest of the figure's event chain.
+            end
+            cb = obj.OldPanelSizeChangedFcn_;
+            if isempty(cb); return; end
+            try
+                if isa(cb, 'function_handle')
+                    feval(cb, obj.hPanel, []);
+                elseif iscell(cb) && ~isempty(cb) && isa(cb{1}, 'function_handle')
+                    feval(cb{1}, obj.hPanel, [], cb{2:end});
+                end
+            catch
+                % Defensive: a prior SizeChangedFcn that errors must not
+                % cascade into TimeRangeSelector's own resize handling.
+            end
+        end
+
+        function setLabelText_(obj, hLabel, str)
+            %setLabelText_  Set label text using the correct property for the widget type.
+            %   uilabel uses Text; uicontrol-text uses String. Single dispatch
+            %   point keeps setRangeLabels free of branching.
+            if isempty(hLabel) || ~ishandle(hLabel); return; end
+            if obj.IsUIFigureParent_
+                try
+                    hLabel.Text = char(str);
+                catch
+                    % Fallback to String (e.g. if a future refactor parents a
+                    % uicontrol under a uifigure-detected panel somehow).
+                    try set(hLabel, 'String', char(str)); catch, end
+                end
+            else
+                try
+                    set(hLabel, 'String', char(str));
+                catch
+                    try hLabel.Text = char(str); catch, end
+                end
+            end
+        end
+
         function redraw_(obj)
             %redraw_  Push current DataRange/Selection to the graphics handles.
             %   Pads the axes XLim with 5% of the span on each side so the
@@ -767,8 +929,9 @@ classdef TimeRangeSelector < handle
             set(obj.hEdgeLeft,  'XData', [xL xL], 'YData', [0 1]);
             set(obj.hEdgeRight, 'XData', [xR xR], 'YData', [0 1]);
             % Inline in-axes edge labels removed (260512-hrn-followup).
-            % Edge timestamps now live in the uicontrol text labels BELOW
-            % the slider — populated via setRangeLabels from the engine.
+            % Edge timestamps now live in the text labels BELOW the slider —
+            % populated via setRangeLabels from the engine. Widget kind is
+            % uicontrol-text (classical figure) or uilabel (uifigure).
         end
 
         function installCallbacks_(obj)
@@ -787,6 +950,15 @@ classdef TimeRangeSelector < handle
                 set(obj.hFigure, 'WindowButtonDownFcn',   obj.OldWindowButtonDownFcn);
                 set(obj.hFigure, 'WindowButtonMotionFcn', obj.OldWindowButtonMotionFcn);
                 set(obj.hFigure, 'WindowButtonUpFcn',     obj.OldWindowButtonUpFcn);
+            end
+            % Restore the panel SizeChangedFcn if we hijacked it for uilabel
+            % positioning. Guarded — only fires on the uifigure-parent path,
+            % and only when the panel is still alive.
+            if obj.IsUIFigureParent_ && ~isempty(obj.hPanel) && ishandle(obj.hPanel)
+                try
+                    set(obj.hPanel, 'SizeChangedFcn', obj.OldPanelSizeChangedFcn_);
+                catch
+                end
             end
         end
 
