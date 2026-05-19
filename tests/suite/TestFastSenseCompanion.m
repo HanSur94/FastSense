@@ -1188,6 +1188,64 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'ObjectBeingDestroyed listener must clear EventViewer_.');
         end
 
+        % ---- Phase 1034 Plan 06: Wiki toolbar button + openWiki entry point ----
+
+        function testToolbarHasWikiButton(testCase)
+        %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 6.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionWikiBtn');
+            testCase.verifyNotEmpty(btn, ...
+                'testToolbarHasWikiButton: Wiki button missing from toolbar');
+            testCase.verifyEqual(numel(btn), 1, ...
+                'testToolbarHasWikiButton: expected exactly one Wiki button');
+            testCase.verifyEqual(btn(1).Layout.Column, 6, ...
+                'testToolbarHasWikiButton: Wiki button should sit in column 6');
+        end
+
+        function testToolbarGearMovedToColumn8(testCase)
+        %TESTTOOLBARGEARMOVEDTOCOLUMN8 Settings gear lives in column 8 after the Phase 1034 reflow.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            btns = findall(app.getFigForTest_(), 'Type', 'uibutton');
+            found = false;
+            for k = 1:numel(btns)
+                if ~isempty(btns(k).Text) && strcmp(btns(k).Text, char(9881))
+                    testCase.verifyEqual(btns(k).Layout.Column, 8, ...
+                        'testToolbarGearMovedToColumn8: gear button should now sit in column 8');
+                    found = true;
+                    break;
+                end
+            end
+            testCase.verifyTrue(found, ...
+                'testToolbarGearMovedToColumn8: gear button not found on toolbar');
+        end
+
+        function testOpenWikiOpensWikiBrowser(testCase)
+        %TESTOPENWIKIOPENSWIKIBROWSER openWiki spawns a WikiBrowserRoot figure; close() tears it down.
+            %   WikiBrowser gates uifigure construction on usejava('desktop')
+            %   (libs/Help/WikiBrowser.m isInteractiveDesktop_). In batch /
+            %   headless mode it shells out to the OS browser instead and
+            %   never tags a WikiBrowserRoot figure. Mirror TestWikiBrowser
+            %   and skip when the desktop is unavailable.
+            testCase.assumeTrue(usejava('desktop'), ...
+                'testOpenWikiOpensWikiBrowser: skipped headless — Wiki uifigure requires MATLAB desktop');
+            app = FastSenseCompanion('Theme', 'dark');
+            % Close handles both the companion and the wiki window via the
+            % WikiBrowser teardown hook added in Task 6.2.
+            testCase.addTeardown(@() app.close());
+            app.openWiki('Companion-Overview');
+            drawnow;
+            hs = findall(0, 'Type', 'figure', 'Tag', 'WikiBrowserRoot');
+            testCase.verifyNotEmpty(hs, ...
+                'testOpenWikiOpensWikiBrowser: expected WikiBrowser figure after openWiki');
+            app.close();
+            drawnow;
+            hs2 = findall(0, 'Type', 'figure', 'Tag', 'WikiBrowserRoot');
+            testCase.verifyEmpty(hs2, ...
+                'testOpenWikiOpensWikiBrowser: expected WikiBrowser closed when companion closes');
+        end
+
         % ---- Phase 1033 Plan 01: SharedRoot / Cluster-mode wiring ----
 
         function testSingleUserModeUnchanged(testCase)
