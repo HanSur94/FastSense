@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779176610427,
+  "lastUpdate": 1779176876477,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -81292,6 +81292,310 @@ window.BENCHMARK_DATA = {
           {
             "name": "Dashboard broadcastTimeRange stdmean",
             "value": 0.367,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd01d6325d329e7bfa03b695f71c8a47e521518d",
+          "message": "Companion: Tile + Close all toolbar buttons (#143)\n\n* feat(companion): tile/close-all buttons + figure tracking [260513-s0y-T1]\n\n- Add OpenedFigures_ private property (column vector of figure handles\n  the companion opens) plus hTileBtn_ / hCloseAllBtn_ button handles.\n- Extend the inner toolbar grid from 1x4 to 1x6: Events / Live remain in\n  cols 1-2; new Tile (col 3, 70 px, WidgetBorderColor) and Close all\n  (col 4, 90 px, Accent) buttons; the gear moves from col 4 to col 6.\n- Add trackOpenedFigure_ / pruneOpenedFigures_ private helpers (dedupe\n  by handle equality, prune dead handles before iteration).\n- Hook onOpenDashboardRequested_ to capture ed.Engine.hFigure and\n  onOpenAdHocPlotRequested_ to capture hFig from openAdHocPlot so both\n  paths feed OpenedFigures_.\n- tileOpenedWindows: ceil(sqrt(N)) grid on the companion's monitor with\n  a 24 px screen margin and 8 px per-tile gap; row-major top-down fill;\n  per-figure failures are skipped so the rest still tile.\n- closeAllOpenedWindows: snapshot OpenedFigures_, call close(h) per\n  handle (honoring each figure's CloseRequestFcn), then re-prune.\n\nImplements S0Y-01 (Tile windows) and S0Y-02 (Close all windows).\nConstructor signature, public properties, and existing method names\nare unchanged -- pure additive surface.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* test(companion): tile/close-all coverage [260513-s0y-T2]\n\nFunction-style test that mirrors tests/test_companion_filter_tags.m\nconventions and exercises the new tile + close-all surface end-to-end:\n\n- test_tracking_on_dashboard_open_     -- track DashboardEngine.hFigure\n- test_tracking_dedupes_same_figure_   -- same handle, 3 calls = 1 entry\n- test_pruning_after_external_close_   -- close(fig) outside, then tile;\n                                          dead handle drops cleanly\n- test_tile_geometry_no_overlap_       -- 4 figs, pairwise non-overlap +\n                                          positive size after tile\n- test_close_all_clears_tracking_      -- 3 figs all close + list empty\n- test_outside_figures_not_touched_    -- untracked fig keeps Position\n                                          AND survives Close all\n- test_toolbar_buttons_present_        -- findall finds 'Tile' + 'Close all'\n\nOctave skipped explicitly (FastSenseCompanion is MATLAB-only).\nAdds two friend accessors -- getOpenedFiguresForTest_ and\ntrackOpenedFigureForTest_ -- so the test can probe + drive private\ntracking state without spinning up a real DashboardListPane.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* fix(companion): sync OpenedFigures_ from Engines_ before tile/close-all [260513-s0y-T4]\n\nThe lazy tracking hooks in onOpenDashboardRequested_ and onOpenAdHocPlotRequested_ missed two real-world cases:\n\n1. DashboardListPane fires OpenDashboardRequested BEFORE calling engine.render(), so the synchronous listener saw hFigure=[] on first open and skipped.\n2. Engines passed into the companion constructor (e.g. demo/industrial_plant/run_demo's pre-rendered dashboard) never go through the event flow at all.\n\nAdded syncOpenedFigures_ that prunes dead handles and then pulls every Engines_{k}.hFigure that's currently alive into OpenedFigures_. tileOpenedWindows and closeAllOpenedWindows now call sync at the top instead of bare prune, so both buttons work for the demo dashboard and for any dashboard the user clicks in the middle pane.\n\ntrackOpenedFigure_ stays unchanged — it's still the path for ad-hoc plots (they aren't in Engines_).\n\nNew 8th sub-test test_sync_pulls_prerendered_engine_ reproduces the live-demo scenario: render a DashboardEngine, pass it into FastSenseCompanion constructor, never fire OpenDashboardRequested, then confirm tile + closeAll find the figure via sync.\n\nTest suite: 8/8 pass; TestFastSenseCompanion regression 64/64 pass.\n\n* fix(companion): expose public trackOpenedFigure + hook detail-plot paths [260513-s0y-T5]\n\nTwo more tracking gaps surfaced in live testing after the sync fix:\n\n1. InspectorPane.onOpenDetail_ calls openAdHocPlot DIRECTLY (single-tag \"Open detail\" button), bypassing OpenAdHocPlotRequested entirely — the returned figure was discarded.\n2. CompanionEventViewer.openEventDashboard_ creates an ephemeral DashboardEngine that isn't added to Companion_.Engines_ — syncOpenedFigures_ can't see it.\n\nBoth paths spawn figures the user expects Tile / Close all to control. Fix:\n\n- Added public FastSenseCompanion.trackOpenedFigure(hFig) — thin wrapper over the private trackOpenedFigure_. Preserves dedupe + prune-aware semantics.\n- InspectorPane.onOpenDetail_ now captures openAdHocPlot's returned hFig and forwards to Orchestrator_.trackOpenedFigure with the same try/catch + ismethod guard used elsewhere.\n- CompanionEventViewer.openEventDashboard_ does the same with the ephemeral DashboardEngine's hFigure (Companion_ already cached at construction).\n\nNew 9th sub-test test_public_trackopenedfigure_hook_ exercises the public method directly: tracks → dedupes → closeAll closes. Existing 8 sub-tests still pass.\n\n* fix(companion): de-maximize + normalize units before set Position in tile [260513-s0y-T6]\n\nDashboardEngine.render creates classical figures with Units='normalized' (Position=[0.05 0.05 0.9 0.9]). The old tile code computed pixel rectangles but did set(fig, 'Position', [x y w h]) directly — MATLAB interpreted those pixels as NORMALIZED fractions of the screen, pushing every figure thousands of screen-widths off-screen. The user reported \"Tile button does nothing\" because the windows went off-canvas.\n\nAlso: figures with WindowState='maximized' silently ignore set(Position), so a maximized dashboard wouldn't tile either.\n\nFix (distFig-style): before set(Position), coerce each figure to WindowState='normal' + Units='pixels'. Both wrapped in try/catch so older releases without WindowState still work.\n\nVerified on a synthetic 3-dashboard test: BEFORE = all normalized (one maximized), AFTER = all 'normal' + 'pixels' with concrete pixel rectangles laid out in the expected 2x2 grid.\n\n* style(test): add whitespace after semicolons in companion test runner\n\nmh_style flagged 2 whitespace_semicolon violations at the test dispatch\ntable where the new sync + public-hook sub-tests were added (commits\n1be2cc8 and e58bc35). Match the alignment of the existing 7 rows.\n\n* Merge origin/main into claude/sharp-villani-e7b970 (catch up perf baseline + sfp quick task)\n\n---------\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-05-19T09:40:19+02:00",
+          "tree_id": "2a2e16a3958cb8d9cc12b370a6a6d19a0e136611",
+          "url": "https://github.com/HanSur94/FastSense/commit/bd01d6325d329e7bfa03b695f71c8a47e521518d"
+        },
+        "date": 1779176874070,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.204,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.089,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 157.252,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 1.073,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 244.098,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 2.255,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 14.484,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.741,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.505,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.032,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 179.341,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 4.118,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 252.493,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 1.207,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 14.381,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.658,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 15.031,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.117,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 194.296,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 0.513,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 253.419,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 1.729,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 15.57,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.702,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 79.154,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.159,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1281.416,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 11.411,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 247.274,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 6.917,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 15.611,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.638,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 153.622,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 1.004,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2471.386,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 84.911,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 260.27,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 4.301,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 16.093,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.437,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 806.33,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 18.199,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22358.224,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 295.766,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 393.786,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 63.069,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 14.583,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 3.49,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 1167.025,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 21.524,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 166.732,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.736,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 164.977,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.67,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.091,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.218,
             "unit": "ms"
           }
         ]
