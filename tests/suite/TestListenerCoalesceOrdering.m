@@ -14,9 +14,10 @@ classdef TestListenerCoalesceOrdering < matlab.unittest.TestCase
     %     3. Duplicate handles in `tagSet` are deduplicated: the same
     %        downstream listener is only invalidated once per batch.
     %
-    %     4. `invalidateBatch_(tagSet)` followed by a per-tag
-    %        `tag.invalidate()` is idempotent (cache state matches
-    %        the per-tag-only path).
+    %     4. Repeated `invalidateBatch_(tagSet)` calls with no
+    %        intervening data change are idempotent: the second call
+    %        produces no additional downstream recompute (dirty_ is
+    %        already true; cache_ already empty).
     %
     %   The contract is internal-only (D-10): public APIs
     %   (`Tag.invalidate`, `addListener`) are unchanged. The
@@ -169,7 +170,21 @@ classdef TestListenerCoalesceOrdering < matlab.unittest.TestCase
         end
 
         function testIdempotency(testCase)
-            %TESTIDEMPOTENCY batch then per-tag invalidate == per-tag-only.
+            %TESTIDEMPOTENCY redundant batch invalidate is safe and stable.
+            %   The contract under test: calling `Tag.invalidateBatch_({s})`
+            %   twice in a row (with no intervening data change) is
+            %   idempotent — the second call produces no additional
+            %   downstream recompute compared to a single call.
+            %
+            %   Previously this test attempted `s1.invalidate()` for the
+            %   "per-tag" comparison path. That call is not supported by
+            %   `SensorTag` (no `invalidate()` method — sensors are data
+            %   sources, their listeners implement invalidate per the
+            %   `SensorTag.addListener` contract at line 258). Octave
+            %   silently no-ops the missing method; MATLAB R2021b errors
+            %   with `MATLAB:noSuchMethodOrField`. Replace with a
+            %   double-batch comparison that exercises the documented
+            %   `Tag.invalidateBatch_` seam end-to-end.
             TagRegistry.clear();
 
             s1 = makeSensor_('s_idem', linspace(0, 10, 40));
@@ -179,9 +194,11 @@ classdef TestListenerCoalesceOrdering < matlab.unittest.TestCase
             [x1, y1] = m1.getXY();
             base1 = m1.recomputeCount_;
 
-            % Path 1: batch then per-tag.
+            % Path 1: batch twice (second call is the redundant invalidate).
+            % Both calls dispatch to m1.invalidate(); the second is a no-op
+            % from the monitor's perspective because dirty_ is already true.
             Tag.invalidateBatch_({s1});
-            s1.invalidate();  % redundant but must be safe
+            Tag.invalidateBatch_({s1});  % redundant but must be safe
             [xPath1, yPath1] = m1.getXY();
             rcPath1 = m1.recomputeCount_ - base1;
 
@@ -189,20 +206,22 @@ classdef TestListenerCoalesceOrdering < matlab.unittest.TestCase
             [~, ~] = m1.getXY();
             base2 = m1.recomputeCount_;
 
-            % Path 2: per-tag only.
-            s1.invalidate();
+            % Path 2: batch once.
+            Tag.invalidateBatch_({s1});
             [xPath2, yPath2] = m1.getXY();
             rcPath2 = m1.recomputeCount_ - base2;
 
             % Both paths must yield same (x, y) and same recompute count
-            % (exactly one recompute, because both invalidate paths leave
-            % the monitor dirty exactly once before the getXY).
+            % (exactly one recompute, because the second invalidate in
+            % path 1 is a no-op when dirty_ is already true).
             testCase.verifyEqual(xPath1, xPath2, ...
-                'X arrays must match between batch and per-tag paths');
+                'X arrays must match between double-batch and single-batch paths');
             testCase.verifyEqual(yPath1, yPath2, ...
-                'Y arrays must match between batch and per-tag paths');
+                'Y arrays must match between double-batch and single-batch paths');
             testCase.verifyEqual(rcPath1, rcPath2, ...
-                'Recompute count must match between batch and per-tag paths');
+                'Recompute count must match — second batch must be a no-op');
+            testCase.verifyEqual(rcPath1, 1, ...
+                'Exactly one recompute per path (dirty_ set once, cleared by getXY)');
 
             % Sanity: starting (x1, y1) matches both paths (no parent data change).
             testCase.verifyEqual(xPath1, x1);
