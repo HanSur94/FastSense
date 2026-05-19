@@ -435,19 +435,22 @@ jobs:
           - { id: 1, name: "A-D",         pattern: "^Test[AB]|^TestC(?!oncurrencyIntegration)|^TestD(?!ashboard)" }
           - { id: 2, name: "Dashboard",   pattern: "^TestDashboard" }
           - { id: 3, name: "E-I",         pattern: "^Test[E-I]" }
-          - { id: 4, name: "J-P",         pattern: "^Test[J-P]" }
+          # J-P batch: excludes TestMonitorTagSingleSource (moved to batch 6) —
+          # it triggers the same R2021b cumulative-state segfault as
+          # TestConcurrencyIntegration when run after ~20 preceding tests in
+          # the same MATLAB process.
+          - { id: 4, name: "J-P",         pattern: "^Test[J-LN-P]|^TestM(?!onitorTagSingleSource)" }
           # Batch 5 also picks up digit-prefixed v4.0 cluster acceptance harness
           # (Test50CompanionAcceptance). The test self-gates via FASTSENSE_RUN_ACCEPTANCE
           # so it will report as skipped/incomplete in CI rather than running, but
           # including it in a batch keeps it discoverable and statused.
           - { id: 5, name: "Q-Z",         pattern: "^Test([Q-Z]|[0-9])" }
-          # Batch 6: TestConcurrencyIntegration runs alone in a fresh MATLAB
-          # process. Background: R2021b headless Linux accumulates state
-          # corruption across the long batch-1 run; by the time
-          # TestConcurrencyIntegration loads `lockfile_mex` it triggers a
-          # segfault inside MATLAB's MEX dispatcher. Running alone in a fresh
-          # process gives the MEX a clean dispatcher state.
-          - { id: 6, name: "Concurrency-Integration", pattern: "^TestConcurrencyIntegration" }
+          # Batch 6: v4.0 cluster tests that load `lockfile_mex` run alone in a
+          # fresh MATLAB process. Background: R2021b headless Linux accumulates
+          # state corruption across the long earlier batches; loading the MEX
+          # late in the run triggers a segfault inside MATLAB's MEX dispatcher.
+          # Running in isolation gives the MEX a clean dispatcher state.
+          - { id: 6, name: "v4-Cluster-Tests", pattern: "^Test(ConcurrencyIntegration|MonitorTagSingleSource)" }
     env:
       FASTSENSE_SKIP_BUILD: "1"
       # v4.0 Phase 1032 SC1: 4-node simulated-cluster smoke. Spawns 4 child
