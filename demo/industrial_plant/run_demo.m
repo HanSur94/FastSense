@@ -16,12 +16,15 @@ function ctx = run_demo(varargin)
 %     ctx - struct with fields:
 %       writerTimer    - IndustrialPlantDataGen MATLAB timer (running)
 %       pipeline       - LiveTagPipeline (running)
-%       engine         - [] (plan 02 populates this with a DashboardEngine)
+%       engine         - DashboardEngine handle (live, populated by buildDashboard)
 %       companion      - FastSenseCompanion handle (or [] when 'Companion'=false)
 %       store          - EventStore wired into every MonitorTag
 %       plantHealthKey - 'plant.health' (top-level rollup)
 %       rawDir         - absolute path to demo/industrial_plant/data/raw
 %       tagsDir        - absolute path to demo/industrial_plant/data/tags
+%       plantLogPath   - absolute path to the generated plant_log.csv (or
+%                        '' if seeding/attaching failed; see warning
+%                        run_demo:plantLogAttachFailed)
 %
 %   Teardown:
 %     teardownDemo(ctx);
@@ -40,7 +43,8 @@ function ctx = run_demo(varargin)
 %     teardownDemo(ctx);
 %
 %   See also: plantConfig, registerPlantTags, makeDataGenerator,
-%             startLivePipeline, teardownDemo, TagRegistry, LiveTagPipeline.
+%             startLivePipeline, seedPlantLog, teardownDemo,
+%             TagRegistry, LiveTagPipeline.
 
     here    = fileparts(mfilename('fullpath'));
 
@@ -97,7 +101,8 @@ function ctx = run_demo(varargin)
         'store',          store, ...
         'plantHealthKey', plantHealthKey, ...
         'rawDir',         rawDir, ...
-        'tagsDir',        tagsDir);
+        'tagsDir',        tagsDir, ...
+        'plantLogPath',   '');
 
     % Plan 02 hook: build the full dashboard on top of the plumbing.
     % buildDashboard creates the DashboardEngine, renders the figure,
@@ -111,6 +116,23 @@ function ctx = run_demo(varargin)
         ctx.companion = buildCompanion(ctx);
     else
         ctx.companion = [];
+    end
+
+    % Phase 1033 / milestone v3.1 -- seed a synthetic plant log and
+    % attach it to the dashboard so the slider preview + per-widget
+    % overlay are exercised end-to-end. Best-effort: a failure here
+    % must not crash the demo bootstrap (dashboard + writer + pipeline
+    % keep running so the rest of the demo stays usable).
+    try
+        ctx.plantLogPath = seedPlantLog(rawDir, plantConfig());
+        if ~isempty(ctx.engine) && isvalid(ctx.engine)
+            ctx.engine.attachPlantLog(ctx.plantLogPath);
+        end
+    catch err
+        warning('run_demo:plantLogAttachFailed', ...
+            'Seed/attach plant log failed: %s (demo continues without plant log)', ...
+            err.message);
+        ctx.plantLogPath = '';
     end
 
     % Phase 1023.1 cross-phase fix: re-bind the dashboard figure's
