@@ -2,17 +2,17 @@
 
 # Datetime Guide
 
-FastSense supports time series data with datetime X-axes. Both datenum values and MATLAB datetime objects are supported.
+FastSense fully supports time series data with datetime X-axes. You can provide either MATLAB `datenum` values or native `datetime` objects — the library handles formatting, tick labels, and tooltip display automatically.
 
 ---
 
 ## Using datenum
 
-Pass datenum values as X data with `'XType', 'datenum'`:
+Pass `datenum` values as X data and set `'XType', 'datenum'`:
 
 ```matlab
-% Generate datenum time stamps
-x = datenum(2024, 1, 1) + (0:99999) / 86400;  % 1-second resolution, ~1 day
+% Generate datenum timestamps (1-second resolution, ~1 day)
+x = datenum(2024, 1, 1) + (0:99999) / 86400;
 y = sin(2 * pi * (1:100000) / 86400) + 0.1 * randn(1, 100000);
 
 fp = FastSense('Theme', 'dark');
@@ -22,9 +22,9 @@ fp.render();
 
 ---
 
-## Using MATLAB datetime (auto-detected)
+## Using MATLAB `datetime` (auto-detected)
 
-In MATLAB (not Octave), you can pass datetime objects directly — they are auto-converted to datenum:
+In MATLAB (not Octave), you can pass `datetime` objects directly — they are automatically converted to `datenum`:
 
 ```matlab
 dt = datetime(2024, 1, 1) + hours(0:9999);
@@ -35,7 +35,7 @@ fp.addLine(dt, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-The `XType` is set automatically to 'datenum' and `IsDatetime` becomes true.
+The `XType` is set automatically to `'datenum'` and an internal `IsDatetime` flag is enabled.
 
 ---
 
@@ -44,12 +44,12 @@ The `XType` is set automatically to 'datenum' and `IsDatetime` becomes true.
 Tick labels automatically adapt to the visible zoom level:
 
 | Visible Range | Format | Example |
-|--------------|--------|---------|
-| > 1 day | `mmm dd HH:MM` | Jan 15 10:00 |
+|---------------|--------|---------|
+| > 1 day       | `mmm dd HH:MM` | Jan 15 10:00 |
 | 1 hour – 1 day | `HH:MM` | 10:00 |
-| < 1 minute | `HH:MM:SS` | 10:30:15 |
+| < 1 minute   | `HH:MM:SS` | 10:30:15 |
 
-As you zoom in, tick labels progressively show more precision. Zoom out and they show dates.
+As you zoom in, labels progressively show more precision; zoom out and dates appear.
 
 ---
 
@@ -92,7 +92,7 @@ fig.renderAll();
 
 ## Datetime with Linked Axes
 
-Linked axes work with datetime — synchronized zoom/pan shows consistent time ranges:
+Linked zoom/pan preserves datetime formatting across subplots:
 
 ```matlab
 fig = figure;
@@ -112,7 +112,7 @@ fp2.render();
 
 ## Toolbar with Datetime
 
-The crosshair and data cursor display datetime values in human-readable format when XType is 'datenum':
+The crosshair and data cursor display datetime values in human-readable format when `XType` is `'datenum'`:
 
 ```matlab
 fp = FastSense('Theme', 'dark');
@@ -122,13 +122,13 @@ tb = FastSenseToolbar(fp);
 % Crosshair shows: "Jan 15, 2024 10:30:15  Y: 52.3"
 ```
 
-The [[API Reference: FastPlot|FastSenseToolbar]] provides `formatX()` for consistent datetime formatting.
+The [[API Reference: FastPlot|FastSenseToolbar]] provides the static method `formatX()` for consistent datetime formatting.
 
 ---
 
 ## Sensor Data with Datetime
 
-Sensor X data is typically in datenum format:
+Sensor X data is typically in `datenum` format:
 
 ```matlab
 s = Sensor('pressure', 'Name', 'Chamber Pressure');
@@ -136,7 +136,7 @@ s.X = datenum(2024, 1, 1) + (0:999999) / 86400;
 s.Y = randn(1, 1000000) * 10 + 50;
 
 sc = StateChannel('machine');
-sc.X = datenum(2024, 1, 1) + [0 3 7 10];  % Day boundaries
+sc.X = datenum(2024, 1, 1) + [0 3 7 10];  % day boundaries
 sc.Y = [0 1 2 1];
 s.addStateChannel(sc);
 
@@ -152,7 +152,7 @@ fp.render();
 
 ## SensorDetailPlot with Datetime
 
-The `SensorDetailPlot` component supports datetime X-axes through the `'XType'` parameter:
+The `SensorDetailPlot` component supports datetime X-axes via the `'XType'` parameter:
 
 ```matlab
 % Create sensor with datenum timestamps
@@ -183,10 +183,10 @@ FastSense handles massive datetime datasets efficiently:
 % ~579 days of temperature data at 1-second resolution
 n = 50000000;
 x = datenum(2024,1,1) + (0:n-1)/86400;  % ~579 days
-t = (0:n-1) / 86400;  % time in days
-y = 20 + 5*sin(t * 2*pi - pi/2) + ...  % daily cycle (peak at midday)
-    0.3*sin(t * 2*pi*24) + ...            % hourly ripple
-    0.1*randn(1,n);                       % sensor noise
+t = (0:n-1) / 86400;                     % time in days
+y = 20 + 5*sin(t * 2*pi - pi/2) + ...   % daily cycle (peak at midday)
+    0.3*sin(t * 2*pi*24) + ...           % hourly ripple
+    0.1*randn(1,n);                      % sensor noise
 
 fp = FastSense('Theme', 'light');
 fp.addLine(x, y, 'DisplayName', 'Temperature', 'XType', 'datenum');
@@ -198,26 +198,26 @@ fp.render();
 
 ## GNU Octave Notes
 
-- Octave does not support MATLAB's `datetime` class
-- Use `datenum()` directly for time stamps
-- Always pass `'XType', 'datenum'` explicitly
-- Tick label formatting works the same way
+- Octave does not support MATLAB's `datetime` class.
+- Use `datenum()` directly for time stamps.
+- Always pass `'XType', 'datenum'` explicitly.
+- Tick label formatting works the same way.
 
 ---
 
 ## Tips
 
-- All X data in a single FastSense must be the same type (all numeric or all datenum)
-- For high-frequency data (kHz+), datenum precision is sufficient (double-precision days)
-- Use `datenum()` for generating time stamps: `datenum(year, month, day, hour, min, sec)`
-- Use `datestr()` for converting back: `datestr(x(1), 'yyyy-mm-dd HH:MM:SS')`
-- Datetime formatting automatically adapts to zoom level — no manual intervention needed
-- The [[API Reference: FastPlot|FastSenseToolbar]] crosshair and data cursor show formatted datetime strings
+- All X data in a single FastSense must be the same type (all numeric or all datenum).
+- For high-frequency data (kHz+), `datenum` precision is sufficient (double-precision days).
+- Use `datenum()` for generating time stamps: `datenum(year, month, day, hour, min, sec)`.
+- Use `datestr()` for converting back: `datestr(x(1), 'yyyy-mm-dd HH:MM:SS')`.
+- Datetime formatting automatically adapts to zoom level — no manual intervention needed.
+- The [[API Reference: FastPlot|FastSenseToolbar]] crosshair and data cursor show formatted datetime strings.
 
 ---
 
 ## See Also
 
-- [[API Reference: FastPlot]] — addLine() with XType parameter
+- [[API Reference: FastPlot]] — `addLine()` with `XType` parameter
 - [[API Reference: Sensors]] — Sensor X data
-- [[Examples]] — example_datetime.m, example_sensor_detail_datetime.m
+- [[Examples]] — `example_datetime.m`, `example_sensor_detail_datetime.m`
