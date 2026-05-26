@@ -1195,6 +1195,16 @@ GETEVENTMARKERS Per-event time + severity + color for slider markers.
 
 #### `s = toStruct(obj)`
 
+#### `evts = resolveEvents(obj)`
+
+RESOLVEEVENTS Get events from the best available source.
+  Priority: EventStoreObj > TagRegistry default > EventFcn > Events
+  (static / Event objects). When FilterTagKey is set AND an
+  EventStore is bound (explicit or registry-default), events are
+  pulled via EventStore.getEventsForTag(tagKey) using the dual-key
+  pattern from Phase 1010 + the registry-default fallback from
+  Phase 1017.
+
 ### Static Methods
 
 #### `EventTimelineWidget.obj = fromStruct(s)`

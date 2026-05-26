@@ -43,7 +43,7 @@ jobs:
           ref: main
           fetch-depth: 2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -102,7 +102,7 @@ jobs:
 
       - name: Open or update PR
         if: steps.diff.outputs.changed == 'true' && inputs.dry_run != true
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: wiki-update/${{ github.sha }}
           commit-message: 'docs: regenerate wiki pages'

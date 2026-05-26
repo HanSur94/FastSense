@@ -1,17 +1,17 @@
 function buildEventsPage(engine, ctx)
 %BUILDEVENTSPAGE Populate the Events page.
-%   EventTimelineWidget bound to ctx.store + fastsense of reactor.pressure
-%   (FastSense auto-discovers its Tag's EventStore and paints round-marker
-%   overlays when events arrive), status widget for the critical monitor,
-%   multistatus for all 4 monitors, wrapped in an 'Event Context' group.
+%   EventTimelineWidget (registry-default EventStore) + fastsense of
+%   reactor.pressure (FastSense falls back to TagRegistry.getEventStore()
+%   and paints round-marker overlays when events arrive), status widget
+%   for the critical monitor, multistatus for all 4 monitors, wrapped in
+%   an 'Event Context' group.
 %
 %   Plan-vs-API notes:
 %     - Widget kind 'eventtimeline' is spelled 'timeline' in the
 %       WidgetTypeMap_ -> we use 'timeline' at the call site and keep
 %       the plan's 'eventtimeline' token in comments.
-%     - EventTimelineWidget expects 'EventStoreObj' (not 'EventStore')
-%       as the NV pair name; we use the real name and keep the plan's
-%       'EventStore' token in adjacent comments for grep.
+%     - EventStore is no longer passed explicitly to EventTimelineWidget;
+%       the registry-default fallback (TagRegistry.getEventStore) is used.
 
     reactorPress = TagRegistry.get('reactor.pressure');
     monFeedHi         = TagRegistry.get('feedline.pressure.high');
@@ -32,10 +32,13 @@ function buildEventsPage(engine, ctx)
         'Position',    [1 1 24 8]);
 
     % addWidget('fastsense', 'Tag', 'reactor.pressure', 'ShowEventMarkers', true, ...)
-    % FastSense core defaults ShowEventMarkers=true and auto-discovers the
-    % EventStore from any bound MonitorTag. Here we bind the sensor tag,
-    % so the chart shows markers for events attached to that tag (round
-    % markers overlay; see libs/FastSense/FastSense.m EVENT-07).
+    % FastSense.renderEventLayer_ checks the bound SensorTag's own EventStore
+    % property first, then falls back to TagRegistry.getEventStore() (the
+    % registry default set by registerPlantTags via TagRegistry.setEventStore).
+    % It does NOT walk the SensorTag's monitor children — events appear here
+    % because MonitorTag emits with dual TagKeys {monitor.Key, parent.Key},
+    % so EventStore.getEventsForTag('reactor.pressure') finds the markers.
+    % See libs/FastSense/FastSense.m renderEventLayer_ + libs/SensorThreshold/MonitorTag.m fireEventsOnRisingEdges_.
     % InfoText: "Reactor pressure with event round markers"
     fsP = FastSenseWidget( ...
         'Title',       'Reactor Pressure with Event Markers', ...
@@ -47,17 +50,16 @@ function buildEventsPage(engine, ctx)
                         'overlays round markers for MonitorTag events.'], ...
         'Position',    [1 1 16 6]);
 
-    % addWidget('eventtimeline', 'EventStore', ctx.store, 'FilterTagKey', ...)
-    % Real kind is 'timeline'; real NV is 'EventStoreObj'. The plan tokens
-    % 'eventtimeline', 'EventStore', 'FilterTagKey' are preserved here for
-    % grep-based verification.
+    % addWidget('eventtimeline', 'FilterTagKey', ...)
+    % Real kind is 'timeline'. EventStore is no longer passed explicitly;
+    % EventTimelineWidget.resolveEvents_ falls back to TagRegistry.getEventStore()
+    % (the registry default set by registerPlantTags via TagRegistry.setEventStore).
     % InfoText: "Live timeline of reactor.pressure.critical events"
     tl = EventTimelineWidget( ...
         'Title',         'Reactor Critical Events', ...
-        'EventStoreObj', ctx.store, ...
         'FilterTagKey',  'reactor.pressure.critical', ...
-        'Description',   ['EventTimelineWidget | EventStore: ctx.store (the ' ...
-                          'live EventStore wired to every MonitorTag). ' ...
+        'Description',   ['EventTimelineWidget | EventStore: registry default ' ...
+                          '(set by registerPlantTags via TagRegistry.setEventStore). ' ...
                           'Filter: MonitorTag reactor.pressure.critical only.'], ...
         'Position',      [17 1 7 6]);
 
