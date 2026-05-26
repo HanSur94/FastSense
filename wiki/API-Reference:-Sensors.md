@@ -1317,6 +1317,19 @@ UNREGISTER Remove a Tag (silent no-op if missing).
 
 CLEAR Wipe the catalog.  Primarily for test isolation.
 
+#### `TagRegistry.setEventStore(store)`
+
+SETEVENTSTORE Register the default EventStore for the registry.
+  TagRegistry.setEventStore(store) sets the global default used
+  by FastSense, FastSenseWidget, EventTimelineWidget, and
+  TableWidget(events) when no per-instance EventStore is
+  configured.  Pass [] to clear the default.
+
+#### `TagRegistry.store = getEventStore()`
+
+GETEVENTSTORE Return the registry-default EventStore, or [] if unset.
+  Safe to call before any store has been registered -- returns [].
+
 #### `TagRegistry.ts = find(predicateFn)`
 
 FIND Return cell of Tags matching predicateFn(tag) -> logical.
