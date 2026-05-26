@@ -40,6 +40,37 @@ classdef BatchTagPipeline < handle
 
     properties (Access = private)
         fileCache_         % containers.Map: absPath -> parsed struct (per-run)
+        writeFn_  = @writeTagMat_   % Phase 1028 plan 02b: DI seam for .mat I/O suppression in benchmarks.
+                                    % Default routes to libs/SensorThreshold/private/writeTagMat_ (production path,
+                                    % unchanged). The handle is created in this class's scope so resolution to the
+                                    % private/ helper is captured at class load time. Tests override via
+                                    % setWriteFnForTesting_ (Hidden); see LiveTagPipeline for full rationale.
+        cachedWriteFn_ = @writeTagMatCached_   % Phase 1028 plan 02d: cached append helper that skips load().
+                                               % Mirrors LiveTagPipeline. Used only when the public run() is called
+                                               % multiple times against the same OutputDir for the same registry.
+        priorState_                 % Phase 1028 plan 02d: containers.Map keyed by tag key, persisted across
+                                    %   run() invocations. Value: struct('X', priorX, 'Y', priorY).
+                                    %   For BatchTagPipeline, run() always uses 'overwrite' mode so the cache
+                                    %   is reset on every run; the property exists primarily to keep the
+                                    %   class shape symmetric with LiveTagPipeline and to support future
+                                    %   append-mode batch runs.
+        cacheActive_ = true         % Phase 1028 plan 02d: production-default. Hidden setter mirrors
+                                    %   LiveTagPipeline.setCacheActiveForTesting_ for benchmark use.
+        writeFnIsProduction_ = true % Phase 1028 plan 02d: tracks whether writeFn_ is the production handle.
+        coalesceActive_ = true      % Phase 1028 plan 05: production-default for symmetry with
+                                    %   LiveTagPipeline. BatchTagPipeline.run() does not currently invoke
+                                    %   Tag.invalidateBatch_ (overwrite-mode writes do not call tag.updateData()
+                                    %   in this code path), so the flag is currently shape-only; the
+                                    %   setCoalesceActiveForTesting_ Hidden setter exists so future
+                                    %   append-mode batch wiring can be configured uniformly with Live.
+        fsCoalesceActive_ = true    % Phase 1028 plan 06: production-default for symmetry with
+                                    %   LiveTagPipeline. BatchTagPipeline.run() does not currently
+                                    %   issue per-tag exist/dir/datenum stat calls (it parses each raw
+                                    %   file once via parseOrCache_ and that's the only fs work), so the
+                                    %   flag is currently shape-only; the setFsCoalesceForTesting_ Hidden
+                                    %   setter exists so future append-mode batch wiring (or any code
+                                    %   path that grows per-tag fs-stat cost) can be configured
+                                    %   uniformly with Live.
     end
 
     methods
@@ -82,6 +113,7 @@ classdef BatchTagPipeline < handle
             end
             obj.OutputDir = opts.OutputDir;
             obj.Verbose   = opts.Verbose;
+            obj.priorState_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
         end
 
         function report = run(obj)
@@ -103,7 +135,7 @@ classdef BatchTagPipeline < handle
                 t = tags{i};
                 try
                     [x, y] = obj.ingestTag_(t);
-                    writeTagMat_(obj.OutputDir, t, x, y, 'overwrite');
+                    obj.writeFn_(obj.OutputDir, t, x, y, 'overwrite');
                     report.succeeded{end+1} = char(t.Key); %#ok<AGROW>
                 catch ex
                     if obj.Verbose
@@ -143,6 +175,78 @@ classdef BatchTagPipeline < handle
         end
     end
 
+    methods (Hidden)
+        function setWriteFnForTesting_(obj, fn)
+            %SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
+            %   Phase 1028 plan 02b: replace the default @writeTagMat_ with a
+            %   user-supplied function handle (e.g., a no-op for benchmark NoIO
+            %   measurement). Production callers MUST NOT use this — the
+            %   default cadence per D-12 is write-on-every-tick.
+            %
+            %   Why this exists: addpath(-begin) cannot shadow private/ helpers
+            %   because MATLAB/Octave scope private/ to the parent directory.
+            %   A function-handle property captured at class-load time is the
+            %   one mechanism that reliably reaches into the private/ caller.
+            %
+            %   The fn must accept the same signature as writeTagMat_:
+            %     fn(outputDir, tag, x, y, mode)
+            %
+            %   Public API note: marked Hidden so it does not appear in
+            %   tab-completion, doc(), or properties() listings (D-10).
+            if ~isa(fn, 'function_handle')
+                error('TagPipeline:invalidWriteFn', ...
+                    'setWriteFnForTesting_ requires a function_handle (got %s)', class(fn));
+            end
+            obj.writeFn_ = fn;
+            obj.writeFnIsProduction_ = false;
+        end
+
+        function setFsCoalesceForTesting_(obj, tf)
+            %SETFSCOALESCEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 06).
+            %   Phase 1028 plan 06: BatchTagPipeline.run() does not currently
+            %   issue per-tag exist/dir/datenum syscalls (parsing happens via
+            %   parseOrCache_, which uses ext-based dispatch, not file stats),
+            %   so fs-stat coalescing is a no-op here. The setter exists for
+            %   symmetry with LiveTagPipeline so tests/bench scripts can
+            %   configure both pipelines uniformly. Hidden (D-10).
+            if ~(islogical(tf) && isscalar(tf))
+                error('TagPipeline:invalidFsCoalesce', ...
+                    'setFsCoalesceForTesting_ requires a logical scalar (got %s).', class(tf));
+            end
+            obj.fsCoalesceActive_ = tf;
+        end
+
+        function setCoalesceActiveForTesting_(obj, tf)
+            %SETCOALESCEACTIVEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 05).
+            %   Phase 1028 plan 05: BatchTagPipeline.run() does not currently
+            %   accumulate a listener cascade (it writes 'overwrite' mode and
+            %   does not call tag.updateData()), so coalescing is a no-op
+            %   here. The setter exists for symmetry with LiveTagPipeline so
+            %   tests/bench scripts can configure both pipelines uniformly.
+            %   Hidden (D-10).
+            if ~(islogical(tf) && isscalar(tf))
+                error('TagPipeline:invalidCoalesceActive', ...
+                    'setCoalesceActiveForTesting_ requires a logical scalar (got %s).', class(tf));
+            end
+            obj.coalesceActive_ = tf;
+        end
+
+        function setCacheActiveForTesting_(obj, tf)
+            %SETCACHEACTIVEFORTESTING_ Internal-only setter for the prior-state cache.
+            %   Phase 1028 plan 02d: enable/disable the in-memory priorState_ cache.
+            %   Mirror of LiveTagPipeline.setCacheActiveForTesting_; production callers
+            %   MUST NOT use this — cache-on is the production default and is byte-for-byte
+            %   parity-tested against the cache-off path. Hidden so it does not appear in
+            %   tab-completion, doc(), or properties() listings (D-10).
+            if ~(islogical(tf) && isscalar(tf))
+                error('TagPipeline:invalidCacheActive', ...
+                    'setCacheActiveForTesting_ requires a logical scalar (got %s).', class(tf));
+            end
+            obj.cacheActive_ = tf;
+            obj.priorState_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
+        end
+    end
+
     methods (Access = private)
         function tags = eligibleTags_(~)
             %ELIGIBLETAGS_ Filter TagRegistry to SensorTag/StateTag with non-empty RawSource.
@@ -176,11 +280,14 @@ classdef BatchTagPipeline < handle
 
         function parsed = dispatchParse_(obj, abspath)  %#ok<INUSL>
             %DISPATCHPARSE_ Internal parser dispatch (D-02 forward-compat shape).
+            %   Routes through dispatchDelimitedParse_ which prefers the
+            %   compiled delimited_parse_mex (Phase 1028 K1) and falls back
+            %   to readRawDelimited_ when the MEX binary is absent (D-09).
             [~, ~, ext] = fileparts(abspath);
             ext = lower(ext);
             switch ext
                 case {'.csv', '.txt', '.dat'}
-                    parsed = readRawDelimited_(abspath);
+                    parsed = dispatchDelimitedParse_(abspath);
                 otherwise
                     error('TagPipeline:unknownExtension', ...
                         'Unsupported extension ''%s''. Supported: .csv .txt .dat', ext);

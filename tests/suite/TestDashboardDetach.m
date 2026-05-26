@@ -86,7 +86,7 @@ classdef TestDashboardDetach < matlab.unittest.TestCase
             testCase.addTeardown(@() close(d.hFigure));
 
             w = d.Widgets{1};
-            btn = findobj(w.hPanel, 'Tag', 'DetachButton');
+            btn = findobj(w.hCellPanel, 'Tag', 'DetachButton');
             testCase.verifyNotEmpty(btn, ...
                 'DetachButton uicontrol should be injected into every widget panel after render()');
         end
@@ -193,6 +193,117 @@ classdef TestDashboardDetach < matlab.unittest.TestCase
                 'Cloned widget should be a FastSenseWidget');
             testCase.verifyFalse(cloned.UseGlobalTime, ...
                 'Cloned FastSenseWidget must have UseGlobalTime = false for independent zoom');
+        end
+
+        % -----------------------------------------------------------------------
+        % DETACH-EVT-01: Detaching preserves EventStore handle on cloned widget
+        % -----------------------------------------------------------------------
+
+        function testDetachPreservesEventStore(testCase)
+        % DETACH-EVT-01 (260508-eu2): A detached FastSenseWidget with
+        %   ShowEventMarkers=true and a populated EventStore must retain the
+        %   live EventStore handle on the clone AND forward it to the inner
+        %   FastSense via the render guard at FastSenseWidget.m:103.
+            if ~usejava('jvm'), testCase.assumeFail('JVM required for render'); end
+
+            % Build the original widget with a real Tag and a live EventStore.
+            w = FastSenseWidget();
+            parent = SensorTag('p_eu2_pres');
+            parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
+            w.Tag = parent;
+            es = EventStore('');
+            w.EventStore       = es;
+            w.ShowEventMarkers = true;
+
+            themeStruct = DashboardTheme('light');
+            noop = @() [];
+            mirror = DetachedMirror(w, themeStruct, noop);
+            set(mirror.hFigure, 'Visible', 'off');
+            testCase.addTeardown(@() close('all', 'force'));
+
+            cloned = mirror.Widget;
+            testCase.verifyTrue(isa(cloned, 'FastSenseWidget'), ...
+                'Cloned widget should be a FastSenseWidget');
+            testCase.verifyTrue(cloned.ShowEventMarkers, ...
+                'ShowEventMarkers should round-trip through toStruct/fromStruct');
+            testCase.verifyTrue(cloned.EventStore == es, ...
+                'Cloned widget must carry the SAME EventStore handle as the original');
+            testCase.verifyNotEmpty(cloned.FastSenseObj, ...
+                'Inner FastSense must have been rendered by DetachedMirror');
+            testCase.verifyTrue(cloned.FastSenseObj.EventStore == es, ...
+                'Inner FastSense.EventStore must be forwarded from widget after render');
+            testCase.verifyTrue(cloned.FastSenseObj.ShowEventMarkers, ...
+                'Inner FastSense.ShowEventMarkers must be forwarded from widget after render');
+        end
+
+        function testDetachWithoutEventStoreUnchanged(testCase)
+        % DETACH-EVT-01 (260508-eu2): A detached FastSenseWidget with no
+        %   EventStore and ShowEventMarkers=false must clone unchanged — the
+        %   render guard at FastSenseWidget.m:103 must NOT forward, leaving
+        %   the inner FastSense at its Phase-1010 default (ShowEventMarkers=true).
+            if ~usejava('jvm'), testCase.assumeFail('JVM required for render'); end
+
+            w = FastSenseWidget();
+            parent = SensorTag('p_eu2_unch');
+            parent.updateData([0 1 2 3], [0 1 2 1]);
+            w.Tag = parent;
+            % Intentionally do NOT set EventStore or ShowEventMarkers.
+            testCase.verifyFalse(w.ShowEventMarkers, 'precondition');
+            testCase.verifyEmpty(w.EventStore, 'precondition');
+
+            themeStruct = DashboardTheme('light');
+            noop = @() [];
+            mirror = DetachedMirror(w, themeStruct, noop);
+            set(mirror.hFigure, 'Visible', 'off');
+            testCase.addTeardown(@() close('all', 'force'));
+
+            cloned = mirror.Widget;
+            testCase.verifyEmpty(cloned.EventStore, ...
+                'Clone EventStore must remain empty when original had none');
+            testCase.verifyFalse(cloned.ShowEventMarkers, ...
+                'Clone ShowEventMarkers must remain false when original had default');
+            % Render guard skipped → inner FastSense keeps its default-true.
+            testCase.verifyTrue(cloned.FastSenseObj.ShowEventMarkers, ...
+                'Inner FastSense default-true must survive when widget did not opt in');
+            testCase.verifyEmpty(cloned.FastSenseObj.EventStore, ...
+                'Inner FastSense.EventStore must remain empty when widget did not opt in');
+        end
+
+        function testDetachMirrorsToggledOffEvents(testCase)
+        % DETACH-EVT-02 (260508-eu2 follow-up): If the user toggled events OFF
+        %   in the dashboard before detaching, the detached clone must mirror
+        %   that state — not show markers because ShowEventMarkers was true at
+        %   construction time.
+            if ~usejava('jvm'), testCase.assumeFail('JVM required for render'); end
+
+            w = FastSenseWidget();
+            parent = SensorTag('p_eu2_off');
+            parent.updateData([0 1 2 3 4 5], [0 0 0 10 10 0]);
+            w.Tag = parent;
+            es = EventStore('');
+            w.EventStore       = es;
+            w.ShowEventMarkers = true;
+
+            % Render the original briefly so FastSenseObj exists, then toggle
+            % markers OFF — mirroring the dashboard toolbar's Events button.
+            origFig = figure('Visible', 'off');
+            origPanel = uipanel('Parent', origFig);
+            w.render(origPanel);
+            w.setEventMarkersVisible(false);
+            testCase.verifyFalse(w.ShowEventMarkers, ...
+                'setEventMarkersVisible(false) must mirror into ShowEventMarkers');
+
+            themeStruct = DashboardTheme('light');
+            noop = @() [];
+            mirror = DetachedMirror(w, themeStruct, noop);
+            set(mirror.hFigure, 'Visible', 'off');
+            testCase.addTeardown(@() close('all', 'force'));
+
+            cloned = mirror.Widget;
+            testCase.verifyFalse(cloned.ShowEventMarkers, ...
+                'Clone must inherit toggled-off state, not the construction default');
+            testCase.verifyFalse(cloned.FastSenseObj.ShowEventMarkers, ...
+                'Inner FastSense must keep markers hidden after detach');
         end
 
         % -----------------------------------------------------------------------

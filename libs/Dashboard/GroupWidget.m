@@ -171,6 +171,18 @@ classdef GroupWidget < DashboardWidget
             end
         end
 
+        function children = getNestedWidgets(obj)
+        %GETNESTEDWIDGETS Return Children plus all Tabs widgets as a flat cell.
+        %   Used by DashboardEngine.flattenWidgetsForPreview_ to surface
+        %   nested data/event widgets to the time-slider preview and
+        %   marker overlay. Order: Children first, then Tabs widgets in
+        %   declaration order. Empty Group returns {}.
+            children = obj.Children;
+            for i = 1:numel(obj.Tabs)
+                children = [children, obj.Tabs{i}.widgets]; %#ok<AGROW>
+            end
+        end
+
         function t = getType(obj) %#ok<MANU>
             t = 'group';
         end

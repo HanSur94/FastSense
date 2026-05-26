@@ -258,11 +258,23 @@ function [engine, parents, monitors] = buildTagDashboard_(n)
 end
 
 function appendLegacy_(sensors, k) %#ok<INUSD>
-    %APPENDLEGACY_ Append 10 samples to each legacy Sensor.
+    %APPENDLEGACY_ Append 10 samples to each legacy-path SensorTag.
+    %   Uses the dependent .X/.Y property getters (the "legacy" path —
+    %   property access, no method dispatch). Twin of appendTag_, which
+    %   uses getXY() (the "tag" path — method dispatch). The two halves
+    %   are compared by the bench to measure the dispatch overhead.
+    %
+    %   Previously contained a leftover from the v2.0 migration:
+    %     `nx = numel(s_x_);`
+    %   where `s_x_` was a stale local from the data-access fallback at
+    %   line 111. Replaced with the obvious `numel(s.X)` to read the
+    %   sensor's current sample count via the property path.
     for i = 1:numel(sensors)
         s = sensors{i};
-        nx = numel(s_x_);
-        s.updateData([s.X (nx + 1):(nx + 10)], [s.Y sin(((nx + 1):(nx + 10)) / 10.0) * 10 + 20]);
+        nx = numel(s.X);
+        newX = (nx + 1):(nx + 10);
+        newY = sin(newX / 10.0) * 10 + 20;
+        s.updateData([s.X newX], [s.Y newY]);
     end
 end
 

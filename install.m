@@ -21,6 +21,9 @@ function varargout = install(varargin)
 %     libs/EventDetection     — violation detection & live pipeline
 %     libs/Dashboard          — widget-based dashboard engine
 %     libs/WebBridge          — browser-based visualization bridge
+%     libs/FastSenseCompanion — companion navigator app
+%     libs/PlantLog           — plant-log entry storage (CSV/XLSX import target; v3.1)
+%     libs/Help               — Wiki Browser + WikiPageIndex (v4.0 Phase 1034)
 %     examples/               — runnable example scripts
 %     benchmarks/             — performance benchmarks
 %     tests/                  — test suites
@@ -53,6 +56,10 @@ function varargout = install(varargin)
     addpath(fullfile(root, 'libs', 'EventDetection'));
     addpath(fullfile(root, 'libs', 'Dashboard'));
     addpath(fullfile(root, 'libs', 'WebBridge'));
+    addpath(fullfile(root, 'libs', 'FastSenseCompanion'));
+    addpath(fullfile(root, 'libs', 'PlantLog'));
+    addpath(fullfile(root, 'libs', 'Concurrency'));
+    addpath(fullfile(root, 'libs', 'Help'));
 
     % Demo workspaces (Phase 1015+): add each demo dir so the entry-point
     % function (e.g. run_demo) is callable without manual addpath.
@@ -79,6 +86,7 @@ function varargout = install(varargin)
             fullfile(root, 'libs', 'FastSense', 'private',            ['octave-' octTag])
             fullfile(root, 'libs', 'FastSense',                        ['octave-' octTag])
             fullfile(root, 'libs', 'SensorThreshold', 'private',       ['octave-' octTag])
+            fullfile(root, 'libs', 'Concurrency', 'private',           ['octave-' octTag])
         };
         for k = 1:numel(candidates)
             if isfolder(candidates{k})
