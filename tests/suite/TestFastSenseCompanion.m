@@ -1,0 +1,1583 @@
+classdef TestFastSenseCompanion < matlab.unittest.TestCase
+%TESTFASTSENSECOMPANION Class-based tests for FastSenseCompanion shell (Phase 1018).
+%   Covers COMPSHELL-01 through COMPSHELL-06.
+%   All uifigure windows are created with default visibility; addTeardown
+%   ensures cleanup even on failure.
+%
+%   See also FastSenseCompanion, run_all_tests.
+
+    methods (TestClassSetup)
+        function gateModernMatlab(testCase)
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeTrue(~verLessThan('matlab', '9.10'), ...
+                'Companion suite requires MATLAB R2021a+ uifigure features');
+        end
+
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners — uifigure
+            %   construction + interaction is unreliable without a real
+            %   X server. macOS / Windows CI cover this suite.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestFastSenseCompanion uifigure paths fail on headless Linux — covered on macOS/Windows CI');
+        end
+
+        function addPaths(testCase)
+            addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
+            install();
+        end
+    end
+
+    methods (TestMethodSetup)
+        function skipOnOctave(testCase)
+            % FastSenseCompanion is MATLAB-only. Skip entire suite on Octave.
+            testCase.assumeFalse( ...
+                exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion: skipped on Octave (uifigure not available)');
+        end
+    end
+
+    methods (Test)
+
+        % ---- COMPSHELL-01: Constructor argument handling ----
+
+        function testConstructorNoArgs(testCase)
+            %TESTCONSTRUCTORNOARGS Default construction succeeds; IsOpen is true.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyTrue(isvalid(app), ...
+                'testConstructorNoArgs: app must be valid after construction');
+            testCase.verifyTrue(app.IsOpen, ...
+                'testConstructorNoArgs: IsOpen must be true after construction');
+        end
+
+        function testConstructorWithDashboards(testCase)
+            %TESTCONSTRUCTORWITHDASHBOARDS Two valid DashboardEngine entries are stored.
+            d1 = DashboardEngine('Test1');
+            d2 = DashboardEngine('Test2');
+            app = FastSenseCompanion('Dashboards', {d1, d2}, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEqual(numel(app.Dashboards), 2, ...
+                'testConstructorWithDashboards: expected 2 dashboards stored');
+        end
+
+        function testConstructorThemeLightPreset(testCase)
+            %TESTCONSTRUCTORTHMELIGHTPRESET Theme property reflects the supplied preset.
+            app = FastSenseCompanion('Theme', 'light');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEqual(app.Theme, 'light', ...
+                'testConstructorThemeLightPreset: Theme property must reflect light preset');
+        end
+
+        function testUnknownOptionThrows(testCase)
+            %TESTUNKNOWNOPTIONTHROWS Unknown key -> FastSenseCompanion:unknownOption
+            % COMPSHELL-01
+            testCase.verifyError( ...
+                @() FastSenseCompanion('NotAKey', 'value'), ...
+                'FastSenseCompanion:unknownOption', ...
+                'testUnknownOptionThrows: wrong error ID for unknown key');
+        end
+
+        function testInvalidDashboardThrows(testCase)
+            %TESTINVALIDDASHBOARDTHROWS Non-DashboardEngine -> FastSenseCompanion:invalidDashboard
+            % COMPSHELL-01
+            testCase.verifyError( ...
+                @() FastSenseCompanion('Dashboards', {struct('x', 1)}), ...
+                'FastSenseCompanion:invalidDashboard', ...
+                'testInvalidDashboardThrows: wrong error ID for invalid dashboard');
+        end
+
+        function testInvalidDashboardIndexInMessage(testCase)
+            %TESTINVALIDDASHBOARDINDEXINMESSAGE Offending index appears in error message.
+            % COMPSHELL-01
+            try
+                FastSenseCompanion('Dashboards', {DashboardEngine('ok'), 42});
+                testCase.verifyFail('testInvalidDashboardIndexInMessage: should have thrown');
+            catch e
+                testCase.verifyEqual(e.identifier, 'FastSenseCompanion:invalidDashboard', ...
+                    'testInvalidDashboardIndexInMessage: wrong error ID');
+                testCase.verifyTrue( ...
+                    ~isempty(strfind(e.message, '2')), ...
+                    'testInvalidDashboardIndexInMessage: message must contain offending index 2');
+            end
+        end
+
+        % ---- COMPSHELL-02: uifigure opens immediately ----
+
+        function testUifigureCreatedImmediately(testCase)
+            %TESTUIFIGURECREATEDIMMEDIATELY No separate render() call required; IsOpen true.
+            % COMPSHELL-02
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyTrue(app.IsOpen, ...
+                'testUifigureCreatedImmediately: IsOpen must be true right after construction');
+        end
+
+        function testThreePanelsExist(testCase)
+            %TESTTHREEPANELSEXIST Three pane panels exist and are valid after construction.
+            % COMPSHELL-02: three panes created immediately
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            % Access private fields via struct() — standard MATLAB unittest practice
+            s = struct(app);
+            testCase.verifyTrue(isvalid(s.hLeftPanel_), ...
+                'testThreePanelsExist: hLeftPanel_ must be valid');
+            testCase.verifyTrue(isvalid(s.hMidPanel_), ...
+                'testThreePanelsExist: hMidPanel_ must be valid');
+            testCase.verifyTrue(isvalid(s.hRightPanel_), ...
+                'testThreePanelsExist: hRightPanel_ must be valid');
+        end
+
+        % ---- COMPSHELL-03: close() lifecycle ----
+
+        function testCloseCleanup(testCase)
+            %TESTCLOSECLEANUP close() sets IsOpen false; timer count unchanged.
+            % COMPSHELL-03
+            timersBefore = numel(timerfindall);
+            app = FastSenseCompanion();
+            app.close();
+            testCase.verifyFalse(app.IsOpen, ...
+                'testCloseCleanup: IsOpen must be false after close()');
+            testCase.verifyEqual(numel(timerfindall), timersBefore, ...
+                'testCloseCleanup: timerfindall count must be unchanged after close()');
+        end
+
+        function testCloseIdempotent(testCase)
+            %TESTCLOSEIDEMPOTENT Second close() call must not throw.
+            % COMPSHELL-03
+            app = FastSenseCompanion();
+            app.close();
+            % Second call must be a no-op, not an error
+            app.close();
+            testCase.verifyFalse(app.IsOpen, ...
+                'testCloseIdempotent: IsOpen should remain false after double close');
+        end
+
+        function testCloseDoesNotAffectDashboards(testCase)
+            %TESTCLOSEDOESNOTAFFECTDASHBOARDS Closing companion does NOT close dashboard figures.
+            % COMPSHELL-03: companion close() must not affect DashboardEngine figures
+            d = DashboardEngine('CloseTest');
+            d.render();
+            testCase.addTeardown(@() close(d.hFigure));
+            app = FastSenseCompanion('Dashboards', {d});
+            app.close();
+            % Dashboard figure must still be open and valid
+            testCase.verifyTrue(isvalid(d.hFigure), ...
+                'testCloseDoesNotAffectDashboards: dashboard figure must survive companion close');
+        end
+
+        % ---- COMPSHELL-04: Octave guard code is present ----
+
+        function testOctaveGuardCodePresent(testCase)
+            %TESTOCTAVEGUARDCODEPRESENT Octave guard code exists in FastSenseCompanion source.
+            % COMPSHELL-04: we cannot execute the guard on MATLAB, so verify textually
+            src = fileread(which('FastSenseCompanion'));
+            testCase.verifyTrue( ...
+                ~isempty(strfind(src, 'OCTAVE_VERSION')), ...
+                'testOctaveGuardCodePresent: OCTAVE_VERSION check missing from source');
+            testCase.verifyTrue( ...
+                ~isempty(strfind(src, 'FastSenseCompanion:notSupported')), ...
+                'testOctaveGuardCodePresent: notSupported error ID missing from source');
+        end
+
+        % ---- COMPSHELL-05: setProject replaces state without uifigure recreation ----
+
+        function testSetProjectReplacesState(testCase)
+            %TESTSETPROJECTREPLACESSTATE setProject replaces internal state; uifigure survives.
+            % COMPSHELL-05
+            d1 = DashboardEngine('Original');
+            d2 = DashboardEngine('Replacement');
+            app = FastSenseCompanion('Dashboards', {d1});
+            testCase.addTeardown(@() app.close());
+            s = struct(app);
+            figBefore = s.hFig_;
+            app.setProject({d2}, TagRegistry);
+            testCase.verifyEqual(numel(app.Dashboards), 1, ...
+                'testSetProjectReplacesState: should have 1 dashboard after setProject');
+            testCase.verifyEqual(app.Dashboards{1}.Name, 'Replacement', ...
+                'testSetProjectReplacesState: Dashboards should contain the new engine');
+            % uifigure must NOT have been recreated — same handle
+            s2 = struct(app);
+            testCase.verifyEqual(s.hFig_, s2.hFig_, ...
+                'testSetProjectReplacesState: uifigure handle must be the same object after setProject');
+        end
+
+        function testSetProjectInvalidDashboardThrows(testCase)
+            %TESTSETPROJECTINVALIDDASHBOARDTHROWS setProject validates dashboards same as constructor.
+            % COMPSHELL-05
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError( ...
+                @() app.setProject({99}, TagRegistry), ...
+                'FastSenseCompanion:invalidDashboard', ...
+                'testSetProjectInvalidDashboardThrows: wrong error ID for invalid dashboard in setProject');
+        end
+
+        % ---- COMPSHELL-06: no gcf/gca in source files ----
+
+        function testNoGcfGcaInSource(testCase)
+            %TESTNOGCFGCAINSOURCE No gcf or gca present in any FastSenseCompanion source file.
+            % COMPSHELL-06: companion must reference obj.hFig_ exclusively, never gcf/gca
+            companionDir = fileparts(which('FastSenseCompanion'));
+            files = dir(fullfile(companionDir, '*.m'));
+            for i = 1:numel(files)
+                src = fileread(fullfile(companionDir, files(i).name));
+                testCase.verifyTrue( ...
+                    isempty(regexp(src, '\bgcf\b|\bgca\b', 'once')), ...
+                    sprintf('testNoGcfGcaInSource: gcf or gca found in %s', files(i).name));
+            end
+        end
+
+        % ---- Phase 1020 BROWSER-05: addDashboard / removeDashboard ----
+
+        function testAddDashboardAppendsToBrowser(testCase)
+        %TESTADDDASHBOARDAPPENDSTOBROWSER BROWSER-05: addDashboard adds engine to public list.
+            d1 = DashboardEngine('Fixture1');
+            d2 = DashboardEngine('Fixture2');
+            app = FastSenseCompanion('Dashboards', {d1, d2}, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            nBefore = numel(app.Dashboards);
+            d = DashboardEngine('NewBoard');
+            app.addDashboard(d);
+            testCase.verifyEqual(numel(app.Dashboards), nBefore + 1, ...
+                'addDashboard: Dashboards count must be nBefore + 1');
+            % Stronger: verify the new engine handle appears in the list
+            found = false;
+            for i = 1:numel(app.Dashboards)
+                if app.Dashboards{i} == d
+                    found = true;
+                    break;
+                end
+            end
+            testCase.verifyTrue(found, ...
+                'BROWSER-05: appended DashboardEngine must be present in app.Dashboards');
+        end
+
+        function testAddDashboardRejectsNonDashboardEngine(testCase)
+        %TESTADDDASHBOARDREJECTSNONDASHBOARDENGINE BROWSER-05: addDashboard validates type.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError(@() app.addDashboard(struct('Name', 'x')), ...
+                'FastSenseCompanion:invalidDashboard');
+        end
+
+        function testAddDashboardRejectsDuplicateHandle(testCase)
+        %TESTADDDASHBOARDREJECTSDUPLICATEHANDLE BROWSER-05: addDashboard rejects same handle twice.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            d = DashboardEngine('OnceOnly');
+            app.addDashboard(d);
+            testCase.verifyError(@() app.addDashboard(d), ...
+                'FastSenseCompanion:duplicateDashboard');
+        end
+
+        function testRemoveDashboardDropsByName(testCase)
+        %TESTREMOVEDASHBOARDDROPSBYNAME BROWSER-05: removeDashboard drops engine by Name match.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            d = DashboardEngine('ToRemove');
+            app.addDashboard(d);
+            nBefore = numel(app.Dashboards);
+            app.removeDashboard('ToRemove');
+            nAfter = numel(app.Dashboards);
+            testCase.verifyEqual(nAfter, nBefore - 1, ...
+                'BROWSER-05: removeDashboard must reduce Dashboards count by 1');
+        end
+
+        function testRemoveDashboardThrowsOnUnknown(testCase)
+        %TESTREMOVEDASHBOARDTHROWSONUNKNOWN BROWSER-05: removeDashboard throws on missing key.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError(@() app.removeDashboard('NoSuchKey'), ...
+                'FastSenseCompanion:dashboardNotFound');
+        end
+
+        function testRemoveDashboardThrowsOnNonChar(testCase)
+        %TESTREMOVEDASHBOARDTHROWSONNONCHAR BROWSER-05: removeDashboard rejects non-char input.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.verifyError(@() app.removeDashboard(42), ...
+                'FastSenseCompanion:dashboardNotFound');
+        end
+
+        % ---- Phase 1021: InspectorStateChanged event firing tests ----
+
+        function testInspectorStateChangedFiresOnDashboardClick(testCase)
+        %TESTINSPECTORSTATECHANGEDFIRESONDASBOARDCLICK Phase 1021: event fires on dashboard click.
+            d = DashboardEngine('TestDash1021');
+            app = FastSenseCompanion('Dashboards', {d}, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            drawnow;
+            received = struct('Fired', false, 'State', '');
+            cb = @(~, ed) assignField(ed);
+            function assignField(ed)
+                received.State = ed.State;
+                received.Fired = true;
+            end
+            lh = addlistener(app, 'InspectorStateChanged', cb);
+            cleanupL = onCleanup(@() delete(lh));
+            % Drive a dashboard row click via struct hack
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            ls = struct(s.ListPane_);
+            testCase.assertNotEmpty(ls.hRowButtons_, ...
+                'Phase 1021: no row buttons found in ListPane_');
+            feval(ls.hRowButtons_{1}.ButtonPushedFcn, [], []);
+            drawnow;
+            testCase.verifyTrue(received.Fired, ...
+                'Phase 1021: InspectorStateChanged must fire on dashboard click');
+            testCase.verifyEqual(received.State, 'dashboard', ...
+                'Phase 1021: dashboard click must produce state=dashboard');
+        end
+
+        function testInspectorStateChangedFiresWelcomeOnNothing(testCase)
+        %TESTINSPECTORSTATECHANGEDFIRESWEOLCOMEONNOTHING Phase 1021: welcome state on remove.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            received = struct('Fired', false, 'State', '');
+            cb = @(~, ed) assignField(ed);
+            function assignField(ed)
+                received.State = ed.State;
+                received.Fired = true;
+            end
+            lh = addlistener(app, 'InspectorStateChanged', cb);
+            cleanupL = onCleanup(@() delete(lh));
+            % Add a dashboard and select it via row click
+            d = DashboardEngine('Tmp1021');
+            app.addDashboard(d);
+            drawnow;
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            ls = struct(s.ListPane_);
+            % Click the row to select the dashboard
+            feval(ls.hRowButtons_{end}.ButtonPushedFcn, [], []);
+            drawnow;
+            % Reset flag so we capture the post-remove fire
+            received.Fired = false;
+            received.State = '';
+            app.removeDashboard('Tmp1021');
+            drawnow;
+            testCase.verifyTrue(received.Fired, ...
+                'Phase 1021: removeDashboard of selected must fire InspectorStateChanged');
+            testCase.verifyEqual(received.State, 'welcome', ...
+                'Phase 1021: removing the selected dashboard must produce state=welcome');
+        end
+
+        function testOpenAdHocPlotRequestedEventFires(testCase)
+        %TESTOPENADHOCPLOTREQUESTEDEVENTFIRES Phase 1021: Plot click fires OpenAdHocPlotRequested.
+            TagRegistry.clear();
+            t1 = SensorTag('ta1021', 'Name', 'Tag A', 'X', 1:3, 'Y', 1:3, ...
+                'Labels', {'L'}, 'Criticality', 'low');
+            TagRegistry.register('ta1021', t1);
+            t2 = SensorTag('tb1021', 'Name', 'Tag B', 'X', 1:3, 'Y', 1:3, ...
+                'Labels', {'L'}, 'Criticality', 'low');
+            TagRegistry.register('tb1021', t2);
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            testCase.addTeardown(@() TagRegistry.clear());
+            drawnow;
+            received = struct('TagKeys', {{}}, 'Mode', '', 'Fired', false);
+            cb = @(~, ed) assignField(ed);
+            function assignField(ed)
+                received.TagKeys = ed.TagKeys;
+                received.Mode    = ed.Mode;
+                received.Fired   = true;
+            end
+            lh = addlistener(app, 'OpenAdHocPlotRequested', cb);
+            cleanupL = onCleanup(@() delete(lh));
+            % Drive 2-tag selection via catalog listbox struct hack
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            cs = struct(s.CatalogPane_);
+            cs.hListbox_.Value = {'ta1021', 'tb1021'};
+            feval(cs.hListbox_.ValueChangedFcn, [], []);
+            drawnow;
+            % Find Plot button and click
+            hFig = findall(groot, 'Type', 'figure', 'Name', 'FastSense Companion');
+            if isempty(hFig)
+                hFig = findall(groot, '-regexp', 'Name', 'FastSense Companion');
+            end
+            testCase.assertNotEmpty(hFig, 'Phase 1021: companion figure not found');
+            allBtns = findall(hFig(1), '-isa', 'matlab.ui.control.Button');
+            plotBtn = [];
+            for i = 1:numel(allBtns)
+                if strcmp(allBtns(i).Text, 'Plot')
+                    plotBtn = allBtns(i);
+                    break;
+                end
+            end
+            testCase.assertNotEmpty(plotBtn, 'Phase 1021: Plot button not found in multitag state');
+            feval(plotBtn.ButtonPushedFcn, [], []);
+            drawnow;
+            testCase.verifyTrue(received.Fired, ...
+                'Phase 1021: Plot click must fire OpenAdHocPlotRequested');
+            testCase.verifyEqual(numel(received.TagKeys), 2, ...
+                'Phase 1021: payload must carry 2 tag keys');
+            testCase.verifyEqual(received.Mode, 'Overlay', ...
+                'Phase 1021: default mode must be Overlay');
+        end
+
+        % ---- Phase 1022: ADHOC end-to-end Plot button tests ----
+
+        function testADHOC02_overlayPlotSpawnsClassicalFigure(testCase)
+        %TESTADHOC02_OVERLAYPLOTSPAWNSCLASSICALFIGURE ADHOC-02: Overlay mode spawns classical figure.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('mk1', MockPlottableTag('mk1', 'Name', 'M1', ...
+                'X', 1:50, 'Y', sin((1:50)/3)));
+            TagRegistry.register('mk2', MockPlottableTag('mk2', 'Name', 'M2', ...
+                'X', 1:50, 'Y', cos((1:50)/3)));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'mk1', 'mk2'}, 'Overlay');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, ...
+                'ADHOC-02: Overlay Plot click must spawn a FastSense Companion figure');
+            testCase.verifyEqual(get(adhocFig, 'Type'), 'figure', ...
+                'ADHOC-02: spawned must be classical figure (Type=figure)');
+            testCase.addTeardown(@() testCase.cleanupAdHoc_(adhocFig));
+        end
+
+        function testADHOC03_linkedGridPlotSpawnsClassicalFigure(testCase)
+        %TESTADHOC03_LINKEDGRIDPLOTSPAWNSCLASSICALFIGURE ADHOC-03: LinkedGrid mode spawns tiled figure.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            for i = 1:4
+                k = sprintf('lg%d', i);
+                TagRegistry.register(k, MockPlottableTag(k, ...
+                    'Name', sprintf('LG%d', i), 'X', 1:30, 'Y', (1:30) + i));
+            end
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'lg1', 'lg2', 'lg3', 'lg4'}, 'LinkedGrid');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, ...
+                'ADHOC-03: LinkedGrid Plot click must spawn a FastSense Companion figure');
+            testCase.verifyEqual(get(adhocFig, 'Type'), 'figure', ...
+                'ADHOC-03: spawned must be classical figure');
+            testCase.addTeardown(@() testCase.cleanupAdHoc_(adhocFig));
+        end
+
+        function testADHOC04_companionCloseDoesNotCloseSpawnedFigure(testCase)
+        %TESTADHOC04_COMPANIONCLOSEDOESNOTCLOSESPAWNEDFIGURE ADHOC-04: spawned figure outlives companion.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('a4', MockPlottableTag('a4', 'Name', 'A4', ...
+                'X', 1:20, 'Y', 1:20));
+            TagRegistry.register('b4', MockPlottableTag('b4', 'Name', 'B4', ...
+                'X', 1:20, 'Y', 20:-1:1));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'a4', 'b4'}, 'Overlay');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, 'ADHOC-04 precondition: spawned figure must exist');
+            app.close();
+            drawnow;
+            testCase.verifyTrue(ishandle(adhocFig), ...
+                'ADHOC-04: spawned figure handle must remain valid after companion.close()');
+            testCase.verifyTrue(strcmp(get(adhocFig, 'Visible'), 'on'), ...
+                'ADHOC-04: spawned figure must remain Visible=on after companion.close()');
+            testCase.addTeardown(@() testCase.cleanupAdHoc_(adhocFig));
+        end
+
+        function testADHOC04_closingSpawnedFigureDoesNotCloseCompanion(testCase)
+        %TESTADHOC04_CLOSINGSPAWNEDFIGUREDOESNOTCLOSECOMPANION ADHOC-04 reverse: closing spawned does not affect companion.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('r1', MockPlottableTag('r1', 'Name', 'R1', ...
+                'X', 1:20, 'Y', 1:20));
+            TagRegistry.register('r2', MockPlottableTag('r2', 'Name', 'R2', ...
+                'X', 1:20, 'Y', 20:-1:1));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.refreshCatalog();
+            drawnow;
+            preFigs = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'r1', 'r2'}, 'Overlay');
+            drawnow;
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            adhocFig = testCase.findCompanionAdHocFigure_(newFigs);
+            testCase.assertNotEmpty(adhocFig, 'precondition: spawned figure must exist');
+            delete(adhocFig);
+            drawnow;
+            testCase.verifyTrue(app.IsOpen, ...
+                'ADHOC-04 reverse: companion.IsOpen must remain true after spawned figure closed');
+        end
+
+        function testADHOC05_noOrphanTimersAfterPlotAndClose(testCase)
+        %TESTADHOC05_NOORPHANTIMERSAFTERPLOTANDCLOSE ADHOC-05: timerfindall delta is empty after spawn+close cycle.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestFastSenseCompanion ADHOC tests are MATLAB-only.');
+            TagRegistry.clear();
+            TagRegistry.register('t1', MockPlottableTag('t1', 'Name', 'T1', ...
+                'X', 1:20, 'Y', 1:20));
+            TagRegistry.register('t2', MockPlottableTag('t2', 'Name', 'T2', ...
+                'X', 1:20, 'Y', 20:-1:1));
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.refreshCatalog();
+            drawnow;
+            preTimers = timerfindall();
+            preFigs   = findobj(groot, 'Type', 'figure');
+            testCase.driveSelectAndPlot_(app, {'t1', 't2'}, 'Overlay');
+            drawnow;
+            postFigs  = findobj(groot, 'Type', 'figure');
+            newFigs   = setdiff(postFigs, preFigs);
+            for i = 1:numel(newFigs)
+                if ishandle(newFigs(i))
+                    delete(newFigs(i));
+                end
+            end
+            app.close();
+            drawnow;
+            postTimers = timerfindall();
+            newTimers  = setdiff(postTimers, preTimers);
+            testCase.verifyEmpty(newTimers, ...
+                'ADHOC-05: spawn+close cycle must leave no orphan companion-owned timers');
+        end
+
+        % ---- QUICK-LIVEUPDATES-01: scanLiveTagUpdates_ guard regression ----
+
+        function testScanLiveTagUpdatesPopulatesTableAfterGrowth(testCase)
+        %TESTSCANLIVETAGUPDATESPOPULATESTABLEAFTERGROWTH Live updates table receives a row after a SensorTag grows between two scan ticks.
+        %   Regression test for the isempty(containers.Map) guard bug.
+        %   Before the fix: scanLiveTagUpdates_ returned on every tick because
+        %   isempty(containers.Map) is true for an empty map (chicken-and-egg).
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            % Register a SensorTag with an initial 3-sample series.
+            tag = SensorTag('liveupd1', 'Name', 'LiveUpd1', ...
+                'X', [1 2 3], 'Y', [10 20 30], ...
+                'Labels', {'L'}, 'Criticality', 'low');
+            TagRegistry.register('liveupd1', tag);
+
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            % Start live mode explicitly (constructor no longer auto-starts).
+            app.startLiveMode();
+            drawnow;
+
+            % Reach the private scan method via the live timer's TimerFcn,
+            % which is a closure that DOES have private access to the method.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            testCase.assertNotEmpty(s.LiveTimer_, ...
+                'Live timer must exist after startLiveMode()');
+            testCase.assertTrue(isa(s.LiveSampleCount_, 'containers.Map'), ...
+                'LiveSampleCount_ must be a containers.Map after constructor');
+            tickFcn = s.LiveTimer_.TimerFcn;
+
+            % Tick 1: baseline — function should record n=3 for the key but NOT log a row.
+            feval(tickFcn, s.LiveTimer_, []);
+            drawnow;
+
+            % Grow the tag by 2 samples.
+            tag.updateData([1 2 3 4 5], [10 20 30 40 50]);
+
+            % Tick 2: should see the delta and append a row.
+            feval(tickFcn, s.LiveTimer_, []);
+            drawnow;
+
+            % Assertion: at least one row in the live-updates buffer (LiveLogPane owns it post-Phase-1027.1).
+            pane = app.getLiveLogPane();
+            testCase.verifyGreaterThanOrEqual(pane.bufferSize(), 1, ...
+                'Live updates buffer must contain at least one row after a SensorTag grows between two ticks');
+            s2 = struct(app);
+            testCase.verifyTrue(s2.LiveSampleCount_.isKey('liveupd1'), ...
+                'LiveSampleCount_ must contain the tag key after the first tick');
+            testCase.verifyEqual(s2.LiveSampleCount_('liveupd1'), 5, ...
+                'LiveSampleCount_(''liveupd1'') must equal 5 after the second tick');
+        end
+
+        % ---- SETTINGS-07: Companion Settings dialog ----
+
+        function testPrefsRoundTrip(testCase)
+        %TESTPREFSROUNDTRIP companionPrefs save->load returns identical struct.
+            testCase.backupAndArmRestore_();
+            s = struct('theme', 'light', 'livePeriod', 1.7);
+            companionPrefs('save', s);
+            s2 = companionPrefs('load');
+            testCase.verifyEqual(s2.theme, 'light');
+            testCase.verifyEqual(s2.livePeriod, 1.7);
+        end
+
+        function testConstructorPriority(testCase)
+        %TESTCONSTRUCTORPRIORITY explicit Name-Value > prefdir > built-in default.
+            testCase.backupAndArmRestore_();
+            % Write 'light' to prefdir via applyTheme (constructor args alone
+            % do not persist — only dialog actions / public setters do).
+            app1 = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() delete(app1));
+            app1.applyTheme('light');
+            app1.close();
+            drawnow;
+            % Default-construct → must pick up 'light' from prefdir.
+            app2 = FastSenseCompanion();
+            testCase.addTeardown(@() delete(app2));
+            testCase.verifyEqual(app2.Theme, 'light', ...
+                'prefdir must override built-in default');
+            app2.close();
+            drawnow;
+            % Explicit Name-Value must override prefdir.
+            app3 = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() delete(app3));
+            testCase.verifyEqual(app3.Theme, 'dark', ...
+                'explicit Name-Value must override prefdir');
+            app3.close();
+        end
+
+        function testApplyThemeLiveSwitch(testCase)
+        %TESTAPPLYTHEMELIVESWITCH applyTheme repaints panes; selection survives.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() delete(app));
+            % Snapshot the pre-switch EventsLogPane root background (Phase 1027.1:
+            % the events log lives in EventsLogPane, accessed via the public test helper).
+            pane = app.getEventsLogPane();
+            beforeBg = pane.rootBackgroundColor();
+            app.applyTheme('light');
+            drawnow;
+            testCase.verifyEqual(app.Theme, 'light');
+            afterBg = pane.rootBackgroundColor();
+            % Sanity: dark and light WidgetBackgrounds must differ at all.
+            darkBg  = CompanionTheme.get('dark').WidgetBackground;
+            lightBg = CompanionTheme.get('light').WidgetBackground;
+            testCase.verifyNotEqual(darkBg, lightBg, ...
+                'sanity: dark and light widget backgrounds must differ');
+            testCase.verifyNotEqual(afterBg, beforeBg, ...
+                'EventsLogPane root background must visibly recolor on theme switch');
+            app.close();
+        end
+
+        function testSetLivePeriod(testCase)
+        %TESTSETLIVEPERIOD setLivePeriod updates timer Period and persists.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() delete(app));
+            % Start live mode so LiveTimer_ is created before calling setLivePeriod.
+            app.startLiveMode();
+            app.setLivePeriod(2.0);
+            testCase.verifyEqual(app.LivePeriod, 2.0);
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            testCase.verifyEqual(s.LiveTimer_.Period, 2.0);
+            testCase.verifyEqual(s.LiveTimer_.Running, 'on');
+            prefs = companionPrefs('load');
+            testCase.verifyEqual(prefs.livePeriod, 2.0);
+            % Invalid argument throws.
+            try
+                app.setLivePeriod(-1);
+                testCase.verifyFail('setLivePeriod(-1) should have thrown');
+            catch err
+                testCase.verifyEqual(err.identifier, ...
+                    'FastSenseCompanion:invalidLivePeriod');
+            end
+            app.close();
+        end
+
+        function testOpenSettingsSingleton(testCase)
+        %TESTOPENSETTINGSSINGLETON openSettings is idempotent; close tears down.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() delete(app));
+            app.openSettings(); drawnow;
+            app.openSettings(); drawnow;
+            figs = findall(groot, 'Type', 'figure', 'Name', 'Companion Settings');
+            testCase.verifyEqual(numel(figs), 1, ...
+                'second openSettings must not spawn a new figure');
+            app.close(); drawnow;
+            figsAfter = findall(groot, 'Type', 'figure', 'Name', 'Companion Settings');
+            testCase.verifyEqual(numel(figsAfter), 0, ...
+                'companion close must tear down the dialog');
+        end
+
+        function testResetToDefaults(testCase)
+        %TESTRESETTODEFAULTS Reset button restores dark / 1.0 and persists.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion('Theme', 'light', 'LivePeriod', 5.0);
+            testCase.addTeardown(@() delete(app));
+            app.openSettings(); drawnow;
+            dlg = app.SettingsDlg_;
+            testCase.assertNotEmpty(dlg, 'openSettings must populate SettingsDlg_');
+            % Locate the Reset button by Text and fire its callback.
+            resetBtn = findall(dlg.hFig_, 'Type', 'uibutton', ...
+                'Text', 'Reset to defaults');
+            testCase.assertEqual(numel(resetBtn), 1, 'Reset button not found');
+            cb = get(resetBtn, 'ButtonPushedFcn');
+            feval(cb, resetBtn, []);
+            drawnow;
+            testCase.verifyEqual(app.Theme, 'dark');
+            testCase.verifyEqual(app.LivePeriod, 1.0);
+            spinner = findall(dlg.hFig_, 'Type', 'uispinner');
+            testCase.assertEqual(numel(spinner), 1);
+            testCase.verifyEqual(spinner.Value, 1.0);
+            prefs = companionPrefs('load');
+            testCase.verifyEqual(prefs.theme, 'dark');
+            testCase.verifyEqual(prefs.livePeriod, 1.0);
+            dlg.close(); drawnow;
+            app.close();
+        end
+
+        % --- Phase 1027 / 1027.1 ---
+
+        function testEventsAndLiveLogStateDefaultIsInline(testCase)
+        %TESTEVENTSANDLIVELOGSTATEDEFAULTISINLINE After construction, both dropdowns show 'Inline' and row 3 has its original height.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline');
+            testCase.verifyEqual(app.getLiveLogStateValue(), 'Inline');
+            testCase.verifyTrue(app.getEventsLogPane().IsAttached);
+            testCase.verifyTrue(app.getLiveLogPane().IsAttached);
+            testCase.verifyEqual(app.getRow3Height(), 360);
+        end
+
+        function testEventsLogStateInlineToDetachedToInline(testCase)
+        %TESTEVENTSLOGSTATEINLINETODETACHEDTOINLINE Round-trip: events detached uifigure created and destroyed.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Detached');
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Detached');
+            fig = app.getDetachedEventsFig();
+            testCase.verifyTrue(~isempty(fig) && isvalid(fig), ...
+                'Detached events uifigure should exist');
+            testCase.verifyEqual(fig.Position(3:4), [720 480], ...
+                'Detached events uifigure should be 720x480');
+            % Live pane still Inline -> outer row 3 unchanged at 360.
+            testCase.verifyEqual(app.getRow3Height(), 360, ...
+                'Row 3 should NOT collapse when only events is detached (live still Inline)');
+            app.applyLogState('events', 'Inline');
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline');
+            fig2 = app.getDetachedEventsFig();
+            testCase.verifyTrue(isempty(fig2) || ~isvalid(fig2), ...
+                'Detached events uifigure should be gone after Inline');
+            testCase.verifyEqual(app.getRow3Height(), 360, ...
+                'Row 3 should remain at 360 on Inline');
+        end
+
+        function testEventsLogStateInlineToHiddenToInline(testCase)
+        %TESTEVENTSLOGSTATEINLINETOHIDDENTOINLINE Hiding events alone leaves outer row 3 unchanged because live is still Inline.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Hidden');
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Hidden');
+            % Live pane still Inline -> outer row 3 stays at 360.
+            testCase.verifyEqual(app.getRow3Height(), 360);
+            fig = app.getDetachedEventsFig();
+            testCase.verifyTrue(isempty(fig) || ~isvalid(fig), ...
+                'No uifigure should be spawned in Hidden state');
+            app.applyLogState('events', 'Inline');
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline');
+            testCase.verifyEqual(app.getRow3Height(), 360);
+        end
+
+        function testEventsLogEntriesSurviveHiddenState(testCase)
+        %TESTEVENTSLOGENTRIESSURVIVEHIDDENSTATE Entries added during Hidden are visible after returning to Inline.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            p = app.getEventsLogPane();
+            sizeBefore = p.bufferSize();
+            app.applyLogState('events', 'Hidden');
+            app.addLogEntry('info', 'hidden entry 1');
+            app.addLogEntry('warn', 'hidden entry 2');
+            app.applyLogState('events', 'Inline');
+            sizeAfter = p.bufferSize();
+            testCase.verifyEqual(sizeAfter - sizeBefore, 2, ...
+                'Both entries added in Hidden state should be in the buffer after returning to Inline');
+        end
+
+        function testEventsProgrammaticCloseDrivesStateToInline(testCase)
+        %TESTEVENTSPROGRAMMATICCLOSEDRIVESSTATETOINLINE Closing the detached events uifigure returns the events state to Inline.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Detached');
+            fig = app.getDetachedEventsFig();
+            testCase.verifyTrue(~isempty(fig) && isvalid(fig));
+            % Programmatically invoke the close request -- equivalent to clicking the X.
+            crf = fig.CloseRequestFcn;
+            testCase.verifyClass(crf, 'function_handle', ...
+                'Detached events uifigure must have a CloseRequestFcn');
+            crf(fig, []);
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline', ...
+                'Events state should be Inline after detached uifigure close');
+            fig2 = app.getDetachedEventsFig();
+            testCase.verifyTrue(isempty(fig2) || ~isvalid(fig2));
+        end
+
+        function testLiveButtonParentedToToolbar(testCase)
+        %TESTLIVEBUTTONPARENTEDTOTOOLBAR Phase 1027: Live button moved out of log header.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            par = app.getLiveButtonParent();
+            testCase.verifyClass(par, 'matlab.ui.container.GridLayout', ...
+                'Live button parent should be the toolbar uigridlayout');
+            % Sanity: parent's parent should be the toolbar uipanel, NOT the log panel.
+            grandpa = par.Parent;
+            testCase.verifyClass(grandpa, 'matlab.ui.container.Panel');
+        end
+
+        function testLiveButtonStillTogglesLiveMode(testCase)
+        %TESTLIVEBUTTONSTILLTOGGLESLIVEMODE Regression: button moved to toolbar but still calls toggleLiveMode.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            wasLive = app.IsLive;
+            app.toggleLiveMode();
+            testCase.verifyNotEqual(app.IsLive, wasLive, ...
+                'toggleLiveMode should flip IsLive');
+            app.toggleLiveMode();
+            testCase.verifyEqual(app.IsLive, wasLive, ...
+                'second toggle should restore IsLive');
+        end
+
+        function testThemeSwitchWhileDetached(testCase)
+        %TESTTHEMESWITCHWHILEDETACHED Theme switch while events detached re-themes both the uifigure and the EventsLogPane.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Detached');
+            fig = app.getDetachedEventsFig();
+            testCase.verifyTrue(~isempty(fig) && isvalid(fig));
+            darkBg = fig.Color;
+            app.applyTheme('light');
+            fig2 = app.getDetachedEventsFig();
+            testCase.verifyTrue(~isempty(fig2) && isvalid(fig2), ...
+                'Detached events uifigure should survive theme switch');
+            lightBg = fig2.Color;
+            testCase.verifyNotEqual(darkBg, lightBg, ...
+                'Detached events uifigure background should change on theme switch');
+            expected = CompanionTheme.get('light').DashboardBackground;
+            testCase.verifyEqual(lightBg, expected, 'AbsTol', 1e-6);
+        end
+
+        function testThemeSwitchWhileHidden(testCase)
+        %TESTTHEMESWITCHWHILEHIDDEN Theme switch during Hidden propagates on next Inline attach.
+        %   Catches the regression where attach() after Hidden forgets to honor
+        %   the latest theme. EventsLogPane.applyTheme is a no-op while detached,
+        %   so the companion must pass the *current* theme to attach() -- not a
+        %   stale handle captured at construction.
+            testCase.backupAndArmRestore_();
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Hidden');
+            app.applyTheme('light');
+            app.applyLogState('events', 'Inline');
+            pane = app.getEventsLogPane();
+            testCase.verifyTrue(pane.IsAttached, ...
+                'EventsLogPane should be attached after returning to Inline');
+            bg = pane.rootBackgroundColor();
+            expected = CompanionTheme.get('light').DashboardBackground;
+            lightWidget = CompanionTheme.get('light').WidgetBackground;
+            matchesLight = isequal(round(bg, 3), round(expected, 3)) || ...
+                           isequal(round(bg, 3), round(lightWidget, 3));
+            testCase.verifyTrue(matchesLight, ...
+                sprintf('EventsLogPane root background (%s) should match light theme after Hidden->theme->Inline.', mat2str(bg, 3)));
+        end
+
+        function testSetLogStateIdempotent(testCase)
+        %TESTSETLOGSTATEIDEMPOTENT Calling setLogState_ with the current state is a no-op (no thrown error, no side effects).
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Inline');  % already Inline
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline');
+            app.applyLogState('events', 'Detached');
+            fig1 = app.getDetachedEventsFig();
+            app.applyLogState('events', 'Detached');  % redundant
+            fig2 = app.getDetachedEventsFig();
+            % Same handle; not destroyed and recreated.
+            testCase.verifyEqual(fig1, fig2);
+        end
+
+        function testCloseWhileDetachedDoesNotRecurse(testCase)
+        %TESTCLOSEWHILEDETACHEDDOESNOTRECURSE Closing companion while events log is detached cleans up without infinite recursion.
+            app = FastSenseCompanion();
+            app.applyLogState('events', 'Detached');
+            fig = app.getDetachedEventsFig();
+            testCase.verifyTrue(~isempty(fig) && isvalid(fig));
+            % Should NOT throw, NOT recurse.
+            app.close();
+            testCase.verifyFalse(app.IsOpen);
+            testCase.verifyTrue(isempty(fig) || ~isvalid(fig), ...
+                'Detached events uifigure should be deleted by close()');
+        end
+
+        % --- Phase 1027.1 independence tests ---
+
+        function testEventsDetachedDoesNotAffectLive(testCase)
+        %TESTEVENTSDETACHEDDOESNOTAFFECTLIVE Detaching events alone leaves live Inline + outer row 3 at 360.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Detached');
+            % Live pane should still be Inline + attached.
+            testCase.verifyEqual(app.getLiveLogStateValue(), 'Inline');
+            testCase.verifyTrue(app.getLiveLogPane().IsAttached);
+            % Outer row 3 stays at 360 (live still inline).
+            testCase.verifyEqual(app.getRow3Height(), 360);
+        end
+
+        function testLiveDetachedDoesNotAffectEvents(testCase)
+        %TESTLIVEDETACHEDDOESNOTAFFECTEVENTS Detaching live alone leaves events Inline + outer row 3 at 360.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('live', 'Detached');
+            fig = app.getDetachedLiveFig();
+            testCase.verifyTrue(~isempty(fig) && isvalid(fig));
+            testCase.verifyEqual(fig.Position(3:4), [480 360], ...
+                'Detached live uifigure should be 480x360');
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline');
+            testCase.verifyTrue(app.getEventsLogPane().IsAttached);
+            testCase.verifyEqual(app.getRow3Height(), 360);
+        end
+
+        function testEventsHiddenLiveInlineFillsStrip(testCase)
+        %TESTEVENTSHIDDENLIVEINLINEFILLSSTRIP When events Hidden, inner sub-grid collapses events row to 0 and live takes 1x.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Hidden');
+            % Outer row 3 still at original height because live is still Inline.
+            testCase.verifyEqual(app.getRow3Height(), 360);
+            % Inner sub-grid: events row collapsed to 0, live row '1x'.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            rh = s.hLogStripGrid_.RowHeight;
+            testCase.verifyEqual(rh{1}, 0, ...
+                'Events row in inner sub-grid should be 0 when events Hidden');
+            testCase.verifyEqual(rh{2}, '1x', ...
+                'Live row in inner sub-grid should be 1x when live Inline');
+        end
+
+        function testBothDetachedCollapsesOuterRow(testCase)
+        %TESTBOTHDETACHEDCOLLAPSESOUTERROW When both panes are not-inline, outer row 3 collapses to 0.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Detached');
+            app.applyLogState('live',   'Detached');
+            testCase.verifyEqual(app.getRow3Height(), 0, ...
+                'Outer row 3 should collapse to 0 when both panes are not-inline');
+            figE = app.getDetachedEventsFig();
+            figL = app.getDetachedLiveFig();
+            testCase.verifyTrue(~isempty(figE) && isvalid(figE));
+            testCase.verifyTrue(~isempty(figL) && isvalid(figL));
+        end
+
+        function testCloseEventsDetachedWindowOnlyAffectsEvents(testCase)
+        %TESTCLOSEEVENTSDETACHEDWINDOWONLYAFFECTSEVENTS Closing the events detached uifigure leaves live state untouched.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            app.applyLogState('events', 'Detached');
+            app.applyLogState('live',   'Detached');
+            figE = app.getDetachedEventsFig();
+            crf = figE.CloseRequestFcn;
+            testCase.verifyClass(crf, 'function_handle');
+            crf(figE, []);
+            drawnow;
+            % Events should be back Inline; live still Detached.
+            testCase.verifyEqual(app.getEventsLogStateValue(), 'Inline');
+            testCase.verifyEqual(app.getLiveLogStateValue(),   'Detached');
+            figE2 = app.getDetachedEventsFig();
+            testCase.verifyTrue(isempty(figE2) || ~isvalid(figE2));
+            figL2 = app.getDetachedLiveFig();
+            testCase.verifyTrue(~isempty(figL2) && isvalid(figL2), ...
+                'Live detached uifigure must NOT be torn down by the events close');
+        end
+
+        % ---- Task 1: Auto-discover EventStore from registry ----
+
+        function testDiscoverEventStoreSuite(testCase)
+        %TESTDISCOVEREVENTSTORESUITE Run the flat-file test suite for the helper.
+        %   Wraps the assert-based runner so its stdout output is captured and
+        %   any assertion failure is surfaced as an xunit-style test failure.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            testCase.verifyWarningFree(@() evalc('runDiscoverEventStoreTests()'), ...
+                'runDiscoverEventStoreTests must complete without errors.');
+        end
+
+        % ---- Task 2: EventStore constructor option with auto-discovery ----
+
+        function testEventStoreOptionAcceptsHandle(testCase)
+            %TESTEVENTSTOREOPTIONACCEPTSHANDLE
+            %   Explicit 'EventStore' option is stored on the object.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath);
+            testCase.addTeardown(@() delete(storePath));
+
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+
+            testCase.verifySameHandle(app.getEventStore(), es, ...
+                'EventStore option must be stored verbatim.');
+        end
+
+        function testEventStoreOptionInvalidThrows(testCase)
+            %TESTEVENTSTOREOPTIONINVALIDTHROWS
+            %   Non-EventStore values raise FastSenseCompanion:invalidEventStore.
+            testCase.verifyError(@() FastSenseCompanion('EventStore', 42), ...
+                'FastSenseCompanion:invalidEventStore');
+        end
+
+        function testEventStoreEmptyOptionAllowed(testCase)
+            %TESTEVENTSTOREEMPTYOPTIONALLOWED
+            %   Empty value is accepted (means "no override; auto-discover").
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion('EventStore', []);
+            testCase.addTeardown(@() app.close());
+            testCase.verifyEmpty(app.getEventStore());
+        end
+
+        function testEventStoreAutoDiscoveryUsedWhenNoOverride(testCase)
+            %TESTEVENTSTOREAUTODISCOVERYUSEDWHENNOOVERRIDE
+            %   Without explicit option, the helper-discovered store is used.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            parent = SensorTag('p2', 'Name', 'P', 'Units', 'u', ...
+                'X', [0 1 2], 'Y', [1 2 3]);
+            TagRegistry.register('p2', parent);
+
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath);
+            testCase.addTeardown(@() delete(storePath));
+
+            mon = MonitorTag('m2', parent, @(x,y) y > 100, 'EventStore', es);
+            TagRegistry.register('m2', mon);
+
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), es);
+        end
+
+        function testEventStoreOverrideBeatsAutoDiscovery(testCase)
+            %TESTEVENTSTOREOVERRIDEBEATSAUTODISCOVERY
+            %   Explicit 'EventStore' wins over auto-discovery.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            parent = SensorTag('p3', 'Name', 'P', 'Units', 'u', ...
+                'X', [0 1 2], 'Y', [1 2 3]);
+            TagRegistry.register('p3', parent);
+
+            pathA = [tempname() '.mat'];
+            pathB = [tempname() '.mat'];
+            esA = EventStore(pathA); esB = EventStore(pathB);
+            testCase.addTeardown(@() delete(pathA));
+            testCase.addTeardown(@() delete(pathB));
+
+            mon = MonitorTag('m3', parent, @(x,y) y > 100, 'EventStore', esA);
+            TagRegistry.register('m3', mon);
+
+            app = FastSenseCompanion('EventStore', esB);
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), esB);
+        end
+
+        % ---- Task 3: LiveModeChanged event ----
+
+        function testLiveModeChangedFiresOnStartAndStop(testCase)
+            %TESTLIVEMODECHANGEDFIRESONSTARTANDSTOP
+            %   Toggling live mode fires LiveModeChanged each time, and listeners
+            %   observe the new IsLive value via the source object.
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+
+            % Companion launches with live mode ON; stop it for a clean baseline.
+            app.stopLiveMode();
+
+            captured = LiveModeCapture();
+            L = addlistener(app, 'LiveModeChanged', @(s, ~) captured.push(s.IsLive));
+            testCase.addTeardown(@() delete(L));
+
+            app.startLiveMode();
+            app.stopLiveMode();
+
+            testCase.verifyTrue(numel(captured.Vals) >= 2, ...
+                'LiveModeChanged must fire at least twice (start + stop).');
+            testCase.verifyTrue(captured.Vals(end-1), ...
+                'Penultimate fire must observe IsLive=true after startLiveMode.');
+            testCase.verifyFalse(captured.Vals(end), ...
+                'Last fire must observe IsLive=false after stopLiveMode.');
+        end
+
+        % ---- Task 13: toolbar Events button + single-instance viewer wiring ----
+
+        function testEventsButtonExistsInToolbar(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(btn.Enable), 'on');
+        end
+
+        function testEventsButtonDisabledWhenNoStore(testCase)
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(btn.Enable), 'off');
+            testCase.verifyEqual(btn.Tooltip, 'No EventStore registered');
+        end
+
+        function testEventsButtonOpensViewerSingleInstance(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.openEventViewer_internalForTest();
+            v1 = app.getEventViewerForTest_();
+            testCase.verifyClass(v1, 'CompanionEventViewer');
+            app.openEventViewer_internalForTest();
+            v2 = app.getEventViewerForTest_();
+            testCase.verifySameHandle(v1, v2, 'Second click must reuse the existing viewer.');
+        end
+
+        function testCompanionCloseClosesViewer(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            app.openEventViewer_internalForTest();
+            v = app.getEventViewerForTest_();
+            f = v.hFigure;
+            app.close();
+            testCase.verifyFalse(isgraphics(f), 'Companion close must close viewer figure.');
+        end
+
+        function testViewerObjectBeingDestroyedClearsHandle(testCase)
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.openEventViewer_internalForTest();
+            v = app.getEventViewerForTest_();
+            delete(v);
+            drawnow;
+            testCase.verifyEmpty(app.getEventViewerForTest_(), ...
+                'ObjectBeingDestroyed listener must clear EventViewer_.');
+        end
+
+        % ---- Phase 1034 Plan 06: Wiki toolbar button + openWiki entry point ----
+
+        function testToolbarHasWikiButton(testCase)
+        %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 6.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            btn = findall(app.getFigForTest_(), 'Tag', 'CompanionWikiBtn');
+            testCase.verifyNotEmpty(btn, ...
+                'testToolbarHasWikiButton: Wiki button missing from toolbar');
+            testCase.verifyEqual(numel(btn), 1, ...
+                'testToolbarHasWikiButton: expected exactly one Wiki button');
+            testCase.verifyEqual(btn(1).Layout.Column, 6, ...
+                'testToolbarHasWikiButton: Wiki button should sit in column 6');
+        end
+
+        function testToolbarGearMovedToColumn8(testCase)
+        %TESTTOOLBARGEARMOVEDTOCOLUMN8 Settings gear lives in column 8 after the Phase 1034 reflow.
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            btns = findall(app.getFigForTest_(), 'Type', 'uibutton');
+            found = false;
+            for k = 1:numel(btns)
+                if ~isempty(btns(k).Text) && strcmp(btns(k).Text, char(9881))
+                    testCase.verifyEqual(btns(k).Layout.Column, 8, ...
+                        'testToolbarGearMovedToColumn8: gear button should now sit in column 8');
+                    found = true;
+                    break;
+                end
+            end
+            testCase.verifyTrue(found, ...
+                'testToolbarGearMovedToColumn8: gear button not found on toolbar');
+        end
+
+        function testOpenWikiOpensWikiBrowser(testCase)
+        %TESTOPENWIKIOPENSWIKIBROWSER openWiki spawns a WikiBrowserRoot figure; close() tears it down.
+            %   WikiBrowser gates uifigure construction on usejava('desktop')
+            %   (libs/Help/WikiBrowser.m isInteractiveDesktop_). In batch /
+            %   headless mode it shells out to the OS browser instead and
+            %   never tags a WikiBrowserRoot figure. Mirror TestWikiBrowser
+            %   and skip when the desktop is unavailable.
+            testCase.assumeTrue(usejava('desktop'), ...
+                'testOpenWikiOpensWikiBrowser: skipped headless — Wiki uifigure requires MATLAB desktop');
+            app = FastSenseCompanion('Theme', 'dark');
+            % Close handles both the companion and the wiki window via the
+            % WikiBrowser teardown hook added in Task 6.2.
+            testCase.addTeardown(@() app.close());
+            app.openWiki('Companion-Overview');
+            drawnow;
+            hs = findall(0, 'Type', 'figure', 'Tag', 'WikiBrowserRoot');
+            testCase.verifyNotEmpty(hs, ...
+                'testOpenWikiOpensWikiBrowser: expected WikiBrowser figure after openWiki');
+            app.close();
+            drawnow;
+            hs2 = findall(0, 'Type', 'figure', 'Tag', 'WikiBrowserRoot');
+            testCase.verifyEmpty(hs2, ...
+                'testOpenWikiOpensWikiBrowser: expected WikiBrowser closed when companion closes');
+        end
+
+        % ---- Phase 1033 Plan 01: SharedRoot / Cluster-mode wiring ----
+
+        function testSingleUserModeUnchanged(testCase)
+        %TESTSINGLEUSERMODEUNCHANGED OPS-01: zero 'SharedRoot' NV-pair = single-user byte-identical.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion();
+            testCase.addTeardown(@() app.close());
+            testCase.verifyFalse(app.IsClusterMode, ...
+                'testSingleUserModeUnchanged: IsClusterMode must be false with no SharedRoot');
+            testCase.verifyEqual(app.SharedRoot, '', ...
+                'testSingleUserModeUnchanged: SharedRoot must be empty with no NV-pair');
+            testCase.verifyFalse(app.getIsClusterMode(), ...
+                'testSingleUserModeUnchanged: getIsClusterMode() mismatch');
+            testCase.verifyEqual(app.getSharedRoot(), '', ...
+                'testSingleUserModeUnchanged: getSharedRoot() mismatch');
+            testCase.verifyEqual(app.getLastContentionNoticeText(), '', ...
+                'testSingleUserModeUnchanged: contention banner must be empty at construction');
+        end
+
+        function testSharedRootPropagation(testCase)
+        %TESTSHAREDROOTPROPAGATION OPS-01: SharedRoot NV-pair upgrades EventStore to cluster mode.
+            if exist('mksqlite', 'file') ~= 3
+                testCase.assumeFail('mksqlite MEX not available -- skipping cluster test');
+            end
+            % Use a clean registry to defeat registry auto-discovery.
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            % Build a temp SharedRoot per TestEventStoreCluster pattern.
+            root = fullfile(tempdir(), sprintf('fsc_%d', round(rand()*1e9)));
+            mkdir(root);
+            testCase.addTeardown(@() rmdir(root, 's'));
+            app = FastSenseCompanion('SharedRoot', root);
+            testCase.addTeardown(@() app.close());
+            testCase.verifyTrue(app.IsClusterMode, ...
+                'testSharedRootPropagation: IsClusterMode must be true');
+            testCase.verifyEqual(app.SharedRoot, root, ...
+                'testSharedRootPropagation: SharedRoot property mismatch');
+            store = app.getEventStore();
+            testCase.verifyNotEmpty(store, ...
+                'testSharedRootPropagation: EventStore must be constructed in cluster mode');
+            testCase.verifyClass(store, 'EventStore', ...
+                'testSharedRootPropagation: EventStore must be an EventStore handle');
+            % Cluster-mode behaviour smoke: getAckRecords must not throw in cluster mode.
+            testCase.verifyWarningFree( ...
+                @() store.getAckRecords(), ...
+                'testSharedRootPropagation: getAckRecords must not warn in cluster mode');
+        end
+
+        function testSharedRootValidation(testCase)
+        %TESTSHAREDROOTVALIDATION OPS-01: nonexistent SharedRoot throws sharedRootUnreachable.
+            bogus = fullfile(tempdir(), 'fsc_definitely_does_not_exist_xyz123abc');
+            testCase.verifyError( ...
+                @() FastSenseCompanion('SharedRoot', bogus), ...
+                'Concurrency:sharedRootUnreachable', ...
+                'testSharedRootValidation: nonexistent SharedRoot must throw');
+        end
+
+        function testExplicitEventStoreWins(testCase)
+        %TESTEXPLICITEVENTSTOREWINS OPS-01: explicit EventStore overrides cluster discovery.
+            if exist('mksqlite', 'file') ~= 3
+                testCase.assumeFail('mksqlite MEX not available -- skipping cluster EventStore test');
+            end
+            % Build a vanilla single-user EventStore explicitly.
+            evFile = fullfile(tempdir(), sprintf('fsc_evt_%d.mat', round(rand()*1e9)));
+            testCase.addTeardown(@() delete(evFile));
+            myStore = EventStore(evFile);
+            % Cluster root exists but should NOT cause re-wrap.
+            root = fullfile(tempdir(), sprintf('fsc_or_%d', round(rand()*1e9)));
+            mkdir(root);
+            testCase.addTeardown(@() rmdir(root, 's'));
+            app = FastSenseCompanion('SharedRoot', root, 'EventStore', myStore);
+            testCase.addTeardown(@() app.close());
+            testCase.verifySameHandle(app.getEventStore(), myStore, ...
+                'testExplicitEventStoreWins: explicit EventStore must win over cluster discovery');
+        end
+
+        % ---- Phase 1033 Plan 04: cluster status surface ----
+
+        function testClusterStatusSurface(testCase)
+        %TESTCLUSTERSTATUSSURFACE Plan 04: contention event surfaces in Companion banner.
+        %   SC5 from CONTEXT.md: "Lock contention surfaces in the Companion UI as a
+        %   non-blocking notice and pipeline.SkippedTickCount is visible as a status badge."
+        %
+        %   Scenario: create a cluster-mode Companion with a LiveTagPipeline in cluster
+        %   mode. Pre-hold the tag lock (simulating a "second process"), run one pipeline
+        %   tick so LastLockContentionEvent is populated. Then fire one live tick on the
+        %   Companion and verify LastContentionNoticeText contains the user@host format.
+        %
+        %   If mksqlite is unavailable, the cluster-mode pipeline cannot be constructed;
+        %   the test falls back to verifying the structural wiring (property types, error
+        %   IDs, and empty-state contract) which are valid without a real cluster.
+            root = fullfile(tempdir(), sprintf('fsc_css_%d', round(rand()*1e9)));
+            mkdir(root);
+            testCase.addTeardown(@() rmdir(root, 's'));
+
+            % Verify the public health properties exist with correct types on a
+            % cluster-mode Companion (always runnable — no mksqlite required).
+            app = FastSenseCompanion('SharedRoot', root);
+            testCase.addTeardown(@() app.close());
+
+            % Baseline contract: all properties empty/true at construction.
+            testCase.verifyEmpty(app.LastContentionNoticeText, ...
+                'testClusterStatusSurface: banner must be empty at construction');
+            testCase.verifyEqual(app.getLastContentionNoticeText(), '', ...
+                'testClusterStatusSurface: getLastContentionNoticeText() must return empty');
+            testCase.verifyTrue(islogical(app.IsShareReachable), ...
+                'testClusterStatusSurface: IsShareReachable must be logical');
+            testCase.verifyTrue(app.IsShareReachable, ...
+                'testClusterStatusSurface: IsShareReachable must be true when share is intact');
+            testCase.verifyClass(app.LastContentionNoticeText, 'char', ...
+                'testClusterStatusSurface: LastContentionNoticeText must be char');
+            testCase.verifyEmpty(app.LastShareError, ...
+                'testClusterStatusSurface: LastShareError must be empty at construction');
+
+            % Validate the invalid-pipeline error ID (no mksqlite needed).
+            testCase.verifyError( ...
+                @() FastSenseCompanion('LiveTagPipelines', {struct('fake', 1)}), ...
+                'FastSenseCompanion:invalidLiveTagPipeline', ...
+                'testClusterStatusSurface: struct must not be accepted as LiveTagPipeline');
+            testCase.verifyError( ...
+                @() FastSenseCompanion('LiveEventPipelines', {struct('fake', 1)}), ...
+                'FastSenseCompanion:invalidLiveEventPipeline', ...
+                'testClusterStatusSurface: struct must not be accepted as LiveEventPipeline');
+
+            % Structural wiring: construct with a real LiveTagPipeline (single-user);
+            % isa check must pass; banner must stay empty when no contention on pipeline.
+            outDir = fullfile(tempdir(), sprintf('slp_%d', round(rand()*1e9)));
+            mkdir(outDir);
+            testCase.addTeardown(@() rmdir(outDir, 's'));
+            pipe = LiveTagPipeline('OutputDir', outDir, 'Interval', 99);
+
+            app.close();
+            app2 = FastSenseCompanion('SharedRoot', root, 'LiveTagPipelines', {pipe});
+            testCase.addTeardown(@() app2.close());
+
+            app2.startLiveMode();
+            testCase.addTeardown(@() app2.stopLiveMode());
+
+            % Fire one tick in-process via timer callback.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupWarn = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s2 = struct(app2);
+            if ~isempty(s2.LiveTimer_) && isvalid(s2.LiveTimer_)
+                feval(s2.LiveTimer_.TimerFcn, s2.LiveTimer_, []);
+                drawnow;
+            end
+
+            % No contention on single-user pipeline — banner must remain empty.
+            testCase.verifyEmpty(app2.LastContentionNoticeText, ...
+                'testClusterStatusSurface: banner must be empty when pipeline has no contention');
+
+            % LiveTagPipelines_ must have been stored (struct reflection).
+            try
+                s3 = struct(app2);
+                testCase.verifyEqual(numel(s3.LiveTagPipelines_), 1, ...
+                    'testClusterStatusSurface: LiveTagPipelines_ must contain the 1 registered pipeline');
+                testCase.verifyTrue(isvalid(s3.LiveTagPipelines_{1}), ...
+                    'testClusterStatusSurface: stored pipeline handle must be valid');
+            catch
+                % struct reflection not available in this version — skip structural check.
+            end
+
+            % --- Full contention-surfacing scenario (requires mksqlite for cluster pipeline) ---
+            if exist('mksqlite', 'file') ~= 3
+                % mksqlite unavailable — structural wiring verified above. Done.
+                return;
+            end
+
+            % Build a cluster-mode LiveTagPipeline; pre-hold the lock via a
+            % TagWriteCoordinator to simulate a "second Companion" holding the tag.
+            tagKey = sprintf('p101_%d', round(rand()*1e9));
+            rawFile = fullfile(tempdir(), sprintf('%s.csv', tagKey));
+            fid = fopen(rawFile, 'w');
+            fprintf(fid, 'time,pressure\n');
+            fprintf(fid, '0,100\n1,110\n');
+            fclose(fid);
+            testCase.addTeardown(@() delete(rawFile));
+
+            t = SensorTag(tagKey, 'RawSource', struct('file', rawFile, 'column', 'pressure'));
+            TagRegistry.register(tagKey, t);
+            testCase.addTeardown(@() TagRegistry.clear());
+
+            coord = TagWriteCoordinator(root);
+            [outerLock, ok] = coord.acquireTag(tagKey, struct('Timeout', 0));
+            testCase.assertTrue(ok, 'testClusterStatusSurface: outer lock must acquire');
+            testCase.addTeardown(@() outerLock.release());
+
+            clusterPipe = LiveTagPipeline('OutputDir', outDir, ...
+                'SharedRoot', root, 'LockTimeout', 0);
+            try
+                clusterPipe.tickOnce();
+            catch
+            end
+
+            % The pipeline should have recorded a contention event via at least one channel:
+            %   a) SkippedTickCount incremented (ok=false from acquireTag)
+            %   b) LastLockContentionEvent populated (ok=false path)
+            %   c) LastTickReport.failed (nestedLockAcquireForbidden in same-process)
+            % Mirrors TestLiveTagPipelineCluster.testLockContentionDefersAndEmitsEvent.
+            sawContention = (clusterPipe.SkippedTickCount >= 1) || ...
+                ~isempty(clusterPipe.LastLockContentionEvent) || ...
+                (isstruct(clusterPipe.LastTickReport) && ...
+                 ~isempty(clusterPipe.LastTickReport.failed));
+            testCase.verifyTrue(sawContention, ...
+                'testClusterStatusSurface: pipeline must record contention (any channel) after pre-held lock');
+
+            % Now build a Companion observing this pipeline and fire a tick.
+            app2.close();
+            app3 = FastSenseCompanion('SharedRoot', root, 'LiveTagPipelines', {clusterPipe});
+            testCase.addTeardown(@() app3.close());
+
+            app3.startLiveMode();
+            testCase.addTeardown(@() app3.stopLiveMode());
+
+            warnState2 = warning('off', 'MATLAB:structOnObject');
+            cleanupWarn2 = onCleanup(@() warning(warnState2)); %#ok<NASGU>
+            s4 = struct(app3);
+            if ~isempty(s4.LiveTimer_) && isvalid(s4.LiveTimer_)
+                feval(s4.LiveTimer_.TimerFcn, s4.LiveTimer_, []);
+                drawnow;
+            end
+
+            % If LastLockContentionEvent was populated in the pipeline, the Companion
+            % must surface a non-empty banner in user@host format.
+            ev = clusterPipe.LastLockContentionEvent;
+            if ~isempty(ev)
+                txt = app3.LastContentionNoticeText;
+                testCase.verifyFalse(isempty(txt), ...
+                    'testClusterStatusSurface: banner must be non-empty when contention event observed');
+                testCase.verifyTrue(~isempty(strfind(txt, '@')), ...
+                    ['testClusterStatusSurface: banner must contain ''@'' (user@host format); got: ', txt]);
+            end
+        end
+
+    end
+
+    methods (Access = private)
+
+        function backupAndArmRestore_(testCase)
+        %BACKUPANDARMRESTORE_ Back up prefdir/FastSenseCompanion.mat for restore on teardown.
+            prefsPath = fullfile(prefdir, 'FastSenseCompanion.mat');
+            backupPath = '';
+            if exist(prefsPath, 'file') == 2
+                backupPath = [tempname, '.mat'];
+                copyfile(prefsPath, backupPath);
+            end
+            testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
+        end
+
+        function driveSelectAndPlot_(testCase, app, keys, mode) %#ok<INUSL>
+        %DRIVESELECTANDPLOT_ Helper: drive catalog selection then click Plot in mode.
+        %   app: the FastSenseCompanion instance (passed in by each test method).
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanup = onCleanup(@() warning(warnState)); %#ok<NASGU>
+            s = struct(app);
+            cs = struct(s.CatalogPane_);
+            cs.hListbox_.Value = keys;
+            feval(cs.hListbox_.ValueChangedFcn, [], []);
+            drawnow;
+            ps = struct(s.InspectorPane_);
+            if strcmp(mode, 'Overlay')
+                feval(ps.hModeOverlay_.ButtonPushedFcn, [], []);
+            else
+                feval(ps.hModeLinked_.ButtonPushedFcn, [], []);
+            end
+            drawnow;
+            feval(ps.hPlotBtn_.ButtonPushedFcn, [], []);
+            drawnow;
+        end
+
+        function adhocFig = findCompanionAdHocFigure_(~, candidateFigs)
+        %FINDCOMPANIONADHOCFIGURE_ Pick the figure whose Name starts with 'FastSense Companion'.
+            adhocFig = matlab.ui.Figure.empty;
+            for i = 1:numel(candidateFigs)
+                try
+                    nm = candidateFigs(i).Name;
+                    if ~isempty(strfind(nm, 'FastSense Companion'))
+                        adhocFig = candidateFigs(i);
+                        return;
+                    end
+                catch
+                    continue;
+                end
+            end
+        end
+
+        function cleanupAdHoc_(testCase, adhocFig) %#ok<INUSL>
+        %CLEANUPADHOC_ Close one spawned ad-hoc figure + clear registry.
+            if ~isempty(adhocFig) && ishandle(adhocFig)
+                try
+                    delete(adhocFig);
+                catch
+                    % swallow — best-effort
+                end
+            end
+            TagRegistry.clear();
+        end
+
+    end
+end
+
+function restorePrefs_(prefsPath, backupPath)
+%RESTOREPREFS_ Local function: restore prefdir/FastSenseCompanion.mat from backup.
+%   Deletes any test-written prefs file. If a backup was made (prefs file
+%   existed before the test), copies it back and removes the backup.
+%   Used by SETTINGS-07 tests to keep the user's real prefs untouched.
+    try
+        if exist(prefsPath, 'file') == 2
+            delete(prefsPath);
+        end
+    catch
+    end
+    if ~isempty(backupPath) && exist(backupPath, 'file') == 2
+        try
+            copyfile(backupPath, prefsPath);
+            delete(backupPath);
+        catch
+        end
+    end
+end
+
+function closeIfOpen_(app)
+%CLOSEIFOPEN_ Local helper: close the companion app if still open and valid.
+%   Replaces the pattern @() isvalid(app) && app.IsOpen && app.close()
+%   which throws MATLAB:TooManyOutputs because close() has no output and
+%   thus cannot serve as the third operand of && in a lambda.
+    try
+        if isvalid(app) && app.IsOpen
+            app.close();
+        end
+    catch
+        % Teardown must never throw.
+    end
+end

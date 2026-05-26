@@ -539,11 +539,18 @@ classdef DashboardBuilder < handle
         end
 
         function relayoutWidgets(obj, theme)
-            % Delete existing widget panels
+            % Delete existing widget panels. Prefer the outer cell panel
+            % (hCellPanel) when chrome was rendered — deleting it cascades
+            % to bar + content + widget children. Fall back to hPanel for
+            % unrealized or no-chrome widgets.
             widgets = obj.Engine.Widgets;
             for i = 1:numel(widgets)
-                if ~isempty(widgets{i}.hPanel) && ishandle(widgets{i}.hPanel)
-                    delete(widgets{i}.hPanel);
+                cellH = widgets{i}.hCellPanel;
+                if isempty(cellH) || ~ishandle(cellH)
+                    cellH = widgets{i}.hPanel;
+                end
+                if ~isempty(cellH) && ishandle(cellH)
+                    delete(cellH);
                 end
             end
 
@@ -578,12 +585,16 @@ classdef DashboardBuilder < handle
 
             for i = 1:numel(widgets)
                 w = widgets{i};
-                if isempty(w.hPanel) || ~ishandle(w.hPanel)
+                cellH = w.hCellPanel;
+                if isempty(cellH) || ~ishandle(cellH)
+                    cellH = w.hPanel;
+                end
+                if isempty(cellH) || ~ishandle(cellH)
                     obj.Overlays{i} = struct('hDragBar', [], 'hResize', []);
                     continue;
                 end
 
-                panelPos = get(w.hPanel, 'Position');
+                panelPos = get(cellH, 'Position');
                 ov = struct();
                 idx = i;
 
@@ -659,7 +670,11 @@ classdef DashboardBuilder < handle
             obj.DragIdx = widgetIdx;
             w = obj.Engine.Widgets{widgetIdx};
             obj.DragOrigGrid = w.Position;
-            obj.DragOrigNorm = get(w.hPanel, 'Position');
+            cellH = w.hCellPanel;
+            if isempty(cellH) || ~ishandle(cellH)
+                cellH = w.hPanel;
+            end
+            obj.DragOrigNorm = get(cellH, 'Position');
 
             % Cache step sizes to avoid recalc on every mouse move
             [obj.CachedStepW, obj.CachedStepH] = ...
@@ -677,7 +692,11 @@ classdef DashboardBuilder < handle
             obj.DragIdx = widgetIdx;
             w = obj.Engine.Widgets{widgetIdx};
             obj.DragOrigGrid = w.Position;
-            obj.DragOrigNorm = get(w.hPanel, 'Position');
+            cellH = w.hCellPanel;
+            if isempty(cellH) || ~ishandle(cellH)
+                cellH = w.hPanel;
+            end
+            obj.DragOrigNorm = get(cellH, 'Position');
 
             [obj.CachedStepW, obj.CachedStepH] = ...
                 obj.Engine.Layout.canvasStepSizes();
@@ -751,9 +770,16 @@ classdef DashboardBuilder < handle
                 obj.clearOverlays();
                 obj.createOverlays(theme);
             else
-                % Fast path: just reposition the panel and overlays in-place
+                % Fast path: just reposition the panel and overlays in-place.
+                % Move the OUTER cell (hCellPanel) so the bar + content
+                % cascade with it; fall back to hPanel for unrealized or
+                % no-chrome widgets.
                 pos = layout.computePosition(newGrid);
-                set(w.hPanel, 'Position', pos);
+                cellH = w.hCellPanel;
+                if isempty(cellH) || ~ishandle(cellH)
+                    cellH = w.hPanel;
+                end
+                set(cellH, 'Position', pos);
 
                 handleH = 0.022;
                 rsW = 0.012; rsH = 0.012;

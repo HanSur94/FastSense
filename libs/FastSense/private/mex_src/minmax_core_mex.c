@@ -7,9 +7,11 @@
  *   x, y:        double row vectors (contiguous, no NaN)
  *   numBuckets:  scalar integer
  *
- *   Returns: xOut, yOut — double row vectors of length 2*numBuckets
- *            Each bucket produces (min, max) or (max, min) pair,
- *            ordered to preserve X monotonicity.
+ *   Returns: xOut, yOut — double row vectors of length
+ *            2*numBuckets (when the final bucket's chosen extreme
+ *            already lands on x[n-1]) OR 2*numBuckets+1 (when a
+ *            tail-anchor (x[n-1], y[n-1]) was appended to pin the
+ *            displayed line to the data tail — see 260512-c5x).
  *
  * SIMD strategy: within each bucket, scan elements with SIMD min/max
  * reduction, then scalar pass to find indices. The index tracking
@@ -17,6 +19,7 @@
  * via SIMD vector reduction which is the hot path for large buckets.
  */
 
+#include <string.h>
 #include "mex.h"
 #include "simd_utils.h"
 
@@ -36,17 +39,35 @@ void mexFunction(int nlhs, mxArray *plhs[],
     const double *x = mxGetPr(prhs[0]);
     const double *y = mxGetPr(prhs[1]);
     const size_t n = mxGetNumberOfElements(prhs[0]);
-    const size_t nb = (size_t)mxGetScalar(prhs[2]);
+    size_t nb = (size_t)mxGetScalar(prhs[2]);
 
-    const size_t bucketSize = n / nb;
-    const size_t usable = bucketSize * nb;
-    const size_t outLen = 2 * nb;
+    /* Bucket-math: when nb*bucketSize << n, the previous code dumped the
+     * entire remainder into the LAST bucket (end = n on b == nb - 1),
+     * making that bucket cover hours of data while every other bucket
+     * covered ~bucketSize samples. The interior min/max emissions of
+     * that fat bucket sprawled across the chart's right edge as a fake
+     * sawtooth. Bumping nb to n/bucketSize keeps every bucket the same
+     * width and shrinks the remainder to < bucketSize, so the last
+     * bucket's time span matches its siblings.
+     * (260512-live-mode-companion-adhoc-tail-spike) */
+    const size_t bucketSize = (nb > 0) ? (n / nb) : 0;
+    if (bucketSize > 0) {
+        size_t nb_eff = n / bucketSize;
+        if (nb_eff > nb) nb = nb_eff;
+    }
 
-    /* Allocate output */
-    plhs[0] = mxCreateDoubleMatrix(1, outLen, mxREAL);
-    plhs[1] = mxCreateDoubleMatrix(1, outLen, mxREAL);
-    double *xOut = mxGetPr(plhs[0]);
-    double *yOut = mxGetPr(plhs[1]);
+    /* Tail-anchor (260512-c5x): the last bucket emits its min/max pair
+     * at INTERIOR X positions; when neither lands on x[n-1] the
+     * displayed line falls short of the actual data tail. Allocate
+     * worst-case (2*nb + 1) into a temporary buffer, fill the bucket
+     * pairs as before, then conditionally append (x[n-1], y[n-1]) iff
+     * it strictly exceeds the current last-X to keep the chart edge
+     * pinned to live data without breaking monotonicity.
+     * Output length: 2*nb or 2*nb+1. */
+    double *xBuf = (double *)mxMalloc((2 * nb + 1) * sizeof(double));
+    double *yBuf = (double *)mxMalloc((2 * nb + 1) * sizeof(double));
+    double *xOut = xBuf;
+    double *yOut = yBuf;
 
     size_t b;
     for (b = 0; b < nb; b++) {
@@ -122,4 +143,21 @@ void mexFunction(int nlhs, mxArray *plhs[],
             yOut[out_base + 1] = ymin_val;
         }
     }
+
+    /* Tail-anchor (260512-c5x): append (x[n-1], y[n-1]) iff its X
+     * strictly exceeds the last emitted X — preserves monotonicity and
+     * pins the rendered line to the data tail. */
+    size_t finalLen = 2 * nb;
+    if (x[n - 1] > xBuf[2 * nb - 1]) {
+        xBuf[2 * nb] = x[n - 1];
+        yBuf[2 * nb] = y[n - 1];
+        finalLen = 2 * nb + 1;
+    }
+
+    plhs[0] = mxCreateDoubleMatrix(1, finalLen, mxREAL);
+    plhs[1] = mxCreateDoubleMatrix(1, finalLen, mxREAL);
+    memcpy(mxGetPr(plhs[0]), xBuf, finalLen * sizeof(double));
+    memcpy(mxGetPr(plhs[1]), yBuf, finalLen * sizeof(double));
+    mxFree(xBuf);
+    mxFree(yBuf);
 }

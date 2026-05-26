@@ -1,5 +1,19 @@
 classdef TestDashboardEngine < matlab.unittest.TestCase
     methods (TestClassSetup)
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on headless Linux CI — same R2021b
+            %   MATLAB dispatcher segfault as the other MEX-heavy gated
+            %   classes. Tests build DashboardEngine + addWidget('fastsense')
+            %   + render which exercises the MEX downsample path; on
+            %   R2021b headless Linux the dispatcher faults on entry
+            %   after the long TestCompanionEventViewer suite has run.
+            %   Interactive MATLAB / macOS / Windows CI run the full suite.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestDashboardEngine: pre-emptive headless-Linux gate (MEX-heavy class, R2021b dispatcher bug)');
+        end
+
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             install();

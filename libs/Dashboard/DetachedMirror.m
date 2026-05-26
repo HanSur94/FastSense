@@ -259,6 +259,24 @@ classdef DetachedMirror < handle
             if isprop(cloned, 'EventStoreObj') && ~isempty(original.EventStoreObj)
                 cloned.EventStoreObj = original.EventStoreObj;
             end
+            % FastSenseWidget event-marker store (260508-eu2). EventStore is
+            % intentionally absent from toStruct/fromStruct (runtime handle).
+            % Copy it post-clone so the render guard at FastSenseWidget.m:103
+            % forwards markers to the inner FastSense. The LastEvent*_ change-
+            % detection cache is SetAccess=private so it cannot be copied from
+            % outside the class — refreshEventMarkers_ rebuilds it on first tick.
+            if isprop(cloned, 'EventStore') && ~isempty(original.EventStore)
+                cloned.EventStore = original.EventStore;
+            end
+            % Phase 1032 PLOG-VIZ-03 — copy ShowPlantLog boolean from original
+            % to clone. toStruct/fromStruct round-trip (Plan 01) already
+            % preserves the key, but this explicit copy is a belt-and-
+            % suspenders so an accidental future regression in serialization
+            % doesn't silently break detach parity (CONTEXT.md Decision G).
+            if isa(cloned, 'FastSenseWidget') && isa(original, 'FastSenseWidget') && ...
+                    isprop(original, 'ShowPlantLog')
+                cloned.ShowPlantLog = original.ShowPlantLog;
+            end
         end
 
         function s = stripSensorRefs(s)

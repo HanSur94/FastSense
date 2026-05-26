@@ -8,6 +8,7 @@ function teardownDemo(ctx)
 %     writerTimer - MATLAB timer returned by makeDataGenerator
 %     pipeline    - LiveTagPipeline returned by startLivePipeline
 %     engine      - DashboardEngine (wired in by plan 02)
+%     companion   - FastSenseCompanion handle (added in Phase 1023)
 %
 %   Regardless of ctx contents, the final step always clears TagRegistry.
 %
@@ -90,6 +91,20 @@ function teardownDemo(ctx)
                 try delete(stragglers(i)); catch, end
             end
         catch
+        end
+    end
+
+    % ---- Companion (Phase 1023) ----
+    % Idempotent: FastSenseCompanion.close() is safe to call multiple times
+    % (Phase 1018 lock); demoClose_ in buildDashboard.m may have already closed
+    % it. Best-effort -- swallow any error so subsequent steps still run.
+    if isfield(ctx, 'companion') && ~isempty(ctx.companion)
+        try
+            if isvalid(ctx.companion)
+                ctx.companion.close();
+            end
+        catch
+            % Best-effort.
         end
     end
 
