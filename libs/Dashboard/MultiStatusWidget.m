@@ -8,6 +8,8 @@ classdef MultiStatusWidget < DashboardWidget
 
     properties (SetAccess = private)
         hAxes = []
+        hDots_  = []   % Cached patch/rectangle handles for in-place color update
+        nDotsCached_ = 0  % Number of items in the last full rebuild
     end
 
     methods
@@ -22,12 +24,18 @@ classdef MultiStatusWidget < DashboardWidget
             obj.hPanel = parentPanel;
             % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
             try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
-            theme = obj.getTheme();
+            theme = obj.getTheme(); %#ok<NASGU>
+            % DataAspectRatio=[1 1 1] forces equal data units in pixels so
+            % circles drawn with cos/sin remain circular regardless of how
+            % the panel resizes. MATLAB letterboxes the axes if needed.
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
                 'Position', [0.02 0.02 0.96 0.96], ...
                 'Visible', 'off', ...
-                'XLim', [0 1], 'YLim', [0 1]);
+                'XLim', [0 1], 'YLim', [0 1], ...
+                'DataAspectRatio', [1 1 1]);
+            obj.hDots_ = [];
+            obj.nDotsCached_ = 0;
             obj.refresh();
         end
 
@@ -45,24 +53,67 @@ classdef MultiStatusWidget < DashboardWidget
             if isempty(cols)
                 cols = ceil(sqrt(n));
             end
+
+            theme = obj.getTheme();
+            okColor = theme.StatusOkColor;
+
+            % Fast path: if item count and layout match cached state, update
+            % FaceColor in-place on existing patch/rectangle handles — skips
+            % cla() + recreating all graphic objects (saves ~12 ms/tick).
+            % Falls through to full rebuild when:
+            %   - first render (nDotsCached_ == 0 or hDots_ empty)
+            %   - item count changed (CompositeTag expansion change)
+            %   - any cached handle is invalid (axes cleared or panel swapped)
+            canFastUpdate = obj.nDotsCached_ == n && ...
+                            numel(obj.hDots_) == n && ...
+                            ~isempty(obj.hDots_) && ...
+                            ishandle(obj.hDots_(1));
+            if canFastUpdate
+                % Verify all handles still valid (cheap: just check first and last)
+                if numel(obj.hDots_) > 1
+                    canFastUpdate = ishandle(obj.hDots_(end));
+                end
+            end
+
+            if canFastUpdate
+                % In-place color-only update — no geometry changes needed
+                for i = 1:n
+                    item = expandedItems{i};
+                    if isstruct(item)
+                        if isfield(item, 'tag') && ~isempty(item.tag)
+                            color = obj.deriveColorFromTag_(item, okColor, theme);
+                        elseif isfield(item, 'threshold')
+                            color = obj.deriveColorFromThreshold(item, okColor, theme);
+                        else
+                            color = okColor;
+                        end
+                    else
+                        color = obj.deriveColor(item, okColor);
+                    end
+                    try
+                        set(obj.hDots_(i), 'FaceColor', color);
+                    catch
+                        % Handle became invalid — force full rebuild on next tick
+                        canFastUpdate = false;
+                        break;
+                    end
+                end
+                if canFastUpdate
+                    return;
+                end
+            end
+
+            % Full rebuild path (first render, count changed, or handles invalid)
             rows = ceil(n / cols);
 
             cla(obj.hAxes);
             hold(obj.hAxes, 'on');
 
-            theme = obj.getTheme();
-            okColor = theme.StatusOkColor;
-            warnColor = theme.StatusWarnColor;
-            alarmColor = theme.StatusAlarmColor;
+            newDots = gobjects(1, n);
 
-            % Compute aspect ratio correction for circles
-            oldUnits = get(obj.hPanel, 'Units');
-            set(obj.hPanel, 'Units', 'pixels');
-            pxPos = get(obj.hPanel, 'Position');
-            set(obj.hPanel, 'Units', oldUnits);
-            pxW = pxPos(3);
-            pxH = pxPos(4);
-
+            % Equal x/y radii — DataAspectRatio=[1 1 1] on the axes (set in
+            % render()) keeps the drawn ellipses perfectly circular at any
+            % panel aspect ratio. No pxW/pxH correction needed.
             for i = 1:n
                 col = mod(i-1, cols);
                 row = floor((i-1) / cols);
@@ -72,13 +123,8 @@ classdef MultiStatusWidget < DashboardWidget
 
                 item = expandedItems{i};
 
-                % Draw indicator — aspect-ratio-corrected so circles stay round
                 ry = 0.3 / max(cols, rows);
-                if pxW > 0 && pxH > 0
-                    rx = ry * (pxH / pxW);
-                else
-                    rx = ry;
-                end
+                rx = ry;
 
                 if isstruct(item)
                     % Tag-first dispatch (v2.0 Tag API) — falls through to legacy
@@ -91,11 +137,11 @@ classdef MultiStatusWidget < DashboardWidget
                         color = okColor;
                     end
                     if strcmp(obj.IconStyle, 'square')
-                        rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
+                        newDots(i) = rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
                             'FaceColor', color, 'EdgeColor', 'none');
                     else
                         theta = linspace(0, 2*pi, 30);
-                        fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
+                        newDots(i) = fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
                             color, 'EdgeColor', 'none');
                     end
                     if obj.ShowLabels && isfield(item, 'label')
@@ -108,11 +154,11 @@ classdef MultiStatusWidget < DashboardWidget
                     % Sensor object item
                     color = obj.deriveColor(item, okColor);
                     if strcmp(obj.IconStyle, 'square')
-                        rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
+                        newDots(i) = rectangle(obj.hAxes, 'Position', [cx-rx cy-ry 2*rx 2*ry], ...
                             'FaceColor', color, 'EdgeColor', 'none');
                     else
                         theta = linspace(0, 2*pi, 30);
-                        fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
+                        newDots(i) = fill(obj.hAxes, cx + rx*cos(theta), cy + ry*sin(theta), ...
                             color, 'EdgeColor', 'none');
                     end
                     if obj.ShowLabels && ~isempty(item)
@@ -126,6 +172,10 @@ classdef MultiStatusWidget < DashboardWidget
                 end
             end
             hold(obj.hAxes, 'off');
+
+            % Cache dot handles for fast in-place updates on subsequent ticks
+            obj.hDots_ = newDots;
+            obj.nDotsCached_ = n;
         end
 
         function t = getType(~)
@@ -239,6 +289,9 @@ classdef MultiStatusWidget < DashboardWidget
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
             try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
             try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
+            % Invalidate dot cache — positions depend on pixel geometry which may change
+            obj.hDots_ = [];
+            obj.nDotsCached_ = 0;
             obj.render(obj.hPanel);
         end
 

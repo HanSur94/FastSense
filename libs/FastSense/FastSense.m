@@ -88,6 +88,7 @@ classdef FastSense < handle
         ShowThresholdLabels = false  % show inline name labels on threshold lines
         ShowEventMarkers = true     % toggle event round-marker overlay (EVENT-07)
         EventStore = []             % EventStore handle for event overlay queries
+        HoverCrosshair = true       % enable hover crosshair + multi-line datatip (set false to disable; see HoverCrosshair.m)
     end
 
     % ====================== INTERNAL DATA STORAGE ========================
@@ -149,9 +150,28 @@ classdef FastSense < handle
         DragOffsetPx_         = [0 0]     % [dx dy] mouse offset from panel origin at drag start
     end
 
+    % 260513-v69 two-click event-pick state machine.
+    % Public access so tests can drive the state machine through a state-seam
+    % (writing EventPickT1_, reading IsEventPicking_ / PrevAxesBDFcn_). The
+    % trailing-underscore convention still marks these as internal: production
+    % callers must go through startEventPick_ / cancelEventPick_, never poke
+    % these directly.
+    properties (Access = public)
+        IsEventPicking_       = false     % event-pick mode active flag (260513-v69)
+        EventPickT1_          = []        % first-click x coordinate
+        EventPickEngine_      = []        % DashboardEngine handle (needed for persist + store)
+        PrevAxesBDFcn_        = []        % saved hAxes.ButtonDownFcn during pick mode
+        PrevFigKPFcn_         = []        % saved figure WindowKeyPressFcn during pick mode
+        EventPickPatch_         = []      % patch handle (Tag='EventPickRegion') for shaded region during pick (260513-voo)
+        PrevFigWBMFcn_          = []      % saved figure WindowButtonMotionFcn during pick mode (260513-voo)
+        EventPickModalListener_ = []      % event.listener on hEventDetails_ ObjectBeingDestroyed (260513-voo)
+    end
+
     % Phase 1012 event-details popup handle — test-readable
     properties (SetAccess = private)
         hEventDetails_ = []               % popup figure handle (empty when no popup open)
+        EventContextMenu_ = []            % cached uicontextmenu (lazy; one per FastSense)
+        HoverCrosshair_ = []              % HoverCrosshair instance (created in render() when HoverCrosshair=true)
     end
 
     % ===================== PERFORMANCE TUNING ============================
@@ -215,6 +235,7 @@ classdef FastSense < handle
             defaults.YScale = cfg.YScale;
             defaults.StorageMode = cfg.StorageMode;
             defaults.MemoryLimit = cfg.MemoryLimit;
+            defaults.HoverCrosshair = true;
             [opts, ~] = parseOpts(defaults, varargin);
 
             obj.ParentAxes = opts.Parent;
@@ -229,6 +250,7 @@ classdef FastSense < handle
             obj.YScale = opts.YScale;
             obj.StorageMode = opts.StorageMode;
             obj.MemoryLimit = opts.MemoryLimit;
+            obj.HoverCrosshair = logical(opts.HoverCrosshair);
             obj.Theme = resolveTheme(opts.Theme, cfg.Theme);
         end
 
@@ -939,6 +961,7 @@ classdef FastSense < handle
             %   fp.ADDTAG(stateTag)      — routes to a staircase line (numeric Y)
             %   fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
             %   fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
+            %   fp.ADDTAG(derivedTag)    — routes to addLine via tag.getXY (continuous derived series)
             %
             %   Dispatches by tag.getKind() — NO isa() subtype checks (Pitfall 1).
             %   Must be called BEFORE render() (enforced by IsRendered guard).
@@ -949,7 +972,7 @@ classdef FastSense < handle
             %     FastSense:stateTagCellstrNotSupported  — cellstr Y StateTag (deferred)
             %     FastSense:alreadyRendered              — render() already called
             %
-            %   See also addLine, addThreshold, Tag, SensorTag, StateTag.
+            %   See also addLine, addThreshold, Tag, SensorTag, StateTag, DerivedTag.
 
             if obj.IsRendered
                 error('FastSense:alreadyRendered', ...
@@ -969,6 +992,9 @@ classdef FastSense < handle
                     [x, y] = tag.getXY();
                     obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
                 case 'composite'
+                    [x, y] = tag.getXY();
+                    obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
+                case 'derived'
                     [x, y] = tag.getXY();
                     obj.addLine(x, y, 'DisplayName', tag.Name, varargin{:});
                 otherwise
@@ -1566,6 +1592,32 @@ classdef FastSense < handle
                 end
                 drawnow;
             end
+
+            % Attach hover crosshair (default on; opt-out via constructor or property).
+            % Skip when MATLAB has no interactive Java desktop (CI / -batch /
+            % -nodesktop / -nodisplay even with xvfb): the WindowButtonMotionFcn
+            % + figure-destroy listener wiring across 25+ FastSense instances in
+            % run_demo segfaults R2020b headless. Hover is mouse-driven and
+            % therefore irrelevant in that environment.
+            isInteractive = false;
+            try
+                isInteractive = usejava('desktop');
+                if exist('batchStartupOptionUsed', 'builtin') == 5 && ...
+                        batchStartupOptionUsed
+                    isInteractive = false;
+                end
+            catch
+            end
+            if obj.HoverCrosshair && isempty(obj.HoverCrosshair_) && isInteractive
+                try
+                    obj.HoverCrosshair_ = HoverCrosshair(obj);
+                catch ME
+                    if obj.Verbose
+                        fprintf('[FastSense] HoverCrosshair init failed: %s\n', ME.message);
+                    end
+                    obj.HoverCrosshair_ = [];
+                end
+            end
         end
 
         function result = lookupMetadata(obj, lineIdx, xValue)
@@ -1855,6 +1907,37 @@ classdef FastSense < handle
             end
         end
 
+        function setXLimQuiet(obj, tStart, tEnd)
+            %SETXLIMQUIET Set XLim without triggering XLimMode listener overhead.
+            %   fp.SETXLIMQUIET(tStart, tEnd) is a performance-optimised
+            %   alternative to calling xlim(ax, [tStart tEnd]) from external
+            %   callers (e.g. FastSenseWidget.setTimeRange). The plain
+            %   xlim() call fires the XLimMode PostSet listener every time,
+            %   which routes to onXLimModeChanged -> scheduleDeferredXLimCheck
+            %   and creates a new 10 ms one-shot timer per call.  That timer
+            %   overhead adds ~4 ms per FastSenseWidget per live tick.
+            %
+            %   This method suppresses the overhead by briefly setting
+            %   IsPropagating = true so the listener's early-return fires.
+            %   The XLim value is still applied directly; the deferred check
+            %   is simply skipped because we are not responding to a user
+            %   gesture (resetplotview / Home button).
+            %
+            %   Note: does NOT update CachedXLim (that is the caller's
+            %   responsibility if needed).  Intended only for the
+            %   dashboard time-sync path, not for user-driven zoom/pan.
+            if ~obj.IsRendered || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
+                return;
+            end
+            obj.IsPropagating = true;
+            try
+                set(obj.hAxes, 'XLim', [tStart, tEnd]);
+                set(obj.hAxes, 'XLimMode', 'manual');
+            catch
+            end
+            obj.IsPropagating = false;
+        end
+
         function stopLive(obj)
             %STOPLIVE Stop live mode polling.
             %   fp.STOPLIVE() stops the live timer, cleans up the deferred
@@ -1893,6 +1976,12 @@ classdef FastSense < handle
             %   timer callbacks referencing deleted objects.
             %
             %   See also stopLive, stopRefineTimer.
+            % Tear down HoverCrosshair FIRST so its chained motion handler
+            % is restored on the figure before any other teardown runs.
+            if ~isempty(obj.HoverCrosshair_) && isvalid(obj.HoverCrosshair_)
+                try delete(obj.HoverCrosshair_); catch; end
+            end
+            obj.HoverCrosshair_ = [];
             obj.stopRefineTimer();
             try obj.stopLive(); catch; end
             % Clean up disk-backed DataStores
@@ -1963,6 +2052,48 @@ classdef FastSense < handle
             %
             %   See also startLive, applyViewMode.
             obj.LiveViewMode = mode;
+        end
+
+        function snapToTail(obj)
+            %SNAPTOTAIL Slide XLim window so its right edge sits just past the data tail.
+            %   fp.SNAPTOTAIL() does a one-shot "jump to now" — finds the
+            %   maximum X across all lines, then sets XLim to
+            %   [xMax - currentWindowWidth + pad, xMax + pad] where pad =
+            %   2% of the current window width. The small right-edge
+            %   padding leaves visual breathing room between the latest
+            %   data point and the chart's right border so the line tail
+            %   doesn't get clipped against the axes frame.
+            %
+            %   No-op when the FastSense is not rendered, has no lines, or
+            %   has no finite data X values.
+            %
+            %   Used by DashboardToolbar's Follow toggle to immediately snap
+            %   the chart to live tail when the user enables Follow from a
+            %   panned-away view. (260512-hrn)
+            %
+            %   See also setViewMode, applyViewMode, setXLimQuiet.
+            if ~obj.IsRendered || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
+                return;
+            end
+            xMax = -Inf;
+            for i = 1:numel(obj.Lines)
+                if obj.lineNumPoints(i) > 0
+                    [~, xiMax] = obj.lineXRange(i);
+                    if xiMax > xMax
+                        xMax = xiMax;
+                    end
+                end
+            end
+            if ~isfinite(xMax)
+                return;
+            end
+            currentXLim = get(obj.hAxes, 'XLim');
+            w = currentXLim(2) - currentXLim(1);
+            if ~(isfinite(w) && w > 0)
+                return;
+            end
+            pad = 0.02 * w;
+            obj.setXLimQuiet(xMax - w + pad, xMax + pad);
         end
 
         function runLive(obj)
@@ -2276,13 +2407,29 @@ classdef FastSense < handle
 
         function onEventMarkerClick_(obj, src, ~)
             %ONEVENTMARKERCLICK_ ButtonDownFcn dispatcher for event markers.
-            %   Hidden public so TestFastSenseEventClick can call it for
-            %   direct-dispatch testing of the click -> details-popup path.
+            %   Hidden public so TestFastSenseEventClick can call it for direct
+            %   dispatch of the click -> details-popup path. Branches on figure
+            %   SelectionType: 'normal' -> openEventDetails_; 'alt' (right-click)
+            %   -> builds/shows uicontextmenu with quick-nav actions.
             ud = get(src, 'UserData');
             if isempty(ud) || ~isfield(ud, 'eventId'), return; end
             if isempty(obj.EventByIdMap_) || ~obj.EventByIdMap_.isKey(ud.eventId), return; end
             ev = obj.EventByIdMap_(ud.eventId);
-            obj.openEventDetails_(ev);
+
+            selType = 'normal';
+            try
+                if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                    selType = get(obj.hFigure, 'SelectionType');
+                end
+            catch
+            end
+
+            switch selType
+                case 'alt'
+                    obj.showEventContextMenu_(src, ev);
+                otherwise   % 'normal', 'extend', 'open' all fall through to details
+                    obj.openEventDetails_(ev);
+            end
         end
     end
 
@@ -2290,6 +2437,116 @@ classdef FastSense < handle
     % Internal helpers: timer callbacks, view mode, theme, listeners,
     % downsampling pipeline, pyramid management, and link propagation.
     methods (Access = private)
+        function showEventContextMenu_(obj, src, ev)
+            %SHOWEVENTCONTEXTMENU_ Lazy-build + bind a 4-item uicontextmenu for an event marker.
+            %   Constructs the menu on first right-click, caches it on
+            %   obj.EventContextMenu_, and rebinds every item's callback to the
+            %   currently right-clicked event id. Attaches to every existing
+            %   badge so subsequent right-clicks need no re-attach.
+            cm = obj.EventContextMenu_;
+            if isempty(cm) || ~ishandle(cm)
+                cm = uicontextmenu(obj.hFigure);
+                uimenu(cm, 'Label', 'Open details…');
+                uimenu(cm, 'Label', 'Jump to next violation');
+                uimenu(cm, 'Label', 'Jump to previous violation');
+                uimenu(cm, 'Label', 'Copy event ID');
+                obj.EventContextMenu_ = cm;
+            end
+
+            % Rebind callbacks to this event id. Locate items by Label so
+            % child-order assumptions don't break across MATLAB/Octave.
+            items = get(cm, 'Children');
+            labels = {'Open details…', 'Jump to next violation', ...
+                      'Jump to previous violation', 'Copy event ID'};
+            for k = 1:numel(labels)
+                mi = obj.findMenuByLabel_(items, labels{k});
+                if isempty(mi), continue; end
+                switch labels{k}
+                    case 'Open details…'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.openEventDetails_(ev));
+                    case 'Jump to next violation'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.jumpToAdjacentEvent_(ev, +1));
+                    case 'Jump to previous violation'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.jumpToAdjacentEvent_(ev, -1));
+                    case 'Copy event ID'
+                        set(mi, 'MenuSelectedFcn', @(~,~) obj.copyEventId_(ev));
+                end
+            end
+
+            % Attach the cached menu to every existing marker so further
+            % right-clicks pop the menu directly without re-entering this branch.
+            for h = 1:numel(obj.EventMarkerHandles_)
+                hh = obj.EventMarkerHandles_{h};
+                if ishandle(hh) && strcmp(get(hh, 'Type'), 'line')
+                    try set(hh, 'UIContextMenu', cm); catch; end
+                end
+            end
+            % Also attach to the source that triggered this right-click — on
+            % this first call MATLAB has already consumed the right-click
+            % event, so no menu pops automatically; subsequent right-clicks
+            % on any marker will show the menu natively.
+            try set(src, 'UIContextMenu', cm); catch; end
+        end
+
+        function mi = findMenuByLabel_(~, items, label)
+            %FINDMENUBYLABEL_ Linear search by Label (Octave-safe; avoids dependence on order).
+            mi = [];
+            for i = 1:numel(items)
+                try
+                    if strcmp(get(items(i), 'Label'), label)
+                        mi = items(i);
+                        return;
+                    end
+                catch
+                end
+            end
+        end
+
+        function jumpToAdjacentEvent_(obj, ev, direction)
+            %JUMPTOADJACENTEVENT_ Pan x-axis to next/prev event for the same tag.
+            %   direction: +1 = next, -1 = previous. Preserves current x-span.
+            try
+                if isempty(obj.EventByIdMap_) || ~ishandle(obj.hAxes), return; end
+                tagKey = '';
+                if ~isempty(ev.TagKeys); tagKey = char(ev.TagKeys{1}); end
+                if isempty(tagKey), return; end
+
+                % Collect all events for this tag, sorted by StartTime.
+                ids = obj.EventByIdMap_.keys();
+                times = [];
+                for k = 1:numel(ids)
+                    e = obj.EventByIdMap_(ids{k});
+                    if any(strcmp(e.TagKeys, tagKey))
+                        times(end+1) = e.StartTime; %#ok<AGROW>
+                    end
+                end
+                if numel(times) < 2, return; end
+                times = sort(times);
+                if direction > 0
+                    target = times(find(times > ev.StartTime, 1, 'first'));
+                else
+                    target = times(find(times < ev.StartTime, 1, 'last'));
+                end
+                if isempty(target), return; end
+
+                xl = get(obj.hAxes, 'XLim');
+                span = xl(2) - xl(1);
+                set(obj.hAxes, 'XLim', [target - span/2, target + span/2]);
+            catch
+                % Best-effort navigation; never crash on bad event metadata.
+            end
+        end
+
+        function copyEventId_(~, ev)
+            %COPYEVENTID_ Copy ev.Id to system clipboard. Octave fallback: warn.
+            try
+                clipboard('copy', char(ev.Id));
+            catch
+                warning('FastSense:clipboardUnavailable', ...
+                    'Clipboard not available on this platform. Event ID: %s', char(ev.Id));
+            end
+        end
+
         function renderEventLayer_(obj)
             %RENDEREVENTLAYER_ Draw round markers per event (EVENT-07 + Phase 1012).
             %   Phase 1012 refactor: one line() per event so each marker carries
@@ -2402,6 +2659,9 @@ classdef FastSense < handle
                         'ButtonDownFcn', @(src, evt) obj.onEventMarkerClick_(src, evt), ...
                         'UserData', struct('eventId', ev.Id, 'tagKey', char(tag.Key)));
                     obj.EventMarkerHandles_{end+1} = h;
+                    if ~isempty(obj.EventContextMenu_) && ishandle(obj.EventContextMenu_)
+                        try set(h, 'UIContextMenu', obj.EventContextMenu_); catch; end
+                    end
                     % Glyph overlay — clicks pass through to badge beneath.
                     % Clipping='off' so the glyph isn't cut when the marker
                     % sits on the axes edge (open events at threshold peak).
@@ -2653,13 +2913,467 @@ classdef FastSense < handle
                 obj.closeEventDetails_();
             end
         end
+
+        % ============================================================
+        % 260513-v69 - Two-click event-pick state machine.
+        % Replaces the modal-dialog trigger from 260513-snt; reuses
+        % CreateEventDialog.persistEventStatic for persistence and
+        % openEventDetails_ for the Notes-editing handoff. Hidden so
+        % DashboardEngine.openCreateEventDialog_ can call startEventPick_
+        % and tests can call onPickClick_ / onPickKey_ / completeEventPick_
+        % directly.
+        % ============================================================
+        function startEventPick_(obj, engine)
+            %STARTEVENTPICK_ Enter two-click event-pick mode (260513-v69).
+            %   Toggle-cancels if already active. Saves axes ButtonDownFcn
+            %   and figure WindowKeyPressFcn, installs our handlers, draws
+            %   hint. WindowButtonMotionFcn is never touched so
+            %   HoverCrosshair stays fully functional.
+            if obj.IsEventPicking_
+                obj.cancelEventPick_();    % toggle-cancel; no throw.
+                return;
+            end
+            if isempty(engine) || ~isa(engine, 'DashboardEngine')
+                error('FastSense:eventPickNoEngine', ...
+                    'startEventPick_ requires a DashboardEngine; got %s.', class(engine));
+            end
+            if ~obj.IsRendered || isempty(obj.hAxes) || ~ishandle(obj.hAxes)
+                error('FastSense:eventPickNotRendered', ...
+                    'FastSense must be rendered before entering event-pick mode.');
+            end
+            obj.EventPickEngine_ = engine;
+            obj.PrevAxesBDFcn_   = get(obj.hAxes, 'ButtonDownFcn');
+            set(obj.hAxes, 'ButtonDownFcn', @(s,e) obj.onPickClick_(s, e));
+            hFig = ancestor(obj.hAxes, 'figure');
+            if ~isempty(hFig) && ishandle(hFig)
+                obj.PrevFigKPFcn_ = get(hFig, 'WindowKeyPressFcn');
+                set(hFig, 'WindowKeyPressFcn', @(s,e) obj.onPickKey_(s, e));
+                % 260513-voo: chain figure WindowButtonMotionFcn so we get
+                % live-preview motion while HoverCrosshair continues to work.
+                obj.PrevFigWBMFcn_ = get(hFig, 'WindowButtonMotionFcn');
+                set(hFig, 'WindowButtonMotionFcn', @(s,e) obj.onPickMotion_(s, e));
+            end
+            obj.drawPickHint_('Click START of event (Right-click or ESC to cancel)...');
+            obj.IsEventPicking_ = true;
+        end
+
+        function cancelEventPick_(obj)
+            %CANCELEVENTPICK_ Exit pick mode + cleanup. Idempotent. Delegates to onEventDetailsClosed_ (260513-voo).
+            %   Preserves the v69 Test 7 contract: silent no-op when not
+            %   picking AND no patch alive (axes children count unchanged).
+            patchAlive = ~isempty(obj.EventPickPatch_) && ishandle(obj.EventPickPatch_);
+            if ~obj.IsEventPicking_ && ~patchAlive
+                return;
+            end
+            obj.onEventDetailsClosed_();
+        end
+
+        function onPickClick_(obj, ~, ~)
+            %ONPICKCLICK_ Axes ButtonDownFcn during pick mode. Right-click cancels.
+            if ~obj.IsEventPicking_, return; end
+            hFig = ancestor(obj.hAxes, 'figure');
+            try
+                sel = '';
+                if ~isempty(hFig) && ishandle(hFig)
+                    sel = get(hFig, 'SelectionType');
+                end
+                if strcmp(sel, 'alt')
+                    obj.cancelEventPick_();
+                    return;
+                end
+            catch
+            end
+            try
+                cp = get(obj.hAxes, 'CurrentPoint');
+                x  = cp(1, 1);
+            catch
+                return;
+            end
+            if isempty(obj.EventPickT1_)
+                obj.EventPickT1_ = x;
+                obj.drawPickLine_(x);
+                obj.createPickPatch_(x);          % 260513-voo: zero-width shaded region
+                obj.updatePickHint_('Click END of event (Right-click or ESC to cancel)...');
+            else
+                % 260513-voo: snap the patch to the final sorted interval BEFORE
+                % handing off, so the modal opens with correct decoration.
+                obj.finalizePickPatch_(obj.EventPickT1_, x);
+                obj.completeEventPick_(obj.EventPickT1_, x);
+            end
+        end
+
+        function onPickKey_(obj, src, evt)
+            %ONPICKKEY_ Figure WindowKeyPressFcn during pick. ESC cancels; chain otherwise.
+            try
+                if isstruct(evt) || isobject(evt)
+                    k = '';
+                    if isprop(evt, 'Key') || isfield(evt, 'Key')
+                        k = lower(char(evt.Key));
+                    end
+                    if strcmp(k, 'escape')
+                        obj.cancelEventPick_();
+                        return;
+                    end
+                end
+            catch
+            end
+            % Chain to whatever WindowKeyPressFcn was installed before us.
+            try
+                prev = obj.PrevFigKPFcn_;
+                if ~isempty(prev)
+                    if isa(prev, 'function_handle')
+                        prev(src, evt);
+                    elseif iscell(prev) && ~isempty(prev) && isa(prev{1}, 'function_handle')
+                        feval(prev{1}, src, evt, prev{2:end});
+                    end
+                end
+            catch
+            end
+        end
+
+        function completeEventPick_(obj, tStart, tEnd)
+            %COMPLETEEVENTPICK_ Sort, persist, hand off to openEventDetails_, cleanup.
+            engine = obj.EventPickEngine_;
+            if isempty(engine) || ~isa(engine, 'DashboardEngine')
+                obj.cancelEventPick_();
+                error('FastSense:eventPickNoEngine', ...
+                    'completeEventPick_ has no DashboardEngine reference.');
+            end
+            t1 = min(tStart, tEnd);
+            t2 = max(tStart, tEnd);
+            keys = {};
+            try
+                for i = 1:numel(obj.Tags_)
+                    tg = obj.Tags_{i};
+                    if ~isempty(tg) && isprop(tg, 'Key') && ~isempty(tg.Key)
+                        keys{end+1} = char(tg.Key); %#ok<AGROW>
+                    end
+                end
+            catch
+            end
+            if isempty(keys)
+                primaryName = 'manual_event';
+            else
+                primaryName = keys{1};
+            end
+            newEv = [];
+            try
+                nBefore = numel(engine.EventStore.getEvents());
+                CreateEventDialog.persistEventStatic(engine, t1, t2, ...
+                    'Custom event', 2, 'manual_annotation', '', keys, primaryName);
+                evs = engine.EventStore.getEvents();
+                if numel(evs) > nBefore && ~isempty(evs)
+                    newEv = evs(end);
+                end
+            catch ME
+                try
+                    errordlg(ME.message, 'Create Event');
+                catch
+                end
+                obj.onEventDetailsClosed_();
+                return;
+            end
+            % 260513-voo: restore figure/axes callbacks AND flip
+            % IsEventPicking_=false BEFORE opening the modal. Two reasons:
+            %   (1) creating the popup figure can transiently focus-shift
+            %       and fire WindowButtonMotion events on the original
+            %       figure; with our chained WBM still installed plus
+            %       IsEventPicking_=true, onPickMotion_FromX_ would
+            %       overwrite the just-finalized patch geometry with the
+            %       current cursor position. Restoring + flipping early
+            %       short-circuits the motion handler.
+            %   (2) the user is now interacting with the modal, not the
+            %       axes — leaving onPickClick_ wired would consume a
+            %       background click meant for the dashboard.
+            % Graphics (lines, patch, hint) survive because they live on
+            % obj.hAxes regardless of input bindings; the
+            % ObjectBeingDestroyed listener tears them down on modal close.
+            obj.restorePickCallbacks_();
+            obj.IsEventPicking_ = false;
+            if ~isempty(newEv)
+                try
+                    obj.openEventDetails_(newEv);
+                catch
+                end
+            end
+            try
+                if ~isempty(obj.hEventDetails_) && ishandle(obj.hEventDetails_)
+                    obj.EventPickModalListener_ = addlistener(obj.hEventDetails_, ...
+                        'ObjectBeingDestroyed', @(~,~) obj.onEventDetailsClosed_());
+                else
+                    % Modal didn't open (edge case — openEventDetails_ aborted
+                    % silently or hFigure invalid). Clean up immediately so no
+                    % orphan decoration is left on screen.
+                    obj.onEventDetailsClosed_();
+                end
+            catch ME
+                warning('FastSense:eventPickListenerFailed', '%s', ME.message);
+                try
+                    obj.onEventDetailsClosed_();
+                catch
+                end
+            end
+        end
+
+        function drawPickHint_(obj, str)
+            %DRAWPICKHINT_ Draw the EventPickHint text annotation in obj.hAxes.
+            try
+                hOld = findall(obj.hAxes, 'Tag', 'EventPickHint');
+                if ~isempty(hOld), delete(hOld); end
+            catch
+            end
+            try
+                color = [1.0 0.55 0.0];          % orange fallback
+                text(obj.hAxes, 0.02, 0.95, str, ...
+                    'Units', 'normalized', ...
+                    'Color', color, ...
+                    'FontSize', 11, ...
+                    'FontWeight', 'bold', ...
+                    'HorizontalAlignment', 'left', ...
+                    'VerticalAlignment', 'top', ...
+                    'BackgroundColor', [1 1 1], ...
+                    'Margin', 2, ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'HandleVisibility', 'off', ...
+                    'Tag', 'EventPickHint');
+            catch
+            end
+        end
+
+        function updatePickHint_(obj, str)
+            %UPDATEPICKHINT_ Mutate an existing EventPickHint's String, fallback redraws.
+            try
+                h = findall(obj.hAxes, 'Tag', 'EventPickHint');
+                if ~isempty(h)
+                    set(h(1), 'String', str);
+                    return;
+                end
+            catch
+            end
+            obj.drawPickHint_(str);
+        end
+
+        function drawPickLine_(obj, x)
+            %DRAWPICKLINE_ Draw a single orange vertical EventPickLine at x.
+            try
+                yl = get(obj.hAxes, 'YLim');
+                color = [1.0 0.55 0.0];
+                line(obj.hAxes, [x x], yl, ...
+                    'Color', color, ...
+                    'LineWidth', 2, ...
+                    'LineStyle', '-', ...
+                    'Tag', 'EventPickLine', ...
+                    'HitTest', 'off', ...
+                    'PickableParts', 'none', ...
+                    'HandleVisibility', 'off');
+            catch
+            end
+        end
+
+        % ============================================================
+        % 260513-voo - Shaded-region overlay + live-preview motion +
+        % modal-persisted decoration + unified cleanup helper. All
+        % additive on top of the 260513-v69 state machine above.
+        % ============================================================
+        function onPickMotion_(obj, src, evt)
+            %ONPICKMOTION_ Chained figure WindowButtonMotionFcn during pick mode (260513-voo).
+            %   FIRST forward to the saved handler so HoverCrosshair keeps
+            %   working. THEN, while in the post-click-1 pre-click-2 sub-
+            %   state, update the shaded patch XData to track the cursor.
+            %   Wrapped in try/catch so our chained handler never breaks
+            %   HoverCrosshair downstream.
+            if isa(obj.PrevFigWBMFcn_, 'function_handle')
+                try
+                    obj.PrevFigWBMFcn_(src, evt);
+                catch ME
+                    warning('FastSense:pickMotionForwardFailed', '%s', ME.message);
+                end
+            elseif iscell(obj.PrevFigWBMFcn_) && ~isempty(obj.PrevFigWBMFcn_) && ...
+                    isa(obj.PrevFigWBMFcn_{1}, 'function_handle')
+                try
+                    feval(obj.PrevFigWBMFcn_{1}, src, evt, obj.PrevFigWBMFcn_{2:end});
+                catch ME
+                    warning('FastSense:pickMotionForwardFailed', '%s', ME.message);
+                end
+            end
+            try
+                if ~obj.IsEventPicking_, return; end
+                if isempty(obj.EventPickT1_), return; end
+                if isempty(obj.EventPickPatch_) || ~ishandle(obj.EventPickPatch_), return; end
+                if isempty(obj.hAxes) || ~ishandle(obj.hAxes), return; end
+                cp = get(obj.hAxes, 'CurrentPoint');
+                cx = cp(1, 1);
+                obj.onPickMotion_FromX_(cx);
+            catch ME
+                warning('FastSense:pickMotionFailed', '%s', ME.message);
+            end
+        end
+
+        function onPickMotion_FromX_(obj, cx)
+            %ONPICKMOTION_FROMX_ Update patch geometry to span [EventPickT1_, cx] x current YLim (260513-voo).
+            %   Pulled out of onPickMotion_ so tests can drive geometry
+            %   updates deterministically without having to mutate
+            %   CurrentPoint (which is read-only on MATLAB).
+            if isempty(obj.EventPickT1_), return; end
+            if isempty(obj.EventPickPatch_) || ~ishandle(obj.EventPickPatch_), return; end
+            if isempty(obj.hAxes) || ~ishandle(obj.hAxes), return; end
+            yLim = get(obj.hAxes, 'YLim');
+            t1   = obj.EventPickT1_;
+            set(obj.EventPickPatch_, ...
+                'XData', [t1 cx cx t1], ...
+                'YData', [yLim(1) yLim(1) yLim(2) yLim(2)]);
+        end
+
+        function createPickPatch_(obj, x)
+            %CREATEPICKPATCH_ Create the EventPickRegion patch at zero width (260513-voo).
+            %   FaceColor is read from the just-drawn EventPickLine (SSOT)
+            %   with fallback to the canonical [1.0 0.55 0.0] orange. The
+            %   patch is pushed to the back of axes Children so the lines
+            %   and plotted signal stay in front. HitTest='off' +
+            %   PickableParts='none' so click 2 reaches the axes
+            %   underneath this patch.
+            if isempty(obj.hAxes) || ~ishandle(obj.hAxes), return; end
+            c = obj.pickLineColor_();
+            yLim = get(obj.hAxes, 'YLim');
+            wasHeld = ishold(obj.hAxes);
+            hold(obj.hAxes, 'on');
+            obj.EventPickPatch_ = patch(obj.hAxes, ...
+                'XData',         [x x x x], ...
+                'YData',         [yLim(1) yLim(1) yLim(2) yLim(2)], ...
+                'FaceColor',     c, ...
+                'FaceAlpha',     0.18, ...
+                'EdgeColor',     'none', ...
+                'HitTest',       'off', ...
+                'PickableParts', 'none', ...
+                'HandleVisibility', 'off', ...
+                'Tag',           'EventPickRegion');
+            if ~wasHeld, hold(obj.hAxes, 'off'); end
+            try
+                uistack(obj.EventPickPatch_, 'bottom');
+            catch
+                % Octave may not support uistack on all releases — non-fatal.
+            end
+        end
+
+        function finalizePickPatch_(obj, tStart, tEnd)
+            %FINALIZEPICKPATCH_ Snap the patch to sorted [tStart, tEnd] x current YLim (260513-voo).
+            if isempty(obj.EventPickPatch_) || ~ishandle(obj.EventPickPatch_), return; end
+            if isempty(obj.hAxes) || ~ishandle(obj.hAxes), return; end
+            t1 = min(tStart, tEnd);
+            t2 = max(tStart, tEnd);
+            yLim = get(obj.hAxes, 'YLim');
+            set(obj.EventPickPatch_, ...
+                'XData', [t1 t2 t2 t1], ...
+                'YData', [yLim(1) yLim(1) yLim(2) yLim(2)]);
+        end
+
+        function c = pickLineColor_(obj)
+            %PICKLINECOLOR_ Resolve patch FaceColor from a live EventPickLine, fallback orange.
+            c = [1.0 0.55 0.0];
+            try
+                hLines = findobj(obj.hAxes, 'Tag', 'EventPickLine');
+                if ~isempty(hLines) && ishandle(hLines(1))
+                    cc = get(hLines(1), 'Color');
+                    if isnumeric(cc) && numel(cc) == 3
+                        c = double(cc(:)');
+                    end
+                end
+            catch
+                % keep fallback
+            end
+        end
+
+        function restorePickCallbacks_(obj)
+            %RESTOREPICKCALLBACKS_ Restore axes BDF + figure KP + figure WBM to pre-pick values (260513-voo).
+            try
+                if ~isempty(obj.hAxes) && ishandle(obj.hAxes)
+                    set(obj.hAxes, 'ButtonDownFcn', obj.PrevAxesBDFcn_);
+                end
+            catch
+            end
+            try
+                hFig = ancestor(obj.hAxes, 'figure');
+                if ~isempty(hFig) && ishandle(hFig)
+                    set(hFig, 'WindowKeyPressFcn', obj.PrevFigKPFcn_);
+                    set(hFig, 'WindowButtonMotionFcn', obj.PrevFigWBMFcn_);
+                end
+            catch
+            end
+        end
+
+        function onEventDetailsClosed_(obj)
+            %ONEVENTDETAILSCLOSED_ Unified pick-mode cleanup (260513-voo).
+            %   Idempotent. Called from three paths:
+            %     - addlistener on hEventDetails_ ObjectBeingDestroyed (modal close)
+            %     - cancelEventPick_ (toggle / ESC / right-click)
+            %     - completeEventPick_ catch fallback when modal couldn't open
+            %   First-line guard returns silently when nothing is in flight.
+            noPatch = isempty(obj.EventPickPatch_) || ~ishandle(obj.EventPickPatch_);
+            noLines = true;
+            noHints = true;
+            try
+                noLines = isempty(findall(obj.hAxes, 'Tag', 'EventPickLine'));
+                noHints = isempty(findall(obj.hAxes, 'Tag', 'EventPickHint'));
+            catch
+            end
+            if noPatch && noLines && noHints && ~obj.IsEventPicking_
+                obj.EventPickModalListener_ = [];   % stale-listener safety
+                return;
+            end
+            try
+                hLines = findall(obj.hAxes, 'Tag', 'EventPickLine');
+                if ~isempty(hLines), delete(hLines); end
+            catch
+            end
+            try
+                hHints = findall(obj.hAxes, 'Tag', 'EventPickHint');
+                if ~isempty(hHints), delete(hHints); end
+            catch
+            end
+            try
+                if ~isempty(obj.EventPickPatch_) && ishandle(obj.EventPickPatch_)
+                    delete(obj.EventPickPatch_);
+                end
+            catch
+            end
+            obj.EventPickPatch_ = [];
+            obj.restorePickCallbacks_();
+            obj.IsEventPicking_  = false;
+            obj.EventPickT1_     = [];
+            obj.EventPickEngine_ = [];
+            obj.PrevAxesBDFcn_   = [];
+            obj.PrevFigKPFcn_    = [];
+            obj.PrevFigWBMFcn_   = [];
+            try
+                if ~isempty(obj.EventPickModalListener_) && ...
+                        isa(obj.EventPickModalListener_, 'event.listener')
+                    delete(obj.EventPickModalListener_);
+                end
+            catch
+            end
+            obj.EventPickModalListener_ = [];
+        end
     end
 
     methods (Access = private)
         function c = severityToColor_(obj, severity)
             %SEVERITYTOCOLOR_ Map severity level to RGB color.
-            %   Uses DashboardTheme status colors if available in obj.Theme;
-            %   falls back to hardcoded defaults (RESEARCH Critical Finding 5).
+            %   Delegates to the public helper at libs/Dashboard/severityColor.m
+            %   so the FastSense main-axes glyph palette and the dashboard
+            %   slider-preview markers stay in lockstep. The helper is on the
+            %   path whenever the Dashboard library has been added by
+            %   install(); a try/catch falls back to the historical inline
+            %   lookup if FastSense is somehow used without Dashboard on the
+            %   path (e.g. an isolated FastSense smoke test).
+            try
+                c = severityColor(obj.Theme, severity);
+                return;
+            catch
+                % Inline fallback — bytewise equivalent to the pre-260508-edd
+                % implementation. Kept so FastSense remains usable without
+                % the Dashboard library on the path.
+            end
             if severity >= 3
                 if isstruct(obj.Theme) && isfield(obj.Theme, 'StatusAlarmColor')
                     c = obj.Theme.StatusAlarmColor;
@@ -2901,13 +3615,32 @@ classdef FastSense < handle
                     currentXLim = get(obj.hAxes, 'XLim');
                     windowWidth = currentXLim(2) - currentXLim(1);
                     newXMax = newX(end);
-                    newXLim = [newXMax - windowWidth, newXMax];
-                    set(obj.hAxes, 'XLim', newXLim);
+                    % 2% right-edge padding so the live tail doesn't sit
+                    % right on the axes frame — matches snapToTail (260512-hrn).
+                    pad = 0.02 * windowWidth;
+                    newXLim = [newXMax - windowWidth + pad, newXMax + pad];
+                    % Suppress XLim PostSet listener: updateData() will call
+                    % updateLines() explicitly right after applyViewMode returns,
+                    % so triggering onXLimChanged here would double the work.
+                    obj.IsPropagating = true;
+                    try
+                        set(obj.hAxes, 'XLim', newXLim);
+                    catch
+                    end
+                    obj.IsPropagating = false;
                     obj.CachedXLim = newXLim;
 
                 case 'reset'
                     newXLim = [newX(1), newX(end)];
-                    set(obj.hAxes, 'XLim', newXLim);
+                    % Suppress XLim PostSet listener: updateData() will call
+                    % updateLines() explicitly right after applyViewMode returns,
+                    % so triggering onXLimChanged here would double the work.
+                    obj.IsPropagating = true;
+                    try
+                        set(obj.hAxes, 'XLim', newXLim);
+                    catch
+                    end
+                    obj.IsPropagating = false;
                     obj.CachedXLim = newXLim;
             end
         end
@@ -3127,6 +3860,31 @@ classdef FastSense < handle
 
             obj.drawnowLimitRate();
             if obj.Verbose && exist('OCTAVE_VERSION', 'builtin'); fflush(stdout); end
+
+            % Auto-disengage Follow on user-initiated pan/zoom.
+            % This branch is only reached when IsPropagating=false (see early
+            % return above), so XLim was changed by the user (mouse zoom/pan
+            % or external set(hAxes,'XLim',...) from anywhere other than
+            % applyViewMode / propagateXLim / onXLimModeChanged, all of which
+            % raise IsPropagating). When the user pans while Follow is on,
+            % their intent is "I want to look at the past now" — so flip to
+            % 'preserve' and update the toolbar State so the visual stays in
+            % sync.
+            if strcmp(obj.LiveViewMode, 'follow')
+                obj.LiveViewMode = 'preserve';
+                % Find the FastSenseToolbar (stored in figure AppData by attachers)
+                % and update its Follow button. AppData key 'FastSenseToolbar' is
+                % set in FastSense.openLoupe and in all toolbar attacher sites.
+                % Some older callers may not set it — the try/catch makes that safe.
+                try
+                    tb = getappdata(obj.hFigure, 'FastSenseToolbar');
+                    if ~isempty(tb) && isvalid(tb) && ismethod(tb, 'syncFollowState')
+                        tb.syncFollowState();
+                    end
+                catch
+                    % Toolbar gone, deleted, or method missing — silent ignore.
+                end
+            end
         end
 
         function onXLimModeChanged(obj)

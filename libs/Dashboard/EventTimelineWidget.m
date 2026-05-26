@@ -103,6 +103,104 @@ classdef EventTimelineWidget < DashboardWidget
             t = raw(:).';
         end
 
+        function m = getEventMarkers(obj)
+        %GETEVENTMARKERS Per-event time + severity + color for slider markers.
+        %   m = getEventMarkers(obj) returns a struct array with fields:
+        %     m(k).Time     — numeric timestamp (startTime)
+        %     m(k).Severity — numeric severity (default 1 if absent)
+        %     m(k).Color    — 1x3 RGB triplet from severityColor(theme, sev)
+        %
+        %   `resolveEvents()` (and its eventStoreToStructs helper) drops
+        %   Severity when projecting to the rendering struct, so we read
+        %   severity directly from the underlying source — exactly the same
+        %   priority order resolveEvents uses (EventStoreObj > EventFcn >
+        %   Events) but preserving the Severity field. Slider markers
+        %   therefore reflect the same severity that drives the bar color
+        %   in the timeline pane.
+        %
+        %   Always returns an empty struct array (struct('Time',{},
+        %   'Severity',{},'Color',{})) when no source yields events;
+        %   never throws.
+            m = struct('Time', {}, 'Severity', {}, 'Color', {});
+            try
+                raw = [];
+                % Mirror resolveEvents' priority order so the underlying
+                % Severity field is preserved (eventStoreToStructs drops it).
+                if ~isempty(obj.EventStoreObj)
+                    if ~isempty(obj.FilterTagKey)
+                        try
+                            raw = obj.EventStoreObj.getEventsForTag(obj.FilterTagKey);
+                        catch
+                            raw = [];
+                        end
+                    else
+                        try
+                            raw = obj.EventStoreObj.getEvents();
+                        catch
+                            raw = [];
+                        end
+                    end
+                elseif ~isempty(obj.EventFcn)
+                    try
+                        raw = obj.EventFcn();
+                    catch
+                        raw = [];
+                    end
+                elseif ~isempty(obj.Events)
+                    raw = obj.Events;
+                end
+                if isempty(raw), return; end
+
+                theme = [];
+                try
+                    theme = obj.getTheme();
+                catch
+                    theme = [];
+                end
+
+                n = numel(raw);
+                for i = 1:n
+                    t = NaN;
+                    sev = 1;
+                    if isstruct(raw)
+                        if isfield(raw, 'StartTime')
+                            t = raw(i).StartTime;
+                        elseif isfield(raw, 'startTime')
+                            t = raw(i).startTime;
+                        end
+                        if isfield(raw, 'Severity') && ~isempty(raw(i).Severity)
+                            sev = raw(i).Severity;
+                        elseif isfield(raw, 'severity') && ~isempty(raw(i).severity)
+                            sev = raw(i).severity;
+                        end
+                    else
+                        if isprop(raw(i), 'StartTime')
+                            t = raw(i).StartTime;
+                        elseif isprop(raw(i), 'startTime')
+                            t = raw(i).startTime;
+                        end
+                        if isprop(raw(i), 'Severity') && ~isempty(raw(i).Severity)
+                            sev = raw(i).Severity;
+                        end
+                    end
+                    if ~isnumeric(t) || ~isfinite(t)
+                        continue;
+                    end
+                    if ~isnumeric(sev) || isempty(sev) || ~isfinite(sev(1))
+                        sev = 1;
+                    else
+                        sev = sev(1);
+                    end
+                    m(end + 1) = struct( ...
+                        'Time',     t, ...
+                        'Severity', sev, ...
+                        'Color',    severityColor(theme, sev)); %#ok<AGROW>
+                end
+            catch
+                m = struct('Time', {}, 'Severity', {}, 'Color', {});
+            end
+        end
+
         function refresh(obj)
             events = obj.resolveEvents();
 

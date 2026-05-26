@@ -176,6 +176,35 @@ function test_dashboard_config_dialog()
         nFailed = nFailed + 1;
     end
 
+    % testResetButtonRestylesOnThemeSwitch (260508-f7p)
+    try
+        d = DashboardEngine('ResetThemeSwitch');
+        d.Theme = 'light';
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+
+        btn = d.hTimeResetBtn;
+        assert(~isempty(btn) && ishandle(btn), 'hTimeResetBtn must be captured at render');
+        lightBG = get(btn, 'BackgroundColor');
+        lightFG = get(btn, 'ForegroundColor');
+
+        d.Theme = 'dark';
+        d.applyThemeToChrome();
+
+        darkBG = get(btn, 'BackgroundColor');
+        darkFG = get(btn, 'ForegroundColor');
+
+        assert(~isequal(lightBG, darkBG) || ~isequal(lightFG, darkFG), ...
+            'Reset button must restyle when theme switches from light to dark');
+
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testResetButtonRestylesOnThemeSwitch: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
     fprintf('    %d passed, %d failed.\n', nPassed, nFailed);
     if nFailed > 0
         error('test_dashboard_config_dialog:fail', ...

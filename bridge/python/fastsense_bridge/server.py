@@ -8,8 +8,12 @@ No UI — this is a pure data relay for external frameworks to consume.
 """
 
 import asyncio
+import logging
+import os
+import re
 import uuid
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +21,67 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .sqlite_reader import SqliteReader
+
+logger = logging.getLogger(__name__)
+
+_LOCALHOST_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
+@dataclass(frozen=True)
+class CorsPolicy:
+    """Resolved CORS policy: single source of truth for HTTP + WS gating.
+
+    Modes:
+    - "regex":    allow origins matching ``regex`` (default: localhost only)
+    - "wildcard": allow any origin (including missing Origin header)
+    - "list":     allow origins matching exactly one entry of ``origins``
+    """
+
+    mode: Literal["regex", "wildcard", "list"]
+    regex: str | None = None
+    origins: tuple[str, ...] = ()
+
+
+def resolve_cors_policy() -> CorsPolicy:
+    """Resolve the CORS policy from FASTSENSE_BRIDGE_CORS_ORIGINS.
+
+    Single source of truth consumed by both the HTTP CORSMiddleware
+    setup and the WebSocket /ws origin gate. Logs the wildcard warning
+    here so it fires exactly once per ``create_app()`` call.
+    """
+    cors_env = os.environ.get("FASTSENSE_BRIDGE_CORS_ORIGINS", "").strip()
+    if not cors_env:
+        return CorsPolicy(mode="regex", regex=_LOCALHOST_ORIGIN_REGEX)
+    if cors_env == "*":
+        logger.warning(
+            "FASTSENSE_BRIDGE_CORS_ORIGINS=* — CORS is wide open. "
+            "Do not use in production."
+        )
+        return CorsPolicy(mode="wildcard")
+    origins = tuple(o.strip() for o in cors_env.split(",") if o.strip())
+    return CorsPolicy(mode="list", origins=origins)
+
+
+def is_origin_allowed(policy: CorsPolicy, origin: str | None) -> bool:
+    """Return True iff ``origin`` is allowed under ``policy``.
+
+    Edge cases:
+    - mode == "wildcard": always True (including ``origin is None``)
+    - mode == "regex":    full-match against ``policy.regex``; None rejected
+    - mode == "list":     exact match against ``policy.origins``; None rejected
+
+    Default policy (no env var) is regex mode, so a missing Origin header
+    on a WS upgrade is treated as a non-browser client and rejected.
+    """
+    if policy.mode == "wildcard":
+        return True
+    if origin is None:
+        return False
+    if policy.mode == "regex":
+        assert policy.regex is not None
+        return re.fullmatch(policy.regex, origin) is not None
+    # mode == "list"
+    return origin in policy.origins
 
 
 class ActionRequest(BaseModel):
@@ -105,12 +170,32 @@ def create_app(state: AppState) -> FastAPI:
         title="FastSense Bridge",
         description="Lean connectivity bridge for MATLAB data access",
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # CORS: single policy resolved once and shared by HTTP middleware and
+    # the WebSocket /ws origin gate. Methods and headers stay open — origins
+    # are the auth boundary.
+    policy = resolve_cors_policy()
+    if policy.mode == "regex":
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[],
+            allow_origin_regex=policy.regex,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    elif policy.mode == "wildcard":
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:  # list
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(policy.origins),
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # --- Signal Data API ---
 
@@ -228,6 +313,13 @@ def create_app(state: AppState) -> FastAPI:
 
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket) -> None:
+        # Gate WS upgrades with the same origin policy that controls HTTP
+        # CORS — FastAPI's CORSMiddleware does not inspect WS upgrades, so
+        # the check has to live here, before accept().
+        origin = ws.headers.get("origin")
+        if not is_origin_allowed(policy, origin):
+            await ws.close(code=1008)  # policy violation
+            return
         await ws.accept()
         state._ws_clients.add(ws)
         try:

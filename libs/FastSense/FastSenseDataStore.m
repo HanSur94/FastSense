@@ -48,8 +48,11 @@ classdef FastSenseDataStore < handle
         PyramidY   = []   % Pre-computed L1 minmax downsample Y
     end
 
+    properties (SetAccess = private)
+        DbId         = -1   % SQLite handle — read-public for TestDataStoreWAL
+    end
+
     properties (Access = private)
-        DbId         = -1
         ChunkSize    = 100000
         NumChunks    = 0
         IsValid      = false

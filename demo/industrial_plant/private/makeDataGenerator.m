@@ -45,12 +45,31 @@ function t = makeDataGenerator(rawDir, varargin)
 
     cfg = plantConfig();
 
+    % Optional name-value: 'Fleets' -- struct array from stressFleets(mode).
+    % When non-empty, each tick also writes one timestamped row per fleet
+    % bank to a shared multi-column .dat file. Pipeline picks them up via
+    % the existing wide-CSV path (RawSource.column).
+    fleets = repmat(struct( ...
+        'name','','prefix','','filePat','', ...
+        'nBanks',0,'nPerBank',0, ...
+        'baseFreq',0,'baseAmp',0,'baseMean',0,'noiseStd',0), 0, 1);
+    for k = 1:2:numel(varargin)
+        key = varargin{k};
+        switch key
+            case 'Fleets'
+                fleets = varargin{k+1};
+            otherwise
+                % Silently ignore unknown options for forward-compat.
+        end
+    end
+
     ud = struct();
     ud.cfg      = cfg;
     ud.rawDir   = rawDir;
     ud.tStart   = [];
     ud.step     = 0;
     ud.stateIdx = struct();
+    ud.fleets   = fleets;
     % Per-tag accumulators so we can push fresh X/Y into the registered
     % tag objects on every tick (the LiveTagPipeline handles .mat
     % persistence; the in-memory path is driven directly here).
@@ -66,9 +85,6 @@ function t = makeDataGenerator(rawDir, varargin)
         'BusyMode',      'drop', ...
         'UserData',      ud, ...
         'TimerFcn',      @industrialPlantTick_);
-
-    % Note: varargin currently unused (reserved for future injection).
-    %#ok<*INUSD>
 end
 
 function industrialPlantTick_(tObj, ~)
@@ -117,9 +133,27 @@ function industrialPlantTick_(tObj, ~)
         % Update in-memory accumulators + push to the registered tag so
         % getXY() / valueAt() / MonitorTag listeners see fresh data
         % without waiting for a LiveTagPipeline round-trip.
+        %
+        % First-tick seeding from the existing tag preserves any history
+        % loaded by seedHistory before the timer started — without this
+        % seeding, the tick's bare `(end+1) = ...` accumulator would
+        % start empty and the first updateData() call would clobber the
+        % seeded historical buffer.
         if ~isfield(ud.sensorX, field)
-            ud.sensorX.(field) = [];
-            ud.sensorY.(field) = [];
+            try
+                seedTag = TagRegistry.get(key);
+                if isa(seedTag, 'SensorTag')
+                    [xExist, yExist] = seedTag.getXY();
+                    ud.sensorX.(field) = xExist(:)';
+                    ud.sensorY.(field) = yExist(:)';
+                else
+                    ud.sensorX.(field) = [];
+                    ud.sensorY.(field) = [];
+                end
+            catch
+                ud.sensorX.(field) = [];
+                ud.sensorY.(field) = [];
+            end
         end
         ud.sensorX.(field)(end+1) = nowTime; %#ok<AGROW>
         ud.sensorY.(field)(end+1) = y;        %#ok<AGROW>
@@ -147,13 +181,39 @@ function industrialPlantTick_(tObj, ~)
         if isnan(prevIdx) || prevIdx ~= idx
             appendRow_(ud.rawDir, key, nowTime, labels{idx}, 'state');
             ud.stateIdx.(field) = idx;
+            % First-time seeding from the existing tag preserves any
+            % history loaded by seedHistory (see sensor block above).
             if ~isfield(ud.stateX, field)
-                ud.stateX.(field) = [];
-                ud.stateY.(field) = {};
+                try
+                    seedStateTag = TagRegistry.get(key);
+                    if isa(seedStateTag, 'StateTag')
+                        ud.stateX.(field) = seedStateTag.X(:)';
+                        ud.stateY.(field) = reshape(seedStateTag.Y, 1, []);
+                    else
+                        ud.stateX.(field) = [];
+                        ud.stateY.(field) = {};
+                    end
+                catch
+                    ud.stateX.(field) = [];
+                    ud.stateY.(field) = {};
+                end
             end
             ud.stateX.(field)(end+1) = nowTime;     %#ok<AGROW>
             ud.stateY.(field){end+1} = labels{idx};  %#ok<AGROW>
             pushToStateTag_(key, ud.stateX.(field), ud.stateY.(field));
+        end
+    end
+
+    % ---- Stress fleets (opt-in via 'Fleets' NV pair) ----
+    % File-only write path; LiveTagPipeline parses the shared multi-column
+    % .dat files on its own tick and routes per-column data to each tag
+    % via the existing wide-CSV path (RawSource.column).
+    if isfield(ud, 'fleets') && ~isempty(ud.fleets)
+        try
+            writeStressFleetRow_(ud.rawDir, ud.fleets, nowTime, tRel);
+        catch err
+            warning('IndustrialPlant:fleetWriteFailed', ...
+                'Stress fleet write failed: %s', err.message);
         end
     end
 
