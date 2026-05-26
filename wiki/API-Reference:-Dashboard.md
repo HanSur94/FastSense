@@ -26,6 +26,7 @@ obj = DashboardEngine(name, varargin)
 | DebugPreview_ | `false` | 260508-das — opt-in: surface preview/marker pipeline failures as warnings |
 | BannerHeight | `0.035` |  |
 | EventStore | `[]` |  |
+| WidgetHovers_ | `{}` |  |
 
 ### Methods
 
@@ -77,7 +78,28 @@ delete (observed on CI as a runaway 500k+ stderr loop in
 testTimerContinuesAfterError). Then stop/delete the timer with
 isvalid + try/catch guards, matching LiveTagPipeline.stop().
 
+#### `store = attachPlantLog(obj, filePath, varargin)`
+
+ATTACHPLANTLOG Attach a plant log to this dashboard (PLOG-INT-01).
+  store = engine.attachPlantLog(filePath) reads filePath using
+  PlantLogReader.autoDetect for the column mapping, ingests every
+  parseable row into a new PlantLogStore, starts a PlantLogLiveTail
+  timer (default Interval=5s, StartTail=true), wires the slider +
+  per-widget overlay refresh path, and returns the store handle.
+
+#### `detachPlantLog(obj)`
+
+DETACHPLANTLOG Remove the attached plant log + all overlays + live tail (PLOG-INT-02).
+  Idempotent: calling on an engine with no plant log attached is a no-op.
+
 #### `save(obj, filepath)`
+
+#### `cfg = stampPlantLogIntoConfig_(obj, cfg)`
+
+STAMPPLANTLOGINTOCONFIG_ Phase 1033 PLOG-INT-04: add plantLog key when attached.
+  When no plant log is attached, cfg is returned unchanged
+  (omit-when-empty contract -- byte-identical back-compat for
+  v1.0-v3.0 dashboards).
 
 #### `exportScript(obj, filepath)`
 
@@ -373,6 +395,49 @@ COMPUTEPREVIEWENVELOPEFORTEST Test-only wrapper around the
   patch handles. When nBuckets is omitted, uses the method's
   own width-derived default.
 
+#### `setPlantLogStoreForTest_(obj, store)`
+
+SETPLANTLOGSTOREFORTEST_ Phase 1031 test seam — replaced by attachPlantLog in Phase 1033.
+  Inject a PlantLogStore (or [] to detach) and immediately recompute
+  plant-log slider markers so callers can assert on the slider state
+  right after attach without waiting for a refresh hook.
+
+#### `setPlantLogLiveTailForTest_(obj, tail)`
+
+SETPLANTLOGLIVETAILFORTEST_ Phase 1031 test seam — wires PlantLogTailTick to refresh.
+  Inject a PlantLogLiveTail (or [] to detach + tear down listener).
+  When non-empty, installs an addlistener that calls
+  computePlantLogMarkers on every PlantLogTailTick so the slider
+  refreshes without a full dashboard re-render (PLOG-VIZ-08).
+
+#### `refreshPlantLogOverlayForWidgetForTest_(obj, widget)`
+
+REFRESHPLANTLOGOVERLAYFORWIDGETFORTEST_ Phase 1032 test seam.
+  Routes to refreshPlantLogOverlayForWidget_ from function-style
+  tests (which can't satisfy the {?FastSenseWidget, ?matlab.unittest.TestCase}
+  access list). Hidden so it doesn't show up in methods(obj).
+
+#### `clearPlantLogOverlaysOnAllWidgetsForTest_(obj)`
+
+CLEARPLANTLOGOVERLAYSONALLWIDGETSFORTEST_ Phase 1032 test seam.
+  Routes to clearPlantLogOverlaysOnAllWidgets_ from function-style
+  tests. Hidden test seam mirroring the Phase 1031 idiom.
+
+#### `attachPlantLogXLimListenerForTest_(obj, widget)`
+
+ATTACHPLANTLOGXLIMLISTENERFORTEST_ Phase 1032 test seam.
+  Routes to attachPlantLogXLimListener_ from function-style tests.
+
+#### `setTimeRangeSelectorForTest_(obj, sel)`
+
+SETTIMERANGESELECTORFORTEST_ Phase 1031 test seam — inject a
+  TimeRangeSelector handle without going through render(). Used by
+  TestPlantLogSliderOverlay to assert hPlantLogMarkers state without
+  paying full-dashboard render cost. The TimeRangeSelector_ property
+  is Access = private, so direct assignment from a test is impossible
+  — this hidden setter is the documented seam. Phase 1033's review
+  may remove it once render() pathways cover the new test cases.
+
 #### `ws = activePageWidgets(obj)`
 
 ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
@@ -395,6 +460,44 @@ NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513
   overlay via computeEventMarkers and the slider preview lines via
   computePreviewEnvelope so a freshly-added event becomes visible
   on the slider strip without waiting for the next live tick.
+
+#### `refreshPlantLogOverlayForWidget_(obj, widget)`
+
+REFRESHPLANTLOGOVERLAYFORWIDGET_ Recompute plant-log overlay for one widget (Phase 1032 PLOG-VIZ-04 + PLOG-VIZ-08).
+  Idempotent: safe to call when widget.ShowPlantLog=false (clears
+  markers), when the engine has no store (clears markers), or
+  when the widget's FastSenseObj is not rendered (no-op).
+
+#### `clearPlantLogOverlaysOnAllWidgets_(obj)`
+
+CLEARPLANTLOGOVERLAYSONALLWIDGETS_ Wipe markers on every widget + every detached mirror (Phase 1032).
+  Does NOT flip ShowPlantLog on any widget — user state is
+  preserved for re-attach. Called from Phase 1033's
+  detachPlantLog() entry point and from store swaps that need
+  to nuke stale per-widget markers.
+
+#### `attachPlantLogXLimListener_(obj, widget)`
+
+ATTACHPLANTLOGXLIMLISTENER_ Wire an XLim PostSet listener on the widget's axes (Phase 1032).
+  Stored in widget.PlantLogXLimListener_; deleted by
+  setShowPlantLog(false) AND by widget.delete(). Idempotent:
+  replaces any prior listener.
+
+#### `attachPlantLogWidgetHover_(obj, widget)`
+
+ATTACHPLANTLOGWIDGETHOVER_ Lazy-construct a PlantLogWidgetHover for one widget (Phase 1032 PLOG-VIZ-07).
+  Tears down any prior hover for this widget first (idempotent),
+  then builds a new PlantLogWidgetHover parented to the widget's
+  uifigure ancestor and storing the lookup closure that routes
+  through obj.lookupPlantLogEntries_ (re-reads the store at call
+  time so subsequent swaps are reflected immediately).
+
+#### `detachPlantLogWidgetHover_(obj, widget)`
+
+DETACHPLANTLOGWIDGETHOVER_ Tear down + remove a widget's hover (Phase 1032 PLOG-VIZ-07).
+  Idempotent: safe when widget has no hover currently registered.
+  Also sweeps stale-widget pairs (widget already destroyed) so the
+  WidgetHovers_ list stays compact.
 
 #### `str = formatTimeVal(~, t)`
 
@@ -623,6 +726,7 @@ obj = FastSenseWidget(varargin)
 | ShowThresholdLabels | `false` | show inline name labels on threshold lines |
 | ShowEventMarkers | `false` | Phase 1012 — toggle event round-marker overlay |
 | EventStore | `[]` | Phase 1012 — EventStore handle forwarded to inner FastSense |
+| ShowPlantLog | `false` | Phase 1032 PLOG-VIZ-03 — opt-in per-widget plant-log vertical-line overlay |
 | LiveViewMode | `'preserve'` |  |
 | YLimitMode | `'auto-visible'` |  |
 
@@ -653,6 +757,27 @@ SETEVENTMARKERSVISIBLE Pass-through to FastSense event-marker toggle.
   When rendered, delegates to FastSense.setShowEventMarkers
   which re-draws the overlay in place without disturbing
   zoom state or live refresh cadence.
+
+#### `setPlantLogMarkers(obj, times, entries)`
+
+SETPLANTLOGMARKERS Draw or clear per-widget plant-log vertical lines.
+  Phase 1032 PLOG-VIZ-04. Draws one xline per finite timestamp
+  on the widget's inner FastSense axes (Tag = 'WidgetPlantLogMarker',
+  1 px solid line with theme.MarkerPlantLog color, default
+  [0 0 0]). Empty / no-arg input clears every existing marker
+  via tag-based delete. Non-finite timestamps are silently
+  dropped (mirrors TimeRangeSelector.setPlantLogMarkers shape).
+
+#### `setPlantLogXLimListenerForEngine_(obj, lis)`
+
+#### `setShowPlantLog(obj, tf, engine)`
+
+SETSHOWPLANTLOG Toggle the per-widget plant-log overlay (Phase 1032 PLOG-VIZ-03).
+  tf     — boolean; true enables overlay + attaches XLim listener,
+           false disables overlay + tears down listener + clears markers.
+  engine — DashboardEngine handle; required so refresh + listener
+           wiring can route through engine.refreshPlantLogOverlayForWidget_
+           and engine.attachPlantLogXLimListener_.
 
 #### `setYLimitMode(obj, mode)`
 
@@ -1092,6 +1217,14 @@ SAVEJSON Write dashboard config struct to JSON file.
  Widgets/pages may have heterogeneous fields, so encode each entry
  individually and assemble the JSON array by hand.
 
+#### `DashboardSerializer.jsonStr = encodePlantLogBlock_(pl)`
+
+ENCODEPLANTLOGBLOCK_ Hand-encode the plantLog block as a JSON object.
+  Used by saveJSON to preserve the metadataCols cell-array
+  shape (jsonencode of {} is ambiguous across MATLAB versions).
+  Returns a JSON object string with sourcePath, mapping,
+  interval, and startTail keys in stable order.
+
 #### `DashboardSerializer.result = load(filepath)`
 
 LOAD Load dashboard config from file.
@@ -1175,6 +1308,7 @@ obj = DashboardLayout(varargin)
 | DetachCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
 | CreateEventCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
 | VisibleRows | `[1 Inf]` | [topRow bottomRow] currently visible |
+| EngineRef | `[]` | Phase 1032 PLOG-VIZ-05 — back-reference to DashboardEngine for chrome callbacks (addPlantLogToggle) |
 | hFigure | `[]` | Figure handle for popup dismiss callbacks |
 | hInfoPopup | `[]` | Handle to active info popup uipanel (at most one) |
 
@@ -1269,6 +1403,21 @@ ONFIGURECLICKFORDISMISS Dismiss popup if click was outside the popup panel.
 #### `onKeyPressForDismiss(obj, eventData)`
 
 ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
+
+#### `addPlantLogToggle(obj, widget, engine)`
+
+ADDPLANTLOGTOGGLE Add the per-widget plant-log overlay toggle (Phase 1032 PLOG-VIZ-05).
+  The toggle is always created (Decision B: always render, disable
+  when no store); clicking it calls
+  widget.setShowPlantLog(~widget.ShowPlantLog, engine).
+  The engine handle is captured by the callback closure.
+
+#### `onPlantLogTogglePressed_(obj, src, widget, engine)`
+
+ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with try/catch (Phase 1032 PLOG-VIZ-05).
+  Programmatic force-call paths (tests, automation) need a
+  software-level guard for Enable='off' because uicontrols only
+  honor Enable natively for user-driven mouse clicks.
 
 ### Static Methods
 
@@ -2340,6 +2489,13 @@ setEventBands  Draw a translucent rectangle per event spanning start→end.
   draws one semi-transparent rectangle per event, spanning
   the start time to the end time. Non-finite values (NaN,
   ±Inf) are silently dropped.
+
+#### `setPlantLogMarkers(obj, times)`
+
+setPlantLogMarkers  Draw a 1px full-opacity vertical line per plant-log entry time.
+  Phase 1031 PLOG-VIZ-01/02/09. Parallel to setEventMarkers but uses
+  SEPARATE storage (hPlantLogMarkers) so plant-log markers and the
+  sev1/2/3 event markers can coexist without clobbering each other.
 
 #### `reinstallCallbacks(obj)`
 
