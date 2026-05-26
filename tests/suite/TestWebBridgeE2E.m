@@ -1,5 +1,18 @@
 classdef TestWebBridgeE2E < matlab.unittest.TestCase
     methods (TestClassSetup)
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners — same MATLAB
+            %   dispatcher segfault as the other gated test classes.
+            %   This test spawns a Python bridge subprocess + MATLAB
+            %   webread() against localhost; the JVM/HTTP path
+            %   destabilises the runner. The non-E2E parts of WebBridge
+            %   are still covered by TestWebBridge on every runner.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestWebBridgeE2E segfaults MATLAB headless on Linux — TestWebBridge still runs');
+        end
+
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             install();

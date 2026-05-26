@@ -14,6 +14,30 @@ classdef TestIndustrialPlantDemoCompanion < matlab.unittest.TestCase
 %   See also: run_demo, teardownDemo, FastSenseCompanion, TagRegistry.
 
     methods (TestClassSetup)
+        function gateModernMatlab(testCase)
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            testCase.assumeTrue(~verLessThan('matlab', '9.10'), ...
+                'Companion suite requires MATLAB R2021a+ uifigure features');
+        end
+
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners (xvfb / -batch).
+            %   This test runs the FULL run_demo() flow which spawns 25+
+            %   widgets in a uifigure. MATLAB segfaults during rendering
+            %   on headless Linux — observed on both R2020b and R2021b.
+            %   PR #109 already partially addressed this (skip
+            %   WidgetButtonBar SizeChangedFcn under headless), but the
+            %   crash persists deeper in libmex.so /
+            %   libmwm_dispatcher.so. The companion wiring this test
+            %   verifies (COMPDEMO-01..04) is structural and exercised
+            %   by TestFastSenseCompanion and the run_demo smoke tests
+            %   on macOS/Windows CI.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestIndustrialPlantDemoCompanion segfaults MATLAB headless on Linux — covered on macOS/Windows CI');
+        end
+
         function addPaths(testCase) %#ok<MANU>
         %ADDPATHS Add demo + suite + lib paths and run install().
             here = fileparts(mfilename('fullpath'));
@@ -120,12 +144,54 @@ classdef TestIndustrialPlantDemoCompanion < matlab.unittest.TestCase
             teardownDemo(ctx);
             drawnow;
             testCase.addTeardown(@() teardownDemo(ctx));   % belt-and-braces
-            testCase.verifyTrue( ~isvalid(ctx.companion) || ~ctx.companion.IsOpen, ...
+            testCase.verifyTrue(~isvalid(ctx.companion) || ~ctx.companion.IsOpen, ...
                 'COMPDEMO-04: teardownDemo must close ctx.companion (handle invalid OR IsOpen=false)');
             postTimers = timerfindall();
             newTimers  = setdiff(postTimers, preTimers);
             testCase.verifyEmpty(newTimers, ...
                 'COMPDEMO-04: teardownDemo must leave no NEW timers in timerfindall (no orphans)');
+        end
+
+        function testDemoCompanionExposesEventStore(testCase)
+            %TESTDEMOCOMPANIONEXPOSESEVENTSTORE
+            %   After run_demo, companion's resolved EventStore is non-empty.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestIndustrialPlantDemoCompanion is MATLAB-only.');
+            TagRegistry.clear();
+            ctx = run_demo();
+            testCase.addTeardown(@() teardownDemo(ctx));
+            testCase.addTeardown(@() TagRegistry.clear());
+            testCase.assertNotEmpty(ctx.companion);
+            testCase.verifyNotEmpty(ctx.companion.getEventStore());
+        end
+
+        function testDemoEventsButtonEnabled(testCase)
+            %TESTDEMOEVENTSBUTTONENABLED
+            %   After run_demo, the toolbar Events button is enabled.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestIndustrialPlantDemoCompanion is MATLAB-only.');
+            TagRegistry.clear();
+            ctx = run_demo();
+            testCase.addTeardown(@() teardownDemo(ctx));
+            testCase.addTeardown(@() TagRegistry.clear());
+            btn = findall(ctx.companion.getFigForTest_(), 'Tag', 'CompanionEventsBtn');
+            testCase.verifyNotEmpty(btn);
+            testCase.verifyEqual(char(get(btn, 'Enable')), 'on');
+        end
+
+        function testDemoEventViewerOpensWithoutErrors(testCase)
+            %TESTDEMOEVENTVIEWEROPENSWITHOUTERRORS
+            %   Programmatically open the viewer; verify it constructs successfully.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'TestIndustrialPlantDemoCompanion is MATLAB-only.');
+            TagRegistry.clear();
+            ctx = run_demo();
+            testCase.addTeardown(@() teardownDemo(ctx));
+            testCase.addTeardown(@() TagRegistry.clear());
+            ctx.companion.openEventViewer();
+            v = ctx.companion.getEventViewerForTest_();
+            testCase.verifyClass(v, 'CompanionEventViewer');
+            testCase.verifyTrue(isgraphics(v.hFigure));
         end
 
     end

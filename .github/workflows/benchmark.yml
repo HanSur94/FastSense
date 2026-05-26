@@ -46,6 +46,16 @@ jobs:
         run: |
           xvfb-run octave --eval "addpath(pwd); install(); addpath('scripts'); run_ci_benchmark();"
 
+      # Phase 1028 D-07: upload the raw benchmark-results.json so the
+      # 1000-tag harness baseline can be captured without scraping logs.
+      - name: Upload benchmark results artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-tag-pipeline-1k-results
+          path: benchmark-results.json
+          retention-days: 30
+
       - name: Fix git ownership
         run: git config --global --add safe.directory /__w/FastSense/FastSense
 
@@ -57,7 +67,27 @@ jobs:
           output-file-path: benchmark-results.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
-          alert-threshold: '110%'
-          comment-on-alert: true
+          # PR-comment alerts disabled (comment-on-alert: false) because the
+          # FastSense rendering benches (Render/Downsample/Zoom/Instantiation
+          # at 5M–100M points) have mean wall-times of 0.4–0.7 ms on shared
+          # CI runners. JIT-cached incremental update paths produce 5–11x
+          # variance run-over-run with NO code change involved. Both 110%
+          # (initial) and 200% (Phase 1028 follow-up, PR #155) thresholds
+          # produced repeat false-positives — evidenced by 11.10x ratios on
+          # Downsample 100M and 11.60x on Instantiation 100M in PR #155
+          # itself, which only changed test files + workflow config.
+          #
+          # The bench action still UPLOADS results to the gh-pages dashboard
+          # (auto-push: true above) so real regressions are visible as a
+          # trend on the chart — that's the right channel for sub-ms metrics.
+          # PR comments were the wrong notification surface; treating CI's
+          # bench output as a regression gate at this granularity is noise.
+          #
+          # If a future phase introduces stable >100ms benches (e.g. the
+          # 1000-tag harness's WithIO tickMin at ~3.6s), those would be
+          # appropriate to alert on — but they should live in a separate
+          # benchmark action invocation with their own threshold.
+          alert-threshold: '200%'
+          comment-on-alert: false
           fail-on-alert: false
           alert-comment-cc-users: '@HanSur94'

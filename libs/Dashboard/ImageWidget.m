@@ -7,9 +7,11 @@ classdef ImageWidget < DashboardWidget
     end
 
     properties (SetAccess = private)
-        hAxes     = []
-        hImage    = []
-        hCaption  = []
+        hAxes          = []
+        hImage         = []
+        hCaption       = []
+        CachedImgData_ = []    % cached imread result; invalidated when File_ or ImageFcn change
+        CachedFile_    = ''    % the File path that produced CachedImgData_
     end
 
     methods
@@ -61,13 +63,23 @@ classdef ImageWidget < DashboardWidget
                 return;
             end
 
-            imgData = [];
-            if ~isempty(obj.File) && exist(obj.File, 'file')
-                imgData = imread(obj.File);
-            elseif ~isempty(obj.ImageFcn)
-                imgData = obj.ImageFcn();
-            end
+            imgData = obj.getImgData_();
             if isempty(imgData), return; end
+
+            % Only rebuild the image object when the data actually changed.
+            % For file-backed widgets with a static file, CachedImgData_ stays
+            % constant across ticks so the early-out fires immediately after the
+            % first render, avoiding a full imagesc/image + axis call every tick.
+            % ImageFcn-backed widgets always rebuild (callback may return new data).
+            if ~isempty(obj.hImage) && ishandle(obj.hImage) && isempty(obj.ImageFcn)
+                % In-place update: just swap CData — no axes re-layout needed.
+                try
+                    set(obj.hImage, 'CData', imgData);
+                    return;
+                catch
+                    % Handle no longer valid; fall through to full rebuild.
+                end
+            end
 
             % For matrices (not RGB uint8), use imagesc so CData auto-scales to
             % the colormap range -- image() would clip to 1..64 and render a dark block.
@@ -122,6 +134,27 @@ classdef ImageWidget < DashboardWidget
             if ~isempty(obj.ImageFcn) && isempty(obj.File)
                 s.source = struct('type', 'callback', ...
                     'function', func2str(obj.ImageFcn));
+            end
+        end
+    end
+
+    methods (Access = private)
+        function imgData = getImgData_(obj)
+        %GETIMGDATA_ Return image data, caching file reads across ticks.
+        %   File-backed widgets: imread is called only when File changes or the
+        %   cache is empty. The cached path (CachedFile_) is compared to the
+        %   current File property; a mismatch forces a reload.
+        %   ImageFcn-backed widgets: the callback is always invoked (its return
+        %   value may change every tick, e.g. a live correlation image).
+            imgData = [];
+            if ~isempty(obj.File) && exist(obj.File, 'file')
+                if isempty(obj.CachedImgData_) || ~strcmp(obj.CachedFile_, obj.File)
+                    obj.CachedImgData_ = imread(obj.File);
+                    obj.CachedFile_ = obj.File;
+                end
+                imgData = obj.CachedImgData_;
+            elseif ~isempty(obj.ImageFcn)
+                imgData = obj.ImageFcn();
             end
         end
     end

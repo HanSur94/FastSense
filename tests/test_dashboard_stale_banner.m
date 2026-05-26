@@ -166,6 +166,139 @@ function test_dashboard_stale_banner()
         nFailed = nFailed + 1;
     end
 
+    % testBannerInReservedStripAboveAllChrome
+    %   Banner now lives in a permanent reserved strip at the figure top.
+    %   Toolbar, page tabs, and content area sit BELOW the strip — the
+    %   banner is never an overlay. This test pins that invariant for a
+    %   2-page dashboard and asserts content-area stability across
+    %   show/hide.
+    try
+        d = DashboardEngine('BannerReservedStrip');
+        d.addPage('A');
+        d.addPage('B');
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+
+        caBefore = d.Layout.ContentArea;
+        d.showStaleBanner({'X'});
+
+        bannerPos  = get(d.hStaleBanner,   'Position');
+        toolbarPos = get(d.Toolbar.hPanel, 'Position');
+        pageBarPos = get(d.hPageBar,       'Position');
+
+        % Banner sits in the reserved top strip: Y == 1 - BannerHeight,
+        % top edge at 1.0.
+        assert(abs(bannerPos(2) - (1 - d.BannerHeight)) < 1e-6, ...
+            sprintf('banner Y %.6f must equal 1 - BannerHeight = %.6f', ...
+                bannerPos(2), 1 - d.BannerHeight));
+        assert(abs((bannerPos(2) + bannerPos(4)) - 1.0) < 1e-6, ...
+            sprintf('banner top %.6f must equal 1.0', ...
+                bannerPos(2) + bannerPos(4)));
+
+        % Banner sits ABOVE toolbar (no overlap).
+        toolbarTop = toolbarPos(2) + toolbarPos(4);
+        assert(bannerPos(2) >= toolbarTop - 1e-6, ...
+            sprintf('banner bottom %.6f must be >= toolbar top %.6f', ...
+                bannerPos(2), toolbarTop));
+
+        % Toolbar sits directly below the reserved strip.
+        assert(abs(toolbarTop - (1 - d.BannerHeight)) < 1e-6, ...
+            sprintf('toolbar top %.6f must equal 1 - BannerHeight = %.6f', ...
+                toolbarTop, 1 - d.BannerHeight));
+        toolbarBot = toolbarPos(2);
+        assert(abs(toolbarBot - (1 - d.BannerHeight - d.Toolbar.Height)) < 1e-6, ...
+            sprintf('toolbar bottom %.6f must equal 1 - BannerHeight - Toolbar.Height = %.6f', ...
+                toolbarBot, 1 - d.BannerHeight - d.Toolbar.Height));
+
+        % Page bar sits below toolbar.
+        pageBarTop = pageBarPos(2) + pageBarPos(4);
+        assert(pageBarTop <= toolbarBot + 1e-6, ...
+            sprintf('page-bar top %.6f must be <= toolbar bottom %.6f', ...
+                pageBarTop, toolbarBot));
+
+        % Content area must NOT extend into the reserved strip.
+        ca = d.Layout.ContentArea;
+        assert(ca(2) + ca(4) <= 1 - d.BannerHeight + 1e-6, ...
+            sprintf('content area top %.6f must be <= 1 - BannerHeight = %.6f', ...
+                ca(2) + ca(4), 1 - d.BannerHeight));
+
+        % Banner visibility does NOT change content area (no overlay shrink).
+        assert(isequal(d.Layout.ContentArea, caBefore), ...
+            'ContentArea must be unchanged when banner is shown (reserved strip is permanent)');
+
+        % Page bar still visible while banner is shown.
+        assert(strcmp(get(d.hPageBar, 'Visible'), 'on'), ...
+            'page bar must remain visible while banner is shown');
+
+        d.hideStaleBanner();
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testBannerInReservedStripAboveAllChrome: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % testReservedStripStableWhenHidden
+    %   Toggling the banner visibility must not shift toolbar, page bar,
+    %   or content-area positions — the reserved strip is permanent.
+    try
+        d = DashboardEngine('ReservedStripStable');
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+
+        % Snapshot positions while banner is hidden.
+        toolbarHidden = get(d.Toolbar.hPanel, 'Position');
+        pageBarHidden = get(d.hPageBar,       'Position');
+        caHidden      = d.Layout.ContentArea;
+        bannerHidden  = get(d.hStaleBanner,   'Position');
+
+        % Show then hide the banner.
+        d.showStaleBanner({'A'});
+        d.hideStaleBanner();
+
+        % Positions must be byte-identical across the visibility toggle.
+        assert(isequal(get(d.Toolbar.hPanel, 'Position'), toolbarHidden), ...
+            'toolbar Position must be byte-identical after show/hide');
+        assert(isequal(get(d.hPageBar, 'Position'), pageBarHidden), ...
+            'page-bar Position must be byte-identical after show/hide');
+        assert(isequal(d.Layout.ContentArea, caHidden), ...
+            'Layout.ContentArea must be byte-identical after show/hide');
+
+        % Reserved strip is parked at [0, 1 - BannerHeight, 1, BannerHeight]
+        % even when Visible='off'.
+        expected = [0, 1 - d.BannerHeight, 1, d.BannerHeight];
+        assert(max(abs(bannerHidden - expected)) < 1e-9, ...
+            sprintf('hidden banner Position [%g %g %g %g] must equal [0 %g 1 %g]', ...
+                bannerHidden(1), bannerHidden(2), bannerHidden(3), bannerHidden(4), ...
+                1 - d.BannerHeight, d.BannerHeight));
+
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testReservedStripStableWhenHidden: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % testBannerHeightProperty
+    %   BannerHeight is a public, readable property with a sane default.
+    try
+        d = DashboardEngine('BannerHeightProp');
+
+        assert(isprop(d, 'BannerHeight'), ...
+            'DashboardEngine must expose a BannerHeight property');
+        assert(abs(d.BannerHeight - 0.035) < 1e-12, ...
+            sprintf('default BannerHeight must be 0.035, got %.6f', d.BannerHeight));
+        assert(d.BannerHeight > 0 && d.BannerHeight < 0.1, ...
+            'BannerHeight must lie in (0, 0.1)');
+
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testBannerHeightProperty: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
     fprintf('    %d passed, %d failed.\n', nPassed, nFailed);
     if nFailed > 0
         error('test_dashboard_stale_banner:fail', ...

@@ -16,12 +16,15 @@ function ctx = run_demo(varargin)
 %     ctx - struct with fields:
 %       writerTimer    - IndustrialPlantDataGen MATLAB timer (running)
 %       pipeline       - LiveTagPipeline (running)
-%       engine         - [] (plan 02 populates this with a DashboardEngine)
+%       engine         - DashboardEngine handle (live, populated by buildDashboard)
 %       companion      - FastSenseCompanion handle (or [] when 'Companion'=false)
 %       store          - EventStore wired into every MonitorTag
 %       plantHealthKey - 'plant.health' (top-level rollup)
 %       rawDir         - absolute path to demo/industrial_plant/data/raw
 %       tagsDir        - absolute path to demo/industrial_plant/data/tags
+%       plantLogPath   - absolute path to the generated plant_log.csv (or
+%                        '' if seeding/attaching failed; see warning
+%                        run_demo:plantLogAttachFailed)
 %
 %   Teardown:
 %     teardownDemo(ctx);
@@ -40,20 +43,24 @@ function ctx = run_demo(varargin)
 %     teardownDemo(ctx);
 %
 %   See also: plantConfig, registerPlantTags, makeDataGenerator,
-%             startLivePipeline, teardownDemo, TagRegistry, LiveTagPipeline.
+%             startLivePipeline, seedPlantLog, teardownDemo,
+%             TagRegistry, LiveTagPipeline.
 
     here    = fileparts(mfilename('fullpath'));
 
     % Parse name-value options (matches FastSenseCompanion's varargin parser convention).
     useCompanion = true;
+    stressMode   = 'off';   % off | small | medium | large -- see stressFleets()
     for k = 1:2:numel(varargin)
         key = varargin{k};
         switch key
             case 'Companion'
                 useCompanion = logical(varargin{k+1});
+            case 'StressMode'
+                stressMode = varargin{k+1};
             otherwise
                 error('run_demo:unknownOption', ...
-                    'Unknown option ''%s''. Valid options: Companion.', key);
+                    'Unknown option ''%s''. Valid options: Companion, StressMode.', key);
         end
     end
 
@@ -70,8 +77,22 @@ function ctx = run_demo(varargin)
     % find a target on the very first tick.
     [store, plantHealthKey] = registerPlantTags(rawDir);
 
+    % Stress fleets (opt-in): register extra synthetic SensorTags backed by
+    % shared multi-column .dat files so LiveTagPipeline can be exercised at
+    % scale (K << N case where K=files, N=tags). No-op for default 'off'.
+    fleets = stressFleets(stressMode);
+    fleetTagKeys = registerStressFleetTags(rawDir, fleets);
+
+    % Preload one week of synthetic 1 Hz history into every SensorTag /
+    % StateTag, drive the MonitorTag detector over that history so the
+    % EventStore is populated with real (not injected) events, and
+    % persist the store. seedHistory must run BEFORE the writer timer
+    % starts so the first live tick lands strictly after the historical
+    % window. Deterministic under rng(1015); restored on exit.
+    seedHistory(store, plantConfig());
+
     % Build the writer timer (unstarted), then the pipeline, then start both.
-    writerTimer = makeDataGenerator(rawDir);
+    writerTimer = makeDataGenerator(rawDir, 'Fleets', fleets);
     start(writerTimer);
     pipeline = startLivePipeline(rawDir, tagsDir);
 
@@ -89,7 +110,10 @@ function ctx = run_demo(varargin)
         'store',          store, ...
         'plantHealthKey', plantHealthKey, ...
         'rawDir',         rawDir, ...
-        'tagsDir',        tagsDir);
+        'tagsDir',        tagsDir, ...
+        'plantLogPath',   '', ...
+        'stressMode',     stressMode, ...
+        'fleetTagKeys',   {fleetTagKeys});
 
     % Plan 02 hook: build the full dashboard on top of the plumbing.
     % buildDashboard creates the DashboardEngine, renders the figure,
@@ -103,6 +127,23 @@ function ctx = run_demo(varargin)
         ctx.companion = buildCompanion(ctx);
     else
         ctx.companion = [];
+    end
+
+    % Phase 1033 / milestone v3.1 -- seed a synthetic plant log and
+    % attach it to the dashboard so the slider preview + per-widget
+    % overlay are exercised end-to-end. Best-effort: a failure here
+    % must not crash the demo bootstrap (dashboard + writer + pipeline
+    % keep running so the rest of the demo stays usable).
+    try
+        ctx.plantLogPath = seedPlantLog(rawDir, plantConfig());
+        if ~isempty(ctx.engine) && isvalid(ctx.engine)
+            ctx.engine.attachPlantLog(ctx.plantLogPath);
+        end
+    catch err
+        warning('run_demo:plantLogAttachFailed', ...
+            'Seed/attach plant log failed: %s (demo continues without plant log)', ...
+            err.message);
+        ctx.plantLogPath = '';
     end
 
     % Phase 1023.1 cross-phase fix: re-bind the dashboard figure's

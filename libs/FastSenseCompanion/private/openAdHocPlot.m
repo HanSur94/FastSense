@@ -106,10 +106,19 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
             for k = 1:N
                 r = ceil(k / cols);
                 c = mod(k - 1, cols) + 1;
+                % LiveViewMode='preserve' (260512-live-mode-companion-adhoc-tail-spike):
+                % Ad-hoc plots default to 'preserve' so live ticks DON'T slide
+                % the chart's XLim to track the latest sample. Users opt in
+                % to "auto-follow" by clicking the Reset button (or panning
+                % to the tail) themselves. Without this the chart hijacks
+                % the view on every tick, making it impossible to scroll
+                % back and inspect older data while live mode is on. The
+                % dashboard's FastSenseWidget keeps its default of 'reset'.
                 args = { ...
                     'Title',            char(validNames{k}), ...
                     'Tag',              validTags{k}, ...
                     'ShowEventMarkers', true, ...
+                    'LiveViewMode',     'preserve', ...
                     'Position',         [(c-1)*unitW + 1, (r-1)*unitH + 1, unitW, unitH]};
                 es = findEventStoreFor_(validTags{k});
                 if ~isempty(es)
@@ -153,9 +162,9 @@ function es = findEventStoreFor_(tag)
     es = [];
     try
         if ~isobject(tag) || ~isvalid(tag) || ~isprop(tag, 'Key'); return; end
-        monitors = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') ...
-            && ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') ...
-            && strcmp(tt.Parent.Key, tag.Key));
+        monitors = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') && ...
+            ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') && ...
+            strcmp(tt.Parent.Key, tag.Key));
         for k = 1:numel(monitors)
             m = monitors{k};
             if isprop(m, 'EventStore') && ~isempty(m.EventStore) && isvalid(m.EventStore)

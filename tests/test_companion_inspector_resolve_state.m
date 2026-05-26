@@ -6,6 +6,10 @@ function test_companion_inspector_resolve_state()
 %
 %   See also inspectorResolveState, InspectorStateEventData, AdHocPlotEventData.
 
+    if exist('OCTAVE_VERSION', 'builtin') ~= 0
+        fprintf('  Skipping test_companion_inspector_resolve_state on Octave (companion API targets MATLAB R2021a+).\n');
+        return;
+    end
     add_companion_path();
     runInspectorResolveStateTests();
 end

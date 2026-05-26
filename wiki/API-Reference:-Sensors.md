@@ -58,6 +58,43 @@ RUN Enumerate tags, ingest each, write per-tag .mat; throw at end if any failed.
     succeeded - cellstr of tag keys that wrote OK
     failed    - struct array of failed tags (key, file, errorId, message)
 
+#### `setWriteFnForTesting_(obj, fn)`
+
+SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
+  Phase 1028 plan 02b: replace the default @writeTagMat_ with a
+  user-supplied function handle (e.g., a no-op for benchmark NoIO
+  measurement). Production callers MUST NOT use this — the
+  default cadence per D-12 is write-on-every-tick.
+
+#### `setFsCoalesceForTesting_(obj, tf)`
+
+SETFSCOALESCEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 06).
+  Phase 1028 plan 06: BatchTagPipeline.run() does not currently
+  issue per-tag exist/dir/datenum syscalls (parsing happens via
+  parseOrCache_, which uses ext-based dispatch, not file stats),
+  so fs-stat coalescing is a no-op here. The setter exists for
+  symmetry with LiveTagPipeline so tests/bench scripts can
+  configure both pipelines uniformly. Hidden (D-10).
+
+#### `setCoalesceActiveForTesting_(obj, tf)`
+
+SETCOALESCEACTIVEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 05).
+  Phase 1028 plan 05: BatchTagPipeline.run() does not currently
+  accumulate a listener cascade (it writes 'overwrite' mode and
+  does not call tag.updateData()), so coalescing is a no-op
+  here. The setter exists for symmetry with LiveTagPipeline so
+  tests/bench scripts can configure both pipelines uniformly.
+  Hidden (D-10).
+
+#### `setCacheActiveForTesting_(obj, tf)`
+
+SETCACHEACTIVEFORTESTING_ Internal-only setter for the prior-state cache.
+  Phase 1028 plan 02d: enable/disable the in-memory priorState_ cache.
+  Mirror of LiveTagPipeline.setCacheActiveForTesting_; production callers
+  MUST NOT use this — cache-on is the production default and is byte-for-byte
+  parity-tested against the cache-off path. Hidden so it does not appear in
+  tab-completion, doc(), or properties() listings (D-10).
+
 ---
 
 ## `CompositeTag` --- Aggregate MonitorTag/CompositeTag children into a 0/1 derived series.
@@ -257,6 +294,13 @@ GETCHILDAT Return the Tag handle of the i-th child (1-based).
   Test-affordance API for 3-deep descent assertions
   (Pitfall 8 round-trip).  Not a mutation path -- child
   insertion goes through addChild.
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10).
 
 ### Static Methods
 
@@ -465,6 +509,13 @@ ADDLISTENER Register a downstream listener.
   bespoke invalidate also work). Listeners are held by
   strong reference — caller manages lifecycle.
 
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10).
+
 ### Static Methods
 
 #### `DerivedTag.obj = fromStruct(s)`
@@ -494,12 +545,30 @@ Mirrors MatFileDataSource's modTime + lastIndex state machine
     - Per-tag try/catch: one tag's failure does NOT abort the tick.
     - tagState_ entries GC'd each tick for tags no longer eligible.
 
+  Cluster mode (Phase 1030, Plan 02):
+    - Enabled by passing 'SharedRoot' NV-pair to constructor.
+    - All shared .mat writes routed through TagWriteCoordinator +
+      AtomicWriter for safe multi-process access (REQ CONC-01).
+    - Single-user mode (no SharedRoot) exercises ZERO Concurrency-
+      library code paths (Success Criterion 5 / byte-identical guarantee).
+    - BusyMode='drop' is forced in cluster mode (Pitfall 7).
+    - Timer period is jittered +-25% in cluster mode (Pitfall 11).
+    - Lock contention causes per-tag skip-and-defer, not whole-tick block.
+
   Observability (Major-2 / revision-1):
     - LastFileParseCount: public SetAccess=private property recording the
       number of DISTINCT files parsed in the most recent tick. Captured
       BEFORE the per-tick tickCache goes out of scope. Mirrors
       BatchTagPipeline's mechanism so tests can assert dedup behavior
       via direct property read rather than wrapping readRawDelimited_.
+
+  Cluster-mode observability (Phase 1030 Plan 02):
+    - SkippedTickCount: public SetAccess=private; incremented on lock
+      contention or BusyMode='drop' skip.
+    - LastTickDurationSec: public SetAccess=private; wall-clock duration
+      of the last onTick_ invocation.
+    - LastLockContentionEvent: public SetAccess=private; most recent
+      contention event struct {tagKey, holder.{user, host, age}}.
 
   Shares readRawDelimited_ / selectTimeAndValue_ / writeTagMat_ with
   BatchTagPipeline -- single source of truth for parse + shape + write.
@@ -514,6 +583,8 @@ LIVETAGPIPELINE Construct with OutputDir (required) + options.
   p = LiveTagPipeline('OutputDir', dir)
   p = LiveTagPipeline('OutputDir', dir, 'Interval', 5, 'Verbose', true)
   p = LiveTagPipeline('OutputDir', dir, 'ErrorFcn', @(ex) ...)
+  p = LiveTagPipeline('OutputDir', dir, 'SharedRoot', root)  % cluster mode
+  p = LiveTagPipeline('OutputDir', dir, 'SharedRoot', root, 'LockTimeout', 10)
 
 ### Properties
 
@@ -549,6 +620,50 @@ TICKONCE Run one tick synchronously (exposed for tests).
 GET.TAGSTATECOUNT Dependent property exposing tagState_.Count.
   RESEARCH Q3 observability -- lets tests verify that entries
   for unregistered tags are GC'd between ticks.
+
+#### `setWriteFnForTesting_(obj, fn)`
+
+SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
+  Phase 1028 plan 02b: replace the default @writeTagMat_ with a
+  user-supplied function handle (e.g., a no-op for benchmark NoIO
+  measurement). Production callers MUST NOT use this — the
+  default cadence per D-12 is write-on-every-tick.
+
+#### `setFsCoalesceForTesting_(obj, tf)`
+
+SETFSCOALESCEFORTESTING_ Internal-only setter for per-tick fs-stat coalescing.
+  Phase 1028 plan 06: enable/disable the per-tick coalesced
+  filesystem-stat lookup inside onTick_. When ON (production
+  default), onTick_ issues ONE dir(parentDir) call per unique
+  raw-source parent directory at tick start and stores the
+  resulting basename->struct map; processTag_ consults that map
+  instead of issuing per-tag exist/dir/datenum syscalls. When
+  OFF, the per-tag fallback path runs (one exist + one dir per
+  tag) — used by the benchmark to isolate the coalescing win.
+
+#### `setCoalesceActiveForTesting_(obj, tf)`
+
+SETCOALESCEACTIVEFORTESTING_ Internal-only setter for end-of-tick listener coalescing.
+  Phase 1028 plan 05: enable/disable the A1+A2 end-of-tick
+  Tag.invalidateBatch_(updatedSet) call inside onTick_.
+  Production callers MUST NOT use this — coalescing-on is the
+  production default (coalesceActive_ = true). The setter exists
+  so the bench can measure the coalesce-on vs coalesce-off
+  delta against the dominant `other` bucket (per-tag dispatch +
+  listener cascade — see Plan 02d VERIFICATION.md). Hidden so
+  it does not appear in tab-completion / doc() (D-10). Mirrors
+  the plan-02b setWriteFnForTesting_ and plan-02d
+  setCacheActiveForTesting_ patterns.
+
+#### `setCacheActiveForTesting_(obj, tf)`
+
+SETCACHEACTIVEFORTESTING_ Internal-only setter for the prior-state cache.
+  Phase 1028 plan 02d: enable/disable the in-memory priorState_ cache
+  used to skip the on-disk load() in writeTagMat_('append',...).
+  Production callers MUST NOT use this — the cache is the production
+  default (cacheActive_ = true) and is byte-for-byte parity-tested
+  against the cache-off path. Disabling it is a benchmark feature for
+  measuring the load()-only cost (see bench_tag_pipeline_1k --cache-off).
 
 ---
 
@@ -632,6 +747,18 @@ MonitorTag produces a binary alarm/ok signal by evaluating a
     MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
     MonitorTag:invalidData              — appendData numeric/length mismatch
     MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
+    MonitorTag:emitEventBadKind         — emitEvent_ called with kind not in {start,closed,end}
+    MonitorTag:eventLogReentrantSkip    — (warning ID) cluster-mode emission skipped due to
+                                          re-entrant per-tag lock acquire (Plan 02 will handle)
+
+  Deferred-notify (Pitfall 13 prevention):
+    OnEventStart / OnEventEnd callbacks are NOT invoked during the emission body.
+    They are queued on pendingNotify_ and flushed by flushPendingNotify_() AFTER
+    the emission loop completes, with inEmission_ = false.
+    Pre-refactor: listeners fired synchronously DURING EventStore.append.
+    Post-refactor: listeners fire immediately AFTER appendData/getXY returns,
+    but OUTSIDE the emission window. The "event was emitted" semantic is preserved;
+    only the timing changes from synchronous-during-append to post-emission-batch.
 
   Persistence (Phase 1007 MONITOR-09):
     Opt-in via Persist=true + DataStore. Staleness detection uses a
@@ -662,6 +789,7 @@ MONITORTAG Construct a MonitorTag.
 | OnEventEnd | `[]` | function_handle @(event); [] disables callback |
 | Persist | `false` | MONITOR-09 opt-in (Pitfall 2 default-off) |
 | DataStore | `[]` | FastSenseDataStore handle; required when Persist=true |
+| EventLog | `[]` | libs/Concurrency/EventLog.m handle; non-empty triggers cluster-mode emission |
 
 ### Methods
 
@@ -719,6 +847,13 @@ ADDLISTENER Register a listener notified when this monitor invalidates.
   that wraps an inner MonitorTag registers as the inner's
   listener so that root-parent updates cascade through.
 
+#### `tf = getInEmission_(obj)`
+
+GETINMISSION_ Test accessor: return true while inside an emission body.
+  Exists ONLY for test observability (deferred-notify proof in
+  TestListenerCannotAcquireLock). The trailing underscore marks it as
+  an internal accessor not intended for production callers.
+
 #### `appendData(obj, newX, newY)`
 
 APPENDDATA Extend cached (X, Y) with new tail samples — no full recompute.
@@ -735,6 +870,13 @@ APPENDDATA Extend cached (X, Y) with new tail samples — no full recompute.
 #### `set()`
 
 #### `set()`
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10).
 
 ### Static Methods
 
@@ -861,6 +1003,14 @@ ADDLISTENER Register a listener notified on underlying data change.
 
 UPDATEDATA Replace X/Y data and fire listeners.
 
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10). Mirrors getListeners_ on StateTag, MonitorTag,
+  CompositeTag, DerivedTag.
+
 ### Static Methods
 
 #### `SensorTag.obj = fromStruct(s)`
@@ -965,6 +1115,13 @@ UPDATEDATA Replace public X/Y and fire listeners (MONITOR-04).
   Additive API — does NOT touch constructor or getXY paths.
   Any registered MonitorTag or other listener receives an
   invalidate() call after the new data is installed.
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10).
 
 ### Static Methods
 
@@ -1078,11 +1235,24 @@ EVENTSATTACHED Query events bound to this tag via EventBinding.
   Returns Event array (possibly empty). This is a query, NOT a
   stored property -- no Event handles on Tag (Pitfall 4).
 
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Default accessor returning empty cell (Phase 1028 plan 05).
+  Subclasses that maintain a listener cell (SensorTag,
+  StateTag, MonitorTag, CompositeTag, DerivedTag) override
+  this to expose their private `listeners_` property for
+  `Tag.invalidateBatch_` to walk. The Tag base returns {} —
+  abstract Tag has no listeners.
+
 ### Static Methods
 
 #### `Tag.obj = fromStruct(s)`
 
 FROMSTRUCT Reconstruct a Tag from a struct.  Subclass must override.
+
+#### `Tag.invalidateBatch_(tagSet)`
+
+INVALIDATEBATCH_ Coalesced invalidation across many tags (Phase 1028 plan 05).
 
 ---
 

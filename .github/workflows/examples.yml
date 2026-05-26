@@ -160,7 +160,9 @@ jobs:
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v3
         with:
-          release: R2020b
+          # Matches tests.yml (PR #109): R2020b libmex segfaults on the
+          # GitHub xvfb runner; codebase targets R2021a+ uifigure features.
+          release: R2021b
           cache: true
 
       - name: Run MATLAB-only examples

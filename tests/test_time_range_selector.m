@@ -1,12 +1,15 @@
 function test_time_range_selector()
 %TEST_TIME_RANGE_SELECTOR Unit tests for TimeRangeSelector invariants.
 %
-%   Covers six invariants from plan 1016-02's public contract:
+%   Covers seven invariants from plan 1016-02's public contract (with
+%   Case 5 split into 5a/5b per 260512-live-mode-companion-adhoc-tail-
+%   -spike's preserve-vs-rescale dichotomy):
 %     1. Construction defaults (DataRange=[0 1], Selection=[0 1], no callback).
 %     2. Swapped setSelection bounds are reordered to tStart < tEnd.
 %     3. setSelection clamps out-of-range bounds to DataRange.
 %     4. setSelection enforces MinWidthFrac * span as a minimum width.
-%     5. setDataRange rescales the current selection proportionally.
+%     5a. setDataRange superset extension preserves selection verbatim.
+%     5b. setDataRange contraction-outside-selection rescales proportionally.
 %     6. OnRangeChanged fires exactly once per setSelection call with the
 %        final (post-clamp, post-reorder) [tStart, tEnd].
 
@@ -67,19 +70,40 @@ function test_time_range_selector()
         sprintf('Case 4 min width: width=%g expected >= 0.5', b - a));
     delete(s);
 
-    % --- Case 5: setDataRange rescales proportionally ------------------------
-    % Start with DR=[0,100] and Sel=[20,80] (20% offset + 60% width). After
-    % setDataRange(0, 200), selection must remain at the same fractional
-    % position => [40, 160].
+    % --- Case 5: setDataRange selection-preserve vs rescale ------------------
+    % Production behavior (260512-live-mode-companion-adhoc-tail-spike):
+    %   - When the new DataRange is a STRICT SUPERSET of the current selection,
+    %     the selection is preserved verbatim — Sel=[20,80] stays put after
+    %     DR is extended from [0,100] to [0,200]. This is the "live mode
+    %     pan-freeze" path (every live tick extends DR by ~1 s; we don't
+    %     want that to shift the user's selected window).
+    %   - When the new DataRange contracts or no longer contains the
+    %     selection, the selection IS rescaled proportionally.
+    % We exercise BOTH branches here.
     p5 = uipanel('Parent', f, 'Units', 'normalized', ...
                  'Position', [0 0 1 0.06]);
     s = TimeRangeSelector(p5);
     s.setDataRange(0, 100);
     s.setSelection(20, 80);
+    % Branch 1: superset extension — selection preserved verbatim.
     s.setDataRange(0, 200);
     [a, b] = s.getSelection();
-    assert(abs(a - 40) < 1e-6, sprintf('Case 5 rescale: a=%g expected 40', a));
-    assert(abs(b - 160) < 1e-6, sprintf('Case 5 rescale: b=%g expected 160', b));
+    assert(abs(a - 20) < 1e-6, sprintf('Case 5 preserve: a=%g expected 20 (superset path)', a));
+    assert(abs(b - 80) < 1e-6, sprintf('Case 5 preserve: b=%g expected 80 (superset path)', b));
+    delete(s);
+
+    % Branch 2: range contraction outside current selection — rescale fires.
+    p5b = uipanel('Parent', f, 'Units', 'normalized', ...
+                  'Position', [0 0 1 0.06]);
+    s = TimeRangeSelector(p5b);
+    s.setDataRange(0, 100);
+    s.setSelection(20, 80);
+    s.setDataRange(50, 200);   % contracts left edge above Sel(1)=20 -> rescale
+    [a, b] = s.getSelection();
+    % Rescaled selection: frac0=0.2 (was 20% offset), frac1=0.8 (80% offset);
+    % newSpan = 150 -> a = 50 + 0.2*150 = 80, b = 50 + 0.8*150 = 170.
+    assert(abs(a - 80) < 1e-6, sprintf('Case 5 rescale: a=%g expected 80 (contraction path)', a));
+    assert(abs(b - 170) < 1e-6, sprintf('Case 5 rescale: b=%g expected 170 (contraction path)', b));
     delete(s);
 
     % --- Case 6: OnRangeChanged fires once per call with final bounds --------
@@ -113,7 +137,7 @@ function test_time_range_selector()
 
     delete(s);
 
-    fprintf('    All 6 tests passed.\n');
+    fprintf('    All 7 tests passed.\n');
 end
 
 function captureHandler(tStart, tEnd)
