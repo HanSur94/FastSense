@@ -190,6 +190,313 @@ function test_dashboard_events_toggle()
         try close(d.hFigure); catch; end
     end
 
+    % --- Test 9: TagRegistry.setEventStore / getEventStore round-trip ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        s = EventStore(tempPath);
+        TagRegistry.setEventStore(s);
+        got = TagRegistry.getEventStore();
+        assert(isequal(got, s), 'getEventStore should return the store just set');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testTagRegistryEventStoreRoundTrip\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testTagRegistryEventStoreRoundTrip: %s\n', err.message);
+    end
+
+    % --- Test 10: getEventStore returns [] before any set (empty default) ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        assert(isempty(TagRegistry.getEventStore()), ...
+            'getEventStore should return [] before any setEventStore call');
+        nPassed = nPassed + 1;
+        fprintf('    PASS testTagRegistryEventStoreEmptyDefault\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testTagRegistryEventStoreEmptyDefault: %s\n', err.message);
+    end
+
+    % --- Test 11: setEventStore second call overwrites first ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        p1 = [tempname(), '.mat']; p2 = [tempname(), '.mat'];
+        s1 = EventStore(p1); s2 = EventStore(p2);
+        TagRegistry.setEventStore(s1);
+        TagRegistry.setEventStore(s2);
+        assert(isequal(TagRegistry.getEventStore(), s2), ...
+            'getEventStore should return s2 after overwrite');
+        if exist(p1, 'file'); delete(p1); end
+        if exist(p2, 'file'); delete(p2); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testTagRegistryEventStoreOverwrite\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testTagRegistryEventStoreOverwrite: %s\n', err.message);
+    end
+
+    % --- Test 12: TagRegistry.clear() resets EventStore slot ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        TagRegistry.setEventStore(EventStore(tempPath));
+        TagRegistry.clear();
+        assert(isempty(TagRegistry.getEventStore()), ...
+            'getEventStore should return [] after clear()');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testTagRegistryClearResetsEventStore\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testTagRegistryClearResetsEventStore: %s\n', err.message);
+    end
+
+    % --- Test 13: setEventStore([]) clears slot explicitly ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        TagRegistry.setEventStore(EventStore(tempPath));
+        TagRegistry.setEventStore([]);
+        assert(isempty(TagRegistry.getEventStore()), ...
+            'getEventStore should return [] after setEventStore([])');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testTagRegistryEventStoreSetEmptyClears\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testTagRegistryEventStoreSetEmptyClears: %s\n', err.message);
+    end
+
+    % --- Test 14: MonitorTag constructor falls back to registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        TagRegistry.setEventStore(es);
+        parent = SensorTag('p');
+        parent.updateData([1 2 3], [1 1 1]);
+        m = MonitorTag('p.high', parent, @(x, y) y > 5);
+        assert(isequal(m.EventStore, es), 'EventStore should equal registry default');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testMonitorTagRegistryDefaultFallback\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testMonitorTagRegistryDefaultFallback: %s\n', err.message);
+    end
+
+    % --- Test 15: explicit 'EventStore' NV-pair wins over registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        p1 = [tempname(), '.mat']; p2 = [tempname(), '.mat'];
+        esRegistry = EventStore(p1);
+        esExplicit = EventStore(p2);
+        TagRegistry.setEventStore(esRegistry);
+        parent = SensorTag('p');
+        parent.updateData([1 2 3], [1 1 1]);
+        m = MonitorTag('p.high', parent, @(x, y) y > 5, 'EventStore', esExplicit);
+        assert(isequal(m.EventStore, esExplicit), 'explicit EventStore should win over registry');
+        assert(~isequal(m.EventStore, esRegistry), 'registry default should NOT override explicit');
+        if exist(p1, 'file'); delete(p1); end
+        if exist(p2, 'file'); delete(p2); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testMonitorTagExplicitOverridesRegistry\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testMonitorTagExplicitOverridesRegistry: %s\n', err.message);
+    end
+
+    % --- Test 16: dual-key emission — events reachable by parent.Key AND monitor.Key ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        TagRegistry.setEventStore(es);
+        parent = SensorTag('reactor.pressure');
+        parent.updateData([1 2 3], [1 1 1]);
+        m = MonitorTag('reactor.pressure.critical', parent, @(x, y) y > 18);
+        parent.updateData([1 2 3 4 5 6], [1 1 1 20 20 1]);
+        m.appendData([4 5 6], [20 20 1]);
+        byParent = es.getEventsForTag('reactor.pressure');
+        byMonitor = es.getEventsForTag('reactor.pressure.critical');
+        assert(~isempty(byParent), 'parent.Key lookup returned empty');
+        assert(~isempty(byMonitor), 'monitor.Key lookup returned empty');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testMonitorTagDualKeyEmission\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testMonitorTagDualKeyEmission: %s\n', err.message);
+    end
+
+    % --- Test 17: FastSense registry-default fallback renders without error ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        TagRegistry.setEventStore(es);
+        s = SensorTag('s');
+        s.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        m = MonitorTag('s.high', s, @(x, y) y > 5);
+        m.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        byParent = es.getEventsForTag('s');
+        assert(~isempty(byParent), 'parent key lookup returned empty');
+        fig = figure('visible', 'off');
+        ax = axes('Parent', fig);
+        fp = FastSense('Parent', ax);
+        fp.addTag(s);
+        fp.ShowEventMarkers = true;
+        fp.render();  % must not error; registry tail provides the store
+        close(fig);
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testRegistryDefaultFastSense\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testRegistryDefaultFastSense: %s\n', err.message);
+        try close(fig); catch; end
+    end
+
+    % --- Test 18: FastSenseWidget forwards registry-default store to inner FastSense ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        TagRegistry.setEventStore(es);
+        s = SensorTag('s');
+        s.updateData([1 2 3], [1 1 1]);
+        d = DashboardEngine('test');
+        d.addWidget('fastsense', 'Tag', s, 'ShowEventMarkers', true);
+        d.render();
+        w = d.Widgets{1};
+        assert(isequal(w.FastSenseObj.EventStore, es), 'registry default not forwarded');
+        if isfield(d, 'hFigure') && ~isempty(d.hFigure) && ishandle(d.hFigure); close(d.hFigure); end
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testRegistryDefaultFastSenseWidget\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testRegistryDefaultFastSenseWidget: %s\n', err.message);
+        try if isfield(d, 'hFigure') && ~isempty(d.hFigure) && ishandle(d.hFigure); close(d.hFigure); end; catch; end
+    end
+
+    % --- Test 19: explicit EventStore NV-pair wins over registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        p1 = [tempname(), '.mat']; p2 = [tempname(), '.mat'];
+        esRegistry = EventStore(p1);
+        esExplicit = EventStore(p2);
+        TagRegistry.setEventStore(esRegistry);
+        s = SensorTag('s');
+        s.updateData([1 2 3], [1 1 1]);
+        d = DashboardEngine('test');
+        d.addWidget('fastsense', 'Tag', s, 'ShowEventMarkers', true, ...
+            'EventStore', esExplicit);
+        d.render();
+        w = d.Widgets{1};
+        assert(isequal(w.FastSenseObj.EventStore, esExplicit), 'explicit EventStore should win over registry');
+        assert(~isequal(w.FastSenseObj.EventStore, esRegistry), 'registry default should NOT override explicit');
+        if isfield(d, 'hFigure') && ~isempty(d.hFigure) && ishandle(d.hFigure); close(d.hFigure); end
+        if exist(p1, 'file'); delete(p1); end
+        if exist(p2, 'file'); delete(p2); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testFastSenseWidgetExplicitWinsOverRegistry\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testFastSenseWidgetExplicitWinsOverRegistry: %s\n', err.message);
+        try if isfield(d, 'hFigure') && ~isempty(d.hFigure) && ishandle(d.hFigure); close(d.hFigure); end; catch; end
+    end
+
+    % --- Test 20: EventTimelineWidget falls back to registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        s = SensorTag('s');
+        s.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        m = MonitorTag('s.high', s, @(x, y) y > 5, 'EventStore', es);
+        m.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        TagRegistry.setEventStore(es);
+        w = EventTimelineWidget('Title', 'Timeline');
+        evts = w.resolveEvents();
+        assert(~isempty(evts), 'registry default events not returned');
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testRegistryDefaultEventTimeline\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testRegistryDefaultEventTimeline: %s\n', err.message);
+    end
+
+    % --- Test 21: TableWidget(events) falls back to registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        tempPath = [tempname(), '.mat'];
+        es = EventStore(tempPath);
+        s = SensorTag('s', 'Name', 's');
+        s.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        m = MonitorTag('s.high', s, @(x, y) y > 5, 'EventStore', es);
+        m.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        TagRegistry.setEventStore(es);
+        % Construct widget with Mode='events'; EventStoreObj NOT set.
+        % Verify refresh does not throw (registry fallback reached).
+        fig = figure('visible', 'off');
+        w = TableWidget('Title', 'Table', 'Mode', 'events', 'Sensor', s);
+        w.render(uipanel(fig));
+        w.refresh();
+        close(fig);
+        if exist(tempPath, 'file'); delete(tempPath); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testRegistryDefaultTableWidget\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testRegistryDefaultTableWidget: %s\n', err.message);
+        try close(fig); catch; end
+    end
+
+    % --- Test 22: explicit EventStoreObj wins over registry default ---
+    try
+        TagRegistry.clear();
+        EventBinding.clear();
+        p1 = [tempname(), '.mat']; p2 = [tempname(), '.mat'];
+        esRegistry = EventStore(p1);
+        esExplicit = EventStore(p2);
+        sR = SensorTag('reg.s'); sR.updateData([1 2 3 4 5], [1 1 20 20 1]);
+        mR = MonitorTag('reg.s.high', sR, @(x, y) y > 5, 'EventStore', esRegistry);
+        mR.appendData([1 2 3 4 5], [1 1 20 20 1]);
+        sE = SensorTag('exp.s'); sE.updateData([1 2 3 4 5], [1 1 30 30 1]);
+        mE = MonitorTag('exp.s.high', sE, @(x, y) y > 5, 'EventStore', esExplicit);
+        mE.appendData([1 2 3 4 5], [1 1 30 30 1]);
+        TagRegistry.setEventStore(esRegistry);
+        w = EventTimelineWidget('Title', 'Timeline', 'EventStoreObj', esExplicit);
+        evts = w.resolveEvents();
+        assert(~isempty(evts), 'resolveEvents returned empty with explicit store');
+        sNames = arrayfun(@(e) e.label, evts, 'UniformOutput', false);
+        hasExplicitMarker = any(cellfun(@(n) ~isempty(strfind(n, 'exp.s')), sNames));
+        assert(hasExplicitMarker, 'explicit store events not returned (registry default used instead)');
+        if exist(p1, 'file'); delete(p1); end
+        if exist(p2, 'file'); delete(p2); end
+        nPassed = nPassed + 1;
+        fprintf('    PASS testEventTimelineExplicitWinsOverRegistry\n');
+    catch err
+        nFailed = nFailed + 1;
+        fprintf('    FAIL testEventTimelineExplicitWinsOverRegistry: %s\n', err.message);
+    end
+
     fprintf('    %d passed, %d failed.\n', nPassed, nFailed);
     if nFailed > 0
         error('test_dashboard_events_toggle:fail', ...

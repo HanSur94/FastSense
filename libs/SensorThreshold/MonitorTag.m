@@ -201,6 +201,15 @@ classdef MonitorTag < Tag
                 end
             end
 
+            % Phase 1017: registry-default fallback. If no explicit
+            % 'EventStore' NV-pair was provided, consult the registry
+            % default set via TagRegistry.setEventStore(store). Returns
+            % [] when no default has been set, preserving pre-1017
+            % behavior for users who never wired a registry default.
+            if isempty(obj.EventStore)
+                obj.EventStore = TagRegistry.getEventStore();
+            end
+
             % MONITOR-09 Persist-pairing validation: Persist=true requires
             % a DataStore handle, otherwise storeMonitor/loadMonitor have
             % nowhere to go. Fail fast at construction rather than at first
