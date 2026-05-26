@@ -62,6 +62,10 @@ classdef TimeRangeSelector < handle
         hEnvelope   = []   % single patch for aggregate min/max envelope (legacy)
         hPreviewLines = []  % array of line handles, one per widget preview
         hEventMarkers = []  % array of line handles, one per event marker
+        hPlantLogMarkers = []  % Phase 1031 PLOG-VIZ-01/02: array of line handles
+                               % (NaN-separated polyline) created by setPlantLogMarkers;
+                               % SEPARATE from hEventMarkers so the two methods do
+                               % not clobber each other.
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
@@ -615,6 +619,99 @@ classdef TimeRangeSelector < handle
                 end
                 others = ch(mask);
                 set(ax, 'Children', [others(:); handles(:)]);
+            end
+        end
+
+        function setPlantLogMarkers(obj, times)
+            %setPlantLogMarkers  Draw a 1px full-opacity vertical line per plant-log entry time.
+            %   Phase 1031 PLOG-VIZ-01/02/09. Parallel to setEventMarkers but uses
+            %   SEPARATE storage (hPlantLogMarkers) so plant-log markers and the
+            %   sev1/2/3 event markers can coexist without clobbering each other.
+            %
+            %   setPlantLogMarkers(times) clears any existing plant-log markers
+            %   and draws one black vertical 1px line per finite entry in `times`.
+            %   Non-finite values (NaN, ±Inf) are silently dropped (mirrors
+            %   setEventMarkers behavior). Empty input simply clears the markers.
+            %
+            %   Color is sourced from obj.Theme.MarkerPlantLog (with [0 0 0]
+            %   fallback when the theme is missing or doesn't carry the token).
+            %   Unlike setEventMarkers, NO translucent blend is applied — plant-log
+            %   markers should read as crisp dividers, not subtle highlights
+            %   (CONTEXT.md: "crisp dividers, not subtle highlights").
+            %
+            %   The N-marker draw uses the SAME NaN-separator polyline strategy
+            %   as setEventMarkers' uniform path (260508-slider-stuck): one
+            %   single line() handle whose XData = [t1 t1 NaN t2 t2 NaN ...] and
+            %   YData = [0 1 NaN 0 1 NaN ...] renders N disconnected vertical
+            %   marks with constant graphics-object cost. Live-tail ticks therefore
+            %   stay O(1) in handle count regardless of how many plant-log
+            %   entries are in the slider's visible range.
+            %
+            %   Markers have HitTest='off' and PickableParts='none' so they
+            %   never intercept selection-rectangle drag/pan/resize. Hover
+            %   handling for plant-log markers is owned by Plan 03's
+            %   PlantLogSliderHover helper (chained WindowButtonMotionFcn).
+            %
+            %   Z-order: this method sends the marker handle to the BACK after
+            %   creation. Combined with the existing pipeline (setPreviewLines
+            %   also sends preview lines to the BACK), and with computeEventMarkers
+            %   running BEFORE computePlantLogMarkers at every hook site, the
+            %   plant-log line ends up between preview lines (further back) and
+            %   the selection patch / edges / labels (in front). See
+            %   DashboardEngine.computePlantLogMarkers for the call ordering.
+            %
+            %   Storage: result handle is stored in obj.hPlantLogMarkers.
+            %   obj.hEventMarkers is NEVER touched by this method.
+            % Clear previous plant-log marker handles.
+            for k = 1:numel(obj.hPlantLogMarkers)
+                if ishandle(obj.hPlantLogMarkers(k))
+                    delete(obj.hPlantLogMarkers(k));
+                end
+            end
+            obj.hPlantLogMarkers = [];
+            if nargin < 2 || isempty(times)
+                return;
+            end
+            times = times(:).';
+            times = times(isfinite(times));
+            if isempty(times)
+                return;
+            end
+
+            % Resolve color from theme (PLOG-VIZ-09); default black.
+            markerColor = [0 0 0];
+            if isstruct(obj.Theme) && isfield(obj.Theme, 'MarkerPlantLog')
+                markerColor = obj.Theme.MarkerPlantLog;
+            end
+
+            % NaN-separator polyline strategy — single line handle, N segments.
+            nT = numel(times);
+            xv = nan(1, 3 * nT);
+            yv = nan(1, 3 * nT);
+            for i = 1:nT
+                idx3 = (i - 1) * 3;
+                xv(idx3 + 1) = times(i);
+                xv(idx3 + 2) = times(i);
+                % xv(idx3+3) stays NaN (separator)
+                yv(idx3 + 1) = 0;
+                yv(idx3 + 2) = 1;
+                % yv(idx3+3) stays NaN (separator)
+            end
+            h = line(obj.hAxes, xv, yv, ...
+                'Color', markerColor, 'LineWidth', 1, ...
+                'HitTest', 'off', 'PickableParts', 'none');
+            obj.hPlantLogMarkers = h;
+
+            % Z-order: send plant-log marker to the BACK. Because preview lines
+            % were already pushed to the back (by setPreviewLines), the plant-log
+            % line ends up BETWEEN preview (further back) and the selection
+            % patch + edges + labels (in front). (Phase 1031 PLOG-VIZ-02)
+            if ~isempty(h) && ishandle(obj.hAxes)
+                ch = get(obj.hAxes, 'Children');
+                mask = true(size(ch));
+                mask(ch == h) = false;
+                others = ch(mask);
+                set(obj.hAxes, 'Children', [others(:); h]);
             end
         end
 

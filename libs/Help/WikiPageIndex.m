@@ -81,8 +81,8 @@ classdef WikiPageIndex
 
                 if strcmpi(filename, '_Sidebar.md')
                     grp = 'Sidebar';
-                elseif numel(filename) >= numel('API-Reference:-') ...
-                        && strncmp(filename, 'API-Reference:-', numel('API-Reference:-'))
+                elseif numel(filename) >= numel('API-Reference:-') && ...
+                        strncmp(filename, 'API-Reference:-', numel('API-Reference:-'))
                     grp = 'API Reference';
                 else
                     grp = 'Pages';
@@ -381,8 +381,8 @@ classdef WikiPageIndex
                     continue;
                 end
                 marker = '<!-- AUTO-GENERATED';
-                if numel(line) >= numel(marker) ...
-                        && strncmp(line, marker, numel(marker))
+                if numel(line) >= numel(marker) && ...
+                        strncmp(line, marker, numel(marker))
                     tf = true;
                 end
                 return;

@@ -9,6 +9,7 @@
 - ✅ **v2.0 Tag-Based Domain Model** — Phases 1004-1011 (shipped 2026-04-17)
 - 📋 **v2.1 Tag-API Tech Debt Cleanup** — Phases 1012-1017 (carry-forward, parallel — not active)
 - ✅ **v3.0 FastSense Companion** — Phases 1018-1023 + 1023.1 gap closure (shipped 2026-04-30)
+- ✅ **v3.1 Plant Log Integration** — Phases 1034-1038 (shipped 2026-05-19; phases renumbered from 1029-1033 on merge to resolve collision with parallel v4.0 development)
 - 🚧 **Pending milestone** — Phases 1025-1028 (promoted from backlog 2026-05-08, awaiting milestone scoping; 1024 closed via quick task 260508-d7k; 1025/1026 substantially addressed via quick tasks 260508-d8y/260508-das)
 - 🚧 **v4.0 Multi-User LAN Concurrency** — Phases 1029-1033 (active, started 2026-05-13)
 
@@ -22,6 +23,21 @@
 - [ ] **Phase 1031: EventLog (Append-Only NDJSON) + EventStore SQLite rollback-mode migration** — lock-serialised appends; reader resilience; SMB-atomicity stress test
 - [ ] **Phase 1032: Single-Source MonitorTag Event Emission + ack workflow** — exactly-once event generation via per-tag lock; ack/comment/visual-state; deferred listener notify; SQLite retry wrapper
 - [ ] **Phase 1033: Companion Integration + Snapshot Consolidator + Operator Docs + 50-Companion Acceptance Test** — wire SharedRoot through Companion; leader-elected snapshot; ops setup README; full acceptance gate
+
+</details>
+
+<details>
+<summary>✅ v3.1 Plant Log Integration (Phases 1034-1038) — SHIPPED 2026-05-19</summary>
+
+- [x] Phase 1034: Plant Log Storage Foundation (3/3 plans) — completed 2026-05-13 (originally Phase 1029)
+- [x] Phase 1035: CSV/XLSX Import + Mapping Dialog (3/3 plans) — completed 2026-05-13 (originally Phase 1030)
+- [x] Phase 1036: Live Tail + Slider Preview Overlay (3/3 plans) — completed 2026-05-14 (originally Phase 1031)
+- [x] Phase 1037: Per-Widget Plant Log Overlay (3/3 plans) — completed 2026-05-19 (originally Phase 1032)
+- [x] Phase 1038: Dashboard + Companion Integration & Serialization (3/3 plans) — completed 2026-05-19 (originally Phase 1033)
+
+Note: v3.1 was developed in parallel with v4.0 in a separate worktree and chose phase numbers 1029-1033 before learning v4.0 had already claimed them on main. The phases were renumbered to 1034-1038 on merge. Original phase numbers are preserved in commit messages (`feat(1029-01): ...`, etc.) and in the milestone archive (`milestones/v3.1-ROADMAP.md`).
+
+Full details: [milestones/v3.1-ROADMAP.md](milestones/v3.1-ROADMAP.md)
 
 </details>
 
@@ -133,6 +149,11 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1031. EventLog + EventStore rollback-mode migration | v4.0 | 4/4 | Complete    | 2026-05-14 |
 | 1032. Single-Source MonitorTag Events + ack workflow | v4.0 | 5/5 | Complete    | 2026-05-14 |
 | 1033. Companion Integration + Acceptance Test | v4.0 | 4/4 | Complete   | 2026-05-14 |
+| 1034. Plant Log Storage Foundation | v3.1 | 3/3 | Complete | 2026-05-13 |
+| 1035. CSV/XLSX Import + Mapping Dialog | v3.1 | 3/3 | Complete | 2026-05-13 |
+| 1036. Live Tail + Slider Preview Overlay | v3.1 | 3/3 | Complete | 2026-05-14 |
+| 1037. Per-Widget Plant Log Overlay | v3.1 | 3/3 | Complete | 2026-05-19 |
+| 1038. Dashboard + Companion Integration & Serialization | v3.1 | 3/3 | Complete | 2026-05-19 |
 
 ## Phase Details (v4.0 Multi-User LAN Concurrency)
 

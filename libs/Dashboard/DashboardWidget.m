@@ -139,11 +139,12 @@ classdef DashboardWidget < handle
         %   since 260508 — but the legacy tags are kept in case any pre-bar
         %   widgets still parent the buttons directly to hPanel.
             if isempty(hPanel) || ~ishandle(hPanel), return; end
-            % 260513-snt — preserve the per-FastSenseWidget '+Event' button
-            % injected by DashboardLayout.addCreateEventButton (Tag='CreateEventButton').
-            % 260513-sfp — preserve the V/A Y-limit cluster (YLimitVisibleBtn, YLimitAllBtn).
+            % v3.1 Phase 1032 PLOG-VIZ-05 — protect plant-log toggle from re-render sweeps.
+            % v4.0 — '+Event' button (Tag='CreateEventButton') + V/A Y-limit cluster
+            % (Tags 'YLimitVisibleBtn', 'YLimitAllBtn') also preserved.
             protectedTags = {'InfoIconButton', 'DetachButton', 'WidgetButtonBar', ...
-                             'YLimitVisibleBtn', 'YLimitAllBtn', 'CreateEventButton'};
+                             'YLimitVisibleBtn', 'YLimitAllBtn', 'CreateEventButton', ...
+                             'PlantLogToggleButton'};
             % Sweep depth-1 uicontrols (legacy-positioned buttons).
             kids = findobj(hPanel, '-depth', 1, 'Type', 'uicontrol');
             for i = 1:numel(kids)
