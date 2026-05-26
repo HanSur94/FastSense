@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779814873048,
+  "lastUpdate": 1779815549078,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -94112,6 +94112,430 @@ window.BENCHMARK_DATA = {
           {
             "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
             "value": 2396.196,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4bff427efa2a3a4d3be11c5279c27e7cf8c14bcb",
+          "message": "Phase 1017: Tag/Event auto-wiring (registry-default + dual-key) (#99)\n\n* feat(1017-01): TagRegistry.setEventStore + getEventStore + eventStoreRef_() helper\n\n- Add setEventStore(store) public static: stores in containers.Map handle singleton\n- Add getEventStore() public static: returns [] if unset (safe before first call)\n- Add eventStoreRef_() private static: persistent containers.Map (handle) for mutation safety\n- Extend clear() to also remove 'store' key from eventStoreRef_ map (Pitfall 5 fix)\n- Pass [] to setEventStore() to clear the default without calling clear()\n\n* test(1017-01): Add TagRegistry EventStore round-trip + clear-resets + overwrite tests\n\n- TestDashboardEventsToggle.m: 5 new methods (Phase 1017)\n  testTagRegistryEventStoreRoundTrip, testTagRegistryEventStoreEmptyDefault,\n  testTagRegistryEventStoreOverwrite, testTagRegistryClearResetsEventStore,\n  testTagRegistryEventStoreSetEmptyClears\n- Add deleteIfExists local helper for temp file cleanup\n- test_dashboard_events_toggle.m: 5 Octave parity test blocks (tests 9-13)\n  matching MATLAB names for grep-verified parity\n- All 13 tests green in Octave (8 existing + 5 new)\n\n* feat(1017-02): MonitorTag constructor falls back to TagRegistry.getEventStore()\n\n- Insert 3-line registry-default fallback after NV-pair for-loop\n- Fallback only runs when no explicit 'EventStore' NV-pair was provided\n- Explicit per-instance store always wins (fallback gated on isempty)\n- Falls back to [] when registry default unset (pre-1017 behavior preserved)\n- Dual-key stamping at 3 sites (lines 738-741, 762-765, 877-879) untouched\n\n* test(1017-02): add MonitorTag registry-default fallback + dual-key emission tests\n\n- testMonitorTagRegistryDefaultFallback: verifies constructor uses registry default\n- testMonitorTagExplicitOverridesRegistry: verifies explicit NV-pair wins\n- testMonitorTagDualKeyEmission: regression-protects dual-key stamp at 3 sites\n- All three tests added to both MATLAB suite and Octave flat test file\n- 16 total Octave tests pass (0 failures)\n\n* feat(1017-03): extend renderEventLayer_ and FastSenseWidget.render with registry-default fallback\n\n- FastSense.renderEventLayer_: append TagRegistry.getEventStore() tail after bound-tag loop\n- FastSenseWidget.render: use esForward local var resolved from registry default before inner FastSense forwarding\n- Both sites: explicit per-instance store wins (unchanged), registry only consulted when slot is empty\n- Second render path (rerender method in FastSenseWidget) also updated\n\n* test(1017-03): add MATLAB + Octave tests for FastSense and FastSenseWidget registry-default fallback\n\n- testRegistryDefaultFastSense: verifies renderEventLayer_ uses TagRegistry.getEventStore() when bound tag's EventStore is empty\n- testRegistryDefaultFastSenseWidget: verifies FastSenseWidget forwards registry-default store to inner FastSense\n- testFastSenseWidgetExplicitWinsOverRegistry: explicit EventStore NV-pair wins over registry default\n- Octave parity: Tests 17-19 in test_dashboard_events_toggle.m (all 19 pass)\n- Added closeIfValid helper to TestDashboardEventsToggle.m\n\n* feat(1017-04): registry-default fallback via local esObj in EventTimelineWidget + TableWidget\n\n- EventTimelineWidget.resolveEvents: public; uses local esObj resolved from\n  obj.EventStoreObj then TagRegistry.getEventStore() (Phase 1017, no obj mutation)\n- New private helper eventStoreToStructsFrom_(esObj) avoids re-entrancy risk\n  (RESEARCH Pitfall 6) — body is verbatim copy of eventStoreToStructs with esObj arg\n- TableWidget refresh events branch: condition narrowed to strcmp(Mode,'events');\n  local esObj resolves explicit slot then registry default (Phase 1017)\n\n* test(1017-04): MATLAB + Octave tests for EventTimelineWidget and TableWidget registry-default fallback\n\n- testRegistryDefaultEventTimeline: no EventStoreObj -> registry default resolves\n- testRegistryDefaultTableWidget: Mode=events, no EventStoreObj -> refresh via registry\n- testEventTimelineExplicitWinsOverRegistry: explicit store wins over registry default\n- Also fix pre-existing Octave incompatibility: replace contains() with strfind in TableWidget\n\n* refactor(1017-05): migrate registerPlantTags to registry-default pattern\n\n- Add TagRegistry.setEventStore(store) after EventStore construction\n- Drop 'EventStore', store NV-pair from all four MonitorTag constructors\n- MonitorTag instances now pick up EventStore via registry-default fallback\n\n* refactor(1017-05): migrate buildEventsPage to registry-default pattern\n\n- Drop 'EventStoreObj', ctx.store NV-pair from EventTimelineWidget call\n- Fix misleading comment claiming FastSense 'auto-discovers EventStore\n  from any bound MonitorTag' — replaced with accurate description of the\n  registry-default fallback and dual-key MonitorTag event emission\n- Update function header comment to reflect registry-default approach\n\n* refactor(1017-06): migrate example_event_markers.m to registry-default pattern\n\n- Add TagRegistry.clear(); EventBinding.clear(); at top to prevent singleton pollution\n- Add TagRegistry.setEventStore(es) once after EventStore construction\n- Register both SensorTags and MonitorTags via TagRegistry.register()\n- Drop 'EventStore', es NV-pairs from both MonitorTag constructors\n- Drop 'EventStore', es NV-pairs from both addWidget calls\n- Retain 'ShowEventMarkers', true on both widgets (explicit feature toggle)\n\n* fix(test): pass axes via 'Parent' name-value to FastSense\n\ntestRegistryDefaultFastSense called FastSense(axes(fig)) positionally,\nbut the constructor only accepts name-value pairs. The single positional\narg made parseOpts try to read args{2}, throwing MATLAB:badsubscript.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-05-26T18:52:17+02:00",
+          "tree_id": "a24b58451c7db032d2973e53c2d351f8b9762952",
+          "url": "https://github.com/HanSur94/FastSense/commit/4bff427efa2a3a4d3be11c5279c27e7cf8c14bcb"
+        },
+        "date": 1779815546899,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.168,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.009,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 156.367,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 0.706,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 246.223,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 1.089,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 14.599,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.572,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.321,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.025,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 174.422,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 0.852,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 253.213,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 0.501,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 14.713,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.411,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 14.75,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.089,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 198.477,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 12.986,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 257.608,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 2.36,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 14.683,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.494,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 88.912,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 6.149,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1223.069,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 12.469,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 246.843,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 1.113,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 14.684,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 1.353,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 150.356,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.282,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2404.254,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 91.945,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 254.251,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 6.173,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 14.904,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.534,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 762.288,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 3.648,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 22771.736,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 442.784,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 292.63,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 14.652,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 15.67,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.158,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 1147.699,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 52.983,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 168.971,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.77,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 166.439,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 1.368,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.085,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.481,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_min_ms",
+            "value": 1915.791,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_median_ms",
+            "value": 1949.206,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_min_ms",
+            "value": 3103.076,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_min_ms",
+            "value": 3103.076,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_min_ms",
+            "value": 4990.677,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_on_min_ms",
+            "value": 3103.076,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_off_min_ms",
+            "value": 2964.257,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_min_ms",
+            "value": 3103.076,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_min_ms",
+            "value": 3003.353,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_lastfsstat_count",
+            "value": 1,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_lastfsstat_count",
+            "value": 1600,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_parse_ms_per_tick",
+            "value": 15.276,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_mat_write_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_select_ms_per_tick",
+            "value": 64.727,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_other_ms_per_tick",
+            "value": 1932.287,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_monitor_recompute_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_composite_merge_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_aggregate_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_listener_fanout_ms_per_tick",
+            "value": 85.911,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_total_profiled_ms_per_tick",
+            "value": 2098.2,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick",
+            "value": 660.875,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick",
+            "value": 2237.155,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick",
+            "value": 2002.474,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
+            "value": 2260.261,
             "unit": "ms"
           }
         ]
