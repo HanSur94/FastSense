@@ -45,6 +45,7 @@ classdef InspectorPane < handle
         RenderedMultiKeys_ = {}  % cellstr of keys captured at last full render
         hModeOverlay_   = []   % "Overlay" mode button (multitag state only)
         hModeLinked_    = []   % "Linked grid" mode button (multitag state only)
+        hModePerTag_    = []   % "Per Tag" mode button (multitag state only)
         hPlotBtn_       = []   % Plot CTA (multitag state only)
         State_          = 'welcome'
         Payload_        = struct()
@@ -108,7 +109,8 @@ classdef InspectorPane < handle
             obj.Listeners_ = {};
             obj.hSparkAxes_ = []; obj.hSparkPanel_ = []; obj.hOpenDetail_ = [];
             obj.hPlayBtn_   = []; obj.hPauseBtn_   = []; obj.hChipsGrid_  = [];
-            obj.hModeOverlay_ = []; obj.hModeLinked_ = []; obj.hPlotBtn_   = [];
+            obj.hModeOverlay_ = []; obj.hModeLinked_ = []; obj.hModePerTag_ = [];
+            obj.hPlotBtn_   = [];
         end
 
         function refreshLive(obj)
@@ -352,6 +354,7 @@ classdef InspectorPane < handle
                 obj.hRangeLbl_  = [];
                 obj.hOpenDetail_ = []; obj.hPlayBtn_  = []; obj.hPauseBtn_ = [];
                 obj.hChipsGrid_  = []; obj.hModeOverlay_ = []; obj.hModeLinked_ = [];
+                obj.hModePerTag_ = [];
                 obj.hPlotBtn_    = []; obj.hTagTable_ = []; obj.hDashTable_ = [];
                 obj.hTagTitle_ = []; obj.hDashTitle_ = [];
                 obj.RenderedTagKey_ = ''; obj.RenderedDashName_ = '';
@@ -1170,9 +1173,9 @@ classdef InspectorPane < handle
                 obj.renderMultiSparkline_(k, tg);
             end
 
-            mg = uigridlayout(g, [1 2]);
+            mg = uigridlayout(g, [1 3]);
             mg.Layout.Row = nT + 2; mg.Layout.Column = 1;
-            mg.ColumnWidth = {'1x', '1x'}; mg.RowHeight = {'1x'};
+            mg.ColumnWidth = {'1x', '1x', '1x'}; mg.RowHeight = {'1x'};
             mg.Padding = [0 0 0 0]; mg.ColumnSpacing = 4;
             mg.BackgroundColor = t.WidgetBackground;
             obj.hModeOverlay_ = uibutton(mg, 'push');
@@ -1183,6 +1186,10 @@ classdef InspectorPane < handle
             obj.hModeLinked_.Layout.Row = 1; obj.hModeLinked_.Layout.Column = 2;
             obj.hModeLinked_.Text = 'Linked grid'; obj.hModeLinked_.FontSize = 11;
             obj.hModeLinked_.ButtonPushedFcn = @(~,~) obj.onModeToggle_('LinkedGrid');
+            obj.hModePerTag_ = uibutton(mg, 'push');
+            obj.hModePerTag_.Layout.Row = 1; obj.hModePerTag_.Layout.Column = 3;
+            obj.hModePerTag_.Text = 'Per Tag'; obj.hModePerTag_.FontSize = 11;
+            obj.hModePerTag_.ButtonPushedFcn = @(~,~) obj.onModeToggle_('PerTag');
             obj.applyModeToggleStyles_();
 
             obj.hPlotBtn_ = uibutton(g, 'push');
@@ -1299,6 +1306,8 @@ classdef InspectorPane < handle
 
         function applyModeToggleStyles_(obj)
         %APPLYMODETOGGLESTYLES_ Highlight active mode button; style inactive as idle.
+        %   Three branches — exactly one of {Overlay, Linked grid, Per Tag}
+        %   renders in the active accent style; the other two render idle.
             t = obj.Theme_;
             if strcmp(obj.ComposerMode_, 'Overlay')
                 obj.hModeOverlay_.BackgroundColor = t.Accent;
@@ -1307,13 +1316,29 @@ classdef InspectorPane < handle
                 obj.hModeLinked_.BackgroundColor  = t.WidgetBackground;
                 obj.hModeLinked_.FontColor        = t.ToolbarFontColor;
                 obj.hModeLinked_.FontWeight       = 'normal';
-            else
+                obj.hModePerTag_.BackgroundColor  = t.WidgetBackground;
+                obj.hModePerTag_.FontColor        = t.ToolbarFontColor;
+                obj.hModePerTag_.FontWeight       = 'normal';
+            elseif strcmp(obj.ComposerMode_, 'LinkedGrid')
                 obj.hModeLinked_.BackgroundColor  = t.Accent;
                 obj.hModeLinked_.FontColor        = t.DashboardBackground;
                 obj.hModeLinked_.FontWeight       = 'bold';
                 obj.hModeOverlay_.BackgroundColor = t.WidgetBackground;
                 obj.hModeOverlay_.FontColor       = t.ToolbarFontColor;
                 obj.hModeOverlay_.FontWeight      = 'normal';
+                obj.hModePerTag_.BackgroundColor  = t.WidgetBackground;
+                obj.hModePerTag_.FontColor        = t.ToolbarFontColor;
+                obj.hModePerTag_.FontWeight       = 'normal';
+            else  % 'PerTag'
+                obj.hModePerTag_.BackgroundColor  = t.Accent;
+                obj.hModePerTag_.FontColor        = t.DashboardBackground;
+                obj.hModePerTag_.FontWeight       = 'bold';
+                obj.hModeOverlay_.BackgroundColor = t.WidgetBackground;
+                obj.hModeOverlay_.FontColor       = t.ToolbarFontColor;
+                obj.hModeOverlay_.FontWeight      = 'normal';
+                obj.hModeLinked_.BackgroundColor  = t.WidgetBackground;
+                obj.hModeLinked_.FontColor        = t.ToolbarFontColor;
+                obj.hModeLinked_.FontWeight       = 'normal';
             end
         end
 
