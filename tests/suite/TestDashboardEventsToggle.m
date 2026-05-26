@@ -229,7 +229,7 @@ classdef TestDashboardEventsToggle < matlab.unittest.TestCase
             % Render a FastSense and verify it does not throw on the registry path.
             fig = figure('Visible', 'off');
             cleanupFig = onCleanup(@() closeIfValid(fig)); %#ok<NASGU>
-            fp = FastSense(axes(fig));
+            fp = FastSense('Parent', axes(fig));
             fp.addTag(s);
             fp.ShowEventMarkers = true;
             fp.render();  % must not error; registry tail provides the store.
