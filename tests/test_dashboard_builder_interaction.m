@@ -127,7 +127,7 @@ end
 
 function testDragStartSelectsWidget()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     builder.MockCurrentPoint = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
 
     startDrag(builder, hFig, 1);
@@ -142,7 +142,7 @@ function testDragMovesWidgetPosition()
     origPos = engine.Widgets{1}.Position;
     [stepW, ~] = gridStepSize(engine);
 
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -161,7 +161,7 @@ end
 
 function testDragClampsToLeftEdge()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -176,7 +176,7 @@ end
 
 function testDragClampsToRightEdge()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -191,7 +191,7 @@ end
 
 function testDragClampsRowToMinOne()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -209,7 +209,7 @@ function testDragResolvesOverlap()
     origBPos = engine.Widgets{2}.Position; % [7 1 3 1]
     [stepW, ~] = gridStepSize(engine);
 
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -232,7 +232,7 @@ function testDragSnapsToGrid()
     [engine, builder, hFig] = makeTestDashboard();
     [stepW, ~] = gridStepSize(engine);
 
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -252,7 +252,7 @@ end
 
 function testResizeStartSelectsWidget()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{2}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{2}), 'Position');
     builder.MockCurrentPoint = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
 
     startResize(builder, hFig, 2);
@@ -267,7 +267,7 @@ function testResizeChangesWidthHeight()
     origPos = engine.Widgets{2}.Position;
     [stepW, stepH] = gridStepSize(engine);
 
-    panelPos = get(engine.Widgets{2}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{2}), 'Position');
     startPt = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
     builder.MockCurrentPoint = startPt;
     startResize(builder, hFig, 2);
@@ -287,7 +287,7 @@ end
 
 function testResizeClampsMinimum()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
     builder.MockCurrentPoint = startPt;
     startResize(builder, hFig, 1);
@@ -304,7 +304,7 @@ end
 
 function testResizeClampsMaxWidth()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{2}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{2}), 'Position');
     startPt = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
     builder.MockCurrentPoint = startPt;
     startResize(builder, hFig, 2);
@@ -321,18 +321,18 @@ end
 
 function testMouseMoveDragUpdatesPanelPosition()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
 
-    origPanelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    origPanelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
 
     dx = 0.1;
     builder.MockCurrentPoint = [startPt(1)+dx, startPt(2)];
     triggerMotion(hFig);
 
-    newPanelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    newPanelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     assert(abs(newPanelPos(1) - (origPanelPos(1)+dx)) < 1e-6, ...
         'testMouseMoveDragUpdatesPanelPosition: X not tracking');
     assert(abs(newPanelPos(3) - origPanelPos(3)) < 1e-6, ...
@@ -341,18 +341,18 @@ end
 
 function testMouseMoveResizeUpdatesSize()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
     builder.MockCurrentPoint = startPt;
     startResize(builder, hFig, 1);
 
-    origPanelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    origPanelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
 
     dx = 0.05;
     builder.MockCurrentPoint = [startPt(1)+dx, startPt(2)];
     triggerMotion(hFig);
 
-    newPanelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    newPanelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     assert(newPanelPos(3) > origPanelPos(3), ...
         'testMouseMoveResizeUpdatesSize: width did not increase');
     assert(abs(newPanelPos(1) - origPanelPos(1)) < 1e-6, ...
@@ -398,7 +398,7 @@ end
 
 function testDragLabelClickStartsDrag()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{2}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{2}), 'Position');
     builder.MockCurrentPoint = [panelPos(1)+0.02, panelPos(2)+panelPos(4)-0.01];
 
     ov = builder.Overlays{2};
@@ -414,7 +414,7 @@ end
 
 function testDragStateResetAfterMouseUp()
     [engine, builder, hFig] = makeTestDashboard();
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -478,7 +478,7 @@ function testDragWidgetZeroMovement()
     [engine, builder, hFig] = makeTestDashboard();
     origPos = engine.Widgets{1}.Position;
 
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+0.01, panelPos(2)+panelPos(4)-0.01];
     builder.MockCurrentPoint = startPt;
     startDrag(builder, hFig, 1);
@@ -493,7 +493,7 @@ function testResizeWidgetZeroMovement()
     [engine, builder, hFig] = makeTestDashboard();
     origPos = engine.Widgets{1}.Position;
 
-    panelPos = get(engine.Widgets{1}.hPanel, 'Position');
+    panelPos = get(getCellPanel_(engine.Widgets{1}), 'Position');
     startPt = [panelPos(1)+panelPos(3)-0.005, panelPos(2)+0.005];
     builder.MockCurrentPoint = startPt;
     startResize(builder, hFig, 1);
@@ -502,4 +502,19 @@ function testResizeWidgetZeroMovement()
 
     assert(isequal(engine.Widgets{1}.Position, origPos), ...
         'testResizeWidgetZeroMovement: position changed');
+end
+
+%% ---- Helper: resolve outer cell panel for a widget ----
+
+function cell = getCellPanel_(widget)
+%GETCELLPANEL_ Return the outer canvas-normalized cell panel for this widget.
+%   After mhv (260508), DashboardLayout renders chrome'd widgets into a
+%   WidgetContentPanel sub-panel and points widget.hPanel at the sub-panel
+%   (in pixel units). The original outer cell — the one with normalized
+%   canvas coordinates that drag/resize math expects — is widget.hCellPanel.
+%   Falls back to widget.hPanel for unrealized or no-chrome widgets.
+    cell = widget.hCellPanel;
+    if isempty(cell) || ~ishandle(cell)
+        cell = widget.hPanel;
+    end
 end

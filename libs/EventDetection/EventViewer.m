@@ -707,7 +707,8 @@ classdef EventViewer < handle
                 'EdgeColor', evColor, 'LineWidth', 2, 'LineStyle', '-', ...
                 'HandleVisibility', 'off');
 
-            FastSenseToolbar(fp1);
+            tbEv = FastSenseToolbar(fp1);
+            setappdata(fp1.hFigure, 'FastSenseToolbar', tbEv);
         end
 
         function c = getThresholdColor(obj, label)

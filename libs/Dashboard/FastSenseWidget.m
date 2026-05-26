@@ -21,15 +21,49 @@ classdef FastSenseWidget < DashboardWidget
         ShowThresholdLabels = false % show inline name labels on threshold lines
         ShowEventMarkers    = false % Phase 1012 — toggle event round-marker overlay
         EventStore          = []    % Phase 1012 — EventStore handle forwarded to inner FastSense
+        ShowPlantLog        = false % Phase 1032 PLOG-VIZ-03 — opt-in per-widget plant-log vertical-line overlay
         % Forwarded to FastSense.LiveViewMode on render:
-        %   'reset'    — window covers the full X range every tick (default:
-        %                matches dashboard-demo expectation that users see
-        %                every sample since session start)
+        %   'preserve' — DEFAULT (260513-ovt). Frozen at the initial X
+        %                range: live ticks append data without changing
+        %                XLim. The user opts into seeing new data via the
+        %                Follow toggle, by dragging the slider, or by
+        %                clicking the toolbar's Reset/Sync-All button.
+        %                This makes Live mode a "data flows in, my view
+        %                stays put" experience.
         %   'follow'   — window of current width tracks the latest sample
         %                (use for long-running deployments where the full
-        %                range would exhaust memory / downsampling budget)
-        %   'preserve' — frozen at the initial X range (legacy behaviour)
-        LiveViewMode = 'reset'
+        %                range would exhaust memory / downsampling budget;
+        %                also what the Follow toolbar toggle switches to)
+        %   'reset'    — window covers the full X range every tick (former
+        %                default; XLim grows automatically to show every
+        %                sample since session start — useful for short
+        %                demos where you want to see the chart fill up)
+        LiveViewMode = 'preserve'
+
+        % YLimitMode — Y-axis rescale strategy applied by autoScaleY_:
+        %   'auto-visible' (DEFAULT) — rescale to cover data inside the
+        %                              current X window. Reproduces the
+        %                              pre-260513-sfp behaviour exactly
+        %                              (so old dashboards behave identically).
+        %   'auto-all'              — rescale to cover ALL data the bound
+        %                              Tag exposes, regardless of current
+        %                              XLim. Equivalent to a global "fit Y
+        %                              to the whole timeline" command.
+        %   'locked'                — freeze current YLim. Live ticks /
+        %                              refresh / update no longer call
+        %                              set(ax, 'YLim', ...).
+        %
+        % Precedence (autoScaleY_ guards, top-to-bottom):
+        %   1. Non-empty YLimits pin -> always wins (explicit numeric pin).
+        %   2. UserZoomedY latch     -> mouse-zoom freezes autoscale until
+        %                               user explicitly re-clicks a mode
+        %                               (setYLimitMode clears this latch).
+        %   3. FastSenseObj.LiveViewMode == 'follow' -> Follow toggle wins
+        %                               (260513-ovt: tail-track in X only,
+        %                               keep Y frozen).
+        %   4. YLimitMode dispatch:    'locked' -> no-op; otherwise
+        %                              auto-visible / auto-all branches run.
+        YLimitMode = 'auto-visible'
     end
     %   (Tag property now lives on the DashboardWidget base class — Plan 1009-02.)
 
@@ -44,6 +78,30 @@ classdef FastSenseWidget < DashboardWidget
         LastEventIds_      = {}    % Phase 1012 — cell of event Ids at last refresh
         LastEventOpen_     = []    % Phase 1012 — logical array parallel to LastEventIds_
         LastEventSeverity_ = []    % Phase 1012 — numeric array parallel to LastEventIds_
+        PreviewCache_      = []    % 260508-das — cached getPreviewSeries result
+        PreviewCacheKey_   = []    % [numel(x), x(1), x(end), nBucketsEff] sentinel
+    end
+
+    % Phase 1032 — XLim listener slot. Public READ (tests + engine
+    % observe); WRITE via the Hidden setPlantLogXLimListenerForEngine_
+    % setter just below. Plain SetAccess = private avoids the
+    % friend-access classdef syntax that Octave's parser is fussy with
+    % (mirrors the FastSenseDataStore Octave-safe idiom — Hidden over
+    % {?ClassName}).
+    properties (SetAccess = private)
+        PlantLogXLimListener_ = [] % Phase 1032 — addlistener handle for XLim PostSet refresh; non-empty when ShowPlantLog=true and widget is rendered
+    end
+
+    properties (Access = private, Constant)
+        % PREVIEWRAWTHRESHOLD_ Sample-count threshold below which
+        %   getPreviewSeries skips downsampling and renders one bucket
+        %   per raw sample. Chosen as 100 because:
+        %     - small enough that raw rendering remains cheap (<= 100
+        %       points -> ~200 line vertices after min/max pairing);
+        %     - large enough that downsampling only kicks in once a
+        %       slider preview is dense enough to genuinely benefit.
+        %   Adjust here if user feedback warrants a different cut-off.
+        PreviewRawThreshold_ = 100
     end
 
     methods
@@ -104,12 +162,12 @@ classdef FastSenseWidget < DashboardWidget
             end
 
             % Slide the X window as new samples arrive on updateData().
-            % Forwarded from the widget-level LiveViewMode property so
-            % callers can swap between 'reset' (default: window grows to
-            % cover all samples — best for short demos), 'follow' (fixed-
-            % width window tracking the latest sample — best for long-
-            % running deployments), and 'preserve' (frozen at the initial
-            % X range — legacy behaviour).
+            % Forwarded from the widget-level LiveViewMode property:
+            %   'preserve' — DEFAULT (260513-ovt): frozen at the initial
+            %                X range; live ticks append data only
+            %   'follow'   — fixed-width window tracking the latest sample
+            %   'reset'    — window grows to cover all samples since
+            %                session start (former default)
             fp.LiveViewMode = obj.LiveViewMode;
 
             % Bind data — Tag-first dispatch (v2.0).
@@ -138,18 +196,55 @@ classdef FastSenseWidget < DashboardWidget
             %   cell of structs            — {struct('Value',..,'Direction',..,'Label',..), ...}
             applyThresholds_(fp, obj.Thresholds);
 
-            % Set title and axis labels
+            % Set title and axis labels.
+            % Title sits ABOVE the (light) axes area against the panel
+            % background, so its color must come from the dashboard theme
+            % (ToolbarFontColor) — using ax.XColor leaves the title dark on
+            % the dark widget panel in dark mode. XLabel/YLabel sit inside
+            % the axes margins but still touch the panel; same fix.
+            % Prefer GroupHeaderFg (near-white in dark / near-black in light)
+            % over ToolbarFontColor for stronger contrast against the panel.
+            titleColor = get(ax, 'XColor');
+            try
+                t = obj.getTheme();
+                if isstruct(t)
+                    if isfield(t, 'GroupHeaderFg')
+                        titleColor = t.GroupHeaderFg;
+                    elseif isfield(t, 'ToolbarFontColor')
+                        titleColor = t.ToolbarFontColor;
+                    end
+                end
+            catch
+            end
             if ~isempty(obj.Title)
-                title(ax, obj.Title, 'Color', get(ax, 'XColor'));
+                title(ax, obj.Title, 'Color', titleColor);
             end
             if ~isempty(obj.XLabel)
-                xlabel(ax, obj.XLabel, 'Color', get(ax, 'XColor'));
+                xlabel(ax, obj.XLabel, 'Color', titleColor);
             end
             if ~isempty(obj.YLabel)
-                ylabel(ax, obj.YLabel, 'Color', get(ax, 'XColor'));
+                ylabel(ax, obj.YLabel, 'Color', titleColor);
             end
 
             fp.render();
+
+            % Re-apply title/label/tick colors AFTER fp.render(), which
+            % restyles the axes using FastSense's own theme (axes-internal
+            % colors — dark on white). The title sits ABOVE the axes box,
+            % the x/ylabels sit in the OUTSIDE margins, AND the tick labels
+            % render in the margins too — so against the dark widget panel
+            % they all need the dashboard theme's foreground color.
+            try
+                if ~isempty(obj.Title),  set(get(ax, 'Title'),  'Color', titleColor); end
+                if ~isempty(obj.XLabel), set(get(ax, 'XLabel'), 'Color', titleColor); end
+                if ~isempty(obj.YLabel), set(get(ax, 'YLabel'), 'Color', titleColor); end
+                % Tick label color (XColor/YColor also control axis line +
+                % tick marks; the axes box color stays via FastSense's own
+                % styling — only the tick text + line color follow the panel
+                % background).
+                set(ax, 'XColor', titleColor, 'YColor', titleColor);
+            catch
+            end
 
             % Reformat time-axis ticks to HH:MM:SS / MM:SS for readability
             % (main branch addition from #66 / datetime axis migration).
@@ -220,9 +315,12 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — the user's Y view is preserved
+                    % unless they explicitly pan/zoom or pin YLimits.
                     obj.updateTimeRangeCache();
-                    obj.refreshEventMarkers_();  % Phase 1012
+                    obj.invalidatePreviewCache_();   % 260508-das
+                    obj.refreshEventMarkers_();      % Phase 1012
                     obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
                     return;
                 catch
@@ -238,6 +336,8 @@ classdef FastSenseWidget < DashboardWidget
         %   Uses FastSenseObj.updateData() to replace data and re-downsample,
         %   avoiding the expensive delete/recreate cycle of refresh().
         %   Falls back to refresh() if FastSenseObj is not in a renderable state.
+        %   (260513-ovt) Per-tick Y autoscale removed from this path so
+        %   Live mode never silently mutates the user's Y view.
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
@@ -245,9 +345,11 @@ classdef FastSenseWidget < DashboardWidget
                 try
                     [x, y] = obj.Tag.getXY();
                     obj.FastSenseObj.updateData(1, x, y);
-                    obj.autoScaleY_(y);
+                    % autoScaleY_(y) removed (260513-ovt): live ticks must
+                    % not rescale Y — see refresh() above for rationale.
                     obj.updateTimeRangeCache();
-                    obj.refreshEventMarkers_();  % Phase 1012
+                    obj.invalidatePreviewCache_();   % 260508-das
+                    obj.refreshEventMarkers_();      % Phase 1012
                     obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
                     return;
                 catch
@@ -263,6 +365,13 @@ classdef FastSenseWidget < DashboardWidget
             %   When rendered, delegates to FastSense.setShowEventMarkers
             %   which re-draws the overlay in place without disturbing
             %   zoom state or live refresh cadence.
+            %
+            %   Also mirrors the runtime visibility into obj.ShowEventMarkers
+            %   so that the property is the single source of truth — required
+            %   for detach (toStruct/fromStruct round-trip) to reflect the
+            %   user's current toggle state instead of the construction-time
+            %   default. (260508-eu2 follow-up.)
+            obj.ShowEventMarkers = logical(tf);
             if ~isempty(obj.FastSenseObj)
                 try
                     obj.FastSenseObj.setShowEventMarkers(tf);
@@ -270,6 +379,186 @@ classdef FastSenseWidget < DashboardWidget
                     warning('FastSenseWidget:eventMarkerToggleFailed', ...
                         'Failed to toggle event markers: %s', ME.message);
                 end
+            end
+        end
+
+        % Phase 1032 PLOG-VIZ-04
+        function setPlantLogMarkers(obj, times, entries) %#ok<INUSD>
+            %SETPLANTLOGMARKERS Draw or clear per-widget plant-log vertical lines.
+            %   Phase 1032 PLOG-VIZ-04. Draws one xline per finite timestamp
+            %   on the widget's inner FastSense axes (Tag = 'WidgetPlantLogMarker',
+            %   1 px solid line with theme.MarkerPlantLog color, default
+            %   [0 0 0]). Empty / no-arg input clears every existing marker
+            %   via tag-based delete. Non-finite timestamps are silently
+            %   dropped (mirrors TimeRangeSelector.setPlantLogMarkers shape).
+            %
+            %   `entries` is currently unused at the draw layer (hover
+            %   lookup goes through the live store, not this snapshot —
+            %   see Plan 02). Accepted in the signature for forward-compat
+            %   with the engine's refresh helper call site and the Plan 02
+            %   hover wiring.
+            %
+            %   Z-order: after drawing, plant-log lines are pushed to the
+            %   BOTTOM (above sensor trace via FastSense draw-order, below
+            %   any FastSenseEventMarker which is re-stacked to the top).
+            %   Net stack: sensor trace (back) -> plant-log lines (middle)
+            %   -> event badges (front).
+            %
+            %   On failure, fires the namespaced warning
+            %   FastSenseWidget:plantLogToggleFailed (mirrors the
+            %   setEventMarkersVisible error-handling style) and returns.
+            try
+                if isempty(obj.FastSenseObj) || ...
+                        ~isa(obj.FastSenseObj, 'FastSense') || ...
+                        ~obj.FastSenseObj.IsRendered
+                    return;
+                end
+                ax = obj.FastSenseObj.hAxes;
+                if isempty(ax) || ~ishandle(ax)
+                    return;
+                end
+                % Tag-based delete of stale markers (mirrors FastSense
+                % renderEventLayer_'s FastSenseEventMarker pattern).
+                delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker'));
+                if nargin < 2 || isempty(times)
+                    return;
+                end
+                times = times(:).';
+                times = times(isfinite(times));
+                if isempty(times)
+                    return;
+                end
+                % Resolve marker color from theme; default black per
+                % CONTEXT.md decision C ("crisp dividers, not subtle
+                % highlights" — full opacity, no dashing).
+                theme = obj.getTheme();
+                markerColor = [0 0 0];
+                if isstruct(theme) && isfield(theme, 'MarkerPlantLog')
+                    markerColor = theme.MarkerPlantLog;
+                end
+                % Draw one xline per timestamp. HitTest='on' +
+                % PickableParts='all' so Plan 02's hover helper can pick
+                % the line.
+                for i = 1:numel(times)
+                    xline(ax, times(i), '-', ...
+                        'Color', markerColor, ...
+                        'LineWidth', 1, ...
+                        'Tag', 'WidgetPlantLogMarker', ...
+                        'HitTest', 'on', ...
+                        'PickableParts', 'all');
+                end
+                % Z-order: send plant-log lines below event badges (CONTEXT
+                % decision H). uistack('bottom') puts them behind everything
+                % drawn afterwards; explicit uistack('top') on
+                % FastSenseEventMarker keeps badges visible above plant-log
+                % lines for every (entry, badge) crossing.
+                h = findobj(ax, 'Tag', 'WidgetPlantLogMarker');
+                if ~isempty(h)
+                    uistack(h, 'bottom');
+                    evt = findobj(ax, 'Tag', 'FastSenseEventMarker');
+                    if ~isempty(evt)
+                        uistack(evt, 'top');
+                    end
+                end
+            catch ME
+                warning('FastSenseWidget:plantLogToggleFailed', ...
+                    'setPlantLogMarkers failed: %s', ME.message);
+            end
+        end
+
+        % Hidden — DashboardEngine writes PlantLogXLimListener_ via this
+        % seam since the property is SetAccess=private. Hidden methods
+        % are callable from anywhere (Octave-safe idiom from
+        % FastSenseDataStore). The listener handle is opaque to the
+        % widget; the engine owns its lifecycle.
+        function setPlantLogXLimListenerForEngine_(obj, lis)
+            obj.PlantLogXLimListener_ = lis;
+        end
+
+        function setShowPlantLog(obj, tf, engine)
+        %SETSHOWPLANTLOG Toggle the per-widget plant-log overlay (Phase 1032 PLOG-VIZ-03).
+        %   tf     — boolean; true enables overlay + attaches XLim listener,
+        %            false disables overlay + tears down listener + clears markers.
+        %   engine — DashboardEngine handle; required so refresh + listener
+        %            wiring can route through engine.refreshPlantLogOverlayForWidget_
+        %            and engine.attachPlantLogXLimListener_.
+        %
+        %   On failure, ShowPlantLog is REVERTED to its prior value and a
+        %   non-blocking warning fires with namespace
+        %   FastSenseWidget:plantLogToggleFailed (matches existing
+        %   setEventMarkersVisible error-handling style).
+            priorState = obj.ShowPlantLog;
+            try
+                if isempty(engine) || ~isa(engine, 'DashboardEngine')
+                    error('FastSenseWidget:plantLogToggleFailed', ...
+                        'engine must be a DashboardEngine handle.');
+                end
+                obj.ShowPlantLog = logical(tf);
+                if obj.ShowPlantLog
+                    engine.attachPlantLogXLimListener_(obj);
+                    engine.refreshPlantLogOverlayForWidget_(obj);
+                    engine.attachPlantLogWidgetHover_(obj);  % Phase 1032 PLOG-VIZ-07
+                else
+                    if ~isempty(obj.PlantLogXLimListener_)
+                        try delete(obj.PlantLogXLimListener_); catch, end
+                        obj.PlantLogXLimListener_ = [];
+                    end
+                    engine.detachPlantLogWidgetHover_(obj);  % Phase 1032 PLOG-VIZ-07
+                    obj.setPlantLogMarkers([], []);  % clear without engine round-trip
+                end
+            catch ME
+                obj.ShowPlantLog = priorState;
+                warning('FastSenseWidget:plantLogToggleFailed', ...
+                    'setShowPlantLog(%s) failed: %s', mat2str(logical(tf)), ME.message);
+            end
+        end
+
+        function setYLimitMode(obj, mode)
+        %SETYLIMITMODE Set the Y-axis rescale strategy and re-fit if rendered.
+        %   mode is one of:
+        %     'auto-visible' - rescale to data inside the current X window
+        %     'auto-all'     - rescale to all data the bound Tag exposes
+        %     'locked'       - freeze YLim; no further rescale on tick/refresh
+        %
+        %   Side effects (260513-sfp):
+        %     - Clears UserZoomedY so an explicit click re-engages autoscale
+        %       (the latch is treated as "I want to override autoscale" — a
+        %       deliberate click on the V/A/L buttons reverses that intent).
+        %     - Fetches the appropriate y window for the new mode and calls
+        %       autoScaleY_(y) so the Y axis snaps immediately. 'locked' mode
+        %       passes empty y; autoScaleY_'s mode dispatch short-circuits.
+        %
+        %   Does NOT override the YLimits pin (autoScaleY_'s guards stay).
+            valid = {'auto-visible', 'auto-all', 'locked'};
+            if ~(ischar(mode) || (isstring(mode) && isscalar(mode))) || ...
+                    ~ismember(char(mode), valid)
+                error('FastSenseWidget:invalidYLimitMode', ...
+                    'YLimitMode must be one of {''auto-visible'',''auto-all'',''locked''}.');
+            end
+            obj.YLimitMode = char(mode);
+
+            % Explicit click clears the user-zoom latch. The latch exists
+            % to stop autoScaleY_ from fighting a mouse-zoom; a deliberate
+            % click on V/A/L is the user re-engaging autoscale on purpose,
+            % which means the latch must drop.
+            obj.UserZoomedY = false;
+
+            % Snap Y immediately so the user sees the click take effect
+            % (no need to wait for the next refresh tick). Only meaningful
+            % when the widget has been rendered.
+            if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered
+                return;
+            end
+            switch obj.YLimitMode
+                case 'auto-visible'
+                    y = obj.getYInVisibleXWindow_();
+                    obj.autoScaleY_(y);
+                case 'auto-all'
+                    y = obj.getYFromTagOrInline_();
+                    obj.autoScaleY_(y);
+                case 'locked'
+                    % autoScaleY_'s mode dispatch treats 'locked' as no-op.
+                    obj.autoScaleY_([]);
             end
         end
 
@@ -281,12 +570,34 @@ classdef FastSenseWidget < DashboardWidget
         %   threshold values so MonitorTag lines stay visible) and updates
         %   the axes. Skipped when:
         %     - the widget has a user-pinned YLimits NV-pair, or
-        %     - the user manually zoomed Y via mouse (UserZoomedY),
-        %   so we never fight an explicit human interaction.
+        %     - the user manually zoomed Y via mouse (UserZoomedY), or
+        %     - the dashboard's Follow toggle is engaged
+        %       (FastSenseObj.LiveViewMode == 'follow') — Follow is an
+        %       explicit user intent to track the data tail in X only and
+        %       keep the rest of the view (including Y) frozen. (260513-ovt)
+        %     - YLimitMode == 'locked' — the user explicitly froze Y limits
+        %       via the L button on the WidgetButtonBar (260513-sfp).
+        %
+        %   Mode dispatch (after the guards above pass):
+        %     'auto-visible' - use y as given (legacy behaviour). The caller
+        %                      either passes data already filtered to the
+        %                      visible X window, or full data — both work.
+        %     'auto-all'     - replace y with full data from
+        %                      getYFromTagOrInline_() so "fit all" ignores
+        %                      whatever window the caller filtered to.
+        %     'locked'       - return without rescaling.
             if ~isempty(obj.YLimits)
                 return;
             end
             if obj.UserZoomedY
+                return;
+            end
+            % Octave 7+ has no isvalid() for classdef handles, so treat the
+            % FastSense handle as valid there and let downstream property
+            % access surface real failures.
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            if ~isempty(obj.FastSenseObj) && (isOctave || isvalid(obj.FastSenseObj)) && ...
+                    strcmp(obj.FastSenseObj.LiveViewMode, 'follow')
                 return;
             end
             if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered
@@ -295,6 +606,20 @@ classdef FastSenseWidget < DashboardWidget
             ax = obj.FastSenseObj.hAxes;
             if isempty(ax) || ~ishandle(ax)
                 return;
+            end
+            % Mode dispatch (260513-sfp). 'locked' short-circuits regardless
+            % of the y argument; 'auto-all' replaces y with full data so the
+            % caller's window filter is bypassed.
+            switch obj.YLimitMode
+                case 'locked'
+                    return;
+                case 'auto-all'
+                    yAll = obj.getYFromTagOrInline_();
+                    if ~isempty(yAll)
+                        y = yAll;
+                    end
+                otherwise
+                    % 'auto-visible' (default) — use y argument as-is.
             end
             if isempty(y)
                 return;
@@ -348,12 +673,14 @@ classdef FastSenseWidget < DashboardWidget
             end
             if ~isempty(obj.FastSenseObj)
                 try
-                    ax = obj.FastSenseObj.hAxes;
-                    if ~isempty(ax) && ishandle(ax)
-                        obj.IsSettingTime = true;
-                        xlim(ax, [tStart tEnd]);
-                        obj.IsSettingTime = false;
-                    end
+                    obj.IsSettingTime = true;
+                    % Use setXLimQuiet to suppress the XLimMode PostSet
+                    % listener (onXLimModeChanged -> scheduleDeferredXLimCheck
+                    % -> timer creation) that fires on every plain xlim() call.
+                    % This avoids ~4 ms of timer-creation overhead per widget
+                    % per live tick when the dashboard broadcasts a time sync.
+                    obj.FastSenseObj.setXLimQuiet(tStart, tEnd);
+                    obj.IsSettingTime = false;
                 catch
                     obj.IsSettingTime = false;
                 end
@@ -381,13 +708,23 @@ classdef FastSenseWidget < DashboardWidget
         function series = getPreviewSeries(obj, nBuckets)
         %GETPREVIEWSERIES Per-bucket min/max preview for the dashboard envelope.
         %   series = getPreviewSeries(obj, nBuckets) returns a struct with
-        %   fields xCenters, yMin, yMax — each a 1xnBuckets row vector; yMin
-        %   and yMax are normalized into [0,1] across the widget's own
-        %   current y-range. Returns [] when no data is bound or when the
-        %   sample count is too low to downsample meaningfully.
+        %   fields xCenters, yMin, yMax — each a 1xnBucketsEff row vector;
+        %   yMin and yMax are normalized into [0,1] across the widget's own
+        %   current y-range. Returns [] only when no data is bound or when
+        %   the sample count is genuinely too sparse (<4) to downsample.
+        %
+        %   The bucket count is adaptive: when the caller asks for more
+        %   buckets than there are samples, we fall back to
+        %   `floor(numel(x)/2)` so live widgets that have only collected a
+        %   few hundred samples still render a meaningful preview line on
+        %   the slider track. (Backlog 999.3.)
         %
         %   Uses minmax_core_mex (or a pure-MATLAB fallback) for the same
         %   downsampling strategy FastSense rendering uses.
+        %
+        %   Cached: a private PreviewCache_ short-circuits repeat calls
+        %   when (numel(x), x(1), x(end), nBucketsEff) is unchanged; the
+        %   cache is invalidated by invalidatePreviewCache_().
             series = [];
             try
                 if nargin < 2 || isempty(nBuckets) || ~isfinite(nBuckets) || nBuckets < 1
@@ -411,8 +748,29 @@ classdef FastSenseWidget < DashboardWidget
                 if isempty(x) || isempty(y) || numel(x) ~= numel(y)
                     return;
                 end
-                if numel(x) < nBuckets
-                    % Not enough points to downsample into this many buckets.
+                % Adaptive bucket count: never bail on small datasets.
+                % Live widgets typically have <200 samples for the first
+                % minute of operation; the previous hard floor
+                % (numel(x) < nBuckets => return) blanked the slider for
+                % the entire warm-up period. We require at least 4 raw
+                % samples to bother downsampling at all.
+                if numel(x) < 4
+                    return;
+                end
+                if numel(x) <= obj.PreviewRawThreshold_
+                    % Below this threshold, render one bucket per raw
+                    % sample — full fidelity for small / freshly-live
+                    % datasets where downsampling artefacts dominate
+                    % the visible slider preview line.
+                    nBucketsEff = numel(x);
+                else
+                    nBucketsEff = max(1, min(nBuckets, floor(numel(x) / 2)));
+                end
+
+                % Cache lookup — bit-identical for unchanged data shape.
+                cacheKey = [double(numel(x)), double(x(1)), double(x(end)), double(nBucketsEff)];
+                if ~isempty(obj.PreviewCache_) && isequal(obj.PreviewCacheKey_, cacheKey)
+                    series = obj.PreviewCache_;
                     return;
                 end
 
@@ -425,8 +783,13 @@ classdef FastSenseWidget < DashboardWidget
                 if any(nanMask)
                     x = x(~nanMask);
                     y = y(~nanMask);
-                    if numel(x) < nBuckets
+                    if numel(x) < 4
                         return;
+                    end
+                    if numel(x) <= obj.PreviewRawThreshold_
+                        nBucketsEff = numel(x);
+                    else
+                        nBucketsEff = max(1, min(nBuckets, floor(numel(x) / 2)));
                     end
                 end
 
@@ -435,25 +798,66 @@ classdef FastSenseWidget < DashboardWidget
                 useMex = (exist('minmax_core_mex', 'file') == 3);
                 if useMex
                     try
-                        [xOut, yOut] = minmax_core_mex(x, y, nBuckets);
+                        [xOut, yOut] = minmax_core_mex(x, y, nBucketsEff);
                     catch
                         useMex = false;
                     end
                 end
                 if ~useMex
-                    [xOut, yOut] = localMinMaxBuckets_(x, y, nBuckets);
+                    [xOut, yOut] = localMinMaxBuckets_(x, y, nBucketsEff);
                 end
 
-                if numel(xOut) ~= 2 * nBuckets || numel(yOut) ~= 2 * nBuckets
+                % Accept BOTH 2*nb (no tail anchor) and 2*nb+1 (anchor
+                % appended by minmax cores — 260512-c5x). The slider
+                % preview only needs paired (min, max) per bucket; the
+                % anchor is informational for the main chart and is
+                % safely dropped here before the reshape (drops the
+                % single trailing anchor (x, y) pair tail).
+                %
+                % 260512-cxc: capture the tail anchor BEFORE the drop so we
+                % can thread it through to xCenters(end). The drop itself
+                % is still required because reshape(xOut, 2, nb) below
+                % needs an even-length vector. Without this capture, the
+                % slider preview's last bucket freezes at the interior
+                % min/max midpoint and never advances under live data
+                % growth (visible "stuck preview tail" on the industrial
+                % plant demo's reactor.pressure widget).
+                anchorX = [];
+                anchorY = []; %#ok<NASGU>  % captured for future symmetry;
+                                           % yMinB/yMaxB already include
+                                           % the anchor's y because
+                                           % minmax_core_mex scans the
+                                           % full last bucket.
+                if numel(xOut) == 2 * nBucketsEff + 1 && numel(yOut) == 2 * nBucketsEff + 1
+                    anchorX = xOut(end);
+                    anchorY = yOut(end); %#ok<NASGU>
+                    xOut = xOut(1:end - 1);
+                    yOut = yOut(1:end - 1);
+                end
+                if numel(xOut) ~= 2 * nBucketsEff || numel(yOut) ~= 2 * nBucketsEff
                     return;
                 end
 
                 % Interleaved (min,max) or (max,min) pairs per bucket.
-                xPairs = reshape(xOut, 2, nBuckets);
-                yPairs = reshape(yOut, 2, nBuckets);
+                xPairs = reshape(xOut, 2, nBucketsEff);
+                yPairs = reshape(yOut, 2, nBucketsEff);
                 yMinB  = min(yPairs, [], 1);
                 yMaxB  = max(yPairs, [], 1);
                 xCenters = (xPairs(1, :) + xPairs(2, :)) / 2;
+
+                % 260512-cxc: snap the trailing xCenter to the tail anchor
+                % when the downsampler appended one. The bucket's interior
+                % (min-X, max-X) midpoint can be hundreds of seconds
+                % behind segX(end) under steady-state live data — the
+                % main chart's tail-anchor fix (260512-c5x) made the
+                % rendered line advance, but the slider preview was still
+                % reading the interior midpoint. Guard against
+                % anchorX <= xCenters(end) to preserve strict monotonicity
+                % (the drop-and-override is purely additive in the X
+                % dimension).
+                if ~isempty(anchorX) && anchorX > xCenters(end)
+                    xCenters(end) = anchorX;
+                end
 
                 % Determine y-range: prefer current axes YLim; fallback to data.
                 yRange = [];
@@ -487,6 +891,8 @@ classdef FastSenseWidget < DashboardWidget
                 series = struct('xCenters', xCenters, ...
                                 'yMin',     yMinN, ...
                                 'yMax',     yMaxN);
+                obj.PreviewCache_    = series;
+                obj.PreviewCacheKey_ = cacheKey;
             catch
                 % Best-effort: swallow any error and opt out of envelope.
                 series = [];
@@ -494,29 +900,178 @@ classdef FastSenseWidget < DashboardWidget
         end
 
         function t = getEventTimes(obj)
-        %GETEVENTTIMES Event start times from the wrapped FastSense.EventStore.
-        %   Returns [] when the FastSense instance is absent, has no
-        %   EventStore, or when any access raises. Never throws.
+        %GETEVENTTIMES Event start times for the dashboard time-slider markers.
+        %   Looks up events in this priority order:
+        %     1. obj.EventStore  (widget-level — the modern attachment point)
+        %     2. obj.FastSenseObj.EventStore  (legacy: events on inner FastSense)
+        %     3. obj.FastSenseObj.Events / .EventTimes  (defensive: extra hooks)
+        %
+        %   Returns [] (and never throws) when no source yields events.
+        %   The widget-level lookup was added in 260508-das after the
+        %   slider markers regressed: most modern dashboards attach an
+        %   EventStore on the widget (which is then forwarded to the
+        %   inner FastSense at render time), but some pre-render flows
+        %   would already query getEventTimes before that forwarding had
+        %   run.
             t = [];
             try
-                if isempty(obj.FastSenseObj) || ~isa(obj.FastSenseObj, 'FastSense')
-                    return;
+                raw = [];
+                % Priority 1: widget-level EventStore (modern path).
+                if ~isempty(obj.EventStore)
+                    try
+                        raw = obj.EventStore.getEvents();
+                    catch
+                        raw = [];
+                    end
                 end
-                if ~isprop(obj.FastSenseObj, 'EventStore') || isempty(obj.FastSenseObj.EventStore)
-                    return;
+                % Priority 2: inner FastSense's EventStore.
+                if isempty(raw) && ~isempty(obj.FastSenseObj) && ...
+                        isa(obj.FastSenseObj, 'FastSense') && ...
+                        isprop(obj.FastSenseObj, 'EventStore') && ...
+                        ~isempty(obj.FastSenseObj.EventStore)
+                    try
+                        raw = obj.FastSenseObj.EventStore.getEvents();
+                    catch
+                        raw = [];
+                    end
                 end
-                raw = obj.FastSenseObj.EventStore.getEvents();
+                % Priority 3: defensive — bare struct array on FastSense.
+                if isempty(raw) && ~isempty(obj.FastSenseObj) && ...
+                        isa(obj.FastSenseObj, 'FastSense')
+                    if isprop(obj.FastSenseObj, 'Events') && ~isempty(obj.FastSenseObj.Events)
+                        raw = obj.FastSenseObj.Events;
+                    end
+                end
                 if isempty(raw), return; end
                 n = numel(raw);
                 tmp = zeros(1, n);
                 for i = 1:n
-                    tmp(i) = raw(i).StartTime;   % PascalCase: Event object / struct
+                    if isstruct(raw)
+                        if isfield(raw, 'StartTime')
+                            tmp(i) = raw(i).StartTime;
+                        elseif isfield(raw, 'startTime')
+                            tmp(i) = raw(i).startTime;
+                        else
+                            tmp(i) = NaN;
+                        end
+                    else
+                        % Object array (Event/Event-like)
+                        if isprop(raw(i), 'StartTime')
+                            tmp(i) = raw(i).StartTime;
+                        else
+                            tmp(i) = NaN;
+                        end
+                    end
                 end
                 tmp = tmp(isfinite(tmp));
                 t = tmp(:).';
             catch
                 t = [];
             end
+        end
+
+        function m = getEventMarkers(obj)
+        %GETEVENTMARKERS Per-event time + severity + color for slider markers.
+        %   m = getEventMarkers(obj) returns a struct array with fields:
+        %     m(k).Time     — numeric timestamp (StartTime)
+        %     m(k).Severity — numeric severity in {1,2,3} (default 1 if absent)
+        %     m(k).Color    — 1x3 RGB triplet from severityColor(theme, sev)
+        %
+        %   Walks the same priority chain as getEventTimes (widget-level
+        %   EventStore -> inner FastSense.EventStore -> bare Events array),
+        %   so the slider markers stay in sync with whatever events the
+        %   widget would otherwise display. Always returns an empty struct
+        %   array (struct('Time',{},'Severity',{},'Color',{})) when no
+        %   source yields events; never throws.
+        %
+        %   The Color is the *base* per-severity palette color — the
+        %   TimeRangeSelector blends it toward AxesColor at draw time.
+        %   Tiebreaker on duplicate Times across widgets is resolved by
+        %   DashboardEngine.computeEventMarkers using the Severity field.
+            m = struct('Time', {}, 'Severity', {}, 'Color', {});
+            try
+                raw = [];
+                if ~isempty(obj.EventStore)
+                    try
+                        raw = obj.EventStore.getEvents();
+                    catch
+                        raw = [];
+                    end
+                end
+                if isempty(raw) && ~isempty(obj.FastSenseObj) && ...
+                        isa(obj.FastSenseObj, 'FastSense') && ...
+                        isprop(obj.FastSenseObj, 'EventStore') && ...
+                        ~isempty(obj.FastSenseObj.EventStore)
+                    try
+                        raw = obj.FastSenseObj.EventStore.getEvents();
+                    catch
+                        raw = [];
+                    end
+                end
+                if isempty(raw) && ~isempty(obj.FastSenseObj) && ...
+                        isa(obj.FastSenseObj, 'FastSense')
+                    if isprop(obj.FastSenseObj, 'Events') && ~isempty(obj.FastSenseObj.Events)
+                        raw = obj.FastSenseObj.Events;
+                    end
+                end
+                if isempty(raw), return; end
+
+                % Resolve theme once — getTheme() is inherited from
+                % DashboardWidget. Tolerate failures (returns []).
+                theme = [];
+                try
+                    theme = obj.getTheme();
+                catch
+                    theme = [];
+                end
+
+                n = numel(raw);
+                for i = 1:n
+                    t = NaN;
+                    sev = 1;
+                    if isstruct(raw)
+                        if isfield(raw, 'StartTime')
+                            t = raw(i).StartTime;
+                        elseif isfield(raw, 'startTime')
+                            t = raw(i).startTime;
+                        end
+                        if isfield(raw, 'Severity') && ~isempty(raw(i).Severity)
+                            sev = raw(i).Severity;
+                        elseif isfield(raw, 'severity') && ~isempty(raw(i).severity)
+                            sev = raw(i).severity;
+                        end
+                    else
+                        if isprop(raw(i), 'StartTime')
+                            t = raw(i).StartTime;
+                        end
+                        if isprop(raw(i), 'Severity') && ~isempty(raw(i).Severity)
+                            sev = raw(i).Severity;
+                        end
+                    end
+                    if ~isnumeric(t) || ~isfinite(t)
+                        continue;
+                    end
+                    if ~isnumeric(sev) || isempty(sev) || ~isfinite(sev(1))
+                        sev = 1;
+                    else
+                        sev = sev(1);
+                    end
+                    m(end + 1) = struct( ...
+                        'Time',     t, ...
+                        'Severity', sev, ...
+                        'Color',    severityColor(theme, sev)); %#ok<AGROW>
+                end
+            catch
+                m = struct('Time', {}, 'Severity', {}, 'Color', {});
+            end
+        end
+
+        function invalidatePreviewCache_(obj)
+        %INVALIDATEPREVIEWCACHE_ Clear PreviewCache_ so getPreviewSeries recomputes.
+        %   Called from refresh() / update() / rebuildForTag_() whenever
+        %   the underlying data may have changed. Cheap (no graphics).
+            obj.PreviewCache_    = [];
+            obj.PreviewCacheKey_ = [];
         end
 
         function t = getType(~)
@@ -576,6 +1131,13 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.YLimits), s.yLimits = obj.YLimits; end
             if obj.ShowThresholdLabels, s.showThresholdLabels = true; end
             if obj.ShowEventMarkers, s.showEventMarkers = true; end
+            if obj.ShowPlantLog, s.showPlantLog = true; end  % v3.1 Phase 1032 PLOG-VIZ-03
+            % v4.0 — emit yLimitMode only when non-default so pre-260513-sfp JSON
+            % stays byte-identical (keeps diffs invisible for old
+            % dashboards that never opted into a mode).
+            if ~strcmp(obj.YLimitMode, 'auto-visible')
+                s.yLimitMode = obj.YLimitMode;
+            end
             % NOTE: EventStore is a runtime handle — intentionally NOT serialized (Pitfall E).
 
             if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
@@ -590,6 +1152,12 @@ classdef FastSenseWidget < DashboardWidget
         end
 
         function delete(obj)
+            % Phase 1032 — release XLim PostSet listener before FastSenseObj
+            % teardown deletes the axes the listener is bound to.
+            if ~isempty(obj.PlantLogXLimListener_)
+                try delete(obj.PlantLogXLimListener_); catch, end
+                obj.PlantLogXLimListener_ = [];
+            end
             % Explicitly stop FastSense timers (hRefineTimer, LiveTimer,
             % DeferredTimer) before the base-class delete() destroys hPanel.
             % Without this, an errored singleShot hRefineTimer can survive
@@ -603,6 +1171,70 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function y = getYFromTagOrInline_(obj)
+        %GETYFROMTAGORINLINE_ Full y vector from Tag (preferred) or inline YData.
+        %   Returns [] when neither source yields data. Used by the
+        %   'auto-all' branch of autoScaleY_ / setYLimitMode so the rescale
+        %   spans the entire timeline regardless of the current X window.
+            y = [];
+            if ~isempty(obj.Tag)
+                try
+                    [~, y] = obj.Tag.getXY();
+                catch
+                    y = [];
+                end
+                return;
+            end
+            if ~isempty(obj.YData)
+                y = obj.YData;
+            end
+        end
+
+        function y = getYInVisibleXWindow_(obj)
+        %GETYINVISIBLEXWINDOW_ y values whose x is inside the current XLim.
+        %   Used by the 'auto-visible' branch of setYLimitMode so an
+        %   explicit click on the V button rescales to the data the user
+        %   can actually see right now. Falls back to the full y vector
+        %   when the axes XLim is unavailable, when the data is too sparse
+        %   to filter meaningfully, or when no samples fall inside the
+        %   window (e.g. live data has not yet caught up with a panned-
+        %   ahead XLim).
+            y = obj.getYFromTagOrInline_();
+            if isempty(y) || isempty(obj.FastSenseObj) || ...
+                    ~obj.FastSenseObj.IsRendered
+                return;
+            end
+            ax = obj.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax)
+                return;
+            end
+            try
+                xl = get(ax, 'XLim');
+            catch
+                return;
+            end
+            if numel(xl) ~= 2 || ~all(isfinite(xl)) || xl(2) <= xl(1)
+                return;
+            end
+            x = [];
+            if ~isempty(obj.Tag)
+                try
+                    [x, ~] = obj.Tag.getXY();
+                catch
+                    x = [];
+                end
+            elseif ~isempty(obj.XData)
+                x = obj.XData;
+            end
+            if isempty(x) || numel(x) ~= numel(y)
+                return;
+            end
+            mask = x >= xl(1) & x <= xl(2);
+            if any(mask)
+                y = y(mask);
+            end
+        end
+
         function refreshEventMarkers_(obj)
             %REFRESHEVENTMARKERS_ Diff LastEventIds_/LastEventOpen_ vs current EventStore state.
             %   Triggers inner FastSense.refreshEventLayer() on any change: added/removed
@@ -735,14 +1367,30 @@ classdef FastSenseWidget < DashboardWidget
             end
             fp.addTag(obj.Tag);
 
+            % See render() — title sits above the axes against the panel,
+            % so use the dashboard theme's ToolbarFontColor for legibility.
+            % Prefer GroupHeaderFg (near-white in dark / near-black in light)
+            % over ToolbarFontColor for stronger contrast against the panel.
+            titleColor = get(ax, 'XColor');
+            try
+                t = obj.getTheme();
+                if isstruct(t)
+                    if isfield(t, 'GroupHeaderFg')
+                        titleColor = t.GroupHeaderFg;
+                    elseif isfield(t, 'ToolbarFontColor')
+                        titleColor = t.ToolbarFontColor;
+                    end
+                end
+            catch
+            end
             if ~isempty(obj.Title)
-                title(ax, obj.Title, 'Color', get(ax, 'XColor'));
+                title(ax, obj.Title, 'Color', titleColor);
             end
             if ~isempty(obj.XLabel)
-                xlabel(ax, obj.XLabel, 'Color', get(ax, 'XColor'));
+                xlabel(ax, obj.XLabel, 'Color', titleColor);
             end
             if ~isempty(obj.YLabel)
-                ylabel(ax, obj.YLabel, 'Color', get(ax, 'XColor'));
+                ylabel(ax, obj.YLabel, 'Color', titleColor);
             end
 
             fp.render();
@@ -756,6 +1404,7 @@ classdef FastSenseWidget < DashboardWidget
 
             obj.LastTagRef = obj.Tag;
             obj.updateTimeRangeCache();
+            obj.invalidatePreviewCache_();   % 260508-das
 
             if ~isempty(savedXLim)
                 obj.IsSettingTime = true;
@@ -829,6 +1478,19 @@ classdef FastSenseWidget < DashboardWidget
             end
             if isfield(s, 'showEventMarkers')
                 obj.ShowEventMarkers = s.showEventMarkers;
+            end
+            if isfield(s, 'showPlantLog')  % v3.1 Phase 1032 PLOG-VIZ-03
+                obj.ShowPlantLog = s.showPlantLog;
+            end
+            % v4.0 260513-sfp — restore YLimitMode if serialized. Absent means
+            % "legacy dashboard, default to 'auto-visible'" so behaviour
+            % is byte-identical for old configs.
+            if isfield(s, 'yLimitMode')
+                try
+                    obj.setYLimitMode(s.yLimitMode);
+                catch
+                    % Invalid serialized value; keep default 'auto-visible'.
+                end
             end
         end
     end
@@ -929,4 +1591,13 @@ function [xOut, yOut] = localMinMaxBuckets_(x, y, nb)
     yOut(odd(~minFirst))  = yMaxVals(~minFirst);
     xOut(even(~minFirst)) = xMinVals(~minFirst);
     yOut(even(~minFirst)) = yMinVals(~minFirst);
+
+    % Tail-anchor (260512-c5x): mirrors minmax_core_mex.c — append
+    % (x(end), y(end)) iff its X strictly exceeds the last emitted X
+    % so the rendered line pins to the data tail. Output length:
+    % 2*nb or 2*nb+1.
+    if x(end) > xOut(end)
+        xOut(end + 1) = x(end);
+        yOut(end + 1) = y(end);
+    end
 end

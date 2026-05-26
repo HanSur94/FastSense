@@ -1,5 +1,17 @@
 classdef TestDownsampleViolations < matlab.unittest.TestCase
     methods (TestClassSetup)
+        function gateHeadlessLinux(testCase)
+            %GATEHEADLESSLINUX Skip on Linux CI runners — same MATLAB
+            %   dispatcher segfault as the other MEX-heavy gated classes.
+            %   Coverage preserved indirectly via FastSense rendering tests
+            %   (downsample + violation paths). Interactive MATLAB / macOS
+            %   / Windows CI run the full suite.
+            if exist('OCTAVE_VERSION', 'builtin'); return; end
+            isHeadlessLinux = ~ispc && ~ismac && ~usejava('desktop');
+            testCase.assumeFalse(isHeadlessLinux, ...
+                'TestDownsampleViolations: pre-emptive headless-Linux gate (MEX-heavy class, R2021b dispatcher bug)');
+        end
+
         function addPaths(testCase)
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             install();

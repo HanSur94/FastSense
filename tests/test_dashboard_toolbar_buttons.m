@@ -51,8 +51,9 @@ function test_dashboard_toolbar_buttons()
         handles = {d.Toolbar.hLiveBtn, ...
             d.Toolbar.hConfigBtn, d.Toolbar.hImageBtn, ...
             d.Toolbar.hExportBtn, d.Toolbar.hSyncBtn, ...
+            d.Toolbar.hResetBtn, ...
             d.Toolbar.hInfoBtn};
-        names = {'Live', 'Config', 'Image', 'Export', 'Sync', 'Info'};
+        names = {'Live', 'Config', 'Image', 'Export', 'Sync', 'Reset', 'Info'};
         for i = 1:numel(handles)
             tip = get(handles{i}, 'TooltipString');
             assert(~isempty(tip), ...
@@ -96,6 +97,64 @@ function test_dashboard_toolbar_buttons()
         nPassed = nPassed + 1;
     catch err
         fprintf('    FAIL testLiveBorder: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % Reset button is created and labelled "Reset" after render
+    try
+        d = DashboardEngine('ResetButtonExistsTest');
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+        assert(~isempty(d.Toolbar.hResetBtn), ...
+            'reset button should exist after render');
+        assert(ishandle(d.Toolbar.hResetBtn), ...
+            'reset button should be a valid handle');
+        assert(strcmp(get(d.Toolbar.hResetBtn, 'String'), 'Reset'), ...
+            'reset button label should be "Reset"');
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testResetButtonExists: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % Reset button has a tooltip mentioning "widget"
+    try
+        d = DashboardEngine('ResetTooltipTest');
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+        tip = get(d.Toolbar.hResetBtn, 'TooltipString');
+        assert(~isempty(tip), 'reset tooltip should be non-empty');
+        assert(~isempty(strfind(lower(tip), 'widget')), ...
+            'reset tooltip should mention "widget" to document recovery purpose');
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testResetButtonTooltip: %s\n', err.message);
+        nFailed = nFailed + 1;
+    end
+
+    % Reset re-renders widgets — onReset() replaces the widget panel handle
+    try
+        d = DashboardEngine('ResetRerenderTest');
+        d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
+        d.render();
+        set(d.hFigure, 'Visible', 'off');
+        oldPanel = d.Widgets{1}.hPanel;
+        assert(ishandle(oldPanel), 'precondition: original panel should be valid');
+        d.Toolbar.onReset();
+        assert(d.Widgets{1}.Realized == true, ...
+            'widget should be realized again after reset');
+        assert(ishandle(d.Widgets{1}.hPanel), ...
+            'widget panel should be a valid handle after reset');
+        assert(d.Widgets{1}.hPanel ~= oldPanel, ...
+            'reset should replace the widget panel handle, not reuse it');
+        close(d.hFigure);
+        nPassed = nPassed + 1;
+    catch err
+        fprintf('    FAIL testResetReRendersWidgets: %s\n', err.message);
         nFailed = nFailed + 1;
     end
 

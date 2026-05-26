@@ -261,6 +261,100 @@ function build_mex()
     copy_mex_to(outDir, sensorPrivDir, 'compute_violations_mex');
     copy_mex_to(outDir, sensorPrivDir, 'resolve_disk_mex');
     copy_mex_to(outDir, sensorPrivDir, 'to_step_function_mex');
+
+    % --- SensorThreshold kernels (Phase 1028 Wave 1+) ---------------------
+    % These kernels live in libs/SensorThreshold/private/mex_src/ rather
+    % than the FastSense one — they target the Tag pipeline (delimited
+    % parse, monitor FSM, composite merge, aggregate matrix) and have no
+    % FastSense rendering coupling. Compile loop mirrors the FastSense
+    % block above; output goes directly into the SensorThreshold private
+    % tree (no copy_mex_to step needed because the source is co-located).
+    %
+    % Plans 03/04 of phase 1028 will append entries to sensorMexFiles
+    % (K2 monitor_fsm_mex, K3 composite_merge_mex, K4 aggregate_matrix_mex).
+    sensorSrcDir = fullfile(rootDir, '..', 'SensorThreshold', 'private', 'mex_src');
+    sensorOutDir = sensorPrivDir;
+    sensorMexFiles = {
+        'delimited_parse_mex.c', 'delimited_parse_mex', {{}}, {{}}
+    };
+    sensorIncFlag = ['-I' sensorSrcDir];
+    sensor_n_success = 0;
+    sensor_n_fail    = 0;
+
+    if exist(sensorSrcDir, 'dir')
+        for ii = 1:size(sensorMexFiles, 1)
+            srcFile = fullfile(sensorSrcDir, sensorMexFiles{ii, 1});
+            outName = sensorMexFiles{ii, 2};
+            extraSrcs  = sensorMexFiles{ii, 3};  extraSrcs  = extraSrcs{1};
+            extraFlags = sensorMexFiles{ii, 4};  extraFlags = extraFlags{1};
+
+            % Skip if already built (mirror FastSense block's mtime backstop).
+            if exist(fullfile(sensorOutDir, [outName, '.', mexext()]), 'file') == 3 || ...
+               exist(fullfile(sensorOutDir, [outName, '.mex']), 'file') == 3
+                fprintf('Compiling %s ... SKIPPED (already exists)\n', sensorMexFiles{ii, 1});
+                sensor_n_success = sensor_n_success + 1;
+                continue;
+            end
+
+            fprintf('Compiling %s ... ', sensorMexFiles{ii, 1});
+            try
+                compile_mex(srcFile, outName, sensorOutDir, sensorIncFlag, ...
+                            [opt_flags, extraFlags], compiler, extraSrcs);
+                fprintf('OK\n');
+                sensor_n_success = sensor_n_success + 1;
+            catch e
+                fprintf('FAILED\n');
+                fprintf('  Error: %s\n', e.message);
+                hasAVX2 = any(~cellfun('isempty', strfind(opt_flags, 'mavx2'))) || any(~cellfun('isempty', strfind(opt_flags, 'AVX2')));
+                if strcmp(arch, 'x86_64') && hasAVX2
+                    fprintf('  Retrying with SSE2 fallback ... ');
+                    try
+                        if useMSVC
+                            sse_flags = {'/O2', '/arch:SSE2', '/fp:fast'};
+                        else
+                            sse_flags = {'-O3', '-msse2', '-ftree-vectorize', '-ffast-math'};
+                        end
+                        compile_mex(srcFile, outName, sensorOutDir, sensorIncFlag, ...
+                                    [sse_flags, extraFlags], compiler, extraSrcs);
+                        fprintf('OK (SSE2)\n');
+                        sensor_n_success = sensor_n_success + 1;
+                    catch e2
+                        fprintf('FAILED\n');
+                        fprintf('  Error: %s\n', e2.message);
+                        sensor_n_fail = sensor_n_fail + 1;
+                    end
+                else
+                    sensor_n_fail = sensor_n_fail + 1;
+                end
+            end
+        end
+        fprintf('\nSensorThreshold MEX kernels: %d/%d compiled successfully.\n', ...
+            sensor_n_success, size(sensorMexFiles, 1));
+        if sensor_n_fail > 0
+            fprintf('(%d failed — MATLAB fallback will be used for those.)\n', sensor_n_fail);
+        end
+    end
+    % --- end SensorThreshold kernels ------------------------------------
+
+    % --- Concurrency library MEX (Phase 1029) ---
+    % build_concurrency_mex lives under libs/Concurrency/.  Try to compile
+    % it on the same pass so users only invoke build_mex once.  Best-effort:
+    % failure here does not abort the FastSense MEX build.
+    try
+        concDir = fullfile(fileparts(rootDir), 'Concurrency');
+        if isfolder(concDir)
+            prevPath = path();
+            pathCleaner = onCleanup(@() path(prevPath)); %#ok<NASGU>
+            addpath(concDir);
+            if exist('build_concurrency_mex', 'file') == 2
+                fprintf('\n[Concurrency] ');
+                build_concurrency_mex();
+            end
+        end
+    catch concErr
+        warning('build_mex:concurrencyMexFailed', ...
+            'Concurrency MEX build failed (non-fatal): %s', concErr.message);
+    end
 end
 
 function compile_mex(src_file, out_name, outDir, include_flag, opt_flags, compiler, extra_srcs)

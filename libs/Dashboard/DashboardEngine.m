@@ -27,6 +27,20 @@ classdef DashboardEngine < handle
         ProgressMode  = 'auto'   % 'auto' | 'on' | 'off' — render progress bar visibility
         ShowTimePanel = true     % hide the bottom time slider panel
         EventMarkersVisible = true  % global toggle for event markers across all widgets (runtime UI state, not serialized)
+        DebugPreview_ = false    % 260508-das — opt-in: surface preview/marker pipeline failures as warnings
+        % Reserved vertical strip at the figure top for the stale-data banner
+        % (normalized units). The banner is no longer an overlay — its space
+        % is permanently reserved, so toolbar / page-bar / content-area all
+        % shift down by BannerHeight. Single source of truth for the banner
+        % strip height (260508-jyh).
+        BannerHeight  = 0.035
+        % 260513-snt — EventStore handle for manual-event creation via the
+        % per-FastSenseWidget '+Event' button. Defaults []; lazily
+        % auto-discovered from any EventTimelineWidget exposing
+        % EventStoreObj on the dashboard the first time the dialog is
+        % opened. Runtime handle only — NOT written through
+        % DashboardSerializer; serialized dashboards round-trip unchanged.
+        EventStore    = []
     end
 
     properties (SetAccess = private)
@@ -44,6 +58,7 @@ classdef DashboardEngine < handle
         LastUpdateTime = []
         FilePath        = ''
         InfoTempFile    = ''
+        InfoModalFigure_ = []  % Cached modal uifigure handle for in-app info display (260508-n8h)
         DetachedMirrors = {}   % Cell array of DetachedMirror objects
         % Theme caching
         ThemeCache_        = []  % Cached DashboardTheme struct; lazy-computed by getCachedTheme()
@@ -51,15 +66,26 @@ classdef DashboardEngine < handle
         % Widget dispatch table
         WidgetTypeMap_     = []  % containers.Map: type string -> constructor function handle
         % Time control
-        TimePanelHeight = 0.06
+        TimePanelHeight = 0.085   % bumped from 0.06 to fit data-range labels below slider (260512-hrn-followup)
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
         hTimePanel      = []
         hTimeSliderL    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
         hTimeSliderR    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
         hTimeStart      = []
         hTimeEnd        = []
+        hTimeResetBtn   = []       % Reset button on time panel (260508-f7p — needed for theme switch)
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
+        ResizeDebounceTimer = []   % MATLAB timer for coalescing rapid resize events (260513-q7w)
+        ResizeFinalRedrawTimer = [] % Longer-period backstop timer: unconditional rerenderWidgets after resize fully settles (260513-q7w fu)
+        % 260513-q7w fu2: true while rerenderWidgets is in flight — suppresses
+        % spurious resize-timer scheduling that the panel teardown/recreate
+        % cascade would otherwise trigger.
+        IsRerendering_ = false
         TimeRangeSelector_  = []   % TimeRangeSelector handle (replaces dual sliders)
+        % [tStart tEnd] cache of most recent broadcast (260508-llw); used by
+        % switchPage to re-apply the current synced window to widgets that
+        % get realized on tab-switch.
+        LastSyncedTimeRange_ = []
         Progress_           = []   % DashboardProgress instance (active during render)
         % Stale-data banner (shown during live mode when a widget's tMax stops advancing)
         hStaleBanner         = []  % uipanel overlay; hidden unless live+stale+!dismissed
@@ -67,6 +93,56 @@ classdef DashboardEngine < handle
         hStaleBannerClose    = []  % uicontrol 'X' pushbutton child of hStaleBanner
         LastTMaxPerWidget_   = []  % containers.Map: widget title -> last observed tMax
         StaleBannerDismissed_ = false  % true after user clicks X; reset when data flows again
+        PreviewNBuckets_     = 0   % Cached nBuckets from last figure-pixel query; 0 = uncached
+        % Slider overlay caches — avoid deleting/recreating line handles when
+        % the underlying data hasn't changed between ticks (260508-slider-stuck).
+        % Each cache stores the last value passed to the selector so the
+        % comparisons below can skip the expensive delete/recreate cycle.
+        EventMarkerTimesCache_  = []   % last uTimes passed to setEventMarkers
+        EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
+        PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
+        FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
+        % Phase 1031 PLOG-VIZ-01..09: plant-log slider overlay test seam.
+        % These three properties are the temporary integration point used by
+        % setPlantLogStoreForTest_ / setPlantLogLiveTailForTest_; Phase 1033
+        % will replace the seam with the public attachPlantLog/detachPlantLog API.
+        PlantLogStoreInternal_    = []  % PlantLogStore handle (or [])
+        PlantLogLiveTailInternal_ = []  % PlantLogLiveTail handle (or [])
+        PlantLogTickListener_     = []  % addlistener handle for PlantLogLiveTail.PlantLogTailTick
+        % Phase 1031 PLOG-VIZ-06: hover tooltip on plant-log slider markers.
+        % Lazily constructed in setPlantLogStoreForTest_ when a non-empty
+        % store is attached AND TimeRangeSelector_ is rendered. Torn down
+        % on every store change (so stale store-handle closures cannot
+        % survive a store swap), on store-detach, and in delete().
+        PlantLogSliderHover_      = []  % PlantLogSliderHover handle (or [])
+        % Phase 1033 PLOG-INT-01/04: serializer read-through state.
+        % Populated by attachPlantLog (public API); cleared by detachPlantLog.
+        % DashboardSerializer reads these via friend access in Plan 02.
+        PlantLogSourcePath_       = ''  % char -- source file path passed to attachPlantLog
+        PlantLogMapping_          = []  % struct (CONTEXT.md JSON-schema shape) or []
+        PlantLogInterval_         = []  % numeric scalar (seconds) or []
+        PlantLogStartTail_        = []  % logical scalar or []
+    end
+
+    % Phase 1032 PLOG-VIZ-07: per-widget hover tooltips. Cell of
+    % {widget, PlantLogWidgetHover} pairs. Lazily populated in
+    % attachPlantLogWidgetHover_ when widget.setShowPlantLog(true, engine)
+    % runs against a widget whose engine has a store attached. Torn down
+    % by detachPlantLogWidgetHover_ on setShowPlantLog(false, engine) AND
+    % in delete() BEFORE the TRS teardown (matching the Phase 1031
+    % hover-before-selector ordering rule).
+    %
+    % Public READ + restricted WRITE: tests + downstream consumers can
+    % observe attached hovers, but only the engine itself + FastSenseWidget
+    % (via the friend access list) can mutate the cell.
+    % SetAccess limited to engine + widget. Tests that need direct
+    % mutation use the existing setPlantLogStoreForTest_ /
+    % setPlantLogLiveTailForTest_ hooks (Hidden, Octave-safe).
+    % matlab.unittest.TestCase is intentionally NOT listed because
+    % Octave has no matlab.unittest namespace and the classdef would
+    % fail to parse entirely.
+    properties (SetAccess = {?DashboardEngine, ?FastSenseWidget})
+        WidgetHovers_             = {}
     end
 
     methods (Access = public)
@@ -84,6 +160,7 @@ classdef DashboardEngine < handle
                 obj.(key) = varargin{k+1};
             end
             obj.Layout = DashboardLayout();
+            obj.Layout.EngineRef = obj;  % Phase 1032 PLOG-VIZ-05 — used by addPlantLogToggle callback
             obj.WidgetTypeMap_ = containers.Map({ ...
                 'fastsense',   'number',     'status',    'text', ...
                 'gauge',       'table',      'rawaxes',   'timeline', ...
@@ -114,8 +191,16 @@ classdef DashboardEngine < handle
             end
             % Refresh the preview envelope (D-07). Safe before render():
             % computePreviewEnvelope guards on TimeRangeSelector_ presence.
-            try obj.computePreviewEnvelope(); catch, end
-            try obj.computeEventMarkers();    catch, end
+            try obj.computePreviewEnvelope(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:previewFailed', 'computePreviewEnvelope: %s', err.message); end
+            end
+            try obj.computeEventMarkers();    catch err
+                if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function setEventMarkersVisible(obj, tf)
@@ -143,13 +228,47 @@ classdef DashboardEngine < handle
             if ~isempty(obj.Toolbar) && ismethod(obj.Toolbar, 'setEventsActiveIndicator')
                 obj.Toolbar.setEventsActiveIndicator(tf);
             end
+            % Refresh slider preview markers so the toolbar toggle is
+            % reflected in the time-panel track too (260508 follow-up).
+            try obj.computeEventMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function switchPage(obj, pageIdx)
         %SWITCHPAGE Switch the active page using panel visibility toggling.
         %   d.switchPage(2) sets ActivePage = 2 and toggles panel visibility.
+            if ~obj.isObjValid_()
+                return;  % uicontrol callback fired after engine was deleted
+            end
             if pageIdx < 1 || pageIdx > numel(obj.Pages)
                 return;
+            end
+            % Cancel any pending resize-debounce timers from a prior resize.
+            % If the user resized then immediately clicked a different tab,
+            % the in-flight backstop would fire ~1.2s later and rerender
+            % the wrong page (the NEW active page), destroying its
+            % freshly-realized panels mid-flight and leaving widgets
+            % white. (260513-q7w fu2)
+            obj.cancelResizeTimers_();
+            % If a rerenderWidgets is currently in flight (the backstop
+            % fired and is mid-flight, with internal drawnow calls letting
+            % this uicontrol callback interrupt it), serialize: spin
+            % drawnow until the rerender completes. Running switchPage
+            % INSIDE a rerender races with the realizeWidget loop and
+            % leaves the previous page's widgets visible (chrome created
+            % inside their outer cells AFTER switchPage hid them) and
+            % the new page's widgets white. Spin with a 3 s safety
+            % timeout. (260513-q7w fu3)
+            if obj.IsRerendering_
+                waitStart = tic;
+                while obj.IsRerendering_ && toc(waitStart) < 3
+                    drawnow;
+                end
             end
             obj.ActivePage = pageIdx;
             % Update button colors if PageBar exists
@@ -175,11 +294,20 @@ classdef DashboardEngine < handle
                 for pgIdx = 1:numel(obj.Pages)
                     pgWidgets = obj.Pages{pgIdx}.Widgets;
                     for wi = 1:numel(pgWidgets)
-                        if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
+                        % Toggle visibility on the OUTER cell panel so the
+                        % WidgetButtonBar (a sibling of the WidgetContentPanel)
+                        % is hidden alongside widget content. Fall back to
+                        % hPanel for widgets that haven't been realized yet
+                        % (hCellPanel is set during realizeWidget).
+                        cellH = pgWidgets{wi}.hCellPanel;
+                        if isempty(cellH) || ~ishandle(cellH)
+                            cellH = pgWidgets{wi}.hPanel;
+                        end
+                        if ~isempty(cellH) && ishandle(cellH)
                             if pgIdx == obj.ActivePage
-                                set(pgWidgets{wi}.hPanel, 'Visible', 'on');
+                                set(cellH, 'Visible', 'on');
                             else
-                                set(pgWidgets{wi}.hPanel, 'Visible', 'off');
+                                set(cellH, 'Visible', 'off');
                             end
                         end
                     end
@@ -197,9 +325,34 @@ classdef DashboardEngine < handle
                     obj.realizeBatch(5);
                 end
             end
+            % Re-apply the current synced time range so widgets that just
+            % realized on this tab inherit the dashboard-wide window
+            % instead of their construction default. (260508-llw)
+            if ~isempty(obj.LastSyncedTimeRange_)
+                rng = obj.LastSyncedTimeRange_;
+                obj.broadcastTimeRange(rng(1), rng(2));
+            end
             % Refresh the preview envelope on the newly active page (D-07).
-            try obj.computePreviewEnvelope(); catch, end
-            try obj.computeEventMarkers();    catch, end
+            % Do NOT clear the slider overlay caches before calling compute.
+            % The dirty-check in computePreviewEnvelopeReturning_ and
+            % computeEventMarkers uses isequal() to detect whether the new
+            % page's data differs from what's currently drawn. If it differs
+            % (different widgets, different events), the compute functions
+            % invoke setPreviewLines/setEventMarkers automatically. Clearing
+            % the caches here was redundant and harmful: it forced a full
+            % delete/recreate of 129+ line handles synchronously inside
+            % switchPage(), blocking the MATLAB event queue long enough to
+            % drop the user's next mouse event (slider drag). (260508-slider-stuck)
+            try obj.computePreviewEnvelope(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:previewFailed', 'computePreviewEnvelope: %s', err.message); end
+            end
+            try obj.computeEventMarkers();    catch err
+                if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function w = addWidget(obj, type, varargin)
@@ -288,6 +441,16 @@ classdef DashboardEngine < handle
                 'Units', 'normalized', ...
                 'OuterPosition', [0.05 0.05 0.9 0.9], ...
                 'CloseRequestFcn', @(~,~) obj.onClose());
+            % Safety net: any figure-destruction path (delete(hf), close all force,
+            % parent teardown) must also stop the live timer. CloseRequestFcn ->
+            % onClose() already handles the normal close path; this listener
+            % covers everything else (260511-mjb).
+            try
+                obj.FigureDestroyedListener_ = addlistener(obj.hFigure, ...
+                    'ObjectBeingDestroyed', @(~,~) obj.onFigureDestroyed_());
+            catch
+                obj.FigureDestroyedListener_ = [];
+            end
             set(obj.hFigure, 'ResizeFcn', @(~,~) obj.onResize());
 
             obj.Toolbar = DashboardToolbar(obj, obj.hFigure, themeStruct);
@@ -298,10 +461,11 @@ classdef DashboardEngine < handle
                 obj.renderPageBar(themeStruct);
                 pageBarH = obj.PageBarHeight;
             else
-                % Create hidden PageBar placeholder so hPageBar is always valid
+                % Create hidden PageBar placeholder so hPageBar is always valid.
+                % Y accounts for the reserved banner strip at the figure top.
                 obj.hPageBar = uipanel('Parent', obj.hFigure, ...
                     'Units', 'normalized', ...
-                    'Position', [0, 1 - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
+                    'Position', [0, 1 - obj.BannerHeight - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
                     'BorderType', 'none', ...
                     'BackgroundColor', themeStruct.ToolbarBackground, ...
                     'Visible', 'off');
@@ -314,11 +478,16 @@ classdef DashboardEngine < handle
             % Create the stale-data banner (hidden by default; toggled by live tick)
             obj.createStaleBanner(themeStruct, toolbarH);
 
-            % Apply visibility flags + compute content area based on effective heights
+            % Apply visibility flags + compute content area based on effective
+            % heights. BannerHeight is reserved at the top regardless of
+            % banner Visible state — toolbar/pagebar/content-area all shift
+            % down so the banner is never an overlay (260508-jyh).
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
             obj.Layout.ContentArea = [0, effTimeH, ...
-                1, 1 - effToolbarH - effPageBarH - effTimeH];
+                1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % 260513-snt — wire the per-FastSenseWidget '+Event' button.
+            obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
             % Create viewport once up front — additive allocatePanels calls below
             % will reuse it rather than destroying and recreating it each time.
             obj.Layout.ensureViewport(obj.hFigure, themeStruct);
@@ -345,7 +514,11 @@ classdef DashboardEngine < handle
                     end
                     pgWidgets = obj.Pages{pgIdx}.Widgets;
                     obj.Layout.allocatePanels(obj.hFigure, pgWidgets, themeStruct);
-                    % Hide panels for non-active pages
+                    % Hide panels for non-active pages. allocatePanels has
+                    % only just assigned the cell panel to widget.hPanel
+                    % (hCellPanel is still empty until realizeWidget fires
+                    % on tab-switch), so toggling hPanel here hides the
+                    % cell — correct.
                     for wi = 1:numel(pgWidgets)
                         if ~isempty(pgWidgets{wi}.hPanel) && ishandle(pgWidgets{wi}.hPanel)
                             set(pgWidgets{wi}.hPanel, 'Visible', 'off');
@@ -415,6 +588,304 @@ classdef DashboardEngine < handle
             end
         end
 
+        function store = attachPlantLog(obj, filePath, varargin)
+        %ATTACHPLANTLOG Attach a plant log to this dashboard (PLOG-INT-01).
+        %   store = engine.attachPlantLog(filePath) reads filePath using
+        %   PlantLogReader.autoDetect for the column mapping, ingests every
+        %   parseable row into a new PlantLogStore, starts a PlantLogLiveTail
+        %   timer (default Interval=5s, StartTail=true), wires the slider +
+        %   per-widget overlay refresh path, and returns the store handle.
+        %
+        %   store = engine.attachPlantLog(filePath, ...
+        %       'Mapping',   struct('timestampCol','Time','messageCol','Msg',...
+        %                           'metadataCols',{{'Unit','Shift'}},'format',''), ...
+        %       'Interval',  5, ...
+        %       'StartTail', true) overrides defaults.
+        %
+        %   Re-attach is idempotent: if a store is already attached, this
+        %   method internally calls detachPlantLog() to release the prior
+        %   store + timer + overlays + hovers, then attaches the new one.
+        %   No error, no warning.
+        %
+        %   Mapping struct field names accepted (CONTEXT.md JSON-schema shape):
+        %     timestampCol, messageCol, metadataCols, format
+        %   These are translated internally into the PlantLogReader.mapping
+        %   shape (TimestampColumn, MessageColumn, TimestampFormat).
+        %
+        %   Errors raised:
+        %     DashboardEngine:invalidPlantLogOption  - bad opt name or value
+        %     PlantLogReader:*                       - propagated from reader
+        %     PlantLogStore:*                        - propagated from store
+        %
+        %   See also detachPlantLog, PlantLogReader.openInteractive, PlantLogStore.
+
+            % --- Validate filePath ---
+            if isstring(filePath); filePath = char(filePath); end
+            if ~ischar(filePath) || isempty(filePath)
+                error('PlantLogReader:invalidInput', ...
+                    'filePath must be a non-empty char/string.');
+            end
+
+            % --- Parse name-value opts (per CONTEXT.md D-02) ---
+            % Hidden opt ContinueOnReadError (default false): when true,
+            % PlantLogReader:fileNotFound + PlantLogReader:unknownColumn +
+            % PlantLogReader:readError are caught and re-emitted as the
+            % three new namespaced warnings instead of propagating. Used
+            % exclusively by DashboardEngine.load to honour the
+            % CONTEXT.md D-12 "degrade-to-warning" load-failure contract.
+            opts = struct('Mapping', [], 'Interval', 5, 'StartTail', true, ...
+                          'ContinueOnReadError', false);
+            if mod(numel(varargin), 2) ~= 0
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'attachPlantLog name-value args must come in pairs; got %d.', numel(varargin));
+            end
+            validKeys = fieldnames(opts);
+            for k = 1:2:numel(varargin)
+                key = varargin{k};
+                if isstring(key); key = char(key); end
+                if ~ischar(key)
+                    error('DashboardEngine:invalidPlantLogOption', ...
+                        'Option key at position %d must be char.', k);
+                end
+                idx = find(strcmpi(validKeys, key), 1);
+                if isempty(idx)
+                    error('DashboardEngine:invalidPlantLogOption', ...
+                        'Unknown attachPlantLog option ''%s''. Valid: %s.', ...
+                        key, strjoin(validKeys, ', '));
+                end
+                opts.(validKeys{idx}) = varargin{k + 1};
+            end
+
+            % --- Validate Interval ---
+            if ~isnumeric(opts.Interval) || ~isscalar(opts.Interval) || ...
+                    ~isfinite(opts.Interval) || opts.Interval <= 0
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'Interval must be a positive finite numeric scalar (seconds).');
+            end
+
+            % --- Validate StartTail ---
+            if ~islogical(opts.StartTail) && ~isnumeric(opts.StartTail)
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'StartTail must be logical scalar.');
+            end
+            if ~isscalar(opts.StartTail)
+                error('DashboardEngine:invalidPlantLogOption', ...
+                    'StartTail must be logical scalar.');
+            end
+            startTail = logical(opts.StartTail);
+
+            % --- Idempotent re-attach: detach any prior store FIRST ---
+            % Per CONTEXT.md D-04: "first call detachPlantLog() internally
+            % to clean up the prior store + tail + listeners + overlays,
+            % then attach new. No error, no user prompt."
+            if ~isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isempty(obj.PlantLogLiveTailInternal_)
+                obj.detachPlantLog();
+            end
+
+            % --- Translate mapping from JSON-schema shape -> PlantLogReader shape ---
+            if isstruct(opts.Mapping)
+                readerMapping = obj.plantLogMappingToReaderShape_(opts.Mapping);
+            else
+                % No mapping supplied -> autoDetect via the public helper
+                % (DashboardEngine cannot reach libs/PlantLog/private, so
+                % PlantLogReader.autoDetectFromFile is the integration point).
+                try
+                    readerMapping = PlantLogReader.autoDetectFromFile(filePath);
+                catch autoME
+                    if opts.ContinueOnReadError
+                        [recovered, store] = obj.surfacePlantLogLoadFailure_(autoME, filePath);
+                        if ~recovered, return; end
+                        % If recovery succeeded inside surfacePlantLogLoadFailure_,
+                        % store is set and we should NOT continue with the
+                        % normal attach path. surfacePlantLogLoadFailure_
+                        % returns recovered=false for fileNotFound /
+                        % readError; recovered=true with store=[] never
+                        % happens (it always returns store=[] when
+                        % recovered=false). Defensive return below.
+                        return;
+                    else
+                        rethrow(autoME);
+                    end
+                end
+            end
+
+            % --- Ingest via headless reader ---
+            try
+                entries = PlantLogReader.openInteractive(filePath, ...
+                    'Headless', true, ...
+                    'Mapping',  readerMapping);
+            catch readME
+                if opts.ContinueOnReadError
+                    if strcmp(readME.identifier, 'PlantLogReader:unknownColumn')
+                        % Mapping mismatch -- re-run autoDetect, warn, retry once.
+                        try
+                            newMapping = PlantLogReader.autoDetectFromFile(filePath);
+                            warning('DashboardEngine:plantLogMappingMismatch', ...
+                                ['Saved plant-log mapping (timestamp=%s, ' ...
+                                 'message=%s) no longer matches file columns; ' ...
+                                 'using auto-detected mapping (timestamp=%s, ' ...
+                                 'message=%s) instead.'], ...
+                                readerMapping.TimestampColumn, readerMapping.MessageColumn, ...
+                                newMapping.TimestampColumn, newMapping.MessageColumn);
+                            readerMapping = newMapping;
+                            entries = PlantLogReader.openInteractive(filePath, ...
+                                'Headless', true, ...
+                                'Mapping',  readerMapping);
+                        catch retryME
+                            warning('DashboardEngine:plantLogReadFailed', ...
+                                ['Saved plant-log re-import failed after ' ...
+                                 'mapping-mismatch recovery: %s; ' ...
+                                 'dashboard loaded without overlay.'], ...
+                                retryME.message);
+                            store = [];
+                            return;
+                        end
+                    else
+                        [~, ~] = obj.surfacePlantLogLoadFailure_(readME, filePath);
+                        store = [];
+                        return;
+                    end
+                else
+                    rethrow(readME);
+                end
+            end
+
+            % --- Build store + populate ---
+            store = PlantLogStore(filePath);
+            if ~isempty(entries)
+                store.addEntries(entries);
+            end
+
+            % --- Persist serialization-state properties (PLOG-INT-04 prep) ---
+            % Set BEFORE setPlantLogStoreForTest_ so any tick callback that
+            % fires during wire-up sees the populated state.
+            obj.PlantLogSourcePath_ = filePath;
+            obj.PlantLogMapping_    = obj.readerMappingToJsonShape_(readerMapping);
+            obj.PlantLogInterval_   = double(opts.Interval);
+            obj.PlantLogStartTail_  = startTail;
+
+            % --- Wire slider overlay + slider hover (existing seam) ---
+            % setPlantLogStoreForTest_ tears down + rebuilds PlantLogSliderHover_
+            % and runs computePlantLogMarkers; we reuse it here so the
+            % production path goes through the same wire-up code.
+            obj.setPlantLogStoreForTest_(store);
+
+            % --- Start live tail (PLOG-LT-01..04) when requested ---
+            if startTail
+                tail = PlantLogLiveTail(store, filePath, readerMapping, ...
+                    'Interval',         opts.Interval, ...
+                    'StartImmediately', true);
+                obj.setPlantLogLiveTailForTest_(tail);   % wires PlantLogTickListener_
+            end
+
+            % --- Re-wire ShowPlantLog=true widgets so overlay/hover attach ---
+            % Per CONTEXT.md D-09: after attachPlantLog runs, the engine
+            % iterates Widgets and calls setShowPlantLog(true, engine) on
+            % every ShowPlantLog=true FastSenseWidget so the engine ref +
+            % XLim listener + hover are rewired. fromStruct alone only
+            % flips the boolean; this triggers the engine-side draw wire-up.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try
+                        w.setShowPlantLog(true, obj);
+                    catch ME
+                        warning('DashboardEngine:plantLogOverlayFailed', ...
+                            'attachPlantLog: setShowPlantLog on widget "%s" failed: %s', ...
+                            w.Title, ME.message);
+                    end
+                end
+            end
+        end
+
+        function detachPlantLog(obj)
+        %DETACHPLANTLOG Remove the attached plant log + all overlays + live tail (PLOG-INT-02).
+        %   Idempotent: calling on an engine with no plant log attached is a no-op.
+        %
+        %   Teardown order (per CONTEXT.md D-04, all guarded by isvalid checks):
+        %     1. Stop + delete the PlantLogLiveTail timer (if running).
+        %     2. Tear down the PlantLogTickListener_ (live-tail listener).
+        %     3. Clear slider overlay markers via setPlantLogStoreForTest_([])
+        %        (this also tears down the PlantLogSliderHover_).
+        %     4. Clear widget overlays via clearPlantLogOverlaysOnAllWidgets_
+        %        + tear down WidgetHovers_.
+        %     5. Null PlantLogStoreInternal_ + PlantLogLiveTailInternal_.
+        %     6. Clear PlantLogSourcePath_, PlantLogMapping_, PlantLogInterval_,
+        %        PlantLogStartTail_.
+        %
+        %   See also attachPlantLog, PlantLogStore, PlantLogLiveTail.
+
+            % Idempotent guard -- already detached, return silently after
+            % wiping any partial state from a failed attach.
+            if isempty(obj.PlantLogStoreInternal_) && isempty(obj.PlantLogLiveTailInternal_) && ...
+                    isempty(obj.PlantLogTickListener_) && isempty(obj.PlantLogSliderHover_) && ...
+                    isempty(obj.WidgetHovers_)
+                % Clear the serialization-state props in case attach failed mid-way.
+                obj.PlantLogSourcePath_ = '';
+                obj.PlantLogMapping_    = [];
+                obj.PlantLogInterval_   = [];
+                obj.PlantLogStartTail_  = [];
+                return;
+            end
+
+            % Step 1 -- stop + delete the live-tail timer.
+            if ~isempty(obj.PlantLogLiveTailInternal_)
+                try
+                    if isvalid(obj.PlantLogLiveTailInternal_)
+                        % Prefer the class's own stop(); fall back to direct delete().
+                        if ismethod(obj.PlantLogLiveTailInternal_, 'stop')
+                            try obj.PlantLogLiveTailInternal_.stop(); catch, end
+                        end
+                        try delete(obj.PlantLogLiveTailInternal_); catch, end
+                    end
+                catch
+                end
+            end
+            obj.PlantLogLiveTailInternal_ = [];
+
+            % Step 2 -- tear down the tick listener.
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+
+            % Step 3 -- clear slider overlay + tear down slider hover.
+            % setPlantLogStoreForTest_([]) tears down PlantLogSliderHover_
+            % unconditionally and runs computePlantLogMarkers which clears
+            % xlines when store is empty.
+            try obj.setPlantLogStoreForTest_([]); catch, end
+
+            % Step 4 -- clear per-widget overlays + tear down WidgetHovers_.
+            try obj.clearPlantLogOverlaysOnAllWidgets_(); catch, end
+            for i = 1:numel(obj.WidgetHovers_)
+                pair = obj.WidgetHovers_{i};
+                if iscell(pair) && numel(pair) >= 2
+                    try
+                        if isa(pair{2}, 'handle') && isvalid(pair{2})
+                            delete(pair{2});
+                        end
+                    catch
+                    end
+                end
+            end
+            obj.WidgetHovers_ = {};
+
+            % Step 5 -- null the store (already implicitly done by step 3,
+            % but the explicit null is the contract for the success criterion).
+            obj.PlantLogStoreInternal_ = [];
+
+            % Step 6 -- clear serialization-state properties.
+            obj.PlantLogSourcePath_ = '';
+            obj.PlantLogMapping_    = [];
+            obj.PlantLogInterval_   = [];
+            obj.PlantLogStartTail_  = [];
+        end
+
         function save(obj, filepath)
             [~, ~, ext] = fileparts(filepath);
             isMultiPage = numel(obj.Pages) > 1;
@@ -424,6 +895,7 @@ classdef DashboardEngine < handle
                 activePageName = obj.Pages{obj.ActivePage}.Name;
                 cfg = DashboardSerializer.widgetsPagesToConfig( ...
                     obj.Name, obj.Theme, obj.LiveInterval, obj.Pages, activePageName, obj.InfoFile);
+                cfg = obj.stampPlantLogIntoConfig_(cfg);   % Phase 1033 PLOG-INT-04
                 if strcmp(ext, '.json')
                     DashboardSerializer.saveJSON(cfg, filepath);
                 else
@@ -437,6 +909,7 @@ classdef DashboardEngine < handle
                     cfg = DashboardSerializer.widgetsToConfig( ...
                         obj.Name, obj.Theme, obj.LiveInterval, obj.Widgets, obj.InfoFile);
                 end
+                cfg = obj.stampPlantLogIntoConfig_(cfg);   % Phase 1033 PLOG-INT-04
                 if strcmp(ext, '.json')
                     DashboardSerializer.saveJSON(cfg, filepath);
                 else
@@ -444,6 +917,47 @@ classdef DashboardEngine < handle
                 end
             end
             obj.FilePath = filepath;
+        end
+
+        function cfg = stampPlantLogIntoConfig_(obj, cfg)
+        %STAMPPLANTLOGINTOCONFIG_ Phase 1033 PLOG-INT-04: add plantLog key when attached.
+        %   When no plant log is attached, cfg is returned unchanged
+        %   (omit-when-empty contract -- byte-identical back-compat for
+        %   v1.0-v3.0 dashboards).
+        %
+        %   Also skipped when only the test seam (setPlantLogStoreForTest_)
+        %   populated the store -- that path does not set PlantLogSourcePath_
+        %   and is by design NOT serialized.
+            if isempty(obj.PlantLogStoreInternal_)
+                return;
+            end
+            if isempty(obj.PlantLogSourcePath_)
+                % Test-seam injection (setPlantLogStoreForTest_) did not
+                % populate SourcePath_ -- that path is NOT serialized.
+                return;
+            end
+            pl = struct();
+            pl.sourcePath = obj.PlantLogSourcePath_;
+            if isstruct(obj.PlantLogMapping_)
+                pl.mapping = obj.PlantLogMapping_;
+            else
+                pl.mapping = struct( ...
+                    'timestampCol', '', ...
+                    'messageCol',   '', ...
+                    'metadataCols', {{}}, ...
+                    'format',       '');
+            end
+            if isempty(obj.PlantLogInterval_)
+                pl.interval = 5;
+            else
+                pl.interval = double(obj.PlantLogInterval_);
+            end
+            if isempty(obj.PlantLogStartTail_)
+                pl.startTail = true;
+            else
+                pl.startTail = logical(obj.PlantLogStartTail_);
+            end
+            cfg.plantLog = pl;
         end
 
         function exportScript(obj, filepath)
@@ -814,8 +1328,83 @@ classdef DashboardEngine < handle
                     system(['xdg-open "' obj.InfoTempFile '"']);
                 end
             else
-                web(obj.InfoTempFile, '-new');
+                % Only render the in-app modal when running in an interactive
+                % desktop MATLAB session. Skip on -batch / -nodisplay so CI
+                % does not block on a uifigure that no one will ever close
+                % (and avoids the JVM segfault history that the older web()
+                % path was designed to dodge — see TestDashboardInfo failure,
+                % GitHub Actions run 25550691546).
+                % The temp HTML file is already on disk above, which is what
+                % the TestDashboardInfo suite verifies for headless runs.
+                interactive = usejava('desktop');
+                if interactive && exist('batchStartupOptionUsed', 'builtin') && ...
+                        batchStartupOptionUsed()
+                    interactive = false;
+                end
+                if interactive
+                    obj.showInfoModal_(html);
+                end
             end
+        end
+
+        function showInfoModal_(obj, html)
+        %SHOWINFOMODAL_ Render the info HTML in an in-app modal uifigure (260508-n8h).
+        %   Replaces the previous browser handoff via web(). Reuses an
+        %   existing modal if still open so repeated Info-button clicks
+        %   refocus rather than stack windows. Falls back silently on
+        %   uifigure construction errors (older MATLAB releases without
+        %   uihtml support keep the temp HTML file as the user-facing
+        %   artifact).
+            if ~isempty(obj.InfoModalFigure_) && ishandle(obj.InfoModalFigure_)
+                try
+                    set(obj.InfoModalFigure_, 'Name', ['Info — ' obj.Name]);
+                    htmlChild = findobj(obj.InfoModalFigure_, '-depth', 1, ...
+                        'Type', 'uihtml');
+                    if ~isempty(htmlChild)
+                        set(htmlChild(1), 'HTMLSource', html);
+                    end
+                    figure(obj.InfoModalFigure_);  % bring to front
+                    return;
+                catch
+                    obj.InfoModalFigure_ = [];
+                end
+            end
+
+            try
+                fig = uifigure('Name', ['Info — ' obj.Name], ...
+                    'Position', [100 100 800 600], ...
+                    'WindowStyle', 'modal', ...
+                    'Visible', 'on');
+                movegui(fig, 'center');
+                hHtml = uihtml(fig, ...
+                    'Position', [0 0 800 600], ...
+                    'HTMLSource', html);
+                % Anchor the uihtml to fill the figure on resize.
+                set(fig, 'AutoResizeChildren', 'off');
+                set(fig, 'SizeChangedFcn', @(src, ~) obj.onInfoModalResize_(src, hHtml));
+                set(fig, 'CloseRequestFcn', @(src, ~) obj.onInfoModalClose_(src));
+                obj.InfoModalFigure_ = fig;
+            catch ME
+                warning('DashboardEngine:infoModalCreateError', ...
+                    'Failed to open info modal: %s', ME.message);
+                obj.InfoModalFigure_ = [];
+            end
+        end
+
+        function onInfoModalResize_(~, src, hHtml)
+        %ONINFOMODALRESIZE_ Keep the uihtml panel filling the modal figure.
+            try
+                pos = get(src, 'Position');
+                set(hHtml, 'Position', [0 0 pos(3) pos(4)]);
+            catch
+                % Resize before children built — ignore.
+            end
+        end
+
+        function onInfoModalClose_(obj, src)
+        %ONINFOMODALCLOSE_ Clear the cached modal handle and dispose the figure.
+            try delete(src); catch, end
+            obj.InfoModalFigure_ = [];
         end
 
         function md = buildPlaceholderInfoMarkdown(obj)
@@ -933,6 +1522,22 @@ classdef DashboardEngine < handle
             mirror = DetachedMirror(widget, themeStruct, removeCallback);
             mirrorHolder('mirror') = mirror;
             obj.DetachedMirrors{end+1} = mirror;
+            % Phase 1032 PLOG-VIZ-03/04/07 — re-attach plant-log wire-up on
+            % the mirror's cloned widget so the standalone figure draws lines
+            % + has a hover. The cloned widget has ShowPlantLog already set
+            % (via DetachedMirror.restoreLiveRefs); calling
+            % setShowPlantLog(currentValue, obj) is a no-op for the property
+            % itself but triggers the listener attach + hover construct +
+            % marker draw on the mirror's axes. CONTEXT.md Decision G.
+            try
+                cw = mirror.Widget;
+                if isa(cw, 'FastSenseWidget') && cw.ShowPlantLog
+                    cw.setShowPlantLog(true, obj);
+                end
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'detachWidget plant-log re-attach failed: %s', err.message);
+            end
         end
 
         function removeDetached(obj)
@@ -945,8 +1550,14 @@ classdef DashboardEngine < handle
 
             keep = true(1, numel(obj.DetachedMirrors));
             for i = 1:numel(obj.DetachedMirrors)
-                if obj.DetachedMirrors{i}.isStale()
+                m = obj.DetachedMirrors{i};
+                if m.isStale()
                     keep(i) = false;
+                    % Phase 1032 PLOG-VIZ-07 — sweep the mirror's hover from
+                    % WidgetHovers_ when the mirror's figure goes stale. Without
+                    % this, closed-but-not-deregistered mirrors leave dangling
+                    % PlantLogWidgetHover instances + stale closures.
+                    try obj.detachPlantLogWidgetHover_(m.Widget); catch, end
                 end
             end
             obj.DetachedMirrors = obj.DetachedMirrors(keep);
@@ -992,8 +1603,14 @@ classdef DashboardEngine < handle
                 return;
             end
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility();
+            % BannerHeight is reserved at the top — content area never extends
+            % into the banner strip (260508-jyh).
             obj.Layout.ContentArea = [0, effTimeH, ...
-                1, 1 - effToolbarH - effPageBarH - effTimeH];
+                1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
+            % Reposition the banner so it stays parked in the reserved strip
+            % even after a re-layout. Body is geometry-stable now (constant
+            % Y), but the call is preserved as defence-in-depth.
+            obj.repositionStaleBanner_();
             try
                 obj.rerenderWidgets();
             catch
@@ -1066,6 +1683,12 @@ classdef DashboardEngine < handle
                         'ForegroundColor', theme.ToolbarFontColor);
                 end
             end
+            % Reset button shares the time panel's background/foreground.
+            if ~isempty(obj.hTimeResetBtn) && ishandle(obj.hTimeResetBtn)
+                set(obj.hTimeResetBtn, ...
+                    'BackgroundColor', theme.ToolbarBackground, ...
+                    'ForegroundColor', theme.ToolbarFontColor);
+            end
 
             % Page bar (visible or placeholder)
             if ~isempty(obj.hPageBar) && ishandle(obj.hPageBar)
@@ -1075,13 +1698,63 @@ classdef DashboardEngine < handle
 
         function rerenderWidgets(obj)
         %RERENDERWIDGETS Delete all widget panels and recreate them.
+            % Mark in-flight so the SizeChangedFcn that fires during
+            % panel teardown/recreate doesn't schedule new resize-debounce
+            % timers — that would cause a recursive rerender cascade.
+            % Also cancel any timers that ARE currently scheduled — they
+            % are about to be invalidated by this rerender anyway.
+            % (260513-q7w fu2)
+            obj.IsRerendering_ = true;
+            obj.cancelResizeTimers_();
+            rerenderCleanup = onCleanup(@() obj.clearRerenderFlag_());
             theme = obj.getCachedTheme();
             ws = obj.activePageWidgets();
             for i = 1:numel(ws)
                 w = ws{i};
                 w.markUnrealized();
-                if ~isempty(w.hPanel) && ishandle(w.hPanel)
-                    delete(w.hPanel);
+                % Delete the OUTER cell panel. After realization,
+                % w.hPanel was reassigned to the INNER content panel
+                % (line 356 of DashboardLayout.realizeWidget), so
+                % deleting only w.hPanel leaves the outer cell —
+                % which still owns the WidgetButtonBar — alive on
+                % the canvas as a ZOMBIE. Stacked across multiple
+                % rerenders these zombies covered the canvas at
+                % overlapping z-positions and painted over freshly
+                % switched-to pages (visible symptom: a tab change
+                % shows panels with chrome i/^ buttons but blank
+                % white content). hCellPanel is the outer handle
+                % when set; falls back to hPanel for pre-realization
+                % widgets where hPanel IS the outer cell.
+                % (260513-q7w fu4)
+                outer = w.hCellPanel;
+                if isempty(outer) || ~ishandle(outer)
+                    outer = w.hPanel;
+                end
+                if ~isempty(outer) && ishandle(outer)
+                    delete(outer);
+                end
+                w.hPanel = [];
+                w.hCellPanel = [];
+            end
+            % Reinstall TimeRangeSelector callbacks NOW — with a clean WBM root
+            % — BEFORE new HoverCrosshairs install on top in Layout.realizeWidget
+            % below. Each new HC's constructor saves the figure's CURRENT WBM as
+            % its PrevWBMFcn_ and replaces WBM with its own onFigureMove_. If we
+            % reinstall AFTER the realizeWidget loop (as 260512-egv did) we
+            % wipe out the newly-installed HC chain and break per-widget
+            % HoverCrosshair. Reinstalling HERE makes WBM = trs.onButtonMotion_
+            % so new HCs save the clean trs handler as PrevWBMFcn_ and chain
+            % on top — final chain: newHcN → ... → newHc1 → trs.onButtonMotion_.
+            % Both slider drag (forwards down chain) and HoverCrosshair (each
+            % HC's onFigureMove_ on the chain) work. (260512-eu2; supersedes
+            % the end-of-method placement from 260512-egv.)
+            if ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                try
+                    obj.TimeRangeSelector_.reinstallCallbacks();
+                catch err
+                    warning('DashboardEngine:trsReinstallFailed', ...
+                        'TimeRangeSelector.reinstallCallbacks failed: %s', err.message);
                 end
             end
             totalPages = max(1, numel(obj.Pages));
@@ -1096,6 +1769,8 @@ classdef DashboardEngine < handle
             obj.Progress_ = [];
             % Re-wire detach callback after panel recreation (Pitfall 3 in RESEARCH.md)
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
+            % 260513-snt — re-wire Create-Event callback for the same reason.
+            obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
         end
 
         function updateGlobalTimeRange(obj)
@@ -1123,8 +1798,16 @@ classdef DashboardEngine < handle
 
             obj.updateTimeLabels(tMin, tMax);
             % Refresh the preview envelope after DataTimeRange change (D-07).
-            try obj.computePreviewEnvelope(); catch, end
-            try obj.computeEventMarkers();    catch, end
+            try obj.computePreviewEnvelope(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:previewFailed', 'computePreviewEnvelope: %s', err.message); end
+            end
+            try obj.computeEventMarkers();    catch err
+                if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function updateLiveTimeRange(obj)
@@ -1161,21 +1844,27 @@ classdef DashboardEngine < handle
             newTMax = tMax;
         end
 
-        function createStaleBanner(obj, theme, toolbarH)
-        %CREATESTALEBANNER Create the hidden stale-data warning banner overlay.
-        %   A uipanel strip below the toolbar containing a message label and
-        %   a close button. Hidden by default; shown when staleness is detected
-        %   and not previously dismissed by the user.
+        function createStaleBanner(obj, theme, toolbarH) %#ok<INUSD>
+        %CREATESTALEBANNER Create the hidden stale-data warning banner.
+        %   Permanent reserved strip at the very TOP of the figure.
+        %   Toolbar, page tabs, and content area all sit BELOW this strip —
+        %   the banner is never an overlay (260508-jyh). Hidden by default;
+        %   shown when staleness is detected and not previously dismissed
+        %   by the user. toolbarH is retained for signature compat; banner
+        %   now lives in the reserved top strip independent of chrome
+        %   heights.
             if ~isempty(obj.hStaleBanner) && ishandle(obj.hStaleBanner)
                 return;
             end
-            bannerH = 0.035;
+            bannerH = obj.BannerHeight;
             warnColor = theme.StatusWarnColor;
             fgColor   = [0.15 0.10 0.02];
 
+            bannerY = 1 - bannerH;  % Reserved strip at the very top of the figure
+
             obj.hStaleBanner = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
-                'Position', [0, 1 - toolbarH - bannerH, 1, bannerH], ...
+                'Position', [0, bannerY, 1, bannerH], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', warnColor, ...
                 'Visible', 'off');
@@ -1201,6 +1890,19 @@ classdef DashboardEngine < handle
                 'Callback', @(~,~) obj.onStaleBannerClose());
         end
 
+        function repositionStaleBanner_(obj)
+        %REPOSITIONSTALEBANNER_ Park banner in the reserved top strip.
+        %   Banner now lives in a permanent strip at the figure top; no
+        %   chrome-height dependence (260508-jyh). Safe to call before
+        %   render or after teardown — no-ops when the handle is
+        %   empty/invalid.
+            if isempty(obj.hStaleBanner) || ~ishandle(obj.hStaleBanner)
+                return;
+            end
+            set(obj.hStaleBanner, 'Position', ...
+                [0, 1 - obj.BannerHeight, 1, obj.BannerHeight]);
+        end
+
         function showStaleBanner(obj, staleTitles)
         %SHOWSTALEBANNER Display the warning listing the widgets without new data.
         %   staleTitles is a cell array of widget Title strings whose tMax
@@ -1216,13 +1918,18 @@ classdef DashboardEngine < handle
             end
             msg = obj.buildStaleMessage(staleTitles, intervalStr);
             set(obj.hStaleBannerText, 'String', msg);
+            % Only raise to front on first show (when transitioning from hidden
+            % to visible). Calling uistack on every tick is expensive (~10 ms
+            % in uifigure due to WebComponentController updates) and unnecessary
+            % once the banner is already visible and at the top.
+            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
             set(obj.hStaleBanner, 'Visible', 'on');
-            % Widget panels are created after the banner, so they render on top
-            % by default. Raise the banner to the front so it is actually seen.
-            try
-                uistack(obj.hStaleBanner, 'top');
-            catch
-                % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+            if wasHidden
+                try
+                    uistack(obj.hStaleBanner, 'top');
+                catch
+                    % uistack is MATLAB-only; Octave's renderer handles z-order differently.
+                end
             end
         end
 
@@ -1298,8 +2005,15 @@ classdef DashboardEngine < handle
         end
 
         function broadcastTimeRange(obj, tStart, tEnd)
-        %BROADCASTTIMERANGE Push time range to widgets using global time.
-            ws = obj.activePageWidgets();
+        %BROADCASTTIMERANGE Push time range to widgets across ALL pages (not just active).
+        %   Time sync is a dashboard-wide control: dragging the slider, clicking
+        %   "Sync all", or calling broadcastTimeRangeNow updates every page's
+        %   widgets so switching tabs preserves the synced window. Per-widget
+        %   UseGlobalTime=false (manually zoomed) widgets opt out via their own
+        %   setTimeRange guard. (260508-llw — was activePageWidgets, caused a
+        %   per-tab desync bug.)
+            obj.LastSyncedTimeRange_ = [tStart tEnd];
+            ws = obj.allPageWidgets();
             for i = 1:numel(ws)
                 try
                     ws{i}.setTimeRange(tStart, tEnd);
@@ -1312,8 +2026,10 @@ classdef DashboardEngine < handle
         end
 
         function resetGlobalTime(obj)
-        %RESETGLOBALTIME Re-attach all widgets to global time and apply.
-            ws = obj.activePageWidgets();
+        %RESETGLOBALTIME Re-attach all widgets across ALL pages to global time and apply.
+        %   (260508-llw — was activePageWidgets, leaving widgets on inactive
+        %   pages still detached after a "Reset" toolbar action.)
+            ws = obj.allPageWidgets();
             for i = 1:numel(ws)
                 ws{i}.UseGlobalTime = true;
             end
@@ -1372,6 +2088,9 @@ classdef DashboardEngine < handle
         end
 
         function onLiveTick(obj)
+            if ~obj.isObjValid_()
+                return;  % live timer fired after engine was deleted
+            end
             if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
                 return;
             end
@@ -1460,7 +2179,19 @@ classdef DashboardEngine < handle
                 obj.TimeRangeSelector_.setDataRange( ...
                     obj.DataTimeRange(1), obj.DataTimeRange(2));
                 [tStart, tEnd] = obj.TimeRangeSelector_.getSelection();
-                obj.broadcastTimeRange(tStart, tEnd);
+                % broadcastTimeRange(tStart, tEnd) removed (260513-ovt):
+                % live ticks must not silently push the slider selection
+                % onto every widget's XLim — that resets the user's X
+                % view every tick. User-driven broadcast paths
+                % (slider drag debounce timer, broadcastTimeRangeNow
+                % public API, "Sync all" button) remain wired up.
+                % Refresh BOTH label rows (in-axes selection labels +
+                % below-slider edge labels) with the current selection.
+                % Usually no-op because the preserve-selection fix keeps
+                % Selection unchanged across live ticks; defensive against
+                % programmatic re-selection (range contraction etc.).
+                % (260512-hrn-followup)
+                obj.updateTimeLabels(tStart, tEnd);
             end
 
             % Clear dirty flags AFTER slider broadcast to avoid re-dirtying
@@ -1468,8 +2199,16 @@ classdef DashboardEngine < handle
                 ws{i}.Dirty = false;
             end
             % Refresh the preview envelope on every live tick (D-07).
-            try obj.computePreviewEnvelope(); catch, end
-            try obj.computeEventMarkers();    catch, end
+            try obj.computePreviewEnvelope(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:previewFailed', 'computePreviewEnvelope: %s', err.message); end
+            end
+            try obj.computeEventMarkers();    catch err
+                if obj.DebugPreview_, warning('DashboardEngine:eventMarkersFailed', 'computeEventMarkers: %s', err.message); end
+            end
+            % Phase 1031 PLOG-VIZ-01/08: refresh plant-log slider markers too.
+            try obj.computePlantLogMarkers(); catch err
+                if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
+            end
         end
 
         function markAllDirty(obj)
@@ -1482,12 +2221,347 @@ classdef DashboardEngine < handle
 
         function onResize(obj)
         %ONRESIZE Handle figure resize: reposition all widget panels.
+            if ~obj.isObjValid_()
+                return;  % SizeChangedFcn fired after engine was deleted
+            end
+            % If a rerenderWidgets is currently in flight, the panel
+            % teardown + recreate cascade fires its own SizeChangedFcn
+            % events. Scheduling new debounce timers from inside that
+            % cascade leads to recursive rerenders. Skip the entire
+            % onResize body — the in-progress rerenderWidgets will leave
+            % the layout consistent. (260513-q7w fu2)
+            if obj.IsRerendering_
+                return;
+            end
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 obj.repositionPanels();
+                obj.repositionStaleBanner_();
+                % Invalidate the cached nBuckets so the next preview computation
+                % re-derives it from the new figure pixel width.
+                obj.PreviewNBuckets_ = 0;
+                % Invalidate slider overlay caches: nBuckets is derived from
+                % figure width, so a resize changes the bucket count and both
+                % preview lines and (potentially) event markers must refresh.
+                % (260508-slider-stuck)
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
+                obj.PreviewLinesCache_      = {};
+                % Schedule a debounced data-refresh sweep across active-page
+                % widgets so any FastSenseWidget that lost its line data to a
+                % resize-race ends up redrawing without the user having to
+                % press the toolbar's Reset button. (260513-q7w)
+                obj.scheduleResizeRefresh_();
+                % Schedule a separate longer-period backstop that fires
+                % unconditionally — equivalent to the user pressing Reset
+                % once they have clearly stopped resizing. Catches failure
+                % modes the cheap update pass doesn't (degenerate axes
+                % after long holds at very small window sizes, destroyed
+                % line handles, etc.). (260513-q7w fu)
+                obj.scheduleResizeFinalRedraw_();
+            end
+        end
+
+        function clearRerenderFlag_(obj)
+        %CLEARRERENDERFLAG_ Reset IsRerendering_ via onCleanup so it
+        %   always lands false even if rerenderWidgets throws.
+        %   (260513-q7w fu2)
+            try
+                if isvalid(obj)
+                    obj.IsRerendering_ = false;
+                end
+            catch
+            end
+        end
+
+        function cancelResizeTimers_(obj)
+        %CANCELRESIZETIMERS_ Stop + delete both resize-related debounce
+        %   timers. Called from switchPage so a stale backstop scheduled
+        %   for the previous page doesn't fire after the user has moved
+        %   to a different tab; also called from rerenderWidgets so the
+        %   spurious SizeChangedFcn that fires during panel teardown
+        %   doesn't reschedule us into a cascade.
+        %   (260513-q7w fu2)
+            if ~isempty(obj.ResizeDebounceTimer)
+                try
+                    if isvalid(obj.ResizeDebounceTimer)
+                        stop(obj.ResizeDebounceTimer);
+                        delete(obj.ResizeDebounceTimer);
+                    end
+                catch
+                end
+                obj.ResizeDebounceTimer = [];
+            end
+            if ~isempty(obj.ResizeFinalRedrawTimer)
+                try
+                    if isvalid(obj.ResizeFinalRedrawTimer)
+                        stop(obj.ResizeFinalRedrawTimer);
+                        delete(obj.ResizeFinalRedrawTimer);
+                    end
+                catch
+                end
+                obj.ResizeFinalRedrawTimer = [];
+            end
+        end
+
+        function scheduleResizeRefresh_(obj)
+        %SCHEDULERESIZEREFRESH_ Coalesce rapid resize events into a single
+        %   deferred refresh, mirroring the SliderDebounceTimer pattern.
+        %   Drag-resize on macOS fires many SizeChangedFcn events per
+        %   second; doing a full widget refresh on each would be expensive
+        %   and visibly stutter. Instead, restart a 300 ms one-shot timer
+        %   on every resize event — once the user stops dragging, the
+        %   timer fires and refreshes all active-page widgets one time.
+        %   (260513-q7w)
+            if ~isempty(obj.ResizeDebounceTimer)
+                try
+                    if isvalid(obj.ResizeDebounceTimer)
+                        stop(obj.ResizeDebounceTimer);
+                        delete(obj.ResizeDebounceTimer);
+                    end
+                catch
+                end
+                obj.ResizeDebounceTimer = [];
+            end
+            try
+                obj.ResizeDebounceTimer = timer( ...
+                    'ExecutionMode', 'singleShot', ...
+                    'StartDelay',    0.3, ...
+                    'Tag',           'DashboardEngineResizeDebounce', ...
+                    'TimerFcn',      @(~,~) obj.refreshActivePageWidgetsAfterResize_());
+                start(obj.ResizeDebounceTimer);
+            catch err
+                % Timer creation can fail (e.g. headless / -batch / Octave).
+                % Fall back to an immediate refresh in that case — better
+                % to do the work synchronously than to skip it entirely.
+                if obj.DebugPreview_
+                    warning('DashboardEngine:resizeDebounceTimerFailed', ...
+                        'scheduleResizeRefresh_: timer failed (%s), running inline.', err.message);
+                end
+                obj.refreshActivePageWidgetsAfterResize_();
+            end
+        end
+
+        function scheduleResizeFinalRedraw_(obj)
+        %SCHEDULERESIZEFINALREDRAW_ Longer-period backstop debouncer that
+        %   fires once the user has clearly stopped resizing for
+        %   ~1.2 seconds, and unconditionally calls rerenderWidgets() —
+        %   the same operation the user would have invoked manually via
+        %   the toolbar's Reset button. Runs IN PARALLEL with the cheap
+        %   scheduleResizeRefresh_ (300 ms): both timers restart on every
+        %   resize event, so during continuous drag neither fires; the
+        %   moment dragging stops, the 300 ms cheap pass runs first and
+        %   handles most cases, then this 1.2 s backstop catches any
+        %   residual failure mode (degenerate axes after holding at very
+        %   small sizes, destroyed line handles, etc.).
+        %   (260513-q7w fu)
+            if ~isempty(obj.ResizeFinalRedrawTimer)
+                try
+                    if isvalid(obj.ResizeFinalRedrawTimer)
+                        stop(obj.ResizeFinalRedrawTimer);
+                        delete(obj.ResizeFinalRedrawTimer);
+                    end
+                catch
+                end
+                obj.ResizeFinalRedrawTimer = [];
+            end
+            try
+                obj.ResizeFinalRedrawTimer = timer( ...
+                    'ExecutionMode', 'singleShot', ...
+                    'StartDelay',    1.2, ...
+                    'Tag',           'DashboardEngineResizeFinalRedraw', ...
+                    'TimerFcn',      @(~,~) obj.finalRedrawAfterResize_());
+                start(obj.ResizeFinalRedrawTimer);
+            catch err
+                % Timer creation failure (headless / -batch / Octave):
+                % fall back to immediate execution.
+                if obj.DebugPreview_
+                    warning('DashboardEngine:resizeFinalRedrawTimerFailed', ...
+                        'scheduleResizeFinalRedraw_: timer failed (%s), running inline.', err.message);
+                end
+                obj.finalRedrawAfterResize_();
+            end
+        end
+
+        function finalRedrawAfterResize_(obj)
+        %FINALREDRAWAFTERRESIZE_ Unconditional full rebuild of all panels
+        %   on the active page after resize fully settles. Equivalent to
+        %   the user pressing the toolbar's Reset button. Bulletproof
+        %   catch-all for any failure mode the cheap two-pass refresh
+        %   missed. (260513-q7w fu)
+            if ~obj.isObjValid_()
+                return;
+            end
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            % Re-entrancy guard: if a render is currently in flight
+            % (Progress_ non-empty), or rerenderWidgets is mid-flight,
+            % bail entirely — the in-progress operation will leave the
+            % layout consistent. Self-rescheduling here was the original
+            % design but interacted badly with switchPage: the deferred
+            % backstop kept landing AFTER the user navigated, on the
+            % wrong page. (260513-q7w fu2)
+            if ~isempty(obj.Progress_) || obj.IsRerendering_
+                return;
+            end
+            try
+                obj.rerenderWidgets();
+            catch err
+                if obj.DebugPreview_
+                    warning('DashboardEngine:finalRedrawFailed', ...
+                        'finalRedrawAfterResize_ rerenderWidgets failed: %s', err.message);
+                end
+            end
+            try drawnow; catch, end
+        end
+
+        function refreshActivePageWidgetsAfterResize_(obj)
+        %REFRESHACTIVEPAGEWIDGETSAFTERRESIZE_ Re-push data through every
+        %   realized widget on the active page after a resize, so any
+        %   widget whose line data was wiped by a resize-race recovers
+        %   without the user having to press Reset. (260513-q7w)
+        %
+        %   Two-pass design:
+        %     1. Cheap pass — call update()/refresh() on each widget.
+        %        For most cases this re-pushes data through updateLines
+        %        and restores the line.
+        %     2. Detection + escalation — re-check each FastSenseWidget's
+        %        first line. If XData is still empty (e.g. the user
+        %        shrunk the window so small that the axes XLim got
+        %        clobbered, so lineVisibleData returns empty), fall
+        %        back to per-widget refresh() (rebuildForTag_); if that
+        %        still doesn't fix it, escalate the whole active page
+        %        to rerenderWidgets() — the same heavy hammer the user
+        %        would have pressed manually via the toolbar's Reset
+        %        button.
+            if ~obj.isObjValid_()
+                return;
+            end
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                return;
+            end
+            ws = obj.activePageWidgets();
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            % --- Pass 1: cheap data re-push ---
+            for i = 1:numel(ws)
+                w = ws{i};
+                % Octave 7+ has no isvalid() for classdef handles, so treat
+                % as valid there and rely on downstream guards / try-catch.
+                if isempty(w) || (~isOctave && ~isvalid(w))
+                    continue;
+                end
+                if ~w.Realized || isempty(w.hPanel) || ~ishandle(w.hPanel)
+                    continue;
+                end
+                try
+                    if isa(w, 'FastSenseWidget')
+                        w.update();
+                    else
+                        w.refresh();
+                    end
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:postResizeRefreshFailed', ...
+                            'post-resize refresh failed for "%s": %s', w.Title, err.message);
+                    end
+                end
+            end
+            % --- Pass 2: detect any still-white FastSenseWidget and escalate ---
+            stillWhite = false;
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isempty(w) || (~isOctave && ~isvalid(w)) || ~isa(w, 'FastSenseWidget')
+                    continue;
+                end
+                if isempty(w.FastSenseObj) || (~isOctave && ~isvalid(w.FastSenseObj)) || ~w.FastSenseObj.IsRendered
+                    continue;
+                end
+                if ~obj.isWidgetLineWhite_(w)
+                    continue;
+                end
+                % Try per-widget refresh() (full rebuildForTag_) first
+                try
+                    w.refresh();
+                catch
+                end
+                if obj.isWidgetLineWhite_(w)
+                    stillWhite = true;
+                    break;  % one is enough to justify escalation
+                end
+            end
+            if stillWhite
+                % Heavy hammer — equivalent to the user pressing Reset.
+                try
+                    obj.rerenderWidgets();
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:postResizeRerenderFailed', ...
+                            'post-resize rerenderWidgets failed: %s', err.message);
+                    end
+                end
+            end
+            try drawnow; catch, end
+        end
+
+        function tf = isWidgetLineWhite_(~, w)
+        %ISWIDGETLINEWHITE_ True if the FastSenseWidget's first line has
+        %   no XData but its bound Tag clearly does — the visible
+        %   manifestation of the resize-race bug. Defensive: any
+        %   missing-handle / invalid-object case returns false to avoid
+        %   false-positive escalations.
+            tf = false;
+            try
+                if isempty(w) || ~isvalid(w) || ~isa(w, 'FastSenseWidget'); return; end
+                if isempty(w.FastSenseObj) || ~isvalid(w.FastSenseObj); return; end
+                fp = w.FastSenseObj;
+                if ~fp.IsRendered || isempty(fp.Lines); return; end
+                hL = fp.Lines(1).hLine;
+                if ~ishandle(hL); return; end
+                xd = get(hL, 'XData');
+                if ~isempty(xd); return; end
+                % Line is empty; only flag as "white" if the source Tag
+                % actually has samples to display. Tag-less widgets or
+                % truly empty sensors should not trigger an escalation.
+                if isempty(w.Tag); return; end
+                try
+                    [tx, ~] = w.Tag.getXY();
+                    tf = ~isempty(tx);
+                catch
+                end
+            catch
             end
         end
 
         function delete(obj)
+            % Remove the figure-destroyed safety-net listener BEFORE any
+            % other teardown so it cannot fire on a partially-destroyed
+            % obj during MATLAB GC. Prevents R2021b segfault when the
+            % engine handle is collected before its hFigure (260511-n1r).
+            if ~isempty(obj.FigureDestroyedListener_)
+                try delete(obj.FigureDestroyedListener_); catch, end
+                obj.FigureDestroyedListener_ = [];
+            end
+            % Phase 1031 PLOG-VIZ-06: tear down hover BEFORE the selector.
+            % Hover saved the selector's chained WindowButtonMotionFcn at
+            % construction; restoring it must happen while the selector is
+            % still alive (otherwise the restored callback handle refers to
+            % a deleted TimeRangeSelector and the figure ends up with a
+            % stale closure). teardownPlantLogSliderHover_ is idempotent
+            % (safe to call again at the end of delete()).
+            obj.teardownPlantLogSliderHover_();
+            % Phase 1032 PLOG-VIZ-07: tear down per-widget hovers BEFORE TRS
+            % so any chained WBMFcn restore lands on a still-alive figure
+            % and selector. Mirrors the slider-hover ordering rule.
+            for hi = 1:numel(obj.WidgetHovers_)
+                try
+                    pair = obj.WidgetHovers_{hi};
+                    if numel(pair) == 2 && ~isempty(pair{2}) && isvalid(pair{2})
+                        delete(pair{2});
+                    end
+                catch
+                end
+            end
+            obj.WidgetHovers_ = {};
             % Tear down the selector first so its figure-level callback
             % restore happens before the figure/panel potentially go away.
             if ~isempty(obj.TimeRangeSelector_) && ...
@@ -1504,6 +2578,16 @@ classdef DashboardEngine < handle
                 try delete(obj.SliderDebounceTimer); catch, end
                 obj.SliderDebounceTimer = [];
             end
+            if ~isempty(obj.ResizeDebounceTimer)
+                try stop(obj.ResizeDebounceTimer); catch, end
+                try delete(obj.ResizeDebounceTimer); catch, end
+                obj.ResizeDebounceTimer = [];
+            end
+            if ~isempty(obj.ResizeFinalRedrawTimer)
+                try stop(obj.ResizeFinalRedrawTimer); catch, end
+                try delete(obj.ResizeFinalRedrawTimer); catch, end
+                obj.ResizeFinalRedrawTimer = [];
+            end
             obj.stopLive();
             % Explicitly delete all widgets in every page so that
             % FastSenseWidget.delete() fires and cleans up FastSense timers
@@ -1517,6 +2601,26 @@ classdef DashboardEngine < handle
                 end
             end
             obj.cleanupInfoTempFile();
+            % 260508-n8h — close the in-app info modal if still open so the
+            % engine never leaves orphan uifigures behind.
+            if ~isempty(obj.InfoModalFigure_) && ishandle(obj.InfoModalFigure_)
+                try delete(obj.InfoModalFigure_); catch, end
+            end
+            obj.InfoModalFigure_ = [];
+            % Phase 1031 PLOG-VIZ-08: tear down plant-log live-tail listener.
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+            % Phase 1031 PLOG-VIZ-06: tear down plant-log slider hover.
+            % delete() restores prior WindowButtonMotionFcn unconditionally.
+            obj.teardownPlantLogSliderHover_();
+            % Phase 1033 PLOG-INT-02: full teardown of plant-log API surface
+            % (idempotent -- no-op if everything already torn down above).
+            try obj.detachPlantLog(); catch, end
         end
     end
 
@@ -1550,9 +2654,454 @@ classdef DashboardEngine < handle
             if nargin < 2, nBuckets = []; end
             env = obj.computePreviewEnvelopeReturning_(nBuckets);
         end
+
+        function setPlantLogStoreForTest_(obj, store)
+        %SETPLANTLOGSTOREFORTEST_ Phase 1031 test seam — replaced by attachPlantLog in Phase 1033.
+        %   Inject a PlantLogStore (or [] to detach) and immediately recompute
+        %   plant-log slider markers so callers can assert on the slider state
+        %   right after attach without waiting for a refresh hook.
+        %
+        %   Phase 1031 PLOG-VIZ-06: every store change ALWAYS tears down +
+        %   (re-)builds the PlantLogSliderHover_ helper. Tearing down first
+        %   ensures stale closures (capturing an old store handle) cannot
+        %   survive a store swap; rebuilding requires a non-empty store AND
+        %   a rendered TimeRangeSelector_. The hover closure goes through
+        %   obj.lookupPlantLogEntries_ (NOT a captured-by-value store ref),
+        %   so subsequent store swaps reflect immediately even if the
+        %   rebuild branch is bypassed.
+            if ~isempty(store) && ~isa(store, 'PlantLogStore')
+                error('DashboardEngine:invalidPlantLogStore', ...
+                    'store must be empty or a PlantLogStore; got %s.', class(store));
+            end
+            obj.PlantLogStoreInternal_ = store;
+            obj.computePlantLogMarkers();
+            % Phase 1031 PLOG-VIZ-06: always tear down any prior hover so
+            % closures capturing the previous store handle cannot survive.
+            obj.teardownPlantLogSliderHover_();
+            if ~isempty(store) && ...
+                    ~isempty(obj.TimeRangeSelector_) && ...
+                    isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                % Lazy-construct hover when the slider is rendered AND a
+                % store is attached. The lookup goes through the engine's
+                % helper (indirect indirection) so future store swaps are
+                % picked up without needing to rebuild the closure.
+                try
+                    ax = obj.TimeRangeSelector_.hAxes;
+                    fig = ancestor(ax, 'figure');
+                    if ~isempty(fig) && ishandle(fig)
+                        obj.PlantLogSliderHover_ = PlantLogSliderHover( ...
+                            fig, ax, ...
+                            @(t0, t1) obj.lookupPlantLogEntries_(t0, t1));
+                    end
+                catch err
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:plantLogHoverFailed', ...
+                            'PlantLogSliderHover construction failed: %s', err.message);
+                    end
+                end
+            end
+        end
+
+        function setPlantLogLiveTailForTest_(obj, tail)
+        %SETPLANTLOGLIVETAILFORTEST_ Phase 1031 test seam — wires PlantLogTailTick to refresh.
+        %   Inject a PlantLogLiveTail (or [] to detach + tear down listener).
+        %   When non-empty, installs an addlistener that calls
+        %   computePlantLogMarkers on every PlantLogTailTick so the slider
+        %   refreshes without a full dashboard re-render (PLOG-VIZ-08).
+            if ~isempty(tail) && ~isa(tail, 'PlantLogLiveTail')
+                error('DashboardEngine:invalidPlantLogLiveTail', ...
+                    'tail must be empty or a PlantLogLiveTail; got %s.', class(tail));
+            end
+            try
+                if ~isempty(obj.PlantLogTickListener_) && isvalid(obj.PlantLogTickListener_)
+                    delete(obj.PlantLogTickListener_);
+                end
+            catch
+            end
+            obj.PlantLogTickListener_ = [];
+            obj.PlantLogLiveTailInternal_ = tail;
+            if ~isempty(tail)
+                % Phase 1032 PLOG-VIZ-08: route ticks through
+                % onPlantLogTailTick_ so slider AND per-widget overlays
+                % refresh on every tail tick (fan-out covers Pages,
+                % single-page Widgets, and DetachedMirrors).
+                obj.PlantLogTickListener_ = addlistener(tail, 'PlantLogTailTick', ...
+                    @(~,~) obj.onPlantLogTailTick_());
+            end
+        end
+
+        function refreshPlantLogOverlayForWidgetForTest_(obj, widget)
+        %REFRESHPLANTLOGOVERLAYFORWIDGETFORTEST_ Phase 1032 test seam.
+        %   Routes to refreshPlantLogOverlayForWidget_ from function-style
+        %   tests (which can't satisfy the {?FastSenseWidget, ?matlab.unittest.TestCase}
+        %   access list). Hidden so it doesn't show up in methods(obj).
+            obj.refreshPlantLogOverlayForWidget_(widget);
+        end
+
+        function clearPlantLogOverlaysOnAllWidgetsForTest_(obj)
+        %CLEARPLANTLOGOVERLAYSONALLWIDGETSFORTEST_ Phase 1032 test seam.
+        %   Routes to clearPlantLogOverlaysOnAllWidgets_ from function-style
+        %   tests. Hidden test seam mirroring the Phase 1031 idiom.
+            obj.clearPlantLogOverlaysOnAllWidgets_();
+        end
+
+        function attachPlantLogXLimListenerForTest_(obj, widget)
+        %ATTACHPLANTLOGXLIMLISTENERFORTEST_ Phase 1032 test seam.
+        %   Routes to attachPlantLogXLimListener_ from function-style tests.
+            obj.attachPlantLogXLimListener_(widget);
+        end
+
+        function setTimeRangeSelectorForTest_(obj, sel)
+        %SETTIMERANGESELECTORFORTEST_ Phase 1031 test seam — inject a
+        %   TimeRangeSelector handle without going through render(). Used by
+        %   TestPlantLogSliderOverlay to assert hPlantLogMarkers state without
+        %   paying full-dashboard render cost. The TimeRangeSelector_ property
+        %   is Access = private, so direct assignment from a test is impossible
+        %   — this hidden setter is the documented seam. Phase 1033's review
+        %   may remove it once render() pathways cover the new test cases.
+            if ~isempty(sel) && ~isa(sel, 'TimeRangeSelector')
+                error('DashboardEngine:invalidTimeRangeSelector', ...
+                    'sel must be empty or a TimeRangeSelector; got %s.', class(sel));
+            end
+            obj.TimeRangeSelector_ = sel;
+        end
+    end
+
+    % Public page/widget accessors — moved out of the private block in
+    % 260513-ovt so DashboardToolbar (and other peers) can iterate
+    % widgets across all pages without triggering MethodRestricted
+    % errors. (Was the root cause of "Follow toggle doesn't work" on
+    % multi-page dashboards: the toolbar's try/catch silently
+    % swallowed the access error.)
+    methods (Access = public)
+        function ws = activePageWidgets(obj)
+        %ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
+        %   Returns obj.Pages{obj.ActivePage}.Widgets in multi-page mode,
+        %   or obj.Widgets in single-page mode.
+            if ~isempty(obj.Pages) && obj.ActivePage >= 1
+                ws = obj.Pages{obj.ActivePage}.Widgets;
+            else
+                ws = obj.Widgets;
+            end
+        end
+
+        function ws = allPageWidgets(obj)
+        %ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
+        %   Used for ReflowCallback injection and Follow toggle sweep.
+        %   When Pages is empty, returns obj.Widgets.
+            if isempty(obj.Pages)
+                ws = obj.Widgets;
+                return;
+            end
+            ws = {};
+            for i = 1:numel(obj.Pages)
+                ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
+            end
+        end
+
+        function notifyEventsChanged(obj)
+        %NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513-snt).
+        %   Called after CreateEventDialog persists a new event. Walks the
+        %   active page (recursing into GroupWidget children via
+        %   getNestedWidgets) and refreshes every EventTimelineWidget and
+        %   FastSenseWidget. Also re-aggregates the slider event-marker
+        %   overlay via computeEventMarkers and the slider preview lines via
+        %   computePreviewEnvelope so a freshly-added event becomes visible
+        %   on the slider strip without waiting for the next live tick.
+        %
+        %   Per-widget refresh() calls are wrapped in try/catch so a single
+        %   broken widget does not kill the sweep. The outer call is also
+        %   wrapped so the dialog's Save handler can swallow non-fatal
+        %   failures without leaving the dialog in a half-saved state.
+        %
+        %   Errors namespaced DashboardEngine:notifyEventsChangedFailed.
+            try
+                ws = obj.activePageWidgets();
+                flat = obj.flattenEventAwareWidgets_(ws);
+                for i = 1:numel(flat)
+                    w = flat{i};
+                    if ~isa(w, 'EventTimelineWidget') && ~isa(w, 'FastSenseWidget')
+                        continue;
+                    end
+                    if ~w.Realized, continue; end
+                    if isempty(w.hPanel) || ~ishandle(w.hPanel), continue; end
+                    try
+                        w.refresh();
+                    catch ME
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'Widget "%s" refresh failed: %s', w.Title, ME.message);
+                    end
+                end
+                % Re-aggregate slider event markers + preview lines so the
+                % new event shows up on the bottom strip. computeEventMarkers
+                % / computePreviewEnvelope are no-ops without a
+                % TimeRangeSelector, so safe to call before render too.
+                try
+                    obj.computeEventMarkers();
+                catch ME
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'computeEventMarkers failed: %s', ME.message);
+                    end
+                end
+                try
+                    obj.computePreviewEnvelope();
+                catch ME
+                    if obj.DebugPreview_
+                        warning('DashboardEngine:notifyEventsChangedFailed', ...
+                            'computePreviewEnvelope failed: %s', ME.message);
+                    end
+                end
+            catch ME
+                warning('DashboardEngine:notifyEventsChangedFailed', ...
+                    'notifyEventsChanged failed: %s', ME.message);
+            end
+        end
+    end
+
+    % Phase 1032 PLOG-VIZ-03 + PLOG-VIZ-04: per-widget plant-log overlay
+    % helpers. Access restricted to FastSenseWidget so the widget's
+    % setShowPlantLog setter can call these without exposing them as
+    % public API.
+    %
+    % Hidden (not Access = {?FastSenseWidget, ?matlab.unittest.TestCase})
+    % so Octave parsing survives — Octave has no matlab.unittest namespace.
+    % Same Octave-safe idiom FastSenseDataStore.ensureOpenForTest uses.
+    % These remain "internal" — not in tab-complete or methods() — while
+    % still being callable from FastSenseWidget (consumer of all four),
+    % the engine's own helpers, and class-based or function-style tests
+    % across MATLAB + Octave.
+    methods (Hidden)
+
+        function refreshPlantLogOverlayForWidget_(obj, widget)
+        %REFRESHPLANTLOGOVERLAYFORWIDGET_ Recompute plant-log overlay for one widget (Phase 1032 PLOG-VIZ-04 + PLOG-VIZ-08).
+        %   Idempotent: safe to call when widget.ShowPlantLog=false (clears
+        %   markers), when the engine has no store (clears markers), or
+        %   when the widget's FastSenseObj is not rendered (no-op).
+        %
+        %   1. Validate widget and inner FastSense are rendered.
+        %   2. Clear all WidgetPlantLogMarker handles on the widget's axes.
+        %   3. Early return when ShowPlantLog=false (clear-only path).
+        %   4. Early return when store is empty / not a PlantLogStore.
+        %   5. Read XLim from the widget's axes.
+        %   6. getEntriesInRange(t0, t1) from PlantLogStoreInternal_.
+        %   7. Sub-pixel coalesce: bucket entries by
+        %      floor(t * pixelsPerDataUnit) and keep one entry per
+        %      unique bucket (stable). pixelsPerDataUnit derived from
+        %      getpixelposition(ax, true).
+        %   8. setPlantLogMarkers(coalescedTimes, coalescedEntries).
+        %
+        %   On failure, fires DashboardEngine:plantLogOverlayFailed warning.
+            try
+                if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+                if isempty(widget.FastSenseObj) || ...
+                        ~isa(widget.FastSenseObj, 'FastSense') || ...
+                        ~widget.FastSenseObj.IsRendered
+                    return;
+                end
+                ax = widget.FastSenseObj.hAxes;
+                if isempty(ax) || ~ishandle(ax), return; end
+                % Clear stale markers first (idempotent).
+                delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker'));
+                if ~widget.ShowPlantLog, return; end
+                if isempty(obj.PlantLogStoreInternal_) || ...
+                        ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                    return;
+                end
+                xl = get(ax, 'XLim');
+                t0 = xl(1);
+                t1 = xl(2);
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+                if isempty(entries), return; end
+                times = [entries.Timestamp];
+                % Sub-pixel coalesce (decision D): bucket entries by their
+                % floored pixel index so two timestamps that land in the
+                % same screen pixel render a single line. Hover lookup
+                % uses the full store, not these coalesced timestamps.
+                try
+                    axPosPx = getpixelposition(ax, true);
+                    ax_width_px = max(axPosPx(3), 1);
+                catch
+                    ax_width_px = 600;  % conservative default
+                end
+                pixelsPerDataUnit = ax_width_px / max(t1 - t0, eps);
+                buckets = floor(double(times) * pixelsPerDataUnit);
+                [~, ia] = unique(buckets, 'stable');
+                coalescedTimes = times(ia);
+                coalescedEntries = entries(ia);
+                widget.setPlantLogMarkers(coalescedTimes, coalescedEntries);
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'refreshPlantLogOverlayForWidget_ failed: %s', err.message);
+            end
+        end
+
+        function clearPlantLogOverlaysOnAllWidgets_(obj)
+        %CLEARPLANTLOGOVERLAYSONALLWIDGETS_ Wipe markers on every widget + every detached mirror (Phase 1032).
+        %   Does NOT flip ShowPlantLog on any widget — user state is
+        %   preserved for re-attach. Called from Phase 1033's
+        %   detachPlantLog() entry point and from store swaps that need
+        %   to nuke stale per-widget markers.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && ~isempty(w.FastSenseObj) && ...
+                        isa(w.FastSenseObj, 'FastSense') && w.FastSenseObj.IsRendered
+                    ax = w.FastSenseObj.hAxes;
+                    if ~isempty(ax) && ishandle(ax)
+                        try delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker')); catch, end
+                    end
+                end
+            end
+            for k = 1:numel(obj.DetachedMirrors)
+                m = obj.DetachedMirrors{k};
+                if isempty(m) || ~isvalid(m), continue; end
+                w = m.Widget;
+                if isa(w, 'FastSenseWidget') && ~isempty(w.FastSenseObj) && ...
+                        isa(w.FastSenseObj, 'FastSense') && w.FastSenseObj.IsRendered
+                    ax = w.FastSenseObj.hAxes;
+                    if ~isempty(ax) && ishandle(ax)
+                        try delete(findobj(ax, 'Tag', 'WidgetPlantLogMarker')); catch, end
+                    end
+                end
+            end
+        end
+
+        function attachPlantLogXLimListener_(obj, widget)
+        %ATTACHPLANTLOGXLIMLISTENER_ Wire an XLim PostSet listener on the widget's axes (Phase 1032).
+        %   Stored in widget.PlantLogXLimListener_; deleted by
+        %   setShowPlantLog(false) AND by widget.delete(). Idempotent:
+        %   replaces any prior listener.
+            if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+            if ~isempty(widget.PlantLogXLimListener_)
+                try delete(widget.PlantLogXLimListener_); catch, end
+                widget.setPlantLogXLimListenerForEngine_([]);
+            end
+            if isempty(widget.FastSenseObj) || ~widget.FastSenseObj.IsRendered
+                return;
+            end
+            ax = widget.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax), return; end
+            % Octave's addlistener does not support the 4-arg
+            % (object, propName, 'PostSet', callback) form — third arg
+            % must be a callback. Skip the listener on Octave; the
+            % engine's PlantLogTickListener_ + the slider redraw on
+            % render still provide refresh on Octave.
+            if exist('OCTAVE_VERSION', 'builtin')
+                return;
+            end
+            try
+                lis = addlistener(ax, 'XLim', 'PostSet', ...
+                    @(~,~) obj.refreshPlantLogOverlayForWidget_(widget));
+                widget.setPlantLogXLimListenerForEngine_(lis);
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'attachPlantLogXLimListener_ failed: %s', err.message);
+            end
+        end
+
+        function attachPlantLogWidgetHover_(obj, widget)
+        %ATTACHPLANTLOGWIDGETHOVER_ Lazy-construct a PlantLogWidgetHover for one widget (Phase 1032 PLOG-VIZ-07).
+        %   Tears down any prior hover for this widget first (idempotent),
+        %   then builds a new PlantLogWidgetHover parented to the widget's
+        %   uifigure ancestor and storing the lookup closure that routes
+        %   through obj.lookupPlantLogEntries_ (re-reads the store at call
+        %   time so subsequent swaps are reflected immediately).
+        %
+        %   Early returns:
+        %     - widget is empty or not a FastSenseWidget
+        %     - widget.FastSenseObj is empty / not rendered
+        %     - engine has no PlantLogStoreInternal_
+        %     - widget.FastSenseObj.hAxes is missing / invalid
+        %
+        %   On failure, fires DashboardEngine:plantLogOverlayFailed warning.
+            if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+            if isempty(widget.FastSenseObj) || ~widget.FastSenseObj.IsRendered
+                return;
+            end
+            % Tear down any prior hover for this widget.
+            obj.detachPlantLogWidgetHover_(widget);
+            % Require a store attached.
+            if isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                return;
+            end
+            try
+                ax = widget.FastSenseObj.hAxes;
+                if isempty(ax) || ~ishandle(ax), return; end
+                fig = ancestor(ax, 'figure');
+                if isempty(fig) || ~ishandle(fig), return; end
+                hover = PlantLogWidgetHover(fig, ax, ...
+                    @(t0, t1) obj.lookupPlantLogEntries_(t0, t1));
+                obj.WidgetHovers_{end+1} = {widget, hover};
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'attachPlantLogWidgetHover_ failed: %s', err.message);
+            end
+        end
+
+        function detachPlantLogWidgetHover_(obj, widget)
+        %DETACHPLANTLOGWIDGETHOVER_ Tear down + remove a widget's hover (Phase 1032 PLOG-VIZ-07).
+        %   Idempotent: safe when widget has no hover currently registered.
+        %   Also sweeps stale-widget pairs (widget already destroyed) so the
+        %   WidgetHovers_ list stays compact.
+            if isempty(widget), return; end
+            keep = true(1, numel(obj.WidgetHovers_));
+            for i = 1:numel(obj.WidgetHovers_)
+                pair = obj.WidgetHovers_{i};
+                if isempty(pair) || numel(pair) ~= 2
+                    keep(i) = false;
+                    continue;
+                end
+                pairWidget = pair{1};
+                pairHover  = pair{2};
+                if isempty(pairWidget) || ~isvalid(pairWidget)
+                    try
+                        if ~isempty(pairHover) && isvalid(pairHover)
+                            delete(pairHover);
+                        end
+                    catch
+                    end
+                    keep(i) = false;
+                    continue;
+                end
+                if pairWidget == widget
+                    try
+                        if ~isempty(pairHover) && isvalid(pairHover)
+                            delete(pairHover);
+                        end
+                    catch
+                    end
+                    keep(i) = false;
+                end
+            end
+            obj.WidgetHovers_ = obj.WidgetHovers_(keep);
+        end
+
     end
 
     methods (Access = private)
+
+        function tf = isObjValid_(obj)
+        %ISOBJVALID_ Cross-platform "is this handle still alive?" check.
+        %   MATLAB: delegates to builtin isvalid().
+        %   Octave 7+: isvalid() is not implemented for classdef handles,
+        %   so the call itself throws; fall through to a property-access
+        %   probe — accessing a property of a deleted handle throws on
+        %   both runtimes, so the inner try/catch is the portable test.
+            try
+                tf = isvalid(obj);
+                return;
+            catch
+                % Octave: isvalid undefined for classdef handles.
+            end
+            try
+                obj.hFigure; %#ok<VUNUS>
+                tf = true;
+            catch
+                tf = false;
+            end
+        end
 
         function repositionPanels(obj)
         %REPOSITIONPANELS Reposition existing widget panels in-place after resize.
@@ -1619,6 +3168,18 @@ classdef DashboardEngine < handle
             if isempty(target)
                 return;
             end
+            % Phase 1032 PLOG-VIZ-07 — sweep the closing mirror's hover from
+            % WidgetHovers_ before removing it from DetachedMirrors. We do this
+            % up front (inside the isvalid check) so that even if the
+            % keep-filter loop encounters a stale handle, the cleanup already
+            % ran. The detach helper is idempotent on missing widgets.
+            try
+                if isa(target, 'DetachedMirror') && ...
+                        isa(target.Widget, 'FastSenseWidget')
+                    obj.detachPlantLogWidgetHover_(target.Widget);
+                end
+            catch
+            end
             keep = true(1, numel(obj.DetachedMirrors));
             for i = 1:numel(obj.DetachedMirrors)
                 if obj.DetachedMirrors{i} == target
@@ -1628,37 +3189,153 @@ classdef DashboardEngine < handle
             obj.DetachedMirrors = obj.DetachedMirrors(keep);
         end
 
-        function ws = activePageWidgets(obj)
-        %ACTIVEPAGEWIDGETS Return the widget list for the currently active page.
-        %   Returns obj.Pages{obj.ActivePage}.Widgets in multi-page mode,
-        %   or obj.Widgets in single-page mode.
-            if ~isempty(obj.Pages) && obj.ActivePage >= 1
-                ws = obj.Pages{obj.ActivePage}.Widgets;
-            else
-                ws = obj.Widgets;
+        function flat = flattenWidgetsForPreview_(obj, widgets, depth)
+        %FLATTENWIDGETSFORPREVIEW_ Depth-first flatten of a widget list.
+        %   Unwraps any container widget that returns a non-empty
+        %   getNestedWidgets() cell. Used by computePreviewEnvelopeReturning_
+        %   and computeEventMarkers so nested FastSenseWidgets inside a
+        %   GroupWidget contribute to the slider preview / marker overlay
+        %   (260508-l2k).
+        %
+        %   Order: input order, with each container's leaves spliced in
+        %   at the container's position. Defensive depth cap of 10 stops
+        %   pathological recursion (GroupWidget enforces maxDepth=2 at
+        %   addChild, but the flatten is engine-level and should not
+        %   assume well-formedness). getNestedWidgets() failures fall
+        %   back to leaf treatment via try/catch — matches the engine's
+        %   existing per-widget defensive iteration pattern.
+            if nargin < 3, depth = 0; end
+            flat = {};
+            if depth >= 10
+                flat = widgets;
+                return;
+            end
+            for i = 1:numel(widgets)
+                w = widgets{i};
+                nested = {};
+                try
+                    nested = w.getNestedWidgets();
+                catch
+                    nested = {};
+                end
+                if isempty(nested)
+                    flat = [flat, {w}]; %#ok<AGROW>
+                else
+                    flat = [flat, obj.flattenWidgetsForPreview_(nested, depth + 1)]; %#ok<AGROW>
+                end
             end
         end
 
-        function ws = allPageWidgets(obj)
-        %ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
-        %   Used for ReflowCallback injection. When Pages is empty, returns obj.Widgets.
-            if isempty(obj.Pages)
-                ws = obj.Widgets;
+        function flat = flattenEventAwareWidgets_(obj, widgets, depth)
+        %FLATTENEVENTAWAREWIDGETS_ Flatten widget tree for event-aware refresh sweep (260513-snt).
+        %   Mirrors flattenWidgetsForPreview_ but kept as a separate helper
+        %   for clarity at the call site — notifyEventsChanged iterates this
+        %   flat list to call refresh() on EventTimelineWidget /
+        %   FastSenseWidget instances regardless of GroupWidget nesting.
+        %   Defensive depth cap of 10 mirrors flattenWidgetsForPreview_.
+            if nargin < 3, depth = 0; end
+            flat = {};
+            if depth >= 10
+                flat = widgets;
                 return;
             end
-            ws = {};
-            for i = 1:numel(obj.Pages)
-                ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
+            for i = 1:numel(widgets)
+                w = widgets{i};
+                nested = {};
+                try
+                    nested = w.getNestedWidgets();
+                catch
+                    nested = {};
+                end
+                if isempty(nested)
+                    flat = [flat, {w}]; %#ok<AGROW>
+                else
+                    flat = [flat, obj.flattenEventAwareWidgets_(nested, depth + 1)]; %#ok<AGROW>
+                end
+            end
+        end
+
+        function store = resolveEventStore_(obj)
+        %RESOLVEEVENTSTORE_ Return the engine's EventStore, auto-discovering it if unset (260513-snt).
+        %   Strategy: if obj.EventStore is already set, return it. Otherwise
+        %   walk obj.allPageWidgets() (recursing into GroupWidget children
+        %   via flattenEventAwareWidgets_) for the first
+        %   EventTimelineWidget with a non-empty EventStoreObj, cache that
+        %   handle onto obj.EventStore, and return it. Returns [] when
+        %   nothing was found — caller is responsible for surfacing the
+        %   no-store error to the user.
+        %
+        %   Note: when multiple EventTimelineWidgets bind different stores,
+        %   the first one walked wins. Setting engine.EventStore explicitly
+        %   is the user's escape hatch.
+            if ~isempty(obj.EventStore)
+                store = obj.EventStore;
+                return;
+            end
+            store = [];
+            ws = obj.allPageWidgets();
+            flat = obj.flattenEventAwareWidgets_(ws);
+            for i = 1:numel(flat)
+                w = flat{i};
+                if isa(w, 'EventTimelineWidget') && ~isempty(w.EventStoreObj)
+                    obj.EventStore = w.EventStoreObj;
+                    store = obj.EventStore;
+                    return;
+                end
+            end
+        end
+
+        function openCreateEventDialog_(obj, widget)
+        %OPENCREATEEVENTDIALOG_ Entry point invoked by the FastSenseWidget '+Event' button.
+        %   260513-snt shipped this as a modal dialog. 260513-v69 supersedes
+        %   that trigger with a two-click pick-on-chart flow:
+        %     1. Resolve EventStore via resolveEventStore_ (auto-discovery
+        %        from EventTimelineWidget if obj.EventStore is empty).
+        %     2. If no store: non-blocking errordlg, return.
+        %     3. Otherwise: hand off to widget.FastSenseObj.startEventPick_(obj).
+        %        The FastSense instance owns the state machine; this engine
+        %        method only gates on store availability and forwards.
+        %   The CreateEventDialog class remains importable as a programmatic
+        %   API (e.g., CreateEventDialog(widget, engine)) but is no longer the
+        %   default '+' button entry point. The persistEventStatic helper is
+        %   still the single source of truth for persistence and is reused by
+        %   FastSense.completeEventPick_.
+            try
+                if ~isa(widget, 'FastSenseWidget')
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'openCreateEventDialog_ requires a FastSenseWidget; got %s.', class(widget));
+                    return;
+                end
+                fs = widget.FastSenseObj;
+                if isempty(fs) || ~isa(fs, 'FastSense') || ~fs.IsRendered
+                    warning('DashboardEngine:openCreateEventDialogFailed', ...
+                        'FastSenseWidget has no rendered FastSense instance.');
+                    return;
+                end
+                store = obj.resolveEventStore_();
+                if isempty(store)
+                    msg = ['No EventStore is bound to this dashboard. ', ...
+                           'Set engine.EventStore = EventStore(path) ', ...
+                           'or add an EventTimelineWidget with ', ...
+                           'EventStoreObj set to enable event creation.'];
+                    errordlg(msg, 'Create Event');
+                    return;
+                end
+                fs.startEventPick_(obj);
+            catch ME
+                warning('DashboardEngine:openCreateEventDialogFailed', ...
+                    'openCreateEventDialog_ failed: %s', ME.message);
             end
         end
 
         function renderPageBar(obj, themeStruct)
         %RENDERPAGEBAR Create the PageBar uipanel with one button per page.
-        %   Called from render() when numel(Pages) > 1.
+        %   Called from render() when numel(Pages) > 1. Y accounts for the
+        %   reserved banner strip at the figure top (260508-jyh).
             toolbarH = obj.Toolbar.Height;
             hPageBar = uipanel('Parent', obj.hFigure, ...
                 'Units', 'normalized', ...
-                'Position', [0, 1 - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
+                'Position', [0, 1 - obj.BannerHeight - toolbarH - obj.PageBarHeight, 1, obj.PageBarHeight], ...
                 'BorderType', 'none', ...
                 'BackgroundColor', themeStruct.ToolbarBackground, ...
                 'Visible', 'on');
@@ -1712,7 +3389,7 @@ classdef DashboardEngine < handle
             % the selection to the full DataTimeRange. Double-clicking the
             % selection patch does the same, but a visible button is more
             % discoverable.
-            uicontrol('Parent', obj.hTimePanel, ...
+            obj.hTimeResetBtn = uicontrol('Parent', obj.hTimePanel, ...
                 'Style', 'pushbutton', ...
                 'Units', 'normalized', ...
                 'Position', [0.003 0.15 0.035 0.7], ...
@@ -1792,22 +3469,60 @@ classdef DashboardEngine < handle
         end
 
         function updateTimeLabels(obj, tStart, tEnd)
+            %UPDATETIMELABELS Push the slider selection-edge timestamps and duration.
+            %   Updates the three uicontrol text labels BELOW the slider:
+            %     LEFT   — slider's LEFT selection-edge time
+            %     MIDDLE — selection duration (e.g. "7d", "3h 25m", "45 s")
+            %     RIGHT  — slider's RIGHT selection-edge time
+            %   The in-axes selection labels were removed in 260512-hrn-followup;
+            %   all time information now lives in the panel below the slider
+            %   strip so it stays readable regardless of selection width.
             if isempty(obj.TimeRangeSelector_) || ...
                     ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
                 return;
             end
-            obj.TimeRangeSelector_.setLabels( ...
-                obj.formatTimeVal(tStart), ...
-                obj.formatTimeVal(tEnd));
+            leftStr   = obj.formatTimeVal(tStart);
+            rightStr  = obj.formatTimeVal(tEnd);
+            middleStr = obj.formatDuration_(tEnd - tStart);
+            obj.TimeRangeSelector_.setRangeLabels(leftStr, rightStr, middleStr);
+        end
+
+        function s = formatDuration_(~, durDays)
+            %FORMATDURATION_ Render a datenum-day span as a full "Xd Yh Zm Ws" string.
+            %   Always shows all four units (days, hours, minutes,
+            %   seconds) so the user sees the complete granularity of
+            %   the selected window at a glance. Sub-second spans fall
+            %   back to a single "N.NN s" reading.
+            %   (260512-hrn-followup)
+            if ~isfinite(durDays) || durDays < 0
+                s = '';
+                return;
+            end
+            durSec = durDays * 86400;
+            if durSec < 1
+                s = sprintf('%.2f s', durSec);
+                return;
+            end
+            totalSec = round(durSec);
+            d = floor(totalSec / 86400);
+            r = mod(totalSec, 86400);
+            h = floor(r / 3600);
+            r = mod(r, 3600);
+            m = floor(r / 60);
+            ss = mod(r, 60);
+            s = sprintf('%dd %dh %dm %ds', d, h, m, ss);
         end
 
         function computePreviewEnvelope(obj, nBuckets)
-        %COMPUTEPREVIEWENVELOPE Aggregate per-bucket min/max across
-        %   active-page widgets and push the result onto the selector's
-        %   envelope patch (D-07, D-08). nBuckets optional; when omitted,
+        %COMPUTEPREVIEWENVELOPE Aggregate per-bucket min/max across the
+        %   currently active page's widgets (including nested GroupWidget
+        %   children) and push the result onto the selector's envelope
+        %   patch (D-07, D-08). Multi-page dashboards therefore reflect
+        %   only the active tab — switchPage() recomputes the envelope so
+        %   navigation stays in sync. nBuckets optional; when omitted,
         %   defaults to ~200 based on panel axes pixel width, clamped to
-        %   [50, 400]. Silently no-ops when no selector is wired yet (e.g.
-        %   before render()).
+        %   [50, 400]. Silently no-ops when no selector is wired yet
+        %   (e.g. before render()).
             if nargin < 2, nBuckets = []; end
             obj.computePreviewEnvelopeReturning_(nBuckets);
         end
@@ -1825,26 +3540,42 @@ classdef DashboardEngine < handle
             end
             if isempty(nBuckets)
                 % Derive nBuckets from figure pixel width; clamp to [50, 400].
-                nBuckets = 200;
-                try
-                    oldU = get(obj.hFigure, 'Units');
-                    set(obj.hFigure, 'Units', 'pixels');
-                    figPx = get(obj.hFigure, 'Position');
-                    set(obj.hFigure, 'Units', oldU);
-                    axWpx = figPx(3) * 0.94;
-                    nBuckets = max(50, min(400, floor(axWpx / 2)));
-                catch
+                % Cache the computed value so we avoid get/set Units on every
+                % live tick (figure size rarely changes between ticks).
+                if obj.PreviewNBuckets_ > 0
+                    nBuckets = obj.PreviewNBuckets_;
+                else
+                    nBuckets = 200;
+                    try
+                        oldU = get(obj.hFigure, 'Units');
+                        set(obj.hFigure, 'Units', 'pixels');
+                        figPx = get(obj.hFigure, 'Position');
+                        set(obj.hFigure, 'Units', oldU);
+                        axWpx = figPx(3) * 0.94;
+                        nBuckets = max(50, min(400, floor(axWpx / 2)));
+                    catch
+                    end
+                    obj.PreviewNBuckets_ = nBuckets;
                 end
             end
-            ws = obj.activePageWidgets();
+            ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
             if isempty(ws)
                 obj.TimeRangeSelector_.setPreviewLines({});
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
                 return;
             end
+            % 260508-das: widgets may return adaptive bucket counts that
+            % differ from nBuckets (e.g., a 50-sample widget returns 25
+            % buckets even when the caller asks for 200). We collect each
+            % series as-is and only build the legacy aggregate envelope
+            % from series that match the requested nBuckets — the
+            % aggregate is read by computePreviewEnvelopeForTest tests
+            % and must stay shape-stable, but the UI lines (linesList)
+            % accept any non-empty series.
             aggMin = inf(1, nBuckets);
             aggMax = -inf(1, nBuckets);
             xCenters = [];
+            haveAggSeries = false;
             linesList = {};
             for i = 1:numel(ws)
                 try
@@ -1856,36 +3587,88 @@ classdef DashboardEngine < handle
                 if ~isfield(s, 'xCenters') || ~isfield(s, 'yMin') || ~isfield(s, 'yMax')
                     continue;
                 end
-                if numel(s.yMin) ~= nBuckets || numel(s.yMax) ~= nBuckets
+                if isempty(s.xCenters) || isempty(s.yMin) || isempty(s.yMax)
                     continue;
                 end
-                if isempty(xCenters), xCenters = s.xCenters; end
-                % Aggregate min/max kept so computePreviewEnvelopeForTest
-                % can still return an envelope struct for existing tests.
-                aggMin = min(aggMin, s.yMin);
-                aggMax = max(aggMax, s.yMax);
+                if numel(s.xCenters) ~= numel(s.yMin) || numel(s.yMin) ~= numel(s.yMax)
+                    continue;
+                end
                 % Per-widget line: midpoint of bucket, already normalized
-                % to [0,1] by the widget (D-08).
+                % to [0,1] by the widget (D-08). Accepted at any bucket
+                % count >= 1.
                 yMid = (s.yMin + s.yMax) / 2;
                 linesList{end + 1} = struct('x', s.xCenters, 'y', yMid); %#ok<AGROW>
+                % Legacy aggregate envelope: only fold in series that
+                % match nBuckets exactly. Existing test_dashboard_preview_envelope
+                % expects a fixed-shape envelope when widgets honour
+                % the requested bucket count.
+                if numel(s.yMin) == nBuckets && numel(s.yMax) == nBuckets
+                    if ~haveAggSeries
+                        xCenters = s.xCenters;
+                        haveAggSeries = true;
+                    end
+                    aggMin = min(aggMin, s.yMin);
+                    aggMax = max(aggMax, s.yMax);
+                end
             end
-            if isempty(xCenters) || ~any(isfinite(aggMin))
+            if isempty(linesList)
+                % Cache check for the empty case.
+                if isempty(obj.PreviewLinesCache_)
+                    env = struct('xCenters', [], 'yMin', [], 'yMax', []);
+                    return;
+                end
+                obj.PreviewLinesCache_ = {};
                 obj.TimeRangeSelector_.setPreviewLines({});
+                env = struct('xCenters', [], 'yMin', [], 'yMax', []);
+                return;
+            end
+            % Cache check: if linesList is identical to the previous call
+            % (cache hits in every FastSenseWidget.getPreviewSeries return
+            % the same struct — isequal compares N*200 doubles, which is fast
+            % and avoids the expensive delete/recreate of N line handles per
+            % tick when data hasn't changed). (260508-slider-stuck)
+            if isequal(linesList, obj.PreviewLinesCache_)
+                % Preview lines unchanged — skip the delete/recreate cycle.
+            else
+                obj.PreviewLinesCache_ = linesList;
+                obj.TimeRangeSelector_.setPreviewLines(linesList);
+            end
+            if ~haveAggSeries
+                % No widget produced exactly nBuckets buckets — return an
+                % empty envelope but keep the per-widget lines we drew.
                 env = struct('xCenters', [], 'yMin', [], 'yMax', []);
                 return;
             end
             aggMin(~isfinite(aggMin)) = 0;
             aggMax(~isfinite(aggMax)) = 0;
-            obj.TimeRangeSelector_.setPreviewLines(linesList);
+            % setPreviewLines already called above with the full linesList.
             env = struct('xCenters', xCenters, 'yMin', aggMin, 'yMax', aggMax);
         end
 
         function computeEventMarkers(obj)
-        %COMPUTEEVENTMARKERS Aggregate event times across active-page widgets
+        %COMPUTEEVENTMARKERS Aggregate event markers across the currently
+        %   active page's widgets (including nested GroupWidget children)
         %   and push them onto the TimeRangeSelector's marker overlay.
-        %   Mirrors computePreviewEnvelope's guard + iteration pattern: no-op
-        %   before render or when no widgets expose events. A failing widget
-        %   does not block siblings (each call is wrapped in try/catch).
+        %   Multi-page dashboards therefore reflect only the active tab —
+        %   switchPage() recomputes the marker overlay so navigation stays
+        %   in sync.
+        %
+        %   Mirrors computePreviewEnvelope's guard + iteration pattern:
+        %   no-op before render or when no widgets expose events. A failing
+        %   widget does not block siblings (each call is wrapped in
+        %   try/catch).
+        %
+        %   For each widget we prefer the modern getEventMarkers() shape
+        %   (struct array with Time/Severity/Color fields) — it lets us
+        %   color each slider marker by event severity. Widgets that
+        %   predate the per-severity-color contract still expose only
+        %   getEventTimes() and are folded in with default OK-severity
+        %   color via the severityColor helper.
+        %
+        %   Tiebreaker on duplicate event Times across widgets: KEEP THE
+        %   ROW WITH THE HIGHEST SEVERITY. So if widget A reports
+        %   Severity=1 at t=50 and widget B reports Severity=3 at t=50,
+        %   the slider draws a single alarm-red marker at t=50.
             % Guard mirrors computePreviewEnvelopeReturning_ for parity.
             % We deliberately do NOT use isvalid() here because Octave 7+11
             % does not implement isvalid() for non-timer handle objects;
@@ -1894,28 +3677,314 @@ classdef DashboardEngine < handle
                     ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
                 return;
             end
-            ws = obj.activePageWidgets();
-            allTimes = [];
+            % Honor the global Events toggle: when off, clear any existing
+            % slider markers and bail before doing the per-widget aggregation.
+            % Also reset the marker cache so re-enabling the toggle forces a
+            % full redraw on the next call (260508-slider-stuck).
+            if ~obj.EventMarkersVisible
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
+                obj.TimeRangeSelector_.setEventMarkers([]);
+                return;
+            end
+            ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
+
+            % Accumulators (parallel arrays — keep allocation-free until
+            % the dedup pass at the end). Severity defaults to 1 (OK) for
+            % legacy getEventTimes()-only widgets so the dedup tiebreaker
+            % cleanly prefers any explicitly-tagged sev>=2 widget.
+            allTimes  = [];
+            allSev    = [];
+            allColors = zeros(0, 3);
+
+            % Resolve the *struct* theme — obj.Theme is a preset string
+            % (e.g. 'light'/'dark'); severityColor wants a struct, so go
+            % through the cached resolver. Tolerate failure (helper is
+            % defensive and accepts []).
+            themeStruct = [];
+            try
+                themeStruct = obj.getCachedTheme();
+            catch
+                themeStruct = [];
+            end
+            okColor = severityColor(themeStruct, 1);  % cached for legacy fallback
+
             for i = 1:numel(ws)
-                tVec = [];
+                w = ws{i};
+
+                % Prefer the modern colored-marker shape when the widget
+                % advertises it. ismethod works on classdef objects in
+                % both MATLAB and Octave 7+.
+                useMarkers = false;
                 try
-                    tVec = ws{i}.getEventTimes();
-                catch err
-                    warning('DashboardEngine:getEventTimesFailed', ...
-                        'Widget %d getEventTimes failed: %s', i, err.message);
+                    useMarkers = ismethod(w, 'getEventMarkers');
+                catch
+                    useMarkers = false;
+                end
+
+                if useMarkers
+                    ms = struct('Time', {}, 'Severity', {}, 'Color', {});
+                    try
+                        ms = w.getEventMarkers();
+                    catch err
+                        warning('DashboardEngine:getEventMarkersFailed', ...
+                            'Widget %d getEventMarkers failed: %s', i, err.message);
+                        ms = struct('Time', {}, 'Severity', {}, 'Color', {});
+                    end
+                    for k = 1:numel(ms)
+                        t = ms(k).Time;
+                        if ~isnumeric(t) || ~isfinite(t)
+                            continue;
+                        end
+                        sev = 1;
+                        if isfield(ms, 'Severity') && isnumeric(ms(k).Severity) && ...
+                                ~isempty(ms(k).Severity) && isfinite(ms(k).Severity(1))
+                            sev = ms(k).Severity(1);
+                        end
+                        c = okColor;
+                        if isfield(ms, 'Color') && isnumeric(ms(k).Color) && ...
+                                numel(ms(k).Color) == 3
+                            c = ms(k).Color(:).';
+                        end
+                        allTimes(end + 1)  = t;          %#ok<AGROW>
+                        allSev(end + 1)    = sev;        %#ok<AGROW>
+                        allColors(end + 1, :) = c;       %#ok<AGROW>
+                    end
+                else
+                    % Legacy widgets — synthesize default-severity markers.
                     tVec = [];
-                end
-                if ~isempty(tVec)
-                    allTimes = [allTimes, tVec(:).']; %#ok<AGROW>
+                    try
+                        tVec = w.getEventTimes();
+                    catch err
+                        warning('DashboardEngine:getEventTimesFailed', ...
+                            'Widget %d getEventTimes failed: %s', i, err.message);
+                        tVec = [];
+                    end
+                    if isempty(tVec), continue; end
+                    tVec = tVec(:).';
+                    tVec = tVec(isfinite(tVec));
+                    for k = 1:numel(tVec)
+                        allTimes(end + 1)  = tVec(k);   %#ok<AGROW>
+                        allSev(end + 1)    = 1;          %#ok<AGROW>
+                        allColors(end + 1, :) = okColor; %#ok<AGROW>
+                    end
                 end
             end
-            if ~isempty(allTimes)
-                allTimes = allTimes(isfinite(allTimes));
-                % unique() returns a sorted ascending row in both MATLAB and
-                % Octave 7+, so an explicit sort() is redundant here.
-                allTimes = unique(allTimes);
+
+            if isempty(allTimes)
+                % Cache check for the empty case.
+                if isempty(obj.EventMarkerTimesCache_)
+                    return;  % already empty — no need to clear markers again
+                end
+                obj.EventMarkerTimesCache_  = [];
+                obj.EventMarkerColorsCache_ = [];
+                obj.TimeRangeSelector_.setEventMarkers([]);
+                return;
             end
-            obj.TimeRangeSelector_.setEventMarkers(allTimes);
+
+            % Dedup pass with max-severity-wins tiebreaker.
+            % unique() returns a sorted ascending row in both MATLAB and
+            % Octave 7+; idx maps each input row to its bucket in uTimes.
+            [uTimes, ~, idx] = unique(allTimes);
+            uColors = zeros(numel(uTimes), 3);
+            for k = 1:numel(uTimes)
+                rows = find(idx == k);
+                if numel(rows) == 1
+                    uColors(k, :) = allColors(rows, :);
+                else
+                    [~, pickRel] = max(allSev(rows));
+                    uColors(k, :) = allColors(rows(pickRel), :);
+                end
+            end
+
+            % Cache check: skip the expensive delete/recreate cycle in
+            % setEventMarkers when the marker set hasn't changed since the
+            % last tick. Historical events are stable between ticks; only new
+            % live events would invalidate the cache. isequal is fast on small
+            % numeric arrays (129 events = 129 doubles + 129x3 RGB matrix).
+            % (260508-slider-stuck: creating 129+ line handles every 1-second
+            % tick blocked the MATLAB event loop long enough to cause null drags.)
+            if isequal(uTimes, obj.EventMarkerTimesCache_) && ...
+                    isequal(uColors, obj.EventMarkerColorsCache_)
+                return;  % marker set unchanged — no need to redraw
+            end
+            obj.EventMarkerTimesCache_  = uTimes;
+            obj.EventMarkerColorsCache_ = uColors;
+            obj.TimeRangeSelector_.setEventMarkers(uTimes, uColors);
+        end
+
+        function computePlantLogMarkers(obj)
+        %COMPUTEPLANTLOGMARKERS Push current plant-log entry timestamps onto the slider.
+        %   Phase 1031 PLOG-VIZ-01..02 + 08: plant-log overlay on TimeRangeSelector.
+        %   Mirrors computeEventMarkers' guard pattern (no-op before render or when
+        %   no store is attached). When PlantLogStoreInternal_ is empty the markers
+        %   are explicitly cleared so detach takes effect immediately.
+        %
+        %   Called at the same hook sites as computeEventMarkers (addPage,
+        %   setEventMarkersVisible, rerenderWidgets, both live-tick paths) plus
+        %   from setPlantLogStoreForTest_ and from the PlantLogTickListener_
+        %   callback installed by setPlantLogLiveTailForTest_.
+            if isempty(obj.TimeRangeSelector_) || ...
+                    ~isa(obj.TimeRangeSelector_, 'TimeRangeSelector')
+                return;
+            end
+            if isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                try
+                    obj.TimeRangeSelector_.setPlantLogMarkers([]);
+                catch
+                end
+                return;
+            end
+            try
+                t0 = obj.TimeRangeSelector_.DataRange(1);
+                t1 = obj.TimeRangeSelector_.DataRange(2);
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+                if isempty(entries)
+                    obj.TimeRangeSelector_.setPlantLogMarkers([]);
+                    return;
+                end
+                times = [entries.Timestamp];
+                obj.TimeRangeSelector_.setPlantLogMarkers(times);
+            catch err
+                fprintf('[ENGINE WARN] computePlantLogMarkers: %s\n', err.message);
+            end
+        end
+
+        function onPlantLogTailTick_(obj)
+        %ONPLANTLOGTAILTICK_ PlantLogTailTick callback — fan out slider + widgets + mirrors (Phase 1032 PLOG-VIZ-08).
+        %   Wraps the existing computePlantLogMarkers (slider path) and
+        %   adds the per-widget refresh fan-out for every ShowPlantLog=true
+        %   widget across pages AND every DetachedMirror (decision G —
+        %   full parity).
+            try
+                obj.computePlantLogMarkers();
+            catch err
+                warning('DashboardEngine:plantLogOverlayFailed', ...
+                    'computePlantLogMarkers (tick): %s', err.message);
+            end
+            % Fan out to attached widgets.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try obj.refreshPlantLogOverlayForWidget_(w); catch, end
+                end
+            end
+            % Fan out to detached mirrors (decision G — full parity).
+            for k = 1:numel(obj.DetachedMirrors)
+                m = obj.DetachedMirrors{k};
+                if isempty(m) || ~isvalid(m), continue; end
+                w = m.Widget;
+                if isa(w, 'FastSenseWidget') && w.ShowPlantLog
+                    try obj.refreshPlantLogOverlayForWidget_(w); catch, end
+                end
+            end
+        end
+
+        function entries = lookupPlantLogEntries_(obj, t0, t1)
+        %LOOKUPPLANTLOGENTRIES_ Phase 1031 PLOG-VIZ-06 indirect store lookup.
+        %   Helper consumed by the PlantLogSliderHover closure. Re-reads
+        %   obj.PlantLogStoreInternal_ AT CALL TIME so subsequent store swaps
+        %   (via setPlantLogStoreForTest_(other)) are reflected immediately
+        %   without rebuilding the hover closure. Returns [] when no store
+        %   is attached or when the lookup throws.
+            entries = [];
+            if isempty(obj.PlantLogStoreInternal_) || ...
+                    ~isa(obj.PlantLogStoreInternal_, 'PlantLogStore')
+                return;
+            end
+            try
+                entries = obj.PlantLogStoreInternal_.getEntriesInRange(t0, t1);
+            catch
+                entries = [];
+            end
+        end
+
+        function teardownPlantLogSliderHover_(obj)
+        %TEARDOWNPLANTLOGSLIDERHOVER_ Phase 1031 PLOG-VIZ-06 hover teardown.
+        %   Idempotent: safe to call when PlantLogSliderHover_ is empty,
+        %   already-deleted, or constructed but never installed. delete()
+        %   restores the prior WindowButtonMotionFcn.
+            try
+                if ~isempty(obj.PlantLogSliderHover_) && ...
+                        isvalid(obj.PlantLogSliderHover_)
+                    delete(obj.PlantLogSliderHover_);
+                end
+            catch
+            end
+            obj.PlantLogSliderHover_ = [];
+        end
+
+        function [recovered, store] = surfacePlantLogLoadFailure_(~, ME, filePath)
+        %SURFACEPLANTLOGLOADFAILURE_ Phase 1033 PLOG-INT-05 load-failure warning router.
+        %   Inspects ME.identifier and emits the appropriate namespaced
+        %   warning per CONTEXT.md D-12:
+        %     PlantLogReader:fileNotFound    -> DashboardEngine:plantLogPathMissing
+        %     PlantLogReader:readError       -> DashboardEngine:plantLogReadFailed
+        %     PlantLogReader:unsupportedFormat -> DashboardEngine:plantLogReadFailed
+        %     PlantLogReader:xlsxUnavailable -> DashboardEngine:plantLogReadFailed
+        %     other                          -> DashboardEngine:plantLogReadFailed
+        %
+        %   Returns recovered=false + store=[] in every case. The caller
+        %   is responsible for returning from attachPlantLog so the
+        %   dashboard load proceeds without an overlay.
+            recovered = false;
+            store     = [];
+            switch ME.identifier
+                case 'PlantLogReader:fileNotFound'
+                    warning('DashboardEngine:plantLogPathMissing', ...
+                        ['Saved plant-log path %s no longer exists; ' ...
+                         'dashboard loaded without overlay. Re-attach via ' ...
+                         'DashboardEngine.attachPlantLog or the FastSenseCompanion toolbar.'], ...
+                        filePath);
+                otherwise
+                    warning('DashboardEngine:plantLogReadFailed', ...
+                        ['Saved plant-log re-import failed: %s; ' ...
+                         'dashboard loaded without overlay.'], ...
+                        ME.message);
+            end
+        end
+
+        function readerMapping = plantLogMappingToReaderShape_(~, jsonMapping)
+        %PLANTLOGMAPPINGTOREADERSHAPE_ Convert CONTEXT.md JSON-schema mapping to PlantLogReader shape.
+        %   jsonMapping fields: timestampCol, messageCol, metadataCols, format
+        %   readerMapping fields: TimestampColumn, MessageColumn, TimestampFormat
+        %   metadataCols is informational only -- PlantLogReader infers metadata
+        %   columns as "every non-timestamp/non-message column" at read time.
+            readerMapping = struct('TimestampColumn', '', 'MessageColumn', '', 'TimestampFormat', '');
+            if isfield(jsonMapping, 'timestampCol')
+                readerMapping.TimestampColumn = char(jsonMapping.timestampCol);
+            end
+            if isfield(jsonMapping, 'messageCol')
+                readerMapping.MessageColumn = char(jsonMapping.messageCol);
+            end
+            if isfield(jsonMapping, 'format')
+                readerMapping.TimestampFormat = char(jsonMapping.format);
+            end
+            % Back-compat: accept PascalCase if caller passed reader-shape directly.
+            if isfield(jsonMapping, 'TimestampColumn')
+                readerMapping.TimestampColumn = char(jsonMapping.TimestampColumn);
+            end
+            if isfield(jsonMapping, 'MessageColumn')
+                readerMapping.MessageColumn = char(jsonMapping.MessageColumn);
+            end
+            if isfield(jsonMapping, 'TimestampFormat')
+                readerMapping.TimestampFormat = char(jsonMapping.TimestampFormat);
+            end
+        end
+
+        function jsonMapping = readerMappingToJsonShape_(~, readerMapping)
+        %READERMAPPINGTOJSONSHAPE_ Convert PlantLogReader mapping shape to JSON-schema for serialization.
+        %   metadataCols is computed from the source file at read time but
+        %   stored as a cell array on the engine -- read from a freshly
+        %   parsed file or left empty (Plan 02 serializer also persists it
+        %   as a cellstr; empty is acceptable).
+            jsonMapping = struct( ...
+                'timestampCol', readerMapping.TimestampColumn, ...
+                'messageCol',   readerMapping.MessageColumn, ...
+                'metadataCols', {{}}, ...
+                'format',       readerMapping.TimestampFormat);
         end
 
     end
@@ -1925,9 +3994,15 @@ classdef DashboardEngine < handle
         function str = formatTimeVal(~, t)
         %FORMATTIMEVAL Format a numeric time value as a human-readable string.
         %   Supports three numeric ranges:
-        %     posix epoch seconds (9e8 < t < 5e9) — converts via datenum(1970,...)+t/86400
-        %     MATLAB datenum (t > 700000, not posix) — uses datestr directly
-        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix
+        %     posix epoch seconds (9e8 < t < 5e9) — fast arithmetic via datevec
+        %     MATLAB datenum (t > 700000, not posix) — fast via datevec
+        %     raw numeric (t <= 700000) — formats as s/m/h/d suffix via sprintf
+        %
+        %   Hot-path note: this is called twice per live tick. Uses datevec
+        %   (no string format parsing) instead of datestr (which invokes
+        %   timefun/private/dateformverify on every call) to avoid ~7 ms
+        %   per-call overhead. datetime constructor is also slow (~16 ms) so
+        %   datevec is preferred here too.
         %
         %   The posix bracket is evaluated BEFORE the datenum bracket because
         %   posix seconds for modern dates (year 2001-2128) are also > 700000
@@ -1935,15 +4010,38 @@ classdef DashboardEngine < handle
             % Order matters: posix epoch seconds (year 2000-2128) are > 700000,
             % so the posix bracket must be evaluated BEFORE the datenum bracket.
             if t > 9e8 && t < 5e9
-                % Posix epoch seconds (year ~2000 - 2128)
-                str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
-                              'yyyy-mm-dd HH:MM');
+                % Posix epoch seconds (year ~2000 - 2128).
+                % Add posix offset (days from year 0 to 1970-01-01) and convert
+                % via datevec, which is faster than datestr (no format parsing).
+                % Seconds included so live ticks are visible in slider labels.
+                % (260512-hrn-followup)
+                try
+                    dv = datevec(datenum(1970, 1, 1) + t / 86400);
+                    str = sprintf('%04d-%02d-%02d %02d:%02d:%02d', ...
+                        dv(1), dv(2), dv(3), dv(4), dv(5), floor(dv(6)));
+                catch
+                    % Fallback for Octave or edge inputs.
+                    str = datestr(datenum(1970, 1, 1, 0, 0, 0) + t / 86400, ...
+                                  'yyyy-mm-dd HH:MM:SS');
+                end
             elseif t > 700000
-                % MATLAB datenum (days since year 0000)
-                if t > 730000
-                    str = datestr(t, 'yyyy-mm-dd HH:MM');
-                else
-                    str = datestr(t, 'HH:MM:SS');
+                % MATLAB datenum (days since year 0000).
+                % Seconds included for live-tick visibility (260512-hrn-followup).
+                try
+                    dv = datevec(t);
+                    if t > 730000
+                        str = sprintf('%04d-%02d-%02d %02d:%02d:%02d', ...
+                            dv(1), dv(2), dv(3), dv(4), dv(5), floor(dv(6)));
+                    else
+                        str = sprintf('%02d:%02d:%02d', dv(4), dv(5), floor(dv(6)));
+                    end
+                catch
+                    % Fallback for Octave or edge inputs.
+                    if t > 730000
+                        str = datestr(t, 'yyyy-mm-dd HH:MM:SS');
+                    else
+                        str = datestr(t, 'HH:MM:SS');
+                    end
                 end
             else
                 % Raw numeric (seconds, samples, etc.)
@@ -2000,6 +4098,25 @@ classdef DashboardEngine < handle
                 return;
             end
             obj.rerenderWidgets();
+        end
+
+        function onFigureDestroyed_(obj)
+        %ONFIGUREDESTROYED_ Safety-net handler invoked when hFigure is destroyed.
+        %   Fires for ANY destruction path (delete(hf), close all force, parent
+        %   teardown). The normal close-via-X path goes through CloseRequestFcn
+        %   -> onClose(), which has already called stopLive() and cleared
+        %   hFigure by the time we get here — both operations below are
+        %   idempotent and benign in that case. Listener MUST NOT throw, so
+        %   every operation is wrapped in try/catch (260511-mjb).
+            try
+                obj.stopLive();
+            catch
+                % best-effort: stopLive is already try/catch internally
+            end
+            try
+                obj.hFigure = [];
+            catch
+            end
         end
 
     end
@@ -2110,6 +4227,65 @@ classdef DashboardEngine < handle
                         wi = obj.Widgets{i};
                         if isa(wi, 'GroupWidget') && strcmp(wi.Mode, 'collapsible')
                             wi.ReflowCallback = @() obj.reflowAfterCollapse();
+                        end
+                    end
+                end
+
+                % --- Phase 1033 PLOG-INT-05: re-attach plant log when present ---
+                % Per CONTEXT.md D-10..D-13: when config.plantLog is
+                % present, call attachPlantLog with ContinueOnReadError=true
+                % so any saved-path/mapping/read failure degrades to a
+                % warning and the dashboard load completes. When absent,
+                % v1.0-v3.0 dashboards load cleanly with zero warnings.
+                if isfield(config, 'plantLog') && ~isempty(config.plantLog)
+                    pl = config.plantLog;
+                    % Schema validation: sourcePath is required.
+                    if ~isfield(pl, 'sourcePath') || isempty(pl.sourcePath)
+                        error('DashboardSerializer:plantLogSchemaInvalid', ...
+                            'plantLog block must contain a non-empty sourcePath.');
+                    end
+                    sourcePath = char(pl.sourcePath);
+                    mapping  = [];
+                    if isfield(pl, 'mapping') && ~isempty(pl.mapping)
+                        mapping = pl.mapping;
+                    end
+                    interval = 5;
+                    if isfield(pl, 'interval') && ~isempty(pl.interval)
+                        interval = double(pl.interval);
+                    end
+                    startTail = true;
+                    if isfield(pl, 'startTail') && ~isempty(pl.startTail)
+                        startTail = logical(pl.startTail);
+                    end
+                    % Pre-flight: if file is missing, surface the warning
+                    % BEFORE attachPlantLog so callers see the warn even
+                    % when the autoDetect path is bypassed (i.e. caller
+                    % supplied a mapping).
+                    if exist(sourcePath, 'file') ~= 2
+                        warning('DashboardEngine:plantLogPathMissing', ...
+                            ['Saved plant-log path %s no longer exists; ' ...
+                             'dashboard loaded without overlay. Re-attach via ' ...
+                             'DashboardEngine.attachPlantLog or the FastSenseCompanion toolbar.'], ...
+                            sourcePath);
+                    else
+                        attachArgs = {};
+                        if isstruct(mapping)
+                            attachArgs{end+1} = 'Mapping';
+                            attachArgs{end+1} = mapping;
+                        end
+                        attachArgs{end+1} = 'Interval';
+                        attachArgs{end+1} = interval;
+                        attachArgs{end+1} = 'StartTail';
+                        attachArgs{end+1} = startTail;
+                        attachArgs{end+1} = 'ContinueOnReadError';
+                        attachArgs{end+1} = true;
+                        try
+                            obj.attachPlantLog(sourcePath, attachArgs{:});
+                        catch attachErr
+                            warning('DashboardEngine:plantLogReadFailed', ...
+                                ['Saved plant-log re-import failed: %s; ' ...
+                                 'dashboard loaded without overlay.'], ...
+                                attachErr.message);
                         end
                     end
                 end
