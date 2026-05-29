@@ -228,12 +228,13 @@ classdef LiveEventPipeline < handle
                 obj.EventStore.save();
             end
 
-            % Send notifications
+            % Send notifications (Phase 1039 D-02: pass real per-event sensor data, not struct())
             if ~isempty(obj.NotificationService)
                 for i = 1:numel(allNewEvents)
                     ev = allNewEvents(i);
                     try
-                        obj.NotificationService.notify(ev, struct());
+                        sd = obj.sensorDataForEvent_(ev);
+                        obj.NotificationService.notify(ev, sd);
                     catch ex
                         fprintf('[PIPELINE WARNING] Notification failed: %s\n', ex.message);
                     end
