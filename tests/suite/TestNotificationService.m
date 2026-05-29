@@ -1,10 +1,11 @@
 classdef TestNotificationService < matlab.unittest.TestCase
     methods (TestClassSetup)
-        function addPaths(testCase)
+        function addPaths(testCase) %#ok<MANU>
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'EventDetection'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'SensorThreshold'));
             addpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', 'libs', 'FastSense'));
+            addpath(fileparts(mfilename('fullpath')));   % tests/suite — for MockEmailTransport
             install();
         end
     end
@@ -89,6 +90,44 @@ classdef TestNotificationService < matlab.unittest.TestCase
             files = dir(fullfile(ns.SnapshotDir, '*.png'));
             testCase.verifyTrue(numel(files) >= 2, 'snapshots_created');
             rmdir(ns.SnapshotDir, 's');
+        end
+
+        function testTransportDelegation(testCase)
+            % sendEmail_ delegates to the injected Transport; recipients/subject forwarded.
+            mock = MockEmailTransport();
+            ns = NotificationService('Transport', mock, 'CooldownMinutes', 0);
+            ns.setDefaultRule(NotificationRule('Recipients', {'a@b.com'}, ...
+                'IncludeSnapshot', false, 'Subject', 'Event: {sensor} - {threshold}'));
+            ev = Event(now, now+0.01, 'temp', 'HH', 100, 'upper');
+            ns.notify(ev, struct());
+            testCase.verifyTrue(isscalar(mock.Calls), 'one_send');
+            testCase.verifyEqual(mock.Calls{1}.recipients, {'a@b.com'}, 'recipients_forwarded');
+            testCase.verifyEqual(mock.Calls{1}.subject, 'Event: temp - HH', 'subject_filled');
+        end
+
+        function testCooldownSuppressesWithinWindow(testCase)
+            % Same (sensor,threshold) twice within the window -> second suppressed.
+            mock = MockEmailTransport();
+            ns = NotificationService('Transport', mock, 'CooldownMinutes', 5);
+            ns.setDefaultRule(NotificationRule('Recipients', {'a@b.com'}, 'IncludeSnapshot', false));
+            ev = Event(now, now+0.01, 'temp', 'HH', 100, 'upper');
+            ns.notify(ev, struct());
+            ns.notify(ev, struct());
+            testCase.verifyTrue(isscalar(mock.Calls), 'second_suppressed');
+            testCase.verifyEqual(ns.SuppressedCount, 1, 'suppressed_count');
+            testCase.verifyEqual(ns.NotificationCount, 1, 'one_notification');
+        end
+
+        function testCooldownAllowsAfterExpiry(testCase)
+            % Back-date the last-sent stamp past the window -> next notify proceeds.
+            mock = MockEmailTransport();
+            ns = NotificationService('Transport', mock, 'CooldownMinutes', 5);
+            ns.setDefaultRule(NotificationRule('Recipients', {'a@b.com'}, 'IncludeSnapshot', false));
+            ev = Event(now, now+0.01, 'temp', 'HH', 100, 'upper');
+            ns.notify(ev, struct());
+            ns.setLastSentForTesting_(ev, now - 10/1440);   % 10 min ago (> 5 min window)
+            ns.notify(ev, struct());
+            testCase.verifyEqual(numel(mock.Calls), 2, 'allowed_after_expiry');
         end
     end
 end
