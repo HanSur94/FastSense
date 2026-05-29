@@ -102,23 +102,34 @@ classdef TestTimeRangeSelectorCurrentView < matlab.unittest.TestCase
                 'Current-view box must not intercept mouse events.');
         end
 
-        function testNoThrowAfterDelete(testCase)
-            % Dedicated selector with its own figure so the explicit delete()
-            % is the path under test (no shared teardown delete).
+        function testNoThrowAfterGraphicsDestroyed(testCase)
+            % Realistic "after delete" contract: the underlying figure (and
+            % therefore every graphics handle the selector owns) is destroyed,
+            % but the TimeRangeSelector OBJECT itself is still a live handle.
+            % setCurrentView/hideCurrentView must no-op via their ishandle
+            % guards rather than throw.
+            %
+            % NOTE: calling a method on a *deleted* handle object (delete(sel)
+            % then sel.method()) is not testable — MATLAB throws "Invalid or
+            % deleted object" at dispatch, before any in-method guard can run.
+            % Destroying the graphics while keeping the object alive is the
+            % case the production guards (ishandle on hAxes + each box handle)
+            % are actually designed for.
             hFig = figure('Visible', 'off');
-            testCase.addTeardown(@() close(hFig));
             hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
             sel = TimeRangeSelector(hp);
+            testCase.addTeardown(@() delete(sel));
             sel.setDataRange(0, 100);
-            delete(sel);
+            sel.setCurrentView(10, 20);   % box live before we nuke the figure
+            delete(hFig);                  % destroys axes + all box graphics
             try
-                sel.setCurrentView(10, 20);
+                sel.setCurrentView(30, 40);
                 sel.hideCurrentView();
                 testCase.verifyTrue(true, ...
-                    'setCurrentView/hideCurrentView must not throw after delete.');
+                    'setCurrentView/hideCurrentView must not throw after graphics destroyed.');
             catch err
                 testCase.verifyFail(sprintf( ...
-                    'Post-delete API must not throw, but threw: %s', err.message));
+                    'Post-graphics-destroy API must not throw, but threw: %s', err.message));
             end
         end
     end
