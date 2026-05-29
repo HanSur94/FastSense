@@ -3250,55 +3250,78 @@ classdef DashboardEngine < handle
         end
 
         function updateCurrentViewIndicator_(obj)
-        %UPDATECURRENTVIEWINDICATOR_ Drive the slider current-view box (Phase 1039).
-        %   Collects the LIVE x-limits of every out-of-sync widget
-        %   (UseGlobalTime==false) on the active page (recursing into
-        %   GroupWidgets), unions them, and shows the box at that union ONLY
-        %   when it differs from the current Selection beyond an epsilon
-        %   scaled to the DataRange span. When everything is synced (or no
-        %   widget is out of sync), the box is hidden. Purely indicative —
-        %   never touches the Selection or fires broadcasts. Fully guarded:
-        %   no-op when the slider is absent. Wrapped by callers in try/catch.
+        %UPDATECURRENTVIEWINDICATOR_ Drive the slider current-view boxes (Phase 1039).
+        %   Draws ONE box per visible, out-of-sync graph (UseGlobalTime==false on
+        %   the active page, recursing into GroupWidgets), each at that graph's
+        %   LIVE x-limits and coloured to MATCH that graph's slider preview line.
+        %   A graph's box is shown only when its view differs from the current
+        %   Selection beyond an epsilon scaled to the DataRange span; graphs that
+        %   are synced (or have no live view) contribute no box. When nothing is
+        %   out of sync, all boxes are hidden. Purely indicative — never touches
+        %   the Selection or fires broadcasts. Guarded: no-op when the slider is
+        %   absent. Wrapped by callers in try/catch.
+        %
+        %   Colour parity: each box's colour index is the graph's PREVIEW-LINE
+        %   index — its position among active-page widgets that yield a valid
+        %   getPreviewSeries — mirroring computePreviewEnvelopeReturning_'s
+        %   linesList order, so box k uses the same shared previewPalette_ slot as
+        %   preview line k.
             sel = obj.TimeRangeSelector_;
             if isempty(sel) || ~isa(sel, 'TimeRangeSelector')
                 return;
             end
             ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
-            starts = [];
-            ends   = [];
+            % Same bucket count the preview used (cache hit on getPreviewSeries).
+            nB = obj.PreviewNBuckets_;
+            if ~(isscalar(nB) && isfinite(nB) && nB > 0)
+                nB = 200;
+            end
+            span = obj.DataTimeRange(2) - obj.DataTimeRange(1);
+            if ~isfinite(span) || span <= 0
+                span = 1;
+            end
+            eps_ = 0.005 * span;        % anti-flicker tolerance vs the Selection
+            [selStart, selEnd] = sel.getSelection();
+            ranges = [];
+            colorIdxs = [];
+            previewIdx = 0;             % mirrors linesList position (preview-line colour slot)
             for i = 1:numel(ws)
                 w = ws{i};
-                % Only FastSenseWidgets expose getCurrentXLim + UseGlobalTime as
-                % the out-of-sync signal. isa guard skips mixed widget lists
-                % (StatusWidget, GaugeWidget, ...) cleanly.
+                % A widget contributes a preview line (and thus a palette slot)
+                % iff getPreviewSeries returns a valid struct — mirror exactly so
+                % box colours line up with the drawn preview lines.
+                hasSeries = false;
+                try
+                    s = w.getPreviewSeries(nB);
+                    hasSeries = ~isempty(s) && isstruct(s) && ...
+                        isfield(s, 'xCenters') && ~isempty(s.xCenters);
+                catch
+                    hasSeries = false;
+                end
+                if hasSeries
+                    previewIdx = previewIdx + 1;
+                end
+                % Only FastSenseWidgets expose getCurrentXLim + UseGlobalTime.
                 if ~isa(w, 'FastSenseWidget'), continue; end
-                if w.UseGlobalTime, continue; end       % synced widget — ignore
+                if w.UseGlobalTime, continue; end           % synced — no box
                 xl = [];
                 try xl = w.getCurrentXLim(); catch, xl = []; end
                 if isempty(xl) || numel(xl) ~= 2 || ~all(isfinite(xl)), continue; end
-                starts(end + 1) = xl(1); %#ok<AGROW>
-                ends(end + 1)   = xl(2); %#ok<AGROW>
+                % Only show when THIS graph's view differs from the Selection.
+                if (abs(xl(1) - selStart) <= eps_) && (abs(xl(2) - selEnd) <= eps_)
+                    continue;
+                end
+                ranges(end + 1, :) = [xl(1) xl(2)]; %#ok<AGROW>
+                if hasSeries
+                    colorIdxs(end + 1) = previewIdx; %#ok<AGROW>  matches its preview line
+                else
+                    colorIdxs(end + 1) = numel(colorIdxs) + 1; %#ok<AGROW>  no line — next slot
+                end
             end
-            if isempty(starts)
+            if isempty(ranges)
                 sel.hideCurrentView();                  % nothing out of sync
-                return;
-            end
-            uStart = min(starts);
-            uEnd   = max(ends);
-            % Epsilon scaled to the data span (reuse MinWidthFrac-style 0.005)
-            % so sub-pixel float noise between a synced widget XLim and the
-            % Selection does not flicker the box on/off.
-            span = obj.DataTimeRange(2) - obj.DataTimeRange(1);
-            if ~isfinite(span) || span <= 0
-                span = max(abs(uEnd - uStart), 1);
-            end
-            eps_ = 0.005 * span;
-            [selStart, selEnd] = sel.getSelection();
-            differs = (abs(uStart - selStart) > eps_) || (abs(uEnd - selEnd) > eps_);
-            if differs
-                sel.setCurrentView(uStart, uEnd);
             else
-                sel.hideCurrentView();                  % union matches Selection — synced
+                sel.setCurrentViews(ranges, colorIdxs);
             end
         end
 

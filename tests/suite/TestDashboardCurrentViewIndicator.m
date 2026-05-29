@@ -108,10 +108,10 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
 
             d.updateCurrentViewIndicatorForTest_();
 
-            testCase.verifyEqual(char(get(sel.hCurrentViewBox, 'Visible')), 'off', ...
-                'All-synced dashboard must keep the current-view box hidden.');
-            testCase.verifyEmpty(sel.CurrentView, ...
-                'CurrentView must be empty when nothing is out of sync.');
+            testCase.verifyEmpty(sel.hCurrentViewBoxes, ...
+                'All-synced dashboard must leave the current-view box pool empty.');
+            testCase.verifyEmpty(sel.CurrentViews, ...
+                'CurrentViews must be empty when nothing is out of sync.');
         end
 
         function testBoxAppearsWhenWidgetZoomed(testCase)
@@ -126,11 +126,13 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
             testCase.zoomWidget_(w1, 20, 40);
             d.updateCurrentViewIndicatorForTest_();
 
-            testCase.verifyEqual(char(get(sel.hCurrentViewBox, 'Visible')), 'on', ...
-                'Zooming a widget out of sync must surface the current-view box.');
-            testCase.verifyEqual(sel.CurrentView, [20 40], 'AbsTol', 0.1, ...
-                'CurrentView must match the zoomed widget''s XLim window.');
-            boxX = reshape(get(sel.hCurrentViewBox, 'XData'), 1, []);
+            testCase.verifyEqual(numel(sel.hCurrentViewBoxes), 1, ...
+                'One out-of-sync graph must produce exactly one box.');
+            testCase.verifyEqual(char(get(sel.hCurrentViewBoxes(1), 'Visible')), 'on', ...
+                'Zooming a widget out of sync must surface its current-view box.');
+            testCase.verifyEqual(sel.CurrentViews, [20 40], 'AbsTol', 0.1, ...
+                'CurrentViews must match the zoomed widget''s XLim window.');
+            boxX = reshape(get(sel.hCurrentViewBoxes(1), 'XData'), 1, []);
             testCase.verifyEqual(boxX, [20 20 40 40], 'AbsTol', 0.1, ...
                 'Box XData must follow the [xL xL xR xR] patch shape at the zoomed window.');
         end
@@ -147,25 +149,29 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
             w1 = d.Widgets{1};
             testCase.zoomWidget_(w1, 20, 40);
             d.updateCurrentViewIndicatorForTest_();
-            testCase.verifyEqual(char(get(sel.hCurrentViewBox, 'Visible')), 'on', ...
-                'Precondition: box must be visible before re-sync.');
+            testCase.verifyEqual(numel(sel.hCurrentViewBoxes), 1, ...
+                'Precondition: one box must exist before re-sync.');
 
             % Re-sync: clear the out-of-sync flag, then broadcast a window.
             % broadcastTimeRange itself re-runs updateCurrentViewIndicator_;
-            % with the widget back in sync the box must hide.
+            % with the widget back in sync the boxes must clear. Also clear the
+            % test override so getCurrentXLim no longer reports a sub-window.
             w1.UseGlobalTime = true;
+            w1.CurrentXLimOverrideForTest_ = [];
             d.broadcastTimeRange(20, 40);
             drawnow;
 
-            testCase.verifyEqual(char(get(sel.hCurrentViewBox, 'Visible')), 'off', ...
-                'Re-syncing via broadcastTimeRange must hide the current-view box.');
-            testCase.verifyEmpty(sel.CurrentView, ...
-                'CurrentView must be empty after re-sync.');
+            testCase.verifyEmpty(sel.hCurrentViewBoxes, ...
+                'Re-syncing via broadcastTimeRange must clear the current-view boxes.');
+            testCase.verifyEmpty(sel.CurrentViews, ...
+                'CurrentViews must be empty after re-sync.');
         end
 
-        function testUnionOfTwoOutOfSyncWidgets(testCase)
-            % Two widgets zoomed to disjoint windows: the box spans their UNION
-            % (min start, max end).
+        function testTwoOutOfSyncProduceSeparateBoxes(testCase)
+            % Two widgets zoomed to disjoint windows: TWO SEPARATE boxes (one per
+            % graph), each at its own window — NOT a single union box. Each box is
+            % coloured from the shared preview palette by its preview-line index,
+            % so the two boxes differ in colour.
             [d, ~] = testCase.makeDashboard_(2);
             sel = d.TimeRangeSelector_;
             testCase.assumeNotEmpty(sel, ...
@@ -177,10 +183,18 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
             testCase.zoomWidget_(w2, 50, 80);
             d.updateCurrentViewIndicatorForTest_();
 
-            testCase.verifyEqual(char(get(sel.hCurrentViewBox, 'Visible')), 'on', ...
-                'Two out-of-sync widgets must surface the current-view box.');
-            testCase.verifyEqual(sel.CurrentView, [10 80], 'AbsTol', 0.1, ...
-                'CurrentView must be the union [min(starts) max(ends)] of both windows.');
+            testCase.verifyEqual(numel(sel.hCurrentViewBoxes), 2, ...
+                'Two out-of-sync graphs must produce two separate boxes (not a union).');
+            % CurrentViews rows follow widget order (w1 then w2).
+            rows = sortrows(sel.CurrentViews, 1);
+            testCase.verifyEqual(rows(1, :), [10 30], 'AbsTol', 0.1, ...
+                'First box must mark widget 1''s window [10 30].');
+            testCase.verifyEqual(rows(2, :), [50 80], 'AbsTol', 0.1, ...
+                'Second box must mark widget 2''s window [50 80].');
+            c1 = get(sel.hCurrentViewBoxes(1), 'FaceColor');
+            c2 = get(sel.hCurrentViewBoxes(2), 'FaceColor');
+            testCase.verifyNotEqual(c1, c2, ...
+                'Per-graph boxes must use distinct preview-palette colours.');
         end
 
         function testSubEpsilonDifferenceStaysHidden(testCase)
@@ -199,10 +213,10 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
             testCase.zoomWidget_(w1, selStart + 0.1, selEnd - 0.1);
             d.updateCurrentViewIndicatorForTest_();
 
-            testCase.verifyEqual(char(get(sel.hCurrentViewBox, 'Visible')), 'off', ...
-                'A sub-epsilon difference from the Selection must NOT show the box.');
-            testCase.verifyEmpty(sel.CurrentView, ...
-                'CurrentView must stay empty for a sub-epsilon difference.');
+            testCase.verifyEmpty(sel.hCurrentViewBoxes, ...
+                'A sub-epsilon difference from the Selection must NOT show a box.');
+            testCase.verifyEmpty(sel.CurrentViews, ...
+                'CurrentViews must stay empty for a sub-epsilon difference.');
         end
 
         function testNoSelectorGuardNoThrow(testCase)

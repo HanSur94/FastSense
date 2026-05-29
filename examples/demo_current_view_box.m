@@ -1,21 +1,23 @@
-%% Demo: Lower-slider "current view" box (Phase 1039)
+%% Demo: Lower-slider per-graph "current view" boxes (Phase 1039)
 % The existing lower preview slider (TimeRangeSelector) keeps its draggable
-% SELECTION window exactly as before. Phase 1039 adds a second, smaller,
-% amber "current view" box that marks where the plots are ACTUALLY looking
-% right now — and it only appears when a plot's x-limits are NOT synchronized
-% with the slider selection (i.e. you zoomed/panned one plot directly).
+% SELECTION window exactly as before. Phase 1039 adds, inside the slider, ONE
+% smaller "current view" box PER visible graph that is NOT synchronized with
+% the selection (i.e. you zoomed/panned that plot directly). Each box is drawn
+% in the SAME colour as that graph's slider preview line, so you can tell at a
+% glance which plot is looking where.
 %
-% This demo renders a 3-widget dashboard and pre-zooms the top plot to an
-% interior window so the amber current-view box is already visible in the
-% lower slider on load.
+% This demo renders a 3-widget dashboard and pre-zooms TWO plots to different
+% interior windows, so two differently-coloured current-view boxes are already
+% visible in the lower slider on load.
 %
 % Try this in the figure:
-%   1. Lower slider: the wide translucent rectangle is the SELECTION; the
-%      smaller amber box is the CURRENT VIEW of the zoomed (top) plot.
-%   2. Zoom/pan the MIDDLE or BOTTOM plot (scroll / toolbar) — its window
-%      joins the amber box (the box spans the union of out-of-sync plots).
-%   3. Drag the slider SELECTION to match a plot, or press the dashboard's
-%      "Sync all" — once every plot is back in sync, the amber box disappears.
+%   1. Lower slider: the wide translucent rectangle is the SELECTION. The two
+%      smaller coloured boxes are the CURRENT VIEWS of the zoomed plots — each
+%      box matches its plot's preview-line colour.
+%   2. Zoom/pan the THIRD plot (scroll / toolbar) — a third box appears in that
+%      plot's colour at its window. One box per out-of-sync graph.
+%   3. Drag the slider SELECTION to match a plot, or press "Sync all" — as each
+%      plot comes back in sync, its box disappears.
 
 close all force;
 clear functions;
@@ -42,23 +44,30 @@ d.addWidget('fastsense', 'Position', [1 7  24 6], 'Tag', sPress);
 d.addWidget('fastsense', 'Position', [1 13 24 6], 'Tag', sFlow);
 d.render();
 
-%% 3. Pre-zoom the top plot so the amber current-view box shows on load
+%% 3. Pre-zoom TWO plots so two coloured current-view boxes show on load
 % (Real interactive zoom does exactly this — here we drive it programmatically
-%  so the box is visible immediately.)
-wTop = d.Widgets{1};
+%  so the boxes are visible immediately. Each box matches its plot's preview
+%  line colour.)
+wTemp  = d.Widgets{1};
+wPress = d.Widgets{2};
 try
-    xlim(wTop.FastSenseObj.hAxes, [120 240]);   % zoom Temperature to 120..240 s
-    wTop.UseGlobalTime = false;                 % detach it from the slider selection
+    xlim(wTemp.FastSenseObj.hAxes,  [120 240]);   % zoom Temperature -> 120..240 s
+    wTemp.UseGlobalTime = false;
+    xlim(wPress.FastSenseObj.hAxes, [400 520]);   % zoom Pressure    -> 400..520 s
+    wPress.UseGlobalTime = false;
 catch
 end
-drawnow;
-% Refresh the indicator now (normally fired by the widget's XLim listener).
+% Let FastSense's zoom re-resolve settle so the axes hold the zoomed window
+% before we read it (FastSense rebuilds line graphics on an XLim change).
+for s = 1:4; drawnow; pause(0.05); end
+% Refresh the indicator now (normally fired by each widget's XLim listener).
 try d.updateCurrentViewIndicatorForTest_(); catch, end
 
 fprintf('\nCurrent-view box demo rendered.\n');
-fprintf('  Full extent      : %.0f .. %.0f s (slider DataRange)\n', t(1), t(end));
-fprintf('  Top plot zoomed  : 120 .. 240 s  -> amber CURRENT-VIEW box in the lower slider\n');
+fprintf('  Full extent       : %.0f .. %.0f s (slider DataRange)\n', t(1), t(end));
+fprintf('  Temperature zoomed: 120 .. 240 s  -> box in Temperature''s colour\n');
+fprintf('  Pressure zoomed   : 400 .. 520 s  -> box in Pressure''s colour\n');
 fprintf('\nInteract:\n');
-fprintf('  - Zoom/pan another plot      -> amber box grows to span all out-of-sync views\n');
-fprintf('  - Drag slider selection / Sync all to re-sync -> amber box disappears\n');
-fprintf('  - The wide translucent rectangle is the SELECTION (unchanged behavior)\n');
+fprintf('  - Zoom/pan the Flow plot      -> a third box appears in Flow''s colour\n');
+fprintf('  - Re-sync a plot (Sync all / match selection) -> that plot''s box disappears\n');
+fprintf('  - One box per out-of-sync graph; the wide rectangle is the SELECTION\n');
