@@ -27,7 +27,7 @@ key_files:
 decisions:
   - "Column-value fix only — method name testToolbarGearMovedToColumn8 retained as-is per user choice. Rename to ...AtColumn9 deferred to a separate cleanup task to avoid touching grep-based references in this commit."
   - "Diagnostic-message strings updated alongside the assertion values so a future failure message stays coherent ('should sit in column 7' / 'should now sit in column 9') — these are part of the same verifyEqual call, not the method-name identifier the user asked to leave alone."
-  - "Docstrings on the two methods (header comments at lines 1194 + 1207) intentionally left untouched — they contain 'column 6' / 'column 8' literals and will be cleaned up as part of the future method-name rename pass."
+  - "Line-1194 docstring corrected 'column 6' -> 'column 7' — it is decoupled from the method name (testToolbarHasWikiButton carries no column number), so fixing it is the same risk-free defect class as the assertion. Line-1207 docstring ('column 8') is left paired with its method name testToolbarGearMovedToColumn8 and travels with the deferred rename — splitting the doc from the name ('MovedToColumn8' + 'column 9') would read as a self-contradiction worse than a stale-but-self-consistent name+doc pair."
 metrics:
   duration_minutes: ~5
   completed: "2026-05-26"
@@ -68,7 +68,7 @@ The two tests still expected the pre-merge layout where Wiki sat at col 6 and ge
 
 | File                                        | Change   | LOC delta | Purpose                                                                 |
 | ------------------------------------------- | -------- | --------- | ----------------------------------------------------------------------- |
-| `tests/suite/TestFastSenseCompanion.m`      | Modified | +4 / -4   | Update `verifyEqual` column values (6→7, 8→9) and matching diagnostic messages in `testToolbarHasWikiButton` (lines 1202–1203) and `testToolbarGearMovedToColumn8` (lines 1214–1215) |
+| `tests/suite/TestFastSenseCompanion.m`      | Modified | +5 / -5   | Update `verifyEqual` column values (6→7, 8→9) + matching diagnostic messages in `testToolbarHasWikiButton` (lines 1202–1203) and `testToolbarGearMovedToColumn8` (lines 1214–1215); plus the decoupled `testToolbarHasWikiButton` header docstring (line 1194, 6→7) surfaced by the post-fix audit sweep |
 | `.planning/quick/260526-tcf-…/SUMMARY.md`   | Created  | —         | This file                                                               |
 
 Total: 1 production-test file touched, ~4 net LOC modified.
@@ -90,12 +90,12 @@ Pending — user will run the test file locally and confirm the two failures cle
 
 1. **Column-value fix only.** Method name `testToolbarGearMovedToColumn8` retained — user explicitly chose the minimum-diff option to avoid grep-based reference churn. Rename to `testToolbarGearAtColumn9` is deferred to a separate cleanup commit.
 2. **Diagnostic messages updated alongside the assertion values.** The trailing string arg to `verifyEqual` is part of the same call site as the column literal; leaving `'should sit in column 6'` while asserting `7` would print a misleading failure message. This is not a "method-name identifier" change so it falls inside the user's "two-line verbatim" instruction.
-3. **Method-header docstrings (lines 1194, 1207) intentionally not touched.** They contain `column 6` / `column 8` literals that will become misleading, but cleaning them up belongs to the same future pass that renames the method — bundling them into this commit would muddy the "tests vs grep-references" boundary the user drew.
+3. **Line-1194 docstring corrected (`column 6` → `column 7`); line-1207 docstring left as-is.** A post-fix audit sweep (`grep -rE "Layout\.Column,\s*[0-9]|column [0-9]" tests/suite/TestFastSenseCompanion*.m`) found the line-1194 header comment was still stale. It is decoupled from the method name (`testToolbarHasWikiButton` has no column number), so it was corrected — same defect class as the assertion, zero rename risk. Line 1207 (`...lives in column 8`) is deliberately *not* touched: it mirrors the method name `testToolbarGearMovedToColumn8`, and keeping the name+docstring as a coherent (stale) pair until the rename lands is cleaner than a `MovedToColumn8` ↔ `column 9` self-contradiction. The same audit confirmed `TestFastSenseCompanionPlantLogToolbar.m` is fully consistent with the 1×9 grid (Plant Log at col 4 on lines 187/345; gear at col 9 on line 219 — independently corroborating the gear-at-9 fix from a second file) and that no other stale column *assertions* exist anywhere.
 
 ## Out-of-Scope Follow-ups (not done, deliberately)
 
 - **Rename `testToolbarGearMovedToColumn8` → `testToolbarGearAtColumn9`** — explicit user deferral; should ship as a separate cleanup task that also touches the method header docstrings on both methods.
-- **Audit `TestFastSenseCompanionPlantLogToolbar.m` and any other companion-toolbar test files** for analogous stale-column literals beyond what `e2ded77` and this commit have covered — the briefing implied these are the only two outliers, but a sweep with `grep -rE "column [0-9]" tests/suite/TestFastSenseCompanion*` would close the loop.
+- **Audit sweep — DONE (clean).** Ran `grep -rE "Layout\.Column,\s*[0-9]|column [0-9]" tests/suite/TestFastSenseCompanion*.m`: no stale column *assertions* remain in either file. `TestFastSenseCompanionPlantLogToolbar.m` is fully consistent with the 1×9 grid (Plant Log col 4, gear col 9). The only residual is the line-1207 docstring, deliberately deferred to the rename (see Design Decision 3).
 
 ## Deviations from Plan
 

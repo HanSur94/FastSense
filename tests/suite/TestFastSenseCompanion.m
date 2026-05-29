@@ -1191,7 +1191,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         % ---- Phase 1034 Plan 06: Wiki toolbar button + openWiki entry point ----
 
         function testToolbarHasWikiButton(testCase)
-        %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 6.
+        %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 7.
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
             btn = findall(app.getFigForTest_(), 'Tag', 'CompanionWikiBtn');
