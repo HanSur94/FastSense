@@ -154,6 +154,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1036. Live Tail + Slider Preview Overlay | v3.1 | 3/3 | Complete | 2026-05-14 |
 | 1037. Per-Widget Plant Log Overlay | v3.1 | 3/3 | Complete | 2026-05-19 |
 | 1038. Dashboard + Companion Integration & Serialization | v3.1 | 3/3 | Complete | 2026-05-19 |
+| 1039. Background monitoring with email notifications | pending | 4/4 | Complete    | 2026-05-29 |
 
 ## Phase Details (v4.0 Multi-User LAN Concurrency)
 
@@ -392,6 +393,22 @@ Plans:
 - [x] 1028-06-PLAN.md — Wave 5: Per-tick fs-stat coalescing (1600 → 1 syscalls/tick) + phase wrap (VERIFICATION.md final, ROADMAP.md, STATE.md, SUMMARY.md)
 
 > Note on the serial plan chain: Plans 02-06 each extend the SensorThreshold MEX block in `libs/FastSense/build_mex.m` (Plan 02 only — K2/K3/K4 deferred), append measurements to `bench_tag_pipeline_1k.m`, and write a new subsection to `1028-VERIFICATION.md`. The serial chain prevented shared-file conflicts and produced a continuous before/after data trail. Plans 03/04 are kept as `[~]` (deferred, not failed) in the list because their PLAN.md files exist on disk and remain available as a starting point for any future phase that finds direct `tic/toc` evidence of their target regions being non-trivial.
+
+### Phase 1039: Background monitoring with email notifications — COMPLETE 2026-05-29
+
+**Goal:** Wire `NotificationService` into `LiveEventPipeline` as a first-class constructor NV-pair (default `[]`, replacing the auto-created dry-run instance); fix `runCycle` to pass real per-event sensor data to `notify()` so snapshots render correctly (was `struct()`); add headless entry point `runBackgroundMonitoring(setupFcn)` for `matlab -batch` use under launchd/systemd/cron; ship demo example + README with SMTP and service-supervision config; add tests for snapshot-data integrity and the runner entry.
+
+**Verification:** passed (7/7 must-haves; sensorData regression test green on Octave + MATLAB). Two human-verification items recorded (timer-driven live loop is MATLAB-only since Octave lacks `timer`; real-email/PNG-attachment smoke needs an SMTP relay). Bonus: fixed two latent library bugs en route — missing `monitor.EventStore` wiring in setup, and NaN-`EndTime` open-event crash in `NotificationRule.fillTemplate` / `generateEventSnapshot`.
+
+**Depends on:** Phase 1032 (`MonitorTag.emitEvent_` deferred-notify) — no dependency on cluster-mode work; auto-wiring works in single-user and cluster modes alike.
+**Requirements:** none — CONTEXT.md decisions (D-01..D-06) are the contract
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 1039-01-PLAN.md — LiveEventPipeline NotificationService NV-pair + sensorDataForEvent_ helper + runCycle notify fix (Wave 1, no deps)
+- [x] 1039-02-PLAN.md — new libs/EventDetection/runBackgroundMonitoring.m headless entry function (Wave 1, no deps)
+- [x] 1039-03-PLAN.md — examples/05-events/example_background_email_monitor.m + README_background_email.md (Wave 2, depends on 01 + 02)
+- [x] 1039-04-PLAN.md — tests/test_live_event_pipeline_notif_sensor_data.m + tests/test_run_background_monitoring.m + tests/CaptureNotificationService.m (Wave 2, depends on 01 + 02)
 
 ## Backlog
 
