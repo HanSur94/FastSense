@@ -58,10 +58,17 @@ classdef NotificationRule < handle
             txt = strrep(txt, '{sensor}', event.SensorName);
             txt = strrep(txt, '{threshold}', event.ThresholdLabel);
             txt = strrep(txt, '{direction}', event.Direction);
-            txt = strrep(txt, '{startTime}', datestr(event.StartTime, 'yyyy-mm-dd HH:MM:SS'));
-            txt = strrep(txt, '{endTime}', datestr(event.EndTime, 'yyyy-mm-dd HH:MM:SS'));
+            % Open events (still in violation) carry EndTime=NaN and therefore
+            % Duration=NaN. datestr(NaN) throws ("Date number out of range" on
+            % MATLAB / "monthlength(nan)" on Octave), which would make EVERY
+            % notification for an open event fail.  Guard both date fields and
+            % the duration so live/background monitoring can email on open events.
+            txt = strrep(txt, '{startTime}', NotificationRule.formatTimeOrOpen_(event.StartTime));
+            txt = strrep(txt, '{endTime}', NotificationRule.formatTimeOrOpen_(event.EndTime));
             durSecs = event.Duration * 86400;
-            if durSecs < 60
+            if isnan(durSecs)
+                durStr = '(ongoing)';
+            elseif durSecs < 60
                 durStr = sprintf('%.1fs', durSecs);
             elseif durSecs < 3600
                 durStr = sprintf('%dm %ds', floor(durSecs/60), round(mod(durSecs, 60)));
@@ -74,6 +81,19 @@ classdef NotificationRule < handle
             txt = strrep(txt, '{rms}', sprintf('%.4g', event.RmsValue));
             txt = strrep(txt, '{std}', sprintf('%.4g', event.StdValue));
             txt = strrep(txt, '{thresholdValue}', sprintf('%.4g', event.ThresholdValue));
+        end
+    end
+
+    methods (Static, Access = private)
+        function s = formatTimeOrOpen_(t)
+            %FORMATTIMEOROPEN_ datestr(t), or '(open)' when t is NaN/empty.
+            %   Open events carry EndTime=NaN; datestr(NaN) throws on both
+            %   MATLAB and Octave, so callers must guard it here.
+            if isempty(t) || any(isnan(t))
+                s = '(open)';
+            else
+                s = datestr(t, 'yyyy-mm-dd HH:MM:SS');
+            end
         end
     end
 end
