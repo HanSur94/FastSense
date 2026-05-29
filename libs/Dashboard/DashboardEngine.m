@@ -2751,6 +2751,15 @@ classdef DashboardEngine < handle
             obj.attachPlantLogXLimListener_(widget);
         end
 
+        function updateCurrentViewIndicatorForTest_(obj)
+        %UPDATECURRENTVIEWINDICATORFORTEST_ Phase 1039 test seam.
+        %   Routes to the private updateCurrentViewIndicator_ so class-based
+        %   tests can assert the show/hide decision without depending on the
+        %   Octave-skipped XLim PostSet listener. Mirrors the existing
+        %   attachPlantLogXLimListenerForTest_ / setTimeRangeSelectorForTest_ idiom.
+            obj.updateCurrentViewIndicator_();
+        end
+
         function setTimeRangeSelectorForTest_(obj, sel)
         %SETTIMERANGESELECTORFORTEST_ Phase 1031 test seam — inject a
         %   TimeRangeSelector handle without going through render(). Used by
@@ -3000,6 +3009,36 @@ classdef DashboardEngine < handle
             end
         end
 
+        function attachCurrentViewXLimListener_(obj, widget)
+        %ATTACHCURRENTVIEWXLIMLISTENER_ XLim PostSet listener -> current-view box refresh (Phase 1039).
+        %   Stored in widget.CurrentViewXLimListener_; released by
+        %   widget.delete(). Idempotent: replaces any prior listener. Octave
+        %   skips (its addlistener lacks the 4-arg PostSet form) — the live
+        %   tick + post-broadcast + page-switch hooks still refresh the box
+        %   there. Mirrors attachPlantLogXLimListener_.
+            if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+            if ~isempty(widget.CurrentViewXLimListener_)
+                try delete(widget.CurrentViewXLimListener_); catch, end
+                widget.setCurrentViewXLimListenerForEngine_([]);
+            end
+            if isempty(widget.FastSenseObj) || ~widget.FastSenseObj.IsRendered
+                return;
+            end
+            ax = widget.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax), return; end
+            if exist('OCTAVE_VERSION', 'builtin')
+                return;
+            end
+            try
+                lis = addlistener(ax, 'XLim', 'PostSet', ...
+                    @(~,~) obj.updateCurrentViewIndicator_());
+                widget.setCurrentViewXLimListenerForEngine_(lis);
+            catch err
+                warning('DashboardEngine:currentViewIndicatorFailed', ...
+                    'attachCurrentViewXLimListener_ failed: %s', err.message);
+            end
+        end
+
         function attachPlantLogWidgetHover_(obj, widget)
         %ATTACHPLANTLOGWIDGETHOVER_ Lazy-construct a PlantLogWidgetHover for one widget (Phase 1032 PLOG-VIZ-07).
         %   Tears down any prior hover for this widget first (idempotent),
@@ -3187,6 +3226,59 @@ classdef DashboardEngine < handle
                 end
             end
             obj.DetachedMirrors = obj.DetachedMirrors(keep);
+        end
+
+        function updateCurrentViewIndicator_(obj)
+        %UPDATECURRENTVIEWINDICATOR_ Drive the slider current-view box (Phase 1039).
+        %   Collects the LIVE x-limits of every out-of-sync widget
+        %   (UseGlobalTime==false) on the active page (recursing into
+        %   GroupWidgets), unions them, and shows the box at that union ONLY
+        %   when it differs from the current Selection beyond an epsilon
+        %   scaled to the DataRange span. When everything is synced (or no
+        %   widget is out of sync), the box is hidden. Purely indicative —
+        %   never touches the Selection or fires broadcasts. Fully guarded:
+        %   no-op when the slider is absent. Wrapped by callers in try/catch.
+            sel = obj.TimeRangeSelector_;
+            if isempty(sel) || ~isa(sel, 'TimeRangeSelector')
+                return;
+            end
+            ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
+            starts = [];
+            ends   = [];
+            for i = 1:numel(ws)
+                w = ws{i};
+                % Only FastSenseWidgets expose getCurrentXLim + UseGlobalTime as
+                % the out-of-sync signal. isa guard skips mixed widget lists
+                % (StatusWidget, GaugeWidget, ...) cleanly.
+                if ~isa(w, 'FastSenseWidget'), continue; end
+                if w.UseGlobalTime, continue; end       % synced widget — ignore
+                xl = [];
+                try xl = w.getCurrentXLim(); catch, xl = []; end
+                if isempty(xl) || numel(xl) ~= 2 || ~all(isfinite(xl)), continue; end
+                starts(end + 1) = xl(1); %#ok<AGROW>
+                ends(end + 1)   = xl(2); %#ok<AGROW>
+            end
+            if isempty(starts)
+                sel.hideCurrentView();                  % nothing out of sync
+                return;
+            end
+            uStart = min(starts);
+            uEnd   = max(ends);
+            % Epsilon scaled to the data span (reuse MinWidthFrac-style 0.005)
+            % so sub-pixel float noise between a synced widget XLim and the
+            % Selection does not flicker the box on/off.
+            span = obj.DataTimeRange(2) - obj.DataTimeRange(1);
+            if ~isfinite(span) || span <= 0
+                span = max(abs(uEnd - uStart), 1);
+            end
+            eps_ = 0.005 * span;
+            [selStart, selEnd] = sel.getSelection();
+            differs = (abs(uStart - selStart) > eps_) || (abs(uEnd - selEnd) > eps_);
+            if differs
+                sel.setCurrentView(uStart, uEnd);
+            else
+                sel.hideCurrentView();                  % union matches Selection — synced
+            end
         end
 
         function flat = flattenWidgetsForPreview_(obj, widgets, depth)
