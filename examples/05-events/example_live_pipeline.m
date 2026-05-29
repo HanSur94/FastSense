@@ -156,6 +156,17 @@ notif = NotificationService('DryRun', true, 'SnapshotDir', snapshotDir);
 %     'CooldownMinutes', 5);
 % (then add your rules with IncludeSnapshot=true and set pipeline.NotificationService = notif;)
 
+% --- ALTERNATIVE: reuse an EXISTING email function (no SMTP config in FastSense) ---
+% If your site already has a MATLAB mailer, wrap it in a FunctionTransport instead
+% of configuring SMTP here.  You still get rules, templated subjects/bodies, the
+% cooldown, and snapshot attachments — only the actual send hands off to your code.
+% Example for a 4-arg companyMail(to, subject, body, attachments):
+% transport = FunctionTransport( ...
+%     @(to, subject, body, attachments) companyMail(to, subject, body, attachments));
+% notif = NotificationService('DryRun', false, 'SnapshotDir', snapshotDir, ...
+%     'Transport', transport, 'CooldownMinutes', 5);
+% (recipients arrive as a flat cellstr; then add your rules and set pipeline.NotificationService = notif;)
+
 % Default rule: catches all events not matched by specific rules (score=1)
 notif.setDefaultRule(NotificationRule( ...
     'Recipients', {{'ops-team@company.com'}}, ...
