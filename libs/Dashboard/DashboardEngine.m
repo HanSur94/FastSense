@@ -3521,7 +3521,7 @@ classdef DashboardEngine < handle
         %   only the active tab — switchPage() recomputes the envelope so
         %   navigation stays in sync. nBuckets optional; when omitted,
         %   defaults to ~200 based on panel axes pixel width, clamped to
-        %   [50, 400]. Silently no-ops when no selector is wired yet
+        %   [50, 1000]. Silently no-ops when no selector is wired yet
         %   (e.g. before render()).
             if nargin < 2, nBuckets = []; end
             obj.computePreviewEnvelopeReturning_(nBuckets);
@@ -3539,7 +3539,7 @@ classdef DashboardEngine < handle
                 return;
             end
             if isempty(nBuckets)
-                % Derive nBuckets from figure pixel width; clamp to [50, 400].
+                % Derive nBuckets from figure pixel width; clamp to [50, 1000].
                 % Cache the computed value so we avoid get/set Units on every
                 % live tick (figure size rarely changes between ticks).
                 if obj.PreviewNBuckets_ > 0
@@ -3552,7 +3552,7 @@ classdef DashboardEngine < handle
                         figPx = get(obj.hFigure, 'Position');
                         set(obj.hFigure, 'Units', oldU);
                         axWpx = figPx(3) * 0.94;
-                        nBuckets = max(50, min(400, floor(axWpx / 2)));
+                        nBuckets = max(50, min(1000, floor(axWpx / 2)));
                     catch
                     end
                     obj.PreviewNBuckets_ = nBuckets;

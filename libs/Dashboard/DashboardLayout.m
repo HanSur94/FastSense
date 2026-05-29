@@ -702,6 +702,22 @@ classdef DashboardLayout < handle
                 'Tag',             'PlantLogToggleButton', ...
                 'TooltipString',   tipStr, ...
                 'Callback',        @(s, ~) obj.onPlantLogTogglePressed_(s, widget, engine));
+            % 260526-info-icon-vanishes-after-plantlog-toggle:
+            % The xPL above is hardcoded for a 3-button right cluster
+            % (Detach + Info + PlantLog). For FastSenseWidgets with the
+            % v4.0 CreateEventButton, the canonical 4-button cluster is
+            % Detach@barW-28, Create@barW-56, Info@barW-84, PlantLog@barW-112.
+            % Without the reflowChrome_ call below, callback-driven rebuilds
+            % drop L at barW-84 — exactly on top of InfoIconButton — so
+            % the i icon is visually swallowed by the L button after every
+            % toggle cycle. The initial call from realizeWidget is rescued
+            % by the reflowChrome_ at the end of realizeWidget; subsequent
+            % callback rebuilds need their own reflow.
+            try
+                DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
+            catch
+                % Best-effort: a reflow failure must not break the toggle.
+            end
         end
 
         function onPlantLogTogglePressed_(obj, src, widget, engine)

@@ -41,9 +41,10 @@ function test_dashboard_layout_plant_log_toggle()
     nPassed = nPassed + test_disabled_button_does_not_flip_state();
     nPassed = nPassed + test_idempotent_double_call();
     nPassed = nPassed + test_callback_traps_exceptions();
+    nPassed = nPassed + test_info_icon_survives_toggle_on_off();
 
-    assert(nPassed == 12, 'expected 12 sub-tests, got %d', nPassed);
-    fprintf('    All 12 dashboard_layout_plant_log_toggle assertions passed.\n');
+    assert(nPassed == 13, 'expected 13 sub-tests, got %d', nPassed);
+    fprintf('    All 13 dashboard_layout_plant_log_toggle assertions passed.\n');
 end
 
 % =====================================================================
@@ -129,15 +130,20 @@ function n = test_button_props_match_spec()
 end
 
 function n = test_initial_position_leftmost_of_three()
+    % After the v3.1↔v4.0 merge the right cluster has 4 buttons
+    % (Detach + Create + Info + PlantLog) because DashboardEngine.render
+    % unconditionally wires the CreateEventCallback. Each button is 24 px
+    % wide with a 4 px gap, so PlantLog (leftmost) sits at
+    % x = barW - 4*24 - 4*4 = barW - 112 after reflowChrome_.
     [eng, widget, fig, btn] = build_widget_with_chrome_(false);
     cleanupF = onCleanup(@() try_delete_h(fig));
     cleanupE = onCleanup(@() try_delete_obj(eng));
     bar = findobj(widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
     barPos = get(bar(1), 'Position');
-    expectedX = barPos(3) - 24 - 4 - 24 - 4 - 24 - 4;
+    expectedX = barPos(3) - 4*24 - 4*4;
     btnPos = get(btn, 'Position');
     assert(abs(btnPos(1) - expectedX) < 1e-6, ...
-        'L button must be at leftmost-of-three offset; expected x=%g, got x=%g', expectedX, btnPos(1));
+        'L button must be at 4-button-cluster offset; expected x=%g, got x=%g', expectedX, btnPos(1));
     clear cleanupE cleanupF;
     n = 1;
 end
@@ -211,6 +217,11 @@ function n = test_callback_flips_show_plant_log()
 end
 
 function n = test_reflow_chrome_three_buttons()
+    % Post v3.1↔v4.0 merge: the right cluster has 4 buttons
+    % (Detach + Create + Info + PlantLog) because DashboardEngine.render
+    % unconditionally wires the Create callback. Positions from the
+    % right edge after reflowChrome_: Detach (barW-28), Create (barW-56),
+    % Info (barW-84), PlantLog (barW-112).
     [eng, widget, fig, btn] = build_widget_with_chrome_(true); %#ok<ASGLU>
     cleanupF = onCleanup(@() try_delete_h(fig));
     cleanupE = onCleanup(@() try_delete_obj(eng));
@@ -221,20 +232,24 @@ function n = test_reflow_chrome_three_buttons()
     bar = findobj(widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
     barPos = get(bar(1), 'Position');
     barW = barPos(3);
-    det  = findobj(bar(1), 'Tag', 'DetachButton',          '-depth', 1);
-    info = findobj(bar(1), 'Tag', 'InfoIconButton',        '-depth', 1);
-    pl   = findobj(bar(1), 'Tag', 'PlantLogToggleButton',  '-depth', 1);
-    assert(~isempty(det)  && ~isempty(info) && ~isempty(pl), ...
-        'after reflow, all three buttons must exist');
-    pDet  = get(det(1),  'Position');
-    pInfo = get(info(1), 'Position');
-    pPL   = get(pl(1),   'Position');
-    assert(abs(pDet(1)  - (barW - 24 - 4))           < 1e-6, ...
-        'Detach x must be barW - 24 - 4; got %g (expected %g)', pDet(1), barW - 24 - 4);
-    assert(abs(pInfo(1) - (barW - 24 - 24 - 4 - 4))  < 1e-6, ...
-        'Info x must be barW - 24 - 24 - 4 - 4; got %g', pInfo(1));
-    assert(abs(pPL(1)   - (barW - 24 - 4 - 24 - 4 - 24 - 4)) < 1e-6, ...
-        'PlantLog x must be barW - 84; got %g (expected %g)', pPL(1), barW - 84);
+    det    = findobj(bar(1), 'Tag', 'DetachButton',          '-depth', 1);
+    create = findobj(bar(1), 'Tag', 'CreateEventButton',     '-depth', 1);
+    info   = findobj(bar(1), 'Tag', 'InfoIconButton',        '-depth', 1);
+    pl     = findobj(bar(1), 'Tag', 'PlantLogToggleButton',  '-depth', 1);
+    assert(~isempty(det) && ~isempty(create) && ~isempty(info) && ~isempty(pl), ...
+        'after reflow, all four right-cluster buttons must exist');
+    pDet  = get(det(1),    'Position');
+    pCre  = get(create(1), 'Position');
+    pInfo = get(info(1),   'Position');
+    pPL   = get(pl(1),     'Position');
+    assert(abs(pDet(1)  - (barW -  28)) < 1e-6, ...
+        'Detach x must be barW - 28; got %g', pDet(1));
+    assert(abs(pCre(1)  - (barW -  56)) < 1e-6, ...
+        'Create x must be barW - 56; got %g', pCre(1));
+    assert(abs(pInfo(1) - (barW -  84)) < 1e-6, ...
+        'Info x must be barW - 84; got %g', pInfo(1));
+    assert(abs(pPL(1)   - (barW - 112)) < 1e-6, ...
+        'PlantLog x must be barW - 112; got %g', pPL(1));
     clear cleanupE cleanupF;
     n = 1;
 end
@@ -338,5 +353,44 @@ function n = test_callback_traps_exceptions()
     end
     assert(~threw, 'callback must NOT propagate exceptions');
     clear cleanupW cleanupE cleanupF;
+    n = 1;
+end
+
+function n = test_info_icon_survives_toggle_on_off()
+    % 260526-info-icon-vanishes-after-plantlog-toggle:
+    % After toggling L ON then OFF, the InfoIconButton must still be
+    % present AND sit at its canonical 4-button-cluster x position
+    % (barW - 84). The original bug placed L at xPL = barW - 84 (the
+    % 3-button-cluster math), so L visually covered Info even though
+    % Info was still in the handle tree.
+    [eng, widget, fig, btn] = build_widget_with_chrome_(true); %#ok<ASGLU>
+    cleanupF = onCleanup(@() try_delete_h(fig));
+    cleanupE = onCleanup(@() try_delete_obj(eng));
+    bar = findobj(widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
+    cb = get(btn, 'Callback');
+    cb(btn, []);              % toggle ON
+    drawnow;
+    btn2 = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+    cb2 = get(btn2, 'Callback');
+    cb2(btn2, []);            % toggle OFF
+    drawnow;
+    info = findobj(bar, 'Tag', 'InfoIconButton', '-depth', 1);
+    det  = findobj(bar, 'Tag', 'DetachButton',   '-depth', 1);
+    pl   = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+    assert(~isempty(info), 'InfoIconButton must survive L on/off cycle');
+    assert(~isempty(det),  'DetachButton must survive L on/off cycle');
+    assert(~isempty(pl),   'PlantLogToggleButton must survive L on/off cycle');
+    barW = subsref(get(bar, 'Position'), substruct('()', {3}));
+    pInfo = get(info(1), 'Position');
+    pPL   = get(pl(1),   'Position');
+    tol = 1.0;  % 1 px slack for sub-pixel rounding of bar width.
+    assert(abs(pInfo(1) - (barW -  84)) < tol, ...
+        'Info must sit at barW - 84 (canonical post-reflow); got x=%g (barW=%g)', pInfo(1), barW);
+    assert(abs(pPL(1)   - (barW - 112)) < tol, ...
+        'PlantLog must sit at barW - 112 (canonical 4-button-cluster); got x=%g (barW=%g)', pPL(1), barW);
+    % Hard separation invariant: PlantLog and Info must NOT share x.
+    assert(abs(pPL(1) - pInfo(1)) > 24 - 2*tol, ...
+        'PlantLog and Info must NOT share an x position');
+    clear cleanupE cleanupF;
     n = 1;
 end
