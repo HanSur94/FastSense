@@ -70,6 +70,10 @@ end
 
 function renderSnapshot(X, Y, thVal, thDir, evStart, evEnd, xMin, xMax, figSize, outFile, titleStr)
     fig = figure('Visible', 'off', 'Position', [100 100 figSize]);
+    % Guarantee the off-screen figure is closed even if print() throws (disk
+    % full, bad path, etc.) — otherwise invisible handles accumulate and a
+    % long-running background monitor eventually hits the figure limit.
+    figCleaner = onCleanup(@() close(fig)); %#ok<NASGU>
     ax = axes(fig);
 
     % Clip data to view
@@ -116,7 +120,6 @@ function renderSnapshot(X, Y, thVal, thDir, evStart, evEnd, xMin, xMax, figSize,
     grid(ax, 'on');
     hold(ax, 'off');
 
-    % Export
+    % Export (figCleaner closes fig on return or on any throw above)
     print(fig, outFile, '-dpng', sprintf('-r%d', 150));
-    close(fig);
 end

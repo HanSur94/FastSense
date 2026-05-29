@@ -157,7 +157,10 @@ function safeStop_(pipeline)
         if exist('isvalid', 'builtin') == 5 && ~isvalid(pipeline)
             return;  % MATLAB: handle was deleted — nothing to stop.
         end
-        if strcmp(pipeline.Status, 'running')
+        % Stop on 'error' too: timerError() sets Status='error' but does NOT
+        % stop/delete the timer, so the error-exit path must still call stop()
+        % to release the timer handle (otherwise it leaks / can keep firing).
+        if ismember(pipeline.Status, {'running', 'error'})
             pipeline.stop();
         end
     catch ME

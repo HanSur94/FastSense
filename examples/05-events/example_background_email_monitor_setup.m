@@ -100,13 +100,17 @@ function pipeline = example_background_email_monitor_setup()
         'SnapshotSize',    [800, 400]));
 
     % --- Build pipeline with the new NV-pair (Plan 01) ---
-    % Reuse the SAME storeFile as the pipeline's own EventStore so the harvested
-    % deltas land in the same file the heartbeat / summary reports on.
+    % Reuse the SAME EventStore *handle* the monitors are bound to, rather than
+    % letting the pipeline open a second independent store on the same path
+    % (which would race save()s against the monitor-bound store every cycle).
+    % Pass 'EventFile','' so the constructor leaves EventStore=[], then assign
+    % the shared handle — this is the correct pattern to copy for real setups.
     pipeline = LiveEventPipeline(monitors, dsMap, ...
-        'EventFile',           storeFile, ...
+        'EventFile',           '', ...
         'Interval',            2, ...   % tight cadence so the demo emits within MaxRuntimeSec=8
         'MinDuration',         0, ...
         'NotificationService', notif);
+    pipeline.EventStore = eventStore;   % single shared store handle (no double-write)
 
     fprintf('[SETUP] Pipeline built with %d monitors, store=%s\n', ...
         numel(monitors.keys()), storeFile);

@@ -76,10 +76,14 @@ classdef NotificationRule < handle
                 durStr = sprintf('%dh %dm', floor(durSecs/3600), round(mod(durSecs, 3600)/60));
             end
             txt = strrep(txt, '{duration}', durStr);
-            txt = strrep(txt, '{peak}', sprintf('%.4g', event.PeakValue));
-            txt = strrep(txt, '{mean}', sprintf('%.4g', event.MeanValue));
-            txt = strrep(txt, '{rms}', sprintf('%.4g', event.RmsValue));
-            txt = strrep(txt, '{std}', sprintf('%.4g', event.StdValue));
+            % Open events carry empty ([]) statistics (peak/mean/rms/std are only
+            % finalized on the falling edge).  sprintf('%.4g', []) returns '' —
+            % which would silently render "Peak: , Mean: " in the email.  Guard
+            % so open-event alerts read "(ongoing)" instead of a blank.
+            txt = strrep(txt, '{peak}', NotificationRule.formatStatOrOpen_(event.PeakValue));
+            txt = strrep(txt, '{mean}', NotificationRule.formatStatOrOpen_(event.MeanValue));
+            txt = strrep(txt, '{rms}', NotificationRule.formatStatOrOpen_(event.RmsValue));
+            txt = strrep(txt, '{std}', NotificationRule.formatStatOrOpen_(event.StdValue));
             txt = strrep(txt, '{thresholdValue}', sprintf('%.4g', event.ThresholdValue));
         end
     end
@@ -93,6 +97,18 @@ classdef NotificationRule < handle
                 s = '(open)';
             else
                 s = datestr(t, 'yyyy-mm-dd HH:MM:SS');
+            end
+        end
+
+        function s = formatStatOrOpen_(v)
+            %FORMATSTATOROPEN_ sprintf('%.4g', v), or '(ongoing)' when v is empty/NaN.
+            %   Open events have empty ([]) peak/mean/rms/std until the falling
+            %   edge; sprintf('%.4g', []) yields '' which reads as a blank in the
+            %   email body.  Render '(ongoing)' so the alert is unambiguous.
+            if isempty(v) || any(isnan(v(:)))
+                s = '(ongoing)';
+            else
+                s = sprintf('%.4g', v);
             end
         end
     end
