@@ -135,10 +135,14 @@ function pipeline = runBackgroundMonitoring(setupFcn, varargin)
         end
     catch ME
         % Any exit-path error (Ctrl-C, uncaught throw) — log once and fall
-        % through; onCleanup runs next and stops the pipeline.
+        % through; the explicit safeStop_ below (and the onCleanup) stop it.
         fprintf('[BG] Heartbeat loop interrupted: %s (id=%s)\n', ME.message, ME.identifier);
     end
 
+    % Stop here (not solely via onCleanup) so the exit line reports the TRUE
+    % post-stop status instead of the pre-stop 'running'/'error'. safeStop_ is
+    % idempotent and the onCleanup remains as a safety net for early returns.
+    safeStop_(pipeline);
     fprintf('[BG] runBackgroundMonitoring exit: status=%s, runtime=%.1fs\n', ...
         pipeline.Status, toc(tStart));
 end
