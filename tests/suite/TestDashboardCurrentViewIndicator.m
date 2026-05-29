@@ -24,6 +24,7 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
 %     testBoxAppearsWhenWidgetZoomed      -> one zoomed -> one box at that window
 %     testBoxHidesAfterResync             -> broadcastTimeRange re-sync -> pool cleared
 %     testTwoOutOfSyncProduceSeparateBoxes-> two zoomed -> two boxes, distinct colours
+%     testPageSwitchScopesBoxesToActivePage-> multi-tab -> boxes follow the active page
 %     testSubEpsilonDifferenceStaysHidden -> sub-epsilon delta from Selection -> no box
 %     testNoSelectorGuardNoThrow          -> engine without a slider -> seam no-throw
 
@@ -195,6 +196,63 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
             c2 = get(sel.hCurrentViewBoxes(2), 'FaceColor');
             testCase.verifyNotEqual(c1, c2, ...
                 'Per-graph boxes must use distinct preview-palette colours.');
+        end
+
+        function testPageSwitchScopesBoxesToActivePage(testCase)
+            % Multi-tab: a box belongs to the page its graph lives on. Switching
+            % tabs via the REAL switchPage (exercising Plan 03 SITE 4) must clear
+            % the now-inactive page's boxes and surface the now-active page's
+            % out-of-sync boxes. Confirms the indicator scopes to
+            % activePageWidgets() and the switchPage wiring auto-refreshes it
+            % (no manual seam call after the switches below).
+            x = linspace(0, 100, 300);
+            d = DashboardEngine('CurrentView MultiPage');
+            testCase.Engines{end + 1} = d;
+            d.addPage('P1');
+            d.addWidget('fastsense', 'Title', 'A', 'XData', x, 'YData', sin(x / 5));
+            d.addPage('P2');
+            d.switchPage(2);
+            d.addWidget('fastsense', 'Title', 'C', 'XData', x, 'YData', cos(x / 7));
+            d.switchPage(1);
+            d.render();
+            try set(d.hFigure, 'Visible', 'off'); catch, end
+            drawnow;
+            sel = d.TimeRangeSelector_;
+            testCase.assumeNotEmpty(sel, ...
+                'No TimeRangeSelector built (slider-less environment) — skip.');
+
+            wA = d.Pages{1}.Widgets{1};
+            wC = d.Pages{2}.Widgets{1};
+
+            % Zoom A (page 1) out of sync; P1 active -> one box.
+            wA.CurrentXLimOverrideForTest_ = [20 40];
+            wA.UseGlobalTime = false;
+            d.updateCurrentViewIndicatorForTest_();
+            testCase.verifyEqual(numel(sel.hCurrentViewBoxes), 1, ...
+                'Page 1 active with A zoomed must show one box.');
+
+            % Real switchPage(2): A is on the inactive page -> its box clears.
+            d.switchPage(2);
+            drawnow;
+            testCase.verifyEmpty(sel.hCurrentViewBoxes, ...
+                'Switching to P2 must clear P1''s box (indicator scopes to active page).');
+
+            % Zoom C (page 2) out of sync; P2 active -> one box at C's window.
+            wC.CurrentXLimOverrideForTest_ = [60 90];
+            wC.UseGlobalTime = false;
+            d.updateCurrentViewIndicatorForTest_();
+            testCase.verifyEqual(numel(sel.hCurrentViewBoxes), 1, ...
+                'Page 2 active with C zoomed must show one box.');
+            testCase.verifyEqual(sel.CurrentViews, [60 90], 'AbsTol', 0.1, ...
+                'P2 box must mark C''s window.');
+
+            % Switch back to P1: A's box returns at its window (no manual seam).
+            d.switchPage(1);
+            drawnow;
+            testCase.verifyEqual(numel(sel.hCurrentViewBoxes), 1, ...
+                'Switching back to P1 must restore A''s box.');
+            testCase.verifyEqual(sel.CurrentViews, [20 40], 'AbsTol', 0.1, ...
+                'Restored P1 box must mark A''s window.');
         end
 
         function testSubEpsilonDifferenceStaysHidden(testCase)
