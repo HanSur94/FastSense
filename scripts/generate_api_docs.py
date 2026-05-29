@@ -637,75 +637,58 @@ def _escape_md_table(text: str) -> str:
 # Page definitions
 # ---------------------------------------------------------------------------
 
-# Each page: (output filename, page title, library dir, class order)
+# Each page: (output filename, page title, library dir, anchors).
+#
+# `anchors` is an ORDERING HINT, not an allow-list: for a library page, EVERY
+# classdef discovered in the directory is documented regardless of whether it
+# is listed here (see generate_page). Anchors float the headline classes to the
+# top; remaining classes are appended alphabetically. An anchor that no longer
+# exists is silently skipped, so this list can never drop or duplicate a real
+# class — it only affects ordering. Keep it short (the few most important
+# classes). This is what makes the generator immune to class renames.
+#
+# Exception: the special page with library dir None (Utilities) uses `anchors`
+# as an explicit cross-library class selector — only the named classes appear.
+#
+# Page names track the published wiki and _Sidebar.md (project brand:
+# "FastPlot"), which intentionally differs from the underlying class names
+# (e.g. the FastSense class is documented on the "FastPlot" page).
 PAGES = [
     (
-        "API-Reference:-FastSense.md",
-        "API Reference: FastSense",
+        "API-Reference:-FastPlot.md",
+        "API Reference: FastPlot",
         "FastSense",
-        [
-            "FastSense",
-            "FastSenseFigure",
-            "FastSenseDock",
-            "FastSenseToolbar",
-            "FastSenseTheme",
-            "FastSenseDataStore",
-            "NavigatorOverlay",
-            "SensorDetailPlot",
-        ],
+        ["FastSense", "FastSenseDataStore", "FastSenseGrid", "SensorDetailPlot"],
     ),
     (
         "API-Reference:-Dashboard.md",
         "API Reference: Dashboard",
         "Dashboard",
         [
-            "DashboardEngine",
-            "DashboardBuilder",
-            "DashboardWidget",
-            "FastSenseWidget",
-            "GaugeWidget",
-            "NumberWidget",
-            "StatusWidget",
-            "TextWidget",
-            "TableWidget",
-            "RawAxesWidget",
-            "EventTimelineWidget",
-            "DashboardSerializer",
-            "DashboardLayout",
-            "DashboardTheme",
-            "DashboardToolbar",
+            "DashboardEngine", "DashboardBuilder", "DashboardWidget",
+            "DashboardLayout", "DashboardPage", "DashboardSerializer",
         ],
     ),
     (
         "API-Reference:-Sensors.md",
         "API Reference: Sensors",
         "SensorThreshold",
-        ["Sensor", "StateChannel", "ThresholdRule", "SensorRegistry"],
+        [
+            "Tag", "SensorTag", "MonitorTag", "CompositeTag", "DerivedTag",
+            "StateTag", "TagRegistry",
+        ],
     ),
     (
         "API-Reference:-Event-Detection.md",
         "API Reference: Event Detection",
         "EventDetection",
-        [
-            "EventDetector",
-            "IncrementalEventDetector",
-            "Event",
-            "EventConfig",
-            "EventStore",
-            "EventViewer",
-            "LiveEventPipeline",
-            "NotificationService",
-            "NotificationRule",
-            "DataSource",
-            "MatFileDataSource",
-            "DataSourceMap",
-        ],
+        ["Event", "EventStore", "EventViewer", "LiveEventPipeline"],
     ),
     (
         "API-Reference:-Utilities.md",
         "API Reference: Utilities",
-        None,  # special: pulls from multiple dirs
-        ["ConsoleProgressBar", "FastSenseDefaults"],
+        None,  # special: explicit cross-library class list (anchors IS the selector)
+        ["ConsoleProgressBar"],
     ),
 ]
 
@@ -727,18 +710,24 @@ def collect_classes(lib_dir: Path) -> dict:
     return classes
 
 
-def generate_page(filename, title, classes_by_name, class_order):
-    """Generate a wiki page for the given classes."""
+def generate_page(filename, title, classes_by_name, anchors):
+    """Generate a wiki page documenting every class in classes_by_name.
+
+    `anchors` lists headline class names to emit first, in order; every
+    remaining class is appended alphabetically. Anchor names absent from
+    classes_by_name are skipped — completeness comes from discovery, never
+    from the anchor list, so a stale anchor cannot drop a real class.
+    """
     parts = [AUTO_GENERATED_NOTICE, f"# {title}\n"]
 
     written = set()
-    for name in class_order:
+    for name in anchors:
         if name in classes_by_name:
             parts.append(format_class_markdown(classes_by_name[name]))
             parts.append("---\n")
             written.add(name)
 
-    # Append any classes found but not in the explicit order
+    # Append any discovered classes not already emitted via anchors.
     for name, cls in sorted(classes_by_name.items()):
         if name not in written:
             parts.append(format_class_markdown(cls))
@@ -761,8 +750,47 @@ def generate_page(filename, title, classes_by_name, class_order):
 # Main
 # ---------------------------------------------------------------------------
 
+# Library directories scanned for classdefs. Order is cosmetic (parse logging).
+SCANNED_LIBS = ["FastSense", "Dashboard", "SensorThreshold", "EventDetection", "WebBridge"]
+
+# Scanned for cross-page class lookup but intentionally given no page of their
+# own. Suppresses the "undocumented library" warning below.
+UNDOCUMENTED_OK = {"WebBridge"}
+
+
+def prune_stale_api_pages(produced):
+    """Delete API-Reference pages this generator owns but no longer produces.
+
+    Safety: only files matching ``API-Reference:-*.md`` that carry THIS
+    script's auto-generated banner are eligible. Manually-maintained pages
+    (e.g. API-Reference:-Themes.md, which documents a function rather than a
+    classdef) carry no banner and are never touched; nor are pages owned by
+    generate_wiki.py, which use a different banner. This makes orphans left by
+    a page rename self-healing instead of silently shipping stale content.
+    """
+    banner_marker = "by scripts/generate_api_docs.py"
+    for page in sorted(WIKI_DIR.glob("API-Reference:-*.md")):
+        if page.name in produced:
+            continue
+        head = page.read_text(encoding="utf-8", errors="replace")[:300]
+        if banner_marker in head:
+            page.unlink()
+            print(f"  -> Pruned stale auto-generated page: {page.relative_to(PROJECT_ROOT)}")
+
+
+def warn_undocumented_libs(lib_classes, documented_libs):
+    """Warn if a scanned library has classdefs but no page maps to it."""
+    for lib_name, parsed in lib_classes.items():
+        if parsed and lib_name not in documented_libs and lib_name not in UNDOCUMENTED_OK:
+            print(
+                f"  WARNING: libs/{lib_name}/ has {len(parsed)} class(es) but no "
+                f"API-Reference page maps to it — add an entry to PAGES.",
+                file=sys.stderr,
+            )
+
+
 def main():
-    print(f"FastSense API Doc Generator")
+    print("FastPlot API Doc Generator")
     print(f"Project root: {PROJECT_ROOT}")
     print(f"Libs dir:     {LIBS_DIR}")
     print(f"Wiki dir:     {WIKI_DIR}")
@@ -778,7 +806,7 @@ def main():
     all_classes = {}  # name -> MatlabClass
     lib_classes = {}  # lib_name -> {name: MatlabClass}
 
-    for lib_name in ["FastSense", "Dashboard", "SensorThreshold", "EventDetection", "WebBridge"]:
+    for lib_name in SCANNED_LIBS:
         lib_dir = LIBS_DIR / lib_name
         print(f"[{lib_name}]")
         parsed = collect_classes(lib_dir)
@@ -788,18 +816,29 @@ def main():
 
     # Generate pages
     print("Generating wiki pages:")
-    for filename, title, lib_name, class_order in PAGES:
+    produced = set()
+    documented_libs = set()
+    for filename, title, lib_name, anchors in PAGES:
         if lib_name is None:
-            # Utilities page: pull from all_classes
+            # Special page: anchors doubles as an explicit cross-library class
+            # selector — only the named classes are documented here.
             subset = {
                 name: all_classes[name]
-                for name in class_order
+                for name in anchors
                 if name in all_classes
             }
         else:
+            # Library page: document every classdef discovered in the directory.
             subset = lib_classes.get(lib_name, {})
+            documented_libs.add(lib_name)
 
-        generate_page(filename, title, subset, class_order)
+        generate_page(filename, title, subset, anchors)
+        produced.add(filename)
+
+    # Remove pages we used to generate but no longer do (e.g. after a rename),
+    # then flag any library that has classes but no page mapping (inverse drift).
+    prune_stale_api_pages(produced)
+    warn_undocumented_libs(lib_classes, documented_libs)
 
     print()
     print("Done. Generated API reference pages in wiki/.")

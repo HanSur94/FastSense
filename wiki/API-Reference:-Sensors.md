@@ -2,98 +2,480 @@
 
 # API Reference: Sensors
 
-## `BatchTagPipeline` --- Synchronous raw-data -> per-tag .mat pipeline.
+## `Tag` --- Abstract base for the unified Tag domain model.
 
 > Inherits from: `handle`
 
-Enumerates TagRegistry for ingestable tags (SensorTag/StateTag
-  with a non-empty RawSource), de-duplicates file reads, parses
-  each raw file once, slices the requested column per tag, and
-  writes <OutputDir>/<tag.Key>.mat in the SensorTag.load shape.
+Tag is the root of the v2.0 domain hierarchy.  Subclasses
+  (SensorTag, StateTag, MonitorTag, CompositeTag) provide concrete
+  implementations of the six abstract-by-convention methods.
 
-  Batch semantics (D-12, D-15, D-18):
-    - OutputDir required at construction; auto-created if missing.
-    - run() returns a report struct; throws TagPipeline:ingestFailed
-      at end-of-run if any tag failed.
-    - Each tag's ingest is a try/catch boundary; one failing tag
-      does NOT abort the batch.
+  Tag uses the Octave-safe "throw-from-base" abstract pattern:
+  the base class provides stub methods that raise a notImplemented
+  error, and subclasses override with concrete implementations.
+  Do NOT use the Abstract-methods block pattern here — it has
+  divergent semantics between MATLAB and Octave (see DataSource.m
+  for the proven pattern used here).
 
-  Observability (Major-2 / revision-1):
-    - LastFileParseCount: public SetAccess=private property
-      recording the number of DISTINCT raw files parsed in the
-      most recent run(). Captured BEFORE the end-of-run cache
-      reset. Enables testFileCacheDedup to assert exact dedup
-      without wrapping readRawDelimited_ (blocked by MATLAB's
-      private-folder scoping).
+  Tag Properties (public):
+    Key         — char: unique identifier (required, non-empty)
+    Name        — char: human-readable name (defaults to Key)
+    Units       — char: measurement unit
+    Description — char: free-text description
+    Labels      — cellstr: cross-cutting classification (META-01)
+    Metadata    — struct: open key-value bag (META-03)
+    Criticality — char enum: 'low'|'medium'|'high'|'safety' (META-04)
+    SourceRef   — char: optional provenance string
 
-  Errors (namespaced under TagPipeline:*):
-    TagPipeline:invalidOutputDir      -- OutputDir missing / empty
-    TagPipeline:cannotCreateOutputDir -- mkdir failed
-    TagPipeline:ingestFailed          -- 1+ tags failed (end-of-run throw)
-    TagPipeline:unknownExtension      -- file ext not .csv/.txt/.dat
+  Tag Methods (abstract-by-convention — subclass must implement):
+    getXY               — return [X, Y] data vectors
+    valueAt(t)          — return scalar value at time t
+    getTimeRange        — return [tMin, tMax]
+    getKind             — return kind string ('sensor'|'state'|'monitor'|'composite'|'mock')
+    toStruct            — return serializable struct
+    fromStruct (Static) — reconstruct from struct
+
+  Tag Methods (default hooks — override when needed):
+    resolveRefs(registry) — Pass-2 deserialization hook; default no-op
 
 ### Constructor
 
 ```matlab
-obj = BatchTagPipeline(varargin)
+obj = Tag(key, varargin)
 ```
 
-BATCHTAGPIPELINE Construct with required OutputDir NV-pair.
-  p = BatchTagPipeline('OutputDir', dir)
-  p = BatchTagPipeline('OutputDir', dir, 'Verbose', true)
+TAG Construct a Tag with required key and optional name-value pairs.
 
 ### Properties
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| OutputDir | `''` |  |
-| Verbose | `false` |  |
+| Key | `''` | char: unique identifier |
+| Name | `''` | char: human-readable name |
+| Units | `''` | char: measurement unit |
+| Description | `''` | char: free-text description |
+| Labels | `{}` | cellstr: cross-cutting classification |
+| Metadata | `struct()` | struct: open key-value bag |
+| Criticality | `'medium'` | char enum: 'low'\|'medium'\|'high'\|'safety' |
+| SourceRef | `''` | char: optional provenance string |
+| EventStore | `[]` | EventStore handle; [] disables event convenience methods |
 
 ### Methods
 
-#### `report = run(obj)`
+#### `set()`
 
-RUN Enumerate tags, ingest each, write per-tag .mat; throw at end if any failed.
-  Returns a report struct with fields:
-    succeeded - cellstr of tag keys that wrote OK
-    failed    - struct array of failed tags (key, file, errorId, message)
+SET.CRITICALITY Validate enum before assigning.
 
-#### `setWriteFnForTesting_(obj, fn)`
+#### `[X, Y] = getXY(obj)`
 
-SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
-  Phase 1028 plan 02b: replace the default @writeTagMat_ with a
-  user-supplied function handle (e.g., a no-op for benchmark NoIO
-  measurement). Production callers MUST NOT use this — the
-  default cadence per D-12 is write-on-every-tick.
+GETXY Return [X, Y] data vectors.  Subclass must override.
 
-#### `setFsCoalesceForTesting_(obj, tf)`
+#### `v = valueAt(obj, t)`
 
-SETFSCOALESCEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 06).
-  Phase 1028 plan 06: BatchTagPipeline.run() does not currently
-  issue per-tag exist/dir/datenum syscalls (parsing happens via
-  parseOrCache_, which uses ext-based dispatch, not file stats),
-  so fs-stat coalescing is a no-op here. The setter exists for
-  symmetry with LiveTagPipeline so tests/bench scripts can
-  configure both pipelines uniformly. Hidden (D-10).
+VALUEAT Return scalar value at time t.  Subclass must override.
 
-#### `setCoalesceActiveForTesting_(obj, tf)`
+#### `[tMin, tMax] = getTimeRange(obj)`
 
-SETCOALESCEACTIVEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 05).
-  Phase 1028 plan 05: BatchTagPipeline.run() does not currently
-  accumulate a listener cascade (it writes 'overwrite' mode and
-  does not call tag.updateData()), so coalescing is a no-op
-  here. The setter exists for symmetry with LiveTagPipeline so
-  tests/bench scripts can configure both pipelines uniformly.
-  Hidden (D-10).
+GETTIMERANGE Return [tMin, tMax] time bounds.  Subclass must override.
 
-#### `setCacheActiveForTesting_(obj, tf)`
+#### `k = getKind(obj)`
 
-SETCACHEACTIVEFORTESTING_ Internal-only setter for the prior-state cache.
-  Phase 1028 plan 02d: enable/disable the in-memory priorState_ cache.
-  Mirror of LiveTagPipeline.setCacheActiveForTesting_; production callers
-  MUST NOT use this — cache-on is the production default and is byte-for-byte
-  parity-tested against the cache-off path. Hidden so it does not appear in
-  tab-completion, doc(), or properties() listings (D-10).
+GETKIND Return kind string.  Subclass must override.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Return serializable struct.  Subclass must override.
+
+#### `resolveRefs(obj, registry)`
+
+RESOLVEREFS Pass-2 hook for two-phase deserialization.
+  Default: no-op.  CompositeTag (Phase 1008) will override to
+  wire up children by key.  Leaf tags (Sensor/State/Monitor)
+  do not need references resolved.
+
+#### `addManualEvent(obj, tStart, tEnd, label, message)`
+
+ADDMANUALEVENT Create a manual annotation event bound to this tag.
+  tag.addManualEvent(tStart, tEnd, label, message) creates an Event
+  with Category = 'manual_annotation' and TagKeys = {obj.Key},
+  appends to the bound EventStore, and registers in EventBinding.
+
+#### `events = eventsAttached(obj)`
+
+EVENTSATTACHED Query events bound to this tag via EventBinding.
+  Returns Event array (possibly empty). This is a query, NOT a
+  stored property -- no Event handles on Tag (Pitfall 4).
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Default accessor returning empty cell (Phase 1028 plan 05).
+  Subclasses that maintain a listener cell (SensorTag,
+  StateTag, MonitorTag, CompositeTag, DerivedTag) override
+  this to expose their private `listeners_` property for
+  `Tag.invalidateBatch_` to walk. The Tag base returns {} —
+  abstract Tag has no listeners.
+
+### Static Methods
+
+#### `Tag.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct a Tag from a struct.  Subclass must override.
+
+#### `Tag.invalidateBatch_(tagSet)`
+
+INVALIDATEBATCH_ Coalesced invalidation across many tags (Phase 1028 plan 05).
+
+---
+
+## `SensorTag` --- Concrete Tag subclass for sensor time-series data.
+
+> Inherits from: `Tag`
+
+SensorTag is the primary sensor data carrier in the Tag-based domain
+  model.  It stores time-series data (X, Y) directly and satisfies the
+  Tag contract (getXY, valueAt, getTimeRange, getKind='sensor',
+  toStruct, fromStruct).  Data-role methods (load, toDisk, toMemory,
+  isOnDisk) operate on the inlined private properties.
+
+  Properties (Dependent): DataStore -- read-only view of the disk store.
+
+  Constructor accepts Tag universals (Name, Units, Description,
+  Labels, Metadata, Criticality, SourceRef), sensor extras (ID,
+  Source, MatFile, KeyName), and inline 'X'/'Y' data arrays.
+
+### Constructor
+
+```matlab
+obj = SensorTag(key, varargin)
+```
+
+SENSORTAG Construct a SensorTag with inlined data storage.
+  t = SensorTag(key) creates a SensorTag with the given key.
+
+### Methods
+
+#### `ds = get()`
+
+GET.DATASTORE Return the disk-backed DataStore (read-only view).
+
+#### `v = get()`
+
+GET.X Read-only access to timestamps (backward-compat with legacy Sensor.X).
+
+#### `v = get()`
+
+GET.Y Read-only access to values (backward-compat with legacy Sensor.Y).
+
+#### `v = get()`
+
+GET.THRESHOLDS Always empty cell array (backward-compat stub).
+  Legacy Sensor class exposed a Thresholds cell array of
+  ThresholdRule handles. In the v2.0 Tag model, thresholds
+  are expressed as MonitorTag children bound via TagRegistry
+  — not as a nested collection on the sensor. Widgets that
+  still read .Thresholds (GaugeWidget, StatusWidget) see an
+  empty cell here and fall through to their "no thresholds"
+  branch. Consumers should migrate to the TagRegistry +
+  MonitorTag workflow for threshold behaviour.
+
+#### `r = get()`
+
+GET.RAWSOURCE Return the raw-data source binding (read-only view).
+  Populated only for SensorTags whose 'RawSource' NV-pair was
+  set at construction. Consumed by BatchTagPipeline /
+  LiveTagPipeline to locate the raw file + column for this tag.
+
+#### `[X, Y] = getXY(obj)`
+
+GETXY Return X, Y by reference (zero-copy via COW).
+  MATLAB copy-on-write guarantees no memory allocation until
+  the caller mutates X or Y.
+
+#### `v = valueAt(obj, t)`
+
+VALUEAT Return Y at the last index where X <= t (ZOH, clamped).
+  Returns NaN on empty data.
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+GETTIMERANGE Return [X(1), X(end)].  [NaN NaN] if empty.
+
+#### `k = getKind(obj)`
+
+GETKIND Return the literal kind identifier 'sensor'.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize SensorTag state to a plain struct.
+  Tag universals at the top level; sensor-specific extras
+  nested under s.sensor (only when non-default) to keep the
+  struct compact.  X/Y are INTENTIONALLY OMITTED -- runtime
+  data, not serialization state.
+
+#### `load(obj, matFile)`
+
+LOAD Load sensor data from a .mat file.
+  t.load() uses the already-configured MatFile.
+  t.load(path) sets MatFile before loading.
+
+#### `toDisk(obj)`
+
+TODISK Move X/Y data to disk-backed FastSenseDataStore.
+  Clears X_ and Y_ from memory after transfer.
+
+#### `toMemory(obj)`
+
+TOMEMORY Load disk-backed data back into memory.
+
+#### `tf = isOnDisk(obj)`
+
+ISONDISK True if sensor data is stored on disk.
+
+#### `addListener(obj, m)`
+
+ADDLISTENER Register a listener notified on underlying data change.
+  Listener must implement an invalidate() method. Strong
+  reference -- caller manages lifecycle.
+
+#### `updateData(obj, X, Y)`
+
+UPDATEDATA Replace X/Y data and fire listeners.
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10). Mirrors getListeners_ on StateTag, MonitorTag,
+  CompositeTag, DerivedTag.
+
+### Static Methods
+
+#### `SensorTag.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct SensorTag from a toStruct output.
+
+---
+
+## `MonitorTag` --- Derived 0/1 binary time-series Tag — lazy-by-default, no persistence.
+
+> Inherits from: `Tag`
+
+MonitorTag produces a binary alarm/ok signal by evaluating a
+  user-supplied ConditionFn against its Parent tag's (X, Y). Output
+  is cached on first read and recomputed only when invalidate() is
+  called (directly or via parent.updateData listener notification).
+
+  This Phase 1006 implementation is lazy-by-default, no persistence —
+  no FastSense data store writes, no disk footprint. Opt-in persistence
+  arrives in Phase 1007 (MONITOR-09).
+
+  MONITOR-05 note: Phase 1006 (later plans) uses the existing Event
+  carrier fields SensorName = Parent.Key and ThresholdLabel = obj.Key.
+  Phase 1010 (EVENT-01) will migrate to a per-Tag keys field on Event.
+  Do NOT write a TagKeys field in this class — it does not exist on
+  Event yet (the carrier pattern uses SensorName + ThresholdLabel).
+
+  MONITOR-10: Only event-level callbacks (OnEventStart, OnEventEnd)
+  are supported. Per-sample callbacks are a documented anti-pattern
+  (PI-AF side-effect pitfall). This class MUST NOT expose keywords
+  whose shape is a per-sample callback.
+
+  ALIGN: operates directly on parent's native grid via parent.getXY().
+  No interp1 linear ever — ZOH is the only legal alignment when
+  aggregating across parents (CompositeTag in a later phase will
+  re-assert this contract via valueAt-on-common-grid).
+
+  Lifecycle: MonitorTag holds a Parent handle; Parent holds a strong
+  reference to MonitorTag via its listeners_ cell. To dispose,
+  unregister the monitor via TagRegistry.unregister AND reset the
+  parent's listener cell (or construct a fresh parent).
+
+  Properties (public):
+    Parent               — Tag handle (required at construction)
+    ConditionFn          — function_handle @(x,y)->logical (required)
+    AlarmOffConditionFn  — function_handle; [] means no hysteresis
+    MinDuration          — native parent-X units; 0 disables debounce
+    EventStore           — EventStore handle; [] disables event emission
+    OnEventStart         — function_handle @(event); [] disables
+    OnEventEnd           — function_handle @(event); [] disables
+    Persist              — logical; when true, derived (X, Y) is
+                           cached to DataStore via storeMonitor on
+                           every recompute_()/appendData() and loaded
+                           on first getXY() (staleness-checked via
+                           quad-signature). Default false — the opt-in
+                           default enforces Pitfall 2 cache-invalidation
+                           discipline: consumers that do not opt in
+                           pay zero disk cost.
+    DataStore            — FastSenseDataStore handle; required when
+                           Persist=true. Provides storeMonitor /
+                           loadMonitor / clearMonitor back-end.
+
+  Methods (Tag contract):
+    getXY                — lazy-memoized 0/1 vector on parent's grid
+    valueAt(t)           — ZOH lookup into getXY cache
+    getTimeRange         — [X(1), X(end)]; [NaN NaN] if empty
+    getKind              — returns 'monitor'
+    toStruct             — serialize (no function handles, no data)
+    fromStruct (Static)  — Pass-1 reconstruction (dummy parent)
+    resolveRefs(registry)— Pass-2 wire Parent + register listener
+
+  Methods (additional):
+    invalidate           — clear cache + mark dirty
+    appendData(newX,newY) — Phase 1007 (MONITOR-08) streaming tail.
+                            Extends cache incrementally; preserves
+                            hysteresis FSM state and MinDuration
+                            bookkeeping across the append boundary.
+                            Falls back to full recompute_() when
+                            the cache is dirty/empty (cold start).
+
+  Error IDs:
+    MonitorTag:invalidParent            — parentTag not a Tag
+    MonitorTag:invalidCondition         — conditionFn not a function_handle
+    MonitorTag:unknownOption            — unknown NV key or dangling key
+    MonitorTag:dataMismatch             — fromStruct missing required fields
+    MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
+    MonitorTag:invalidData              — appendData numeric/length mismatch
+    MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
+    MonitorTag:emitEventBadKind         — emitEvent_ called with kind not in {start,closed,end}
+    MonitorTag:eventLogReentrantSkip    — (warning ID) cluster-mode emission skipped due to
+                                          re-entrant per-tag lock acquire (Plan 02 will handle)
+
+  Deferred-notify (Pitfall 13 prevention):
+    OnEventStart / OnEventEnd callbacks are NOT invoked during the emission body.
+    They are queued on pendingNotify_ and flushed by flushPendingNotify_() AFTER
+    the emission loop completes, with inEmission_ = false.
+    Pre-refactor: listeners fired synchronously DURING EventStore.append.
+    Post-refactor: listeners fire immediately AFTER appendData/getXY returns,
+    but OUTSIDE the emission window. The "event was emitted" semantic is preserved;
+    only the timing changes from synchronous-during-append to post-emission-batch.
+
+  Persistence (Phase 1007 MONITOR-09):
+    Opt-in via Persist=true + DataStore. Staleness detection uses a
+    quad-signature (parent_key, num_points, parent_xmin, parent_xmax)
+    stamped at write. Default-off preserves Pitfall 2 cache-invalidation
+    safety — consumers that do not opt in pay zero disk cost.
+
+### Constructor
+
+```matlab
+obj = MonitorTag(key, parentTag, conditionFn, varargin)
+```
+
+MONITORTAG Construct a MonitorTag.
+  m = MonitorTag(key, parentTag, conditionFn) creates a lazy
+  binary monitor whose output is conditionFn(parentTag.X,
+  parentTag.Y) aligned to parent's native grid.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Parent |  | Tag handle (required) |
+| ConditionFn |  | function_handle @(x,y) -> logical (required) |
+| AlarmOffConditionFn | `[]` | function_handle; [] means no hysteresis |
+| MinDuration | `0` | native parent-X units; 0 disables debounce |
+| OnEventStart | `[]` | function_handle @(event); [] disables callback |
+| OnEventEnd | `[]` | function_handle @(event); [] disables callback |
+| Persist | `false` | MONITOR-09 opt-in (Pitfall 2 default-off) |
+| DataStore | `[]` | FastSenseDataStore handle; required when Persist=true |
+| EventLog | `[]` | libs/Concurrency/EventLog.m handle; non-empty triggers cluster-mode emission |
+
+### Methods
+
+#### `[x, y] = getXY(obj)`
+
+GETXY Return lazy-memoized 0/1 vector aligned to parent's grid.
+  When Persist=true + DataStore bound, first attempts a disk
+  load via tryLoadFromDisk_ (quad-signature staleness check).
+  On miss or stale cache, falls through to recompute_() and
+  then persistIfEnabled_() writes the fresh row.
+
+#### `v = valueAt(obj, t)`
+
+VALUEAT ZOH lookup into the cached 0/1 series.
+  Returns NaN if parent has no data.
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+GETTIMERANGE Return [X(1), X(end)]; [NaN NaN] if empty.
+
+#### `k = getKind(obj)`
+
+GETKIND Return the kind identifier 'monitor'.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize MonitorTag state to a plain struct.
+  Function handles are NOT serialized — consumers re-bind
+  ConditionFn / AlarmOffConditionFn / EventStore / callbacks
+  after loadFromStructs. The Parent handle is stored as its
+  Key string (parentkey); resolveRefs wires the real handle
+  in Pass 2 of the two-phase loader.
+
+#### `resolveRefs(obj, registry)`
+
+RESOLVEREFS Pass-2 hook to wire Parent from registry by key.
+  Called by TagRegistry.loadFromStructs. On success:
+    - obj.Parent is swapped to the real registry entry
+    - obj registers itself as a listener on the real parent
+    - obj.invalidate() clears any stale cache
+    - obj.ParentKey_ is cleared (consumed)
+
+#### `invalidate(obj)`
+
+INVALIDATE Clear cache + mark dirty; cascade to downstream listeners.
+  MonitorTag itself is observable: downstream MonitorTags
+  (recursive chains) register as listeners and are invalidated
+  here so that a root-parent update propagates through the
+  full derivation chain.
+
+#### `addListener(obj, m)`
+
+ADDLISTENER Register a listener notified when this monitor invalidates.
+  Enables recursive MonitorTag chains — an outer MonitorTag
+  that wraps an inner MonitorTag registers as the inner's
+  listener so that root-parent updates cascade through.
+
+#### `tf = getInEmission_(obj)`
+
+GETINMISSION_ Test accessor: return true while inside an emission body.
+  Exists ONLY for test observability (deferred-notify proof in
+  TestListenerCannotAcquireLock). The trailing underscore marks it as
+  an internal accessor not intended for production callers.
+
+#### `appendData(obj, newX, newY)`
+
+APPENDDATA Extend cached (X, Y) with new tail samples — no full recompute.
+  Preserves hysteresis FSM state and MinDuration bookkeeping
+  across the append boundary (MONITOR-08). Events fire only
+  for runs that COMPLETE (reach a falling edge) inside newX:
+  a run still open at the tail end is carried as state for
+  the next appendData call; a run that was already open at
+  the cache end and closes inside newX fires ONE event with
+  StartTime = the original (carried) start.
+
+#### `set()`
+
+#### `set()`
+
+#### `set()`
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10).
+
+### Static Methods
+
+#### `MonitorTag.obj = fromStruct(s)`
+
+FROMSTRUCT Pass-1 reconstruction from a toStruct output.
+  The real Parent handle is wired in Pass 2 via resolveRefs.
+  ConditionFn / AlarmOffConditionFn / EventStore / callbacks
+  are NOT restored — consumers must re-bind these after load.
 
 ---
 
@@ -527,6 +909,333 @@ FROMSTRUCT Pass-1 reconstruction with sentinel parents + stashed keys.
 
 ---
 
+## `StateTag` --- Concrete Tag subclass for discrete state signals with ZOH lookup.
+
+> Inherits from: `Tag`
+
+StateTag models a piecewise-constant ("zero-order hold") time
+  series representing a discrete system state (e.g., machine mode,
+  recipe phase).  valueAt(t) returns the most recent known state
+  value using a right-biased binary search on X.  Supports BOTH
+  numeric and cellstr Y — semantics are byte-for-byte equivalent to
+  legacy StateChannel.valueAt.  Adds StateTag:emptyState guard so
+  unloaded tags produce a clean error instead of a bounds crash.
+
+  Properties (public, in addition to Tag universals):
+    X — 1xN sorted numeric: timestamps of state transitions
+    Y — 1xN numeric OR 1xN cell of char: state values
+
+  Methods:
+    StateTag     — constructor (key + 'X','Y' + Tag universals)
+    getXY        — return [X, Y] (pass-through)
+    valueAt(t)   — ZOH lookup; scalar or vector t; numeric or cellstr Y
+    getTimeRange — [X(1), X(end)]; [NaN NaN] if empty
+    getKind      — returns 'state'
+    toStruct     — serialize X, Y, plus Tag universals
+    fromStruct   — static factory rebuilding StateTag from toStruct
+
+  Error IDs:
+    StateTag:emptyState     — valueAt on empty X/Y
+    StateTag:unknownOption  — unknown constructor name-value key
+    StateTag:dataMismatch   — fromStruct struct missing .key
+
+### Constructor
+
+```matlab
+obj = StateTag(key, varargin)
+```
+
+STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y + RawSource.
+  Valid name-value keys: 'X', 'Y', 'RawSource', plus Tag universals
+  (Name, Units, Description, Labels, Metadata, Criticality, SourceRef).
+  Raises StateTag:unknownOption for unrecognized or dangling keys.
+  Raises TagPipeline:invalidRawSource if RawSource is malformed.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| X | `[]` | 1xN numeric: sorted transition timestamps |
+| Y | `[]` | 1xN numeric OR 1xN cell of char: state values |
+
+### Methods
+
+#### `r = get()`
+
+GET.RAWSOURCE Return the raw-data source binding (read-only view).
+  Populated only for StateTags whose 'RawSource' NV-pair was
+  set at construction. Consumed by BatchTagPipeline /
+  LiveTagPipeline to locate the raw file + column for this tag.
+
+#### `[X, Y] = getXY(obj)`
+
+GETXY Return [X, Y] data vectors (pass-through).
+
+#### `val = valueAt(obj, t)`
+
+VALUEAT Return state value at t using zero-order hold.
+  Right-biased binary search on X: largest idx with X(idx)<=t,
+  clamped to [1, N].  Supports scalar and vector t for both
+  numeric and cellstr Y.  Raises StateTag:emptyState if X or
+  Y is empty.  Semantics match StateChannel.valueAt byte-for-byte.
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+GETTIMERANGE Return [X(1), X(end)]; [NaN NaN] if empty.
+
+#### `k = getKind(obj)`
+
+GETKIND Return the kind identifier 'state'.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize StateTag to a plain struct.
+  Wraps cellstr Labels and cellstr Y once via {...} to survive
+  MATLAB's struct() cellstr-collapse.  fromStruct unwraps.
+
+#### `addListener(obj, m)`
+
+ADDLISTENER Register a listener notified on underlying data change.
+  Listener must implement an invalidate() method. Strong
+  reference — caller manages lifecycle.
+
+#### `updateData(obj, X, Y)`
+
+UPDATEDATA Replace public X/Y and fire listeners (MONITOR-04).
+  Additive API — does NOT touch constructor or getXY paths.
+  Any registered MonitorTag or other listener receives an
+  invalidate() call after the new data is installed.
+
+#### `ll = getListeners_(obj)`
+
+GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
+  Returns the private listeners_ cell. Hidden so it does not
+  appear in tab-completion / doc(); not part of public API
+  (D-10).
+
+### Static Methods
+
+#### `StateTag.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct StateTag from a toStruct output.
+
+---
+
+## `TagRegistry` --- Singleton catalog of named Tag entities.
+
+TagRegistry provides a centralized, persistent catalog of all
+  known Tag objects in the v2.0 domain model.  It mirrors the
+  ThresholdRegistry API for CRUD / query / introspection, with
+  three intentional deltas:
+
+    1. register() HARD-ERRORS on duplicate key (Pitfall 7).
+       ThresholdRegistry silently overwrites — TagRegistry does
+       not, to prevent subtle identity bugs when two different
+       tags claim the same key.
+    2. loadFromStructs() uses two-phase deserialization
+       (Pitfall 8):
+         Pass 1 — instantiate every tag with empty children.
+         Pass 2 — call tag.resolveRefs(registry) on each.
+       This is order-insensitive; no silent try/warn/skip.  Any
+       resolveRefs failure is wrapped as TagRegistry unresolvedRef.
+    3. findByKind() replaces findByDirection() because Tag is
+       multi-kind (sensor | state | monitor | composite | mock).
+
+  The catalog starts EMPTY on first use.
+
+  TagRegistry Methods (Static, public):
+    get             — retrieve Tag by key; errors if missing
+    register        — add Tag to catalog; hard error on duplicate
+    unregister      — remove Tag (silent no-op if missing)
+    clear           — wipe catalog
+    find            — tags matching predicate fn
+    findByLabel     — tags carrying a given label (META-02)
+    findByKind      — tags whose getKind() matches
+    list            — print sorted keys + names to command window
+    printTable      — detailed table (Key/Name/Kind/Criticality/Units/Labels)
+    viewer          — uitable GUI (Octave-safe)
+    loadFromStructs — two-phase JSON round-trip (TAG-06, TAG-07)
+    instantiateByKind — dispatch s.kind -> the right fromStruct
+
+### Static Methods
+
+#### `TagRegistry.t = get(key)`
+
+GET Retrieve a Tag by key.
+  t = TagRegistry.get(key) returns the Tag stored under key.
+  Throws TagRegistry unknownKey if not registered.
+
+#### `TagRegistry.register(key, tag)`
+
+REGISTER Add a Tag to the catalog (hard error on collision).
+  TagRegistry.register(key, tag) stores tag under key.
+  Unlike ThresholdRegistry (which silently overwrites), this
+  registry HARD-ERRORS on collision with TagRegistry
+  duplicateKey (Pitfall 7).  Call TagRegistry.unregister(key)
+  first to replace an existing entry.
+
+#### `TagRegistry.unregister(key)`
+
+UNREGISTER Remove a Tag (silent no-op if missing).
+
+#### `TagRegistry.clear()`
+
+CLEAR Wipe the catalog.  Primarily for test isolation.
+
+#### `TagRegistry.setEventStore(store)`
+
+SETEVENTSTORE Register the default EventStore for the registry.
+  TagRegistry.setEventStore(store) sets the global default used
+  by FastSense, FastSenseWidget, EventTimelineWidget, and
+  TableWidget(events) when no per-instance EventStore is
+  configured.  Pass [] to clear the default.
+
+#### `TagRegistry.store = getEventStore()`
+
+GETEVENTSTORE Return the registry-default EventStore, or [] if unset.
+  Safe to call before any store has been registered -- returns [].
+
+#### `TagRegistry.ts = find(predicateFn)`
+
+FIND Return cell of Tags matching predicateFn(tag) -> logical.
+
+#### `TagRegistry.ts = findByLabel(label)`
+
+FINDBYLABEL Return cell of Tags carrying the given label (META-02).
+
+#### `TagRegistry.ts = findByKind(kind)`
+
+FINDBYKIND Return cell of Tags where getKind() == kind.
+
+#### `TagRegistry.list()`
+
+LIST Print sorted keys + names to command window.
+
+#### `TagRegistry.printTable()`
+
+PRINTTABLE Print Key/Name/Kind/Criticality/Units/Labels table.
+
+#### `TagRegistry.hFig = viewer()`
+
+VIEWER Open uitable GUI showing all registered tags (Octave-safe).
+
+#### `TagRegistry.loadFromStructs(structs)`
+
+LOADFROMSTRUCTS Two-phase JSON deserialization (TAG-06, Pitfall 8).
+  Pass 1: instantiate every tag with empty children and
+          register it via TagRegistry.register (so duplicate
+          keys in the input surface as TagRegistry
+          duplicateKey, and unknown kinds surface as
+          TagRegistry unknownKind).
+  Pass 2: call tag.resolveRefs(catalog) on every registered
+          tag.  Any error raised during Pass 2 is wrapped
+          and rethrown as TagRegistry unresolvedRef — never
+          silently swallowed.
+
+#### `TagRegistry.tag = instantiateByKind(s)`
+
+INSTANTIATEBYKIND Dispatch fromStruct based on s.kind.
+  Phase 1004 ships 'mock' and 'mockThrowingResolve' only
+  (tests).  Phase 1005+ extends the switch for sensor,
+  state, monitor, and composite kinds.
+
+---
+
+## `BatchTagPipeline` --- Synchronous raw-data -> per-tag .mat pipeline.
+
+> Inherits from: `handle`
+
+Enumerates TagRegistry for ingestable tags (SensorTag/StateTag
+  with a non-empty RawSource), de-duplicates file reads, parses
+  each raw file once, slices the requested column per tag, and
+  writes <OutputDir>/<tag.Key>.mat in the SensorTag.load shape.
+
+  Batch semantics (D-12, D-15, D-18):
+    - OutputDir required at construction; auto-created if missing.
+    - run() returns a report struct; throws TagPipeline:ingestFailed
+      at end-of-run if any tag failed.
+    - Each tag's ingest is a try/catch boundary; one failing tag
+      does NOT abort the batch.
+
+  Observability (Major-2 / revision-1):
+    - LastFileParseCount: public SetAccess=private property
+      recording the number of DISTINCT raw files parsed in the
+      most recent run(). Captured BEFORE the end-of-run cache
+      reset. Enables testFileCacheDedup to assert exact dedup
+      without wrapping readRawDelimited_ (blocked by MATLAB's
+      private-folder scoping).
+
+  Errors (namespaced under TagPipeline:*):
+    TagPipeline:invalidOutputDir      -- OutputDir missing / empty
+    TagPipeline:cannotCreateOutputDir -- mkdir failed
+    TagPipeline:ingestFailed          -- 1+ tags failed (end-of-run throw)
+    TagPipeline:unknownExtension      -- file ext not .csv/.txt/.dat
+
+### Constructor
+
+```matlab
+obj = BatchTagPipeline(varargin)
+```
+
+BATCHTAGPIPELINE Construct with required OutputDir NV-pair.
+  p = BatchTagPipeline('OutputDir', dir)
+  p = BatchTagPipeline('OutputDir', dir, 'Verbose', true)
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| OutputDir | `''` |  |
+| Verbose | `false` |  |
+
+### Methods
+
+#### `report = run(obj)`
+
+RUN Enumerate tags, ingest each, write per-tag .mat; throw at end if any failed.
+  Returns a report struct with fields:
+    succeeded - cellstr of tag keys that wrote OK
+    failed    - struct array of failed tags (key, file, errorId, message)
+
+#### `setWriteFnForTesting_(obj, fn)`
+
+SETWRITEFNFORTESTING_ Internal-only DI seam for .mat write suppression.
+  Phase 1028 plan 02b: replace the default @writeTagMat_ with a
+  user-supplied function handle (e.g., a no-op for benchmark NoIO
+  measurement). Production callers MUST NOT use this — the
+  default cadence per D-12 is write-on-every-tick.
+
+#### `setFsCoalesceForTesting_(obj, tf)`
+
+SETFSCOALESCEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 06).
+  Phase 1028 plan 06: BatchTagPipeline.run() does not currently
+  issue per-tag exist/dir/datenum syscalls (parsing happens via
+  parseOrCache_, which uses ext-based dispatch, not file stats),
+  so fs-stat coalescing is a no-op here. The setter exists for
+  symmetry with LiveTagPipeline so tests/bench scripts can
+  configure both pipelines uniformly. Hidden (D-10).
+
+#### `setCoalesceActiveForTesting_(obj, tf)`
+
+SETCOALESCEACTIVEFORTESTING_ Shape-parity setter mirroring LiveTagPipeline (plan 05).
+  Phase 1028 plan 05: BatchTagPipeline.run() does not currently
+  accumulate a listener cascade (it writes 'overwrite' mode and
+  does not call tag.updateData()), so coalescing is a no-op
+  here. The setter exists for symmetry with LiveTagPipeline so
+  tests/bench scripts can configure both pipelines uniformly.
+  Hidden (D-10).
+
+#### `setCacheActiveForTesting_(obj, tf)`
+
+SETCACHEACTIVEFORTESTING_ Internal-only setter for the prior-state cache.
+  Phase 1028 plan 02d: enable/disable the in-memory priorState_ cache.
+  Mirror of LiveTagPipeline.setCacheActiveForTesting_; production callers
+  MUST NOT use this — cache-on is the production default and is byte-for-byte
+  parity-tested against the cache-off path. Hidden so it does not appear in
+  tab-completion, doc(), or properties() listings (D-10).
+
+---
+
 ## `LiveTagPipeline` --- Timer-driven raw-data -> per-tag .mat pipeline.
 
 > Inherits from: `handle`
@@ -664,713 +1373,4 @@ SETCACHEACTIVEFORTESTING_ Internal-only setter for the prior-state cache.
   default (cacheActive_ = true) and is byte-for-byte parity-tested
   against the cache-off path. Disabling it is a benchmark feature for
   measuring the load()-only cost (see bench_tag_pipeline_1k --cache-off).
-
----
-
-## `MonitorTag` --- Derived 0/1 binary time-series Tag — lazy-by-default, no persistence.
-
-> Inherits from: `Tag`
-
-MonitorTag produces a binary alarm/ok signal by evaluating a
-  user-supplied ConditionFn against its Parent tag's (X, Y). Output
-  is cached on first read and recomputed only when invalidate() is
-  called (directly or via parent.updateData listener notification).
-
-  This Phase 1006 implementation is lazy-by-default, no persistence —
-  no FastSense data store writes, no disk footprint. Opt-in persistence
-  arrives in Phase 1007 (MONITOR-09).
-
-  MONITOR-05 note: Phase 1006 (later plans) uses the existing Event
-  carrier fields SensorName = Parent.Key and ThresholdLabel = obj.Key.
-  Phase 1010 (EVENT-01) will migrate to a per-Tag keys field on Event.
-  Do NOT write a TagKeys field in this class — it does not exist on
-  Event yet (the carrier pattern uses SensorName + ThresholdLabel).
-
-  MONITOR-10: Only event-level callbacks (OnEventStart, OnEventEnd)
-  are supported. Per-sample callbacks are a documented anti-pattern
-  (PI-AF side-effect pitfall). This class MUST NOT expose keywords
-  whose shape is a per-sample callback.
-
-  ALIGN: operates directly on parent's native grid via parent.getXY().
-  No interp1 linear ever — ZOH is the only legal alignment when
-  aggregating across parents (CompositeTag in a later phase will
-  re-assert this contract via valueAt-on-common-grid).
-
-  Lifecycle: MonitorTag holds a Parent handle; Parent holds a strong
-  reference to MonitorTag via its listeners_ cell. To dispose,
-  unregister the monitor via TagRegistry.unregister AND reset the
-  parent's listener cell (or construct a fresh parent).
-
-  Properties (public):
-    Parent               — Tag handle (required at construction)
-    ConditionFn          — function_handle @(x,y)->logical (required)
-    AlarmOffConditionFn  — function_handle; [] means no hysteresis
-    MinDuration          — native parent-X units; 0 disables debounce
-    EventStore           — EventStore handle; [] disables event emission
-    OnEventStart         — function_handle @(event); [] disables
-    OnEventEnd           — function_handle @(event); [] disables
-    Persist              — logical; when true, derived (X, Y) is
-                           cached to DataStore via storeMonitor on
-                           every recompute_()/appendData() and loaded
-                           on first getXY() (staleness-checked via
-                           quad-signature). Default false — the opt-in
-                           default enforces Pitfall 2 cache-invalidation
-                           discipline: consumers that do not opt in
-                           pay zero disk cost.
-    DataStore            — FastSenseDataStore handle; required when
-                           Persist=true. Provides storeMonitor /
-                           loadMonitor / clearMonitor back-end.
-
-  Methods (Tag contract):
-    getXY                — lazy-memoized 0/1 vector on parent's grid
-    valueAt(t)           — ZOH lookup into getXY cache
-    getTimeRange         — [X(1), X(end)]; [NaN NaN] if empty
-    getKind              — returns 'monitor'
-    toStruct             — serialize (no function handles, no data)
-    fromStruct (Static)  — Pass-1 reconstruction (dummy parent)
-    resolveRefs(registry)— Pass-2 wire Parent + register listener
-
-  Methods (additional):
-    invalidate           — clear cache + mark dirty
-    appendData(newX,newY) — Phase 1007 (MONITOR-08) streaming tail.
-                            Extends cache incrementally; preserves
-                            hysteresis FSM state and MinDuration
-                            bookkeeping across the append boundary.
-                            Falls back to full recompute_() when
-                            the cache is dirty/empty (cold start).
-
-  Error IDs:
-    MonitorTag:invalidParent            — parentTag not a Tag
-    MonitorTag:invalidCondition         — conditionFn not a function_handle
-    MonitorTag:unknownOption            — unknown NV key or dangling key
-    MonitorTag:dataMismatch             — fromStruct missing required fields
-    MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
-    MonitorTag:invalidData              — appendData numeric/length mismatch
-    MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
-    MonitorTag:emitEventBadKind         — emitEvent_ called with kind not in {start,closed,end}
-    MonitorTag:eventLogReentrantSkip    — (warning ID) cluster-mode emission skipped due to
-                                          re-entrant per-tag lock acquire (Plan 02 will handle)
-
-  Deferred-notify (Pitfall 13 prevention):
-    OnEventStart / OnEventEnd callbacks are NOT invoked during the emission body.
-    They are queued on pendingNotify_ and flushed by flushPendingNotify_() AFTER
-    the emission loop completes, with inEmission_ = false.
-    Pre-refactor: listeners fired synchronously DURING EventStore.append.
-    Post-refactor: listeners fire immediately AFTER appendData/getXY returns,
-    but OUTSIDE the emission window. The "event was emitted" semantic is preserved;
-    only the timing changes from synchronous-during-append to post-emission-batch.
-
-  Persistence (Phase 1007 MONITOR-09):
-    Opt-in via Persist=true + DataStore. Staleness detection uses a
-    quad-signature (parent_key, num_points, parent_xmin, parent_xmax)
-    stamped at write. Default-off preserves Pitfall 2 cache-invalidation
-    safety — consumers that do not opt in pay zero disk cost.
-
-### Constructor
-
-```matlab
-obj = MonitorTag(key, parentTag, conditionFn, varargin)
-```
-
-MONITORTAG Construct a MonitorTag.
-  m = MonitorTag(key, parentTag, conditionFn) creates a lazy
-  binary monitor whose output is conditionFn(parentTag.X,
-  parentTag.Y) aligned to parent's native grid.
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Parent |  | Tag handle (required) |
-| ConditionFn |  | function_handle @(x,y) -> logical (required) |
-| AlarmOffConditionFn | `[]` | function_handle; [] means no hysteresis |
-| MinDuration | `0` | native parent-X units; 0 disables debounce |
-| OnEventStart | `[]` | function_handle @(event); [] disables callback |
-| OnEventEnd | `[]` | function_handle @(event); [] disables callback |
-| Persist | `false` | MONITOR-09 opt-in (Pitfall 2 default-off) |
-| DataStore | `[]` | FastSenseDataStore handle; required when Persist=true |
-| EventLog | `[]` | libs/Concurrency/EventLog.m handle; non-empty triggers cluster-mode emission |
-
-### Methods
-
-#### `[x, y] = getXY(obj)`
-
-GETXY Return lazy-memoized 0/1 vector aligned to parent's grid.
-  When Persist=true + DataStore bound, first attempts a disk
-  load via tryLoadFromDisk_ (quad-signature staleness check).
-  On miss or stale cache, falls through to recompute_() and
-  then persistIfEnabled_() writes the fresh row.
-
-#### `v = valueAt(obj, t)`
-
-VALUEAT ZOH lookup into the cached 0/1 series.
-  Returns NaN if parent has no data.
-
-#### `[tMin, tMax] = getTimeRange(obj)`
-
-GETTIMERANGE Return [X(1), X(end)]; [NaN NaN] if empty.
-
-#### `k = getKind(obj)`
-
-GETKIND Return the kind identifier 'monitor'.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Serialize MonitorTag state to a plain struct.
-  Function handles are NOT serialized — consumers re-bind
-  ConditionFn / AlarmOffConditionFn / EventStore / callbacks
-  after loadFromStructs. The Parent handle is stored as its
-  Key string (parentkey); resolveRefs wires the real handle
-  in Pass 2 of the two-phase loader.
-
-#### `resolveRefs(obj, registry)`
-
-RESOLVEREFS Pass-2 hook to wire Parent from registry by key.
-  Called by TagRegistry.loadFromStructs. On success:
-    - obj.Parent is swapped to the real registry entry
-    - obj registers itself as a listener on the real parent
-    - obj.invalidate() clears any stale cache
-    - obj.ParentKey_ is cleared (consumed)
-
-#### `invalidate(obj)`
-
-INVALIDATE Clear cache + mark dirty; cascade to downstream listeners.
-  MonitorTag itself is observable: downstream MonitorTags
-  (recursive chains) register as listeners and are invalidated
-  here so that a root-parent update propagates through the
-  full derivation chain.
-
-#### `addListener(obj, m)`
-
-ADDLISTENER Register a listener notified when this monitor invalidates.
-  Enables recursive MonitorTag chains — an outer MonitorTag
-  that wraps an inner MonitorTag registers as the inner's
-  listener so that root-parent updates cascade through.
-
-#### `tf = getInEmission_(obj)`
-
-GETINMISSION_ Test accessor: return true while inside an emission body.
-  Exists ONLY for test observability (deferred-notify proof in
-  TestListenerCannotAcquireLock). The trailing underscore marks it as
-  an internal accessor not intended for production callers.
-
-#### `appendData(obj, newX, newY)`
-
-APPENDDATA Extend cached (X, Y) with new tail samples — no full recompute.
-  Preserves hysteresis FSM state and MinDuration bookkeeping
-  across the append boundary (MONITOR-08). Events fire only
-  for runs that COMPLETE (reach a falling edge) inside newX:
-  a run still open at the tail end is carried as state for
-  the next appendData call; a run that was already open at
-  the cache end and closes inside newX fires ONE event with
-  StartTime = the original (carried) start.
-
-#### `set()`
-
-#### `set()`
-
-#### `set()`
-
-#### `ll = getListeners_(obj)`
-
-GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
-  Returns the private listeners_ cell. Hidden so it does not
-  appear in tab-completion / doc(); not part of public API
-  (D-10).
-
-### Static Methods
-
-#### `MonitorTag.obj = fromStruct(s)`
-
-FROMSTRUCT Pass-1 reconstruction from a toStruct output.
-  The real Parent handle is wired in Pass 2 via resolveRefs.
-  ConditionFn / AlarmOffConditionFn / EventStore / callbacks
-  are NOT restored — consumers must re-bind these after load.
-
----
-
-## `SensorTag` --- Concrete Tag subclass for sensor time-series data.
-
-> Inherits from: `Tag`
-
-SensorTag is the primary sensor data carrier in the Tag-based domain
-  model.  It stores time-series data (X, Y) directly and satisfies the
-  Tag contract (getXY, valueAt, getTimeRange, getKind='sensor',
-  toStruct, fromStruct).  Data-role methods (load, toDisk, toMemory,
-  isOnDisk) operate on the inlined private properties.
-
-  Properties (Dependent): DataStore -- read-only view of the disk store.
-
-  Constructor accepts Tag universals (Name, Units, Description,
-  Labels, Metadata, Criticality, SourceRef), sensor extras (ID,
-  Source, MatFile, KeyName), and inline 'X'/'Y' data arrays.
-
-### Constructor
-
-```matlab
-obj = SensorTag(key, varargin)
-```
-
-SENSORTAG Construct a SensorTag with inlined data storage.
-  t = SensorTag(key) creates a SensorTag with the given key.
-
-### Methods
-
-#### `ds = get()`
-
-GET.DATASTORE Return the disk-backed DataStore (read-only view).
-
-#### `v = get()`
-
-GET.X Read-only access to timestamps (backward-compat with legacy Sensor.X).
-
-#### `v = get()`
-
-GET.Y Read-only access to values (backward-compat with legacy Sensor.Y).
-
-#### `v = get()`
-
-GET.THRESHOLDS Always empty cell array (backward-compat stub).
-  Legacy Sensor class exposed a Thresholds cell array of
-  ThresholdRule handles. In the v2.0 Tag model, thresholds
-  are expressed as MonitorTag children bound via TagRegistry
-  — not as a nested collection on the sensor. Widgets that
-  still read .Thresholds (GaugeWidget, StatusWidget) see an
-  empty cell here and fall through to their "no thresholds"
-  branch. Consumers should migrate to the TagRegistry +
-  MonitorTag workflow for threshold behaviour.
-
-#### `r = get()`
-
-GET.RAWSOURCE Return the raw-data source binding (read-only view).
-  Populated only for SensorTags whose 'RawSource' NV-pair was
-  set at construction. Consumed by BatchTagPipeline /
-  LiveTagPipeline to locate the raw file + column for this tag.
-
-#### `[X, Y] = getXY(obj)`
-
-GETXY Return X, Y by reference (zero-copy via COW).
-  MATLAB copy-on-write guarantees no memory allocation until
-  the caller mutates X or Y.
-
-#### `v = valueAt(obj, t)`
-
-VALUEAT Return Y at the last index where X <= t (ZOH, clamped).
-  Returns NaN on empty data.
-
-#### `[tMin, tMax] = getTimeRange(obj)`
-
-GETTIMERANGE Return [X(1), X(end)].  [NaN NaN] if empty.
-
-#### `k = getKind(obj)`
-
-GETKIND Return the literal kind identifier 'sensor'.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Serialize SensorTag state to a plain struct.
-  Tag universals at the top level; sensor-specific extras
-  nested under s.sensor (only when non-default) to keep the
-  struct compact.  X/Y are INTENTIONALLY OMITTED -- runtime
-  data, not serialization state.
-
-#### `load(obj, matFile)`
-
-LOAD Load sensor data from a .mat file.
-  t.load() uses the already-configured MatFile.
-  t.load(path) sets MatFile before loading.
-
-#### `toDisk(obj)`
-
-TODISK Move X/Y data to disk-backed FastSenseDataStore.
-  Clears X_ and Y_ from memory after transfer.
-
-#### `toMemory(obj)`
-
-TOMEMORY Load disk-backed data back into memory.
-
-#### `tf = isOnDisk(obj)`
-
-ISONDISK True if sensor data is stored on disk.
-
-#### `addListener(obj, m)`
-
-ADDLISTENER Register a listener notified on underlying data change.
-  Listener must implement an invalidate() method. Strong
-  reference -- caller manages lifecycle.
-
-#### `updateData(obj, X, Y)`
-
-UPDATEDATA Replace X/Y data and fire listeners.
-
-#### `ll = getListeners_(obj)`
-
-GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
-  Returns the private listeners_ cell. Hidden so it does not
-  appear in tab-completion / doc(); not part of public API
-  (D-10). Mirrors getListeners_ on StateTag, MonitorTag,
-  CompositeTag, DerivedTag.
-
-### Static Methods
-
-#### `SensorTag.obj = fromStruct(s)`
-
-FROMSTRUCT Reconstruct SensorTag from a toStruct output.
-
----
-
-## `StateTag` --- Concrete Tag subclass for discrete state signals with ZOH lookup.
-
-> Inherits from: `Tag`
-
-StateTag models a piecewise-constant ("zero-order hold") time
-  series representing a discrete system state (e.g., machine mode,
-  recipe phase).  valueAt(t) returns the most recent known state
-  value using a right-biased binary search on X.  Supports BOTH
-  numeric and cellstr Y — semantics are byte-for-byte equivalent to
-  legacy StateChannel.valueAt.  Adds StateTag:emptyState guard so
-  unloaded tags produce a clean error instead of a bounds crash.
-
-  Properties (public, in addition to Tag universals):
-    X — 1xN sorted numeric: timestamps of state transitions
-    Y — 1xN numeric OR 1xN cell of char: state values
-
-  Methods:
-    StateTag     — constructor (key + 'X','Y' + Tag universals)
-    getXY        — return [X, Y] (pass-through)
-    valueAt(t)   — ZOH lookup; scalar or vector t; numeric or cellstr Y
-    getTimeRange — [X(1), X(end)]; [NaN NaN] if empty
-    getKind      — returns 'state'
-    toStruct     — serialize X, Y, plus Tag universals
-    fromStruct   — static factory rebuilding StateTag from toStruct
-
-  Error IDs:
-    StateTag:emptyState     — valueAt on empty X/Y
-    StateTag:unknownOption  — unknown constructor name-value key
-    StateTag:dataMismatch   — fromStruct struct missing .key
-
-### Constructor
-
-```matlab
-obj = StateTag(key, varargin)
-```
-
-STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y + RawSource.
-  Valid name-value keys: 'X', 'Y', 'RawSource', plus Tag universals
-  (Name, Units, Description, Labels, Metadata, Criticality, SourceRef).
-  Raises StateTag:unknownOption for unrecognized or dangling keys.
-  Raises TagPipeline:invalidRawSource if RawSource is malformed.
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| X | `[]` | 1xN numeric: sorted transition timestamps |
-| Y | `[]` | 1xN numeric OR 1xN cell of char: state values |
-
-### Methods
-
-#### `r = get()`
-
-GET.RAWSOURCE Return the raw-data source binding (read-only view).
-  Populated only for StateTags whose 'RawSource' NV-pair was
-  set at construction. Consumed by BatchTagPipeline /
-  LiveTagPipeline to locate the raw file + column for this tag.
-
-#### `[X, Y] = getXY(obj)`
-
-GETXY Return [X, Y] data vectors (pass-through).
-
-#### `val = valueAt(obj, t)`
-
-VALUEAT Return state value at t using zero-order hold.
-  Right-biased binary search on X: largest idx with X(idx)<=t,
-  clamped to [1, N].  Supports scalar and vector t for both
-  numeric and cellstr Y.  Raises StateTag:emptyState if X or
-  Y is empty.  Semantics match StateChannel.valueAt byte-for-byte.
-
-#### `[tMin, tMax] = getTimeRange(obj)`
-
-GETTIMERANGE Return [X(1), X(end)]; [NaN NaN] if empty.
-
-#### `k = getKind(obj)`
-
-GETKIND Return the kind identifier 'state'.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Serialize StateTag to a plain struct.
-  Wraps cellstr Labels and cellstr Y once via {...} to survive
-  MATLAB's struct() cellstr-collapse.  fromStruct unwraps.
-
-#### `addListener(obj, m)`
-
-ADDLISTENER Register a listener notified on underlying data change.
-  Listener must implement an invalidate() method. Strong
-  reference — caller manages lifecycle.
-
-#### `updateData(obj, X, Y)`
-
-UPDATEDATA Replace public X/Y and fire listeners (MONITOR-04).
-  Additive API — does NOT touch constructor or getXY paths.
-  Any registered MonitorTag or other listener receives an
-  invalidate() call after the new data is installed.
-
-#### `ll = getListeners_(obj)`
-
-GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
-  Returns the private listeners_ cell. Hidden so it does not
-  appear in tab-completion / doc(); not part of public API
-  (D-10).
-
-### Static Methods
-
-#### `StateTag.obj = fromStruct(s)`
-
-FROMSTRUCT Reconstruct StateTag from a toStruct output.
-
----
-
-## `Tag` --- Abstract base for the unified Tag domain model.
-
-> Inherits from: `handle`
-
-Tag is the root of the v2.0 domain hierarchy.  Subclasses
-  (SensorTag, StateTag, MonitorTag, CompositeTag) provide concrete
-  implementations of the six abstract-by-convention methods.
-
-  Tag uses the Octave-safe "throw-from-base" abstract pattern:
-  the base class provides stub methods that raise a notImplemented
-  error, and subclasses override with concrete implementations.
-  Do NOT use the Abstract-methods block pattern here — it has
-  divergent semantics between MATLAB and Octave (see DataSource.m
-  for the proven pattern used here).
-
-  Tag Properties (public):
-    Key         — char: unique identifier (required, non-empty)
-    Name        — char: human-readable name (defaults to Key)
-    Units       — char: measurement unit
-    Description — char: free-text description
-    Labels      — cellstr: cross-cutting classification (META-01)
-    Metadata    — struct: open key-value bag (META-03)
-    Criticality — char enum: 'low'|'medium'|'high'|'safety' (META-04)
-    SourceRef   — char: optional provenance string
-
-  Tag Methods (abstract-by-convention — subclass must implement):
-    getXY               — return [X, Y] data vectors
-    valueAt(t)          — return scalar value at time t
-    getTimeRange        — return [tMin, tMax]
-    getKind             — return kind string ('sensor'|'state'|'monitor'|'composite'|'mock')
-    toStruct            — return serializable struct
-    fromStruct (Static) — reconstruct from struct
-
-  Tag Methods (default hooks — override when needed):
-    resolveRefs(registry) — Pass-2 deserialization hook; default no-op
-
-### Constructor
-
-```matlab
-obj = Tag(key, varargin)
-```
-
-TAG Construct a Tag with required key and optional name-value pairs.
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Key | `''` | char: unique identifier |
-| Name | `''` | char: human-readable name |
-| Units | `''` | char: measurement unit |
-| Description | `''` | char: free-text description |
-| Labels | `{}` | cellstr: cross-cutting classification |
-| Metadata | `struct()` | struct: open key-value bag |
-| Criticality | `'medium'` | char enum: 'low'\|'medium'\|'high'\|'safety' |
-| SourceRef | `''` | char: optional provenance string |
-| EventStore | `[]` | EventStore handle; [] disables event convenience methods |
-
-### Methods
-
-#### `set()`
-
-SET.CRITICALITY Validate enum before assigning.
-
-#### `[X, Y] = getXY(obj)`
-
-GETXY Return [X, Y] data vectors.  Subclass must override.
-
-#### `v = valueAt(obj, t)`
-
-VALUEAT Return scalar value at time t.  Subclass must override.
-
-#### `[tMin, tMax] = getTimeRange(obj)`
-
-GETTIMERANGE Return [tMin, tMax] time bounds.  Subclass must override.
-
-#### `k = getKind(obj)`
-
-GETKIND Return kind string.  Subclass must override.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Return serializable struct.  Subclass must override.
-
-#### `resolveRefs(obj, registry)`
-
-RESOLVEREFS Pass-2 hook for two-phase deserialization.
-  Default: no-op.  CompositeTag (Phase 1008) will override to
-  wire up children by key.  Leaf tags (Sensor/State/Monitor)
-  do not need references resolved.
-
-#### `addManualEvent(obj, tStart, tEnd, label, message)`
-
-ADDMANUALEVENT Create a manual annotation event bound to this tag.
-  tag.addManualEvent(tStart, tEnd, label, message) creates an Event
-  with Category = 'manual_annotation' and TagKeys = {obj.Key},
-  appends to the bound EventStore, and registers in EventBinding.
-
-#### `events = eventsAttached(obj)`
-
-EVENTSATTACHED Query events bound to this tag via EventBinding.
-  Returns Event array (possibly empty). This is a query, NOT a
-  stored property -- no Event handles on Tag (Pitfall 4).
-
-#### `ll = getListeners_(obj)`
-
-GETLISTENERS_ Default accessor returning empty cell (Phase 1028 plan 05).
-  Subclasses that maintain a listener cell (SensorTag,
-  StateTag, MonitorTag, CompositeTag, DerivedTag) override
-  this to expose their private `listeners_` property for
-  `Tag.invalidateBatch_` to walk. The Tag base returns {} —
-  abstract Tag has no listeners.
-
-### Static Methods
-
-#### `Tag.obj = fromStruct(s)`
-
-FROMSTRUCT Reconstruct a Tag from a struct.  Subclass must override.
-
-#### `Tag.invalidateBatch_(tagSet)`
-
-INVALIDATEBATCH_ Coalesced invalidation across many tags (Phase 1028 plan 05).
-
----
-
-## `TagRegistry` --- Singleton catalog of named Tag entities.
-
-TagRegistry provides a centralized, persistent catalog of all
-  known Tag objects in the v2.0 domain model.  It mirrors the
-  ThresholdRegistry API for CRUD / query / introspection, with
-  three intentional deltas:
-
-    1. register() HARD-ERRORS on duplicate key (Pitfall 7).
-       ThresholdRegistry silently overwrites — TagRegistry does
-       not, to prevent subtle identity bugs when two different
-       tags claim the same key.
-    2. loadFromStructs() uses two-phase deserialization
-       (Pitfall 8):
-         Pass 1 — instantiate every tag with empty children.
-         Pass 2 — call tag.resolveRefs(registry) on each.
-       This is order-insensitive; no silent try/warn/skip.  Any
-       resolveRefs failure is wrapped as TagRegistry unresolvedRef.
-    3. findByKind() replaces findByDirection() because Tag is
-       multi-kind (sensor | state | monitor | composite | mock).
-
-  The catalog starts EMPTY on first use.
-
-  TagRegistry Methods (Static, public):
-    get             — retrieve Tag by key; errors if missing
-    register        — add Tag to catalog; hard error on duplicate
-    unregister      — remove Tag (silent no-op if missing)
-    clear           — wipe catalog
-    find            — tags matching predicate fn
-    findByLabel     — tags carrying a given label (META-02)
-    findByKind      — tags whose getKind() matches
-    list            — print sorted keys + names to command window
-    printTable      — detailed table (Key/Name/Kind/Criticality/Units/Labels)
-    viewer          — uitable GUI (Octave-safe)
-    loadFromStructs — two-phase JSON round-trip (TAG-06, TAG-07)
-    instantiateByKind — dispatch s.kind -> the right fromStruct
-
-### Static Methods
-
-#### `TagRegistry.t = get(key)`
-
-GET Retrieve a Tag by key.
-  t = TagRegistry.get(key) returns the Tag stored under key.
-  Throws TagRegistry unknownKey if not registered.
-
-#### `TagRegistry.register(key, tag)`
-
-REGISTER Add a Tag to the catalog (hard error on collision).
-  TagRegistry.register(key, tag) stores tag under key.
-  Unlike ThresholdRegistry (which silently overwrites), this
-  registry HARD-ERRORS on collision with TagRegistry
-  duplicateKey (Pitfall 7).  Call TagRegistry.unregister(key)
-  first to replace an existing entry.
-
-#### `TagRegistry.unregister(key)`
-
-UNREGISTER Remove a Tag (silent no-op if missing).
-
-#### `TagRegistry.clear()`
-
-CLEAR Wipe the catalog.  Primarily for test isolation.
-
-#### `TagRegistry.setEventStore(store)`
-
-SETEVENTSTORE Register the default EventStore for the registry.
-  TagRegistry.setEventStore(store) sets the global default used
-  by FastSense, FastSenseWidget, EventTimelineWidget, and
-  TableWidget(events) when no per-instance EventStore is
-  configured.  Pass [] to clear the default.
-
-#### `TagRegistry.store = getEventStore()`
-
-GETEVENTSTORE Return the registry-default EventStore, or [] if unset.
-  Safe to call before any store has been registered -- returns [].
-
-#### `TagRegistry.ts = find(predicateFn)`
-
-FIND Return cell of Tags matching predicateFn(tag) -> logical.
-
-#### `TagRegistry.ts = findByLabel(label)`
-
-FINDBYLABEL Return cell of Tags carrying the given label (META-02).
-
-#### `TagRegistry.ts = findByKind(kind)`
-
-FINDBYKIND Return cell of Tags where getKind() == kind.
-
-#### `TagRegistry.list()`
-
-LIST Print sorted keys + names to command window.
-
-#### `TagRegistry.printTable()`
-
-PRINTTABLE Print Key/Name/Kind/Criticality/Units/Labels table.
-
-#### `TagRegistry.hFig = viewer()`
-
-VIEWER Open uitable GUI showing all registered tags (Octave-safe).
-
-#### `TagRegistry.loadFromStructs(structs)`
-
-LOADFROMSTRUCTS Two-phase JSON deserialization (TAG-06, Pitfall 8).
-  Pass 1: instantiate every tag with empty children and
-          register it via TagRegistry.register (so duplicate
-          keys in the input surface as TagRegistry
-          duplicateKey, and unknown kinds surface as
-          TagRegistry unknownKind).
-  Pass 2: call tag.resolveRefs(catalog) on every registered
-          tag.  Any error raised during Pass 2 is wrapped
-          and rethrown as TagRegistry unresolvedRef — never
-          silently swallowed.
-
-#### `TagRegistry.tag = instantiateByKind(s)`
-
-INSTANTIATEBYKIND Dispatch fromStruct based on s.kind.
-  Phase 1004 ships 'mock' and 'mockThrowingResolve' only
-  (tests).  Phase 1005+ extends the switch for sensor,
-  state, monitor, and composite kinds.
 

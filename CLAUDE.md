@@ -61,13 +61,13 @@ An upgrade to FastSense's existing dashboard engine adding nested layout organiz
 - `uvicorn[standard] >= 0.24`
 - `websockets >= 12.0`
 - `numpy >= 1.24`
-- `anthropic` (dev/scripts dependency, NOT in main dependencies — used only by `scripts/generate_wiki.py`)
+- `openai` (dev/scripts dependency, NOT in main dependencies — used by `scripts/generate_wiki.py` to call the OpenRouter API)
 - GitHub Actions - CI/CD (tests, MEX build, benchmarks, wiki generation, release)
 - Codecov - test coverage reporting (MATLAB runs only; token via secret)
 ## Configuration
 - `FASTSENSE_SKIP_BUILD=1` - skip MEX compilation in CI when MEX binaries are cached
 - `FASTSENSE_RESULTS_FILE` - path for Octave test result output in CI
-- `ANTHROPIC_API_KEY` - required only for `scripts/generate_wiki.py` (wiki auto-generation)
+- `OPENROUTER_API_KEY` - required only for `scripts/generate_wiki.py` (wiki auto-generation via OpenRouter)
 - `miss_hit.cfg` - MISS_HIT linter/style/metric configuration (project root)
 - `bridge/python/pyproject.toml` - Python bridge package config
 - ARM64: `-O3 -ffast-math` (Clang/MATLAB) or `-O3 -mcpu=apple-m3 -ftree-vectorize -ffast-math` (GCC/Octave)
