@@ -1,15 +1,15 @@
 classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
-%TESTDASHBOARDCURRENTVIEWINDICATOR End-to-end integration suite for the Phase 1039 current-view box.
+%TESTDASHBOARDCURRENTVIEWINDICATOR End-to-end integration suite for the Phase 1039 current-view boxes.
 %   Goal-backward verification: builds a real DashboardEngine with multiple
 %   FastSenseWidgets, zooms ONE (or more) widget(s) out of sync, drives the
 %   engine indicator via the public test seam updateCurrentViewIndicatorForTest_,
-%   and asserts the slider's hCurrentViewBox becomes visible at the zoomed
-%   widget's XLim union; re-syncing (broadcastTimeRange) hides it; an all-synced
-%   dashboard never shows it.
+%   and asserts the slider grows ONE box PER out-of-sync graph at that graph's
+%   XLim window; re-syncing (broadcastTimeRange) clears them; an all-synced
+%   dashboard never shows any.
 %
 %   This asserts the observable truths of the phase goal against the INTEGRATED
 %   stack from Plans 01-03:
-%     - Plan 01: TimeRangeSelector.hCurrentViewBox + setCurrentView/hideCurrentView
+%     - Plan 01: TimeRangeSelector box pool + setCurrentViews/hideCurrentView
 %     - Plan 02: FastSenseWidget.getCurrentXLim + UseGlobalTime out-of-sync signal
 %     - Plan 03: DashboardEngine.updateCurrentViewIndicator_ + the test seam
 %
@@ -20,12 +20,12 @@ classdef TestDashboardCurrentViewIndicator < matlab.unittest.TestCase
 %   flipped it, so the explicit set is a no-op).
 %
 %   Coverage:
-%     testBoxHiddenWhenAllSynced        -> all-synced -> box hidden, CurrentView empty
-%     testBoxAppearsWhenWidgetZoomed    -> one zoomed -> box visible at that window
-%     testBoxHidesAfterResync           -> broadcastTimeRange re-sync -> box hidden
-%     testUnionOfTwoOutOfSyncWidgets    -> two zoomed -> box spans the union
-%     testSubEpsilonDifferenceStaysHidden -> sub-epsilon delta from Selection -> hidden
-%     testNoSelectorGuardNoThrow        -> engine without a slider -> seam no-throw
+%     testBoxHiddenWhenAllSynced          -> all-synced -> pool empty, CurrentViews empty
+%     testBoxAppearsWhenWidgetZoomed      -> one zoomed -> one box at that window
+%     testBoxHidesAfterResync             -> broadcastTimeRange re-sync -> pool cleared
+%     testTwoOutOfSyncProduceSeparateBoxes-> two zoomed -> two boxes, distinct colours
+%     testSubEpsilonDifferenceStaysHidden -> sub-epsilon delta from Selection -> no box
+%     testNoSelectorGuardNoThrow          -> engine without a slider -> seam no-throw
 
     properties
         Engines = {}
