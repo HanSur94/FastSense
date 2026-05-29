@@ -189,6 +189,7 @@ classdef LiveEventPipeline < handle
                 drawnow limitrate nocallbacks;  % Pitfall 7 reentrancy guard (mirrors LiveTagPipeline)
             end
             allNewEvents = [];
+            allSensorData = {};  % parallel cell array: one sensorData struct per event in allNewEvents
             hasNewData = false;
 
             % --- MonitorTag path ---
@@ -196,7 +197,7 @@ classdef LiveEventPipeline < handle
             for i = 1:numel(monitorKeys)
                 key = monitorKeys{i};
                 try
-                    [newEvents, gotData] = obj.processMonitorTag_(key);
+                    [newEvents, gotData, sensorData] = obj.processMonitorTag_(key);
                     hasNewData = hasNewData || gotData;
                     if ~isempty(newEvents)
                         if isempty(allNewEvents)
@@ -204,6 +205,10 @@ classdef LiveEventPipeline < handle
                         else
                             allNewEvents = [allNewEvents, newEvents]; %#ok<AGROW>
                         end
+                        % Pair each new event with its monitor's sensorData so that
+                        % IncludeSnapshot rules in NotificationService can render PNGs
+                        % with the actual sensor values from this tick.
+                        allSensorData = [allSensorData, repmat({sensorData}, 1, numel(newEvents))]; %#ok<AGROW>
                     end
                 catch ex
                     fprintf('[PIPELINE WARNING] MonitorTag "%s" failed: %s\n', ...
@@ -224,12 +229,19 @@ classdef LiveEventPipeline < handle
                 obj.EventStore.save();
             end
 
-            % Send notifications
+            % Send notifications — each event is paired with its monitor's real sensorData
+            % so IncludeSnapshot rules can attach PNGs rendered from the live tick data.
+            % Default DryRun=true service ignores the richer struct harmlessly (it only
+            % generates snapshots when a rule sets IncludeSnapshot=true).
             if ~isempty(obj.NotificationService)
                 for i = 1:numel(allNewEvents)
                     ev = allNewEvents(i);
+                    sd = struct();
+                    if numel(allSensorData) >= i
+                        sd = allSensorData{i};
+                    end
                     try
-                        obj.NotificationService.notify(ev, struct());
+                        obj.NotificationService.notify(ev, sd);
                     catch ex
                         fprintf('[PIPELINE WARNING] Notification failed: %s\n', ex.message);
                     end
@@ -244,8 +256,17 @@ classdef LiveEventPipeline < handle
     end
 
     methods (Access = private)
-        function [newEvents, gotData] = processMonitorTag_(obj, key)
+        function [newEvents, gotData, sensorData] = processMonitorTag_(obj, key)
             %PROCESSMONITORTAG_ Tag-first live-tick path (SC#4 realization).
+            %
+            %   Returns [newEvents, gotData, sensorData] where sensorData is a
+            %   struct matching the generateEventSnapshot contract:
+            %     struct('X', <vector>, 'Y', <vector>, 'thresholdValue', <numeric>,
+            %            'thresholdDirection', <'upper'|'lower'>)
+            %   Built from the same fullX/fullY used for parent.updateData plus the
+            %   first new event's ThresholdValue/Direction.  sensorData is well-formed
+            %   on every return path (X=[],Y=[],thresholdValue=NaN,thresholdDirection='upper'
+            %   for early-return paths where no data was fetched).
             %
             %   Phase 1007 MONITOR-08 contract: MonitorTag.appendData
             %   expects the monitor's Parent to already carry the new
@@ -279,8 +300,12 @@ classdef LiveEventPipeline < handle
             %     On contention (ok=false), the monitor is skipped this tick and
             %     SkippedMonitorCount is incremented. onCleanup releases the lock after
             %     the critical section completes (RAII pattern from LiveTagPipeline.processTag_).
-            newEvents = [];
-            gotData   = false;
+            newEvents  = [];
+            gotData    = false;
+            % Initialise sensorData on every return path so callers always get a
+            % well-formed struct even when we return early.
+            sensorData = struct('X', [], 'Y', [], 'thresholdValue', NaN, ...
+                'thresholdDirection', 'upper');
             if ~obj.DataSourceMap.has(key)
                 return;
             end
@@ -355,6 +380,14 @@ classdef LiveEventPipeline < handle
             fullX = [oldX(:).', newX(:).'];
             fullY = [oldY(:).', newY(:).'];
 
+            % Build sensorData for notification snapshot using the full accumulated
+            % sensor grid.  thresholdValue/thresholdDirection will be filled in from
+            % the first new event below (they are the same for all events from this
+            % monitor).  The struct matches the generateEventSnapshot contract exactly:
+            %   struct('X', ..., 'Y', ..., 'thresholdValue', ..., 'thresholdDirection', ...)
+            sensorData = struct('X', fullX, 'Y', fullY, ...
+                'thresholdValue', NaN, 'thresholdDirection', 'upper');
+
             % CRITICAL ORDERING (Pitfall Y): parent.updateData BEFORE
             % monitor.appendData.  See MonitorTag.m:330-334 docstring.
             if ismethod(monitor.Parent, 'updateData')
@@ -373,6 +406,13 @@ classdef LiveEventPipeline < handle
                 if postCount > preCount
                     newEvents = allEvts((preCount+1):postCount);
                 end
+            end
+
+            % Populate sensorData threshold info from the first new event.
+            % All new events on this tick share the same monitor (same threshold).
+            if ~isempty(newEvents)
+                sensorData.thresholdValue     = newEvents(1).ThresholdValue;
+                sensorData.thresholdDirection = newEvents(1).Direction;
             end
             % === END CRITICAL SECTION (onCleanup releases the lock here in cluster mode) ===
         end
