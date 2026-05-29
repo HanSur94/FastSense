@@ -1191,7 +1191,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         % ---- Phase 1034 Plan 06: Wiki toolbar button + openWiki entry point ----
 
         function testToolbarHasWikiButton(testCase)
-        %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 6.
+        %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 7.
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
             btn = findall(app.getFigForTest_(), 'Tag', 'CompanionWikiBtn');
@@ -1199,8 +1199,8 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'testToolbarHasWikiButton: Wiki button missing from toolbar');
             testCase.verifyEqual(numel(btn), 1, ...
                 'testToolbarHasWikiButton: expected exactly one Wiki button');
-            testCase.verifyEqual(btn(1).Layout.Column, 6, ...
-                'testToolbarHasWikiButton: Wiki button should sit in column 6');
+            testCase.verifyEqual(btn(1).Layout.Column, 7, ...
+                'testToolbarHasWikiButton: Wiki button should sit in column 7');
         end
 
         function testToolbarGearMovedToColumn8(testCase)
@@ -1211,8 +1211,8 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             found = false;
             for k = 1:numel(btns)
                 if ~isempty(btns(k).Text) && strcmp(btns(k).Text, char(9881))
-                    testCase.verifyEqual(btns(k).Layout.Column, 8, ...
-                        'testToolbarGearMovedToColumn8: gear button should now sit in column 8');
+                    testCase.verifyEqual(btns(k).Layout.Column, 9, ...
+                        'testToolbarGearMovedToColumn8: gear button should now sit in column 9');
                     found = true;
                     break;
                 end
