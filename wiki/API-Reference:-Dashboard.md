@@ -693,6 +693,831 @@ ASCIIRENDER Return ASCII representation of this widget.
 
 ---
 
+## `DashboardLayout` --- Manages 24-column responsive grid positioning.
+
+> Inherits from: `handle`
+
+Converts widget grid positions [col, row, width, height] to normalized
+  canvas coordinates [x, y, w, h]. Handles overlap resolution, row
+  calculation, and scrollable canvas when content exceeds the viewport.
+
+### Constructor
+
+```matlab
+obj = DashboardLayout(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Columns | `24` |  |
+| TotalRows | `4` |  |
+| ContentArea | `[0 0 1 1]` |  |
+| Padding | `[0 0 0 0]` |  |
+| GapH | `0` |  |
+| GapV | `0` |  |
+| RowHeight | `0.22` |  |
+| ScrollbarWidth | `0.015` |  |
+| OnScrollCallback | `[]` | function handle: @(topRow, bottomRow) |
+| DetachCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
+| CreateEventCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
+| VisibleRows | `[1 Inf]` | [topRow bottomRow] currently visible |
+| EngineRef | `[]` | Phase 1032 PLOG-VIZ-05 — back-reference to DashboardEngine for chrome callbacks (addPlantLogToggle) |
+| hFigure | `[]` | Figure handle for popup dismiss callbacks |
+| hInfoPopup | `[]` | Handle to active info popup uipanel (at most one) |
+
+### Methods
+
+#### `cr = canvasRatio(obj)`
+
+CANVASRATIO Ratio of canvas height to viewport height.
+  Returns 1 when content fits, >1 when scrolling is needed.
+
+#### `pos = computePosition(obj, gridPos)`
+
+COMPUTEPOSITION Convert grid position to canvas-normalized coords.
+
+#### `[stepW, stepH, cellW, cellH] = canvasStepSizes(obj)`
+
+CANVASSTEPSIZES Grid step sizes in canvas-normalized coords.
+
+#### `[dx_c, dy_c] = figureToCanvasDelta(obj, dx_fig, dy_fig)`
+
+FIGURETOCANVASDELTA Convert figure-normalized deltas to canvas deltas.
+
+#### `maxRow = calculateMaxRow(obj, widgets)`
+
+#### `tf = overlaps(obj, posA, posB)`
+
+#### `newPos = resolveOverlap(obj, pos, existingPositions)`
+
+#### `ensureViewport(obj, hFigure, theme)`
+
+ENSUREVIEWPORT Create viewport/canvas/scrollbar only if they do not exist yet.
+  Idempotent: if the viewport handle is already valid, returns immediately
+  without deleting or recreating anything. On the first call the viewport,
+  canvas, and (if needed) scrollbar are created and TotalRows is reset to 0
+  so that subsequent additive allocatePanels calls accumulate row counts.
+
+#### `resetViewport(obj)`
+
+RESETVIEWPORT Destroy the current viewport so the next ensureViewport call rebuilds it.
+  Use when a full layout rebuild is required (e.g. single-page reflow).
+
+#### `allocatePanels(obj, hFigure, widgets, theme)`
+
+ALLOCATEPANELS Create placeholder panels for widgets (additive; no viewport destruction).
+  Calls ensureViewport (idempotent) to guarantee hViewport/hCanvas exist, then
+  accumulates TotalRows and appends widget panels to the shared canvas.
+  Multiple calls for different page-widget sets are safe: earlier panels survive.
+Ensure viewport exists (idempotent — no-op if already live)
+
+#### `realizeWidget(obj, widget)`
+
+REALIZEWIDGET Render a single widget into its pre-allocated panel.
+  Creates the chrome (full-width WidgetButtonBar + WidgetContentPanel
+  sub-panel below the bar) BEFORE calling widget.render so the
+  widget's own graphics children (titles, axes, status text, group
+  headers) land in the visible content area, never under the bar.
+
+#### `createPanels(obj, hFigure, widgets, theme)`
+
+CREATEPANELS Create and render all widget panels (legacy path).
+
+#### `reflow(obj, hFigure, widgets, theme)`
+
+Re-run layout after dynamic changes (e.g., group collapse/expand).
+Tears down and recreates all panels, calling render() on each widget.
+
+#### `onScroll(obj, val)`
+
+ONSCROLL Adjust canvas position from scrollbar value.
+  val=1 shows top, val=0 shows bottom.
+
+#### `rows = computeVisibleRows(obj, scrollVal)`
+
+COMPUTEVISIBLEROWS Derive visible row range from scroll position.
+
+#### `vis = isWidgetVisible(obj, gridPos, buffer)`
+
+ISWIDGETVISIBLE Check if widget rows overlap visible range + buffer.
+
+#### `openInfoPopup(obj, widget, theme)`
+
+OPENINFOPOPUP Open a modal figure window showing widget Description.
+
+#### `closeInfoPopup(obj)`
+
+CLOSEINFOPOPUP Close and delete the active info popup panel.
+
+#### `onFigureClickForDismiss(obj)`
+
+ONFIGURECLICKFORDISMISS Dismiss popup if click was outside the popup panel.
+
+#### `onKeyPressForDismiss(obj, eventData)`
+
+ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
+
+#### `addPlantLogToggle(obj, widget, engine)`
+
+ADDPLANTLOGTOGGLE Add the per-widget plant-log overlay toggle (Phase 1032 PLOG-VIZ-05).
+  The toggle is always created (Decision B: always render, disable
+  when no store); clicking it calls
+  widget.setShowPlantLog(~widget.ShowPlantLog, engine).
+  The engine handle is captured by the callback closure.
+
+#### `onPlantLogTogglePressed_(obj, src, widget, engine)`
+
+ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with try/catch (Phase 1032 PLOG-VIZ-05).
+  Programmatic force-call paths (tests, automation) need a
+  software-level guard for Enable='off' because uicontrols only
+  honor Enable natively for user-driven mouse clicks.
+
+### Static Methods
+
+#### `DashboardLayout.reflowChrome_(hCell, barH, inset)`
+
+REFLOWCHROME_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
+  AND resize the WidgetContentPanel after the parent cell panel
+  resizes. Public so tests can drive a deterministic resize without
+  relying on SizeChangedFcn firing under -batch.
+  No-op when the cell has been deleted or chrome isn't there yet.
+
+#### `DashboardLayout.bg = chooseYLimitActiveBg_(theme)`
+
+CHOOSEYLIMITACTIVEBG_ Pick the highlight color for the active YLimit button.
+  Tries PressedBg / SelectedBg / AccentColor in order, falling
+  back to ToolbarBackground brightened by 0.15 per channel
+  (capped at 1) when none are present. No new theme fields are
+  introduced by 260513-sfp; future themes can opt into a
+  dedicated PressedBg token without touching layout code.
+
+#### `DashboardLayout.syncYLimitButtonsState_(bar, mode)`
+
+SYNCYLIMITBUTTONSSTATE_ Visually highlight the YLimit button matching mode.
+  The active button's BackgroundColor becomes the value stashed on
+  bar.UserData.YLimitActiveBg by addYLimitButtons_; the other two
+  revert to the theme's ToolbarBackground. Tolerates missing
+  buttons (no-op if the bar's UserData was never primed).
+
+#### `DashboardLayout.reflowButtonBar_(hCell, barH, inset)`
+
+REFLOWBUTTONBAR_ Deprecated alias — forwards to reflowChrome_.
+  Kept temporarily for any external callers that still reference
+  the m52-era name.
+
+---
+
+## `DashboardPage` --- Named page container within a multi-page dashboard.
+
+> Inherits from: `handle`
+
+Each DashboardPage holds a list of widgets to be rendered when the
+  page is active. DashboardEngine maintains a Pages cell array of
+  DashboardPage objects and routes addWidget() to the active page.
+
+### Constructor
+
+```matlab
+obj = DashboardPage(name)
+```
+
+DASHBOARDPAGE Construct a named page container.
+  pg = DashboardPage()        creates page with Name = ''
+  pg = DashboardPage('Name')  creates page with given Name
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Name | `''` |  |
+| Widgets | `{}` |  |
+
+### Methods
+
+#### `w = addWidget(obj, w)`
+
+ADDWIDGET Append widget w to the Widgets list.
+  pg.addWidget(w) appends w to obj.Widgets.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize the page to a struct with name and widgets fields.
+  s = pg.toStruct() returns s.name (char) and s.widgets (cell).
+
+---
+
+## `DashboardSerializer` --- JSON load/save and .m export for dashboard configs.
+
+### Static Methods
+
+#### `DashboardSerializer.save(config, filepath)`
+
+SAVE Write dashboard config as a MATLAB function file.
+  The output is a function returning a DashboardEngine.
+
+#### `DashboardSerializer.saveJSON(config, filepath)`
+
+SAVEJSON Write dashboard config struct to JSON file.
+ Handles both single-page (widgets field) and multi-page (pages field).
+ Widgets/pages may have heterogeneous fields, so encode each entry
+ individually and assemble the JSON array by hand.
+
+#### `DashboardSerializer.jsonStr = encodePlantLogBlock_(pl)`
+
+ENCODEPLANTLOGBLOCK_ Hand-encode the plantLog block as a JSON object.
+  Used by saveJSON to preserve the metadataCols cell-array
+  shape (jsonencode of {} is ambiguous across MATLAB versions).
+  Returns a JSON object string with sourcePath, mapping,
+  interval, and startTail keys in stable order.
+
+#### `DashboardSerializer.result = load(filepath)`
+
+LOAD Load dashboard config from file.
+  For .m files: uses feval to execute the function and return the engine.
+  For .json files: uses legacy JSON parsing.
+
+#### `DashboardSerializer.config = loadJSON(filepath)`
+
+LOADJSON Legacy: read dashboard config from JSON file.
+
+#### `DashboardSerializer.config = widgetsToConfig(name, theme, liveInterval, widgets, infoFile)`
+
+WIDGETSTOCONFIG Build a config struct from widget objects.
+
+#### `DashboardSerializer.config = widgetsPagesToConfig(name, theme, liveInterval, pages, activePage, infoFile)`
+
+WIDGETSPAGESTOCONFIG Build a multi-page config struct from page objects.
+  pages is a cell array of DashboardPage objects.
+  activePage is the Name string of the active page.
+
+#### `DashboardSerializer.widgets = configToWidgets(config, resolver)`
+
+CONFIGTOWIDGETS Create widget objects from config struct.
+  configToWidgets(config) — no sensor resolution
+  configToWidgets(config, resolver) — resolver is a function
+    handle @(name) that returns a Sensor object by name.
+
+#### `DashboardSerializer.w = createWidgetFromStruct(ws)`
+
+CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+
+#### `DashboardSerializer.exportScript(config, filepath)`
+
+EXPORTSCRIPT Generate a readable .m script from config.
+
+#### `DashboardSerializer.exportScriptPages(config, filepath)`
+
+EXPORTSCRIPTPAGES Generate a MATLAB function file from a multi-page config.
+  The output is a function returning a DashboardEngine so that
+  DashboardEngine.load() can use feval(funcname) to reconstruct it.
+  Emits d.addPage('Name') + d.switchPage(N) before each page's widget block
+  so that addWidget routes to the correct page.
+
+#### `DashboardSerializer.[childLines, varName, groupCount] = emitChildWidget(cw, groupCount)`
+
+EMITCHILDWIDGET Emit .m constructor lines for a child widget.
+  Used by DashboardSerializer.save() to emit child code for GroupWidget
+  children. Children are created by constructor, not d.addWidget().
+  Returns the generated code lines, the variable name assigned, and the
+  updated groupCount (in case the child is itself a GroupWidget).
+
+---
+
+## `BarChartWidget`
+
+> Inherits from: `DashboardWidget`
+
+### Constructor
+
+```matlab
+obj = BarChartWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| DataFcn | `[]` | @() struct('categories',{},'values',[]) |
+| Orientation | `'vertical'` | 'vertical' or 'horizontal' |
+| Stacked | `false` |  |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `BarChartWidget.obj = fromStruct(s)`
+
+---
+
+## `ChipBarWidget` --- Horizontal row of mini status chips for system health summary.
+
+> Inherits from: `DashboardWidget`
+
+Displays N colored circle icons with labels in a compact horizontal strip.
+  Designed as a dense multi-sensor status overview at a glance.
+
+### Constructor
+
+```matlab
+obj = ChipBarWidget(varargin)
+```
+
+CHIPBARWIDGET Construct a ChipBarWidget with optional name-value pairs.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Chips | `{}` | Cell array of chip structs (label, statusFcn, sensor, iconColor) |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+RENDER Draw all chips in a single shared axes inside parentPanel.
+Re-entrancy guard: parenting an axes to parentPanel and
+toggling its Units below can synchronously fire the panel's
+SizeChangedFcn -> relayout_ -> render. Without this lock the
+nested call deletes the axes the outer render is populating
+and the outer render then crashes on text(obj.hAx, ...).
+
+#### `refresh(obj)`
+
+REFRESH Update chip circle colors from statusFcn or sensor state.
+
+#### `t = getType(~)`
+
+GETTYPE Return widget type string.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize widget to struct for JSON export.
+
+### Static Methods
+
+#### `ChipBarWidget.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct ChipBarWidget from a saved struct.
+
+---
+
+## `CreateEventDialog` --- Modal dialog to create a manual annotation Event (260513-snt).
+
+> Inherits from: `handle`
+
+d = CreateEventDialog(fastSenseWidget, dashboardEngine)
+
+  Opens a modal figure pre-filled with the widget's current X view as
+  the event time range and the widget's bound Tag.Key as the tag
+  binding. On Save: appends an Event to engine.EventStore, registers
+  per-tag EventBinding entries, calls EventStore.save() and finally
+  engine.notifyEventsChanged() so EventTimelineWidget +
+  FastSenseWidget instances and the slider's event-marker overlay
+  refresh.
+
+  The dialog mirrors DashboardConfigDialog's pattern: classical
+  figure (NOT uifigure) with WindowStyle='modal', styled from the
+  engine's theme. All UI callbacks are wrapped in try/catch with
+  non-blocking errordlg so a bad input never tears down the dialog.
+
+  Properties (SetAccess = private):
+    Widget   - bound FastSenseWidget
+    Engine   - bound DashboardEngine
+    hFigure  - modal figure handle
+
+  Methods (public):
+    onSave   - validate, persist, notify, close dialog on success
+    onCancel - close dialog without writing
+    delete   - destructor, tears down figure
+
+  Methods (Static, public):
+    persistEventStatic(engine, tStart, tEnd, label, sev, cat, notes,
+                       keys, primaryName) - mock-friendly persistence
+      seam used by Task-3 tests; instance persistEvent_ delegates here.
+
+  Errors raised (all namespaced):
+    CreateEventDialog:invalidWidget    - widget is not a FastSenseWidget
+    CreateEventDialog:invalidEngine    - engine is not a DashboardEngine
+    CreateEventDialog:noStore          - engine.EventStore is empty
+    CreateEventDialog:invalidTimeRange - EndTime < StartTime (or
+                                         not finite)
+    CreateEventDialog:emptyLabel       - Label is empty after trim
+
+### Constructor
+
+```matlab
+obj = CreateEventDialog(widget, engine)
+```
+
+CREATEEVENTDIALOG Construct + show modal dialog.
+
+### Methods
+
+#### `onSave(obj, ~, ~)`
+
+ONSAVE Validate inputs, persist Event, refresh dashboard, close dialog.
+  Wraps the full pipeline in try/catch so any throw surfaces
+  via errordlg without tearing the dialog down — the user
+  can correct input and Save again. On success: deletes
+  the modal figure.
+
+#### `onCancel(obj, ~, ~)`
+
+ONCANCEL Close the dialog without writing.
+
+### Static Methods
+
+#### `CreateEventDialog.persistEventStatic(engine, tStart, tEnd, label, sev, cat, notes, keys, primaryName)`
+
+PERSISTEVENTSTATIC Persist a manual annotation Event into engine.EventStore (260513-snt).
+  Public static seam called by the instance persistEvent_
+  wrapper AND directly by Task-3 tests. Keeping the
+  write-side logic free of any figure handles makes it
+  trivially unit-testable.
+
+---
+
+## `DashboardConfigDialog` --- Config editor for a DashboardEngine.
+
+> Inherits from: `handle`
+
+Opens a figure listing every public DashboardEngine property with
+  an editable control. Apply writes values back to the engine and
+  propagates visible changes (figure title, theme re-render, live
+  timer restart). Close dismisses without additional changes.
+
+  Enum-like properties get a popup menu:
+    Theme         — {'light', 'dark'}
+    ProgressMode  — {'auto', 'on', 'off'}
+  Numeric properties get a numeric edit control. Everything else
+  gets a plain text edit.
+
+  Usage (usually invoked by the toolbar Config button):
+    dlg = DashboardConfigDialog(engine);
+    % ...user edits fields, clicks Apply/Close...
+
+### Constructor
+
+```matlab
+obj = DashboardConfigDialog(engine)
+```
+
+### Methods
+
+#### `close(obj)`
+
+CLOSE Destroy the dialog figure.
+
+#### `apply(obj)`
+
+APPLY Write all control values back to the engine and propagate.
+
+---
+
+## `DashboardProgress` --- Progress-bar helper for DashboardEngine render passes.
+
+> Inherits from: `handle`
+
+Emits a self-updating progress line to stdout as widgets are realized
+  during DashboardEngine.render() / rerenderWidgets(), and a final
+  summary line on completion.
+
+  Silent outside interactive sessions so test / CI output stays clean.
+
+### Constructor
+
+```matlab
+obj = DashboardProgress(name, totalWidgets, totalPages, mode)
+```
+
+### Methods
+
+#### `tick(obj, widget, pageIdx, pageName)`
+
+#### `finish(obj)`
+
+---
+
+## `DashboardToolbar` --- Global toolbar for dashboard controls.
+
+> Inherits from: `handle`
+
+Provides buttons for: Sync, Live (toggle with blue border when active),
+  Config (opens DashboardConfigDialog), Image, Export, and Info (always
+  present — shows a placeholder page when no InfoFile is configured).
+  Every button has a descriptive tooltip. Sits at the top of the
+  dashboard figure.
+
+### Constructor
+
+```matlab
+obj = DashboardToolbar(engine, hFigure, theme)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Height | `0.04` |  |
+
+### Methods
+
+#### `setLastUpdateTime(obj, t)`
+
+SETLASTUPDATETIME Update the last-update label with a timestamp.
+  Hot-path note: called on every live tick. Uses datevec (no format
+  string parsing) instead of datestr to avoid timefun/private overhead.
+
+#### `onNameEdit(obj, src)`
+
+#### `onLiveToggle(obj, src)`
+
+#### `setLiveActiveIndicator(obj, isActive)`
+
+SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
+
+#### `onFollowToggle(obj, src)`
+
+ONFOLLOWTOGGLE Apply auto-pan to every FastSense widget in the dashboard.
+  isOn=true:  LiveViewMode='follow' on every FastSenseWidget's
+              FastSenseObj AND snap each chart to its current
+              data tail (one-shot jump-to-now).
+  isOn=false: LiveViewMode='preserve' on every FastSenseWidget's
+              FastSenseObj (the chart stops following).
+
+#### `setFollowActiveIndicator(obj, isActive)`
+
+SETFOLLOWACTIVEINDICATOR Show a blue surround when Follow is active.
+
+#### `applyFollowToWidgets_(obj, widgets, mode, snap)`
+
+APPLYFOLLOWTOWIDGETS_ Recursively apply LiveViewMode + optional snap.
+  Walks the widget tree (descends into GroupWidget children),
+  sets LiveViewMode on every FastSenseWidget's FastSenseObj,
+  and — when `snap` is true — calls snapToTail() on each to
+  immediately jump the view to the current data tail.
+
+#### `onEventsToggle(obj, src)`
+
+ONEVENTSTOGGLE Fire engine-level event-marker toggle from button state.
+  Engine.setEventMarkersVisible already calls back into
+  setEventsActiveIndicator, but call it directly here too in
+  case the engine's call path skips the toolbar (e.g. tests
+  that temporarily reassign Engine.Toolbar).
+
+#### `setEventsActiveIndicator(obj, isActive)`
+
+SETEVENTSACTIVEINDICATOR Blue border when event markers are visible.
+  Matches the Live button's visual treatment so the toolbar
+  reads consistently. Keeps the button label constant — the
+  border colour is the active indicator; the tooltip explains
+  the function.
+
+#### `onConfig(obj)`
+
+ONCONFIG Open the dashboard config dialog.
+
+#### `onReset(obj)`
+
+ONRESET Manual recovery — re-render all widgets on the active page.
+  Delegates to DashboardEngine.rerenderWidgets which deletes every
+  widget panel, marks widgets unrealized, then re-allocates and
+  re-realizes them. Use when widgets get stuck (stale axes, zombie
+  state, transient render error). Safe to call while Live mode is
+  active — rerenderWidgets does not touch the Live timer state.
+
+#### `onExport(obj)`
+
+#### `onImage(obj)`
+
+ONIMAGE Open save dialog and export dashboard figure as PNG/JPEG.
+  Pops a uiputfile with PNG+JPEG filters, defaults to the
+  sanitized dashboard name plus timestamp. On cancel, returns
+  silently. On engine error, surfaces message via warndlg.
+
+#### `dispatchImageExport(obj, file, path, idx)`
+
+DISPATCHIMAGEEXPORT Post-dialog dispatcher — testable without uiputfile.
+  file  — filename string, or 0 on user-cancel
+  path  — directory path from uiputfile
+  idx   — filter index (1=PNG, 2=JPEG). Defaults to PNG.
+
+#### `fname = defaultImageFilename(obj)`
+
+DEFAULTIMAGEFILENAME Build sanitized default filename for the dialog.
+  Pattern: {sanitized Engine.Name}_{yyyymmdd_HHMMSS}.png
+  Sanitization: replace [/\:*?"<>|] and whitespace with '_'.
+  NOTE: datestr format 'yyyymmdd_HHMMSS' (lowercase mm=month here,
+  HHMMSS=seconds). This differs from datetime/ISO notation —
+  see libs/EventDetection/generateEventSnapshot.m:28 for the
+  in-codebase precedent.
+
+#### `onInfo(obj)`
+
+#### `contentArea = getContentArea(obj)`
+
+GETCONTENTAREA Compute the widget content area in normalized units.
+  Subtracts the reserved banner strip at the top, the toolbar,
+  and the time-panel height (260508-jyh). DashboardEngine
+  computes ContentArea inline in render() and
+  applyVisibilityAndRelayout(); this helper exists for
+  consistency with consumers that read directly from the
+  toolbar (e.g. DashboardBuilder canvas calc).
+
+---
+
+## `DetachedMirror` --- Standalone live-mirrored widget window for DashboardEngine.
+
+> Inherits from: `handle`
+
+DetachedMirror wraps a cloned DashboardWidget in a standalone MATLAB
+  figure window. The clone is produced via toStruct/fromStruct with post-
+  clone live-reference restoration for FastSenseWidget and RawAxesWidget.
+
+  The mirror is NOT a DashboardWidget subclass — it wraps one. It belongs
+  to DashboardEngine.DetachedMirrors and is ticked by the engine's existing
+  LiveTimer via the engine's onLiveTick() loop.
+
+  Usage (called internally by DashboardEngine.detachWidget()):
+    theme = DashboardTheme(obj.Theme);
+    cb    = @() obj.removeDetached(mirror);
+    mirror = DetachedMirror(originalWidget, theme, cb);
+
+  Properties (SetAccess = private):
+    hFigure        — standalone MATLAB figure window handle
+    hPanel         — full-figure uipanel that hosts the cloned widget
+    Widget         — cloned DashboardWidget instance
+    RemoveCallback — @() called by onFigureClose() before delete(hFigure)
+
+### Constructor
+
+```matlab
+obj = DetachedMirror(originalWidget, themeStruct, removeCallback)
+```
+
+DETACHEDMIRROR Create a detached live-mirror window for originalWidget.
+
+### Methods
+
+#### `tick(obj)`
+
+TICK Refresh the cloned widget; no-op if figure is stale.
+
+#### `result = isStale(obj)`
+
+ISSTALE Return true when the mirror's figure has been closed or destroyed.
+
+---
+
+## `DividerWidget` --- Horizontal divider line for visual section separation.
+
+> Inherits from: `DashboardWidget`
+
+DividerWidget renders a horizontal colored line using the theme's
+  WidgetBorderColor (or a custom Color override). It is a static widget
+  with no data binding.
+
+### Constructor
+
+```matlab
+obj = DividerWidget(varargin)
+```
+
+DIVIDERWIDGET Construct a DividerWidget.
+  obj = DividerWidget() creates with defaults.
+  obj = DividerWidget('Thickness', 2, 'Color', [1 0 0]) sets props.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Thickness | `1` | Relative line thickness (1=thin, 2=medium, 3=thick) |
+| Color | `[]` | RGB override; empty = use theme WidgetBorderColor |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+RENDER Create the divider line inside parentPanel.
+  render(obj, parentPanel) creates a uipanel that acts as a
+  horizontal colored line centered vertically in the panel.
+
+#### `refresh(~)`
+
+REFRESH No-op for static widget.
+
+#### `t = getType(~)`
+
+GETTYPE Return widget type string.
+
+#### `lines = asciiRender(obj, width, height)`
+
+ASCIIRENDER Return ASCII representation of the divider.
+  First line is a row of dashes; remaining lines are blank.
+
+#### `s = toStruct(obj)`
+
+TOSTRUCT Serialize to struct.
+  Omits 'thickness' at default (1) and 'color' when empty.
+
+### Static Methods
+
+#### `DividerWidget.obj = fromStruct(s)`
+
+FROMSTRUCT Reconstruct DividerWidget from serialized struct.
+
+---
+
+## `EventTimelineWidget` --- Displays events as colored bars on a timeline.
+
+> Inherits from: `DashboardWidget`
+
+Preferred: bind to an EventStore from the event detection system:
+    w = EventTimelineWidget('Title', 'Events', 'EventStoreObj', store);
+
+  Legacy (still supported for backwards compatibility):
+    w = EventTimelineWidget('Title', 'Events', 'EventFcn', @() getEvents());
+    w = EventTimelineWidget('Title', 'Events', 'Events', eventArray);
+
+  Events must be a struct array with fields:
+    startTime, endTime, label, color (optional)
+
+### Constructor
+
+```matlab
+obj = EventTimelineWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| EventStoreObj | `[]` | EventStore handle — primary data source |
+| Events | `[]` | struct array of events (legacy) |
+| EventFcn | `[]` | function_handle returning events (legacy) |
+| FilterSensors | `{}` | Cell array of Sensor names to filter |
+| FilterTagKey | `''` | Tag-key filter (MONITOR-05 carrier: SensorName OR ThresholdLabel match) |
+| ColorSource | `'event'` | 'event' or 'theme' |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `setTimeRange(obj, tStart, tEnd)`
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+#### `t = getEventTimes(obj)`
+
+GETEVENTTIMES Event start times from resolveEvents (override).
+  Mirrors the same filtering pipeline the widget uses to draw
+  bars, so the time-slider overlay always matches what the
+  widget itself renders.
+
+#### `m = getEventMarkers(obj)`
+
+GETEVENTMARKERS Per-event time + severity + color for slider markers.
+  m = getEventMarkers(obj) returns a struct array with fields:
+    m(k).Time     — numeric timestamp (startTime)
+    m(k).Severity — numeric severity (default 1 if absent)
+    m(k).Color    — 1x3 RGB triplet from severityColor(theme, sev)
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+#### `evts = resolveEvents(obj)`
+
+RESOLVEEVENTS Get events from the best available source.
+  Priority: EventStoreObj > TagRegistry default > EventFcn > Events
+  (static / Event objects). When FilterTagKey is set AND an
+  EventStore is bound (explicit or registry-default), events are
+  pulled via EventStore.getEventsForTag(tagKey) using the dual-key
+  pattern from Phase 1010 + the registry-default fallback from
+  Phase 1017.
+
+### Static Methods
+
+#### `EventTimelineWidget.obj = fromStruct(s)`
+
+---
+
 ## `FastSenseWidget` --- Dashboard widget wrapping a FastSense instance.
 
 > Inherits from: `DashboardWidget`
@@ -909,1052 +1734,6 @@ obj = GaugeWidget(varargin)
 ### Static Methods
 
 #### `GaugeWidget.obj = fromStruct(s)`
-
----
-
-## `NumberWidget` --- Dashboard widget showing a big number with label and trend.
-
-> Inherits from: `DashboardWidget`
-
-w = NumberWidget('Title', 'Temp', 'ValueFcn', @() readTemp(), 'Units', 'degC');
-
-  ValueFcn returns either:
-    - A scalar (displayed as-is)
-    - A struct with fields: value, unit, trend ('up'/'down'/'flat')
-
-### Constructor
-
-```matlab
-obj = NumberWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| ValueFcn | `[]` | function_handle returning scalar or struct |
-| Units | `''` | unit label string |
-| Format | `'%.1f'` | sprintf format for value |
-| StaticValue | `[]` | fixed value (no callback needed) |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `refresh(obj)`
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-### Static Methods
-
-#### `NumberWidget.obj = fromStruct(s)`
-
----
-
-## `StatusWidget` --- Colored dot indicator with sensor value.
-
-> Inherits from: `DashboardWidget`
-
-Sensor-first:
-    w = StatusWidget('Sensor', sensorObj);
-
-  Threshold-bound (no Sensor required):
-    w = StatusWidget('Title', 'Temp', 'Threshold', t, 'Value', 85);
-    w = StatusWidget('Title', 'Temp', 'Threshold', 'temp_hi', 'ValueFcn', @getTemp);
-
-  Legacy (still supported):
-    w = StatusWidget('Title', 'Pump 1', 'StatusFcn', @() 'ok');
-
-### Constructor
-
-```matlab
-obj = StatusWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| StatusFcn | `[]` | function_handle returning 'ok'/'warning'/'alarm' (legacy) |
-| StaticStatus | `''` | fixed status string (legacy) |
-| Threshold | `[]` | Threshold object or registry key string (per D-01) |
-| Value | `[]` | Scalar numeric value for threshold comparison (per D-03) |
-| ValueFcn | `[]` | Function handle returning scalar value (per D-03, D-09) |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `refresh(obj)`
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-### Static Methods
-
-#### `StatusWidget.obj = fromStruct(s)`
-
----
-
-## `TextWidget` --- Static text label or section header.
-
-> Inherits from: `DashboardWidget`
-
-w = TextWidget('Title', 'Section A', 'Content', 'Sensor overview');
-
-### Constructor
-
-```matlab
-obj = TextWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Content | `''` | body text |
-| FontSize | `0` | 0 = use theme default |
-| Alignment | `'left'` | 'left', 'center', 'right' |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `refresh(~)`
-
-Static widget — nothing to refresh
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-### Static Methods
-
-#### `TextWidget.obj = fromStruct(s)`
-
----
-
-## `TableWidget` --- Tabular data display using uitable.
-
-> Inherits from: `DashboardWidget`
-
-w = TableWidget('Title', 'Sensor Data', 'DataFcn', @() getData());
-  w = TableWidget('Title', 'Static', 'Data', {{'A',1;'B',2}}, ...
-                  'ColumnNames', {'Name','Value'});
-  w = TableWidget('Sensor', sensorObj);                 % last N data rows
-  w = TableWidget('Sensor', sensorObj, 'Mode', 'events', 'EventStoreObj', store);
-
-### Constructor
-
-```matlab
-obj = TableWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| DataFcn | `[]` |  |
-| Data | `{}` |  |
-| ColumnNames | `{}` |  |
-| Mode | `'data'` | 'data' or 'events' |
-| N | `10` | number of rows to display |
-| EventStoreObj | `[]` | EventStore for event mode |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `refresh(obj)`
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-### Static Methods
-
-#### `TableWidget.obj = fromStruct(s)`
-
----
-
-## `RawAxesWidget` --- User-supplied plot function on raw MATLAB axes.
-
-> Inherits from: `DashboardWidget`
-
-w = RawAxesWidget('Title', 'Histogram', ...
-      'PlotFcn', @(ax) histogram(ax, randn(1,1000)));
-
-  When bound to a Sensor, the PlotFcn receives (ax, sensor) or
-  (ax, sensor, timeRange) depending on its nargin.
-
-### Constructor
-
-```matlab
-obj = RawAxesWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| PlotFcn | `[]` | @(ax) or @(ax, sensor[, tRange]) or @(ax, tRange) |
-| DataRangeFcn | `[]` | @() returning [tMin tMax] for global time range detection |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `refresh(obj)`
-
-#### `setTimeRange(obj, tStart, tEnd)`
-
-#### `[tMin, tMax] = getTimeRange(obj)`
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-### Static Methods
-
-#### `RawAxesWidget.obj = fromStruct(s)`
-
----
-
-## `EventTimelineWidget` --- Displays events as colored bars on a timeline.
-
-> Inherits from: `DashboardWidget`
-
-Preferred: bind to an EventStore from the event detection system:
-    w = EventTimelineWidget('Title', 'Events', 'EventStoreObj', store);
-
-  Legacy (still supported for backwards compatibility):
-    w = EventTimelineWidget('Title', 'Events', 'EventFcn', @() getEvents());
-    w = EventTimelineWidget('Title', 'Events', 'Events', eventArray);
-
-  Events must be a struct array with fields:
-    startTime, endTime, label, color (optional)
-
-### Constructor
-
-```matlab
-obj = EventTimelineWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| EventStoreObj | `[]` | EventStore handle — primary data source |
-| Events | `[]` | struct array of events (legacy) |
-| EventFcn | `[]` | function_handle returning events (legacy) |
-| FilterSensors | `{}` | Cell array of Sensor names to filter |
-| FilterTagKey | `''` | Tag-key filter (MONITOR-05 carrier: SensorName OR ThresholdLabel match) |
-| ColorSource | `'event'` | 'event' or 'theme' |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `setTimeRange(obj, tStart, tEnd)`
-
-#### `[tMin, tMax] = getTimeRange(obj)`
-
-#### `t = getEventTimes(obj)`
-
-GETEVENTTIMES Event start times from resolveEvents (override).
-  Mirrors the same filtering pipeline the widget uses to draw
-  bars, so the time-slider overlay always matches what the
-  widget itself renders.
-
-#### `m = getEventMarkers(obj)`
-
-GETEVENTMARKERS Per-event time + severity + color for slider markers.
-  m = getEventMarkers(obj) returns a struct array with fields:
-    m(k).Time     — numeric timestamp (startTime)
-    m(k).Severity — numeric severity (default 1 if absent)
-    m(k).Color    — 1x3 RGB triplet from severityColor(theme, sev)
-
-#### `refresh(obj)`
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-#### `evts = resolveEvents(obj)`
-
-RESOLVEEVENTS Get events from the best available source.
-  Priority: EventStoreObj > TagRegistry default > EventFcn > Events
-  (static / Event objects). When FilterTagKey is set AND an
-  EventStore is bound (explicit or registry-default), events are
-  pulled via EventStore.getEventsForTag(tagKey) using the dual-key
-  pattern from Phase 1010 + the registry-default fallback from
-  Phase 1017.
-
-### Static Methods
-
-#### `EventTimelineWidget.obj = fromStruct(s)`
-
----
-
-## `DashboardSerializer` --- JSON load/save and .m export for dashboard configs.
-
-### Static Methods
-
-#### `DashboardSerializer.save(config, filepath)`
-
-SAVE Write dashboard config as a MATLAB function file.
-  The output is a function returning a DashboardEngine.
-
-#### `DashboardSerializer.saveJSON(config, filepath)`
-
-SAVEJSON Write dashboard config struct to JSON file.
- Handles both single-page (widgets field) and multi-page (pages field).
- Widgets/pages may have heterogeneous fields, so encode each entry
- individually and assemble the JSON array by hand.
-
-#### `DashboardSerializer.jsonStr = encodePlantLogBlock_(pl)`
-
-ENCODEPLANTLOGBLOCK_ Hand-encode the plantLog block as a JSON object.
-  Used by saveJSON to preserve the metadataCols cell-array
-  shape (jsonencode of {} is ambiguous across MATLAB versions).
-  Returns a JSON object string with sourcePath, mapping,
-  interval, and startTail keys in stable order.
-
-#### `DashboardSerializer.result = load(filepath)`
-
-LOAD Load dashboard config from file.
-  For .m files: uses feval to execute the function and return the engine.
-  For .json files: uses legacy JSON parsing.
-
-#### `DashboardSerializer.config = loadJSON(filepath)`
-
-LOADJSON Legacy: read dashboard config from JSON file.
-
-#### `DashboardSerializer.config = widgetsToConfig(name, theme, liveInterval, widgets, infoFile)`
-
-WIDGETSTOCONFIG Build a config struct from widget objects.
-
-#### `DashboardSerializer.config = widgetsPagesToConfig(name, theme, liveInterval, pages, activePage, infoFile)`
-
-WIDGETSPAGESTOCONFIG Build a multi-page config struct from page objects.
-  pages is a cell array of DashboardPage objects.
-  activePage is the Name string of the active page.
-
-#### `DashboardSerializer.widgets = configToWidgets(config, resolver)`
-
-CONFIGTOWIDGETS Create widget objects from config struct.
-  configToWidgets(config) — no sensor resolution
-  configToWidgets(config, resolver) — resolver is a function
-    handle @(name) that returns a Sensor object by name.
-
-#### `DashboardSerializer.w = createWidgetFromStruct(ws)`
-
-CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
-
-#### `DashboardSerializer.exportScript(config, filepath)`
-
-EXPORTSCRIPT Generate a readable .m script from config.
-
-#### `DashboardSerializer.exportScriptPages(config, filepath)`
-
-EXPORTSCRIPTPAGES Generate a MATLAB function file from a multi-page config.
-  The output is a function returning a DashboardEngine so that
-  DashboardEngine.load() can use feval(funcname) to reconstruct it.
-  Emits d.addPage('Name') + d.switchPage(N) before each page's widget block
-  so that addWidget routes to the correct page.
-
-#### `DashboardSerializer.[childLines, varName, groupCount] = emitChildWidget(cw, groupCount)`
-
-EMITCHILDWIDGET Emit .m constructor lines for a child widget.
-  Used by DashboardSerializer.save() to emit child code for GroupWidget
-  children. Children are created by constructor, not d.addWidget().
-  Returns the generated code lines, the variable name assigned, and the
-  updated groupCount (in case the child is itself a GroupWidget).
-
----
-
-## `DashboardLayout` --- Manages 24-column responsive grid positioning.
-
-> Inherits from: `handle`
-
-Converts widget grid positions [col, row, width, height] to normalized
-  canvas coordinates [x, y, w, h]. Handles overlap resolution, row
-  calculation, and scrollable canvas when content exceeds the viewport.
-
-### Constructor
-
-```matlab
-obj = DashboardLayout(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Columns | `24` |  |
-| TotalRows | `4` |  |
-| ContentArea | `[0 0 1 1]` |  |
-| Padding | `[0 0 0 0]` |  |
-| GapH | `0` |  |
-| GapV | `0` |  |
-| RowHeight | `0.22` |  |
-| ScrollbarWidth | `0.015` |  |
-| OnScrollCallback | `[]` | function handle: @(topRow, bottomRow) |
-| DetachCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
-| CreateEventCallback | `[]` | function handle: @(widget) — set by DashboardEngine |
-| VisibleRows | `[1 Inf]` | [topRow bottomRow] currently visible |
-| EngineRef | `[]` | Phase 1032 PLOG-VIZ-05 — back-reference to DashboardEngine for chrome callbacks (addPlantLogToggle) |
-| hFigure | `[]` | Figure handle for popup dismiss callbacks |
-| hInfoPopup | `[]` | Handle to active info popup uipanel (at most one) |
-
-### Methods
-
-#### `cr = canvasRatio(obj)`
-
-CANVASRATIO Ratio of canvas height to viewport height.
-  Returns 1 when content fits, >1 when scrolling is needed.
-
-#### `pos = computePosition(obj, gridPos)`
-
-COMPUTEPOSITION Convert grid position to canvas-normalized coords.
-
-#### `[stepW, stepH, cellW, cellH] = canvasStepSizes(obj)`
-
-CANVASSTEPSIZES Grid step sizes in canvas-normalized coords.
-
-#### `[dx_c, dy_c] = figureToCanvasDelta(obj, dx_fig, dy_fig)`
-
-FIGURETOCANVASDELTA Convert figure-normalized deltas to canvas deltas.
-
-#### `maxRow = calculateMaxRow(obj, widgets)`
-
-#### `tf = overlaps(obj, posA, posB)`
-
-#### `newPos = resolveOverlap(obj, pos, existingPositions)`
-
-#### `ensureViewport(obj, hFigure, theme)`
-
-ENSUREVIEWPORT Create viewport/canvas/scrollbar only if they do not exist yet.
-  Idempotent: if the viewport handle is already valid, returns immediately
-  without deleting or recreating anything. On the first call the viewport,
-  canvas, and (if needed) scrollbar are created and TotalRows is reset to 0
-  so that subsequent additive allocatePanels calls accumulate row counts.
-
-#### `resetViewport(obj)`
-
-RESETVIEWPORT Destroy the current viewport so the next ensureViewport call rebuilds it.
-  Use when a full layout rebuild is required (e.g. single-page reflow).
-
-#### `allocatePanels(obj, hFigure, widgets, theme)`
-
-ALLOCATEPANELS Create placeholder panels for widgets (additive; no viewport destruction).
-  Calls ensureViewport (idempotent) to guarantee hViewport/hCanvas exist, then
-  accumulates TotalRows and appends widget panels to the shared canvas.
-  Multiple calls for different page-widget sets are safe: earlier panels survive.
-Ensure viewport exists (idempotent — no-op if already live)
-
-#### `realizeWidget(obj, widget)`
-
-REALIZEWIDGET Render a single widget into its pre-allocated panel.
-  Creates the chrome (full-width WidgetButtonBar + WidgetContentPanel
-  sub-panel below the bar) BEFORE calling widget.render so the
-  widget's own graphics children (titles, axes, status text, group
-  headers) land in the visible content area, never under the bar.
-
-#### `createPanels(obj, hFigure, widgets, theme)`
-
-CREATEPANELS Create and render all widget panels (legacy path).
-
-#### `reflow(obj, hFigure, widgets, theme)`
-
-Re-run layout after dynamic changes (e.g., group collapse/expand).
-Tears down and recreates all panels, calling render() on each widget.
-
-#### `onScroll(obj, val)`
-
-ONSCROLL Adjust canvas position from scrollbar value.
-  val=1 shows top, val=0 shows bottom.
-
-#### `rows = computeVisibleRows(obj, scrollVal)`
-
-COMPUTEVISIBLEROWS Derive visible row range from scroll position.
-
-#### `vis = isWidgetVisible(obj, gridPos, buffer)`
-
-ISWIDGETVISIBLE Check if widget rows overlap visible range + buffer.
-
-#### `openInfoPopup(obj, widget, theme)`
-
-OPENINFOPOPUP Open a modal figure window showing widget Description.
-
-#### `closeInfoPopup(obj)`
-
-CLOSEINFOPOPUP Close and delete the active info popup panel.
-
-#### `onFigureClickForDismiss(obj)`
-
-ONFIGURECLICKFORDISMISS Dismiss popup if click was outside the popup panel.
-
-#### `onKeyPressForDismiss(obj, eventData)`
-
-ONKEYPRESSFORDISMISS Dismiss popup when Escape is pressed.
-
-#### `addPlantLogToggle(obj, widget, engine)`
-
-ADDPLANTLOGTOGGLE Add the per-widget plant-log overlay toggle (Phase 1032 PLOG-VIZ-05).
-  The toggle is always created (Decision B: always render, disable
-  when no store); clicking it calls
-  widget.setShowPlantLog(~widget.ShowPlantLog, engine).
-  The engine handle is captured by the callback closure.
-
-#### `onPlantLogTogglePressed_(obj, src, widget, engine)`
-
-ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with try/catch (Phase 1032 PLOG-VIZ-05).
-  Programmatic force-call paths (tests, automation) need a
-  software-level guard for Enable='off' because uicontrols only
-  honor Enable natively for user-driven mouse clicks.
-
-### Static Methods
-
-#### `DashboardLayout.reflowChrome_(hCell, barH, inset)`
-
-REFLOWCHROME_ SizeChangedFcn handler — re-anchor the WidgetButtonBar
-  AND resize the WidgetContentPanel after the parent cell panel
-  resizes. Public so tests can drive a deterministic resize without
-  relying on SizeChangedFcn firing under -batch.
-  No-op when the cell has been deleted or chrome isn't there yet.
-
-#### `DashboardLayout.bg = chooseYLimitActiveBg_(theme)`
-
-CHOOSEYLIMITACTIVEBG_ Pick the highlight color for the active YLimit button.
-  Tries PressedBg / SelectedBg / AccentColor in order, falling
-  back to ToolbarBackground brightened by 0.15 per channel
-  (capped at 1) when none are present. No new theme fields are
-  introduced by 260513-sfp; future themes can opt into a
-  dedicated PressedBg token without touching layout code.
-
-#### `DashboardLayout.syncYLimitButtonsState_(bar, mode)`
-
-SYNCYLIMITBUTTONSSTATE_ Visually highlight the YLimit button matching mode.
-  The active button's BackgroundColor becomes the value stashed on
-  bar.UserData.YLimitActiveBg by addYLimitButtons_; the other two
-  revert to the theme's ToolbarBackground. Tolerates missing
-  buttons (no-op if the bar's UserData was never primed).
-
-#### `DashboardLayout.reflowButtonBar_(hCell, barH, inset)`
-
-REFLOWBUTTONBAR_ Deprecated alias — forwards to reflowChrome_.
-  Kept temporarily for any external callers that still reference
-  the m52-era name.
-
----
-
-## `DashboardToolbar` --- Global toolbar for dashboard controls.
-
-> Inherits from: `handle`
-
-Provides buttons for: Sync, Live (toggle with blue border when active),
-  Config (opens DashboardConfigDialog), Image, Export, and Info (always
-  present — shows a placeholder page when no InfoFile is configured).
-  Every button has a descriptive tooltip. Sits at the top of the
-  dashboard figure.
-
-### Constructor
-
-```matlab
-obj = DashboardToolbar(engine, hFigure, theme)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Height | `0.04` |  |
-
-### Methods
-
-#### `setLastUpdateTime(obj, t)`
-
-SETLASTUPDATETIME Update the last-update label with a timestamp.
-  Hot-path note: called on every live tick. Uses datevec (no format
-  string parsing) instead of datestr to avoid timefun/private overhead.
-
-#### `onNameEdit(obj, src)`
-
-#### `onLiveToggle(obj, src)`
-
-#### `setLiveActiveIndicator(obj, isActive)`
-
-SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
-
-#### `onFollowToggle(obj, src)`
-
-ONFOLLOWTOGGLE Apply auto-pan to every FastSense widget in the dashboard.
-  isOn=true:  LiveViewMode='follow' on every FastSenseWidget's
-              FastSenseObj AND snap each chart to its current
-              data tail (one-shot jump-to-now).
-  isOn=false: LiveViewMode='preserve' on every FastSenseWidget's
-              FastSenseObj (the chart stops following).
-
-#### `setFollowActiveIndicator(obj, isActive)`
-
-SETFOLLOWACTIVEINDICATOR Show a blue surround when Follow is active.
-
-#### `applyFollowToWidgets_(obj, widgets, mode, snap)`
-
-APPLYFOLLOWTOWIDGETS_ Recursively apply LiveViewMode + optional snap.
-  Walks the widget tree (descends into GroupWidget children),
-  sets LiveViewMode on every FastSenseWidget's FastSenseObj,
-  and — when `snap` is true — calls snapToTail() on each to
-  immediately jump the view to the current data tail.
-
-#### `onEventsToggle(obj, src)`
-
-ONEVENTSTOGGLE Fire engine-level event-marker toggle from button state.
-  Engine.setEventMarkersVisible already calls back into
-  setEventsActiveIndicator, but call it directly here too in
-  case the engine's call path skips the toolbar (e.g. tests
-  that temporarily reassign Engine.Toolbar).
-
-#### `setEventsActiveIndicator(obj, isActive)`
-
-SETEVENTSACTIVEINDICATOR Blue border when event markers are visible.
-  Matches the Live button's visual treatment so the toolbar
-  reads consistently. Keeps the button label constant — the
-  border colour is the active indicator; the tooltip explains
-  the function.
-
-#### `onConfig(obj)`
-
-ONCONFIG Open the dashboard config dialog.
-
-#### `onReset(obj)`
-
-ONRESET Manual recovery — re-render all widgets on the active page.
-  Delegates to DashboardEngine.rerenderWidgets which deletes every
-  widget panel, marks widgets unrealized, then re-allocates and
-  re-realizes them. Use when widgets get stuck (stale axes, zombie
-  state, transient render error). Safe to call while Live mode is
-  active — rerenderWidgets does not touch the Live timer state.
-
-#### `onExport(obj)`
-
-#### `onImage(obj)`
-
-ONIMAGE Open save dialog and export dashboard figure as PNG/JPEG.
-  Pops a uiputfile with PNG+JPEG filters, defaults to the
-  sanitized dashboard name plus timestamp. On cancel, returns
-  silently. On engine error, surfaces message via warndlg.
-
-#### `dispatchImageExport(obj, file, path, idx)`
-
-DISPATCHIMAGEEXPORT Post-dialog dispatcher — testable without uiputfile.
-  file  — filename string, or 0 on user-cancel
-  path  — directory path from uiputfile
-  idx   — filter index (1=PNG, 2=JPEG). Defaults to PNG.
-
-#### `fname = defaultImageFilename(obj)`
-
-DEFAULTIMAGEFILENAME Build sanitized default filename for the dialog.
-  Pattern: {sanitized Engine.Name}_{yyyymmdd_HHMMSS}.png
-  Sanitization: replace [/\:*?"<>|] and whitespace with '_'.
-  NOTE: datestr format 'yyyymmdd_HHMMSS' (lowercase mm=month here,
-  HHMMSS=seconds). This differs from datetime/ISO notation —
-  see libs/EventDetection/generateEventSnapshot.m:28 for the
-  in-codebase precedent.
-
-#### `onInfo(obj)`
-
-#### `contentArea = getContentArea(obj)`
-
-GETCONTENTAREA Compute the widget content area in normalized units.
-  Subtracts the reserved banner strip at the top, the toolbar,
-  and the time-panel height (260508-jyh). DashboardEngine
-  computes ContentArea inline in render() and
-  applyVisibilityAndRelayout(); this helper exists for
-  consistency with consumers that read directly from the
-  toolbar (e.g. DashboardBuilder canvas calc).
-
----
-
-## `BarChartWidget`
-
-> Inherits from: `DashboardWidget`
-
-### Constructor
-
-```matlab
-obj = BarChartWidget(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| DataFcn | `[]` | @() struct('categories',{},'values',[]) |
-| Orientation | `'vertical'` | 'vertical' or 'horizontal' |
-| Stacked | `false` |  |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-#### `refresh(obj)`
-
-#### `t = getType(~)`
-
-#### `lines = asciiRender(obj, width, height)`
-
-#### `s = toStruct(obj)`
-
-### Static Methods
-
-#### `BarChartWidget.obj = fromStruct(s)`
-
----
-
-## `ChipBarWidget` --- Horizontal row of mini status chips for system health summary.
-
-> Inherits from: `DashboardWidget`
-
-Displays N colored circle icons with labels in a compact horizontal strip.
-  Designed as a dense multi-sensor status overview at a glance.
-
-### Constructor
-
-```matlab
-obj = ChipBarWidget(varargin)
-```
-
-CHIPBARWIDGET Construct a ChipBarWidget with optional name-value pairs.
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Chips | `{}` | Cell array of chip structs (label, statusFcn, sensor, iconColor) |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-RENDER Draw all chips in a single shared axes inside parentPanel.
-Re-entrancy guard: parenting an axes to parentPanel and
-toggling its Units below can synchronously fire the panel's
-SizeChangedFcn -> relayout_ -> render. Without this lock the
-nested call deletes the axes the outer render is populating
-and the outer render then crashes on text(obj.hAx, ...).
-
-#### `refresh(obj)`
-
-REFRESH Update chip circle colors from statusFcn or sensor state.
-
-#### `t = getType(~)`
-
-GETTYPE Return widget type string.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Serialize widget to struct for JSON export.
-
-### Static Methods
-
-#### `ChipBarWidget.obj = fromStruct(s)`
-
-FROMSTRUCT Reconstruct ChipBarWidget from a saved struct.
-
----
-
-## `CreateEventDialog` --- Modal dialog to create a manual annotation Event (260513-snt).
-
-> Inherits from: `handle`
-
-d = CreateEventDialog(fastSenseWidget, dashboardEngine)
-
-  Opens a modal figure pre-filled with the widget's current X view as
-  the event time range and the widget's bound Tag.Key as the tag
-  binding. On Save: appends an Event to engine.EventStore, registers
-  per-tag EventBinding entries, calls EventStore.save() and finally
-  engine.notifyEventsChanged() so EventTimelineWidget +
-  FastSenseWidget instances and the slider's event-marker overlay
-  refresh.
-
-  The dialog mirrors DashboardConfigDialog's pattern: classical
-  figure (NOT uifigure) with WindowStyle='modal', styled from the
-  engine's theme. All UI callbacks are wrapped in try/catch with
-  non-blocking errordlg so a bad input never tears down the dialog.
-
-  Properties (SetAccess = private):
-    Widget   - bound FastSenseWidget
-    Engine   - bound DashboardEngine
-    hFigure  - modal figure handle
-
-  Methods (public):
-    onSave   - validate, persist, notify, close dialog on success
-    onCancel - close dialog without writing
-    delete   - destructor, tears down figure
-
-  Methods (Static, public):
-    persistEventStatic(engine, tStart, tEnd, label, sev, cat, notes,
-                       keys, primaryName) - mock-friendly persistence
-      seam used by Task-3 tests; instance persistEvent_ delegates here.
-
-  Errors raised (all namespaced):
-    CreateEventDialog:invalidWidget    - widget is not a FastSenseWidget
-    CreateEventDialog:invalidEngine    - engine is not a DashboardEngine
-    CreateEventDialog:noStore          - engine.EventStore is empty
-    CreateEventDialog:invalidTimeRange - EndTime < StartTime (or
-                                         not finite)
-    CreateEventDialog:emptyLabel       - Label is empty after trim
-
-### Constructor
-
-```matlab
-obj = CreateEventDialog(widget, engine)
-```
-
-CREATEEVENTDIALOG Construct + show modal dialog.
-
-### Methods
-
-#### `onSave(obj, ~, ~)`
-
-ONSAVE Validate inputs, persist Event, refresh dashboard, close dialog.
-  Wraps the full pipeline in try/catch so any throw surfaces
-  via errordlg without tearing the dialog down — the user
-  can correct input and Save again. On success: deletes
-  the modal figure.
-
-#### `onCancel(obj, ~, ~)`
-
-ONCANCEL Close the dialog without writing.
-
-### Static Methods
-
-#### `CreateEventDialog.persistEventStatic(engine, tStart, tEnd, label, sev, cat, notes, keys, primaryName)`
-
-PERSISTEVENTSTATIC Persist a manual annotation Event into engine.EventStore (260513-snt).
-  Public static seam called by the instance persistEvent_
-  wrapper AND directly by Task-3 tests. Keeping the
-  write-side logic free of any figure handles makes it
-  trivially unit-testable.
-
----
-
-## `DashboardConfigDialog` --- Config editor for a DashboardEngine.
-
-> Inherits from: `handle`
-
-Opens a figure listing every public DashboardEngine property with
-  an editable control. Apply writes values back to the engine and
-  propagates visible changes (figure title, theme re-render, live
-  timer restart). Close dismisses without additional changes.
-
-  Enum-like properties get a popup menu:
-    Theme         — {'light', 'dark'}
-    ProgressMode  — {'auto', 'on', 'off'}
-  Numeric properties get a numeric edit control. Everything else
-  gets a plain text edit.
-
-  Usage (usually invoked by the toolbar Config button):
-    dlg = DashboardConfigDialog(engine);
-    % ...user edits fields, clicks Apply/Close...
-
-### Constructor
-
-```matlab
-obj = DashboardConfigDialog(engine)
-```
-
-### Methods
-
-#### `close(obj)`
-
-CLOSE Destroy the dialog figure.
-
-#### `apply(obj)`
-
-APPLY Write all control values back to the engine and propagate.
-
----
-
-## `DashboardPage` --- Named page container within a multi-page dashboard.
-
-> Inherits from: `handle`
-
-Each DashboardPage holds a list of widgets to be rendered when the
-  page is active. DashboardEngine maintains a Pages cell array of
-  DashboardPage objects and routes addWidget() to the active page.
-
-### Constructor
-
-```matlab
-obj = DashboardPage(name)
-```
-
-DASHBOARDPAGE Construct a named page container.
-  pg = DashboardPage()        creates page with Name = ''
-  pg = DashboardPage('Name')  creates page with given Name
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Name | `''` |  |
-| Widgets | `{}` |  |
-
-### Methods
-
-#### `w = addWidget(obj, w)`
-
-ADDWIDGET Append widget w to the Widgets list.
-  pg.addWidget(w) appends w to obj.Widgets.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Serialize the page to a struct with name and widgets fields.
-  s = pg.toStruct() returns s.name (char) and s.widgets (cell).
-
----
-
-## `DashboardProgress` --- Progress-bar helper for DashboardEngine render passes.
-
-> Inherits from: `handle`
-
-Emits a self-updating progress line to stdout as widgets are realized
-  during DashboardEngine.render() / rerenderWidgets(), and a final
-  summary line on completion.
-
-  Silent outside interactive sessions so test / CI output stays clean.
-
-### Constructor
-
-```matlab
-obj = DashboardProgress(name, totalWidgets, totalPages, mode)
-```
-
-### Methods
-
-#### `tick(obj, widget, pageIdx, pageName)`
-
-#### `finish(obj)`
-
----
-
-## `DetachedMirror` --- Standalone live-mirrored widget window for DashboardEngine.
-
-> Inherits from: `handle`
-
-DetachedMirror wraps a cloned DashboardWidget in a standalone MATLAB
-  figure window. The clone is produced via toStruct/fromStruct with post-
-  clone live-reference restoration for FastSenseWidget and RawAxesWidget.
-
-  The mirror is NOT a DashboardWidget subclass — it wraps one. It belongs
-  to DashboardEngine.DetachedMirrors and is ticked by the engine's existing
-  LiveTimer via the engine's onLiveTick() loop.
-
-  Usage (called internally by DashboardEngine.detachWidget()):
-    theme = DashboardTheme(obj.Theme);
-    cb    = @() obj.removeDetached(mirror);
-    mirror = DetachedMirror(originalWidget, theme, cb);
-
-  Properties (SetAccess = private):
-    hFigure        — standalone MATLAB figure window handle
-    hPanel         — full-figure uipanel that hosts the cloned widget
-    Widget         — cloned DashboardWidget instance
-    RemoveCallback — @() called by onFigureClose() before delete(hFigure)
-
-### Constructor
-
-```matlab
-obj = DetachedMirror(originalWidget, themeStruct, removeCallback)
-```
-
-DETACHEDMIRROR Create a detached live-mirror window for originalWidget.
-
-### Methods
-
-#### `tick(obj)`
-
-TICK Refresh the cloned widget; no-op if figure is stale.
-
-#### `result = isStale(obj)`
-
-ISSTALE Return true when the mirror's figure has been closed or destroyed.
-
----
-
-## `DividerWidget` --- Horizontal divider line for visual section separation.
-
-> Inherits from: `DashboardWidget`
-
-DividerWidget renders a horizontal colored line using the theme's
-  WidgetBorderColor (or a custom Color override). It is a static widget
-  with no data binding.
-
-### Constructor
-
-```matlab
-obj = DividerWidget(varargin)
-```
-
-DIVIDERWIDGET Construct a DividerWidget.
-  obj = DividerWidget() creates with defaults.
-  obj = DividerWidget('Thickness', 2, 'Color', [1 0 0]) sets props.
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Thickness | `1` | Relative line thickness (1=thin, 2=medium, 3=thick) |
-| Color | `[]` | RGB override; empty = use theme WidgetBorderColor |
-
-### Methods
-
-#### `render(obj, parentPanel)`
-
-RENDER Create the divider line inside parentPanel.
-  render(obj, parentPanel) creates a uipanel that acts as a
-  horizontal colored line centered vertically in the panel.
-
-#### `refresh(~)`
-
-REFRESH No-op for static widget.
-
-#### `t = getType(~)`
-
-GETTYPE Return widget type string.
-
-#### `lines = asciiRender(obj, width, height)`
-
-ASCIIRENDER Return ASCII representation of the divider.
-  First line is a row of dashes; remaining lines are blank.
-
-#### `s = toStruct(obj)`
-
-TOSTRUCT Serialize to struct.
-  Omits 'thickness' at default (1) and 'color' when empty.
-
-### Static Methods
-
-#### `DividerWidget.obj = fromStruct(s)`
-
-FROMSTRUCT Reconstruct DividerWidget from serialized struct.
 
 ---
 
@@ -2253,6 +2032,94 @@ Fully override — does not use base Sensor property
 
 ---
 
+## `NumberWidget` --- Dashboard widget showing a big number with label and trend.
+
+> Inherits from: `DashboardWidget`
+
+w = NumberWidget('Title', 'Temp', 'ValueFcn', @() readTemp(), 'Units', 'degC');
+
+  ValueFcn returns either:
+    - A scalar (displayed as-is)
+    - A struct with fields: value, unit, trend ('up'/'down'/'flat')
+
+### Constructor
+
+```matlab
+obj = NumberWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| ValueFcn | `[]` | function_handle returning scalar or struct |
+| Units | `''` | unit label string |
+| Format | `'%.1f'` | sprintf format for value |
+| StaticValue | `[]` | fixed value (no callback needed) |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `NumberWidget.obj = fromStruct(s)`
+
+---
+
+## `RawAxesWidget` --- User-supplied plot function on raw MATLAB axes.
+
+> Inherits from: `DashboardWidget`
+
+w = RawAxesWidget('Title', 'Histogram', ...
+      'PlotFcn', @(ax) histogram(ax, randn(1,1000)));
+
+  When bound to a Sensor, the PlotFcn receives (ax, sensor) or
+  (ax, sensor, timeRange) depending on its nargin.
+
+### Constructor
+
+```matlab
+obj = RawAxesWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| PlotFcn | `[]` | @(ax) or @(ax, sensor[, tRange]) or @(ax, tRange) |
+| DataRangeFcn | `[]` | @() returning [tMin tMax] for global time range detection |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `setTimeRange(obj, tStart, tEnd)`
+
+#### `[tMin, tMax] = getTimeRange(obj)`
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `RawAxesWidget.obj = fromStruct(s)`
+
+---
+
 ## `ScatterWidget`
 
 > Inherits from: `DashboardWidget`
@@ -2365,6 +2232,139 @@ TOSTRUCT Serialize widget to a struct for JSON export.
 #### `SparklineCardWidget.obj = fromStruct(s)`
 
 FROMSTRUCT Deserialize a SparklineCardWidget from a struct.
+
+---
+
+## `StatusWidget` --- Colored dot indicator with sensor value.
+
+> Inherits from: `DashboardWidget`
+
+Sensor-first:
+    w = StatusWidget('Sensor', sensorObj);
+
+  Threshold-bound (no Sensor required):
+    w = StatusWidget('Title', 'Temp', 'Threshold', t, 'Value', 85);
+    w = StatusWidget('Title', 'Temp', 'Threshold', 'temp_hi', 'ValueFcn', @getTemp);
+
+  Legacy (still supported):
+    w = StatusWidget('Title', 'Pump 1', 'StatusFcn', @() 'ok');
+
+### Constructor
+
+```matlab
+obj = StatusWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| StatusFcn | `[]` | function_handle returning 'ok'/'warning'/'alarm' (legacy) |
+| StaticStatus | `''` | fixed status string (legacy) |
+| Threshold | `[]` | Threshold object or registry key string (per D-01) |
+| Value | `[]` | Scalar numeric value for threshold comparison (per D-03) |
+| ValueFcn | `[]` | Function handle returning scalar value (per D-03, D-09) |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `StatusWidget.obj = fromStruct(s)`
+
+---
+
+## `TableWidget` --- Tabular data display using uitable.
+
+> Inherits from: `DashboardWidget`
+
+w = TableWidget('Title', 'Sensor Data', 'DataFcn', @() getData());
+  w = TableWidget('Title', 'Static', 'Data', {{'A',1;'B',2}}, ...
+                  'ColumnNames', {'Name','Value'});
+  w = TableWidget('Sensor', sensorObj);                 % last N data rows
+  w = TableWidget('Sensor', sensorObj, 'Mode', 'events', 'EventStoreObj', store);
+
+### Constructor
+
+```matlab
+obj = TableWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| DataFcn | `[]` |  |
+| Data | `{}` |  |
+| ColumnNames | `{}` |  |
+| Mode | `'data'` | 'data' or 'events' |
+| N | `10` | number of rows to display |
+| EventStoreObj | `[]` | EventStore for event mode |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(obj)`
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `TableWidget.obj = fromStruct(s)`
+
+---
+
+## `TextWidget` --- Static text label or section header.
+
+> Inherits from: `DashboardWidget`
+
+w = TextWidget('Title', 'Section A', 'Content', 'Sensor overview');
+
+### Constructor
+
+```matlab
+obj = TextWidget(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Content | `''` | body text |
+| FontSize | `0` | 0 = use theme default |
+| Alignment | `'left'` | 'left', 'center', 'right' |
+
+### Methods
+
+#### `render(obj, parentPanel)`
+
+#### `refresh(~)`
+
+Static widget — nothing to refresh
+
+#### `t = getType(~)`
+
+#### `lines = asciiRender(obj, width, height)`
+
+#### `s = toStruct(obj)`
+
+### Static Methods
+
+#### `TextWidget.obj = fromStruct(s)`
 
 ---
 

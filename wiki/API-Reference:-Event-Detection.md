@@ -338,81 +338,6 @@ RUNCYCLE Execute one poll cycle synchronously (exposed for tests + timer callbac
 
 ---
 
-## `NotificationService` --- Rule-based email notifications with event snapshots.
-
-> Inherits from: `handle`
-
-### Constructor
-
-```matlab
-obj = NotificationService(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| Rules | `[]` |  |
-| DefaultRule | `[]` |  |
-| Enabled | `true` |  |
-| DryRun | `false` |  |
-| SnapshotDir | `''` |  |
-| SnapshotRetention | `7` | days |
-| SmtpServer | `''` |  |
-| SmtpPort | `25` |  |
-| SmtpUser | `''` |  |
-| SmtpPassword | `''` |  |
-| FromAddress | `'fastsense@noreply.com'` |  |
-| NotificationCount | `0` |  |
-
-### Methods
-
-#### `addRule(obj, rule)`
-
-#### `setDefaultRule(obj, rule)`
-
-#### `rule = findBestRule(obj, event)`
-
-#### `notify(obj, event, sensorData)`
-
-#### `cleanupSnapshots(obj)`
-
----
-
-## `NotificationRule` --- Configures notification for sensor/threshold events.
-
-> Inherits from: `handle`
-
-### Constructor
-
-```matlab
-obj = NotificationRule(varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| SensorKey | `''` |  |
-| ThresholdLabel | `''` |  |
-| Recipients | `{{}}` |  |
-| Subject | `'Event: {sensor} - {threshold}'` |  |
-| Message | `'{sensor} exceeded {threshold} ({direction}) at {startTime}. Peak: {peak}'` |  |
-| IncludeSnapshot | `true` |  |
-| ContextHours | `2` |  |
-| SnapshotPadding | `0.1` |  |
-| SnapshotSize | `[800, 400]` |  |
-
-### Methods
-
-#### `score = matches(obj, event)`
-
-Returns match score: 3=sensor+threshold, 2=sensor, 1=default, 0=no match
-
-#### `txt = fillTemplate(~, template, event)`
-
----
-
 ## `DataSource` --- Abstract interface for fetching new sensor data.
 
 > Inherits from: `handle`
@@ -431,32 +356,6 @@ Subclasses must implement fetchNew() which returns a struct:
 ### Static Methods
 
 #### `DataSource.result = emptyResult()`
-
----
-
-## `MatFileDataSource` --- Reads sensor data from a continuously-updated .mat file.
-
-> Inherits from: `DataSource`
-
-### Constructor
-
-```matlab
-obj = MatFileDataSource(filePath, varargin)
-```
-
-### Properties
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| FilePath | `''` |  |
-| XVar | `'X'` |  |
-| YVar | `'Y'` |  |
-| StateXVar | `''` |  |
-| StateYVar | `''` |  |
-
-### Methods
-
-#### `result = fetchNew(obj)`
 
 ---
 
@@ -518,6 +417,32 @@ CLEAR Reset all bindings in both forward and reverse indexes.
 
 ---
 
+## `MatFileDataSource` --- Reads sensor data from a continuously-updated .mat file.
+
+> Inherits from: `DataSource`
+
+### Constructor
+
+```matlab
+obj = MatFileDataSource(filePath, varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| FilePath | `''` |  |
+| XVar | `'X'` |  |
+| YVar | `'Y'` |  |
+| StateXVar | `''` |  |
+| StateYVar | `''` |  |
+
+### Methods
+
+#### `result = fetchNew(obj)`
+
+---
+
 ## `MockDataSource` --- Generates realistic industrial sensor signals for testing.
 
 > Inherits from: `DataSource`
@@ -548,4 +473,79 @@ obj = MockDataSource(varargin)
 ### Methods
 
 #### `result = fetchNew(obj)`
+
+---
+
+## `NotificationRule` --- Configures notification for sensor/threshold events.
+
+> Inherits from: `handle`
+
+### Constructor
+
+```matlab
+obj = NotificationRule(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| SensorKey | `''` |  |
+| ThresholdLabel | `''` |  |
+| Recipients | `{{}}` |  |
+| Subject | `'Event: {sensor} - {threshold}'` |  |
+| Message | `'{sensor} exceeded {threshold} ({direction}) at {startTime}. Peak: {peak}'` |  |
+| IncludeSnapshot | `true` |  |
+| ContextHours | `2` |  |
+| SnapshotPadding | `0.1` |  |
+| SnapshotSize | `[800, 400]` |  |
+
+### Methods
+
+#### `score = matches(obj, event)`
+
+Returns match score: 3=sensor+threshold, 2=sensor, 1=default, 0=no match
+
+#### `txt = fillTemplate(~, template, event)`
+
+---
+
+## `NotificationService` --- Rule-based email notifications with event snapshots.
+
+> Inherits from: `handle`
+
+### Constructor
+
+```matlab
+obj = NotificationService(varargin)
+```
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Rules | `[]` |  |
+| DefaultRule | `[]` |  |
+| Enabled | `true` |  |
+| DryRun | `false` |  |
+| SnapshotDir | `''` |  |
+| SnapshotRetention | `7` | days |
+| SmtpServer | `''` |  |
+| SmtpPort | `25` |  |
+| SmtpUser | `''` |  |
+| SmtpPassword | `''` |  |
+| FromAddress | `'fastsense@noreply.com'` |  |
+| NotificationCount | `0` |  |
+
+### Methods
+
+#### `addRule(obj, rule)`
+
+#### `setDefaultRule(obj, rule)`
+
+#### `rule = findBestRule(obj, event)`
+
+#### `notify(obj, event, sensorData)`
+
+#### `cleanupSnapshots(obj)`
 

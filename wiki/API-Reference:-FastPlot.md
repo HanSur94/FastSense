@@ -45,6 +45,18 @@ FASTSENSE Construct a FastSense instance.
 | XScale | `'linear'` | 'linear' or 'log' — X axis scale |
 | YScale | `'linear'` | 'linear' or 'log' — Y axis scale |
 | ViolationsVisible | `true` | global toggle for violation markers |
+| ShowThresholdLabels | `false` | show inline name labels on threshold lines |
+| ShowEventMarkers | `true` | toggle event round-marker overlay (EVENT-07) |
+| EventStore | `[]` | EventStore handle for event overlay queries |
+| HoverCrosshair | `true` | enable hover crosshair + multi-line datatip (set false to disable; see HoverCrosshair.m) |
+| IsEventPicking_ | `false` | event-pick mode active flag (260513-v69) |
+| EventPickT1_ | `[]` | first-click x coordinate |
+| EventPickEngine_ | `[]` | DashboardEngine handle (needed for persist + store) |
+| PrevAxesBDFcn_ | `[]` | saved hAxes.ButtonDownFcn during pick mode |
+| PrevFigKPFcn_ | `[]` | saved figure WindowKeyPressFcn during pick mode |
+| EventPickPatch_ | `[]` | patch handle (Tag='EventPickRegion') for shaded region during pick (260513-voo) |
+| PrevFigWBMFcn_ | `[]` | saved figure WindowButtonMotionFcn during pick mode (260513-voo) |
+| EventPickModalListener_ | `[]` | event.listener on hEventDetails_ ObjectBeingDestroyed (260513-voo) |
 | MinPointsForDownsample | `5000` | below this, plot raw data |
 | DownsampleFactor | `2` | points per pixel (min + max) |
 | PyramidReduction | `100` | reduction factor per pyramid level |
@@ -84,14 +96,6 @@ ADDLINE Add a data line to the plot.
   fp.ADDLINE(x, y, 'DownsampleMethod', 'lttb') uses the
   Largest-Triangle-Three-Buckets algorithm instead of MinMax.
 
-#### `addSensor(obj, sensor, varargin)`
-
-ADDSENSOR Add a resolved Sensor's data and thresholds to the plot.
-  fp.ADDSENSOR(s) adds the sensor's X/Y data as a line and
-  all resolved thresholds with violation markers enabled.
-  fp.ADDSENSOR(s, 'ShowThresholds', false) adds only the data
-  line, suppressing threshold overlay.
-
 #### `addThreshold(obj, varargin)`
 
 ADDTHRESHOLD Add a threshold line (scalar or time-varying).
@@ -118,6 +122,15 @@ ADDMARKER Add custom event markers at specific positions.
   fp.ADDMARKER(x, y, 'Marker', 'v', 'MarkerSize', 8, 'Color', [1 0 0])
   plots red downward-pointing triangles of size 8.
 
+#### `setShowEventMarkers(obj, tf)`
+
+SETSHOWEVENTMARKERS Toggle event-marker overlay post-render.
+  fp.SETSHOWEVENTMARKERS(true|false) flips ShowEventMarkers and
+  either deletes existing markers (tf=false) or re-runs
+  renderEventLayer_ (tf=true) so markers appear/disappear in
+  place without a full re-render. No-op if not yet rendered;
+  the next render() honours the new flag automatically.
+
 #### `addShaded(obj, x, y1, y2, varargin)`
 
 ADDSHADED Add a shaded region between two curves.
@@ -133,6 +146,23 @@ ADDFILL Add an area fill from a line to a baseline.
   of zero using default shading colors.
   fp.ADDFILL(x, y, 'Baseline', -1, 'FaceColor', [0 0.5 1])
   fills between y and y=-1 with a custom color.
+
+#### `addTag(obj, tag, varargin)`
+
+ADDTAG Polymorphic dispatch — route a Tag to the correct render path.
+  fp.ADDTAG(sensorTag)     — routes to addLine via tag.getXY
+  fp.ADDTAG(stateTag)      — routes to a staircase line (numeric Y)
+  fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
+  fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
+  fp.ADDTAG(derivedTag)    — routes to addLine via tag.getXY (continuous derived series)
+
+#### `addStateTagAsStaircase_(obj, tag, varargin)`
+
+ADDSTATETAGASSTAIRCASE_ Render a numeric StateTag as a stepped line.
+  Private helper (name ends in _) invoked by addTag for the
+  'state' kind. Expands (X, Y) pairs into an interleaved
+  2N-1 staircase and delegates to addLine. Cellstr Y is not
+  supported in Phase 1005 (deferred).
 
 #### `render(obj, progressBar)`
 
@@ -175,6 +205,17 @@ STARTLIVE Start live mode — poll a .mat file for changes.
   fp.STARTLIVE(filepath, updateFcn, 'Interval', 2)
   fp.STARTLIVE(filepath, updateFcn, 'ViewMode', 'follow')
 
+#### `setXLimQuiet(obj, tStart, tEnd)`
+
+SETXLIMQUIET Set XLim without triggering XLimMode listener overhead.
+  fp.SETXLIMQUIET(tStart, tEnd) is a performance-optimised
+  alternative to calling xlim(ax, [tStart tEnd]) from external
+  callers (e.g. FastSenseWidget.setTimeRange). The plain
+  xlim() call fires the XLimMode PostSet listener every time,
+  which routes to onXLimModeChanged -> scheduleDeferredXLimCheck
+  and creates a new 10 ms one-shot timer per call.  That timer
+  overhead adds ~4 ms per FastSenseWidget per live tick.
+
 #### `stopLive(obj)`
 
 STOPLIVE Stop live mode polling.
@@ -195,6 +236,17 @@ REFRESH Manual one-shot reload from LiveFile.
 SETVIEWMODE Change the live view mode at runtime.
   fp.SETVIEWMODE(mode) sets the LiveViewMode property, which
   controls how the X-axis adjusts when new data arrives.
+
+#### `snapToTail(obj)`
+
+SNAPTOTAIL Slide XLim window so its right edge sits just past the data tail.
+  fp.SNAPTOTAIL() does a one-shot "jump to now" — finds the
+  maximum X across all lines, then sets XLim to
+  [xMax - currentWindowWidth + pad, xMax + pad] where pad =
+  2% of the current window width. The small right-edge
+  padding leaves visual breathing room between the latest
+  data point and the chart's right border so the line tail
+  doesn't get clipped against the axes frame.
 
 #### `runLive(obj)`
 
@@ -237,6 +289,19 @@ OPENLOUPE Open a standalone enlarged copy of this tile.
   by [+30, -30] pixels from the source figure, and receives
   its own FastSenseToolbar.
 
+#### `exportData(obj, filepath, format)`
+
+EXPORTDATA Export raw line and threshold data as CSV or MAT.
+  EXPORTDATA(obj, filepath, format) writes all raw line and
+  threshold data from the plot to the file at filepath.
+
+#### `refreshEventLayer(obj)`
+
+REFRESHEVENTLAYER Public thin wrapper — rebuild the event marker layer.
+  Calls the private renderEventLayer_ so external consumers
+  (e.g. FastSenseWidget.refresh()) can trigger a marker rebuild
+  without exposing the implementation method directly.
+
 #### `n = lineNumPoints(obj, i)`
 
 LINENUMPOINTS Return total point count for line i.
@@ -245,7 +310,159 @@ LINENUMPOINTS Return total point count for line i.
 
 LINEXRANGE Return X endpoints for line i.
 
+#### `onEventMarkerClick_(obj, src, ~)`
+
+ONEVENTMARKERCLICK_ ButtonDownFcn dispatcher for event markers.
+  Hidden public so TestFastSenseEventClick can call it for direct
+  dispatch of the click -> details-popup path. Branches on figure
+  SelectionType: 'normal' -> openEventDetails_; 'alt' (right-click)
+  -> builds/shows uicontextmenu with quick-nav actions.
+
+#### `openEventDetails_(obj, ev)`
+
+OPENEVENTDETAILS_ Open a separate floating figure with event fields.
+  Phase 1012 refit: standalone figure (OS-native drag/close), light
+  theme with standard font, read-only field list on top and an
+  editable Notes box at the bottom. Saving the notes mutates
+  ev.Notes (handle persists across the MATLAB session) and calls
+  EventStore.save() when a FilePath is configured (disk persistence).
+
+#### `fitDetailsTableColumns_(~, hTable)`
+
+FITDETAILSTABLECOLUMNS_ Split the uitable width ~1:2 between
+  Field and Value columns based on the parent FIGURE's
+  current pixel width. Deriving from the figure rather than
+  reading the table's own Position avoids a race where the
+  table layout hasn't settled when SizeChangedFcn fires.
+
+#### `saveEventNotes_(obj, ev, hNotesControl)`
+
+SAVEEVENTNOTES_ Commit the Notes textarea to ev.Notes and persist.
+  Mutates the Event handle (in-session persistence) and calls
+  obj.EventStore.save() when available so notes survive MATLAB
+  restarts. Updates the status label to confirm.
+
+#### `closeEventDetails_(obj)`
+
+CLOSEEVENTDETAILS_ Dismiss the popup figure.
+
+#### `onKeyPressForDetailsDismiss_(obj, eventData)`
+
+ONKEYPRESSFORDETAILSDISMISS_ Close popup on ESC key.
+
+#### `startEventPick_(obj, engine)`
+
+STARTEVENTPICK_ Enter two-click event-pick mode (260513-v69).
+  Toggle-cancels if already active. Saves axes ButtonDownFcn
+  and figure WindowKeyPressFcn, installs our handlers, draws
+  hint. WindowButtonMotionFcn is never touched so
+  HoverCrosshair stays fully functional.
+
+#### `cancelEventPick_(obj)`
+
+CANCELEVENTPICK_ Exit pick mode + cleanup. Idempotent. Delegates to onEventDetailsClosed_ (260513-voo).
+  Preserves the v69 Test 7 contract: silent no-op when not
+  picking AND no patch alive (axes children count unchanged).
+
+#### `onPickClick_(obj, ~, ~)`
+
+ONPICKCLICK_ Axes ButtonDownFcn during pick mode. Right-click cancels.
+
+#### `onPickKey_(obj, src, evt)`
+
+ONPICKKEY_ Figure WindowKeyPressFcn during pick. ESC cancels; chain otherwise.
+
+#### `completeEventPick_(obj, tStart, tEnd)`
+
+COMPLETEEVENTPICK_ Sort, persist, hand off to openEventDetails_, cleanup.
+
+#### `drawPickHint_(obj, str)`
+
+DRAWPICKHINT_ Draw the EventPickHint text annotation in obj.hAxes.
+
+#### `updatePickHint_(obj, str)`
+
+UPDATEPICKHINT_ Mutate an existing EventPickHint's String, fallback redraws.
+
+#### `drawPickLine_(obj, x)`
+
+DRAWPICKLINE_ Draw a single orange vertical EventPickLine at x.
+
+#### `onPickMotion_(obj, src, evt)`
+
+ONPICKMOTION_ Chained figure WindowButtonMotionFcn during pick mode (260513-voo).
+  FIRST forward to the saved handler so HoverCrosshair keeps
+  working. THEN, while in the post-click-1 pre-click-2 sub-
+  state, update the shaded patch XData to track the cursor.
+  Wrapped in try/catch so our chained handler never breaks
+  HoverCrosshair downstream.
+
+#### `onPickMotion_FromX_(obj, cx)`
+
+ONPICKMOTION_FROMX_ Update patch geometry to span [EventPickT1_, cx] x current YLim (260513-voo).
+  Pulled out of onPickMotion_ so tests can drive geometry
+  updates deterministically without having to mutate
+  CurrentPoint (which is read-only on MATLAB).
+
+#### `createPickPatch_(obj, x)`
+
+CREATEPICKPATCH_ Create the EventPickRegion patch at zero width (260513-voo).
+  FaceColor is read from the just-drawn EventPickLine (SSOT)
+  with fallback to the canonical [1.0 0.55 0.0] orange. The
+  patch is pushed to the back of axes Children so the lines
+  and plotted signal stay in front. HitTest='off' +
+  PickableParts='none' so click 2 reaches the axes
+  underneath this patch.
+
+#### `finalizePickPatch_(obj, tStart, tEnd)`
+
+FINALIZEPICKPATCH_ Snap the patch to sorted [tStart, tEnd] x current YLim (260513-voo).
+
+#### `c = pickLineColor_(obj)`
+
+PICKLINECOLOR_ Resolve patch FaceColor from a live EventPickLine, fallback orange.
+
+#### `restorePickCallbacks_(obj)`
+
+RESTOREPICKCALLBACKS_ Restore axes BDF + figure KP + figure WBM to pre-pick values (260513-voo).
+
+#### `onEventDetailsClosed_(obj)`
+
+ONEVENTDETAILSCLOSED_ Unified pick-mode cleanup (260513-voo).
+  Idempotent. Called from three paths:
+    - addlistener on hEventDetails_ ObjectBeingDestroyed (modal close)
+    - cancelEventPick_ (toggle / ESC / right-click)
+    - completeEventPick_ catch fallback when modal couldn't open
+  First-line guard returns silently when nothing is in flight.
+
+#### `tbl = buildEventFieldsTable_(~, ev)`
+
+BUILDEVENTFIELDSTABLE_ Nx2 cell array for the uitable in the
+  details popup. Columns are {Field, Value}. Empty statistics
+  rows are skipped. Section separators use a blank-label row
+  with a bullet '·' value to maintain visual grouping without
+  relying on cell-level styling (not portable across MATLAB
+  versions).
+
+#### `txt = formatEventFields_(~, ev)`
+
+FORMATEVENTFIELDS_ Produce a grouped, readable listing of event fields.
+  Sections: TIMING / STATISTICS / CLASSIFICATION / TAGS / THRESHOLD.
+  Empty-valued statistics rows are hidden (they carry no
+  information and clutter the popup). IsOpen=true displays
+  "Open" for EndTime and Duration so the test contract in
+  TestFastSenseEventClick.testFormatEventFieldsShowsOpenForOpenEvent
+  still holds.
+
+#### `s = formatSection(header, rows, labelWidth)`
+
 ### Static Methods
+
+#### `FastSense.fp = plot(x, y, varargin)`
+
+PLOT One-liner convenience for quick plotting.
+  FastSense.plot(x, y)
+  FastSense.plot(x, y, 'DisplayName', 'Signal', 'Theme', 'dark')
 
 #### `FastSense.resetDefaults()`
 
@@ -265,6 +482,149 @@ DISTFIG Distribute figure windows across the screen.
 
 ---
 
+## `FastSenseDataStore` --- SQLite-backed data storage for large time series.
+
+> Inherits from: `handle`
+
+Stores X/Y data in a temporary SQLite database via mksqlite using
+  chunked typed BLOBs for fast bulk insert and range-based retrieval.
+  This avoids loading full datasets into MATLAB memory, preventing
+  out-of-memory errors on Windows and memory-constrained systems.
+
+  Data is split into chunks of ~100K points. Each chunk is stored as
+  a pair of typed BLOBs (X and Y arrays) with the chunk's X range
+  indexed for fast overlap queries. On zoom/pan, only the chunks
+  overlapping the visible range are loaded, then trimmed to the exact
+  view window.
+
+  Additional data columns (cell, char, string, categorical, logical,
+  or any numeric type) can be attached via addColumn / getColumn.
+
+  Requires mksqlite. If not available, falls back to binary file
+  storage (extra columns require mksqlite).
+
+### Constructor
+
+```matlab
+obj = FastSenseDataStore(x, y)
+```
+
+FASTSENSEDATASTORE Create a disk-backed store from X/Y arrays.
+
+### Methods
+
+#### `[xOut, yOut] = getRange(obj, xMin, xMax)`
+
+GETRANGE Read data within an X range (with one-point padding).
+
+#### `[xOut, yOut] = readSlice(obj, startIdx, endIdx)`
+
+READSLICE Read a contiguous slice of data by row index.
+
+#### `addColumn(obj, name, data)`
+
+ADDCOLUMN Store an extra data column alongside X/Y.
+  Categorical arrays auto-convert to codes+categories struct.
+  String arrays auto-convert to cell of char.
+
+#### `data = getColumnRange(obj, name, xMin, xMax)`
+
+GETCOLUMNRANGE Read a column's data within an X range.
+  Converts the X range to a point-offset range using chunk
+  metadata (no x_data BLOB fetch), then delegates to slice.
+
+#### `data = getColumnSlice(obj, name, startIdx, endIdx)`
+
+GETCOLUMNSLICE Read a column slice by point index range.
+
+#### `names = listColumns(obj)`
+
+LISTCOLUMNS Return names of all stored extra columns.
+
+#### `idx = findIndex(obj, xVal, side)`
+
+FINDINDEX Binary search for a global point index by X value.
+  idx = ds.findIndex(xVal, 'left') returns the first index
+  where X(idx) >= xVal.  idx = ds.findIndex(xVal, 'right')
+  returns the last index where X(idx) <= xVal.
+
+#### `[violX, violY] = findViolations(obj, startIdx, endIdx, threshold, isUpper)`
+
+FINDVIOLATIONS Find violation points using chunk-level Y filtering.
+  [vx, vy] = ds.findViolations(lo, hi, thresh, true) finds all
+  points in [lo, hi] where Y > thresh (upper violation).
+  [vx, vy] = ds.findViolations(lo, hi, thresh, false) finds
+  points where Y < thresh (lower violation).
+
+#### `enableWAL(obj)`
+
+ENABLEWAL Switch database to WAL journal mode for concurrent reads.
+
+#### `disableWAL(obj)`
+
+DISABLEWAL Revert database to DELETE journal mode.
+
+#### `storeResolved(obj, resolvedTh, resolvedViol)`
+
+STORERESOLVED Cache pre-computed resolve() results in SQLite.
+  ds.storeResolved(resolvedTh, resolvedViol) stores the
+  threshold and violation struct arrays produced by
+  Sensor.resolve() into the database for instant retrieval.
+
+#### `[resolvedTh, resolvedViol] = loadResolved(obj)`
+
+LOADRESOLVED Load pre-computed resolve() results from SQLite.
+  Returns empty arrays if no cached results exist.
+
+#### `clearResolved(obj)`
+
+CLEARRESOLVED Invalidate pre-computed resolve() cache.
+
+#### `storeMonitor(obj, key, X, Y, parentKey, parentNumPts, parentXMin, parentXMax)`
+
+STOREMONITOR Cache a MonitorTag's derived (X, Y) plus staleness quad.
+  ds.storeMonitor(key, X, Y, parentKey, parentNumPts, parentXMin, parentXMax)
+  upserts a monitors row. The quad (parent_key, num_points,
+  parent_xmin, parent_xmax) is stamped at write time and is
+  compared at load time by MonitorTag.cacheIsStale_.
+
+#### `[X, Y, meta] = loadMonitor(obj, key)`
+
+LOADMONITOR Retrieve cached MonitorTag (X, Y) + staleness metadata.
+  [X, Y, meta] = ds.loadMonitor(key) returns X=[] on miss.
+  Callers must verify freshness via the returned meta struct
+  (fields: parent_key, num_points, parent_xmin, parent_xmax,
+  computed_at).
+
+#### `clearMonitor(obj, key)`
+
+CLEARMONITOR Delete a cached MonitorTag row by key.
+
+#### `cleanup(obj)`
+
+CLEANUP Close the database and delete temp files.
+
+#### `ensureOpenForTest(obj)`
+
+ENSUREOPENFORTEST Test-only hook to force-reopen the DB handle.
+  Exposes the private ensureOpen() lifecycle helper so WAL-mode
+  tests can query journal_mode via mksqlite(DbId, ...) without
+  hitting MethodRestricted. Hidden (rather than narrower
+  Access = {?matlab.unittest.TestCase}) so Octave parsing
+  survives — Octave has no matlab.unittest.
+
+### Static Methods
+
+#### `FastSenseDataStore.c = toCategorical(s)`
+
+TOCATEGORICAL Convert a codes+categories struct back to categorical.
+
+#### `FastSenseDataStore.c = fromCategorical(data)`
+
+FROMCATEGORICAL Convert a MATLAB categorical to codes+categories struct.
+
+---
+
 ## `FastSenseGrid` --- Tiled layout manager for FastSense dashboards.
 
 > Inherits from: `handle`
@@ -272,6 +632,9 @@ DISTFIG Distribute figure windows across the screen.
 Creates a grid of FastSense tiles in a single figure window with
   configurable spacing, per-tile theme overrides, and tile spanning.
   Supports live mode that synchronizes file polling across all tiles.
+
+  For widget-based dashboards with gauges, numbers, status indicators,
+  and edit mode, see DashboardEngine.
 
   fig = FastSenseGrid(rows, cols)
   fig = FastSenseGrid(rows, cols, 'Theme', 'dark')
@@ -347,24 +710,24 @@ SETTILETHEME Set per-tile theme overrides.
   struct for tile n. When the tile is created or re-themed,
   these overrides are merged on top of the figure-level theme.
 
-#### `tileTitle(obj, n, str)`
+#### `setTileTitle(obj, n, str)`
 
-TILETITLE Set title for tile n.
-  fig.tileTitle(n, str) sets the axes title on tile n using
+SETTILETITLE Set title for tile n.
+  fig.setTileTitle(n, str) sets the axes title on tile n using
   the figure theme's TitleFontSize and ForegroundColor.
   Can be called before or after render().
 
-#### `tileXLabel(obj, n, str)`
+#### `setTileXLabel(obj, n, str)`
 
-TILEXLABEL Set xlabel for tile n.
-  fig.tileXLabel(n, str) sets the X-axis label on tile n
+SETTILEXLABEL Set xlabel for tile n.
+  fig.setTileXLabel(n, str) sets the X-axis label on tile n
   using the figure theme's ForegroundColor.
   Can be called before or after render().
 
-#### `tileYLabel(obj, n, str)`
+#### `setTileYLabel(obj, n, str)`
 
-TILEYLABEL Set ylabel for tile n.
-  fig.tileYLabel(n, str) sets the Y-axis label on tile n
+SETTILEYLABEL Set ylabel for tile n.
+  fig.setTileYLabel(n, str) sets the Y-axis label on tile n
   using the figure theme's ForegroundColor.
   Can be called before or after render().
 
@@ -432,6 +795,105 @@ COMPUTETILEPOSITION Calculate normalized [x y w h] for tile n.
   ContentOffset. Tiles are numbered in row-major order with
   top-left origin, then converted to MATLAB's bottom-left
   coordinate system.
+
+---
+
+## `SensorDetailPlot` --- Two-panel sensor overview+detail plot with interactive navigator.
+
+> Inherits from: `handle`
+
+sdp = SensorDetailPlot(tag)
+  sdp = SensorDetailPlot(tag, Name, Value, ...)
+
+  Name-Value Options:
+    'Theme'              - FastSense theme (default: 'default')
+    'NavigatorHeight'    - Fraction 0-1 for navigator (default: 0.20)
+    'ShowThresholds'     - Show thresholds in main plot (default: true)
+    'ShowThresholdBands' - Show threshold bands in navigator (default: true)
+    'Events'             - EventStore or Event array (default: [])
+    'ShowEventLabels'    - Reserved, no effect (default: false)
+    'Parent'             - uipanel handle for embedding (default: [])
+    'Title'              - Plot title (default: tag.Name)
+    'XType'              - 'numeric' or 'datenum' (default: 'numeric')
+
+### Constructor
+
+```matlab
+obj = SensorDetailPlot(tag, varargin)
+```
+
+Accept Tag (v2.0) only.
+Tag class is the abstract base — uses isa(x, 'Tag'), NOT
+isa-on-subclass-name (Pitfall 1).
+
+### Methods
+
+#### `render(obj)`
+
+#### `setZoomRange(obj, xMin, xMax)`
+
+#### `[xMin, xMax] = getZoomRange(obj)`
+
+---
+
+## `ConsoleProgressBar` --- Single-line console progress bar with indentation.
+
+> Inherits from: `handle`
+
+A lightweight progress indicator that renders an ASCII/Unicode bar
+  on a single console line, overwriting itself on each update via
+  backspace characters. Supports optional leading indentation so
+  multiple bars can be stacked hierarchically.
+
+  The typical lifecycle is:  construct -> start -> update (loop) ->
+  freeze or finish. Calling freeze() prints a newline to make the
+  current state permanent, allowing a subsequent bar to render on a
+  fresh line below. Calling finish() sets progress to 100 % and
+  freezes automatically.
+
+  On GNU Octave the bar uses ASCII characters (# and -). On MATLAB
+  it uses Unicode block characters for a smoother appearance.
+
+### Constructor
+
+```matlab
+obj = ConsoleProgressBar(indent)
+```
+
+CONSOLEPROGRESSBAR Construct a progress bar instance.
+  pb = ConsoleProgressBar() creates a bar with no indentation.
+
+### Methods
+
+#### `start(obj)`
+
+START Initialize and render the progress bar for the first time.
+  pb.start() resets the frozen/started state and prints the
+  initial (empty) bar. Must be called before update() will
+  have any visible effect.
+
+#### `update(obj, current, total, label)`
+
+UPDATE Set progress counters and redraw the bar.
+  pb.update(current, total) updates the progress fraction
+  to current/total and redraws the bar in-place.
+
+#### `freeze(obj)`
+
+FREEZE Make the current bar state permanent by printing a newline.
+  pb.freeze() redraws the bar one final time, appends a
+  newline character, and sets IsFrozen to true. Subsequent
+  calls to update() are silently ignored. Use this when you
+  want the bar to remain visible while a new bar starts on
+  the next line.
+
+#### `finish(obj)`
+
+FINISH Set progress to 100 %, freeze, and mark the bar done.
+  pb.finish() fills the bar to completion, prints a newline
+  (if not already frozen), and sets IsStarted to false. This
+  is a convenience shortcut equivalent to calling
+  pb.update(total, total) followed by pb.freeze().
 
 ---
 
@@ -559,8 +1021,10 @@ Adds a uitoolbar with data cursor, crosshair, grid/legend toggles,
     Legend        — toggle legend visibility
     Autoscale Y  — fit Y-axis to visible data range
     Export PNG   — save figure as PNG with file dialog
+    Export Data  — save raw data as CSV or MAT with file dialog
     Refresh      — manual one-shot data reload
     Live Mode    — toggle automatic file polling
+    Follow       — auto-pan X-axis to show the data tail
     Metadata     — show/hide metadata in data cursor tooltips
     Violations   — toggle violation marker visibility
 
@@ -594,6 +1058,12 @@ EXPORTPNG Save figure as PNG image at 150 DPI.
   tb.exportPNG()          — opens file dialog
   tb.exportPNG(filepath)  — saves directly to path
 
+#### `exportData(obj, filepath)`
+
+EXPORTDATA Export raw plot data as CSV or MAT file.
+  tb.exportData()          — opens file dialog
+  tb.exportData(filepath)  — saves directly (format from extension)
+
 #### `setCrosshair(obj, on)`
 
 SETCROSSHAIR Enable or disable crosshair tracking mode.
@@ -613,6 +1083,14 @@ REFRESH Trigger a manual data refresh.
 #### `toggleLive(obj)`
 
 TOGGLELIVE Toggle live mode on/off.
+
+#### `setFollow(obj, on)`
+
+SETFOLLOW Enable or disable Follow auto-pan-to-tail.
+  tb.setFollow(true)  — set LiveViewMode='follow' and immediately
+                        snap XLim to [x(end)-w, x(end)] if the
+                        current XLim does not already include x(end).
+  tb.setFollow(false) — set LiveViewMode='preserve' (XLim unchanged).
 
 #### `setMetadata(obj, on)`
 
@@ -641,6 +1119,13 @@ BUILDCURSORLABEL Build the text label for data cursor.
 SNAPTONEAREST Find the closest data point to a click position.
   [sx, sy, lineIdx] = tb.snapToNearest(fp, xClick, yClick)
 
+#### `syncFollowState(obj)`
+
+SYNCFOLLOWSTATE Mirror target's LiveViewMode onto the Follow button.
+  Sets State='on' when LiveViewMode='follow', 'off' otherwise.
+  Sets Enable='off' when LiveViewMode is empty (no live wiring),
+  'on' otherwise. Safe to call before/after rebind.
+
 ### Static Methods
 
 #### `FastSenseToolbar.icon = makeIcon(name)`
@@ -660,117 +1145,62 @@ FORMATX Format an X value based on XType.
 
 ---
 
-## `FastSenseDataStore` --- SQLite-backed data storage for large time series.
+## `HoverCrosshair` --- Hover-driven vertical crosshair + multi-line datatip for FastSense.
 
 > Inherits from: `handle`
 
-Stores X/Y data in a temporary SQLite database via mksqlite using
-  chunked typed BLOBs for fast bulk insert and range-based retrieval.
-  This avoids loading full datasets into MATLAB memory, preventing
-  out-of-memory errors on Windows and memory-constrained systems.
+hc = HOVERCROSSHAIR(fp) attaches a hover crosshair to a rendered
+  FastSense instance fp. While the mouse is over fp.hAxes, a vertical
+  line tracks the cursor's x position and a small datatip near the
+  cursor shows the formatted x value plus one row per visible line
+  (DisplayName + interpolated y at hovered x via binary_search).
 
-  Data is split into chunks of ~100K points. Each chunk is stored as
-  a pair of typed BLOBs (X and Y arrays) with the chunk's X range
-  indexed for fast overlap queries. On zoom/pan, only the chunks
-  overlapping the visible range are loaded, then trimmed to the exact
-  view window.
+  The handler is *chained*: any pre-existing WindowButtonMotionFcn
+  on the figure is preserved and invoked first on every motion event,
+  so this class coexists with other hover-driven features
+  (FastSenseToolbar crosshair toggle, NavigatorOverlay drag, etc.).
 
-  Additional data columns (cell, char, string, categorical, logical,
-  or any numeric type) can be attached via addColumn / getColumn.
+  Properties (read-only):
+    Target           — FastSense instance
+    hFigure, hAxes   — cached graphics handles
+    hLineV           — vertical crosshair line
+    hTipBox          — text annotation acting as datatip box
 
-  Requires mksqlite. If not available, falls back to binary file
-  storage (extra columns require mksqlite).
+  Methods:
+    onMove(xQuery)   — update + show crosshair at xQuery (data coords)
+    onLeave()        — hide crosshair + datatip
+    delete()         — restore prior WindowButtonMotionFcn and clean up
+
+  Coexistence with FastSenseToolbar:
+    The toolbar's setCrosshair() also swaps WindowButtonMotionFcn at
+    activation. Because we only chain whatever handler was installed
+    when our constructor ran, when the toolbar later overwrites the
+    callback our hover handler is temporarily detached (toolbar mode
+    wins). When the toolbar deactivates and restores its saved
+    callback (which is *our* chained handler), hover resumes
+    automatically.
 
 ### Constructor
 
 ```matlab
-obj = FastSenseDataStore(x, y)
+obj = HoverCrosshair(fp)
 ```
 
-FASTSENSEDATASTORE Create a disk-backed store from X/Y arrays.
+HOVERCROSSHAIR Construct hover crosshair attached to a FastSense.
+  hc = HOVERCROSSHAIR(fp) requires fp to be a rendered FastSense
+  handle. Throws HoverCrosshair:invalidTarget if not.
 
 ### Methods
 
-#### `[xOut, yOut] = getRange(obj, xMin, xMax)`
+#### `onMove(obj, xQuery)`
 
-GETRANGE Read data within an X range (with one-point padding).
+ONMOVE Update + show the crosshair at data x-coordinate xQuery.
+  Public so tests can drive motion deterministically without
+  needing real mouse input.
 
-#### `[xOut, yOut] = readSlice(obj, startIdx, endIdx)`
+#### `onLeave(obj)`
 
-READSLICE Read a contiguous slice of data by row index.
-
-#### `addColumn(obj, name, data)`
-
-ADDCOLUMN Store an extra data column alongside X/Y.
-  Categorical arrays auto-convert to codes+categories struct.
-  String arrays auto-convert to cell of char.
-
-#### `data = getColumnRange(obj, name, xMin, xMax)`
-
-GETCOLUMNRANGE Read a column's data within an X range.
-  Converts the X range to a point-offset range using chunk
-  metadata (no x_data BLOB fetch), then delegates to slice.
-
-#### `data = getColumnSlice(obj, name, startIdx, endIdx)`
-
-GETCOLUMNSLICE Read a column slice by point index range.
-
-#### `names = listColumns(obj)`
-
-LISTCOLUMNS Return names of all stored extra columns.
-
-#### `idx = findIndex(obj, xVal, side)`
-
-FINDINDEX Binary search for a global point index by X value.
-  idx = ds.findIndex(xVal, 'left') returns the first index
-  where X(idx) >= xVal.  idx = ds.findIndex(xVal, 'right')
-  returns the last index where X(idx) <= xVal.
-
-#### `[violX, violY] = findViolations(obj, startIdx, endIdx, threshold, isUpper)`
-
-FINDVIOLATIONS Find violation points using chunk-level Y filtering.
-  [vx, vy] = ds.findViolations(lo, hi, thresh, true) finds all
-  points in [lo, hi] where Y > thresh (upper violation).
-  [vx, vy] = ds.findViolations(lo, hi, thresh, false) finds
-  points where Y < thresh (lower violation).
-
-#### `enableWAL(obj)`
-
-ENABLEWAL Switch database to WAL journal mode for concurrent reads.
-
-#### `disableWAL(obj)`
-
-DISABLEWAL Revert database to DELETE journal mode.
-
-#### `storeResolved(obj, resolvedTh, resolvedViol)`
-
-STORERESOLVED Cache pre-computed resolve() results in SQLite.
-  ds.storeResolved(resolvedTh, resolvedViol) stores the
-  threshold and violation struct arrays produced by
-  Sensor.resolve() into the database for instant retrieval.
-
-#### `[resolvedTh, resolvedViol] = loadResolved(obj)`
-
-LOADRESOLVED Load pre-computed resolve() results from SQLite.
-  Returns empty arrays if no cached results exist.
-
-#### `clearResolved(obj)`
-
-CLEARRESOLVED Invalidate pre-computed resolve() cache.
-
-#### `cleanup(obj)`
-
-CLEANUP Close the database and delete temp files.
-
-### Static Methods
-
-#### `FastSenseDataStore.c = toCategorical(s)`
-
-TOCATEGORICAL Convert a codes+categories struct back to categorical.
-
-#### `FastSenseDataStore.c = fromCategorical(data)`
-
-FROMCATEGORICAL Convert a MATLAB categorical to codes+categories struct.
+ONLEAVE Hide the crosshair line + datatip.
 
 ---
 
@@ -804,101 +1234,4 @@ obj = NavigatorOverlay(hAxes, varargin)
 #### `setRange(obj, xMin, xMax)`
 
 Clamp to data limits
-
----
-
-## `SensorDetailPlot` --- Two-panel sensor overview+detail plot with interactive navigator.
-
-> Inherits from: `handle`
-
-sdp = SensorDetailPlot(sensor)
-  sdp = SensorDetailPlot(sensor, Name, Value, ...)
-
-  Name-Value Options:
-    'Theme'              - FastSense theme (default: 'default')
-    'NavigatorHeight'    - Fraction 0-1 for navigator (default: 0.20)
-    'ShowThresholds'     - Show thresholds in main plot (default: true)
-    'ShowThresholdBands' - Show threshold bands in navigator (default: true)
-    'Events'             - EventStore or Event array (default: [])
-    'ShowEventLabels'    - Reserved, no effect (default: false)
-    'Parent'             - uipanel handle for embedding (default: [])
-    'Title'              - Plot title (default: sensor.Name)
-    'XType'              - 'numeric' or 'datenum' (default: 'numeric')
-
-### Constructor
-
-```matlab
-obj = SensorDetailPlot(sensor, varargin)
-```
-
-Validate sensor
-
-### Methods
-
-#### `render(obj)`
-
-#### `setZoomRange(obj, xMin, xMax)`
-
-#### `[xMin, xMax] = getZoomRange(obj)`
-
----
-
-## `ConsoleProgressBar` --- Single-line console progress bar with indentation.
-
-> Inherits from: `handle`
-
-A lightweight progress indicator that renders an ASCII/Unicode bar
-  on a single console line, overwriting itself on each update via
-  backspace characters. Supports optional leading indentation so
-  multiple bars can be stacked hierarchically.
-
-  The typical lifecycle is:  construct -> start -> update (loop) ->
-  freeze or finish. Calling freeze() prints a newline to make the
-  current state permanent, allowing a subsequent bar to render on a
-  fresh line below. Calling finish() sets progress to 100 % and
-  freezes automatically.
-
-  On GNU Octave the bar uses ASCII characters (# and -). On MATLAB
-  it uses Unicode block characters for a smoother appearance.
-
-### Constructor
-
-```matlab
-obj = ConsoleProgressBar(indent)
-```
-
-CONSOLEPROGRESSBAR Construct a progress bar instance.
-  pb = ConsoleProgressBar() creates a bar with no indentation.
-
-### Methods
-
-#### `start(obj)`
-
-START Initialize and render the progress bar for the first time.
-  pb.start() resets the frozen/started state and prints the
-  initial (empty) bar. Must be called before update() will
-  have any visible effect.
-
-#### `update(obj, current, total, label)`
-
-UPDATE Set progress counters and redraw the bar.
-  pb.update(current, total) updates the progress fraction
-  to current/total and redraws the bar in-place.
-
-#### `freeze(obj)`
-
-FREEZE Make the current bar state permanent by printing a newline.
-  pb.freeze() redraws the bar one final time, appends a
-  newline character, and sets IsFrozen to true. Subsequent
-  calls to update() are silently ignored. Use this when you
-  want the bar to remain visible while a new bar starts on
-  the next line.
-
-#### `finish(obj)`
-
-FINISH Set progress to 100 %, freeze, and mark the bar done.
-  pb.finish() fills the bar to completion, prints a newline
-  (if not already frozen), and sets IsStarted to false. This
-  is a convenience shortcut equivalent to calling
-  pb.update(total, total) followed by pb.freeze().
 
