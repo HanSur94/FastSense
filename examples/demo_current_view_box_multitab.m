@@ -45,26 +45,26 @@ d.switchPage(1);
 d.render();
 
 %% 3. Pre-zoom one plot on EACH page so a box is waiting on both tabs
-% (Real interactive zoom does the same; we drive it programmatically here.)
+% Page-2 widgets only realize when their tab is first shown, so briefly visit
+% page 2 to zoom Flow, then return to page 1. (Real interactive zoom does the
+% same; switching tabs re-attaches each page's current-view listener.)
 wTemp = d.Pages{1}.Widgets{1};   % Temperature on page 1
 wFlow = d.Pages{2}.Widgets{1};   % Flow on page 2
 try
-    xlim(wTemp.FastSenseObj.hAxes, [120 240]);
+    xlim(wTemp.FastSenseObj.hAxes, [120 240]);   % zoom Temperature on page 1
     wTemp.UseGlobalTime = false;
 catch
 end
-% Page 2 is inactive (not realized yet); set its out-of-sync window via the
-% live axes if available, else it will surface when the tab is first shown and
-% the plot is zoomed interactively.
+d.switchPage(2);                                 % realize page 2 widgets
+for s = 1:3; drawnow; pause(0.05); end
 try
-    if ~isempty(wFlow.FastSenseObj) && wFlow.FastSenseObj.IsRendered
-        xlim(wFlow.FastSenseObj.hAxes, [380 500]);
-    end
+    xlim(wFlow.FastSenseObj.hAxes, [380 500]);   % zoom Flow on page 2
     wFlow.UseGlobalTime = false;
 catch
 end
-for s = 1:4; drawnow; pause(0.05); end
-try d.updateCurrentViewIndicatorForTest_(); catch, end
+for s = 1:3; drawnow; pause(0.05); end
+d.switchPage(1);                                 % back to page 1 (Temperature box)
+for s = 1:3; drawnow; pause(0.05); end
 
 fprintf('\nMulti-tab current-view demo rendered (2 pages).\n');
 fprintf('  Page 1 "Process"   : Temperature pre-zoomed 120..240 s -> coloured box on the slider\n');
