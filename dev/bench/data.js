@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780077291283,
+  "lastUpdate": 1780077382563,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -95796,6 +95796,430 @@ window.BENCHMARK_DATA = {
           {
             "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
             "value": 1967.34,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99d138fa6080ac9ef3eafc0aae3bad035770b9e6",
+          "message": "FastSenseCompanion PerTag mode + industrial plant demo event markers (#166)\n\n* fix(industrial-plant-demo): show all tag events in FastSense widgets\n\nWire 'ShowEventMarkers', true + 'EventStore', ctx.store into all 9\nFastSenseWidget construction sites across the 5 build*Page.m files\n(2 Overview, 2 FeedLine, 3 Reactor, 1 Cooling, 1 Events). Without\nthese NV-pairs FastSenseWidget defaults ShowEventMarkers=false and\nEventStore=[], which silenced both the constructor-time forward\n(FastSenseWidget.m:159) and the live-tick refreshEventMarkers_ guard\n(FastSenseWidget.m:1242), so round event markers never painted on\ndemo plots even though the engine itself had an EventStore.\n\nAlso drops the now-incorrect %#ok<INUSD> pragma from\nbuildFeedLinePage.m, buildReactorPage.m, and buildCoolingPage.m,\nsince ctx.store is now referenced in each body.\n\nNo changes to FastSenseWidget defaults (preserves back-compat for\nnon-demo dashboards). No new tests; manual UAT via run_demo.m.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* docs(quick-260526-pw3): record FastSense widget event-marker fix in STATE.md\n\nQuick task 260526-pw3 wired ShowEventMarkers=true + EventStore=ctx.store\ninto all 9 FastSenseWidget call sites across the 5 industrial-plant demo\nbuild*Page.m files (shipped in c475d2a). This commit records that work\nin the STATE.md Quick Tasks Completed table and updates Last activity.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* feat(companion): add PerTag composer mode — spawn one window per tag\n\nAdd a third composer mode \"PerTag\" to FastSenseCompanion. When the user\nselects N tags and clicks Plot in PerTag mode, the companion spawns N\nindependent FastSense Companion figures — one per tag — each identical\nto today's single-tag \"Open Detail\" output (one FastSenseWidget,\nLinkedGrid layout). Every spawned figure is tracked in OpenedFigures_\nso the existing Tile and Close-all toolbar buttons sweep them.\n\nFour files modified, no new files created:\n\n- libs/FastSenseCompanion/AdHocPlotEventData.m: widen Mode validator\n  from {'Overlay','LinkedGrid'} to {'Overlay','LinkedGrid','PerTag'}.\n  No new properties; no constructor signature change.\n\n- libs/FastSenseCompanion/InspectorPane.m: add hModePerTag_ button next\n  to hModeOverlay_ / hModeLinked_ in the composer panel, grow the\n  toggle grid from [1 2] to [1 3], extend applyModeToggleStyles_ to a\n  3-branch styler. The composer's onModeToggle_ and onPlot_ are\n  untouched — mode-agnostic; they forward ComposerMode_ into\n  AdHocPlotEventData directly.\n\n- libs/FastSenseCompanion/FastSenseCompanion.m: branch\n  onOpenAdHocPlotRequested_ on evt.Mode. Overlay / LinkedGrid paths\n  are byte-equivalent to prior behaviour. New PerTag branch loops\n  openAdHocPlot({tags{k}}, 'LinkedGrid', obj.Theme) per tag, tracks\n  each figure via trackOpenedFigure_, and accumulates skipped names\n  into a single end-of-loop uialert. Per-iteration try/catch so one\n  failed tag does not abort the batch.\n\n- tests/suite/TestFastSenseCompanion.m: extend driveSelectAndPlot_\n  helper to a 3-way mode click, and add testPerTagModeSpawnsNFigures.\n  The new test registers 3 MockPlottableTag entries, drives PerTag +\n  Plot, then asserts (a) getOpenedFiguresForTest_ delta == 3, (b)\n  ≥3 new figures on groot with Name starting \"FastSense Companion\",\n  and (c) no orphan timers after tearing down (mirrors ADHOC-05).\n\nVerification on MATLAB R2025b:\n- checkcode: zero new findings on all 4 files.\n- Constructor smoke: PerTag accepted; bogus modes rejected with\n  FastSenseCompanion:invalidEventData; Overlay / LinkedGrid still work.\n- Suite TestFastSenseCompanion: 73 tests total (72 baseline + 1 new),\n  testPerTagModeSpawnsNFigures PASSES, all 6 ADHOC tests still PASS.\n- Two pre-existing failures (testToolbarHasWikiButton actual=7\n  expected=6; testToolbarGearMovedToColumn8 actual=9 expected=8) are\n  unrelated to R9X — confirmed by re-running them against a stash of\n  the unmodified HEAD: same actual-vs-expected mismatch. Root cause:\n  incomplete merge cleanup in commit e2ded77 (1×9 toolbar tests fix\n  updated TestFastSenseCompanionPlantLogToolbar.m but not the two\n  matching tests in TestFastSenseCompanion.m). Out of scope.\n\nImplements R9X-01 through R9X-05.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n* docs(quick-260526-r9x): record PerTag composer mode in STATE.md\n\nQuick task 260526-r9x shipped a 3rd composer mode \"PerTag\" in the\nFastSenseCompanion ad-hoc plot composer that spawns one independent\nDashboardEngine window per selected tag (shipped in abdc80b).\nVerifier confirmed all 6 must-haves pass; goal-backward audit clean.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-05-29T19:36:02+02:00",
+          "tree_id": "0f42fdef56ed077a946dace5ae3f44c1b7a8bb26",
+          "url": "https://github.com/HanSur94/FastSense/commit/99d138fa6080ac9ef3eafc0aae3bad035770b9e6"
+        },
+        "date": 1780077380189,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.358,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.01,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 160.974,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 0.785,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 251.099,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 2.972,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 16.011,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.592,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.979,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.065,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 183.781,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 0.956,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 254.915,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 0.192,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 15.997,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.455,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 16.009,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.199,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 208.901,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 1.318,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 260.349,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 0.138,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 16.057,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.897,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 83.101,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 1.019,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1405.112,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 5.187,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 257.563,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 6.091,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 17.197,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.501,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 161.222,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.347,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2498.402,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 51.095,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 260.678,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 2.823,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 18.462,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.937,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 806.406,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 1.149,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 23794.311,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 117.741,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 294.502,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 1.587,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 16.638,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.941,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 1181.855,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 16.474,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 179.228,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 0.846,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 175.635,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 0.972,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 0.069,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.277,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_min_ms",
+            "value": 1681.155,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_median_ms",
+            "value": 1728.074,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_min_ms",
+            "value": 2761.846,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_min_ms",
+            "value": 2761.846,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_min_ms",
+            "value": 5163.699,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_on_min_ms",
+            "value": 2761.846,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_off_min_ms",
+            "value": 2662.429,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_min_ms",
+            "value": 2761.846,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_min_ms",
+            "value": 2750.972,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_lastfsstat_count",
+            "value": 1,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_lastfsstat_count",
+            "value": 1600,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_parse_ms_per_tick",
+            "value": 14.599,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_mat_write_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_select_ms_per_tick",
+            "value": 54.008,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_other_ms_per_tick",
+            "value": 1588.773,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_monitor_recompute_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_composite_merge_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_aggregate_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_listener_fanout_ms_per_tick",
+            "value": 71.059,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_total_profiled_ms_per_tick",
+            "value": 1728.439,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick",
+            "value": 648.27,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick",
+            "value": 1904.505,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick",
+            "value": 2312.607,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
+            "value": 1976.864,
             "unit": "ms"
           }
         ]
