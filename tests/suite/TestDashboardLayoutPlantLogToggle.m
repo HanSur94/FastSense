@@ -206,5 +206,66 @@ classdef TestDashboardLayoutPlantLogToggle < matlab.unittest.TestCase
             warning('on', 'DashboardLayout:plantLogToggleParentMissing');
             testCase.verifyFalse(threw);
         end
+
+        function testInfoIconSurvivesToggleOnOff(testCase)
+            % 260526-info-icon-vanishes-after-plantlog-toggle:
+            % After toggling L on then off via the button callback, the
+            % InfoIconButton (and Detach + L itself) must still be present
+            % on the WidgetButtonBar AND each button must sit at its
+            % canonical post-reflow x position. The original bug placed L
+            % at xPL=barW-84 (3-button-cluster math) which is exactly the
+            % post-reflow x position of InfoIconButton in the 4-button
+            % cluster — so L visually covered Info even though Info was
+            % still in the handle tree. The fix calls reflowChrome_ at the
+            % end of addPlantLogToggle so the 4-button-cluster positions
+            % are re-applied after every rebuild.
+            testCase.buildWidgetWithChrome(true);
+            bar = findobj(testCase.Widget.hCellPanel, 'Tag', 'WidgetButtonBar', '-depth', 1);
+            % Sanity: all four right-cluster buttons exist before any toggling.
+            testCase.verifyNotEmpty(findobj(bar, 'Tag', 'InfoIconButton',       '-depth', 1));
+            testCase.verifyNotEmpty(findobj(bar, 'Tag', 'DetachButton',         '-depth', 1));
+            testCase.verifyNotEmpty(findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1));
+            cb = get(testCase.Btn, 'Callback');
+            % Toggle ON (enable plant-log overlay).
+            cb(testCase.Btn, []);
+            drawnow;
+            testCase.verifyTrue(testCase.Widget.ShowPlantLog);
+            % Re-resolve the L button after addPlantLogToggle rebuilt it.
+            btn2 = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+            cb2 = get(btn2, 'Callback');
+            % Toggle OFF (disable plant-log overlay).
+            cb2(btn2, []);
+            drawnow;
+            testCase.verifyFalse(testCase.Widget.ShowPlantLog);
+            % All four right-cluster buttons MUST still be on the bar.
+            info = findobj(bar, 'Tag', 'InfoIconButton',       '-depth', 1);
+            det  = findobj(bar, 'Tag', 'DetachButton',         '-depth', 1);
+            pl   = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+            testCase.verifyNotEmpty(info, 'InfoIconButton must survive L on/off cycle');
+            testCase.verifyNotEmpty(det,  'DetachButton must survive L on/off cycle');
+            testCase.verifyNotEmpty(pl,   'PlantLogToggleButton must survive L on/off cycle');
+            % AND the canonical 4-button-cluster positions must be respected:
+            %   Detach @ barW-28, Info @ barW-84, PlantLog @ barW-112.
+            % If L sits at barW-84 (the original bug), it overlaps Info.
+            % Use the bar's CURRENT width (it can be reread by reflowChrome_
+            % via the SizeChangedFcn pathway, and may drift by sub-pixel
+            % rounding when the cell panel resizes — use a 1px tolerance).
+            barW = subsref(get(bar, 'Position'), substruct('()', {3}));
+            pInfo = get(info(1), 'Position');
+            pDet  = get(det(1),  'Position');
+            pPL   = get(pl(1),   'Position');
+            tol = 1.0;  % 1 px slack for sub-pixel rounding of bar width.
+            testCase.verifyLessThan(abs(pDet(1)  - (barW -  28)), tol, ...
+                'Detach must sit at barW - 28');
+            testCase.verifyLessThan(abs(pInfo(1) - (barW -  84)), tol, ...
+                'Info must sit at barW - 84');
+            testCase.verifyLessThan(abs(pPL(1)   - (barW - 112)), tol, ...
+                'PlantLog must sit at barW - 112 (NOT barW - 84 — that would overlap Info)');
+            % And the strongest separation invariant: PlantLog and Info
+            % must NOT share an x position (the original bug had them
+            % both at barW - 84, fully overlapping).
+            testCase.verifyGreaterThan(abs(pPL(1) - pInfo(1)), 24 - 2*tol, ...
+                'PlantLog and Info must NOT share an x position');
+        end
     end
 end

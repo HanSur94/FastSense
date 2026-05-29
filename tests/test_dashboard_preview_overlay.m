@@ -92,7 +92,7 @@ end
 
 function case_small_dataset_adaptive_buckets()
     %CASE_SMALL_DATASET_ADAPTIVE_BUCKETS Regression: 50 samples must still preview.
-    %   Default aggregator picks nBuckets in [50, 400]; with 50 samples,
+    %   Default aggregator picks nBuckets in [50, 1000]; with 50 samples,
     %   the old hard floor `if numel(x) < nBuckets, return` returned [].
     x = linspace(0, 100, 50);
     y = sin(x * 0.2);
