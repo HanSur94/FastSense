@@ -248,6 +248,74 @@ classdef LiveEventPipeline < handle
     end
 
     methods (Access = private)
+        function sd = sensorDataForEvent_(obj, ev)
+            %SENSORDATAFOREVENT_ Resolve per-event sensor data for snapshot rendering (Phase 1039 D-03).
+            %   Returns struct with fields .X, .Y, .thresholdValue, .thresholdDirection
+            %   (matching the contract consumed by generateEventSnapshot.m). Slice covers
+            %   [evStart - ctxHours/24 - padding, evEnd + padding] where ctxHours comes
+            %   from the best-matching NotificationRule (fallback: 2.0 hours).
+            %
+            %   Defensive: if the sensor key is not in MonitorTargets OR the parent has no
+            %   data, returns empty .X/.Y and logs a warning (does NOT throw — notify-loop
+            %   is wrapped in try/catch in runCycle anyway).
+            %
+            %   D-03 Phase 1039.
+            sd = struct('X', [], 'Y', [], ...
+                'thresholdValue', ev.ThresholdValue, ...
+                'thresholdDirection', ev.Direction);
+
+            key = char(ev.SensorName);
+            if ~obj.MonitorTargets.isKey(key)
+                fprintf('[PIPELINE WARNING] sensorDataForEvent_: SensorName "%s" not in MonitorTargets — sending empty snapshot data.\n', key);
+                return;
+            end
+            monitor = obj.MonitorTargets(key);
+            if isempty(monitor) || ~isprop(monitor, 'Parent') || isempty(monitor.Parent)
+                fprintf('[PIPELINE WARNING] sensorDataForEvent_: MonitorTag "%s" has no Parent — sending empty snapshot data.\n', key);
+                return;
+            end
+            if ~ismethod(monitor.Parent, 'getXY')
+                fprintf('[PIPELINE WARNING] sensorDataForEvent_: Parent of "%s" lacks getXY — sending empty snapshot data.\n', key);
+                return;
+            end
+            [px, py] = monitor.Parent.getXY();
+            if isempty(px)
+                return;  % silent: parent simply has no data yet
+            end
+
+            % Resolve ctxHours from the best-matching NotificationRule (D-03).
+            % Fallback to NotificationRule default (2.0) when no service / no rule matches.
+            ctxHours = 2.0;
+            padFrac  = 0.1;
+            if ~isempty(obj.NotificationService) && ismethod(obj.NotificationService, 'findBestRule')
+                try
+                    rule = obj.NotificationService.findBestRule(ev);
+                    if ~isempty(rule)
+                        if isprop(rule, 'ContextHours'),    ctxHours = rule.ContextHours;    end
+                        if isprop(rule, 'SnapshotPadding'), padFrac  = rule.SnapshotPadding; end
+                    end
+                catch
+                    % keep defaults
+                end
+            end
+
+            % Window: [evStart - ctxHours/24 - padAmt, evEnd + padAmt]
+            % Open events (EndTime=NaN) use the latest parent X as evEnd.
+            evStart = ev.StartTime;
+            evEnd   = ev.EndTime;
+            if isnan(evEnd), evEnd = px(end); end
+            evDur = max(0, evEnd - evStart);
+            padAmt = max(evDur * padFrac, 30/86400);  % at least 30 seconds, matches generateEventSnapshot
+            xMin = evStart - ctxHours/24 - padAmt;
+            xMax = evEnd   + padAmt;
+
+            mask = px >= xMin & px <= xMax;
+            sd.X = px(mask);
+            sd.Y = py(mask);
+            sd.X = sd.X(:).';
+            sd.Y = sd.Y(:).';
+        end
+
         function [newEvents, gotData] = processMonitorTag_(obj, key)
             %PROCESSMONITORTAG_ Tag-first live-tick path (SC#4 realization).
             %
