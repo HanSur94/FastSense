@@ -42,7 +42,6 @@
 __pycache__/
 wiki-gen-summary.md
 .claude/worktrees/
-.planning/
+# .planning/ and docs/superpowers/ are tracked GSD planning docs (un-ignored intentionally).
 .superpowers/
-docs/superpowers/
 .matlab-tests-passed
