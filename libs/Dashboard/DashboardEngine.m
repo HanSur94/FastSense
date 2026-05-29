@@ -353,6 +353,8 @@ classdef DashboardEngine < handle
             try obj.computePlantLogMarkers(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
+            % Phase 1039 — recompute the current-view box for the newly active page.
+            try obj.updateCurrentViewIndicator_(); catch, end
         end
 
         function w = addWidget(obj, type, varargin)
@@ -529,6 +531,19 @@ classdef DashboardEngine < handle
 
             % Auto-detect time range from data
             obj.updateGlobalTimeRange();
+
+            % Phase 1039 — attach a current-view XLim listener to each FastSenseWidget
+            % so user zoom/pan refreshes the slider current-view box. Octave-skipped
+            % inside the attach helper; non-FastSense widgets are skipped (guarded).
+            try
+                cvWs = obj.flattenWidgetsForPreview_(obj.allPageWidgets());
+                for ci = 1:numel(cvWs)
+                    if isa(cvWs{ci}, 'FastSenseWidget')
+                        obj.attachCurrentViewXLimListener_(cvWs{ci});
+                    end
+                end
+            catch
+            end
         end
 
         function startLive(obj)
@@ -2023,6 +2038,9 @@ classdef DashboardEngine < handle
                         ws{i}.Title, ME.message);
                 end
             end
+            % Phase 1039 — a re-sync (broadcast) means the plots now match the
+            % Selection, so the current-view box should hide. Recompute the indicator.
+            try obj.updateCurrentViewIndicator_(); catch, end
         end
 
         function resetGlobalTime(obj)
@@ -2209,6 +2227,9 @@ classdef DashboardEngine < handle
             try obj.computePlantLogMarkers(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
+            % Phase 1039 — refresh the current-view box each tick so a widget that
+            % drifted out of sync (or back in) updates without user interaction.
+            try obj.updateCurrentViewIndicator_(); catch, end
         end
 
         function markAllDirty(obj)
