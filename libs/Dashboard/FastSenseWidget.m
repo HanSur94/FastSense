@@ -93,6 +93,17 @@ classdef FastSenseWidget < DashboardWidget
         CurrentViewXLimListener_ = [] % Phase 1039 — addlistener handle for the current-view-box XLim PostSet notify; engine owns lifecycle
     end
 
+    properties (Hidden)
+        % Phase 1039 test seam. When non-empty (1x2), getCurrentXLim returns it
+        % verbatim instead of reading the live axes. Lets integration tests drive
+        % the engine's current-view decision deterministically — FastSense rebuilds
+        % its axes on zoom-re-resolve, so a raw programmatic xlim() poke is not a
+        % durable way to simulate "this widget is showing a sub-window" under the
+        % unittest runner's event flushing. The real axes<->getCurrentXLim path is
+        % covered separately by TestFastSenseWidgetCurrentXLim. Empty in production.
+        CurrentXLimOverrideForTest_ = []
+    end
+
     properties (Access = private, Constant)
         % PREVIEWRAWTHRESHOLD_ Sample-count threshold below which
         %   getPreviewSeries skips downsampling and renders one bucket
@@ -735,6 +746,14 @@ classdef FastSenseWidget < DashboardWidget
         %   when the user zooms/pans. The current-view box (DashboardEngine.
         %   updateCurrentViewIndicator_) needs the live view, so it calls this.
             xl = [];
+            % Phase 1039 test seam: a forced value bypasses the live-axes read.
+            if ~isempty(obj.CurrentXLimOverrideForTest_)
+                v = obj.CurrentXLimOverrideForTest_;
+                if numel(v) == 2 && all(isfinite(v)) && v(2) > v(1)
+                    xl = [v(1), v(2)];
+                end
+                return;
+            end
             if isempty(obj.FastSenseObj) || ~isa(obj.FastSenseObj, 'FastSense') || ...
                     ~obj.FastSenseObj.IsRendered
                 return;
