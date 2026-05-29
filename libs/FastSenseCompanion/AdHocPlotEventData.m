@@ -10,7 +10,7 @@ classdef AdHocPlotEventData < event.EventData
 %
 %   Properties (read-only after construction):
 %     TagKeys  - cellstr of selected tag keys
-%     Mode     - char in {'Overlay','LinkedGrid'}
+%     Mode     - char in {'Overlay','LinkedGrid','PerTag'}
 %
 %   See also InspectorPane, FastSenseCompanion, event.EventData.
 
@@ -36,7 +36,7 @@ classdef AdHocPlotEventData < event.EventData
                         'AdHocPlotEventData: tagKeys{%d} must be char.', i);
                 end
             end
-            validModes = {'Overlay', 'LinkedGrid'};
+            validModes = {'Overlay', 'LinkedGrid', 'PerTag'};
             if ~ischar(mode) || ~any(strcmp(mode, validModes))
                 error('FastSenseCompanion:invalidEventData', ...
                     'AdHocPlotEventData: mode must be one of: %s. Got: ''%s''.', ...

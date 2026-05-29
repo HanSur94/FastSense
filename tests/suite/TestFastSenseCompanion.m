@@ -563,6 +563,65 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'ADHOC-05: spawn+close cycle must leave no orphan companion-owned timers');
         end
 
+        % ---- R9X-01..05: PerTag composer mode spawns one window per tag ----
+
+        function testPerTagModeSpawnsNFigures(testCase)
+        %TESTPERTAGMODESPAWNSNFIGURES R9X: PerTag mode spawns N independent figures.
+        %   Builds the companion with 3 MockPlottableTag entries, drives the
+        %   composer into PerTag mode, clicks Plot, then asserts exactly
+        %   3 figures were added to OpenedFigures_ (delta vs preCount) and
+        %   at least 3 new figure handles appeared in groot. Tears down each
+        %   spawned figure and verifies no orphan timers leaked — mirroring
+        %   ADHOC-05's lifecycle hygiene check.
+            testCase.assumeFalse(exist('OCTAVE_VERSION', 'builtin') ~= 0, ...
+                'PerTag mode test is MATLAB-only.');
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            for i = 1:3
+                k = sprintf('p%d', i);
+                TagRegistry.register(k, MockPlottableTag(k, ...
+                    'Name', sprintf('P%d', i), 'X', 1:30, 'Y', (1:30) + i));
+            end
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.refreshCatalog();
+            drawnow;
+            preTimers = timerfindall();
+            preFigs   = findobj(groot, 'Type', 'figure');
+            preCount  = numel(app.getOpenedFiguresForTest_());
+            testCase.driveSelectAndPlot_(app, {'p1', 'p2', 'p3'}, 'PerTag');
+            drawnow;
+            postCount = numel(app.getOpenedFiguresForTest_());
+            testCase.verifyEqual(postCount - preCount, 3, ...
+                'PerTag mode must track exactly N=3 figures for 3 selected tags');
+            postFigs = findobj(groot, 'Type', 'figure');
+            newFigs  = setdiff(postFigs, preFigs);
+            testCase.verifyGreaterThanOrEqual(numel(newFigs), 3, ...
+                'PerTag mode must spawn at least 3 new figures');
+            for i = 1:numel(newFigs)
+                testCase.verifyTrue(ishandle(newFigs(i)), ...
+                    'PerTag mode: each spawned figure must be a valid handle');
+                testCase.verifyEqual(get(newFigs(i), 'Type'), 'figure', ...
+                    'PerTag mode: each spawned must be classical figure (Type=figure)');
+                nm = get(newFigs(i), 'Name');
+                testCase.verifyNotEmpty(strfind(nm, 'FastSense Companion'), ...
+                    'PerTag mode: each spawned figure Name must start with "FastSense Companion"');
+            end
+            % Lifecycle hygiene: close each spawned figure, close the companion,
+            % and verify no orphan companion-owned timers remain (mirrors ADHOC-05).
+            for i = 1:numel(newFigs)
+                if ishandle(newFigs(i))
+                    delete(newFigs(i));
+                end
+            end
+            app.close();
+            drawnow;
+            postTimers = timerfindall();
+            newTimers  = setdiff(postTimers, preTimers);
+            testCase.verifyEmpty(newTimers, ...
+                'PerTag mode: spawn+close cycle must leave no orphan companion-owned timers');
+        end
+
         % ---- QUICK-LIVEUPDATES-01: scanLiveTagUpdates_ guard regression ----
 
         function testScanLiveTagUpdatesPopulatesTableAfterGrowth(testCase)
@@ -1509,8 +1568,10 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             ps = struct(s.InspectorPane_);
             if strcmp(mode, 'Overlay')
                 feval(ps.hModeOverlay_.ButtonPushedFcn, [], []);
-            else
+            elseif strcmp(mode, 'LinkedGrid')
                 feval(ps.hModeLinked_.ButtonPushedFcn, [], []);
+            else  % 'PerTag'
+                feval(ps.hModePerTag_.ButtonPushedFcn, [], []);
             end
             drawnow;
             feval(ps.hPlotBtn_.ButtonPushedFcn, [], []);

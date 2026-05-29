@@ -2091,24 +2091,77 @@ classdef FastSenseCompanion < handle
                         tags{end+1} = obj.Registry_.get(keys{k}); %#ok<AGROW>
                     end
                 end
-                [hFig, skipped] = openAdHocPlot(tags, mode, obj.Theme);
-                % S0Y-01: track the ad-hoc figure so Tile / Close all see it.
-                try
-                    obj.trackOpenedFigure_(hFig);
-                catch
-                end
-                obj.addLogEntry('info', sprintf( ...
-                    'Opened ad-hoc plot: %d tag(s) [%s]', ...
-                    numel(tags), char(mode)));
-                if ~isempty(skipped)
-                    obj.addLogEntry('warn', sprintf( ...
-                        'Ad-hoc plot skipped %d tag(s): %s', ...
-                        numel(skipped), strjoin(skipped, ', ')));
-                    msg = sprintf( ...
-                        'Plot opened, but some tags were skipped:\n  - %s', ...
-                        strjoin(skipped, sprintf('\n  - ')));
-                    uialert(obj.hFig_, msg, 'FastSense Companion', ...
-                        'Icon', 'warning');
+                if strcmp(mode, 'PerTag')
+                    % R9X PerTag branch: spawn one DashboardEngine window per
+                    % tag, each identical to the single-tag "Open Detail"
+                    % output (LinkedGrid layout, one FastSenseWidget). Track
+                    % every spawned figure so the Tile / Close-all toolbar
+                    % sees them. A no-data tag does NOT abort the batch — it
+                    % is appended to skippedAll and the loop continues.
+                    skippedAll = {};
+                    for kk = 1:numel(tags)
+                        try
+                            tgK = tags{kk};
+                            [hFig_k, skipped_k] = openAdHocPlot({tgK}, ...
+                                'LinkedGrid', obj.Theme);
+                            try
+                                obj.trackOpenedFigure_(hFig_k);
+                            catch
+                            end
+                            try
+                                nm = tgK.Name;
+                            catch
+                                nm = sprintf('<tag %d>', kk);
+                            end
+                            obj.addLogEntry('info', sprintf( ...
+                                'Opened per-tag plot: %s', char(nm)));
+                            if ~isempty(skipped_k)
+                                skippedAll = [skippedAll, skipped_k(:)']; %#ok<AGROW>
+                            end
+                        catch IterME
+                            try
+                                tgK = tags{kk};
+                                nm  = tgK.Name;
+                            catch
+                                nm = sprintf('<tag %d>', kk);
+                            end
+                            skippedAll{end+1} = sprintf('%s (%s)', char(nm), ...
+                                IterME.message); %#ok<AGROW>
+                            obj.addLogEntry('warn', sprintf( ...
+                                'Per-tag plot skipped (%s): %s', ...
+                                char(nm), IterME.message));
+                        end
+                    end
+                    if ~isempty(skippedAll)
+                        obj.addLogEntry('warn', sprintf( ...
+                            'Ad-hoc plot skipped %d tag(s): %s', ...
+                            numel(skippedAll), strjoin(skippedAll, ', ')));
+                        msg = sprintf( ...
+                            'Plot opened, but some tags were skipped:\n  - %s', ...
+                            strjoin(skippedAll, sprintf('\n  - ')));
+                        uialert(obj.hFig_, msg, 'FastSense Companion', ...
+                            'Icon', 'warning');
+                    end
+                else
+                    [hFig, skipped] = openAdHocPlot(tags, mode, obj.Theme);
+                    % S0Y-01: track the ad-hoc figure so Tile / Close all see it.
+                    try
+                        obj.trackOpenedFigure_(hFig);
+                    catch
+                    end
+                    obj.addLogEntry('info', sprintf( ...
+                        'Opened ad-hoc plot: %d tag(s) [%s]', ...
+                        numel(tags), char(mode)));
+                    if ~isempty(skipped)
+                        obj.addLogEntry('warn', sprintf( ...
+                            'Ad-hoc plot skipped %d tag(s): %s', ...
+                            numel(skipped), strjoin(skipped, ', ')));
+                        msg = sprintf( ...
+                            'Plot opened, but some tags were skipped:\n  - %s', ...
+                            strjoin(skipped, sprintf('\n  - ')));
+                        uialert(obj.hFig_, msg, 'FastSense Companion', ...
+                            'Icon', 'warning');
+                    end
                 end
             catch ME
                 obj.addLogEntry('error', sprintf('Ad-hoc plot failed: %s', ME.message));
