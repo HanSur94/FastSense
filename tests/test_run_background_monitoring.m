@@ -12,13 +12,23 @@ function test_run_background_monitoring()
     TagRegistry.clear();
     cleaner = onCleanup(@() cleanup_()); %#ok<NASGU>
 
-    test_runner_exits_on_max_runtime();
-    test_runner_returns_pipeline_in_stopped_state();
+    % The lifecycle tests drive runBackgroundMonitoring -> pipeline.start(),
+    % which creates a MATLAB `timer`. Octave has no `timer` (errors in start),
+    % so these two are MATLAB-only. The 3 input-validation tests throw BEFORE
+    % any timer is created and run on both runtimes.
+    nRun = 3;
+    if exist('OCTAVE_VERSION', 'builtin')
+        fprintf('  SKIP: timer-driven lifecycle tests (Octave has no timer)\n');
+    else
+        test_runner_exits_on_max_runtime();
+        test_runner_returns_pipeline_in_stopped_state();
+        nRun = 5;
+    end
     test_runner_rejects_non_function_handle_setup();
     test_runner_rejects_bad_setup_return();
     test_runner_rejects_negative_max_runtime();
 
-    fprintf('    All 5 run_background_monitoring tests passed.\n');
+    fprintf('    All %d run_background_monitoring tests passed.\n', nRun);
 end
 
 function add_test_path_()
