@@ -75,6 +75,7 @@ classdef LiveEventPipeline < handle
             defaults.MaxCallsPerEvent  = 1;
             defaults.OnEventStart      = [];
             defaults.Monitors          = [];  % NV-pair override for MonitorTargets
+            defaults.NotificationService = [];  % D-01 Phase 1039: explicit NV-pair, default [] (no auto-DryRun)
             defaults.SharedRoot        = '';  % Phase 1032-02 cluster mode
             defaults.LockTimeout       = 5.0; % Phase 1032-02 per-monitor lock timeout
             opts = parseOpts(defaults, varargin);
@@ -103,7 +104,10 @@ classdef LiveEventPipeline < handle
                     'MaxBackups', opts.MaxBackups);
             end
 
-            obj.NotificationService = NotificationService('DryRun', true);
+            % Phase 1039 D-01: NotificationService is now an explicit NV-pair (default []).
+            % The auto-created DryRun instance is removed -- downstream runCycle guards
+            % with ~isempty(obj.NotificationService) so [] is safe.
+            obj.NotificationService = opts.NotificationService;
 
             % --- Cluster mode resolution (Phase 1032 Plan 02; ACK-04 single-source) ---
             if ~isempty(opts.SharedRoot)
