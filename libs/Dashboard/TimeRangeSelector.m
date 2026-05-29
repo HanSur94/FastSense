@@ -31,14 +31,22 @@ classdef TimeRangeSelector < handle
     %
     %   Properties (read-only, set internally):
     %       hPanel, hFigure, hAxes, hEnvelope, hSelection, hEdgeLeft, hEdgeRight
+    %       hCurrentViewBox, hCurrentViewLeft, hCurrentViewRight  (Phase 1039:
+    %                       the visually-distinct "current view" box marking the
+    %                       plots' live x-limits; hidden unless setCurrentView is
+    %                       called — see DashboardEngine.updateCurrentViewIndicator_)
     %       DataRange       1x2 [tMin tMax].
     %       Selection       1x2 [tStart tEnd].
+    %       CurrentView     1x2 [tStart tEnd] of the current-view box, or [] when hidden.
     %       DragState       'idle' | 'panning' | 'resizeLeft' | 'resizeRight'.
     %
     %   Methods:
     %       setDataRange(tMin, tMax)         Set full extent; rescales selection.
     %       setSelection(tStart, tEnd)       Set/clamp/reorder selection; fires callback.
     %       getSelection()                   Return [tStart, tEnd].
+    %       setCurrentView(tStart, tEnd)     Show the (non-interactive) current-view
+    %                                        box at [tStart, tEnd], clamped to DataRange.
+    %       hideCurrentView()                Hide the current-view box.
     %       setEnvelope(xC, yMin, yMax)      Update or hide aggregate envelope.
     %       delete()                         Restore saved figure callbacks.
     %
@@ -69,6 +77,10 @@ classdef TimeRangeSelector < handle
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
+        hCurrentViewBox   = []   % Phase 1039: patch for the current-view box (out-of-sync plot x-limits)
+        hCurrentViewLeft  = []   % Phase 1039: left edge line of the current-view box
+        hCurrentViewRight = []   % Phase 1039: right edge line of the current-view box
+        CurrentView       = []   % Phase 1039: 1x2 [tStart tEnd] of the current-view box, or [] when hidden
         hRangeLabelLeft   = []   % text label BELOW slider — slider LEFT selection-edge timestamp (260512-hrn-followup)
         hRangeLabelMiddle = []   % text label BELOW slider — selection duration (e.g. "3d 12h")
         hRangeLabelRight  = []   % text label BELOW slider — slider RIGHT selection-edge timestamp
@@ -213,6 +225,46 @@ classdef TimeRangeSelector < handle
             %getSelection  Return the current selection as [tStart, tEnd].
             tStart = obj.Selection(1);
             tEnd   = obj.Selection(2);
+        end
+
+        function setCurrentView(obj, tStart, tEnd)
+            %setCurrentView  Show the current-view box at [tStart, tEnd] (data-time).
+            %   Phase 1039. Clamps to DataRange (same shape as setSelection),
+            %   reorders swapped bounds, stores CurrentView, redraws, and makes
+            %   the box + edge lines visible. Purely indicative — does NOT fire
+            %   OnRangeChanged and does NOT touch the Selection. No-throw if the
+            %   handles are not yet created (pre-render) or already deleted.
+            if nargin < 3 || isempty(tStart) || isempty(tEnd) || ...
+                    ~isfinite(tStart) || ~isfinite(tEnd)
+                return;
+            end
+            if tStart > tEnd
+                tmp = tStart; tStart = tEnd; tEnd = tmp;
+            end
+            tStart = max(tStart, obj.DataRange(1));
+            tEnd   = min(tEnd,   obj.DataRange(2));
+            obj.CurrentView = [tStart tEnd];
+            obj.redraw_();
+            if ishandle(obj.hCurrentViewBox),   set(obj.hCurrentViewBox,   'Visible', 'on'); end
+            if ishandle(obj.hCurrentViewLeft),  set(obj.hCurrentViewLeft,  'Visible', 'on'); end
+            if ishandle(obj.hCurrentViewRight), set(obj.hCurrentViewRight, 'Visible', 'on'); end
+        end
+
+        function hideCurrentView(obj)
+            %hideCurrentView  Hide the current-view box.
+            %   Phase 1039. Clears CurrentView, sets the three handles Visible
+            %   off, and NaNs their data so a stale geometry never flashes. Safe
+            %   to call before render / after delete (handles guarded).
+            obj.CurrentView = [];
+            if ishandle(obj.hCurrentViewBox)
+                set(obj.hCurrentViewBox, 'XData', NaN, 'YData', NaN, 'Visible', 'off');
+            end
+            if ishandle(obj.hCurrentViewLeft)
+                set(obj.hCurrentViewLeft, 'XData', [NaN NaN], 'YData', [0 1], 'Visible', 'off');
+            end
+            if ishandle(obj.hCurrentViewRight)
+                set(obj.hCurrentViewRight, 'XData', [NaN NaN], 'YData', [0 1], 'Visible', 'off');
+            end
         end
 
         function setRangeLabels(obj, leftText, rightText, middleText)
@@ -813,6 +865,27 @@ classdef TimeRangeSelector < handle
             obj.hEdgeRight = line(obj.hAxes, [NaN NaN], [0 1], ...
                 'Color', selColor, 'LineWidth', 2, ...
                 'HitTest', 'off', 'PickableParts', 'none');
+            % Phase 1039 — current-view box: a SECOND, visually-distinct box marking
+            % the plots' current/latest x-limits when they are NOT synced with the
+            % Selection. Lower alpha + dashed thinner edges + a contrasting color so
+            % it never reads as the (dominant) Selection rectangle. Purely indicative:
+            % PickableParts='none' / HitTest='off' — only the Selection is interactive.
+            % Created hidden; the engine (DashboardEngine.updateCurrentViewIndicator_)
+            % calls setCurrentView / hideCurrentView to drive visibility.
+            cvColor = [0.90 0.55 0.15];   % amber fallback if theme lacks the token
+            if isstruct(obj.Theme) && isfield(obj.Theme, 'CurrentViewBoxColor')
+                cvColor = obj.Theme.CurrentViewBoxColor;
+            end
+            obj.hCurrentViewBox = patch(obj.hAxes, NaN, NaN, cvColor, ...
+                'FaceAlpha', 0.12, 'EdgeColor', 'none', ...
+                'HitTest', 'off', 'PickableParts', 'none', ...
+                'Tag', 'TimeRangeSelectorCurrentView', 'Visible', 'off');
+            obj.hCurrentViewLeft = line(obj.hAxes, [NaN NaN], [0 1], ...
+                'Color', cvColor, 'LineWidth', 1, 'LineStyle', '--', ...
+                'HitTest', 'off', 'PickableParts', 'none', 'Visible', 'off');
+            obj.hCurrentViewRight = line(obj.hAxes, [NaN NaN], [0 1], ...
+                'Color', cvColor, 'LineWidth', 1, 'LineStyle', '--', ...
+                'HitTest', 'off', 'PickableParts', 'none', 'Visible', 'off');
             % Date/time labels BELOW the slider strip:
             %   - LEFT  : slider's LEFT selection-edge timestamp
             %   - MIDDLE: selection duration (e.g. "7d", "3h 25m", "45 s")
@@ -1025,6 +1098,22 @@ classdef TimeRangeSelector < handle
             set(obj.hSelection, 'XData', [xL xL xR xR], 'YData', [0 1 1 0]);
             set(obj.hEdgeLeft,  'XData', [xL xL], 'YData', [0 1]);
             set(obj.hEdgeRight, 'XData', [xR xR], 'YData', [0 1]);
+            % Phase 1039 — redraw the current-view box if one is active. Same
+            % [xL xL xR xR]/[0 1 1 0] patch shape as the Selection; same data-time
+            % space. Hidden state is owned by hideCurrentView (this only refreshes
+            % geometry when CurrentView is non-empty).
+            if ~isempty(obj.CurrentView) && numel(obj.CurrentView) == 2
+                cL = obj.CurrentView(1); cR = obj.CurrentView(2);
+                if ishandle(obj.hCurrentViewBox)
+                    set(obj.hCurrentViewBox, 'XData', [cL cL cR cR], 'YData', [0 1 1 0]);
+                end
+                if ishandle(obj.hCurrentViewLeft)
+                    set(obj.hCurrentViewLeft, 'XData', [cL cL], 'YData', [0 1]);
+                end
+                if ishandle(obj.hCurrentViewRight)
+                    set(obj.hCurrentViewRight, 'XData', [cR cR], 'YData', [0 1]);
+                end
+            end
             % Inline in-axes edge labels removed (260512-hrn-followup).
             % Edge timestamps now live in the text labels BELOW the slider —
             % populated via setRangeLabels from the engine. Widget kind is
