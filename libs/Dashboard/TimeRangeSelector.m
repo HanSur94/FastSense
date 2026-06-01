@@ -863,7 +863,7 @@ classdef TimeRangeSelector < handle
             %   repeat updates). No-op without a valid axes.
             if ~ishandle(obj.hAxes), return; end
             cur = numel(obj.hCurrentViewBoxes);
-            for k = cur + 1 : n
+            for k = cur + 1:n
                 obj.hCurrentViewBoxes(k) = patch(obj.hAxes, NaN, NaN, [0.9 0.55 0.15], ...
                     'FaceAlpha', 0.12, 'EdgeColor', 'none', ...
                     'HitTest', 'off', 'PickableParts', 'none', ...
@@ -883,13 +883,13 @@ classdef TimeRangeSelector < handle
         function deleteCurrentViewHandles_(obj, keep)
             %deleteCurrentViewHandles_  Delete pooled box handles beyond index keep
             %   (keep=0 clears all). Trims the handle arrays to length keep.
-            for k = keep + 1 : numel(obj.hCurrentViewBoxes)
+            for k = keep + 1:numel(obj.hCurrentViewBoxes)
                 if ishandle(obj.hCurrentViewBoxes(k)),  delete(obj.hCurrentViewBoxes(k));  end
             end
-            for k = keep + 1 : numel(obj.hCurrentViewEdgesL)
+            for k = keep + 1:numel(obj.hCurrentViewEdgesL)
                 if ishandle(obj.hCurrentViewEdgesL(k)), delete(obj.hCurrentViewEdgesL(k)); end
             end
-            for k = keep + 1 : numel(obj.hCurrentViewEdgesR)
+            for k = keep + 1:numel(obj.hCurrentViewEdgesR)
                 if ishandle(obj.hCurrentViewEdgesR(k)), delete(obj.hCurrentViewEdgesR(k)); end
             end
             if keep <= 0
