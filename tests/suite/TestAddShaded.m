@@ -101,5 +101,55 @@ classdef TestAddShaded < matlab.unittest.TestCase
             ud = get(fp.Shadings(1).hPatch, 'UserData');
             testCase.verifyEqual(ud.FastSense.Type, 'shaded', 'testAddFillRendered: type is shaded');
         end
+
+        function testShadedPatchEqualLengthCacheBranch(testCase)
+            % Regression (260512-c5x): with > 2*shadingCacheSize (20000) points
+            % and a constant fill baseline, the upper (varying) and lower
+            % (constant) boundaries downsample to DIFFERENT lengths via the
+            % minmax tail-anchor. render()'s cache branch must still emit an
+            % equal-length patch polygon — previously patch() threw "Vectors
+            % must be the same length." (e.g. example_dock's Power Systems
+            % tile). The subsequent zoom exercises the same fix in
+            % updateShadings(). A monotonic upper curve guarantees divergence:
+            % its last sample IS its last bucket extreme (no tail-anchor) while
+            % the constant baseline DOES anchor.
+            n = 25000;
+            x = linspace(0, 100, n);
+            y = linspace(0, 10, n);
+            fp = FastSense();
+            fp.addLine(x, y, 'DisplayName', 'ramp');
+            fp.addFill(x, y, 'Baseline', 0, 'FaceColor', [0 0.5 1]);
+            fp.render();
+            testCase.addTeardown(@close, fp.hFigure);
+
+            hP = fp.Shadings(1).hPatch;
+            testCase.verifyEqual(numel(get(hP, 'XData')), numel(get(hP, 'YData')), ...
+                'cache branch: shading patch XData/YData length mismatch after render');
+
+            % Zoom to a sub-range that stays above MinPointsForDownsample so
+            % updateShadings re-downsamples (the live zoom/pan path).
+            set(fp.hAxes, 'XLim', [20 60]);
+            drawnow; pause(0.2);
+            testCase.verifyEqual(numel(get(hP, 'XData')), numel(get(hP, 'YData')), ...
+                'updateShadings: shading patch XData/YData length mismatch after zoom');
+        end
+
+        function testShadedPatchEqualLengthMidBranch(testCase)
+            % MinPointsForDownsample (5000) < n <= 2*shadingCacheSize (20000)
+            % exercises render()'s mid-size (elseif) downsample branch with the
+            % same varying-vs-constant boundary divergence.
+            n = 10000;
+            x = linspace(0, 100, n);
+            y = linspace(0, 5, n);
+            fp = FastSense();
+            fp.addLine(x, y);
+            fp.addFill(x, y, 'Baseline', 0);
+            fp.render();
+            testCase.addTeardown(@close, fp.hFigure);
+
+            hP = fp.Shadings(1).hPatch;
+            testCase.verifyEqual(numel(get(hP, 'XData')), numel(get(hP, 'YData')), ...
+                'mid branch: shading patch XData/YData length mismatch after render');
+        end
     end
 end
