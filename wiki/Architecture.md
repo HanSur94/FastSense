@@ -4,7 +4,7 @@
 
 ## Overview
 
-FastPlot uses a render‑once, re‑downsample‑on‑zoom architecture. Instead of pushing millions of points to the GPU, it maintains a lightweight cache and re‑downsamples only the visible range on every interaction. A dynamic downsampling engine, lazy multi‑resolution pyramid, and optional MEX acceleration ensure that datasets from a few hundred to over 100 million points remain responsive during pan and zoom.
+FastPlot uses a **render‑once, re‑downsample‑on‑zoom** architecture. Instead of pushing millions of points to the GPU, it maintains a lightweight cache and re‑downsamples only the visible range on every interaction. A dynamic downsampling engine, lazy multi‑resolution pyramid, and optional MEX acceleration ensure that datasets from a few hundred to over 100 million points remain responsive during pan and zoom.
 
 ## Project Structure
 
@@ -56,26 +56,7 @@ FastPlot/
 │   │   ├── DashboardTheme.m          # Theme for dashboard
 │   │   ├── DashboardToolbar.m       # Top toolbar
 │   │   ├── DashboardWidget.m        # Abstract widget base
-│   │   ├── FastSenseWidget.m        # FastSense‑bound widget
-│   │   ├── GaugeWidget.m            # Arc / donut / bar gauge
-│   │   ├── NumberWidget.m           # Big number
-│   │   ├── StatusWidget.m           # Colored dot indicator
-│   │   ├── TextWidget.m             # Static label
-│   │   ├── TableWidget.m            # uitable wrapper
-│   │   ├── RawAxesWidget.m          # User‑supplied plot function
-│   │   ├── EventTimelineWidget.m    # Event Gantt widget
-│   │   ├── GroupWidget.m            # Collapsible / tabbed groups
-│   │   ├── MultiStatusWidget.m      # Grid of status dots
-│   │   ├── SparklineCardWidget.m    # KPI with mini sparkline
-│   │   ├── ChipBarWidget.m        # Health chip row
-│   │   ├── IconCardWidget.m        # Mushroom‑style card
-│   │   ├── BarChartWidget.m         # Bar chart
-│   │   ├── ScatterWidget.m          # Scatter plot
-│   │   ├── HeatmapWidget.m          # heatmap
-│   │   ├── HistogramWidget.m        # Histogram
-│   │   ├── ImageWidget.m            # Image display
-│   │   ├── DividerWidget.m         # Horizontal divider
-│   │   ├── MarkdownRenderer.m      # Info panel HTML
+│   │   ├── ... (widget subclasses)   # Gauge, Number, Status, etc.
 │   │   └── TimeRangeSelector.m      # Slider with envelope preview
 │   └── WebBridge/                    # TCP server for web visualization
 │       ├── WebBridge.m
@@ -93,7 +74,7 @@ FastPlot/
 5. Allocate downsampling buffers based on axes pixel width.
 6. For each line: initial downsample of full range, create graphics object.
 7. Create threshold, band, shading, marker objects.
-8. Install XLim PostSet listener for zoom/pan events.
+8. Install XLim `PostSet` listener for zoom/pan events.
 9. Set axis limits, disable auto‑limits.
 10. `drawnow` to display.
 
@@ -104,14 +85,14 @@ When the user zooms or pans:
 1. XLim listener fires.
 2. Compare new XLim to cached value (skip if unchanged).
 3. For each line:
-   - Binary search visible X range — O(log N).
+   - Binary search visible X range — O(log N).
    - Select pyramid level with sufficient resolution.
    - Build pyramid level lazily if needed.
    - Downsample visible range to ~4,000 points.
    - Update `hLine.XData`/`YData` (dot notation for speed).
 4. Recompute violation markers (fused SIMD with pixel culling).
 5. If `LinkGroup` active: propagate XLim to linked plots.
-6. `drawnow limitrate` (caps display at 20 FPS).
+6. `drawnow limitrate` (caps display at 20 FPS).
 
 ## Downsampling Algorithms
 
@@ -123,11 +104,11 @@ Visually optimal downsampling that preserves signal shape by maximizing triangle
 
 Both algorithms handle NaN gaps by segmenting contiguous non‑NaN regions independently.
 
-## Lazy Multi-Resolution Pyramid
+## Lazy Multi‑Resolution Pyramid
 
-Problem: At full zoom‑out with 50M+ points, scanning all data is O(N).
+**Problem**: At full zoom‑out with 50M+ points, scanning all data is O(N).
 
-Solution: Pre‑computed MinMax pyramid with configurable reduction factor (default 100× per level):
+**Solution**: Pre‑computed MinMax pyramid with configurable reduction factor (default 100× per level):
 
 ```
 Level 0: Raw data         (50,000,000 points)
@@ -137,25 +118,24 @@ Level 2: 100× reduction   (     5,000 points)
 
 On zoom, the coarsest level with sufficient resolution is selected. Full zoom‑out reads level 2 (5K points) and downsamples to ~4K in under 1 ms.
 
-Levels are built lazily on first access — the first zoom‑out pays a one‑time build cost (~70 ms with MEX), subsequent queries are instant.
+Levels are built lazily on first access — the first zoom‑out pays a one‑time build cost, subsequent queries are instant.
 
 ## MEX Acceleration
 
 Optional C MEX functions with SIMD intrinsics (AVX2 on x86_64, NEON on arm64). A shared `simd_utils.h` abstraction layer provides a single code base for all platforms. Detection of AVX2, fallback to SSE2, and arm64‑NEON is handled at `build_mex` time.
 
-| Function | Speedup | Description |
-|----------|---------|-------------|
-| `binary_search_mex` | 10–20× | O(log N) visible range lookup |
-| `minmax_core_mex` | 3–10× | Per‑pixel MinMax reduction |
-| `lttb_core_mex` | 10–50× | Triangle area computation |
-| `violation_cull_mex` | significant | Fused detection + pixel culling |
-| `compute_violations_mex` | significant | Batch violation detection for `resolve()` |
-| `resolve_disk_mex` | significant | SQLite disk‑based sensor resolution |
-| `build_store_mex` | 2–3× | Bulk SQLite writer for DataStore init |
-| `to_step_function_mex` | significant | SIMD step‑function conversion for thresholds |
-| `delimited_parse_mex` | (plan 1028) | SIMD delimited file parsing for tag pipeline |
+| Function | Description |
+|----------|-------------|
+| `binary_search_mex` | O(log N) visible range lookup |
+| `minmax_core_mex` | Per‑pixel MinMax reduction |
+| `lttb_core_mex` | Triangle area computation |
+| `violation_cull_mex` | Fused detection + pixel culling |
+| `compute_violations_mex` | Batch violation detection for `resolve()` |
+| `resolve_disk_mex` | SQLite disk‑based sensor resolution |
+| `build_store_mex` | Bulk SQLite writer for DataStore init |
+| `to_step_function_mex` | SIMD step‑function conversion for thresholds |
 
-If MEX is unavailable, pure-MATLAB implementations are used with identical behavior.
+If MEX is unavailable, pure‑MATLAB implementations are used with identical behavior.
 
 ## Data Flow Architecture
 
@@ -203,7 +183,7 @@ The [[API Reference: Sensors|legacy]] `Sensor.resolve()` algorithm is segment‑
 3. Assign threshold values per segment.
 4. Detect violations using SIMD‑accelerated comparison.
 
-Complexity: O(S × R) where S = state segments and R = rules, instead of O(N × R) per‑point evaluation.
+Complexity: O(S × R) where S = state segments and R = rules, instead of O(N × R) per‑point evaluation.
 
 ### Tag‑Based Monitoring
 
