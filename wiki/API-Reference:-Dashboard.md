@@ -428,6 +428,14 @@ CLEARPLANTLOGOVERLAYSONALLWIDGETSFORTEST_ Phase 1032 test seam.
 ATTACHPLANTLOGXLIMLISTENERFORTEST_ Phase 1032 test seam.
   Routes to attachPlantLogXLimListener_ from function-style tests.
 
+#### `updateCurrentViewIndicatorForTest_(obj)`
+
+UPDATECURRENTVIEWINDICATORFORTEST_ Phase 1039 test seam.
+  Routes to the private updateCurrentViewIndicator_ so class-based
+  tests can assert the show/hide decision without depending on the
+  Octave-skipped XLim PostSet listener. Mirrors the existing
+  attachPlantLogXLimListenerForTest_ / setTimeRangeSelectorForTest_ idiom.
+
 #### `setTimeRangeSelectorForTest_(obj, sel)`
 
 SETTIMERANGESELECTORFORTEST_ Phase 1031 test seam — inject a
@@ -482,6 +490,15 @@ ATTACHPLANTLOGXLIMLISTENER_ Wire an XLim PostSet listener on the widget's axes (
   Stored in widget.PlantLogXLimListener_; deleted by
   setShowPlantLog(false) AND by widget.delete(). Idempotent:
   replaces any prior listener.
+
+#### `attachCurrentViewXLimListener_(obj, widget)`
+
+ATTACHCURRENTVIEWXLIMLISTENER_ XLim PostSet listener -> current-view box refresh (Phase 1039).
+  Stored in widget.CurrentViewXLimListener_; released by
+  widget.delete(). Idempotent: replaces any prior listener. Octave
+  skips (its addlistener lacks the 4-arg PostSet form) — the live
+  tick + post-broadcast + page-switch hooks still refresh the box
+  there. Mirrors attachPlantLogXLimListener_.
 
 #### `attachPlantLogWidgetHover_(obj, widget)`
 
@@ -1554,6 +1571,7 @@ obj = FastSenseWidget(varargin)
 | ShowPlantLog | `false` | Phase 1032 PLOG-VIZ-03 — opt-in per-widget plant-log vertical-line overlay |
 | LiveViewMode | `'preserve'` |  |
 | YLimitMode | `'auto-visible'` |  |
+| CurrentXLimOverrideForTest_ | `[]` |  |
 
 ### Methods
 
@@ -1594,6 +1612,8 @@ SETPLANTLOGMARKERS Draw or clear per-widget plant-log vertical lines.
   dropped (mirrors TimeRangeSelector.setPlantLogMarkers shape).
 
 #### `setPlantLogXLimListenerForEngine_(obj, lis)`
+
+#### `setCurrentViewXLimListenerForEngine_(obj, lis)`
 
 #### `setShowPlantLog(obj, tf, engine)`
 
@@ -1649,6 +1669,14 @@ detach this widget from global time.
 
 Return cached min/max in O(1). Cache is kept up to date by
 updateTimeRangeCache() which is called from render/refresh/update.
+
+#### `xl = getCurrentXLim(obj)`
+
+GETCURRENTXLIM Live x-limits of the wrapped FastSense axes (Phase 1039).
+  Returns the 1x2 [xMin xMax] the plot is CURRENTLY showing — the
+  actual view window, read live from the axes via get(ax,'XLim').
+  Returns [] when the widget is not rendered (no FastSenseObj, not
+  IsRendered, or no valid axes).
 
 #### `series = getPreviewSeries(obj, nBuckets)`
 
@@ -2402,14 +2430,25 @@ selector = TimeRangeSelector(hPanel) attaches a time-range selector to a
 
   Properties (read-only, set internally):
       hPanel, hFigure, hAxes, hEnvelope, hSelection, hEdgeLeft, hEdgeRight
+      hCurrentViewBoxes, hCurrentViewEdgesL, hCurrentViewEdgesR  (Phase 1039:
+                      a POOL of visually-distinct "current view" boxes — one per
+                      out-of-sync graph — each coloured to match that graph's
+                      slider preview line; empty unless setCurrentViews is called.
+                      See DashboardEngine.updateCurrentViewIndicator_)
       DataRange       1x2 [tMin tMax].
       Selection       1x2 [tStart tEnd].
+      CurrentViews    Nx2 [tStart tEnd] rows (one per box), or [] when hidden.
       DragState       'idle' | 'panning' | 'resizeLeft' | 'resizeRight'.
 
   Methods:
       setDataRange(tMin, tMax)         Set full extent; rescales selection.
       setSelection(tStart, tEnd)       Set/clamp/reorder selection; fires callback.
       getSelection()                   Return [tStart, tEnd].
+      setCurrentViews(ranges, colorIdxs)  Show one non-interactive current-view
+                                       box per row of ranges (Nx2), each coloured
+                                       from the shared preview palette by colorIdxs.
+      setCurrentView(tStart, tEnd)     Back-compat single-box wrapper.
+      hideCurrentView()                Hide/clear all current-view boxes.
       setEnvelope(xC, yMin, yMax)      Update or hide aggregate envelope.
       delete()                         Restore saved figure callbacks.
 
@@ -2462,6 +2501,33 @@ Reorder swapped bounds (tStart < tEnd).
 #### `[tStart, tEnd] = getSelection(obj)`
 
 getSelection  Return the current selection as [tStart, tEnd].
+
+#### `setCurrentView(obj, tStart, tEnd)`
+
+setCurrentView  Back-compat single-box wrapper around setCurrentViews.
+  Phase 1039. Shows ONE current-view box at [tStart, tEnd] coloured
+  with preview-palette index 1. Prefer setCurrentViews for the
+  per-graph multi-box path. No-throw on bad/empty input.
+
+#### `setCurrentViews(obj, ranges, colorIdxs)`
+
+setCurrentViews  Show ONE current-view box per out-of-sync graph (Phase 1039).
+  ranges     Nx2 [tStart tEnd] rows in data-time (a flat 1x2 is
+             accepted for the single-box case).
+  colorIdxs  1xN preview-line indices (1-based). Each box is coloured
+             from the shared preview palette (previewPalette_) by its
+             index, so a box matches its graph's slider preview line.
+             Defaults to 1:N when omitted.
+  Each range is clamped to DataRange and reordered if swapped. Boxes
+  are purely indicative (PickableParts/HitTest off) — only the
+  Selection is interactive. Empty ranges hide everything. No-throw
+  before render / after the figure is destroyed (handle-guarded).
+
+#### `hideCurrentView(obj)`
+
+hideCurrentView  Hide and clear ALL current-view boxes.
+  Phase 1039. Clears CurrentViews and deletes every pooled box +
+  edge-line handle. Safe to call before render / after delete.
 
 #### `setRangeLabels(obj, leftText, rightText, middleText)`
 

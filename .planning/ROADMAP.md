@@ -396,19 +396,21 @@ Plans:
 
 ### Phase 1039: Background monitoring with email notifications — COMPLETE 2026-05-29
 
-**Goal:** Wire `NotificationService` into `LiveEventPipeline` as a first-class constructor NV-pair (default `[]`, replacing the auto-created dry-run instance); fix `runCycle` to pass real per-event sensor data to `notify()` so snapshots render correctly (was `struct()`); add headless entry point `runBackgroundMonitoring(setupFcn)` for `matlab -batch` use under launchd/systemd/cron; ship demo example + README with SMTP and service-supervision config; add tests for snapshot-data integrity and the runner entry.
+**Goal:** Add a headless entry point `runBackgroundMonitoring(setupFcn)` for `matlab -batch` use under launchd/systemd/cron; ship a demo example + README with SMTP and service-supervision config; harden the notification snapshot path (open-event guards + figure-leak fix); add tests for the runner entry and the live snapshot-data contract.
 
-**Verification:** passed (7/7 must-haves; sensorData regression test green on Octave + MATLAB). Two human-verification items recorded (timer-driven live loop is MATLAB-only since Octave lacks `timer`; real-email/PNG-attachment smoke needs an SMTP relay). Bonus: fixed two latent library bugs en route — missing `monitor.EventStore` wiring in setup, and NaN-`EndTime` open-event crash in `NotificationRule.fillTemplate` / `generateEventSnapshot`.
+**Reconciliation note (2026-05-29):** Sibling PR #171 ("Background-monitoring email alerts: real SMTP send + pluggable external mailer") merged to main first and independently delivered the `notify(ev, struct())` → real-sensorData fix (via `processMonitorTag_` returning `sensorData`) plus the `NotificationService` Transport/cooldown rework. On merge, Phase 1039's two overlapping pieces were **dropped as superseded**: the `LiveEventPipeline` `'NotificationService'` constructor NV-pair and the duplicate `sensorDataForEvent_`/`runCycle` sensorData fix. The phase's `test_live_event_pipeline_notif_sensor_data` was retained and now serves as a regression guard for #171's sensorData mechanism (demo/tests inject the service via the public property post-construction). Net unique contribution of #170: the headless runner, ops README, open-event/fig-leak robustness, and the demo + tests.
 
-**Depends on:** Phase 1032 (`MonitorTag.emitEvent_` deferred-notify) — no dependency on cluster-mode work; auto-wiring works in single-user and cluster modes alike.
-**Requirements:** none — CONTEXT.md decisions (D-01..D-06) are the contract
-**Plans:** 4/4 plans complete
+**Verification:** passed. Post-#171-merge: `test_live_event_pipeline_notif_sensor_data` 2/2, `test_run_background_monitoring` 5/5 (MATLAB) / 3/3+skip (Octave), `TestBackgroundEmailMonitoring` 9/9 — all green on Octave + MATLAB. Timer-driven live loop is MATLAB-only (Octave lacks `timer`); real-email/PNG smoke needs an SMTP relay. Also fixed two latent library bugs en route — missing `monitor.EventStore` wiring in setup, and NaN-`EndTime` open-event crash in `NotificationRule.fillTemplate` / `generateEventSnapshot`.
+
+**Depends on:** Phase 1032 (`MonitorTag.emitEvent_` deferred-notify). Lands on top of PR #171 (shares the `NotificationService`/`LiveEventPipeline` email path).
+**Requirements:** none — CONTEXT.md decisions (D-01..D-06) are the contract; D-01/D-03 superseded by #171.
+**Plans:** 4/4 plans complete (01's NV-pair/sensorData portion superseded by #171; runner/docs/tests retained)
 
 Plans:
-- [x] 1039-01-PLAN.md — LiveEventPipeline NotificationService NV-pair + sensorDataForEvent_ helper + runCycle notify fix (Wave 1, no deps)
+- [x] 1039-01-PLAN.md — (sensorData fix + NV-pair superseded by #171; no net change retained from this plan)
 - [x] 1039-02-PLAN.md — new libs/EventDetection/runBackgroundMonitoring.m headless entry function (Wave 1, no deps)
-- [x] 1039-03-PLAN.md — examples/05-events/example_background_email_monitor.m + README_background_email.md (Wave 2, depends on 01 + 02)
-- [x] 1039-04-PLAN.md — tests/test_live_event_pipeline_notif_sensor_data.m + tests/test_run_background_monitoring.m + tests/CaptureNotificationService.m (Wave 2, depends on 01 + 02)
+- [x] 1039-03-PLAN.md — examples/05-events/example_background_email_monitor*.m + README_background_email.md + open-event/fig-leak hardening (Wave 2)
+- [x] 1039-04-PLAN.md — tests/test_live_event_pipeline_notif_sensor_data.m + tests/test_run_background_monitoring.m + tests/CaptureNotificationService.m + tests/suite/TestBackgroundEmailMonitoring.m (Wave 2)
 
 ## Backlog
 

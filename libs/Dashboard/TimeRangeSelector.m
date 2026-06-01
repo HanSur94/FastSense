@@ -31,14 +31,25 @@ classdef TimeRangeSelector < handle
     %
     %   Properties (read-only, set internally):
     %       hPanel, hFigure, hAxes, hEnvelope, hSelection, hEdgeLeft, hEdgeRight
+    %       hCurrentViewBoxes, hCurrentViewEdgesL, hCurrentViewEdgesR  (Phase 1039:
+    %                       a POOL of visually-distinct "current view" boxes — one per
+    %                       out-of-sync graph — each coloured to match that graph's
+    %                       slider preview line; empty unless setCurrentViews is called.
+    %                       See DashboardEngine.updateCurrentViewIndicator_)
     %       DataRange       1x2 [tMin tMax].
     %       Selection       1x2 [tStart tEnd].
+    %       CurrentViews    Nx2 [tStart tEnd] rows (one per box), or [] when hidden.
     %       DragState       'idle' | 'panning' | 'resizeLeft' | 'resizeRight'.
     %
     %   Methods:
     %       setDataRange(tMin, tMax)         Set full extent; rescales selection.
     %       setSelection(tStart, tEnd)       Set/clamp/reorder selection; fires callback.
     %       getSelection()                   Return [tStart, tEnd].
+    %       setCurrentViews(ranges, colorIdxs)  Show one non-interactive current-view
+    %                                        box per row of ranges (Nx2), each coloured
+    %                                        from the shared preview palette by colorIdxs.
+    %       setCurrentView(tStart, tEnd)     Back-compat single-box wrapper.
+    %       hideCurrentView()                Hide/clear all current-view boxes.
     %       setEnvelope(xC, yMin, yMax)      Update or hide aggregate envelope.
     %       delete()                         Restore saved figure callbacks.
     %
@@ -69,6 +80,11 @@ classdef TimeRangeSelector < handle
         hSelection  = []   % patch for selection rectangle
         hEdgeLeft   = []   % line: left drag handle
         hEdgeRight  = []   % line: right drag handle
+        hCurrentViewBoxes  = []  % Phase 1039: patch handles, ONE per out-of-sync graph (pool, reused across updates)
+        hCurrentViewEdgesL = []  % Phase 1039: left edge line per box
+        hCurrentViewEdgesR = []  % Phase 1039: right edge line per box
+        CurrentViews       = []  % Phase 1039: Nx2 [tStart tEnd] rows (one per box), or [] when hidden
+        CurrentViewColorIdx_ = [] % Phase 1039: 1xN preview-line indices used to colour each box from the shared palette
         hRangeLabelLeft   = []   % text label BELOW slider — slider LEFT selection-edge timestamp (260512-hrn-followup)
         hRangeLabelMiddle = []   % text label BELOW slider — selection duration (e.g. "3d 12h")
         hRangeLabelRight  = []   % text label BELOW slider — slider RIGHT selection-edge timestamp
@@ -215,6 +231,69 @@ classdef TimeRangeSelector < handle
             tEnd   = obj.Selection(2);
         end
 
+        function setCurrentView(obj, tStart, tEnd)
+            %setCurrentView  Back-compat single-box wrapper around setCurrentViews.
+            %   Phase 1039. Shows ONE current-view box at [tStart, tEnd] coloured
+            %   with preview-palette index 1. Prefer setCurrentViews for the
+            %   per-graph multi-box path. No-throw on bad/empty input.
+            if nargin < 3 || isempty(tStart) || isempty(tEnd) || ...
+                    ~isfinite(tStart) || ~isfinite(tEnd)
+                return;
+            end
+            obj.setCurrentViews([tStart tEnd], 1);
+        end
+
+        function setCurrentViews(obj, ranges, colorIdxs)
+            %setCurrentViews  Show ONE current-view box per out-of-sync graph (Phase 1039).
+            %   ranges     Nx2 [tStart tEnd] rows in data-time (a flat 1x2 is
+            %              accepted for the single-box case).
+            %   colorIdxs  1xN preview-line indices (1-based). Each box is coloured
+            %              from the shared preview palette (previewPalette_) by its
+            %              index, so a box matches its graph's slider preview line.
+            %              Defaults to 1:N when omitted.
+            %   Each range is clamped to DataRange and reordered if swapped. Boxes
+            %   are purely indicative (PickableParts/HitTest off) — only the
+            %   Selection is interactive. Empty ranges hide everything. No-throw
+            %   before render / after the figure is destroyed (handle-guarded).
+            if nargin < 2 || isempty(ranges)
+                obj.hideCurrentView();
+                return;
+            end
+            if size(ranges, 2) ~= 2
+                ranges = reshape(ranges(:), [], 2);
+            end
+            n = size(ranges, 1);
+            if nargin < 3 || isempty(colorIdxs)
+                colorIdxs = 1:n;
+            end
+            colorIdxs = double(colorIdxs(:)');
+            % Clamp + reorder each range against DataRange.
+            for k = 1:n
+                a = ranges(k, 1); b = ranges(k, 2);
+                if ~isfinite(a) || ~isfinite(b)
+                    a = NaN; b = NaN;
+                elseif a > b
+                    tmp = a; a = b; b = tmp;
+                end
+                a = max(a, obj.DataRange(1));
+                b = min(b, obj.DataRange(2));
+                ranges(k, :) = [a b];
+            end
+            obj.CurrentViews = ranges;
+            obj.CurrentViewColorIdx_ = colorIdxs;
+            obj.ensureCurrentViewHandles_(n);
+            obj.redrawCurrentViews_();
+        end
+
+        function hideCurrentView(obj)
+            %hideCurrentView  Hide and clear ALL current-view boxes.
+            %   Phase 1039. Clears CurrentViews and deletes every pooled box +
+            %   edge-line handle. Safe to call before render / after delete.
+            obj.CurrentViews = [];
+            obj.CurrentViewColorIdx_ = [];
+            obj.deleteCurrentViewHandles_(0);
+        end
+
         function setRangeLabels(obj, leftText, rightText, middleText)
             %setRangeLabels  Update the date/time labels shown BELOW the slider.
             %   Updates three labels:
@@ -268,14 +347,7 @@ classdef TimeRangeSelector < handle
             %   endpoint) but the same number of widget lines, so the in-place
             %   path fires every tick and avoids the delete/recreate cycle that
             %   blocked the MATLAB event queue.
-            palette = [ ...
-                0.00 0.45 0.70    % blue
-                0.90 0.40 0.20    % orange
-                0.20 0.60 0.20    % green
-                0.70 0.20 0.50    % purple
-                0.85 0.70 0.20    % mustard
-                0.30 0.70 0.70    % teal
-                0.70 0.30 0.30]; % brick
+            palette = obj.previewPalette_();   % shared with current-view boxes (Phase 1039)
             % Hide the legacy envelope patch regardless of path taken.
             set(obj.hEnvelope, 'Visible', 'off');
             if isempty(lines)
@@ -771,6 +843,98 @@ classdef TimeRangeSelector < handle
             end
         end
 
+        function pal = previewPalette_(~)
+            %previewPalette_  Shared colour palette for slider preview lines AND
+            %   current-view boxes (Phase 1039). Single source of truth so each
+            %   current-view box matches its graph's preview line colour by index.
+            pal = [ ...
+                0.00 0.45 0.70    % blue
+                0.90 0.40 0.20    % orange
+                0.20 0.60 0.20    % green
+                0.70 0.20 0.50    % purple
+                0.85 0.70 0.20    % mustard
+                0.30 0.70 0.70    % teal
+                0.70 0.30 0.30];  % brick
+        end
+
+        function ensureCurrentViewHandles_(obj, n)
+            %ensureCurrentViewHandles_  Grow/shrink the current-view box pool to
+            %   exactly n box+edge triples, reusing existing handles (no thrash on
+            %   repeat updates). No-op without a valid axes.
+            if ~ishandle(obj.hAxes), return; end
+            cur = numel(obj.hCurrentViewBoxes);
+            for k = cur + 1:n
+                obj.hCurrentViewBoxes(k) = patch(obj.hAxes, NaN, NaN, [0.9 0.55 0.15], ...
+                    'FaceAlpha', 0.12, 'EdgeColor', 'none', ...
+                    'HitTest', 'off', 'PickableParts', 'none', ...
+                    'Tag', 'TimeRangeSelectorCurrentView', 'Visible', 'off');
+                obj.hCurrentViewEdgesL(k) = line(obj.hAxes, [NaN NaN], [0 1], ...
+                    'Color', [0.9 0.55 0.15], 'LineWidth', 1, 'LineStyle', '--', ...
+                    'HitTest', 'off', 'PickableParts', 'none', 'Visible', 'off');
+                obj.hCurrentViewEdgesR(k) = line(obj.hAxes, [NaN NaN], [0 1], ...
+                    'Color', [0.9 0.55 0.15], 'LineWidth', 1, 'LineStyle', '--', ...
+                    'HitTest', 'off', 'PickableParts', 'none', 'Visible', 'off');
+            end
+            if n < cur
+                obj.deleteCurrentViewHandles_(n);
+            end
+        end
+
+        function deleteCurrentViewHandles_(obj, keep)
+            %deleteCurrentViewHandles_  Delete pooled box handles beyond index keep
+            %   (keep=0 clears all). Trims the handle arrays to length keep.
+            for k = keep + 1:numel(obj.hCurrentViewBoxes)
+                if ishandle(obj.hCurrentViewBoxes(k)),  delete(obj.hCurrentViewBoxes(k));  end
+            end
+            for k = keep + 1:numel(obj.hCurrentViewEdgesL)
+                if ishandle(obj.hCurrentViewEdgesL(k)), delete(obj.hCurrentViewEdgesL(k)); end
+            end
+            for k = keep + 1:numel(obj.hCurrentViewEdgesR)
+                if ishandle(obj.hCurrentViewEdgesR(k)), delete(obj.hCurrentViewEdgesR(k)); end
+            end
+            if keep <= 0
+                obj.hCurrentViewBoxes  = [];
+                obj.hCurrentViewEdgesL = [];
+                obj.hCurrentViewEdgesR = [];
+            else
+                obj.hCurrentViewBoxes  = obj.hCurrentViewBoxes(1:min(keep, numel(obj.hCurrentViewBoxes)));
+                obj.hCurrentViewEdgesL = obj.hCurrentViewEdgesL(1:min(keep, numel(obj.hCurrentViewEdgesL)));
+                obj.hCurrentViewEdgesR = obj.hCurrentViewEdgesR(1:min(keep, numel(obj.hCurrentViewEdgesR)));
+            end
+        end
+
+        function redrawCurrentViews_(obj)
+            %redrawCurrentViews_  Push CurrentViews geometry + per-index colours to
+            %   the pooled box handles and make them visible. Each box is coloured
+            %   from previewPalette_ by its CurrentViewColorIdx_ entry, matching the
+            %   corresponding slider preview line.
+            pal = obj.previewPalette_();
+            np = size(pal, 1);
+            n = size(obj.CurrentViews, 1);
+            for k = 1:n
+                if k > numel(obj.hCurrentViewBoxes), break; end
+                cL = obj.CurrentViews(k, 1); cR = obj.CurrentViews(k, 2);
+                idx = k;
+                if k <= numel(obj.CurrentViewColorIdx_)
+                    idx = obj.CurrentViewColorIdx_(k);
+                end
+                if ~isfinite(idx) || idx < 1, idx = 1; end
+                c = pal(mod(round(idx) - 1, np) + 1, :);
+                if ishandle(obj.hCurrentViewBoxes(k))
+                    set(obj.hCurrentViewBoxes(k), 'XData', [cL cL cR cR], 'YData', [0 1 1 0], ...
+                        'FaceColor', c, 'Visible', 'on');
+                end
+                if ishandle(obj.hCurrentViewEdgesL(k))
+                    set(obj.hCurrentViewEdgesL(k), 'XData', [cL cL], 'YData', [0 1], ...
+                        'Color', c, 'Visible', 'on');
+                end
+                if ishandle(obj.hCurrentViewEdgesR(k))
+                    set(obj.hCurrentViewEdgesR(k), 'XData', [cR cR], 'YData', [0 1], ...
+                        'Color', c, 'Visible', 'on');
+                end
+            end
+        end
+
         function buildGraphics_(obj)
             %buildGraphics_  Construct axes and graphics handles inside hPanel.
             % Slider axes height reduced (was 0.85) so three date/time labels
@@ -813,6 +977,18 @@ classdef TimeRangeSelector < handle
             obj.hEdgeRight = line(obj.hAxes, [NaN NaN], [0 1], ...
                 'Color', selColor, 'LineWidth', 2, ...
                 'HitTest', 'off', 'PickableParts', 'none');
+            % Phase 1039 — current-view boxes: ONE visually-distinct box per
+            % out-of-sync graph, marking that graph's current/latest x-limits when
+            % it is NOT synced with the Selection. Each box is coloured to match its
+            % graph's slider preview line (shared previewPalette_, by index), with
+            % lower alpha + dashed thinner edges so boxes never read as the
+            % (dominant) Selection rectangle. Purely indicative (PickableParts/
+            % HitTest off). The handle pool is created lazily by setCurrentViews /
+            % ensureCurrentViewHandles_; the engine (updateCurrentViewIndicator_)
+            % drives visibility via setCurrentViews / hideCurrentView.
+            obj.hCurrentViewBoxes  = [];
+            obj.hCurrentViewEdgesL = [];
+            obj.hCurrentViewEdgesR = [];
             % Date/time labels BELOW the slider strip:
             %   - LEFT  : slider's LEFT selection-edge timestamp
             %   - MIDDLE: selection duration (e.g. "7d", "3h 25m", "45 s")
@@ -1025,6 +1201,12 @@ classdef TimeRangeSelector < handle
             set(obj.hSelection, 'XData', [xL xL xR xR], 'YData', [0 1 1 0]);
             set(obj.hEdgeLeft,  'XData', [xL xL], 'YData', [0 1]);
             set(obj.hEdgeRight, 'XData', [xR xR], 'YData', [0 1]);
+            % Phase 1039 — refresh all active current-view boxes (one per
+            % out-of-sync graph). Same data-time space as the Selection; hidden
+            % state is owned by hideCurrentView. Only refreshes when boxes exist.
+            if ~isempty(obj.CurrentViews)
+                obj.redrawCurrentViews_();
+            end
             % Inline in-axes edge labels removed (260512-hrn-followup).
             % Edge timestamps now live in the text labels BELOW the slider —
             % populated via setRangeLabels from the engine. Widget kind is

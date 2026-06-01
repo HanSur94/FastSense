@@ -109,9 +109,12 @@ function [pipeline, cap, ds, monitor] = make_fixture_()
         'Recipients',      {{'test@example.com'}}, ...
         'IncludeSnapshot', false));
 
-    % Plan 01 NV-pair (the API surface this plan locks down):
+    % Override the pipeline's default DryRun service with our capture mock
+    % (post-construction; NotificationService is a public property). This test
+    % locks down that runCycle passes REAL sensorData to notify() — the behavior
+    % implemented on main by the processMonitorTag_ sensorData return path.
     pipeline = LiveEventPipeline(monitorsMap, dsMap, ...
         'Interval',            60, ...
-        'MinDuration',         0, ...
-        'NotificationService', cap);
+        'MinDuration',         0);
+    pipeline.NotificationService = cap;
 end

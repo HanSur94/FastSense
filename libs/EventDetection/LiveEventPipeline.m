@@ -75,7 +75,6 @@ classdef LiveEventPipeline < handle
             defaults.MaxCallsPerEvent  = 1;
             defaults.OnEventStart      = [];
             defaults.Monitors          = [];  % NV-pair override for MonitorTargets
-            defaults.NotificationService = [];  % D-01 Phase 1039: explicit NV-pair, default [] (no auto-DryRun)
             defaults.SharedRoot        = '';  % Phase 1032-02 cluster mode
             defaults.LockTimeout       = 5.0; % Phase 1032-02 per-monitor lock timeout
             opts = parseOpts(defaults, varargin);
@@ -104,10 +103,7 @@ classdef LiveEventPipeline < handle
                     'MaxBackups', opts.MaxBackups);
             end
 
-            % Phase 1039 D-01: NotificationService is now an explicit NV-pair (default []).
-            % The auto-created DryRun instance is removed -- downstream runCycle guards
-            % with ~isempty(obj.NotificationService) so [] is safe.
-            obj.NotificationService = opts.NotificationService;
+            obj.NotificationService = NotificationService('DryRun', true);
 
             % --- Cluster mode resolution (Phase 1032 Plan 02; ACK-04 single-source) ---
             if ~isempty(opts.SharedRoot)
@@ -193,6 +189,7 @@ classdef LiveEventPipeline < handle
                 drawnow limitrate nocallbacks;  % Pitfall 7 reentrancy guard (mirrors LiveTagPipeline)
             end
             allNewEvents = [];
+            allSensorData = {};  % parallel cell array: one sensorData struct per event in allNewEvents
             hasNewData = false;
 
             % --- MonitorTag path ---
@@ -200,7 +197,7 @@ classdef LiveEventPipeline < handle
             for i = 1:numel(monitorKeys)
                 key = monitorKeys{i};
                 try
-                    [newEvents, gotData] = obj.processMonitorTag_(key);
+                    [newEvents, gotData, sensorData] = obj.processMonitorTag_(key);
                     hasNewData = hasNewData || gotData;
                     if ~isempty(newEvents)
                         if isempty(allNewEvents)
@@ -208,6 +205,10 @@ classdef LiveEventPipeline < handle
                         else
                             allNewEvents = [allNewEvents, newEvents]; %#ok<AGROW>
                         end
+                        % Pair each new event with its monitor's sensorData so that
+                        % IncludeSnapshot rules in NotificationService can render PNGs
+                        % with the actual sensor values from this tick.
+                        allSensorData = [allSensorData, repmat({sensorData}, 1, numel(newEvents))]; %#ok<AGROW>
                     end
                 catch ex
                     fprintf('[PIPELINE WARNING] MonitorTag "%s" failed: %s\n', ...
@@ -228,12 +229,18 @@ classdef LiveEventPipeline < handle
                 obj.EventStore.save();
             end
 
-            % Send notifications (Phase 1039 D-02: pass real per-event sensor data, not struct())
+            % Send notifications — each event is paired with its monitor's real sensorData
+            % so IncludeSnapshot rules can attach PNGs rendered from the live tick data.
+            % Default DryRun=true service ignores the richer struct harmlessly (it only
+            % generates snapshots when a rule sets IncludeSnapshot=true).
             if ~isempty(obj.NotificationService)
                 for i = 1:numel(allNewEvents)
                     ev = allNewEvents(i);
+                    sd = struct();
+                    if numel(allSensorData) >= i
+                        sd = allSensorData{i};
+                    end
                     try
-                        sd = obj.sensorDataForEvent_(ev);
                         obj.NotificationService.notify(ev, sd);
                     catch ex
                         fprintf('[PIPELINE WARNING] Notification failed: %s\n', ex.message);
@@ -249,76 +256,17 @@ classdef LiveEventPipeline < handle
     end
 
     methods (Access = private)
-        function sd = sensorDataForEvent_(obj, ev)
-            %SENSORDATAFOREVENT_ Resolve per-event sensor data for snapshot rendering (Phase 1039 D-03).
-            %   Returns struct with fields .X, .Y, .thresholdValue, .thresholdDirection
-            %   (matching the contract consumed by generateEventSnapshot.m). Slice covers
-            %   [evStart - ctxHours/24 - padding, evEnd + padding] where ctxHours comes
-            %   from the best-matching NotificationRule (fallback: 2.0 hours).
-            %
-            %   Defensive: if the sensor key is not in MonitorTargets OR the parent has no
-            %   data, returns empty .X/.Y and logs a warning (does NOT throw — notify-loop
-            %   is wrapped in try/catch in runCycle anyway).
-            %
-            %   D-03 Phase 1039.
-            sd = struct('X', [], 'Y', [], ...
-                'thresholdValue', ev.ThresholdValue, ...
-                'thresholdDirection', ev.Direction);
-
-            key = char(ev.SensorName);
-            if ~obj.MonitorTargets.isKey(key)
-                fprintf('[PIPELINE WARNING] sensorDataForEvent_: SensorName "%s" not in MonitorTargets — sending empty snapshot data.\n', key);
-                return;
-            end
-            monitor = obj.MonitorTargets(key);
-            if isempty(monitor) || ~isprop(monitor, 'Parent') || isempty(monitor.Parent)
-                fprintf('[PIPELINE WARNING] sensorDataForEvent_: MonitorTag "%s" has no Parent — sending empty snapshot data.\n', key);
-                return;
-            end
-            if ~ismethod(monitor.Parent, 'getXY')
-                fprintf('[PIPELINE WARNING] sensorDataForEvent_: Parent of "%s" lacks getXY — sending empty snapshot data.\n', key);
-                return;
-            end
-            [px, py] = monitor.Parent.getXY();
-            if isempty(px)
-                return;  % silent: parent simply has no data yet
-            end
-
-            % Resolve ctxHours from the best-matching NotificationRule (D-03).
-            % Fallback to NotificationRule default (2.0) when no service / no rule matches.
-            ctxHours = 2.0;
-            padFrac  = 0.1;
-            if ~isempty(obj.NotificationService) && ismethod(obj.NotificationService, 'findBestRule')
-                try
-                    rule = obj.NotificationService.findBestRule(ev);
-                    if ~isempty(rule)
-                        if isprop(rule, 'ContextHours'),    ctxHours = rule.ContextHours;    end
-                        if isprop(rule, 'SnapshotPadding'), padFrac  = rule.SnapshotPadding; end
-                    end
-                catch
-                    % keep defaults
-                end
-            end
-
-            % Window: [evStart - ctxHours/24 - padAmt, evEnd + padAmt]
-            % Open events (EndTime=NaN) use the latest parent X as evEnd.
-            evStart = ev.StartTime;
-            evEnd   = ev.EndTime;
-            if isnan(evEnd), evEnd = px(end); end
-            evDur = max(0, evEnd - evStart);
-            padAmt = max(evDur * padFrac, 30/86400);  % at least 30 seconds, matches generateEventSnapshot
-            xMin = evStart - ctxHours/24 - padAmt;
-            xMax = evEnd   + padAmt;
-
-            mask = px >= xMin & px <= xMax;
-            sd.X = px(mask);
-            sd.Y = py(mask);
-            sd.X = sd.X(:).';
-            sd.Y = sd.Y(:).';
-        end
-
-        function [newEvents, gotData] = processMonitorTag_(obj, key)
+        function [newEvents, gotData, sensorData] = processMonitorTag_(obj, key)
             %PROCESSMONITORTAG_ Tag-first live-tick path (SC#4 realization).
+            %
+            %   Returns [newEvents, gotData, sensorData] where sensorData is a
+            %   struct matching the generateEventSnapshot contract:
+            %     struct('X', <vector>, 'Y', <vector>, 'thresholdValue', <numeric>,
+            %            'thresholdDirection', <'upper'|'lower'>)
+            %   Built from the same fullX/fullY used for parent.updateData plus the
+            %   first new event's ThresholdValue/Direction.  sensorData is well-formed
+            %   on every return path (X=[],Y=[],thresholdValue=NaN,thresholdDirection='upper'
+            %   for early-return paths where no data was fetched).
             %
             %   Phase 1007 MONITOR-08 contract: MonitorTag.appendData
             %   expects the monitor's Parent to already carry the new
@@ -352,8 +300,12 @@ classdef LiveEventPipeline < handle
             %     On contention (ok=false), the monitor is skipped this tick and
             %     SkippedMonitorCount is incremented. onCleanup releases the lock after
             %     the critical section completes (RAII pattern from LiveTagPipeline.processTag_).
-            newEvents = [];
-            gotData   = false;
+            newEvents  = [];
+            gotData    = false;
+            % Initialise sensorData on every return path so callers always get a
+            % well-formed struct even when we return early.
+            sensorData = struct('X', [], 'Y', [], 'thresholdValue', NaN, ...
+                'thresholdDirection', 'upper');
             if ~obj.DataSourceMap.has(key)
                 return;
             end
@@ -428,6 +380,14 @@ classdef LiveEventPipeline < handle
             fullX = [oldX(:).', newX(:).'];
             fullY = [oldY(:).', newY(:).'];
 
+            % Build sensorData for notification snapshot using the full accumulated
+            % sensor grid.  thresholdValue/thresholdDirection will be filled in from
+            % the first new event below (they are the same for all events from this
+            % monitor).  The struct matches the generateEventSnapshot contract exactly:
+            %   struct('X', ..., 'Y', ..., 'thresholdValue', ..., 'thresholdDirection', ...)
+            sensorData = struct('X', fullX, 'Y', fullY, ...
+                'thresholdValue', NaN, 'thresholdDirection', 'upper');
+
             % CRITICAL ORDERING (Pitfall Y): parent.updateData BEFORE
             % monitor.appendData.  See MonitorTag.m:330-334 docstring.
             if ismethod(monitor.Parent, 'updateData')
@@ -446,6 +406,13 @@ classdef LiveEventPipeline < handle
                 if postCount > preCount
                     newEvents = allEvts((preCount+1):postCount);
                 end
+            end
+
+            % Populate sensorData threshold info from the first new event.
+            % All new events on this tick share the same monitor (same threshold).
+            if ~isempty(newEvents)
+                sensorData.thresholdValue     = newEvents(1).ThresholdValue;
+                sensorData.thresholdDirection = newEvents(1).Direction;
             end
             % === END CRITICAL SECTION (onCleanup releases the lock here in cluster mode) ===
         end

@@ -68,6 +68,7 @@ function d = getDashboardDefaults(preset)
             d.TabActiveBg         = [0.16 0.22 0.34];
             d.TabInactiveBg       = [0.10 0.12 0.18];
             d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
+            d.CurrentViewBoxColor = [0.95 0.62 0.20];   % Phase 1039: amber current-view box, contrasts with bluish-gray Selection
         otherwise % 'light' (also: legacy aliases default/industrial/scientific/ocean)
             d.DashboardBackground = [0.96 0.96 0.97];
             d.WidgetBackground    = [1.00 1.00 1.00];
@@ -83,6 +84,7 @@ function d = getDashboardDefaults(preset)
             d.TabActiveBg         = [0.90 0.92 0.95];
             d.TabInactiveBg       = [0.82 0.84 0.88];
             d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
+            d.CurrentViewBoxColor = [0.85 0.45 0.05];    % Phase 1039: dark amber, contrasts with the dark-blue Selection on light bg
     end
 
     % Axis label/tick color — derive from toolbar font (readable on widget bg)

@@ -174,7 +174,8 @@ classdef TestBackgroundEmailMonitoring < matlab.unittest.TestCase
                 'Recipients', {{'test@example.com'}}, 'IncludeSnapshot', false));
 
             pipeline = LiveEventPipeline(monitors, dsMap, ...
-                'Interval', 60, 'MinDuration', 0, 'NotificationService', cap);
+                'Interval', 60, 'MinDuration', 0);
+            pipeline.NotificationService = cap;  % override default DryRun service
         end
     end
 end

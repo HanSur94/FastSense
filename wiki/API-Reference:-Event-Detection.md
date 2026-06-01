@@ -383,6 +383,53 @@ obj = DataSourceMap()
 
 ---
 
+## `EmailTransport` --- SMTP email send mechanics with configurable security modes.
+
+> Inherits from: `handle`
+
+EmailTransport owns all JavaMail property configuration and the sendmail
+  call so that NotificationService can delegate real-send logic and be unit-
+  tested without touching the network.
+
+### Constructor
+
+```matlab
+obj = EmailTransport(varargin)
+```
+
+EMAILTRANSPORT Construct EmailTransport with optional name-value configuration.
+  Accepts any subset of the public properties as name-value pairs.
+  SecurityMode is validated case-insensitively; it is stored lower-cased.
+  Throws EmailTransport:invalidSecurityMode on unrecognised mode.
+
+### Properties
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| Server | `''` | SMTP host name or IP address |
+| Port | `587` | TCP port (default 587 for STARTTLS) |
+| User | `''` | SMTP auth username |
+| Password | `''` | Explicit password (takes precedence over PasswordEnv) |
+| PasswordEnv | `''` | Env-var NAME for password resolution at send time |
+| SecurityMode | `'starttls'` | 'none' \| 'starttls' \| 'ssl' |
+| From | `'fastsense@noreply.com'` | Sender address for SMTP envelope |
+
+### Methods
+
+#### `send(obj, recipients, subject, body, attachments)`
+
+SEND Send an email to one or more recipients via SMTP.
+  send(obj, recipients, subject, body, attachments)
+
+### Static Methods
+
+#### `EmailTransport.props = buildMailProps(securityMode, port)`
+
+BUILDMAILPROPS PURE static mapping of SecurityMode + port to mail.smtp.* properties.
+  props = EmailTransport.buildMailProps(securityMode, port)
+
+---
+
 ## `EventBinding` --- Singleton many-to-many registry binding Events to Tags.
 
 EventBinding stores (eventId, tagKey) pairs using two persistent
@@ -414,6 +461,71 @@ GETEVENTSFORTAG Return Event array bound to tagKey via reverse index.
 #### `EventBinding.clear()`
 
 CLEAR Reset all bindings in both forward and reverse indexes.
+
+---
+
+## `FunctionTransport` --- Route NotificationService sends to an external function.
+
+> Inherits from: `handle`
+
+FunctionTransport adapts an existing email-sending function (for example
+  a company-internal MATLAB mailer) into a NotificationService Transport.
+  It owns no SMTP mechanics of its own — it simply forwards each send to a
+  user-supplied function handle.  This lets you reuse external email code
+  for background-monitoring alerts WITHOUT configuring SMTP in FastSense
+  (no server, port, credentials, STARTTLS, or App Passwords), while still
+  getting NotificationService's rule matching, templated subjects/bodies,
+  per-(sensor,threshold) cooldown, and snapshot attachments.
+
+  It is a drop-in Transport: it exposes the same
+  send(recipients, subject, body, attachments) signature as EmailTransport,
+  so NotificationService delegates to it identically (duck-typed).
+
+  Usage (wrap a 4-arg company mailer companyMail(to, subject, body, attachments)):
+    transport = FunctionTransport( ...
+        @(to, subject, body, attachments) companyMail(to, subject, body, attachments));
+    notif = NotificationService('DryRun', false, 'Transport', transport, ...
+                                'CooldownMinutes', 5);
+    notif.setDefaultRule(NotificationRule('Recipients', {{'ops@yourco.com'}}));
+    pipeline.NotificationService = notif;   % LiveEventPipeline now alerts via companyMail
+
+  The wrapping handle adapts ANY external signature.  Examples:
+    % 3-arg mailer (no attachments):
+    FunctionTransport(@(to, subject, body, attachments) companyMail(to, subject, body));
+    % mailer wanting a single semicolon-joined recipient string:
+    FunctionTransport(@(to, subject, body, attachments) companyMail(strjoin(to, ';'), subject, body));
+
+  Recipients passed to your function are normalised to a flat 1xN cellstr
+  (e.g. {'a@co.com', 'b@co.com'}) regardless of how NotificationService
+  nests them internally, so your function always receives a simple list.
+
+  Properties:
+    Fn — the wrapped function handle (read-only; set via constructor)
+
+  Methods:
+    FunctionTransport(fn)                              — Constructor; validates fn is a function_handle
+    send(obj, recipients, subject, body, attachments) — normalises recipients and forwards to Fn
+
+  Error IDs:
+    FunctionTransport:invalidHandle
+
+### Constructor
+
+```matlab
+obj = FunctionTransport(fn)
+```
+
+FUNCTIONTRANSPORT Construct a FunctionTransport wrapping a send function.
+  obj = FunctionTransport(fn) stores fn, which must be a
+  function_handle invoked as fn(recipients, subject, body, attachments).
+  Throws FunctionTransport:invalidHandle when fn is not a handle.
+
+### Methods
+
+#### `send(obj, recipients, subject, body, attachments)`
+
+SEND Forward a send request to the wrapped function handle.
+  send(obj, recipients, subject, body, attachments)
 
 ---
 
@@ -510,15 +622,22 @@ Returns match score: 3=sensor+threshold, 2=sensor, 1=default, 0=no match
 
 ---
 
-## `NotificationService` --- Rule-based email notifications with event snapshots.
+## `NotificationService` --- Rule-based email notifications with event snapshots and cooldown.
 
 > Inherits from: `handle`
+
+Evaluates incoming events against a priority-ordered set of NotificationRule
+  objects, generates optional FastSense PNG snapshots, and sends email via an
+  injectable EmailTransport (defaults to a lazily-constructed real EmailTransport
+  when none is provided).
 
 ### Constructor
 
 ```matlab
 obj = NotificationService(varargin)
 ```
+
+NOTIFICATIONSERVICE Construct with optional name-value configuration.
 
 ### Properties
 
@@ -531,21 +650,45 @@ obj = NotificationService(varargin)
 | SnapshotDir | `''` |  |
 | SnapshotRetention | `7` | days |
 | SmtpServer | `''` |  |
-| SmtpPort | `25` |  |
+| SmtpPort | `587` |  |
 | SmtpUser | `''` |  |
 | SmtpPassword | `''` |  |
+| PasswordEnv | `''` | env-var NAME for password resolution at send time |
+| SecurityMode | `'starttls'` |  |
 | FromAddress | `'fastsense@noreply.com'` |  |
+| CooldownMinutes | `5` | per-(sensor,threshold) cooldown; 0 disables |
+| Transport | `[]` | injectable EmailTransport or mock; lazily built when empty |
 | NotificationCount | `0` |  |
+| SuppressedCount | `0` | events suppressed within the cooldown window |
 
 ### Methods
 
 #### `addRule(obj, rule)`
 
+ADDRULE Append a NotificationRule to the priority-match list.
+
 #### `setDefaultRule(obj, rule)`
+
+SETDEFAULTRULE Set the fallback rule (score=1) used when no specific rule matches.
 
 #### `rule = findBestRule(obj, event)`
 
+FINDBESTRULE Return the highest-scoring NotificationRule that matches event.
+  Returns [] when no rule matches (including no default rule).
+
 #### `notify(obj, event, sensorData)`
 
+NOTIFY Evaluate event against rules and send/log a notification.
+  notify(obj, event, sensorData)
+
 #### `cleanupSnapshots(obj)`
+
+CLEANUPSNAPSHOTS Delete PNG snapshot files older than SnapshotRetention days.
+
+#### `setLastSentForTesting_(obj, event, datenumVal)`
+
+SETLASTSENTFORTESTING_ Test seam: back-date the cooldown stamp for an event.
+  Follows the DI-seam pattern from STATE.md ("1028 DI-seam pattern").
+  Writes obj.lastSentByKey_(cooldownKey) = datenumVal so that tests can
+  simulate cooldown expiry without sleeping.
 
