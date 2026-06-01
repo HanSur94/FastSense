@@ -75,6 +75,7 @@ classdef DashboardEngine < handle
         hTimeEnd        = []
         hTimeResetBtn   = []       % Reset button on time panel (260508-f7p — needed for theme switch)
         SliderDebounceTimer = []   % MATLAB timer for coalescing rapid slider events
+        CurrentViewDebounceTimer_ = []  % Phase 1039: coalesces XLim events so the current-view box refreshes once AFTER FastSense's zoom re-resolve settles
         ResizeDebounceTimer = []   % MATLAB timer for coalescing rapid resize events (260513-q7w)
         ResizeFinalRedrawTimer = [] % Longer-period backstop timer: unconditional rerenderWidgets after resize fully settles (260513-q7w fu)
         % 260513-q7w fu2: true while rerenderWidgets is in flight — suppresses
@@ -353,6 +354,23 @@ classdef DashboardEngine < handle
             try obj.computePlantLogMarkers(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
+            % Phase 1039 — attach the current-view XLim listener to the now-active
+            % page's widgets. Widgets on pages other than page 1 are not realized
+            % at render() time (no axes yet), so the render-time attach loop skips
+            % them; they get realized here on first switch. attachCurrentViewXLimListener_
+            % is idempotent and skips unrealized widgets, so this is safe to repeat.
+            % Without it, zooming a plot on a second tab never refreshes its box.
+            try
+                cvWs = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
+                for ci = 1:numel(cvWs)
+                    if isa(cvWs{ci}, 'FastSenseWidget')
+                        obj.attachCurrentViewXLimListener_(cvWs{ci});
+                    end
+                end
+            catch
+            end
+            % Phase 1039 — recompute the current-view box for the newly active page.
+            try obj.updateCurrentViewIndicator_(); catch, end
         end
 
         function w = addWidget(obj, type, varargin)
@@ -529,6 +547,19 @@ classdef DashboardEngine < handle
 
             % Auto-detect time range from data
             obj.updateGlobalTimeRange();
+
+            % Phase 1039 — attach a current-view XLim listener to each FastSenseWidget
+            % so user zoom/pan refreshes the slider current-view box. Octave-skipped
+            % inside the attach helper; non-FastSense widgets are skipped (guarded).
+            try
+                cvWs = obj.flattenWidgetsForPreview_(obj.allPageWidgets());
+                for ci = 1:numel(cvWs)
+                    if isa(cvWs{ci}, 'FastSenseWidget')
+                        obj.attachCurrentViewXLimListener_(cvWs{ci});
+                    end
+                end
+            catch
+            end
         end
 
         function startLive(obj)
@@ -2023,6 +2054,9 @@ classdef DashboardEngine < handle
                         ws{i}.Title, ME.message);
                 end
             end
+            % Phase 1039 — a re-sync (broadcast) means the plots now match the
+            % Selection, so the current-view box should hide. Recompute the indicator.
+            try obj.updateCurrentViewIndicator_(); catch, end
         end
 
         function resetGlobalTime(obj)
@@ -2082,6 +2116,12 @@ classdef DashboardEngine < handle
                 w = ws{i};
                 if ~w.Realized && obj.Layout.isWidgetVisible(w.Position)
                     obj.Layout.realizeWidget(w);
+                    % Phase 1039 — a widget realized on scroll (below the fold at
+                    % render time) needs its current-view XLim listener too, else
+                    % zooming it never refreshes the slider box. Idempotent.
+                    if isa(w, 'FastSenseWidget')
+                        try obj.attachCurrentViewXLimListener_(w); catch, end
+                    end
                 end
             end
             drawnow;
@@ -2209,6 +2249,9 @@ classdef DashboardEngine < handle
             try obj.computePlantLogMarkers(); catch err
                 if obj.DebugPreview_, warning('DashboardEngine:plantLogMarkersFailed', 'computePlantLogMarkers: %s', err.message); end
             end
+            % Phase 1039 — refresh the current-view box each tick so a widget that
+            % drifted out of sync (or back in) updates without user interaction.
+            try obj.updateCurrentViewIndicator_(); catch, end
         end
 
         function markAllDirty(obj)
@@ -2578,6 +2621,11 @@ classdef DashboardEngine < handle
                 try delete(obj.SliderDebounceTimer); catch, end
                 obj.SliderDebounceTimer = [];
             end
+            if ~isempty(obj.CurrentViewDebounceTimer_)
+                try stop(obj.CurrentViewDebounceTimer_); catch, end
+                try delete(obj.CurrentViewDebounceTimer_); catch, end
+                obj.CurrentViewDebounceTimer_ = [];
+            end
             if ~isempty(obj.ResizeDebounceTimer)
                 try stop(obj.ResizeDebounceTimer); catch, end
                 try delete(obj.ResizeDebounceTimer); catch, end
@@ -2749,6 +2797,15 @@ classdef DashboardEngine < handle
         %ATTACHPLANTLOGXLIMLISTENERFORTEST_ Phase 1032 test seam.
         %   Routes to attachPlantLogXLimListener_ from function-style tests.
             obj.attachPlantLogXLimListener_(widget);
+        end
+
+        function updateCurrentViewIndicatorForTest_(obj)
+        %UPDATECURRENTVIEWINDICATORFORTEST_ Phase 1039 test seam.
+        %   Routes to the private updateCurrentViewIndicator_ so class-based
+        %   tests can assert the show/hide decision without depending on the
+        %   Octave-skipped XLim PostSet listener. Mirrors the existing
+        %   attachPlantLogXLimListenerForTest_ / setTimeRangeSelectorForTest_ idiom.
+            obj.updateCurrentViewIndicator_();
         end
 
         function setTimeRangeSelectorForTest_(obj, sel)
@@ -3000,6 +3057,36 @@ classdef DashboardEngine < handle
             end
         end
 
+        function attachCurrentViewXLimListener_(obj, widget)
+        %ATTACHCURRENTVIEWXLIMLISTENER_ XLim PostSet listener -> current-view box refresh (Phase 1039).
+        %   Stored in widget.CurrentViewXLimListener_; released by
+        %   widget.delete(). Idempotent: replaces any prior listener. Octave
+        %   skips (its addlistener lacks the 4-arg PostSet form) — the live
+        %   tick + post-broadcast + page-switch hooks still refresh the box
+        %   there. Mirrors attachPlantLogXLimListener_.
+            if isempty(widget) || ~isa(widget, 'FastSenseWidget'), return; end
+            if ~isempty(widget.CurrentViewXLimListener_)
+                try delete(widget.CurrentViewXLimListener_); catch, end
+                widget.setCurrentViewXLimListenerForEngine_([]);
+            end
+            if isempty(widget.FastSenseObj) || ~widget.FastSenseObj.IsRendered
+                return;
+            end
+            ax = widget.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax), return; end
+            if exist('OCTAVE_VERSION', 'builtin')
+                return;
+            end
+            try
+                lis = addlistener(ax, 'XLim', 'PostSet', ...
+                    @(~,~) obj.scheduleCurrentViewRefresh_());
+                widget.setCurrentViewXLimListenerForEngine_(lis);
+            catch err
+                warning('DashboardEngine:currentViewIndicatorFailed', ...
+                    'attachCurrentViewXLimListener_ failed: %s', err.message);
+            end
+        end
+
         function attachPlantLogWidgetHover_(obj, widget)
         %ATTACHPLANTLOGWIDGETHOVER_ Lazy-construct a PlantLogWidgetHover for one widget (Phase 1032 PLOG-VIZ-07).
         %   Tears down any prior hover for this widget first (idempotent),
@@ -3187,6 +3274,117 @@ classdef DashboardEngine < handle
                 end
             end
             obj.DetachedMirrors = obj.DetachedMirrors(keep);
+        end
+
+        function scheduleCurrentViewRefresh_(obj)
+        %SCHEDULECURRENTVIEWREFRESH_ Debounce the current-view box refresh (Phase 1039).
+        %   The per-widget XLim PostSet listener fires MULTIPLE times during a
+        %   single zoom: once for the user's change, then again as FastSense
+        %   re-resolves/rebuilds its axes for the new window. Refreshing the box
+        %   on each fire races that rebuild and can leave the box hidden even
+        %   though the final view is zoomed. Instead, restart a short one-shot
+        %   timer on every XLim event; once FastSense settles, the timer fires
+        %   ONCE and reads the final getCurrentXLim. Mirrors scheduleResizeRefresh_.
+        %   Falls back to an inline refresh if timers are unavailable (Octave /
+        %   headless) — though the listener itself is Octave-skipped.
+            if ~obj.isObjValid_(), return; end
+            if ~isempty(obj.CurrentViewDebounceTimer_)
+                try
+                    if isvalid(obj.CurrentViewDebounceTimer_)
+                        stop(obj.CurrentViewDebounceTimer_);
+                        delete(obj.CurrentViewDebounceTimer_);
+                    end
+                catch
+                end
+                obj.CurrentViewDebounceTimer_ = [];
+            end
+            try
+                obj.CurrentViewDebounceTimer_ = timer( ...
+                    'ExecutionMode', 'singleShot', ...
+                    'StartDelay',    0.15, ...
+                    'Tag',           'DashboardEngineCurrentViewDebounce', ...
+                    'TimerFcn',      @(~,~) obj.updateCurrentViewIndicator_());
+                start(obj.CurrentViewDebounceTimer_);
+            catch
+                obj.updateCurrentViewIndicator_();  % timers unavailable — run inline
+            end
+        end
+
+        function updateCurrentViewIndicator_(obj)
+        %UPDATECURRENTVIEWINDICATOR_ Drive the slider current-view boxes (Phase 1039).
+        %   Draws ONE box per visible, out-of-sync graph (UseGlobalTime==false on
+        %   the active page, recursing into GroupWidgets), each at that graph's
+        %   LIVE x-limits and coloured to MATCH that graph's slider preview line.
+        %   A graph's box is shown only when its view differs from the current
+        %   Selection beyond an epsilon scaled to the DataRange span; graphs that
+        %   are synced (or have no live view) contribute no box. When nothing is
+        %   out of sync, all boxes are hidden. Purely indicative — never touches
+        %   the Selection or fires broadcasts. Guarded: no-op when the slider is
+        %   absent. Wrapped by callers in try/catch.
+        %
+        %   Colour parity: each box's colour index is the graph's PREVIEW-LINE
+        %   index — its position among active-page widgets that yield a valid
+        %   getPreviewSeries — mirroring computePreviewEnvelopeReturning_'s
+        %   linesList order, so box k uses the same shared previewPalette_ slot as
+        %   preview line k.
+            if ~obj.isObjValid_(), return; end   % debounce timer may fire post-delete
+            sel = obj.TimeRangeSelector_;
+            if isempty(sel) || ~isa(sel, 'TimeRangeSelector')
+                return;
+            end
+            ws = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
+            % Same bucket count the preview used (cache hit on getPreviewSeries).
+            nB = obj.PreviewNBuckets_;
+            if ~(isscalar(nB) && isfinite(nB) && nB > 0)
+                nB = 200;
+            end
+            span = obj.DataTimeRange(2) - obj.DataTimeRange(1);
+            if ~isfinite(span) || span <= 0
+                span = 1;
+            end
+            eps_ = 0.005 * span;        % anti-flicker tolerance vs the Selection
+            [selStart, selEnd] = sel.getSelection();
+            ranges = [];
+            colorIdxs = [];
+            previewIdx = 0;             % mirrors linesList position (preview-line colour slot)
+            for i = 1:numel(ws)
+                w = ws{i};
+                % A widget contributes a preview line (and thus a palette slot)
+                % iff getPreviewSeries returns a valid struct — mirror exactly so
+                % box colours line up with the drawn preview lines.
+                hasSeries = false;
+                try
+                    s = w.getPreviewSeries(nB);
+                    hasSeries = ~isempty(s) && isstruct(s) && ...
+                        isfield(s, 'xCenters') && ~isempty(s.xCenters);
+                catch
+                    hasSeries = false;
+                end
+                if hasSeries
+                    previewIdx = previewIdx + 1;
+                end
+                % Only FastSenseWidgets expose getCurrentXLim + UseGlobalTime.
+                if ~isa(w, 'FastSenseWidget'), continue; end
+                if w.UseGlobalTime, continue; end           % synced — no box
+                xl = [];
+                try xl = w.getCurrentXLim(); catch, xl = []; end
+                if isempty(xl) || numel(xl) ~= 2 || ~all(isfinite(xl)), continue; end
+                % Only show when THIS graph's view differs from the Selection.
+                if (abs(xl(1) - selStart) <= eps_) && (abs(xl(2) - selEnd) <= eps_)
+                    continue;
+                end
+                ranges(end + 1, :) = [xl(1) xl(2)]; %#ok<AGROW>
+                if hasSeries
+                    colorIdxs(end + 1) = previewIdx; %#ok<AGROW>  matches its preview line
+                else
+                    colorIdxs(end + 1) = numel(colorIdxs) + 1; %#ok<AGROW>  no line — next slot
+                end
+            end
+            if isempty(ranges)
+                sel.hideCurrentView();                  % nothing out of sync
+            else
+                sel.setCurrentViews(ranges, colorIdxs);
+            end
         end
 
         function flat = flattenWidgetsForPreview_(obj, widgets, depth)

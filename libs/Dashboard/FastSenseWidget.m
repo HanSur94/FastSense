@@ -90,6 +90,18 @@ classdef FastSenseWidget < DashboardWidget
     % {?ClassName}).
     properties (SetAccess = private)
         PlantLogXLimListener_ = [] % Phase 1032 — addlistener handle for XLim PostSet refresh; non-empty when ShowPlantLog=true and widget is rendered
+        CurrentViewXLimListener_ = [] % Phase 1039 — addlistener handle for the current-view-box XLim PostSet notify; engine owns lifecycle
+    end
+
+    properties (Hidden)
+        % Phase 1039 test seam. When non-empty (1x2), getCurrentXLim returns it
+        % verbatim instead of reading the live axes. Lets integration tests drive
+        % the engine's current-view decision deterministically — FastSense rebuilds
+        % its axes on zoom-re-resolve, so a raw programmatic xlim() poke is not a
+        % durable way to simulate "this widget is showing a sub-window" under the
+        % unittest runner's event flushing. The real axes<->getCurrentXLim path is
+        % covered separately by TestFastSenseWidgetCurrentXLim. Empty in production.
+        CurrentXLimOverrideForTest_ = []
     end
 
     properties (Access = private, Constant)
@@ -484,6 +496,14 @@ classdef FastSenseWidget < DashboardWidget
             obj.PlantLogXLimListener_ = lis;
         end
 
+        % Hidden — DashboardEngine writes CurrentViewXLimListener_ via this seam
+        % (Phase 1039) since the property is SetAccess=private. Hidden methods are
+        % callable from anywhere (Octave-safe idiom). The engine owns the handle's
+        % lifecycle; the widget only stores it so delete() can release it.
+        function setCurrentViewXLimListenerForEngine_(obj, lis)
+            obj.CurrentViewXLimListener_ = lis;
+        end
+
         function setShowPlantLog(obj, tf, engine)
         %SETSHOWPLANTLOG Toggle the per-widget plant-log overlay (Phase 1032 PLOG-VIZ-03).
         %   tf     — boolean; true enables overlay + attaches XLim listener,
@@ -711,6 +731,44 @@ classdef FastSenseWidget < DashboardWidget
             tMax = obj.CachedXMax;
             if isinf(tMin) || isinf(tMax)
                 tMin = inf; tMax = -inf;
+            end
+        end
+
+        function xl = getCurrentXLim(obj)
+        %GETCURRENTXLIM Live x-limits of the wrapped FastSense axes (Phase 1039).
+        %   Returns the 1x2 [xMin xMax] the plot is CURRENTLY showing — the
+        %   actual view window, read live from the axes via get(ax,'XLim').
+        %   Returns [] when the widget is not rendered (no FastSenseObj, not
+        %   IsRendered, or no valid axes).
+        %
+        %   This is deliberately NOT getTimeRange(): getTimeRange returns the
+        %   cached DATA extent (CachedXMin/CachedXMax), which does not move
+        %   when the user zooms/pans. The current-view box (DashboardEngine.
+        %   updateCurrentViewIndicator_) needs the live view, so it calls this.
+            xl = [];
+            % Phase 1039 test seam: a forced value bypasses the live-axes read.
+            if ~isempty(obj.CurrentXLimOverrideForTest_)
+                v = obj.CurrentXLimOverrideForTest_;
+                if numel(v) == 2 && all(isfinite(v)) && v(2) > v(1)
+                    xl = [v(1), v(2)];
+                end
+                return;
+            end
+            if isempty(obj.FastSenseObj) || ~isa(obj.FastSenseObj, 'FastSense') || ...
+                    ~obj.FastSenseObj.IsRendered
+                return;
+            end
+            ax = obj.FastSenseObj.hAxes;
+            if isempty(ax) || ~ishandle(ax)
+                return;
+            end
+            try
+                v = get(ax, 'XLim');
+            catch
+                return;
+            end
+            if numel(v) == 2 && all(isfinite(v)) && v(2) > v(1)
+                xl = [v(1), v(2)];
             end
         end
 
@@ -1166,6 +1224,12 @@ classdef FastSenseWidget < DashboardWidget
             if ~isempty(obj.PlantLogXLimListener_)
                 try delete(obj.PlantLogXLimListener_); catch, end
                 obj.PlantLogXLimListener_ = [];
+            end
+            % Phase 1039 — release the current-view XLim listener before FastSenseObj
+            % teardown destroys the axes the listener is bound to.
+            if ~isempty(obj.CurrentViewXLimListener_)
+                try delete(obj.CurrentViewXLimListener_); catch, end
+                obj.CurrentViewXLimListener_ = [];
             end
             % Explicitly stop FastSense timers (hRefineTimer, LiveTimer,
             % DeferredTimer) before the base-class delete() destroys hPanel.
