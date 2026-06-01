@@ -44,10 +44,10 @@ The Companion's bottom strip hosts two compact log panes:
 - **Events log** — rolling list of recent detected events (this surface's compact form)
 - **Live log** — per-tag sample-delta counts as new data arrives (a different surface)
 
-See [Live Log](Live-Log) for the live updates pane.
+See [Live Log](Live-Log.md) for the live updates pane.
 
 ## See also
 
-- [Live Log](Live-Log)
-- [Tag Status Table](Tag-Status-Table)
-- [Companion Overview](Companion-Overview)
+- [Live Log](Live-Log.md)
+- [Tag Status Table](Tag-Status-Table.md)
+- [Companion Overview](Companion-Overview.md)

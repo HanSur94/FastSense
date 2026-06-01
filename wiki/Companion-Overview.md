@@ -2,7 +2,7 @@
 
 The FastSense Companion is a three-pane `uifigure` control panel that browses the project's `TagRegistry`, opens dashboards and ad-hoc plots in their own MATLAB figures, and provides live status monitoring across the entire project. It is purely a navigator — every dashboard it opens runs in a standalone classical figure with its own live timer, theme, and toolbar.
 
-Two parallel help systems live inside FastSense: **System 1** is the per-dashboard `Info` button driven by `DashboardEngine.InfoFile`, and **System 2** is this Wiki Browser. See [Dashboard Info vs Wiki](Dashboard-Info-vs-Wiki) for the full distinction.
+Two parallel help systems live inside FastSense: **System 1** is the per-dashboard `Info` button driven by `DashboardEngine.InfoFile`, and **System 2** is this Wiki Browser. See [Dashboard Info vs Wiki](Dashboard-Info-vs-Wiki.md) for the full distinction.
 
 ## Three-pane layout
 
@@ -16,9 +16,9 @@ The right pane is *adaptive*: when one tag is selected it shows metadata, thresh
 
 ## Top toolbar (left to right)
 
-- **Events** — opens the [Event Viewer](Event-Viewer)
+- **Events** — opens the [Event Viewer](Event-Viewer.md)
 - **Live: ON/OFF** — toggles the companion-driven inspector refresh and the live log
-- **Tags** — opens the [Tag Status Table](Tag-Status-Table)
+- **Tags** — opens the [Tag Status Table](Tag-Status-Table.md)
 - **Tile / Close all** — manages the windows the Companion has opened (dashboards, ad-hoc plots, detached panes)
 - **Wiki** — opens this Wiki Browser (you are reading it now)
 - **Gear** — opens Companion settings (theme, live period)
@@ -30,7 +30,7 @@ The bottom of the window hosts two compact log panes:
 - **Events log** — rolling list of recent threshold violations from `EventStore`
 - **Live log** — per-tag `Δ samples` and latest value as new data lands
 
-Each pane has a pop-out icon in its header that detaches the pane into its own figure window. See [Event Viewer](Event-Viewer) for the events pane and [Live Log](Live-Log) for the live updates pane.
+Each pane has a pop-out icon in its header that detaches the pane into its own figure window. See [Event Viewer](Event-Viewer.md) for the events pane and [Live Log](Live-Log.md) for the live updates pane.
 
 ## Opening a dashboard
 
@@ -44,8 +44,8 @@ The **Live: ON/OFF** toggle controls a Companion-owned `timer` that drives the i
 
 ## See also
 
-- [Tag Status Table](Tag-Status-Table)
-- [Event Viewer](Event-Viewer)
-- [Live Log](Live-Log)
-- [Dashboard Info vs Wiki](Dashboard-Info-vs-Wiki)
-- [Home](Home)
+- [Tag Status Table](Tag-Status-Table.md)
+- [Event Viewer](Event-Viewer.md)
+- [Live Log](Live-Log.md)
+- [Dashboard Info vs Wiki](Dashboard-Info-vs-Wiki.md)
+- [Home](Home.md)
