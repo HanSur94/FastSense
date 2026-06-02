@@ -292,6 +292,37 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             testCase.verifyClass(v.getSliderForTest_(), 'TimeRangeSelector');
         end
 
+        function testSliderInnerPanelHasPositiveSizeAfterConstruction(testCase)
+        % Regression test for stale-fragment fix (event-viewer-slider-stale-render).
+        %
+        % Root cause: TimeRangeSelector was constructed before the uigridlayout
+        % compositor had settled SliderInnerPanel_'s final pixel geometry. The
+        % fix inserts drawnow() in buildFigure_ just before the selector
+        % constructor so the panel reaches its final size first.
+        %
+        % Assertion: after construction + drawnow, SliderInnerPanel_ must have
+        % positive pixel dimensions (w > 0 and h > 0). A width or height of 0
+        % or near-zero indicates the panel was still at provisional geometry,
+        % which is the precondition that produced the stray rendering fragments.
+        %
+        % Note: getpixelposition requires the panel to exist in a displayed
+        % figure; the uifigure is set Visible='on' in buildFigure_, so the
+        % compositor must have run by the time drawnow() returns.
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            drawnow;
+            panel = v.getSliderInnerPanelForTest_();
+            testCase.verifyNotEmpty(panel, 'SliderInnerPanel_ must exist.');
+            testCase.verifyTrue(ishandle(panel), 'SliderInnerPanel_ must be a valid handle.');
+            px = getpixelposition(panel, true);  % recursive=true: walks parent chain
+            testCase.verifyGreaterThan(px(3), 0, ...
+                'SliderInnerPanel_ width must be positive after construction (layout settled).');
+            testCase.verifyGreaterThan(px(4), 0, ...
+                'SliderInnerPanel_ height must be positive after construction (layout settled).');
+        end
+
         function testSliderRangeChangedSetsCustomMode(testCase)
             es = makeStore_(testCase);
             comp = makeRealCompanion_(testCase);

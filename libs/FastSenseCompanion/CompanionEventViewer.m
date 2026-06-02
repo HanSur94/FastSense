@@ -266,6 +266,15 @@ classdef CompanionEventViewer < handle
             s = obj.Selector_;
         end
 
+        function p = getSliderInnerPanelForTest_(obj)
+        %GETSLIDERINNERFORTEST_ Test accessor: return SliderInnerPanel_ handle.
+        %   Used by regression tests for the initial-render stale-fragment fix:
+        %   the panel must have positive pixel dimensions at the time the
+        %   TimeRangeSelector is constructed (enforced by drawnow() in
+        %   buildFigure_ before the selector constructor runs).
+            p = obj.SliderInnerPanel_;
+        end
+
         function onSliderRangeChanged_internalForTest(obj, t1, t2)
         %ONSLIDERRANGECHANGED_INTERNALFORTEST Test-only proxy for the slider callback.
             obj.onSliderRangeChanged_(t1, t2);
@@ -748,6 +757,16 @@ classdef CompanionEventViewer < handle
             obj.SliderInnerPanel_.Layout.Column = 1;
             obj.SliderInnerPanel_.BackgroundColor = t.WidgetBackground;
             obj.SliderInnerPanel_.BorderType      = 'none';
+
+            % Flush the uifigure layout compositor so SliderInnerPanel_ reaches
+            % its final pixel geometry BEFORE TimeRangeSelector's constructor runs
+            % buildGraphics_ + redraw_. Without this the selector draws at the
+            % uigridlayout's provisional (pre-settled) size and leaves one-time
+            % stale on-screen fragments that the settled layout never clears.
+            % A manual window resize was the only prior workaround — this is the
+            % targeted fix. drawnow() is valid on both MATLAB and Octave; it is a
+            % no-op in headless/test environments where no figure is displayed.
+            drawnow();
 
             obj.Selector_ = TimeRangeSelector(obj.SliderInnerPanel_, ...
                 'OnRangeChanged', @(t1, t2) obj.onSliderRangeChanged_(t1, t2), ...
