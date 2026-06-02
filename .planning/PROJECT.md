@@ -52,6 +52,8 @@ The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundat
 
 **Vocabulary:** `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `TagRegistry`, `EventBinding`. FastSense API: `addTag(t)`.
 
+**Companion (Phase 1040, 2026-06-02):** the FastSenseCompanion **Event Viewer** now hosts an acknowledgeable notification inbox (`NotificationCenterPane`) as a horizontally-resizable right panel (draggable divider); a toolbar **bell** shows the unacked count + highest-severity color and opens the viewer. Dismiss == shared, audited `EventStore.acknowledgeEvent`.
+
 ## Current Milestone: v2.1 Tag-API Tech Debt Cleanup
 
 **Goal:** Close the 4 non-blocking tech debt items surfaced by the v2.0 milestone audit so the Tag-API codebase is free of dead code, test-skip gaps, and stubbed example demos.
@@ -146,4 +148,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-22 — v2.1 milestone (Tag-API Tech Debt Cleanup) started*
+*Last updated: 2026-06-02 — Phase 1040 (Companion Notification Center) complete*

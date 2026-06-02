@@ -122,6 +122,8 @@ classdef FastSenseCompanion < handle
         % Phase 1034 — Wiki button + shared WikiBrowser handle.
         hWikiBtn_     = []   % toolbar uibutton: Wiki / Help launch
         WikiBrowser_  = []   % shared WikiBrowser handle (or [])
+        % Phase 1040 — toolbar bell: unacked-count indicator that opens the Event Viewer.
+        hBellBtn_          = []   % toolbar bell uibutton with unacked-count badge
     end
 
     methods (Access = public)
@@ -318,10 +320,11 @@ classdef FastSenseCompanion < handle
             %   col 5 = Tile windows (v4.0 S0Y-01)                      ( 70)
             %   col 6 = Close all (v4.0 S0Y-02)                         ( 90)
             %   col 7 = Wiki / Help launch (v4.0 Phase 1034)            ( 70)
-            %   col 8 = flex spacer                                     ('1x')
-            %   col 9 = Settings gear                                   ( 36)
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 9]);
-            hToolbarGrid.ColumnWidth     = {110, 110, 110, 130, 70, 90, 70, '1x', 36};
+            %   col 8 = Notification center bell (Phase 1040)           ( 70)
+            %   col 9 = flex spacer                                     ('1x')
+            %   col 10 = Settings gear                                  ( 36)
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 10]);
+            hToolbarGrid.ColumnWidth     = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -417,10 +420,27 @@ classdef FastSenseCompanion < handle
             obj.hWikiBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hWikiBtn_.ButtonPushedFcn = @(~,~) obj.openWiki_('Companion-Overview');
 
-            % Col 9 — Settings gear (moved as new buttons accumulated).
+            % Col 8 — Phase 1040 Notification center bell with unacked-count badge.
+            obj.hBellBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hBellBtn_.Layout.Row    = 1;
+            obj.hBellBtn_.Layout.Column = 8;
+            obj.hBellBtn_.Text          = obj.bellGlyph_();
+            obj.hBellBtn_.FontSize      = 12;
+            obj.hBellBtn_.FontWeight    = 'bold';
+            obj.hBellBtn_.Tag           = 'CompanionBellBtn';
+            obj.hBellBtn_.Tooltip       = 'Show notifications (opens the Event Viewer)';
+            obj.hBellBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+            obj.hBellBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hBellBtn_.ButtonPushedFcn = @(~,~) obj.openEventViewer_();
+            if isempty(obj.EventStore_)
+                obj.hBellBtn_.Enable  = 'off';
+                obj.hBellBtn_.Tooltip = 'No EventStore registered';
+            end
+
+            % Col 10 — Settings gear (Phase 1040 shifted it 9 -> 10 to make room for the bell).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 9;
+            obj.hSettingsBtn_.Layout.Column = 10;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -501,6 +521,9 @@ classdef FastSenseCompanion < handle
             % Attach both panes inline by default.
             obj.setLogState_('events', 'Inline');
             obj.setLogState_('live',   'Inline');
+            % Phase 1040 — reflect any pre-loaded events on the toolbar bell badge.
+            % (The notification pane itself now lives in the Event Viewer, not here.)
+            obj.updateBellBadge_();
             % Seed the events log with the ready line.
             obj.addLogEntry('info', 'Companion ready.');
 
@@ -979,6 +1002,8 @@ classdef FastSenseCompanion < handle
                 if ~isempty(obj.hDetachedLiveFig_) && isvalid(obj.hDetachedLiveFig_)
                     obj.hDetachedLiveFig_.Color = obj.Theme_.DashboardBackground;
                 end
+                % Phase 1040 — recolor the toolbar bell badge under the new theme tokens.
+                obj.updateBellBadge_();
                 obj.updateLiveButton_();
                 drawnow;
             catch err
@@ -1366,6 +1391,22 @@ classdef FastSenseCompanion < handle
             obj.trackOpenedFigure_(hFig);
         end
 
+        % --- Phase 1040 test seam (Hidden, do not call from production) ---
+
+        function onLiveTickForTest_(obj)
+        %ONLIVETICKFORTEST_ Test seam: drive one onLiveTick_ body even when not live.
+        %   Temporarily forces IsLive so the tick runs without starting the timer,
+        %   then restores the prior value (deterministic, timer-free tests).
+            prevLive = obj.IsLive;
+            obj.IsLive = true;
+            try
+                obj.onLiveTick_();
+            catch
+                % onLiveTick_ has its own guard; never propagate from the seam.
+            end
+            obj.IsLive = prevLive;
+        end
+
     end
 
     methods (Access = private)
@@ -1662,6 +1703,50 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function g = bellGlyph_(~)
+        %BELLGLYPH_ Bell emoji on a desktop; ASCII '[!]' fallback otherwise (headless/Windows).
+            g = '[!]';
+            try
+                if usejava('desktop')
+                    g = char(128276);   % U+1F514 bell
+                end
+            catch
+                % Stay with the ASCII fallback.
+            end
+        end
+
+        function updateBellBadge_(obj)
+        %UPDATEBELLBADGE_ Reflect unacked count + max-severity color on the bell (read-error tolerant).
+            try
+                if isempty(obj.hBellBtn_) || ~isvalid(obj.hBellBtn_); return; end
+                store = obj.getEventStore();
+                if isempty(store) || ~isvalid(store)
+                    obj.hBellBtn_.Text            = obj.bellGlyph_();
+                    obj.hBellBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                    obj.hBellBtn_.FontColor       = obj.Theme_.ForegroundColor;
+                    return;
+                end
+                allEvents = Event.empty;
+                try
+                    allEvents = store.getEvents();   % stale-safe; badge tolerates a read failure
+                catch
+                end
+                unacked = NotificationCenterPane.filterUnacked_(allEvents);
+                n = numel(unacked);
+                obj.hBellBtn_.Text = NotificationCenterPane.badgeText_(n, obj.bellGlyph_());
+                if n == 0
+                    obj.hBellBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                    obj.hBellBtn_.FontColor       = obj.Theme_.ForegroundColor;
+                else
+                    obj.hBellBtn_.BackgroundColor = NotificationCenterPane.badgeColor_( ...
+                        NotificationCenterPane.maxSeverity_(unacked), obj.Theme_);
+                    obj.hBellBtn_.FontColor       = obj.Theme_.DashboardBackground;
+                end
+            catch
+                % Badge update must never crash.
+            end
+        end
+
         function onLiveTick_(obj)
         %ONLIVETICK_ Periodic in-place refresh: tag sample count + X range +
         %   sparkline; or dashboard status. Uses InspectorPane.refreshLive
@@ -1679,6 +1764,12 @@ classdef FastSenseCompanion < handle
                 obj.scanLiveTagUpdates_();
                 if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
                     obj.EventsLogPane_.setLastUpdated(datetime('now'));
+                end
+                % Phase 1040 — refresh the toolbar bell badge (guarded; never crash the timer).
+                try
+                    obj.updateBellBadge_();
+                catch
+                    % Must never crash the live timer.
                 end
                 % Phase 1033 Plan 04 — cluster surfacing (dormant in single-user mode)
                 if obj.IsClusterMode_
