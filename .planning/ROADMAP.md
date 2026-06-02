@@ -431,10 +431,10 @@ Plans:
 **Goal:** Add an acknowledgeable in-app notification inbox to `FastSenseCompanion` — a collapsible right-hand `NotificationCenterPane` (toggled by a toolbar bell + unacked-count badge) that live-lists unacknowledged threshold-violation events from the shared `EventStore` and lets operators acknowledge them (dismiss = `EventStore.acknowledgeEvent`, shared + audited). Predominantly a new UI surface over existing event + acknowledge infrastructure.
 **Requirements**: none mapped — 1040-CONTEXT.md locked decisions + the phase GOAL are the contract (must_haves derived in each PLAN)
 **Depends on:** Phase 1039
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 1040-01-test-foundation-PLAN.md (Wave 1) — StubEventStore double + NotificationCenterPane static pure-logic helpers + flat test
 - [x] 1040-02-notification-pane-PLAN.md (Wave 2, depends 01) — full detachable inbox pane (attach/detach/refresh/ack/filter/stale/theme) + TestNotificationCenterPane
-- [ ] 1040-03-companion-integration-PLAN.md (Wave 3, depends 02) — Companion 4th-column grid + toolbar bell+badge + onLiveTick_ refresh hook + detach wiring
+- [x] 1040-03-companion-integration-PLAN.md (Wave 3, depends 02) — Companion 4th-column grid + toolbar bell+badge + onLiveTick_ refresh hook + detach wiring
 - [ ] 1040-04-companion-tests-verify-PLAN.md (Wave 4, depends 03) — TestFastSenseCompanion toolbar-col updates + 9 integration tests + full-suite gate + human live-verify
