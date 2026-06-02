@@ -574,6 +574,65 @@ classdef NotificationCenterPane < handle
 
     end
 
+    methods (Hidden)
+        % --- Test seams (Hidden, not public API; mirrors the Phase 1028 pattern) ---
+
+        function n = lastGoodCount_(obj)
+        %LASTGOODCOUNT_ Count of the last-good unacked set (survives detach).
+            n = numel(obj.LastGoodEvents_);
+        end
+
+        function ids = lastIdsSnapshot_(obj)
+        %LASTIDSSNAPSHOT_ Copy of the current diff-key id list.
+            ids = obj.LastIds_;
+        end
+
+        function t = lastUpdatedText_(obj)
+        %LASTUPDATEDTEXT_ The "Updated:" label text (or '' when detached).
+            t = '';
+            if ~isempty(obj.hLastUpdateLbl_) && isvalid(obj.hLastUpdateLbl_)
+                t = obj.hLastUpdateLbl_.Text;
+            end
+        end
+
+        function n = numVisibleRows_(obj)
+        %NUMVISIBLEROWS_ Rendered row count, excluding the empty-state row.
+            n = 0;
+            if isempty(obj.hTable_) || ~isvalid(obj.hTable_); return; end
+            d = obj.hTable_.Data;
+            if isempty(d); return; end
+            nrows = size(d, 1);
+            if nrows == 1 && strcmp(d{1, 3}, 'No unacknowledged events')
+                n = 0;
+            else
+                n = nrows;
+            end
+        end
+
+        function setSeverityFilterForTest_(obj, value)
+        %SETSEVERITYFILTERFORTEST_ Drive the severity dropdown + re-render.
+            obj.SevFilter_ = value;
+            if ~isempty(obj.hSevDD_) && isvalid(obj.hSevDD_)
+                obj.hSevDD_.Value = value;
+            end
+            obj.applyFilterAndRender_();
+        end
+
+        function ackForTest_(obj, eventId)
+        %ACKFORTEST_ Drive the per-item ack path without a real cell-selection event.
+            obj.onAckBtn_(eventId);
+        end
+
+        function d = tableDataForTest_(obj)
+        %TABLEDATAFORTEST_ Raw uitable Data ({} when detached).
+            d = {};
+            if ~isempty(obj.hTable_) && isvalid(obj.hTable_)
+                d = obj.hTable_.Data;
+            end
+        end
+
+    end
+
     methods (Static)
 
         function evs = filterUnacked_(allEvents)

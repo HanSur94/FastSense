@@ -60,5 +60,16 @@ classdef StubEventStore < handle
             end
             ack = struct('eventId', eventId, 'action', 'ack');
         end
+
+        function store = getEventStore(obj)
+        %GETEVENTSTORE Return self, so the stub can double as the Companion's store resolver.
+        %   NotificationCenterPane.ackOne_ calls Companion_.getEventStore(); pointing the
+        %   pane's Companion_ at this stub routes acks straight back here.
+            store = obj;
+        end
+
+        function save(obj) %#ok<MANU>
+        %SAVE No-op; events live in memory. Lets ackOne_'s post-ack save() succeed.
+        end
     end
 end
