@@ -159,7 +159,7 @@ function testWidgetWindowedPull()
     if ~isempty(w.FastSenseObj) && w.FastSenseObj.IsRendered
         nLines = numel(w.FastSenseObj.Lines);
         if nLines >= 1
-            wLineN = numel(w.FastSenseObj.Lines{1}.XData);
+            wLineN = w.FastSenseObj.Lines(1).NumPoints;  % raw points bound (Lines is a struct array; NumPoints is downsample/disk-immune)
             assert(wLineN > 0, ...
                 'test_dashboard_time_window:testWidgetWindowedPull', ...
                 'Windowed render should bind non-empty line');
@@ -201,7 +201,7 @@ function testWidgetWindowedRenderBindsDisk()
         'test_dashboard_time_window:testWidgetWindowedRenderBindsDisk', ...
         'Windowed disk render should have at least one plotted line (not 0 via empty addTag)');
 
-    wLineN = numel(w.FastSenseObj.Lines{1}.XData);
+    wLineN = w.FastSenseObj.Lines(1).NumPoints;  % raw points bound (Lines is a struct array; NumPoints is downsample/disk-immune)
     assert(wLineN > 0, ...
         'test_dashboard_time_window:testWidgetWindowedRenderBindsDisk', ...
         sprintf('Disk windowed render bound line length is %d; expected > 0 (fix: fp.addLine(getXYRange))', wLineN));
@@ -244,7 +244,7 @@ function testWidgetAllDataDiskNonEmpty()
         'test_dashboard_time_window:testWidgetAllDataDiskNonEmpty', ...
         'All data disk render should have at least one line (not blank addTag line)');
 
-    wLineN = numel(w.FastSenseObj.Lines{1}.XData);
+    wLineN = w.FastSenseObj.Lines(1).NumPoints;  % raw points bound (Lines is a struct array; NumPoints is downsample/disk-immune)
     assert(wLineN > 0, ...
         'test_dashboard_time_window:testWidgetAllDataDiskNonEmpty', ...
         sprintf('All data disk render bound line length is %d; expected > 0 (fix: fp.addLine(getXYRange(getTimeRange())))', wLineN));
@@ -282,7 +282,7 @@ function testWidgetFullPullWhenEmpty()
 
     nLines = numel(w.FastSenseObj.Lines);
     if nLines >= 1
-        wLineN = numel(w.FastSenseObj.Lines{1}.XData);
+        wLineN = w.FastSenseObj.Lines(1).NumPoints;  % raw points bound (Lines is a struct array; NumPoints is downsample/disk-immune)
         % FastSense may downsample; after LTTB/MinMax: still proportional to fullN.
         % Assert at least 10% of full series (downsampling never removes ALL points).
         assert(wLineN > 0, ...
