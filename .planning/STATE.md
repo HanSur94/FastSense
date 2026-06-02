@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Multi-User LAN Concurrency
-status: verifying
-last_updated: "2026-06-02T11:44:53.304Z"
+status: executing
+last_updated: "2026-06-02T16:16:22.781Z"
 last_activity: 2026-06-02
 progress:
-  total_phases: 16
+  total_phases: 17
   completed_phases: 4
-  total_plans: 20
-  completed_plans: 39
+  total_plans: 25
+  completed_plans: 40
 ---
 
 # State
@@ -19,15 +19,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** Phase 1040 — companion-notification-center
+**Current focus:** Phase 1041 — global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading
 
 ## Current Position
 
-Phase: 1040
-Plan: Not started
+Phase: 1041 (global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading) — EXECUTING
+Plan: 2 of 5
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
-Status: Phase complete — ready for verification
-Last activity: 2026-06-02
+Status: Executing Phase 1041 — Plan 01 complete, Plan 02 next
+Last activity: 2026-06-02 -- Phase 1041 Plan 01 complete (Tag.getXYRange + SensorTag disk-fix)
 
 ### Note on parallel v4.0 work (main branch state)
 
