@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Multi-Machine Fleet
-status: defining_requirements
-last_updated: "2026-06-02T14:59:09.000Z"
+status: roadmap_created
+last_updated: "2026-06-02T00:00:00.000Z"
 last_activity: 2026-06-02
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -16,18 +16,18 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-13)
+See: .planning/PROJECT.md (updated 2026-06-02)
 
-**Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** Phase 1040 — companion-notification-center
+**Core value:** A MATLAB engineer can ingest, browse, dashboard, and compare data across a growing fleet of near-identical machines from the FastSense Companion — including overlaying the same logical sensor across machines whose raw sensor keys differ — without leaving MATLAB and without external toolboxes.
+**Current focus:** Phase 1041 — CanonicalMapper (next to plan)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap created, ready for Phase 1041 planning)
 Plan: —
-Milestone: v5.0 Multi-Machine Fleet — started 2026-06-02 (continues phase numbering from 1040). Prior: v4.0 Multi-User LAN Concurrency (verifying); v3.0 FastSense Companion (shipped 2026-04-30).
-Status: Defining requirements
-Last activity: 2026-06-02 — Milestone v5.0 Multi-Machine Fleet started
+Milestone: v5.0 Multi-Machine Fleet — started 2026-06-02 (continues phase numbering from 1040). Prior: v4.0 Multi-User LAN Concurrency (shipped); v3.0 FastSense Companion (shipped 2026-04-30).
+Status: Roadmap created — 6 phases, 26 requirements mapped, 100% coverage
+Last activity: 2026-06-02 — v5.0 roadmap created (phases 1041-1046)
 
 ### Note on parallel v4.0 work (main branch state)
 
@@ -77,32 +77,36 @@ Other main PRs (#138, #139, #141, #144, #145, #146) auto-merged without conflict
 | 260508-mjp | Add tag-column search field to LiveLogPane mirroring events log | 2026-05-08 | 1c258fb | — | [260508-mjp-add-tag-column-search-field-to-livelogpa](./quick/260508-mjp-add-tag-column-search-field-to-livelogpa/) |
 | 260508-n8h | Dashboard Info button opens modal in-app uifigure (uihtml) instead of system browser | 2026-05-08 | 8b525a8 | — | [260508-n8h-dashboard-info-button-opens-modal-render](./quick/260508-n8h-dashboard-info-button-opens-modal-render/) |
 | 260511-ldu | PR #125 followup polish — extract bringFigureToFront_, tighten crosshair visibility, +2 tests, doc fixes | 2026-05-11 | 134a0d9 | — | [260511-ldu-pr-125-followup-polish-extract-bringfigu](./quick/260511-ldu-pr-125-followup-polish-extract-bringfigu/) |
-| 260511-mjb | Fix 2 pre-existing TestFastSenseCompanion failures — findobj→findall for uifigure lookup; ObjectBeingDestroyed safety-net listener on DashboardEngine.hFigure (stops LiveTimer for delete(fig)/close all force paths) | 2026-05-11 | 8df1a67 | Verified | [260511-mjb-fix-2-pre-existing-testfastsensecompanio](./quick/260511-mjb-fix-2-pre-existing-testfastsensecompanio/) |
-| 260511-n1r | Sever FigureDestroyedListener_ at top of DashboardEngine.delete() — fixes R2021b CI segfault in TestDashboardDirtyFlag (listener captured engine handle; on R2021b GC could destroy engine before its hFigure, then listener fired on deleted handle inside MATLAB's C++ dispatch layer) | 2026-05-11 | e7026bb | Verified | [260511-n1r-fix-r2021b-segfault-delete-figuredestroy](./quick/260511-n1r-fix-r2021b-segfault-delete-figuredestroy/) |
-| 260512-c5x | Fix tail-truncation artifact in FastSense MinMax downsampling — append (segX(end), segY(end)) anchor in all four cores (MEX/pure-MATLAB/log-X/slider-preview) when bucket's min/max miss segX(end). Industrial plant demo reactor.pressure tail delta 10580s→0.97s; n=2*nb+1 when anchor needed | 2026-05-12 | c932acd | Verified | [260512-c5x-fix-tail-truncation-artifact-in-fastsens](./quick/260512-c5x-fix-tail-truncation-artifact-in-fastsens/) |
-| 260512-cxc | Fix slider preview tail stuck at interior bucket midpoint (260512-c5x follow-up) — in getPreviewSeries capture anchorX before dropping the trailing point, then override xCenters(end):=anchorX so the slider tail tracks live data growth. Industrial plant demo slider-tail delta 414s→0.00s; tracks tick-for-tick after Reset | 2026-05-12 | f79642a | Verified | [260512-cxc-fix-slider-preview-tail-stuck-at-interio](./quick/260512-cxc-fix-slider-preview-tail-stuck-at-interio/) |
-| 260512-egv | Fix slider drag broken after top-toolbar Reset — add TimeRangeSelector.reinstallCallbacks + call at end of DashboardEngine.rerenderWidgets. Root cause: HoverCrosshair's chained WBM pattern unwinds in install order (not LIFO) when rerenderWidgets deletes widget panels 1..N, leaving a dangling-handle closure on the figure WBM that swallows motion events before they reach trs.onButtonMotion_. Re-installing TRS callbacks at the outermost layer restores drag. Acknowledged trade-off: per-widget HoverCrosshair goes inert until next instantiation (out-of-scope refactor) | 2026-05-12 | 7ab7584 | Verified | [260512-egv-fix-slider-drag-broken-after-reset-due-t](./quick/260512-egv-fix-slider-drag-broken-after-reset-due-t/) |
-| 260512-eu2 | Restore HoverCrosshair after Reset (260512-egv follow-up) — move TRS.reinstallCallbacks from end of rerenderWidgets to BETWEEN the delete-old-panels loop and the allocate-new-panels block. New chain post-rerender: newHcN→...→newHc1→trs.onButtonMotion_. Both slider drag AND per-widget HoverCrosshair work after Reset. Verified on live demo: POST-RESET WBM = HC's onFigureMove_, synth drag moves Selection by ~1.74 days, 2 live HoverCrosshair instances alive on active page | 2026-05-12 | dc84454 | Verified | [260512-eu2-restore-hovercrosshair-after-reset-by-mo](./quick/260512-eu2-restore-hovercrosshair-after-reset-by-mo/) |
-| 260512-fd9 | Industrial plant demo opens with Live mode OFF by default — removed `engine.startLive()` from buildDashboard.m. Both dashboard and companion now start idle (engine.IsLive=0, companion.IsLive=0); user opts in via the top-toolbar "Live" button. Aligns the two windows on the same default; data writer + LiveTagPipeline keep running independently in the background | 2026-05-12 | ac0baaa | Verified | (inline) |
-| 260512-hrn | Add Follow uitoggletool to FastSenseToolbar — between Live and Metadata — with setFollow(), syncFollowState(), IsPropagating-aware auto-disengage in FastSense.onXLimChanged, AppData stash at 4 attacher sites, and 9 function-style tests (test_fastsense_follow_toggle.m) | 2026-05-12 | 596d399, 0a4a516 | — | [260512-hrn-add-follow-toggle-button-to-fastsense-to](./quick/260512-hrn-add-follow-toggle-button-to-fastsense-to/) |
-| 260513-ovt | Preserve widget X and Y views across Live ticks + Follow toggle reaches every page — (1) added LiveViewMode='follow' guard inside FastSenseWidget.autoScaleY_, (2) removed `autoScaleY_(y)` from FastSenseWidget.refresh/update, (3) removed `broadcastTimeRange(tStart, tEnd)` from DashboardEngine.onLiveTick, (4) flipped FastSenseWidget.LiveViewMode default 'reset'→'preserve', (5) made FastSenseToolbar.syncFollowState public so FastSense.onXLimChanged's auto-disengage hook actually syncs the Follow button, (6) made DashboardEngine.{allPageWidgets,activePageWidgets} public + onFollowToggle uses allPageWidgets() so Follow actually flips every FastSenseWidget across all pages on multi-page dashboards (was silently no-op via swallowed MethodRestricted). Live mode is now strictly "append data only"; Follow does width-preserving slide with 2% right-edge gap. test_fastsense_follow_toggle 10/10, test_dashboard_time_sync_all_pages 5/5, test_dashboard_range_selector_integration 2/2; verified end-to-end on industrial plant demo (Follow ON: XLim+0.140d toward tail, width preserved exactly, 2/2 widgets switched; OFF: 2/2 reverted) | 2026-05-13 | 498a5f3, ca5be95, 8d41c48, 63cdff4 | — | [260513-ovt-when-follow-button-is-pressed-y-axis-lim](./quick/260513-ovt-when-follow-button-is-pressed-y-axis-lim/) |
-| 260513-q7w | Debounced post-resize refresh + ZOMBIE-PANEL fix that stops widgets going white during drag-resize and tab switching — TWO parallel timers on every figure resize event (300 ms cheap two-pass refresh + 1.2 s unconditional rerenderWidgets backstop). switchPage cancels both timers AND waits up to 3 s for in-flight rerenderWidgets to complete before mutating state. `IsRerendering_` flag prevents rerender-cascade scheduling. Re-entrancy guard aborts instead of self-rescheduling. **Root-cause fix**: rerenderWidgets now deletes the OUTER cell panel (via hCellPanel, falling back to hPanel for pre-realization widgets) — previous code deleted only `hPanel` which after realization points to the INNER content panel, leaving the outer cell + its WidgetButtonBar chrome alive on the canvas as "zombies" that stacked up over multiple rerenders and painted over freshly switched-to pages. test_dashboard_range_selector_integration 2/2, test_dashboard_time_sync_all_pages 5/5; canvas-children-count canary verifies zero zombie accumulation across 4 rerenders + resize + tab switch (constant 29) | 2026-05-13 | 577bf95, 99c8808, 4eda604, bc305dc, 54d5aa0, 20bcd4c | — | [260513-q7w-during-dashboard-figure-resize-fastsense](./quick/260513-q7w-during-dashboard-figure-resize-fastsense/) |
-| 260513-sfp | Add auto-y-limit control buttons (V/A/L) to FastSenseWidget WidgetButtonBar — new YLimitMode property (auto-visible / auto-all / locked, default 'auto-visible' reproduces pre-260513-sfp behaviour), setYLimitMode public method (clears UserZoomedY on explicit click so click re-engages autoscale), autoScaleY_ refactored to dispatch on mode AFTER existing precedence guards (YLimits pin / UserZoomedY / FastSense.LiveViewMode=='follow') so 260513-ovt Follow semantics are preserved. DashboardLayout duck-types widget chrome via ismethod(widget,'setYLimitMode'), so future widgets that expose Y-rescale modes opt in without touching DashboardLayout. ASCII glyphs (V/A/L) match existing Info/Detach. reflowChrome_ re-anchors on resize. toStruct omits the default so legacy dashboards stay diff-invisible. test_fastsense_widget_ylimit_modes 11/11, test_fastsense_widget_tag 7/7, test_fastsense_follow_toggle 10/10, test_dashboard_time_sync_all_pages 5/5. Verified on live industrial-plant demo, all 8 scenarios approved. Known caveat: V/A/L cluster butts against Info button (0-px gap) — inherited from pre-existing addInfoIcon 28-px-typo, explicitly out-of-scope per plan; logged in deferred-items.md | 2026-05-13 | 4db9138, cc18c7f, a9cc181 | Verified | [260513-sfp-add-auto-y-limit-control-buttons-to-fast](./quick/260513-sfp-add-auto-y-limit-control-buttons-to-fast/) |
-| 260513-s0y | Add Tile + Close all buttons to FastSenseCompanion top toolbar — private OpenedFigures_ tracking + syncOpenedFigures_ (walks Engines_ before tile/close-all) + public trackOpenedFigure hook (InspectorPane.onOpenDetail_ and CompanionEventViewer.openEventDashboard_ forward their figure handles). tileOpenedWindows: ceil(sqrt(N))×ceil(N/cols) grid on monitor containing the companion, 24px margin, 8px gutter, row-major top-down. Before set(Position), coerces each figure to WindowState='normal' + Units='pixels' — root cause of initial "Tile does nothing" report was DashboardEngine.render defaulting to Units='normalized' (pixel rects got treated as screen fractions, pushing figures off-canvas). closeAllOpenedWindows: snapshot + close(h) per handle (honors each figure's CloseRequestFcn). Inner toolbar grid 1×4→1×6 (Events / Live / Tile / Close all / spacer / gear; gear Layout.Column 4→6). 9 sub-tests in test_companion_tile_close_buttons.m PASS; TestFastSenseCompanion regression 64/64 PASS. Verified on live industrial-plant demo. Shipped as PR #143. | 2026-05-14 | 182d6f1, 2867caa, 1be2cc8, e58bc35, c47c0c1, db9ef88 | Shipped (PR #143) | [260513-s0y-add-tile-windows-and-close-all-windows-b](./quick/260513-s0y-add-tile-windows-and-close-all-windows-b/) |
+| 260511-mjb | Fix 2 pre-existing TestFastSenseCompanion failures — findobj->findall for uifigure lookup; ObjectBeingDestroyed safety-net listener on DashboardEngine.hFigure (stops LiveTimer for delete(fig)/close all force paths) | 2026-05-11 | 8df1a67 | Verified | [260511-mjb-fix-2-pre-existing-testfastsensecompanio](./quick/260511-mjb-fix-2-pre-existing-testfastsensecompanion/) |
+| 260511-n1r | Sever FigureDestroyedListener_ at top of DashboardEngine.delete() — fixes R2021b CI segfault in TestDashboardDirtyFlag | 2026-05-11 | e7026bb | Verified | [260511-n1r-fix-r2021b-segfault-delete-figuredestroy](./quick/260511-n1r-fix-r2021b-segfault-delete-figuredestroy/) |
+| 260512-c5x | Fix tail-truncation artifact in FastSense MinMax downsampling | 2026-05-12 | c932acd | Verified | [260512-c5x-fix-tail-truncation-artifact-in-fastsens](./quick/260512-c5x-fix-tail-truncation-artifact-in-fastsens/) |
+| 260512-cxc | Fix slider preview tail stuck at interior bucket midpoint (260512-c5x follow-up) | 2026-05-12 | f79642a | Verified | [260512-cxc-fix-slider-preview-tail-stuck-at-interio](./quick/260512-cxc-fix-slider-preview-tail-stuck-at-interio/) |
+| 260512-egv | Fix slider drag broken after top-toolbar Reset | 2026-05-12 | 7ab7584 | Verified | [260512-egv-fix-slider-drag-broken-after-reset-due-t](./quick/260512-egv-fix-slider-drag-broken-after-reset-due-t/) |
+| 260512-eu2 | Restore HoverCrosshair after Reset (260512-egv follow-up) | 2026-05-12 | dc84454 | Verified | [260512-eu2-restore-hovercrosshair-after-reset-by-mo](./quick/260512-eu2-restore-hovercrosshair-after-reset-by-mo/) |
+| 260512-fd9 | Industrial plant demo opens with Live mode OFF by default | 2026-05-12 | ac0baaa | Verified | (inline) |
+| 260512-hrn | Add Follow uitoggletool to FastSenseToolbar | 2026-05-12 | 596d399 | — | [260512-hrn-add-follow-toggle-button-to-fastsense-to](./quick/260512-hrn-add-follow-toggle-button-to-fastsense-to/) |
+| 260513-ovt | Preserve widget X and Y views across Live ticks + Follow toggle reaches every page | 2026-05-13 | 498a5f3 | — | [260513-ovt-when-follow-button-is-pressed-y-axis-lim](./quick/260513-ovt-when-follow-button-is-pressed-y-axis-lim/) |
+| 260513-q7w | Debounced post-resize refresh + ZOMBIE-PANEL fix | 2026-05-13 | 577bf95 | — | [260513-q7w-during-dashboard-figure-resize-fastsense](./quick/260513-q7w-during-dashboard-figure-resize-fastsense/) |
+| 260513-sfp | Add auto-y-limit control buttons (V/A/L) to FastSenseWidget WidgetButtonBar | 2026-05-13 | 4db9138 | Verified | [260513-sfp-add-auto-y-limit-control-buttons-to-fast](./quick/260513-sfp-add-auto-y-limit-control-buttons-to-fast/) |
+| 260513-s0y | Add Tile + Close all buttons to FastSenseCompanion top toolbar | 2026-05-14 | 182d6f1 | Shipped (PR #143) | [260513-s0y-add-tile-windows-and-close-all-windows-b](./quick/260513-s0y-add-tile-windows-and-close-all-windows-b/) |
 | 260526-pw3 | Show all tag events in FastSense widgets across industrial plant demo | 2026-05-26 | c475d2a | — | [260526-pw3-in-the-industrial-plant-demo-ensure-all-](./quick/260526-pw3-in-the-industrial-plant-demo-ensure-all-/) |
-| 260526-r9x | Add PerTag composer mode to FastSenseCompanion — spawn one DashboardEngine window per selected tag | 2026-05-26 | abdc80b | Verified | [260526-r9x-add-pertag-composer-mode-to-fastsensecom](./quick/260526-r9x-add-pertag-composer-mode-to-fastsensecom/) |
-| 260519-bs4 | Add Tag Status Table window to FastSenseCompanion — new `TagStatusTableWindow.m` (classical figure, not uifigure, per CONTEXT.md), opened via new **Tags ↗** button on companion top toolbar (col 3 in the post-merge 1×7 grid: Events / Live / Tags / Tile / Close all / spacer / gear). Detached-only window with 12-column `uitable`: Key, Name, Type, Criticality, Units, Latest, Status (smart per-type — Monitor→OK/ALARM, State→state label, others→—), Last updated (X(end) timestamp), Activity (Live/Inactive at 5-min threshold), Events (count from EventStore), Samples, Labels. All 18 demo tags listed (snapshot from `TagRegistry.find(@(t)true)`). Two parallel refresh paths: (a) push-on-write via existing `FastSenseCompanion.scanLiveTagUpdates_` → `markStatusTableDirty_(keys)` when companion is in Live mode, (b) window-owned `RefreshTimer_` (1s fixedSpacing, unique UUID name, BusyMode='drop', self-stop after 2 consecutive tick errors) so the table refreshes regardless of companion's IsLive — addresses user feedback that Activity/Last updated must stay correct when companion is idle. Pause/Resume polling toggle freezes both paths (markTagsDirty becomes a no-op while paused; header shows "Last refreshed: HH:MM:SS (paused)"). "Last refreshed" heartbeat label updates every tick. Filter chips mirror TagCatalogPane pattern: Type (Sensor/Monitor/Composite/State/Derived), Criticality (Low/Medium/High/Safety), Activity (Live/Inactive) — multi-toggle, AND-across-groups / OR-within-group; broadened free-text search across Key+Name+Units+Labels. Push-on-write hook in companion stays — both mechanisms run in parallel. Six atomic commits + 1 merge: 01 base class + 11 pure-logic tests; 02 companion wiring + 7 lifecycle tests; 03 Activity column + own timer (+5 logic + 2 lifecycle tests, deviation from "push-on-write only" CONTEXT decision per user); 04 last-refreshed header + chip filters + broader search (+4 logic + 2 lifecycle tests); 05 Pause/Resume polling toggle (+4 lifecycle tests); 06 Events count column (+4 logic + 1 lifecycle test); 07 merge with main (PR #143 toolbar grid conflict). Final test counts post-merge: `test_companion_tag_status_table` 24/24 (pure-logic), `TestTagStatusTableWindow` 16/16 (UI lifecycle), `test_companion_tile_close_buttons` 9/9 (main's new test still PASS), `TestFastSenseCompanion` 64/64 (no regression) = 113/113 total. Verified end-to-end on live industrial-plant demo: 4 MonitorTags showed real event counts (29/32/33/35), 14 others showed 0; Activity flipped Live→Inactive at exactly 5-min boundary via static buildRow_ proof; companion IsLive=0 throughout (window polled itself). Deferred / out-of-scope: (1) polling-scope clarification dismissed by user (heartbeat-only vs. passive-observation vs. only-update-changed-cells — left as-is, table updates all cells every tick); (2) Info button + markdown help — scoped up to a milestone-sized "unified in-app help/wiki" effort, parked as backlog 999.1. | 2026-05-19 | b2ed937, e8a1be5, 43d2d3b, 2a24965, 50d464c, 10df740, 73a3bf1 | Verified | [260519-bs4-implement-a-new-table-view-in-the-compan](./quick/260519-bs4-implement-a-new-table-view-in-the-compan/) |
-| 260526-tcf | Fix two pre-existing column assertions in `TestFastSenseCompanion.m` to match the post-PR-#159 1x9 companion toolbar grid — `testToolbarHasWikiButton` now asserts Wiki at col **7** (was 6), `testToolbarGearMovedToColumn8` now asserts Settings gear at col **9** (was 8). Production source-of-truth: `FastSenseCompanion.m:410` (`hWikiBtn_.Layout.Column = 7`) and `FastSenseCompanion.m:423` (`hSettingsBtn_.Layout.Column = 9`); commit `e2ded77` migrated the parallel `TestFastSenseCompanionPlantLogToolbar.m` file but missed these two assertions. Column-value fix only — method name `testToolbarGearMovedToColumn8` retained per user choice; rename to `testToolbarGearAtColumn9` + matching docstring cleanup deferred to a separate task. Diagnostic-message strings on the two `verifyEqual` calls updated alongside the literals so failure messages stay coherent. Pre-existing nature confirmed in briefing: both failures reproduce against HEAD~1 and survived a stash-revert of the parallel quick task `260526-r9x`. MATLAB test verification (expected: 73/73 PASS, or 74/74 if PerTag commit landed first) deferred to the user's local session — `mcp__matlab__*` tools route to local MATLAB and are not reachable from the remote sandbox. | 2026-05-26 | e321ac7 | Ready for verification | [260526-tcf-fix-companion-toolbar-1x9-grid-test-cols](./quick/260526-tcf-fix-companion-toolbar-1x9-grid-test-cols/) |
-| 260526-pqz | Raise per-signal slider-preview cap from 400 → 1000 buckets in `DashboardEngine.computePreviewEnvelopeReturning_` — three textual edits (1 code clamp + 2 documenting comments) in `libs/Dashboard/DashboardEngine.m` plus one consistency comment in `tests/test_dashboard_preview_overlay.m` (no assertion change; `numel(xd) >= 4` is cap-independent). Edit sites: line 3524 doc-comment (`computePreviewEnvelope` range), line 3542 inline comment (clamp range), line 3555 actual clamp `max(50, min(1000, floor(axWpx / 2)))`. Out of scope per plan: cache invalidation of `PreviewNBuckets_` — running demos must restart (or trigger the existing resize-invalidation path at `DashboardEngine.m:2241`) for the new cap to take effect. Static analysis clean: `mh_lint` + `mh_style` on both edited files report "everything seems fine"; regression sweep `grep -rn "\b400\b" tests/ \| grep -iE "(preview\|bucket\|envelope)"` returns no matches. MATLAB R2025a: `test_dashboard_preview_envelope` 7/7, `test_dashboard_preview_overlay` 10/10. Octave 11.1.0: `test_dashboard_preview_envelope` 2/2 (5 skipped — pre-existing TimeRangeSelector guard for patch+FaceAlpha+NaN on xvfb), `test_dashboard_preview_overlay` skipped entirely (pre-existing). | 2026-05-26 | 834b43c | — | [260526-pqz-raise-preview-line-cap-per-signal-from-4](./quick/260526-pqz-raise-preview-line-cap-per-signal-from-4/) |
-| 260529-rxf | Real per-event email alerts for background monitoring — new `EmailTransport` (SMTP auth/STARTTLS:587 default, also `none`/`ssl`; Octave `exist('sendmail','file')` log-and-skip guard; pure static `buildMailProps` CI seam) that `NotificationService` now delegates to via an injectable `Transport` property; per-(sensor,threshold) email cooldown (default 5 min, 0 disables; dry-run honors it too) with public `SuppressedCount`; `LiveEventPipeline.processMonitorTag_`/`runCycle` now forward real per-event `sensorData` (X/Y/thresholdValue/thresholdDirection from the live tick) so `IncludeSnapshot` rules attach PNGs in live mode. MATLAB-only per user decision. **Backward-compat preserved**: pipeline still defaults to `NotificationService('DryRun', true)` and all prior tests stay green. Verified locally (R2025a, live MATLAB MCP): `test_email_transport` 5/5, `test_notification_service` 10/10 (7 original + 3 new: delegation / cooldown-suppress / cooldown-expiry-via-Hidden-DI-seam), `test_live_event_pipeline_tag` 3/3, plus class suites `TestEmailTransport` 5/5, `TestNotificationService` 7/7, `TestLiveEventPipelineTag` 3/3. MISS_HIT (`mh_style`+`mh_lint`) clean on all 8 files; MATLAB Code Analyzer clean on the 3 new/edited libs. Real SMTP delivery is the single manual step via `examples/05-events/smoke_email_send.m` (FASTSENSE_SMTP_* env vars, STARTTLS:587), out of CI. | 2026-05-29 | 203da7a, 2ac6887, 341bab2, cef1fc5 | Verified | [260529-rxf-real-per-event-email-alerts-for-backgrou](./quick/260529-rxf-real-per-event-email-alerts-for-backgrou/) |
-| 260529-fnt | Add `FunctionTransport` adapter (`libs/EventDetection/FunctionTransport.m`) — wraps a user-supplied function handle as a `NotificationService` `Transport` so an existing site/company MATLAB mailer can be reused for alerts with **no SMTP config** (no server/port/creds, no Gmail App Password). Drop-in duck-typed `send(recipients,subject,body,attachments)` (same as EmailTransport), normalizes recipients to a flat cellstr, defaults attachments to `{}`, Octave-safe (only calls user code). Purely additive — EmailTransport/NotificationService behavior unchanged. Built via **/gsd:fast** (inline, no subagents). Verified (R2025a): `test_function_transport` 5/5 (forwarding / recipients-normalization / attachments-default / invalid-handle / NotificationService integration), `test_notification_service` 10/10 (no regression); MISS_HIT + Code Analyzer clean on all touched files. `example_live_pipeline.m` gains a commented FunctionTransport option. Follow-up to 260529-rxf after the user opted to reuse their company mailer instead of configuring Gmail SMTP. | 2026-05-29 | 706e9d5 | Verified | (inline) |
+| 260526-r9x | Add PerTag composer mode to FastSenseCompanion | 2026-05-26 | abdc80b | Verified | [260526-r9x-add-pertag-composer-mode-to-fastsensecom](./quick/260526-r9x-add-pertag-composer-mode-to-fastsensecom/) |
+| 260519-bs4 | Add Tag Status Table window to FastSenseCompanion | 2026-05-19 | b2ed937 | Verified | [260519-bs4-implement-a-new-table-view-in-the-compan](./quick/260519-bs4-implement-a-new-table-view-in-the-compan/) |
+| 260526-tcf | Fix two pre-existing column assertions in TestFastSenseCompanion.m | 2026-05-26 | e321ac7 | Ready for verification | [260526-tcf-fix-companion-toolbar-1x9-grid-test-cols](./quick/260526-tcf-fix-companion-toolbar-1x9-grid-test-cols/) |
+| 260526-pqz | Raise per-signal slider-preview cap from 400 to 1000 buckets | 2026-05-26 | 834b43c | — | [260526-pqz-raise-preview-line-cap-per-signal-from-4](./quick/260526-pqz-raise-preview-line-cap-per-signal-from-4/) |
+| 260529-rxf | Real per-event email alerts for background monitoring | 2026-05-29 | 203da7a | Verified | [260529-rxf-real-per-event-email-alerts-for-backgrou](./quick/260529-rxf-real-per-event-email-alerts-for-backgrou/) |
+| 260529-fnt | Add FunctionTransport adapter | 2026-05-29 | 706e9d5 | Verified | (inline) |
 
 ## Progress Bar
 
 ```
-v3.0 FastSense Companion
-Phase 1018 [██████████] 100% (3/3 plans complete in Phase 1018; 1/6 phases complete overall)
-Phase 1019 [██████████] 100% (3/3 plans complete in Phase 1019; 6/6 plans complete overall)
+v5.0 Multi-Machine Fleet
+Phase 1041 [ ] 0% (0/? plans)
+Phase 1042 [ ] 0% (0/? plans)
+Phase 1043 [ ] 0% (0/? plans)
+Phase 1044 [ ] 0% (0/? plans)
+Phase 1045 [ ] 0% (0/? plans)
+Phase 1046 [ ] 0% (0/? plans)
 ```
 
 ## Accumulated Context
@@ -113,12 +117,52 @@ Phase 1019 [██████████] 100% (3/3 plans complete in Phase 10
 - 2026-04-29 — v3.0 roadmap created: 5 phases (1018-1022) covering 28 REQ-IDs across COMPSHELL, CATALOG, BROWSER, INSPECT, ADHOC categories
 - 2026-04-29 — v3.0 phase 1023 added (Industrial Plant Demo Integration): wraps `demo/industrial_plant/run_demo.m` in `FastSenseCompanion`; 4 new COMPDEMO REQ-IDs; total now 6 phases / 32 REQ-IDs
 - 2026-05-13 — Milestone v4.0 Multi-User LAN Concurrency started; PROJECT.md updated, REQUIREMENTS.md created (14 P1 REQ-IDs across CONC/IDENT/EVTLOG/ACK/OPS categories; 6 P2 deferred to v4.1); research/ phase produced SUMMARY/STACK/FEATURES/ARCHITECTURE/PITFALLS markdown
-- 2026-05-13 — v4.0 roadmap created: 5 phases (1029-1033) covering all 14 P1 REQ-IDs, full coverage no orphans; phase structure mirrors research-recommended build order (Foundation → TagWriteCoordinator → EventLog → Single-Source Events → Companion Integration); three PITFALLS corrections (OFD locks, mtime heartbeat, lock-serialised appends) baked into Phase 1029 success criteria
+- 2026-05-13 — v4.0 roadmap created: 5 phases (1029-1033) covering all 14 P1 REQ-IDs, full coverage no orphans; phase structure mirrors research-recommended build order (Foundation -> TagWriteCoordinator -> EventLog -> Single-Source Events -> Companion Integration); three PITFALLS corrections (OFD locks, mtime heartbeat, lock-serialised appends) baked into Phase 1029 success criteria
 - 2026-06-02 — Phase 1040 added: Companion Notification Center (acknowledgeable in-app inbox pane in `FastSenseCompanion`; design brainstormed in-session and approved; EventStore-backed feed, dismiss = `acknowledgeEvent`, new collapsible right column + toolbar bell badge; `1040-CONTEXT.md` written)
+- 2026-06-02 — Milestone v5.0 Multi-Machine Fleet started; REQUIREMENTS.md created (26 v1 REQ-IDs across FLEET/CANON/MACH/CMP/DASH categories); research SUMMARY.md completed with HIGH confidence
+- 2026-06-02 — v5.0 roadmap created: 6 phases (1041-1046) covering all 26 v1 REQ-IDs, 100% coverage, no orphans; phase structure follows research dependency-ordered build sequence; critical pitfalls baked into phase success criteria
 
 ### Phase Numbering Note
 
-v2.1 phases in the phases/ directory extend to 1017 (1012, 1013, 1014, 1017). v3.0 phases extended to 1023.1. Pending unscoped phases 1025-1028 are carry-forward from a backlog promotion (NOT v4.0). v4.0 phases start at **1029** to leave room for the pending carry-forward and avoid collision.
+v2.1 phases in the phases/ directory extend to 1017 (1012, 1013, 1014, 1017). v3.0 phases extended to 1023.1. Pending unscoped phases 1025-1028 are carry-forward from a backlog promotion (NOT v4.0). v4.0 phases start at 1029. v5.0 phases start at 1041.
+
+### v5.0 Architecture Decisions Locked
+
+- **Data model:** Approach 1 (Machine/Fleet layer). Each `Machine` owns its own `containers.Map` tag catalog. Global `TagRegistry` singleton left untouched (72 static call sites across 31 files).
+- **Comparison UX:** Approach A locked — machine-first compare-builder dialog; opens its own overlay figure via `openAdHocPlot` Overlay path; no changes to the 3 Companion panes or `setProject`.
+- **Machine selector placement:** Deferred to Phase 1044 UI planning — left-rail vs. top dropdown vs. tabs is a UI-phase decision; data model is placement-agnostic.
+- **FleetDashboardCloner placement:** Deferred to Phase 1046 planning — behavior is specified; whether it lives in `libs/Fleet/`, as a static method on `DashboardSerializer`, or as a method on `Fleet` is unresolved.
+- **openAdHocPlot per-series color injection:** Deferred to Phase 1045 planning — existing `plotOverlay_` uses MATLAB `ColorOrder` auto-assignment; explicit per-machine color injection form not pinned.
+
+### Critical Invariants (must be verified at every phase gate)
+
+1. `grep -rn "TagRegistry.register" libs/Fleet/` must return 0 (machine tags never enter global registry)
+2. `grep -rn "uifigure\|uicontrol\|uitree\|uigridlayout\|uiprogressdlg" libs/Fleet/` must return 0 (no UI code in data model; Octave must run all Fleet data-model code)
+3. `grep -rn "contains(" libs/Fleet/CanonicalMapper.m` must return 0 (Octave-safe string ops only)
+4. LOW-confidence canonical matches are excluded from comparison unless explicitly confirmed by user
+5. `CanonicalMapper.resolve` absent from steady-state tick profiler output (resolve-once-at-open pattern)
+
+### Phase Dependencies Summary
+
+```
+1041 CanonicalMapper
+  |
+1042 Machine + Fleet + Pipeline DI (uses CanonicalMapper for resolveLogical)
+  |
+1043 DashboardSerializer Resolver Seam (depends on Machine resolver signature)
+  |
+1044 Companion Machine Dimension (consumes 1041 + 1042 + 1043)
+  |
+1045 Cross-Machine Comparison (depends on 1044 machine selector + 1042 Fleet.resolveLogical)
+  |
+1046 Clone/Remap (depends on 1041 + 1042 + 1043 + 1044)
+```
+
+### Research Flags for Planning
+
+- **Phase 1044 planning:** Machine selector placement (left rail vs. top dropdown vs. tabs) was explicitly deferred in PROJECT.md; requires a focused UI decision before the phase plan is written; re-read SUMMARY.md Q5 + FEATURES.md Area 1 differentiators
+- **Phase 1045 planning:** `openAdHocPlot` per-series color injection design is not pinned (`colors` arg vs. struct-array input); resolve before plan is locked; re-read SUMMARY.md Q5
+- **Phase 1046 planning:** `FleetDashboardCloner` placement (standalone function vs. method on `Fleet` vs. `DashboardSerializer` static method) is unresolved; needs one design decision pass
 
 ### Brainstorm Outcomes (v3.0)
 
@@ -129,24 +173,8 @@ Design decisions locked during the v3.0 brainstorm conversation (2026-04-29):
 - **Connection contract:** Loose handoff via constructor: `FastSenseCompanion('Dashboards', {d1, d2}, 'Registry', TagRegistry)`. Tags pulled from `TagRegistry` singleton by default; pass `'Registry', reg` to override. Single project per app instance (no multi-project switcher).
 - **Dashboard rendering:** Opening a dashboard pops it into its own MATLAB figure via existing `DashboardEngine.render()`. Companion is purely a control panel / navigator. Zero changes required to `DashboardEngine`.
 - **Layout:** Three-pane window — left = searchable tag catalog with multi-select checkboxes and filter pills; middle = dashboard list; right = adaptive inspector.
-- **Inspector states:** `welcome` (empty) / `tag` (single tag selected — metadata, thresholds, "used in" cross-references, "Plot this tag" → `SensorDetailPlot`) / `multitag` (N>1 — plot composer with Linked grid / Overlay, time range All / Last 1h, Live Off/2s/5s) / `dashboard` (dashboard tile selected — summary + open + live toggle). Most-recent click wins (`LastInteraction = 'tags' | 'dashboard'`).
-- **Tag grouping:** Derived from `Tag.Labels` (existing property; no new model field). Filter pills also reflect `Tag.Criticality`.
-- **Ad-hoc plotting modes:** Linked grid (`FastSenseGrid` with shared `LinkGroup`) and Overlay (single `FastSense` instance with multiple lines). Dropped "Separate figures" as YAGNI.
-- **Live refresh:** Companion does **not** own a refresh timer for dashboards — uses each `DashboardEngine`'s own `LiveInterval` and start/stop. For ad-hoc plots, companion runs a `timer` that calls `tag.getXY()` and `updateData()` on the open figure; timer stored on figure `UserData`, stops on figure close.
-- **File structure:**
-  - `libs/FastSenseCompanion/FastSenseCompanion.m` (orchestrator, public API)
-  - `libs/FastSenseCompanion/TagCatalogPane.m` (left pane)
-  - `libs/FastSenseCompanion/DashboardListPane.m` (middle pane)
-  - `libs/FastSenseCompanion/InspectorPane.m` (right pane)
-  - `libs/FastSenseCompanion/CompanionTheme.m` (static color/font helper, mirrors `DashboardTheme`)
-  - `libs/FastSenseCompanion/private/companionUsageIndex.m` (tag → dashboards map)
-  - `libs/FastSenseCompanion/private/filterTags.m` (search + filter pure logic)
-  - `libs/FastSenseCompanion/private/openAdHocPlot.m` (figure factory)
-- **Event wiring:** MATLAB `events`/`notify`. Pane events: `TagSelectionChanged`, `DashboardSelected`, `OpenSensorDetail`, `OpenAdHocPlot`, `OpenDashboard`. Orchestrator owns selection state (`SelectedTagKeys`, `SelectedDashboardIdx`, `LastInteraction`).
+- **Inspector states:** `welcome` (empty) / `tag` (single tag selected — metadata, thresholds, "used in" cross-references, "Plot this tag" -> `SensorDetailPlot`) / `multitag` (N>1 — plot composer with Linked grid / Overlay, time range All / Last 1h, Live Off/2s/5s) / `dashboard` (dashboard tile selected — summary + open + live toggle). Most-recent click wins (`LastInteraction = 'tags' | 'dashboard'`).
 - **Public API:** `FastSenseCompanion(name-value)`, `setProject(dashboards, registry)`, `addDashboard(d)`, `removeDashboard(key)`, `selectTags(keys)`, `close()`. Private: pane handles. Not on surface: live-refresh control (delegates to `DashboardEngine`), dashboard creation/edit (out of scope).
-- **Errors:** All namespaced `FastSenseCompanion:*`. Constructor / `setProject` validate eagerly. Every event callback wrapped in try/catch → `uialert(fig, ...)`. Downstream throws (e.g., `DashboardEngine.render`) never crash the companion.
-- **Testing:** Pure-logic unit tests (`tests/test_companion_filter_tags.m`, `tests/test_companion_usage_index.m`). Class-based integration suite (`tests/suite/TestFastSenseCompanion.m`) — hidden `uifigure('Visible','off')`, drives state via `selectTags`, mocks `openAdHocPlot` via DI seam (constructor accepts a callable, defaults to real helper). No pixel-perfect UI tests.
-- **Out of scope (v1 of Companion):** dashboard authoring; multi-project; cross-session persistence; status strip with global KPIs; custom time-range picker; detachable panes; WebBridge integration.
 
 ### Cross-Cutting Engineering Constraints (locked in Phase 1018)
 
@@ -158,31 +186,3 @@ These apply to every phase and are reflected in phase success criteria rather th
 - `axes(uipanel)` not `uiaxes(uipanel)` for embedded plots (9x performance difference)
 - Errors namespaced `FastSenseCompanion:*`; every callback wrapped in try/catch + non-blocking `uialert`
 - Pure-logic helpers (`filterTags_`, `flattenWidgets_`) ship with unit tests
-
-### Research Flags for Planning
-
-- **Phase 1020 planning:** Read `libs/Dashboard/DashboardPage.m` and `libs/Dashboard/GroupWidget.m` to confirm `Widgets` and `Children` GetAccess. Determines whether `DashboardEngine.getWidgets()` wrapper is required or if `d.Widgets`/`d.Pages{i}.Widgets` suffices.
-- **Phase 1021 planning:** Run 20-line scratch test of `SensorDetailPlot(tag, 'Parent', uipanelHandle)` to verify resize behavior under embedded panel parenting.
-- **Phase 1022 planning:** Write standalone 50-line `FastSenseGrid` + `timer` + `CloseRequestFcn` prototype before full implementation; verify zero orphan timers in `timerfindall` after close.
-- **Phase 1029 planning (v4.0):** `lockfile_mex.c` OFD-vs-`F_SETLK` branching; Win32 `LockFileEx` flag combinations; `F_OFD_SETLK` re-acquire behaviour from same process (LOW confidence per SUMMARY.md); empirical `staleTimeout` calibration on target office LAN; mksqlite `extended_result_codes` pass-through probe (feeds Phase 1032's retry wrapper).
-- **Phase 1031 planning (v4.0):** SMB atomicity stress test on the target file server (Pitfalls 4 + 5 + 12); phase budget includes contingency to re-architect to per-writer-file + merge if SMB atomicity fails.
-- **Phase 1032 planning (v4.0):** SQLite `BUSY_SNAPSHOT` retry semantics under 50-writer contention; retry-loop tuning needs 20-process write-contention test.
-
-### Decisions (Phase 1020)
-
-- **1020-02:** applyFilter_() is the single rebuild path for DashboardListPane row list; onRowClicked_ sets SelectedIdx_ then calls applyFilter_() for highlight rather than painting individual buttons
-- **1020-02:** addDashboard uses handle identity (==) for duplicate detection; removeDashboard uses Name (case-sensitive strcmp) for lookup per CONTEXT.md
-- **1020-02:** Listeners re-wired in setProject after detach clears them; SelectedDashboardIdx_ clamped to 0 in refresh() when engine list shrinks
-
-### Decisions (Phase 1028)
-
-- **1028-02b/02d/05/06 DI-seam pattern:** All four mid-phase architectural levers share a single shape — `Access = private` flag (production default true) + `Hidden setFooForTesting_(tf)` setter that validates `logical scalar`. This preserves D-10 (no public API), gives the harness a single flip-point per lever, and makes the test surface uniform. Future phases that add a switchable behaviour to a Tag-pipeline class should follow this pattern.
-- **1028-02d in-memory cache mechanism:** The big win in the phase was a read-side cache, not a write-side coalesce. The original Plan 02d framing ("coalesce within-tick semantics") was wrong — `processTag_` already calls `writeFn_` exactly once per tag per tick. The actual mechanism is a `containers.Map` of `tag.Key -> struct('X', priorX, 'Y', priorY)` populated lazily and refreshed after every write, skipping the per-tick `load()` inside `writeTagMat_('append',...)`. Crash-recovery semantics preserved because `save()` cadence is unchanged.
-- **1028-03/04 deferral was data-driven, not a scope cut:** K2/K3/K4 kernel target regions bucket as 0 ms in the post-cache `tBreakdown` profile. Plans 03/04 PLAN.md files exist on disk and are valid pickup points if a future profile pass with direct `tic/toc` probes finds those regions to be non-trivial. The deferral is documented in VERIFICATION.md and the 1028-06-SUMMARY.md retrospective.
-- **1028-05 null-result ship-the-seam pattern:** When a planned architectural lever's expected mechanism doesn't materialise empirically, ship the lever as an internal seam and surface the null result in VERIFICATION.md. Avoid the false dichotomy of "meets ship-criterion → ship" vs "doesn't → revert"; the third option is "ships as forward-compat, doesn't move today's number". Establishes a precedent for honest measurement reporting.
-- **1028-06 fs-stat coalesce mechanism:** One `dir(parentDir)` per unique parent directory per tick, keyed map populated lazily on first lookup, frozen for the rest of that tick. Octave-safe (no MATLAB-specific syntax). Trade-off: a file appearing mid-tick is NOT visible in that tick. Acceptable because the per-tag mtime check vs `lastModTime` already serialises ingestion at tick boundaries.
-
-### Carry-Forward
-
-- **v2.1 Tag-API Tech Debt Cleanup** — in flight, parallel to v3.0/v4.0. Phases 1012-1017. Does not block v4.0 work.
-- **Pending unscoped phases 1025-1028** — promoted from backlog 2026-05-08; NOT v4.0 scope. 1025 + 1026 largely addressed via quick tasks 260508-d8y / 260508-das. 1027/1027.1 complete. 1028 (Tag update perf — MEX + SIMD) remains on the books, may be re-scoped later.

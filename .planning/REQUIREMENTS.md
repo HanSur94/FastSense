@@ -91,22 +91,42 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Each requirement maps to exactly one phase. **To be filled by the roadmapper** (phases start at 1041). Suggested dependency-ordered grouping from research (roadmapper validates/finalizes):
+Each requirement maps to exactly one phase. Confirmed by roadmapper 2026-06-02.
 
-| Requirement(s) | Suggested Phase | Status |
-|----------------|-----------------|--------|
-| CANON-01..05 | Phase 1041 (CanonicalMapper) | Pending |
-| FLEET-01..06 | Phase 1042 (Machine + Fleet + pipeline DI) | Pending |
-| DASH-01, DASH-02 | Phase 1043 (Serializer resolver seam + backward-compat) | Pending |
-| MACH-01..05 | Phase 1044 (Companion machine dimension) | Pending |
-| CMP-01..06 | Phase 1045 (Comparison view) | Pending |
-| DASH-03, DASH-04 | Phase 1046 (Clone/remap) | Pending |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CANON-01 | Phase 1041 (CanonicalMapper) | Pending |
+| CANON-02 | Phase 1041 (CanonicalMapper) | Pending |
+| CANON-03 | Phase 1041 (CanonicalMapper) | Pending |
+| CANON-04 | Phase 1041 (CanonicalMapper) | Pending |
+| CANON-05 | Phase 1041 (CanonicalMapper) | Pending |
+| FLEET-01 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
+| FLEET-02 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
+| FLEET-03 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
+| FLEET-04 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
+| FLEET-05 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
+| FLEET-06 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
+| DASH-01 | Phase 1043 (DashboardSerializer Resolver Seam + Backward Compat) | Pending |
+| DASH-02 | Phase 1043 (DashboardSerializer Resolver Seam + Backward Compat) | Pending |
+| MACH-01 | Phase 1044 (Companion Machine Dimension) | Pending |
+| MACH-02 | Phase 1044 (Companion Machine Dimension) | Pending |
+| MACH-03 | Phase 1044 (Companion Machine Dimension) | Pending |
+| MACH-04 | Phase 1044 (Companion Machine Dimension) | Pending |
+| MACH-05 | Phase 1044 (Companion Machine Dimension) | Pending |
+| CMP-01 | Phase 1045 (Cross-Machine Comparison View) | Pending |
+| CMP-02 | Phase 1045 (Cross-Machine Comparison View) | Pending |
+| CMP-03 | Phase 1045 (Cross-Machine Comparison View) | Pending |
+| CMP-04 | Phase 1045 (Cross-Machine Comparison View) | Pending |
+| CMP-05 | Phase 1045 (Cross-Machine Comparison View) | Pending |
+| CMP-06 | Phase 1045 (Cross-Machine Comparison View) | Pending |
+| DASH-03 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | Pending |
+| DASH-04 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | Pending |
 
 **Coverage:**
 - v1 requirements: 26 total (FLEET 6, CANON 5, MACH 5, CMP 6, DASH 4)
-- Mapped to phases: pending roadmapper confirmation
-- Unmapped: TBD
+- Mapped to phases: 26/26 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-02*
-*Last updated: 2026-06-02 — v5.0 requirements scoped; comparison UX locked to a machine-first compare builder with per-machine data (CMP-06 added; CMP now 6).*
+*Last updated: 2026-06-02 — Traceability confirmed by roadmapper; 26/26 requirements mapped to phases 1041-1046, 100% coverage.*
