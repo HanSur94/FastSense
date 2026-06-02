@@ -32,129 +32,49 @@ classdef DashboardSerializer
                 pos = sprintf('[%d %d %d %d]', ws.position.col, ws.position.row, ...
                     ws.position.width, ws.position.height);
 
-                switch ws.type
-                    case 'fastsense'
-                        showPl = isfield(ws, 'showPlantLog') && ws.showPlantLog;
-                        if isfield(ws, 'source')
-                            switch ws.source.type
-                                case 'sensor'
-                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    if showPl
-                                        lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''), ...', ws.source.name);
-                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
-                                    else
-                                        lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.name);
-                                    end
-                                case 'file'
-                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    if showPl
-                                        lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'', ...', ...
-                                            ws.source.path, ws.source.xVar, ws.source.yVar);
-                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
-                                    else
-                                        lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
-                                            ws.source.path, ws.source.xVar, ws.source.yVar);
-                                    end
-                                case 'data'
-                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    if showPl
-                                        lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s, ...', ...
-                                            mat2str(ws.source.x), mat2str(ws.source.y));
-                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
-                                    else
-                                        lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s);', ...
-                                            mat2str(ws.source.x), mat2str(ws.source.y));
-                                    end
-                                otherwise
-                                    if showPl
-                                        lines{end+1} = sprintf( ...
-                                            '    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', ...
-                                            ws.title, pos);
-                                    else
-                                        lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                                    end
-                            end
-                        else
-                            if showPl
-                                lines{end+1} = sprintf( ...
-                                    '    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', ...
-                                    ws.title, pos);
-                            else
-                                lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                            end
-                        end
-                    case 'number'
-                        line = sprintf('    d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n        ''Units'', ''%s''', ws.units)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'status'
-                        line = sprintf('    d.addWidget(''status'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        lines{end+1} = [line, ');'];
-                    case 'text'
-                        line = sprintf('    d.addWidget(''text'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'content') && ~isempty(ws.content)
-                            line = [line, sprintf(', ...\n        ''Content'', ''%s''', ws.content)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'gauge'
-                        line = sprintf('    d.addWidget(''gauge'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'range')
-                            line = [line, sprintf(', ...\n        ''Range'', [%g %g]', ws.range(1), ws.range(2))];
-                        end
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n        ''Units'', ''%s''', ws.units)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'group'
-                        groupVarName = sprintf('g%d', groupCount);
-                        groupCount = groupCount + 1;
-                        line = sprintf('    %s = d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ...
-                            groupVarName, ws.label, pos);
-                        if isfield(ws, 'mode') && ~isempty(ws.mode)
-                            line = [line, sprintf(', ...\n        ''Mode'', ''%s''', ws.mode)];
-                        end
-                        lines{end+1} = [line, ');'];
-                        % Emit children
-                        if isfield(ws, 'mode') && strcmp(ws.mode, 'tabbed') && isfield(ws, 'tabs') && ~isempty(ws.tabs)
-                            tabs = normalizeToCell(ws.tabs);
-                            for ti = 1:numel(tabs)
-                                tab = tabs{ti};
-                                tabWidgets = normalizeToCell(tab.widgets);
-                                for ci = 1:numel(tabWidgets)
-                                    [childLines, childVar, groupCount] = ...
-                                        DashboardSerializer.emitChildWidget(tabWidgets{ci}, groupCount);
-                                    lines = [lines, childLines];
-                                    lines{end+1} = sprintf('    %s.addChild(%s, ''%s'');', ...
-                                        groupVarName, childVar, tab.name);
-                                end
-                            end
-                        elseif isfield(ws, 'children') && ~isempty(ws.children)
-                            ch = normalizeToCell(ws.children);
-                            for ci = 1:numel(ch)
+                if strcmp(ws.type, 'group')
+                    % Groups need a captured variable (gN) so children can be
+                    % attached via gN.addChild(...). linesForWidget emits only the
+                    % group header, so keep the group-aware emission here.
+                    groupVarName = sprintf('g%d', groupCount);
+                    groupCount = groupCount + 1;
+                    line = sprintf('    %s = d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ...
+                        groupVarName, ws.label, pos);
+                    if isfield(ws, 'mode') && ~isempty(ws.mode)
+                        line = [line, sprintf(', ...\n        ''Mode'', ''%s''', ws.mode)];
+                    end
+                    lines{end+1} = [line, ');'];
+                    % Emit children
+                    if isfield(ws, 'mode') && strcmp(ws.mode, 'tabbed') && isfield(ws, 'tabs') && ~isempty(ws.tabs)
+                        tabs = normalizeToCell(ws.tabs);
+                        for ti = 1:numel(tabs)
+                            tab = tabs{ti};
+                            tabWidgets = normalizeToCell(tab.widgets);
+                            for ci = 1:numel(tabWidgets)
                                 [childLines, childVar, groupCount] = ...
-                                    DashboardSerializer.emitChildWidget(ch{ci}, groupCount);
+                                    DashboardSerializer.emitChildWidget(tabWidgets{ci}, groupCount);
                                 lines = [lines, childLines];
-                                lines{end+1} = sprintf('    %s.addChild(%s);', groupVarName, childVar);
+                                lines{end+1} = sprintf('    %s.addChild(%s, ''%s'');', ...
+                                    groupVarName, childVar, tab.name);
                             end
                         end
-                    case 'divider'
-                        lines{end+1} = sprintf('    d.addWidget(''divider'', ''Position'', %s);', pos);
-                    case 'iconcard'
-                        lines{end+1} = sprintf('    d.addWidget(''iconcard'', ''Title'', ''%s'', ...', ws.title);
-                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
-                    case 'chipbar'
-                        lines{end+1} = sprintf('    d.addWidget(''chipbar'', ''Title'', ''%s'', ...', ws.title);
-                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
-                    case 'sparkline'
-                        lines{end+1} = sprintf('    d.addWidget(''sparkline'', ''Title'', ''%s'', ...', ws.title);
-                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
-                    otherwise
-                        lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
+                    elseif isfield(ws, 'children') && ~isempty(ws.children)
+                        ch = normalizeToCell(ws.children);
+                        for ci = 1:numel(ch)
+                            [childLines, childVar, groupCount] = ...
+                                DashboardSerializer.emitChildWidget(ch{ci}, groupCount);
+                            lines = [lines, childLines];
+                            lines{end+1} = sprintf('    %s.addChild(%s);', groupVarName, childVar);
+                        end
+                    end
+                else
+                    % Delegate all non-group widgets to the complete per-type emitter
+                    % so number/status/gauge ValueFcn/StaticValue/StatusFcn bindings
+                    % (and every other widget type) survive .m export — exactly as
+                    % exportScript already does. The old open-coded switch here was a
+                    % lossy duplicate that dropped those bindings.
+                    wLines = DashboardSerializer.linesForWidget(ws, pos, '    ');
+                    lines = [lines, wLines]; %#ok<AGROW>
                 end
                 lines{end+1} = '';
             end

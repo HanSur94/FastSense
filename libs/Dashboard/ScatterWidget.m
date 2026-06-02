@@ -187,6 +187,29 @@ classdef ScatterWidget < DashboardWidget
             end
             if isfield(s, 'markerSize'), obj.MarkerSize = s.markerSize; end
             if isfield(s, 'colormap'), obj.Colormap = s.colormap; end
+            % Restore the dual-sensor bindings via TagRegistry — dropped before P0-3.
+            % Old structs without these keys load with no binding and no warning.
+            if isfield(s, 'sensorX'), obj.SensorX = ScatterWidget.resolveTag_(s.sensorX, obj.Title); end
+            if isfield(s, 'sensorY'), obj.SensorY = ScatterWidget.resolveTag_(s.sensorY, obj.Title); end
+            if isfield(s, 'sensorColor'), obj.SensorColor = ScatterWidget.resolveTag_(s.sensorColor, obj.Title); end
+        end
+
+        function t = resolveTag_(key, title)
+        %RESOLVETAG_ Resolve a Tag key via TagRegistry; warn (no throw) if absent.
+        %   Mirrors FastSenseWidget:tagNotFound semantics: a missing key yields []
+        %   and a namespaced warning rather than an error, so a dashboard saved
+        %   against a different registry still loads.
+            t = [];
+            if isempty(key), return; end
+            if exist('TagRegistry', 'class')
+                try
+                    t = TagRegistry.get(key);
+                catch
+                    t = [];
+                    warning('ScatterWidget:sourceUnresolved', ...
+                        'Unresolved sensor ''%s'' for Scatter ''%s''.', key, title);
+                end
+            end
         end
     end
 end

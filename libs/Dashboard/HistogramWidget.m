@@ -142,6 +142,17 @@ classdef HistogramWidget < DashboardWidget
             if isfield(s, 'numBins'), obj.NumBins = s.numBins; end
             if isfield(s, 'showNormalFit'), obj.ShowNormalFit = s.showNormalFit; end
             if isfield(s, 'edgeColor'), obj.EdgeColor = s.edgeColor; end
+            % Restore the data binding (callback) — dropped before P0-3.
+            if isfield(s, 'source') && isfield(s.source, 'type')
+                switch s.source.type
+                    case 'callback'
+                        obj.DataFcn = str2func(s.source.function);
+                    otherwise
+                        warning('HistogramWidget:sourceUnresolved', ...
+                            'Unresolved source type ''%s'' for Histogram ''%s''.', ...
+                            s.source.type, obj.Title);
+                end
+            end
         end
     end
 end

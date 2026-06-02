@@ -189,5 +189,60 @@ classdef TestDashboardSerializerRoundTrip < matlab.unittest.TestCase
             testCase.verifyEqual(etw.Events(2).label, 'B', ...
                 'EventTimelineWidget second event label should be B');
         end
+
+        function testChartCallbackRoundTrip(testCase)
+            %TESTCHARTCALLBACKROUNDTRIP P0-3: a callback chart widget's DataFcn
+            %   must survive toStruct/fromStruct (was silently dropped before).
+            w = BarChartWidget('Title', 'Bars');
+            w.DataFcn = @() [1 2 3];
+            s = w.toStruct();
+            w2 = BarChartWidget.fromStruct(s);
+            testCase.verifyNotEmpty(w2.DataFcn, 'DataFcn must be restored from s.source');
+            testCase.verifyEqual(func2str(w2.DataFcn), func2str(w.DataFcn));
+        end
+
+        function testScatterSensorRoundTrip(testCase)
+            %TESTSCATTERSENSORROUNDTRIP P0-3: Scatter SensorX/SensorY must be
+            %   restored from TagRegistry on load (was silently dropped before).
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            tx = SensorTag('sx', 'X', 1:5, 'Y', 1:5);
+            ty = SensorTag('sy', 'X', 1:5, 'Y', 2:6);
+            TagRegistry.register('sx', tx);
+            TagRegistry.register('sy', ty);
+            w = ScatterWidget('Title', 'Sc');
+            w.SensorX = tx;
+            w.SensorY = ty;
+            s = w.toStruct();
+            w2 = ScatterWidget.fromStruct(s);
+            testCase.verifyNotEmpty(w2.SensorX, 'SensorX must be restored');
+            testCase.verifyNotEmpty(w2.SensorY, 'SensorY must be restored');
+            testCase.verifyEqual(w2.SensorX.Key, 'sx');
+        end
+
+        function testChartOldStructNoSourceLoadsQuietly(testCase)
+            %TESTCHARTOLDSTRUCTNOSOURCELOADSQUIETLY P0-3 backward-compat: an old
+            %   chart struct WITHOUT s.source must load with no binding and NO warning.
+            s = struct('type', 'barchart', 'title', 'B', ...
+                'position', struct('col', 1, 'row', 1, 'width', 8, 'height', 4));
+            lastwarn('');
+            w2 = BarChartWidget.fromStruct(s);
+            [~, wid] = lastwarn();
+            testCase.verifyEmpty(wid, 'Old struct without source must not emit a warning');
+            testCase.verifyEmpty(w2.DataFcn);
+        end
+
+        function testSaveEmitsNumberBinding(testCase)
+            %TESTSAVEEMITSNUMBERBINDING P0-3: DashboardSerializer.save (.m export)
+            %   must emit the ValueFcn binding (it was dropped before the fix).
+            d = DashboardEngine('rt');
+            d.addWidget('number', 'Title', 'Speed', 'Position', [1 1 4 2], ...
+                'ValueFcn', @() 42);
+            filepath = fullfile(testCase.TempDir, 'rtbind.m');
+            d.save(filepath);
+            txt = fileread(filepath);
+            testCase.verifyTrue(contains(txt, 'ValueFcn'), ...
+                'save() must emit the number ValueFcn binding');
+        end
     end
 end
