@@ -80,6 +80,8 @@ classdef FastSenseWidget < DashboardWidget
         LastEventSeverity_ = []    % Phase 1012 — numeric array parallel to LastEventIds_
         PreviewCache_      = []    % 260508-das — cached getPreviewSeries result
         PreviewCacheKey_   = []    % [numel(x), x(1), x(end), nBucketsEff] sentinel
+        TimeWindow_        = []    % [t0 t1] datenum pushed by DashboardEngine.setTimeWindow; [] = full range
+        ShowingEmptyState_ = false % true while 'No data in selected range' label is rendered
     end
 
     % Phase 1032 — XLim listener slot. Public READ (tests + engine
@@ -146,6 +148,44 @@ classdef FastSenseWidget < DashboardWidget
 
         function render(obj, parentPanel)
             obj.hPanel = parentPanel;
+            obj.ShowingEmptyState_ = false;
+
+            % Early empty-state check for Tag-bound windowed or disk-backed paths.
+            % For a NON-EMPTY window: probe via pullData_() = getXYRange(t0,t1).
+            % For an EMPTY window on a DISK-backed tag: probe full extent via
+            % getTimeRange() + getXYRange(tMin,tMax) (the 'All data' disk fix).
+            % If the probed data is empty, render the 'No data in selected range'
+            % label directly into parentPanel and return before creating axes.
+            % Cache the probed [xw,yw] so the bind block below can reuse them
+            % without a second getXYRange call.
+            xw = [];
+            yw = [];
+            needsProbeCheck_ = false;
+            if ~isempty(obj.Tag)
+                if ~isempty(obj.TimeWindow_)
+                    needsProbeCheck_ = true;
+                    try
+                        [xw, yw] = obj.pullData_();
+                    catch
+                        xw = [];
+                        yw = [];
+                    end
+                elseif ismethod(obj.Tag, 'isOnDisk') && obj.Tag.isOnDisk()
+                    needsProbeCheck_ = true;
+                    try
+                        [tMin, tMax] = obj.Tag.getTimeRange();
+                        [xw, yw] = obj.Tag.getXYRange(tMin, tMax);
+                    catch
+                        xw = [];
+                        yw = [];
+                    end
+                end
+                if needsProbeCheck_ && isempty(xw)
+                    obj.renderEmptyState_(parentPanel);
+                    obj.ShowingEmptyState_ = true;
+                    return;
+                end
+            end
 
             % Create axes inside the panel
             ax = axes('Parent', parentPanel, ...
@@ -192,8 +232,29 @@ classdef FastSenseWidget < DashboardWidget
             fp.LiveViewMode = obj.LiveViewMode;
 
             % Bind data — Tag-first dispatch (v2.0).
+            % THREE-WAY branch on the Tag path (Phase 1041-03):
+            %   (1) TimeWindow_ non-empty  -> bind windowed arrays via fp.addLine.
+            %       getXYRange routes through DataStore.getRange for disk-backed
+            %       sensors (overlapping chunks only) and binary-search-slices in RAM.
+            %       xw/yw were probed above — reuse to avoid a second call.
+            %   (2) TimeWindow_ empty AND tag is disk-backed ('All data' preset fix):
+            %       getXY() is EMPTY on disk; fp.addTag would bind a BLANK line.
+            %       Resolve full extent via getXYRange(getTimeRange()) -> fp.addLine.
+            %       xw/yw were probed above — reuse here too.
+            %   (3) TimeWindow_ empty AND tag is NOT disk-backed (in-RAM SensorTag,
+            %       Derived/Composite/State/Monitor): byte-identical to today.
             if ~isempty(obj.Tag)
-                fp.addTag(obj.Tag);
+                if ~isempty(obj.TimeWindow_)
+                    % (1) Windowed: xw already fetched by the probe block above.
+                    % Empty case was caught there (returned early), so xw is non-empty here.
+                    fp.addLine(xw, yw, 'DisplayName', obj.Tag.Name);
+                elseif ismethod(obj.Tag, 'isOnDisk') && obj.Tag.isOnDisk()
+                    % (2) Empty window + DISK-backed: xw is full-extent data from above.
+                    fp.addLine(xw, yw, 'DisplayName', obj.Tag.Name);
+                else
+                    % (3) Empty window + in-RAM tag: byte-identical to today's fp.addTag path.
+                    fp.addTag(obj.Tag);
+                end
             elseif ~isempty(obj.DataStoreObj)
                 fp.addLine([], [], 'DataStore', obj.DataStoreObj);
             elseif ~isempty(obj.File)
@@ -280,7 +341,7 @@ classdef FastSenseWidget < DashboardWidget
                 yInit = [];
                 try
                     if ~isempty(obj.Tag)
-                        [~, yInit] = obj.Tag.getXY();
+                        [~, yInit] = obj.pullData_();
                     elseif ~isempty(obj.YData)
                         yInit = obj.YData;
                     end
@@ -332,9 +393,9 @@ classdef FastSenseWidget < DashboardWidget
                       obj.FastSenseObj.IsRendered && ...
                       ~isempty(obj.FastSenseObj.hAxes) && ...
                       ishandle(obj.FastSenseObj.hAxes);
-            if tagUnchanged && fpValid
+            if tagUnchanged && ~obj.ShowingEmptyState_ && fpValid
                 try
-                    [x, y] = obj.Tag.getXY();
+                    [x, y] = obj.pullData_();
                     obj.FastSenseObj.updateData(1, x, y);
                     % autoScaleY_(y) removed (260513-ovt): live ticks must
                     % not rescale Y — the user's Y view is preserved
@@ -362,9 +423,9 @@ classdef FastSenseWidget < DashboardWidget
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
-            if ~isempty(obj.FastSenseObj) && obj.FastSenseObj.IsRendered
+            if ~obj.ShowingEmptyState_ && ~isempty(obj.FastSenseObj) && obj.FastSenseObj.IsRendered
                 try
-                    [x, y] = obj.Tag.getXY();
+                    [x, y] = obj.pullData_();
                     obj.FastSenseObj.updateData(1, x, y);
                     % autoScaleY_(y) removed (260513-ovt): live ticks must
                     % not rescale Y — see refresh() above for rationale.
@@ -589,6 +650,24 @@ classdef FastSenseWidget < DashboardWidget
                     % autoScaleY_'s mode dispatch treats 'locked' as no-op.
                     obj.autoScaleY_([]);
             end
+        end
+
+        function setTimeWindow(obj, t0, t1)
+        %SETTIMEWINDOW Set the load window for this widget's data pulls.
+        %   t0, t1 datenum scalars; both [] resets to full range.
+        %   The DashboardEngine pushes this before re-rendering. Data is
+        %   pulled via Tag.getXYRange when set, Tag.getXY when empty.
+            if nargin < 3 || isempty(t0) || isempty(t1)
+                obj.TimeWindow_ = [];
+            else
+                obj.TimeWindow_ = [t0, t1];
+            end
+        end
+
+        function tf = isShowingEmptyState(obj)
+        %ISSHOWINGEMPYSTATE Returns true when 'No data in selected range' is displayed.
+        %   False when the widget has plotted data, or when no render has occurred.
+            tf = obj.ShowingEmptyState_;
         end
 
         function autoScaleY_(obj, y)
@@ -1244,6 +1323,52 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function [x, y] = pullData_(obj)
+        %PULLDATA_ Windowed data pull. Honors TimeWindow_ via getXYRange;
+        %   full series via getXY when no window is set.
+            if ~isempty(obj.TimeWindow_)
+                [x, y] = obj.Tag.getXYRange(obj.TimeWindow_(1), obj.TimeWindow_(2));
+            else
+                [x, y] = obj.Tag.getXY();
+            end
+        end
+
+        function renderEmptyState_(obj, parentPanel)
+        %RENDEREMPTYSTATE_ Render 'No data in selected range' centered label.
+        %   Mirrors DashboardListPane.renderEmptyState_ — a 1x1 grid filling
+        %   the panel with a centered bold label. Called when a windowed pull
+        %   yields empty data.
+            theme = struct('WidgetBackground', [0.15 0.15 0.17], ...
+                           'PlaceholderTextColor', [0.5 0.5 0.55]);
+            try
+                t = obj.getTheme();
+                if isstruct(t)
+                    if isfield(t, 'WidgetBackground')
+                        theme.WidgetBackground = t.WidgetBackground;
+                    end
+                    if isfield(t, 'PlaceholderTextColor')
+                        theme.PlaceholderTextColor = t.PlaceholderTextColor;
+                    end
+                end
+            catch
+            end
+            g = uigridlayout(parentPanel, [1, 1]);
+            g.RowHeight       = {'1x'};
+            g.ColumnWidth     = {'1x'};
+            g.Padding         = [16 16 16 16];
+            g.BackgroundColor = theme.WidgetBackground;
+            lbl = uilabel(g);
+            lbl.Layout.Row          = 1;
+            lbl.Layout.Column       = 1;
+            lbl.Text                = 'No data in selected range';
+            lbl.FontSize            = 14;
+            lbl.FontWeight          = 'bold';
+            lbl.FontColor           = theme.PlaceholderTextColor;
+            lbl.BackgroundColor     = theme.WidgetBackground;
+            lbl.HorizontalAlignment = 'center';
+            lbl.VerticalAlignment   = 'center';
+        end
+
         function y = getYFromTagOrInline_(obj)
         %GETYFROMTAGORINLINE_ Full y vector from Tag (preferred) or inline YData.
         %   Returns [] when neither source yields data. Used by the
