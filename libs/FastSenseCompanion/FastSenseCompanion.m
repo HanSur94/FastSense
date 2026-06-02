@@ -1877,6 +1877,16 @@ classdef FastSenseCompanion < handle
                 if ~isempty(obj.EventsLogPane_) && isvalid(obj.EventsLogPane_)
                     obj.EventsLogPane_.setLastUpdated(datetime('now'));
                 end
+                % Phase 1040 — Notification center refresh (no new timer; piggybacks this tick).
+                % Only when attached; guarded so it can never crash the live timer.
+                if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_) && obj.NotifPane_.IsAttached
+                    try
+                        obj.NotifPane_.refresh(obj.getEventStore());
+                        obj.updateBellBadge_();
+                    catch
+                        % Must never crash the live timer.
+                    end
+                end
                 % Phase 1033 Plan 04 — cluster surfacing (dormant in single-user mode)
                 if obj.IsClusterMode_
                     obj.pollClusterContention_();
