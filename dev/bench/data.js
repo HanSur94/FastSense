@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780381936457,
+  "lastUpdate": 1780382027057,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -102112,6 +102112,430 @@ window.BENCHMARK_DATA = {
           {
             "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
             "value": 2114.262,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c02e34d633256d03af0518a17dc985746560e068",
+          "message": "Phase 1039: Background monitoring with email notifications (#170)\n\n* feat(1039-01): add NotificationService NV-pair to LiveEventPipeline ctor\n\n- Add defaults.NotificationService = [] (D-01): explicit NV-pair, default empty\n- Replace auto-created NotificationService('DryRun', true) with opts.NotificationService\n- Public NotificationService property stays assignable post-construction (back-compat)\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* feat(1039-01): add sensorDataForEvent_ private helper\n\n- Resolves per-event sensor data from MonitorTargets(ev.SensorName).Parent.getXY()\n- Produces .X/.Y/.thresholdValue/.thresholdDirection (generateEventSnapshot contract)\n- Slices window [evStart - ctxHours/24 - pad, evEnd + pad]; ctxHours/padFrac from best-matching NotificationRule (fallback 2.0h / 0.1)\n- Open events (EndTime=NaN) use X(end) as evEnd\n- Defensive: missing key / no Parent / no getXY -> empty X/Y + warning, no throw\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* fix(1039-01): pass real sensorData to notify in runCycle (was struct())\n\n- Replace notify(ev, struct()) with sd = sensorDataForEvent_(ev); notify(ev, sd)\n- Fixes empty snapshots: generateEventSnapshot reads sensorData.X/.Y which were empty\n- try/catch wrapper preserved; ~isempty(NotificationService) guard unchanged\n- Verified end-to-end: notify receives 211-pt populated sensorData covering the event window\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* feat(1039-02): add runBackgroundMonitoring headless entry function\n\n- New libs/EventDetection/runBackgroundMonitoring.m: pipeline = runBackgroundMonitoring(setupFcn, varargin)\n- NV-pairs 'PollSec' (default 60, >=1) and 'MaxRuntimeSec' (default 0=infinite, >=0) via parseOpts\n- Validates setupFcn type + return shape; error IDs invalidSetupFcn / invalidOption / setupFcnFailed / setupFcnBadReturn\n- pipeline.start() then [BG] heartbeat loop ([BG] HH:MM:SS  events=N  emails=M  uptime=Ts), onCleanup(safeStop_) stops on every exit path\n- Catch block is a single fprintf fall-through (no dead-code conditional, no catenate:dimensionMismatch)\n- Octave-portability fixes in validation + safeStop_ (ismethod cell-array/non-object, isvalid not in Octave) so CI Octave path works\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* fix(1039-03): handle open events (NaN EndTime) in notification path\n\nOpen events (still in violation) carry EndTime=NaN, which made two\nnotification-path functions throw and abort the notify/snapshot for\nevery open-event alert:\n\n- NotificationRule.fillTemplate: datestr(NaN) threw (\"Date number out\n  of range\" on MATLAB / \"monthlength(nan)\" on Octave). Now {endTime}\n  renders as (open) and NaN {duration} as (ongoing) via the new private\n  static formatTimeOrOpen_; closed-event formatting is unchanged.\n- generateEventSnapshot: NaN EndTime propagated to evDur/padAmount/xMin/\n  xMax, so xlim() threw (\"Limits must be a 2-element vector of\n  increasing numeric values\"). Now clamps open-event end to the last\n  sample (mirrors LiveEventPipeline.sensorDataForEvent_) and guards the\n  xlim call against degenerate/non-increasing windows.\n\nSurfaced by the Phase 1039 background-email demo: a fast-firing pipeline\nproduces open events at notify time. Required for the demo to run\nwarning-free and for live/background email alerts on open events.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* feat(1039-03): add background email monitor setup function + demo wrapper\n\n- example_background_email_monitor_setup.m: TOP-LEVEL function file\n  returning a configured LiveEventPipeline (2 sensors + 1 catch-all\n  NotificationRule). DryRun toggles off only when FASTSENSE_SMTP_SERVER\n  is set. Wired via the 'NotificationService' NV-pair (Plan 01). A\n  standalone function file so @example_background_email_monitor_setup\n  resolves from matlab -batch supervisor invocations.\n- example_background_email_monitor.m: thin wrapper SCRIPT (no embedded\n  setup-function def) that bootstraps install.m and calls\n  runBackgroundMonitoring(@example_background_email_monitor_setup,\n  'PollSec', 2, 'MaxRuntimeSec', 8) for a bounded demo run.\n\nEach MonitorTag is bound to a shared EventStore so the pipeline can\nharvest per-tick event deltas (proven Tag-path pattern from\ntests/test_live_event_pipeline_tag.m); without it zero events are\nharvested and the notify path never fires.\n\nVerified on MATLAB R2025b: demo runs end-to-end in ~8.7s, harvests 36\nevents, fires 36 dry-run notifications, generates snapshot PNGs, and\nexits cleanly (Status=stopped). which/@-handle resolution confirmed.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* docs(1039-03): add operator README for background email monitoring\n\nexamples/05-events/README_background_email.md documents unattended\nLiveEventPipeline operation:\n- matlab -batch invocation + bounded demo quick-start\n- launchd (.plist), systemd (.service), and cron supervisor snippets,\n  each invoking runBackgroundMonitoring(@example_background_email_monitor_setup, ...)\n  as a function handle (valid now that the setup is a top-level file)\n- SMTP config via env vars (FASTSENSE_SMTP_SERVER / FROM_ADDR / RECIPIENT)\n  + optional setpref('Internet', ...) auth, with a never-commit-secrets warning\n- dry-run <-> real-email toggle table, heartbeat grep/awk recipe,\n  multi-Companion notification note, and a troubleshooting section\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* test(1039-04): add sensorData regression test + capture mock\n\n- tests/CaptureNotificationService.m: NotificationService subclass that\n  stashes notify() (event, sensorData) args instead of emailing\n- tests/test_live_event_pipeline_notif_sensor_data.m: 2 sub-tests proving\n  runCycle passes populated sensorData (.X/.Y/.thresholdValue/\n  .thresholdDirection), guarding Plan 01's struct() bug fix\n- exercises the real runCycle notify path end-to-end (not sensorDataForEvent_\n  in isolation); reuses MakePhase1009Fixtures.makeEventStoreTmp()\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* test(1039-04): add runBackgroundMonitoring lifecycle regression test\n\n- tests/test_run_background_monitoring.m: 5 sub-tests for Plan 02's headless runner\n  - lifecycle: MaxRuntimeSec=2 returns in [2,5)s with pipeline.Status=='stopped'\n  - error IDs: invalidSetupFcn, setupFcnBadReturn, invalidOption\n- lifecycle sub-tests verified 5/5 under MATLAB R2025b (timer-backed start());\n  3 error-ID sub-tests also pass under Octave (timer not reached)\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* docs(1039): record phase in roadmap + planning artifacts\n\nAdds the Phase 1039 progress row + detail section to ROADMAP.md and the\nphase's planning artifacts (CONTEXT, PLANs, SUMMARYs, VERIFICATION) now\nthat main tracks .planning/ (#168). STATE.md left to main's canonical\nversion (ephemeral session tracking).\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* fix(1039): address code review findings (open-event stats, error-path stop, fig leak, demo store)\n\nCode review of PR #170 surfaced 4 issues; all fixed:\n\n- [M] NotificationRule.fillTemplate: {peak}/{mean}/{rms}/{std} expanded to\n  empty strings for open events (sprintf('%.4g', []) -> ''), rendering\n  'Peak: , Mean: ' in alerts. Added formatStatOrOpen_ guard -> '(ongoing)'.\n  Completes this phase's open-event handling (time/duration were already\n  guarded; stats were missed).\n- [M] runBackgroundMonitoring.safeStop_: only stopped on Status=='running',\n  so the error-exit path (timerError sets 'error' without stopping the\n  timer) leaked the timer handle. Now stops on {'running','error'}.\n- [L] generateEventSnapshot.renderSnapshot: figure closed via onCleanup so a\n  throwing print() can't leak invisible figures in the long-running runner.\n- [L] example setup: reuse the single EventStore handle (pass EventFile='',\n  assign pipeline.EventStore) instead of opening a second store on the same\n  path — correct template for real deployments.\n\nVerified: test_notification_rule, test_notification_service,\ntest_live_event_pipeline_notif_sensor_data (2/2), test_run_background_monitoring\n(5/5) all pass; open-event template renders '(ongoing)'/'(open)' not blanks;\nMISS_HIT lint+style clean.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* fix(1039): report true post-stop status in runner exit log\n\nThe [BG] exit line read pipeline.Status before onCleanup stopped the\npipeline, so it always logged status=running even though the pipeline\nstopped correctly right after. Call safeStop_ explicitly before the exit\nlog (idempotent; onCleanup remains a safety net) so the line reports the\ntrue final status. Verified: exit line now reads status=stopped;\ntest_run_background_monitoring 5/5.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* test(1039): add class-based suite test for MATLAB coverage\n\nCodecov flagged ~0% patch coverage on runBackgroundMonitoring.m and the\nLiveEventPipeline sensorData path. Root cause: run_all_tests' MATLAB path\nruns TestSuite.fromFolder(tests/suite) only — the Phase 1039 regression\ntests are function-based (tests/test_*.m) and execute on the Octave path,\nso the runner's MATLAB-only (timer) behavior had zero MATLAB-measured\ncoverage. This class-based suite mirrors those tests so the coverage job\nexercises the new code: runner lifecycle + 3 error-ID branches, the\nrunCycle sensorData fix, and the NotificationRule open-event guards.\n\n9/9 pass under matlab.unittest (R2025b).\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n* fix(1039): gate timer-driven runner tests to MATLAB (Octave has no timer)\n\ntest_run_background_monitoring ran its two lifecycle sub-tests\nunconditionally; on Octave pipeline.start() -> timer errors ('timer'\nundefined), so the Octave Tests CI job failed on this new test (on top of\nmain's pre-existing test_mex_parity failure). Gate the timer tests behind\nexist('OCTAVE_VERSION','builtin') so Octave runs only the 3 input-validation\nerror-ID tests (which throw before any timer is created); MATLAB still runs\nall 5. Verified locally: Octave 3/3 + SKIP, MATLAB 5/5.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-06-02T08:13:52+02:00",
+          "tree_id": "bdad43593640a047f96ba83b39e4212a5fd106f1",
+          "url": "https://github.com/HanSur94/FastSense/commit/c02e34d633256d03af0518a17dc985746560e068"
+        },
+        "date": 1780382024833,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.348,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.007,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 163.803,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 0.602,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 253.7,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 4.617,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 18.684,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.406,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 8.084,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.051,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 187.189,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 1.287,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 260.093,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 1.731,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 16.946,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.629,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 15.807,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.112,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 208.413,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 1.449,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 265.817,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 1.629,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 17.607,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.525,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 81.662,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.085,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1375.63,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 10.129,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 263.044,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 3.297,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 17.173,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.919,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 160.401,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 4.411,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2265.624,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 44.587,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 263.095,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 2.946,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 18.262,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.623,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 788.692,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 1.285,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 23439.327,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 568.253,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 384.98,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 96.772,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 18.708,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1.491,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 1266.961,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 20.688,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 363.721,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 3.765,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 274.465,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 1.294,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 180.401,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 0.722,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_min_ms",
+            "value": 1683.346,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_median_ms",
+            "value": 1709.828,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_min_ms",
+            "value": 2799.919,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_min_ms",
+            "value": 2799.919,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_min_ms",
+            "value": 5149.649,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_on_min_ms",
+            "value": 2799.919,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_off_min_ms",
+            "value": 2678.142,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_min_ms",
+            "value": 2799.919,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_min_ms",
+            "value": 2781.104,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_lastfsstat_count",
+            "value": 1,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_lastfsstat_count",
+            "value": 1600,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_parse_ms_per_tick",
+            "value": 14.623,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_mat_write_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_select_ms_per_tick",
+            "value": 56.697,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_other_ms_per_tick",
+            "value": 1633.139,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_monitor_recompute_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_composite_merge_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_aggregate_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_listener_fanout_ms_per_tick",
+            "value": 71.628,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_total_profiled_ms_per_tick",
+            "value": 1776.087,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick",
+            "value": 649.514,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick",
+            "value": 1917.284,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick",
+            "value": 2312.184,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
+            "value": 1981.71,
             "unit": "ms"
           }
         ]
