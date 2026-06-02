@@ -1471,8 +1471,17 @@ classdef FastSenseCompanion < handle
         end
 
         function onLiveTickForTest_(obj)
-        %ONLIVETICKFORTEST_ Test seam: drive one onLiveTick_ without the timer.
-            obj.onLiveTick_();
+        %ONLIVETICKFORTEST_ Test seam: drive one onLiveTick_ body even when not live.
+        %   Temporarily forces IsLive so the tick runs without starting the timer,
+        %   then restores the prior value (deterministic, timer-free tests).
+            prevLive = obj.IsLive;
+            obj.IsLive = true;
+            try
+                obj.onLiveTick_();
+            catch
+                % onLiveTick_ has its own guard; never propagate from the seam.
+            end
+            obj.IsLive = prevLive;
         end
 
         function p = notifPaneForTest_(obj)

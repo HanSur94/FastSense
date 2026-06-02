@@ -1251,6 +1251,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
 
         function testToolbarHasWikiButton(testCase)
         %TESTTOOLBARHASWIKIBUTTON CompanionWikiBtn exists and sits in column 7.
+        %   Phase 1040: the bell follows at col 8; Wiki is unchanged at col 7.
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
             btn = findall(app.getFigForTest_(), 'Tag', 'CompanionWikiBtn');
@@ -1263,21 +1264,154 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         end
 
         function testToolbarGearMovedToColumn8(testCase)
-        %TESTTOOLBARGEARMOVEDTOCOLUMN8 Settings gear lives in column 8 after the Phase 1034 reflow.
+        %TESTTOOLBARGEARMOVEDTOCOLUMN8 Settings gear lives in column 10 after the Phase 1040 bell insert.
+        %   Method name intentionally preserved (per STATE.md 260526-tcf / RESEARCH Pitfall 1);
+        %   the gear shifted 9 -> 10 when the Phase 1040 bell took col 8.
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
             btns = findall(app.getFigForTest_(), 'Type', 'uibutton');
             found = false;
             for k = 1:numel(btns)
                 if ~isempty(btns(k).Text) && strcmp(btns(k).Text, char(9881))
-                    testCase.verifyEqual(btns(k).Layout.Column, 9, ...
-                        'testToolbarGearMovedToColumn8: gear button should now sit in column 9');
+                    testCase.verifyEqual(btns(k).Layout.Column, 10, ...
+                        'testToolbarGearMovedToColumn8: gear button should now sit in column 10');
                     found = true;
                     break;
                 end
             end
             testCase.verifyTrue(found, ...
                 'testToolbarGearMovedToColumn8: gear button not found on toolbar');
+        end
+
+        % ---- Phase 1040: Notification Center integration ----
+
+        function testBellButtonAtColumn8(testCase)
+        %TESTBELLBUTTONATCOLUMN8 Bell sits at toolbar column 8.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            testCase.verifyEqual(numel(b), 1, 'expected exactly one bell button');
+            testCase.verifyEqual(b.Layout.Column, 8, 'bell should sit in column 8');
+        end
+
+        function testRootGridHasFourColumns(testCase)
+        %TESTROOTGRIDHASFOURCOLUMNS Root grid has 4 columns; the 4th starts hidden (0).
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            cw = app.getRootColumnWidthForTest_();
+            testCase.verifyEqual(numel(cw), 4, 'root grid should have 4 columns');
+            testCase.verifyEqual(cw{4}, 0, 'notification column should start hidden (0)');
+        end
+
+        function testBellTogglesFourthColumn(testCase)
+        %TESTBELLTOGGLESFOURTHCOLUMN Toggling shows (320) then hides (0) the 4th column.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.toggleNotificationCenter_(); drawnow;
+            cw = app.getRootColumnWidthForTest_();
+            testCase.verifyEqual(cw{4}, 320, 'first toggle should show the column at 320');
+            app.toggleNotificationCenter_(); drawnow;
+            cw = app.getRootColumnWidthForTest_();
+            testCase.verifyEqual(cw{4}, 0, 'second toggle should hide the column');
+        end
+
+        function testBellDisabledWithoutEventStore(testCase)
+        %TESTBELLDISABLEDWITHOUTEVENTSTORE Bell disabled + tooltipped when there is no store.
+            TagRegistry.clear(); testCase.addTeardown(@() TagRegistry.clear());
+            app = FastSenseCompanion('EventStore', []);
+            testCase.addTeardown(@() app.close());
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            testCase.verifyTrue(strcmp(char(b.Enable), 'off'), 'bell should be disabled with no store');
+            testCase.verifyEqual(b.Tooltip, 'No EventStore registered');
+        end
+
+        function testBellEnabledWithEventStore(testCase)
+        %TESTBELLENABLEDWITHEVENTSTORE Bell enabled when a store is present.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            testCase.verifyTrue(strcmp(char(b.Enable), 'on'), 'bell should be enabled with a store');
+        end
+
+        function testBellBadgeReflectsUnackedCount(testCase)
+        %TESTBELLBADGEREFLECTSUNACKEDCOUNT Badge shows the unacked count; decrements after an ack.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            e  = Event(now-0.01, NaN, 'P-101', 'HighPressure', 100, 'upper');
+            e.Severity = 3; e.IsOpen = true;
+            e2 = Event(now-0.02, now-0.015, 'T-200', 'Overtemp', 80, 'upper');
+            e2.Severity = 2;
+            es.append([e e2]);
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.toggleNotificationCenter_();
+            app.onLiveTickForTest_(); drawnow;
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            testCase.verifyTrue(~isempty(strfind(b.Text, '(2)')), ...
+                'badge should show (2) for two unacked events'); %#ok<STREMP>
+            es.acknowledgeEvent(e2.Id, struct('comment', ''));
+            app.onLiveTickForTest_(); drawnow;
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            testCase.verifyTrue(~isempty(strfind(b.Text, '(1)')), ...
+                'badge should show (1) after acknowledging one'); %#ok<STREMP>
+        end
+
+        function testBellBadgeSeverityColor(testCase)
+        %TESTBELLBADGESEVERITYCOLOR Badge background is StatusAlarmColor when an alarm is unacked.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            e = Event(now-0.01, NaN, 'P-101', 'HighPressure', 100, 'upper');
+            e.Severity = 3; e.IsOpen = true;
+            es.append(e);
+            app = FastSenseCompanion('EventStore', es, 'Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            app.toggleNotificationCenter_();
+            app.onLiveTickForTest_(); drawnow;
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            t = CompanionTheme.get('dark');
+            testCase.verifyEqual(b.BackgroundColor, t.StatusAlarmColor, 'AbsTol', 1e-6, ...
+                'sev-3 unacked badge should use StatusAlarmColor');
+        end
+
+        function testOnLiveTickRefreshesNotifPane(testCase)
+        %TESTONLIVETICKREFRESHESNOTIFPANE A new event after construction is picked up on the next tick.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.toggleNotificationCenter_();
+            app.onLiveTickForTest_(); drawnow;   % no events yet -> plain glyph
+            e = Event(now-0.01, NaN, 'P-101', 'HighPressure', 100, 'upper');
+            e.Severity = 2;
+            es.append(e);
+            app.onLiveTickForTest_(); drawnow;   % tick must pick up the new event
+            b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
+            testCase.verifyTrue(~isempty(strfind(b.Text, '(1)')), ...
+                'onLiveTick_ should refresh the badge to (1) after a new event'); %#ok<STREMP>
+        end
+
+        function testNotifPaneDetachReinline(testCase)
+        %TESTNOTIFPANEDETACHREINLINE DetachRequested pops a window; close() tears it down.
+            storePath = [tempname() '.mat'];
+            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
+            app = FastSenseCompanion('EventStore', es);
+            testCase.addTeardown(@() app.close());
+            app.toggleNotificationCenter_(); drawnow;
+            figName = sprintf('Notification Center %s FastSenseCompanion', char(8212));
+            notify(app.notifPaneForTest_(), 'DetachRequested'); drawnow;
+            det = findall(groot, 'Type', 'figure', 'Name', figName);
+            testCase.verifyNotEmpty(det, 'detach should create the notification window');
+            app.close(); drawnow;
+            det2 = findall(groot, 'Type', 'figure', 'Name', figName);
+            testCase.verifyEmpty(det2, 'close() should tear down the detached window');
         end
 
         function testOpenWikiOpensWikiBrowser(testCase)
