@@ -160,7 +160,16 @@ classdef CompanionEventViewer < handle
         function bringToFront(obj)
         %BRINGTTOFRONT Raise the viewer figure. No-op if figure is gone.
             if ~isempty(obj.hFigure) && isgraphics(obj.hFigure)
-                figure(obj.hFigure);
+                % Best-effort: figure()/toFront errors on a headless CEF
+                % uifigure (no display, e.g. -batch CI) — the figure realized
+                % by buildFigure_'s drawnow has a CEF host whose toFront is
+                % unsupported there. Raising the window is non-essential, so
+                % swallow that case rather than propagate it to callers/tests.
+                try
+                    figure(obj.hFigure);
+                catch
+                    % Headless/offscreen: toFront unavailable — leave as-is.
+                end
             end
         end
 
