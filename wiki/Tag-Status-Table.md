@@ -53,6 +53,6 @@ Click again to **Resume polling**. Useful when you want a stable snapshot of the
 
 ## See also
 
-- [Companion Overview](Companion-Overview)
-- [Live Log](Live-Log)
-- [Event Viewer](Event-Viewer)
+- [Companion Overview](Companion-Overview.md)
+- [Live Log](Live-Log.md)
+- [Event Viewer](Event-Viewer.md)

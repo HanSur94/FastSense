@@ -106,6 +106,27 @@ function varargout = install(varargin)
         first_run(root);
     end
 
+    % --- Always: ensure the Concurrency lockfile_mex is compiled ---
+    % lockfile_mex is the only MEX NOT committed to the repo, so the
+    % needs_build() gate above (which probes the committed FastSense
+    % binary_search_mex) returns false on a clean checkout that ships
+    % prebuilt FastSense binaries — and first_run()/build_mex() never
+    % runs build_concurrency_mex().  Build it here, independent of that
+    % gate, so every consumer (tests, FileLock, the concurrency CI
+    % smoke) gets it.  Best-effort: honour FASTSENSE_SKIP_BUILD (CI with
+    % cached/prebuilt binaries) and never block install() on a missing
+    % C compiler (FileLock falls back to pure-MATLAB sidecar mode).
+    if isempty(getenv('FASTSENSE_SKIP_BUILD')) ...
+            && exist('lockfile_mex', 'file') ~= 3 ...
+            && exist('build_concurrency_mex', 'file') == 2
+        try
+            build_concurrency_mex();
+        catch concErr
+            warning('install:concurrencyMexFailed', ...
+                'lockfile_mex compile skipped (non-fatal): %s', concErr.message);
+        end
+    end
+
     % --- Once per session: JIT warmup ---
     jit_warmup();
 end

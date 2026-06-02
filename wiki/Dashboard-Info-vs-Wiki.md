@@ -52,5 +52,5 @@ The two systems never collide on the same button. They can both exist on the sam
 
 ## See also
 
-- [Companion Overview](Companion-Overview)
-- [Home](Home)
+- [Companion Overview](Companion-Overview.md)
+- [Home](Home.md)

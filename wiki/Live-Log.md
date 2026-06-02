@@ -17,7 +17,7 @@ Buffer is capped at 500 rows, newest first. When the cap is reached the oldest r
 
 ## Tracking source
 
-The Live Log does **not** track per-tag sample cursors itself — `FastSenseCompanion.scanLiveTagUpdates_` owns the `LiveSampleCount_` map and calls `addLiveLogEntry(tagKey, delta, latestY)` whenever a positive delta is detected. This boundary is fixed by Phase 1027 CONTEXT and is the same separation the [Event Viewer](Event-Viewer)'s events log uses — pipeline state lives in the Companion, panes only render rows.
+The Live Log does **not** track per-tag sample cursors itself — `FastSenseCompanion.scanLiveTagUpdates_` owns the `LiveSampleCount_` map and calls `addLiveLogEntry(tagKey, delta, latestY)` whenever a positive delta is detected. This boundary is fixed by Phase 1027 CONTEXT and is the same separation the [Event Viewer](Event-Viewer.md)'s events log uses — pipeline state lives in the Companion, panes only render rows.
 
 ## Filter
 
@@ -29,7 +29,7 @@ The **Clear** button next to the filter wipes the buffer entirely.
 
 Only while the Companion is in **Live mode** (top toolbar's "Live: ON"). When Live is OFF the live pipeline is idle and no new rows arrive. Existing rows stay visible.
 
-The [Tag Status Table](Tag-Status-Table) is the exception — it polls under its own window-owned timer and stays current even when Live is OFF.
+The [Tag Status Table](Tag-Status-Table.md) is the exception — it polls under its own window-owned timer and stays current even when Live is OFF.
 
 ## Detached vs inline
 
@@ -37,6 +37,6 @@ When detached, the pane re-parents itself into a standalone `uifigure` and keeps
 
 ## See also
 
-- [Event Viewer](Event-Viewer)
-- [Tag Status Table](Tag-Status-Table)
-- [Companion Overview](Companion-Overview)
+- [Event Viewer](Event-Viewer.md)
+- [Tag Status Table](Tag-Status-Table.md)
+- [Companion Overview](Companion-Overview.md)
