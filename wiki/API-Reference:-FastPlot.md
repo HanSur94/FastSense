@@ -1192,6 +1192,33 @@ HOVERCROSSHAIR Construct hover crosshair attached to a FastSense.
 
 ### Methods
 
+#### `setBroadcastFcn(obj, moveFn, leaveFn)`
+
+SETBROADCASTFCN Set (or clear) crosshair-link broadcast callbacks (260602-mri).
+  setBroadcastFcn(obj, moveFn, leaveFn)
+  moveFn  — @(x) callback, or [] to clear.  Called at end of onMove.
+  leaveFn — @() callback, or []. Called at end of onLeave on source.
+  nargin < 3: leaveFn defaults to [].
+
+#### `onMoveExternal(obj, xQuery)`
+
+ONMOVEEXTERNAL Mirror an external crosshair data-x without re-broadcasting.
+  Called by DashboardEngine.broadcastCrosshairX_ to drive a peer
+  crosshair at xQuery.  Sets IsMirrored_ so the peer's own
+  onFigureMove_->onLeave (fired in the same motion dispatch when
+  the cursor is not over this widget) is swallowed and the
+  mirrored crosshair stays visible. IsMirrored_ is cleared either
+  when this widget becomes the hover source (its own real onMove)
+  or by onLeaveExternal (the source's leave-broadcast).
+
+#### `onLeaveExternal(obj)`
+
+ONLEAVEEXTERNAL Clear mirror state and hide crosshair on command.
+  Called by DashboardEngine.broadcastCrosshairLeave_ when the
+  source crosshair's own onLeave fires (cursor left all linked axes).
+  Hides DIRECTLY (does NOT call onLeave) so it never re-broadcasts
+  leave — that would ping-pong between linked peers indefinitely.
+
 #### `onMove(obj, xQuery)`
 
 ONMOVE Update + show the crosshair at data x-coordinate xQuery.
@@ -1201,6 +1228,11 @@ ONMOVE Update + show the crosshair at data x-coordinate xQuery.
 #### `onLeave(obj)`
 
 ONLEAVE Hide the crosshair line + datatip.
+
+#### `hideGraphics_(obj)`
+
+HIDEGRAPHICS_ Hide the crosshair line + datatip (no broadcast).
+  Shared by onLeave (source path) and onLeaveExternal (peer path).
 
 ---
 

@@ -458,6 +458,47 @@ ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
   Used for ReflowCallback injection and Follow toggle sweep.
   When Pages is empty, returns obj.Widgets.
 
+#### `linked = collectLinkedCrosshairs_(obj, widgets)`
+
+COLLECTLINKEDCROSSHAIRS_ Enumerate linked+rendered crosshairs on active page (260602-mri).
+  linked = collectLinkedCrosshairs_(obj, widgets) flattens widgets via
+  flattenWidgetsForPreview_ and returns a cell array of structs:
+    {struct('widget', w, 'hc', hc), ...}
+  for every flattened FastSenseWidget with CrosshairLinked=true AND a
+  valid rendered HoverCrosshair_.  Widgets failing any guard are silently
+  skipped.  PURE (no side effects) so it is unit-testable with a
+  hand-built widget list.
+  Made public (Access=public) so tests and DashboardLayout can call it.
+
+#### `rewireCrosshairLinks_(obj)`
+
+REWIRECEOSSHAIRLINKS_ Re-prime BroadcastFcn_ on active-page linked crosshairs (260602-mri).
+  1. Clear BroadcastFcn_/BroadcastLeaveFcn_ on ALL active-page FastSense
+     crosshairs (handles toggled-OFF widgets + previous-page crosshairs).
+  2. For each currently-linked+rendered crosshair, install the engine
+     broadcast callbacks.  Must be called after rerenderWidgets (fresh
+     HoverCrosshair_ handles), after switchPage, and after detachWidget.
+  Wrapped in try/catch at call sites; inner per-handle errors are silently
+  skipped so a single bad crosshair never breaks the whole sweep.
+
+#### `broadcastCrosshairX_(obj, sourceHc, xQuery)`
+
+BROADCASTCROSSHAIRX_ Mirror xQuery onto all OTHER linked crosshairs on active page (260602-mri).
+  Fired at end of source crosshair's onMove (via BroadcastFcn_).
+  Re-collects the linked set each call (cheap; active page only;
+  upstream throttle limits call rate to ~40 Hz; N widgets small).
+
+#### `broadcastCrosshairLeave_(obj, sourceHc)`
+
+BROADCASTCROSSHAIRLEAVE_ Tell all OTHER linked crosshairs to hide (260602-mri).
+  Fired at end of source crosshair's onLeave (via BroadcastLeaveFcn_).
+
+#### `onCrosshairLinkToggle(obj, widget)`
+
+ONCROSSHAIRLINKTOGGLE Called by DashboardLayout after widget.setCrosshairLink(tf) (260602-mri).
+  Re-derives the whole active-page link set from current flags — idempotent.
+  Wrapped in try/catch so a single toggle failure never crashes the bar.
+
 #### `notifyEventsChanged(obj)`
 
 NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513-snt).
@@ -850,6 +891,24 @@ ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with t
   Programmatic force-call paths (tests, automation) need a
   software-level guard for Enable='off' because uicontrols only
   honor Enable natively for user-driven mouse clicks.
+
+#### `addCrosshairLinkToggle(obj, widget)`
+
+ADDCROSSHAIRLINKTOGGLE Inject crosshair-link 'X' button into WidgetButtonBar (260602-mri).
+  Duck-typed: only called for widgets where ismethod(widget,'setCrosshairLink').
+  Idempotent: removes any prior CrosshairLinkButton before creating the new one.
+  Glyph: 'X' (ASCII, Octave-safe — matches existing V/A/L/i/^ glyphs).
+  Position: leftmost chrome button, placed to the LEFT of the V/A cluster;
+  final position settled by reflowChrome_ (reflowChrome_ is called from
+  both realizeWidget and from this method for callback-driven rebuilds).
+  Active (linked) state highlighted via chooseYLimitActiveBg_ (same as V/A).
+
+#### `onCrosshairLinkTogglePressed_(obj, src, widget)`
+
+ONCROSSHAIRLINKTOGLEPRESSED_ CrosshairLink toggle callback (260602-mri).
+  Flips widget.CrosshairLinked, notifies the engine, and rebuilds the
+  button visual. All errors are caught and surfaced as namespaced
+  warnings so no toggle failure can crash the dashboard refresh loop.
 
 ### Static Methods
 
@@ -1571,6 +1630,7 @@ obj = FastSenseWidget(varargin)
 | ShowPlantLog | `false` | Phase 1032 PLOG-VIZ-03 — opt-in per-widget plant-log vertical-line overlay |
 | LiveViewMode | `'preserve'` |  |
 | YLimitMode | `'auto-visible'` |  |
+| CrosshairLinked | `false` |  |
 | CurrentXLimOverrideForTest_ | `[]` |  |
 
 ### Methods
@@ -1631,6 +1691,14 @@ SETYLIMITMODE Set the Y-axis rescale strategy and re-fit if rendered.
     'auto-visible' - rescale to data inside the current X window
     'auto-all'     - rescale to all data the bound Tag exposes
     'locked'       - freeze YLim; no further rescale on tick/refresh
+
+#### `setCrosshairLink(obj, tf)`
+
+SETCROSSHAIRLINK Set the crosshair-link flag (260602-mri).
+  setCrosshairLink(obj, tf) sets CrosshairLinked to logical(tf).
+  tf must be a logical scalar or a numeric 0/1 scalar.
+  Does NOT touch graphics — the engine owns broadcast wiring.
+  Throws FastSenseWidget:invalidCrosshairLink for invalid input.
 
 #### `autoScaleY_(obj, y)`
 
