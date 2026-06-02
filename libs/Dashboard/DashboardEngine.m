@@ -68,6 +68,7 @@ classdef DashboardEngine < handle
         % Time control
         TimePanelHeight = 0.085   % bumped from 0.06 to fit data-range labels below slider (260512-hrn-followup)
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
+        TimeWindow_     = []       % [t0 t1] datenum load window pushed by companion; [] = full range (Phase 1041-03)
         hTimePanel      = []
         hTimeSliderL    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
         hTimeSliderR    = []       % Shim handle — points at TimeRangeSelector_ (D-10)
@@ -1802,6 +1803,44 @@ classdef DashboardEngine < handle
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % 260513-snt — re-wire Create-Event callback for the same reason.
             obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
+        end
+
+        function setTimeWindow(obj, t0, t1)
+        %SETTIMEWINDOW Set the global load window and re-resolve all widgets.
+        %   t0, t1 datenum scalars; both [] resets to full range. User-triggered
+        %   (e.g. from the companion time bar) -- NOT called per live tick. Fans
+        %   the window out to every widget via allPageWidgets(), then rebuilds
+        %   widget panels once so they reload windowed data.
+        %   Does NOT touch the scrubber's data range (no updateGlobalTimeRange call).
+            if nargin < 3 || isempty(t0) || isempty(t1)
+                obj.TimeWindow_ = [];
+            else
+                obj.TimeWindow_ = [t0, t1];
+            end
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                w = ws{i};
+                if ismethod(w, 'setTimeWindow')
+                    try
+                        if isempty(obj.TimeWindow_)
+                            w.setTimeWindow([], []);
+                        else
+                            w.setTimeWindow(obj.TimeWindow_(1), obj.TimeWindow_(2));
+                        end
+                    catch ME
+                        warning('DashboardEngine:setTimeWindowWidget', ...
+                            'setTimeWindow failed for a widget: %s', ME.message);
+                    end
+                end
+            end
+            obj.rerenderWidgets();
+        end
+
+        function w = getTimeWindow(obj)
+        %GETTIMEWINDOW Return the current stored load window.
+        %   Returns [] when no window is set (full-range default).
+        %   Used by tests and the companion to read back the stored window.
+            w = obj.TimeWindow_;
         end
 
         function updateGlobalTimeRange(obj)
