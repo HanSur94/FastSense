@@ -52,8 +52,7 @@ classdef HoverCrosshair < handle
         % 260602-mri — crosshair-link broadcast support
         BroadcastFcn_      = []   % @(x) callback fired at end of onMove (link source->peers)
         BroadcastLeaveFcn_ = []   % @() callback fired at end of onLeave (source hides->peers)
-        SuppressLeaveUntil_ = []  % tic timestamp; while toc < SuppressWindow_, onLeave is no-op
-        SuppressWindow_    = 0.075 % ~3*ThrottleSeconds; keep mirrored crosshair alive per dispatch
+        IsMirrored_        = false % driven by a peer via onMoveExternal; own self-leave then no-ops (deterministic, no wall-clock)
         InBroadcast_       = false % re-entrancy guard: peers must not re-broadcast
     end
 
@@ -126,11 +125,14 @@ classdef HoverCrosshair < handle
         function onMoveExternal(obj, xQuery)
             %ONMOVEEXTERNAL Mirror an external crosshair data-x without re-broadcasting.
             %   Called by DashboardEngine.broadcastCrosshairX_ to drive a peer
-            %   crosshair at xQuery.  Sets SuppressLeaveUntil_ so the peer's
-            %   own onFigureMove_->onLeave (fired in the same motion dispatch)
-            %   is swallowed and the mirrored crosshair stays visible.
+            %   crosshair at xQuery.  Sets IsMirrored_ so the peer's own
+            %   onFigureMove_->onLeave (fired in the same motion dispatch when
+            %   the cursor is not over this widget) is swallowed and the
+            %   mirrored crosshair stays visible. IsMirrored_ is cleared either
+            %   when this widget becomes the hover source (its own real onMove)
+            %   or by onLeaveExternal (the source's leave-broadcast).
             if ~isvalid(obj); return; end
-            obj.SuppressLeaveUntil_ = tic;
+            obj.IsMirrored_ = true;
             obj.InBroadcast_ = true;
             try
                 obj.onMove(xQuery);
@@ -141,12 +143,14 @@ classdef HoverCrosshair < handle
         end
 
         function onLeaveExternal(obj)
-            %ONLEAVEEXTERNAL Clear suppress guard and hide crosshair on command.
+            %ONLEAVEEXTERNAL Clear mirror state and hide crosshair on command.
             %   Called by DashboardEngine.broadcastCrosshairLeave_ when the
             %   source crosshair's own onLeave fires (cursor left all linked axes).
+            %   Hides DIRECTLY (does NOT call onLeave) so it never re-broadcasts
+            %   leave — that would ping-pong between linked peers indefinitely.
             if ~isvalid(obj); return; end
-            obj.SuppressLeaveUntil_ = [];
-            obj.onLeave();
+            obj.IsMirrored_ = false;
+            obj.hideGraphics_();
         end
 
         function onMove(obj, xQuery)
@@ -160,6 +164,13 @@ classdef HoverCrosshair < handle
 
             fp = obj.Target;
             if isempty(fp) || ~isvalid(fp); return; end
+
+            % 260602-mri — a real (non-mirrored) hover makes this crosshair the
+            % link source. Clearing IsMirrored_ here means a later self-leave
+            % WILL hide it and broadcast leave to peers (see onLeave).
+            if ~obj.InBroadcast_
+                obj.IsMirrored_ = false;
+            end
 
             yLim = get(obj.hAxes, 'YLim');
             xLim = get(obj.hAxes, 'XLim');
@@ -247,30 +258,33 @@ classdef HoverCrosshair < handle
         function onLeave(obj)
             %ONLEAVE Hide the crosshair line + datatip.
             if ~isvalid(obj); return; end
-            % 260602-mri — suppress-leave guard: when this crosshair was recently
-            % mirrored (SuppressLeaveUntil_ was set by onMoveExternal), a same-
-            % dispatch onLeave from onFigureMove_ must be a no-op so the mirrored
-            % crosshair stays visible. The guard window is ~3*ThrottleSeconds.
-            if ~isempty(obj.SuppressLeaveUntil_)
-                try
-                    if toc(obj.SuppressLeaveUntil_) < obj.SuppressWindow_
-                        return;
-                    end
-                catch
-                    obj.SuppressLeaveUntil_ = [];
-                end
+            % 260602-mri — suppress-leave: a crosshair currently mirrored by a
+            % peer (IsMirrored_ set in onMoveExternal) must NOT hide on its own
+            % same-dispatch self-leave (the cursor is over the source, not over
+            % this widget). It hides only via onLeaveExternal (the source's
+            % leave-broadcast). This is deterministic — no wall-clock window —
+            % so it cannot race the synchronous motion dispatch.
+            if obj.IsMirrored_
+                return;
             end
+            obj.hideGraphics_();
+            % 260602-mri — this is the source crosshair (not externally driven):
+            % broadcast leave so peer crosshairs hide. onLeaveExternal hides
+            % peers DIRECTLY (it does not call onLeave), so there is no leave
+            % ping-pong / unbounded recursion between linked peers.
+            if ~obj.InBroadcast_ && isa(obj.BroadcastLeaveFcn_, 'function_handle')
+                try obj.BroadcastLeaveFcn_(); catch; end
+            end
+        end
+
+        function hideGraphics_(obj)
+            %HIDEGRAPHICS_ Hide the crosshair line + datatip (no broadcast).
+            %   Shared by onLeave (source path) and onLeaveExternal (peer path).
             if ~isempty(obj.hLineV) && ishandle(obj.hLineV)
                 set(obj.hLineV, 'Visible', 'off');
             end
             if ~isempty(obj.hTipBox) && ishandle(obj.hTipBox)
                 set(obj.hTipBox, 'Visible', 'off');
-            end
-            % 260602-mri — if this is the source crosshair (not in external drive,
-            % no active suppress), broadcast leave to peer crosshairs so they hide.
-            if ~obj.InBroadcast_ && isempty(obj.SuppressLeaveUntil_) && ...
-                    isa(obj.BroadcastLeaveFcn_, 'function_handle')
-                try obj.BroadcastLeaveFcn_(); catch; end
             end
         end
 

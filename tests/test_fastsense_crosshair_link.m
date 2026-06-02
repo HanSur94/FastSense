@@ -151,16 +151,17 @@ function test_fastsense_crosshair_link()
         wB = FastSenseWidget('Tag', tag); wB.setCrosshairLink(true);
         wC = FastSenseWidget('Tag', tag); % unlinked
 
-        % With no FastSenseObj rendered, collectLinkedCrosshairs_ should
-        % return empty (guard: FastSenseObj must be rendered).
-        eng.Widgets = {wA, wB, wC};
-        linked = eng.collectLinkedCrosshairs_(eng.Widgets);
+        % collectLinkedCrosshairs_ takes the widget list as a parameter
+        % (DashboardEngine.Widgets is SetAccess=private). With no FastSenseObj
+        % rendered it must return empty (guard: FastSenseObj must be rendered).
+        wlist = {wA, wB, wC};
+        linked = eng.collectLinkedCrosshairs_(wlist);
         assert(isempty(linked), ...
             sprintf('unrendered widgets must yield empty linked set; got %d', numel(linked)));
 
         % Flip wA unlinked -> size still 0 (not rendered)
         wA.setCrosshairLink(false);
-        linked2 = eng.collectLinkedCrosshairs_(eng.Widgets);
+        linked2 = eng.collectLinkedCrosshairs_(wlist);
         assert(isempty(linked2), ...
             'still empty with all unrendered widgets');
         nPassed = nPassed + 1;
@@ -210,7 +211,7 @@ function test_fastsense_crosshair_link()
             'onMoveExternal must show the crosshair line');
 
         % An immediately following onLeave (same dispatch, cursor not over us)
-        % MUST be suppressed because SuppressLeaveUntil_ was just set.
+        % MUST be suppressed because IsMirrored_ was set by onMoveExternal.
         hc.onLeave();
         assert(strcmp(get(hc.hLineV, 'Visible'), 'on'), ...
             'onLeave immediately after onMoveExternal must be SUPPRESSED (crux)');
@@ -278,8 +279,10 @@ function test_fastsense_crosshair_link()
         wA.render(panAp);
         wB.render(panB);
 
-        % Wire engine widget list + rewire crosshair links.
-        eng.Widgets = {wA, wB};
+        % Register widgets with the engine (Widgets is SetAccess=private;
+        % addWidget accepts pre-constructed widget handles) + rewire links.
+        eng.addWidget(wA);
+        eng.addWidget(wB);
         eng.rewireCrosshairLinks_();
 
         % Simulate hover on A: onMove fires BroadcastFcn_ which calls
