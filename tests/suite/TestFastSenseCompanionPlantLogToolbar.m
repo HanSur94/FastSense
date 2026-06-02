@@ -114,19 +114,20 @@ classdef TestFastSenseCompanionPlantLogToolbar < matlab.unittest.TestCase
         end
 
         function g = findToolbarGrid_(testCase, c) %#ok<INUSL>
-            % After v3.1 Plant Log + v4.0 Wiki Browser merges, the
-            % Companion toolbar is a 1x9 grid:
-            %   {110, 110, 110, 130, 70, 90, 70, '1x', 36}
+            % After v3.1 Plant Log + v4.0 Wiki Browser + v4.0 Phase 1040
+            % notification bell, the Companion toolbar is a 1x10 grid:
+            %   {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36}
             fig = c.getFigForTest_();
             grids = findobj(fig, 'Type', 'uigridlayout');
             g = [];
             for i = 1:numel(grids)
-                if numel(grids(i).ColumnWidth) == 9
+                if numel(grids(i).ColumnWidth) == 10
                     cw = grids(i).ColumnWidth;
                     if iscell(cw) && isequal(cw{1}, 110) && isequal(cw{2}, 110) && ...
                             isequal(cw{3}, 110) && isequal(cw{4}, 130) && ...
                             isequal(cw{5}, 70)  && isequal(cw{6}, 90)  && ...
-                            isequal(cw{7}, 70)  && isequal(cw{9}, 36)
+                            isequal(cw{7}, 70)  && isequal(cw{8}, 70)  && ...
+                            isequal(cw{10}, 36)
                         g = grids(i);
                         return;
                     end
@@ -139,22 +140,23 @@ classdef TestFastSenseCompanionPlantLogToolbar < matlab.unittest.TestCase
     methods (Test)
 
         function testToolbarGridIs1x5(testCase)
-            % v3.1 Plant Log + v4.0 Wiki Browser merged: toolbar grew from
-            % 1x4 to 1x9.
-            %   col 1 = Events     (110)
-            %   col 2 = Live       (110)
-            %   col 3 = Tags       (110, v4.0 quick task 260519-bs4)
-            %   col 4 = Plant Log  (130, v3.1 Phase 1033 PLOG-INT-03)
-            %   col 5 = Tile       ( 70, v4.0 S0Y-01)
-            %   col 6 = Close all  ( 90, v4.0 S0Y-02)
-            %   col 7 = Wiki       ( 70, v4.0 Phase 1034)
-            %   col 8 = flex spacer
-            %   col 9 = gear       ( 36)
+            % v3.1 Plant Log + v4.0 Wiki Browser + Phase 1040 bell: toolbar
+            % grew from 1x4 to 1x10.
+            %   col 1  = Events     (110)
+            %   col 2  = Live       (110)
+            %   col 3  = Tags       (110, v4.0 quick task 260519-bs4)
+            %   col 4  = Plant Log  (130, v3.1 Phase 1033 PLOG-INT-03)
+            %   col 5  = Tile       ( 70, v4.0 S0Y-01)
+            %   col 6  = Close all  ( 90, v4.0 S0Y-02)
+            %   col 7  = Wiki       ( 70, v4.0 Phase 1034)
+            %   col 8  = Bell       ( 70, v4.0 Phase 1040 notification center)
+            %   col 9  = flex spacer
+            %   col 10 = gear       ( 36)
             d1 = testCase.makeEngine_('A');
             c = testCase.makeCompanion_({d1});
             g = testCase.findToolbarGrid_(c);
             testCase.verifyNotEmpty(g, ...
-                'toolbar grid (1x8 with ColumnWidth {110 110 110 130 70 90 ''1x'' 36}) must exist');
+                'toolbar grid (1x10 with ColumnWidth {110 110 110 130 70 90 70 70 ''1x'' 36}) must exist');
             cw = g.ColumnWidth;
             testCase.verifyEqual(cw{1}, 110, 'ColumnWidth{1} (Events)');
             testCase.verifyEqual(cw{2}, 110, 'ColumnWidth{2} (Live)');
@@ -163,8 +165,9 @@ classdef TestFastSenseCompanionPlantLogToolbar < matlab.unittest.TestCase
             testCase.verifyEqual(cw{5}, 70,  'ColumnWidth{5} (Tile, v4.0)');
             testCase.verifyEqual(cw{6}, 90,  'ColumnWidth{6} (Close all, v4.0)');
             testCase.verifyEqual(cw{7}, 70,  'ColumnWidth{7} (Wiki, v4.0 Phase 1034)');
-            testCase.verifyEqual(cw{8}, '1x', 'ColumnWidth{8} flex spacer');
-            testCase.verifyEqual(cw{9}, 36,  'ColumnWidth{9} (gear)');
+            testCase.verifyEqual(cw{8}, 70,  'ColumnWidth{8} (Bell, v4.0 Phase 1040)');
+            testCase.verifyEqual(cw{9}, '1x', 'ColumnWidth{9} flex spacer');
+            testCase.verifyEqual(cw{10}, 36, 'ColumnWidth{10} (gear)');
         end
 
         function testPlantLogButtonExists(testCase)
@@ -211,13 +214,13 @@ classdef TestFastSenseCompanionPlantLogToolbar < matlab.unittest.TestCase
         end
 
         function testSettingsButtonMovedToCol5(testCase)
-            % After v3.1 + v4.0 merge, gear lives at col 8 (1x8 grid).
+            % After v3.1 + v4.0 + Phase 1040 bell, gear lives at col 10 (1x10 grid).
             d1 = testCase.makeEngine_('A');
             c = testCase.makeCompanion_({d1});
             gear = findobj(c.getFigForTest_(), 'Tooltip', 'Companion settings');
             testCase.verifyNotEmpty(gear);
-            testCase.verifyEqual(gear.Layout.Column, 9, ...
-                'settings gear must be at col 9 (1x9 grid post-v3.1+Wiki-Browser merge)');
+            testCase.verifyEqual(gear.Layout.Column, 10, ...
+                'settings gear must be at col 10 (1x10 grid post-Phase-1040 bell)');
         end
 
         function testFindObjResolvesViaTag(testCase)

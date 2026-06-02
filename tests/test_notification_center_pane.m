@@ -43,7 +43,7 @@ function test_notification_center_pane()
 
     % 4. maxSeverity_.
     n = n + 1; check(NotificationCenterPane.maxSeverity_([e1 e2]) == 3, 'maxSeverity_([3 2]) should be 3');
-    n = n + 1; check(NotificationCenterPane.maxSeverity_(Event.empty) == 0, 'maxSeverity_(empty) should be 0');
+    n = n + 1; check(NotificationCenterPane.maxSeverity_([]) == 0, 'maxSeverity_(empty) should be 0');
 
     % 5. diffIds_ — order-insensitive set comparison.
     n = n + 1; check(~NotificationCenterPane.diffIds_({'a', 'b'}, {'b', 'a'}), ...
