@@ -367,19 +367,23 @@ classdef CompanionTimeBar < handle
         end
 
         function buildRelativePanel_(obj, parent)
-        %BUILDRELATIVEPANEL_ Build the Relative builder panel (stub; completed in Task 1b).
-            % TODO(1b): populate with uispinner + uidropdown + preview label.
+        %BUILDRELATIVEPANEL_ Build the Relative builder panel.
+        %   [1x3] control row: uispinner N, spacer, uidropdown unit.
+        %   Below: a read-only preview uilabel showing resolved date range.
+        %   Spinner/dropdown ValueChangedFcn -> update preview live (no commit).
             t = obj.Theme_;
+
+            % Container grid: 3 rows x 3 columns.
             obj.hPanelRelative_ = uigridlayout(parent, [3 3]);
-            obj.hPanelRelative_.RowHeight   = {32, 32, 32};
-            obj.hPanelRelative_.ColumnWidth = {60, '1x', 120};
-            obj.hPanelRelative_.Padding     = [0 0 0 0];
-            obj.hPanelRelative_.RowSpacing  = 8;
+            obj.hPanelRelative_.RowHeight     = {32, 32, '1x'};
+            obj.hPanelRelative_.ColumnWidth   = {60, '1x', 120};
+            obj.hPanelRelative_.Padding       = [0 0 0 0];
+            obj.hPanelRelative_.RowSpacing    = 8;
             obj.hPanelRelative_.ColumnSpacing = 8;
             obj.hPanelRelative_.BackgroundColor = t.DashboardBackground;
             obj.hPanelRelative_.Visible         = 'off';
 
-            % Row 1: labels
+            % Row 1: labels — "Last" (col 1) ... "until now" (col 3).
             lbLast = uilabel(obj.hPanelRelative_);
             lbLast.Layout.Row    = 1;
             lbLast.Layout.Column = 1;
@@ -394,7 +398,7 @@ classdef CompanionTimeBar < handle
             lbUntil.FontSize      = 11;
             lbUntil.FontColor     = t.ForegroundColor;
 
-            % Row 2: controls
+            % Row 2: controls — uispinner (col 1) + uidropdown (col 3).
             obj.hRelSpinner_ = uispinner(obj.hPanelRelative_);
             obj.hRelSpinner_.Layout.Row    = 2;
             obj.hRelSpinner_.Layout.Column = 1;
@@ -411,7 +415,7 @@ classdef CompanionTimeBar < handle
             obj.hRelDropdown_.Value         = 'days';
             obj.hRelDropdown_.ValueChangedFcn = @(~,~) obj.updateRelPreview_();
 
-            % Row 3: preview label
+            % Row 3: read-only preview label — "YYYY-MM-DD to YYYY-MM-DD".
             obj.hRelPreview_ = uilabel(obj.hPanelRelative_);
             obj.hRelPreview_.Layout.Row    = 3;
             obj.hRelPreview_.Layout.Column = [1 3];
@@ -419,24 +423,28 @@ classdef CompanionTimeBar < handle
             obj.hRelPreview_.FontColor     = t.PlaceholderTextColor;
             obj.hRelPreview_.Text          = '';
 
-            % Seed preview.
+            % Seed the preview with the current spinner/dropdown values.
             obj.updateRelPreview_();
         end
 
         function buildAbsolutePanel_(obj, parent)
-        %BUILDABSOLUTEPANEL_ Build the Absolute date-picker panel (stub; completed in Task 1b).
-            % TODO(1b): populate with uidatepicker + validation + preview label.
+        %BUILDABSOLUTEPANEL_ Build the Absolute date-picker panel.
+        %   [3x2] grid: Start label+uidatepicker, End label+uidatepicker,
+        %   and a preview/validation uilabel.
+        %   Picker ValueChangedFcn -> recompute day count + run validation live.
+        %   Validation: start >= end -> disable Apply + show alarm text.
             t = obj.Theme_;
+
             obj.hPanelAbsolute_ = uigridlayout(parent, [3 2]);
-            obj.hPanelAbsolute_.RowHeight   = {32, 32, 32};
-            obj.hPanelAbsolute_.ColumnWidth = {80, '1x'};
-            obj.hPanelAbsolute_.Padding     = [0 0 0 0];
-            obj.hPanelAbsolute_.RowSpacing  = 8;
+            obj.hPanelAbsolute_.RowHeight     = {32, 32, '1x'};
+            obj.hPanelAbsolute_.ColumnWidth   = {80, '1x'};
+            obj.hPanelAbsolute_.Padding       = [0 0 0 0];
+            obj.hPanelAbsolute_.RowSpacing    = 8;
             obj.hPanelAbsolute_.ColumnSpacing = 8;
             obj.hPanelAbsolute_.BackgroundColor = t.DashboardBackground;
             obj.hPanelAbsolute_.Visible         = 'off';
 
-            % Row 1: Start
+            % Row 1: Start label + uidatepicker.
             lbStart = uilabel(obj.hPanelAbsolute_);
             lbStart.Layout.Row    = 1;
             lbStart.Layout.Column = 1;
@@ -450,7 +458,7 @@ classdef CompanionTimeBar < handle
             obj.hAbsStartPicker_.Value         = datetime('today') - caldays(7);
             obj.hAbsStartPicker_.ValueChangedFcn = @(~,~) obj.updateAbsPreview_();
 
-            % Row 2: End
+            % Row 2: End label + uidatepicker.
             lbEnd = uilabel(obj.hPanelAbsolute_);
             lbEnd.Layout.Row    = 2;
             lbEnd.Layout.Column = 1;
@@ -464,7 +472,9 @@ classdef CompanionTimeBar < handle
             obj.hAbsEndPicker_.Value         = datetime('today');
             obj.hAbsEndPicker_.ValueChangedFcn = @(~,~) obj.updateAbsPreview_();
 
-            % Row 3: Preview label
+            % Row 3: preview / validation label.
+            % Normal: "N days" in PlaceholderTextColor.
+            % Invalid: "Invalid: start must be before end" in StatusAlarmColor.
             obj.hAbsPreview_ = uilabel(obj.hPanelAbsolute_);
             obj.hAbsPreview_.Layout.Row    = 3;
             obj.hAbsPreview_.Layout.Column = [1 2];
