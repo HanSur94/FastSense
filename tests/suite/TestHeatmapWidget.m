@@ -55,5 +55,14 @@ classdef TestHeatmapWidget < matlab.unittest.TestCase
             end
             testCase.verifyFalse(threw, msg);
         end
+
+        function testHeatmapCallbackRoundTrip(testCase)
+        %TESTHEATMAPCALLBACKROUNDTRIP P0-3: DataFcn survives toStruct/fromStruct.
+            w = HeatmapWidget('Title', 'H');
+            w.DataFcn = @() magic(4);
+            w2 = HeatmapWidget.fromStruct(w.toStruct());
+            testCase.verifyNotEmpty(w2.DataFcn);
+            testCase.verifyEqual(func2str(w2.DataFcn), func2str(w.DataFcn));
+        end
     end
 end

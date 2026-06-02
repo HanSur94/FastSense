@@ -55,5 +55,26 @@ classdef TestHistogramWidget < matlab.unittest.TestCase
             end
             testCase.verifyFalse(threw, msg);
         end
+
+        function testHistogramCallbackRoundTrip(testCase)
+        %TESTHISTOGRAMCALLBACKROUNDTRIP P0-3: DataFcn survives toStruct/fromStruct.
+            w = HistogramWidget('Title', 'H');
+            w.DataFcn = @() [1 2 3 4 5];
+            w2 = HistogramWidget.fromStruct(w.toStruct());
+            testCase.verifyNotEmpty(w2.DataFcn);
+            testCase.verifyEqual(func2str(w2.DataFcn), func2str(w.DataFcn));
+        end
+
+        function testHistogramAsciiRenderTag(testCase)
+        %TESTHISTOGRAMASCIIRENDERTAG P0-2: asciiRender probes Tag data via getXY().
+            a = SensorTag('a', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('b', 'X', 1:10, 'Y', 2:11);
+            d = DerivedTag('d', {a, b}, @(p) deal(p{1}.X, p{1}.Y + p{2}.Y));
+            w = HistogramWidget('Title', 'H');
+            w.Tag = d;
+            lines = w.asciiRender(24, 3);
+            testCase.verifyEqual(numel(lines), 3);
+            testCase.verifyTrue(contains(lines{2}, 'data points'));
+        end
     end
 end

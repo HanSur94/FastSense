@@ -55,5 +55,17 @@ classdef TestBarChartWidget < matlab.unittest.TestCase
             end
             testCase.verifyFalse(threw, msg);
         end
+
+        function testBarChartUnresolvedSourceWarns(testCase)
+        %TESTBARCHARTUNRESOLVEDSOURCEWARNS P0-3: an unknown source.type warns (no throw).
+            s = struct('type', 'barchart', 'title', 'B', ...
+                'position', struct('col', 1, 'row', 1, 'width', 8, 'height', 4), ...
+                'source', struct('type', 'weirdtype', 'function', '@() 1'));
+            lastwarn('');
+            w = BarChartWidget.fromStruct(s);
+            [~, id] = lastwarn();
+            testCase.verifyEqual(id, 'BarChartWidget:sourceUnresolved');
+            testCase.verifyEmpty(w.DataFcn);
+        end
     end
 end

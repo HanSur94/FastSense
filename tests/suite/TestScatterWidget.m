@@ -43,5 +43,33 @@ classdef TestScatterWidget < matlab.unittest.TestCase
             end
             testCase.verifyFalse(threw, msg);
         end
+
+        function testScatterAsciiRenderTags(testCase)
+        %TESTSCATTERASCIIRENDERTAGS P0-2: asciiRender probes SensorX/SensorY via getXY().
+            a = SensorTag('a', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('b', 'X', 1:10, 'Y', 2:11);
+            dx = DerivedTag('dx', {a, b}, @(p) deal(p{1}.X, p{1}.Y + p{2}.Y));
+            dy = DerivedTag('dy', {a, b}, @(p) deal(p{1}.X, p{2}.Y));
+            w = ScatterWidget('Title', 'S');
+            w.SensorX = dx;
+            w.SensorY = dy;
+            lines = w.asciiRender(24, 3);
+            testCase.verifyEqual(numel(lines), 3);
+            testCase.verifyTrue(contains(lines{2}, 'points'));
+        end
+
+        function testScatterUnresolvedSensorWarns(testCase)
+        %TESTSCATTERUNRESOLVEDSENSORWARNS P0-3: a sensor key absent from TagRegistry warns (no throw).
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            s = struct('type', 'scatter', 'title', 'S', ...
+                'position', struct('col', 1, 'row', 1, 'width', 8, 'height', 4), ...
+                'sensorX', 'missingX', 'sensorY', 'missingY');
+            lastwarn('');
+            w = ScatterWidget.fromStruct(s);
+            [~, id] = lastwarn();
+            testCase.verifyEqual(id, 'ScatterWidget:sourceUnresolved');
+            testCase.verifyEmpty(w.SensorX);
+        end
     end
 end
