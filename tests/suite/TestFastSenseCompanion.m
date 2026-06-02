@@ -1296,29 +1296,17 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             testCase.verifyEqual(b.Layout.Column, 8, 'bell should sit in column 8');
         end
 
-        function testRootGridHasFourColumns(testCase)
-        %TESTROOTGRIDHASFOURCOLUMNS Root grid has 4 columns; the 4th starts hidden (0).
+        function testBellOpensEventViewer(testCase)
+        %TESTBELLOPENSEVENTVIEWER The bell click opens the Event Viewer (which hosts the inbox).
             storePath = [tempname() '.mat'];
             es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
             app = FastSenseCompanion('EventStore', es);
             testCase.addTeardown(@() app.close());
-            cw = app.getRootColumnWidthForTest_();
-            testCase.verifyEqual(numel(cw), 4, 'root grid should have 4 columns');
-            testCase.verifyEqual(cw{4}, 0, 'notification column should start hidden (0)');
-        end
-
-        function testBellTogglesFourthColumn(testCase)
-        %TESTBELLTOGGLESFOURTHCOLUMN Toggling shows (320) then hides (0) the 4th column.
-            storePath = [tempname() '.mat'];
-            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
-            app = FastSenseCompanion('EventStore', es);
-            testCase.addTeardown(@() app.close());
-            app.toggleNotificationCenter_(); drawnow;
-            cw = app.getRootColumnWidthForTest_();
-            testCase.verifyEqual(cw{4}, 320, 'first toggle should show the column at 320');
-            app.toggleNotificationCenter_(); drawnow;
-            cw = app.getRootColumnWidthForTest_();
-            testCase.verifyEqual(cw{4}, 0, 'second toggle should hide the column');
+            app.openEventViewer_internalForTest();   % the bell's ButtonPushedFcn target
+            drawnow;
+            v = app.getEventViewerForTest_();
+            testCase.verifyNotEmpty(v, 'bell click should open the Event Viewer');
+            testCase.verifyTrue(isvalid(v), 'opened Event Viewer should be valid');
         end
 
         function testBellDisabledWithoutEventStore(testCase)
@@ -1352,7 +1340,6 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             es.append([e e2]);
             app = FastSenseCompanion('EventStore', es);
             testCase.addTeardown(@() app.close());
-            app.toggleNotificationCenter_();
             app.onLiveTickForTest_(); drawnow;
             b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
             testCase.verifyTrue(~isempty(strfind(b.Text, '(2)')), ...
@@ -1373,7 +1360,6 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             es.append(e);
             app = FastSenseCompanion('EventStore', es, 'Theme', 'dark');
             testCase.addTeardown(@() app.close());
-            app.toggleNotificationCenter_();
             app.onLiveTickForTest_(); drawnow;
             b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
             t = CompanionTheme.get('dark');
@@ -1381,37 +1367,20 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'sev-3 unacked badge should use StatusAlarmColor');
         end
 
-        function testOnLiveTickRefreshesNotifPane(testCase)
-        %TESTONLIVETICKREFRESHESNOTIFPANE A new event after construction is picked up on the next tick.
+        function testOnLiveTickUpdatesBellBadge(testCase)
+        %TESTONLIVETICKUPDATESBELLBADGE A new event after construction is reflected on the next tick.
             storePath = [tempname() '.mat'];
             es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
             app = FastSenseCompanion('EventStore', es);
             testCase.addTeardown(@() app.close());
-            app.toggleNotificationCenter_();
             app.onLiveTickForTest_(); drawnow;   % no events yet -> plain glyph
             e = Event(now-0.01, NaN, 'P-101', 'HighPressure', 100, 'upper');
             e.Severity = 2;
             es.append(e);
-            app.onLiveTickForTest_(); drawnow;   % tick must pick up the new event
+            app.onLiveTickForTest_(); drawnow;   % tick must reflect the new event
             b = findall(app.getFigForTest_(), 'Tag', 'CompanionBellBtn');
             testCase.verifyTrue(~isempty(strfind(b.Text, '(1)')), ...
-                'onLiveTick_ should refresh the badge to (1) after a new event'); %#ok<STREMP>
-        end
-
-        function testNotifPaneDetachReinline(testCase)
-        %TESTNOTIFPANEDETACHREINLINE DetachRequested pops a window; close() tears it down.
-            storePath = [tempname() '.mat'];
-            es = EventStore(storePath); testCase.addTeardown(@() delete(storePath));
-            app = FastSenseCompanion('EventStore', es);
-            testCase.addTeardown(@() app.close());
-            app.toggleNotificationCenter_(); drawnow;
-            figName = sprintf('Notification Center %s FastSenseCompanion', char(8212));
-            notify(app.notifPaneForTest_(), 'DetachRequested'); drawnow;
-            det = findall(groot, 'Type', 'figure', 'Name', figName);
-            testCase.verifyNotEmpty(det, 'detach should create the notification window');
-            app.close(); drawnow;
-            det2 = findall(groot, 'Type', 'figure', 'Name', figName);
-            testCase.verifyEmpty(det2, 'close() should tear down the detached window');
+                'onLiveTick_ should update the bell badge to (1) after a new event'); %#ok<STREMP>
         end
 
         function testOpenWikiOpensWikiBrowser(testCase)
