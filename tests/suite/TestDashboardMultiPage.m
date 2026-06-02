@@ -183,6 +183,54 @@ classdef TestDashboardMultiPage < matlab.unittest.TestCase
             testCase.verifyTrue(w.Dirty);
         end
 
+        function testRemovePageDropsPage(testCase)
+        %TESTREMOVEPAGEDROPSPAGE removePage drops the page and keeps the rest.
+            d = DashboardEngine('mp');
+            d.addPage('P1'); d.addPage('P2'); d.addPage('P3');
+            testCase.verifyEqual(numel(d.Pages), 3);
+            d.removePage(2);
+            testCase.verifyEqual(numel(d.Pages), 2);
+            testCase.verifyEqual(d.Pages{1}.Name, 'P1');
+            testCase.verifyEqual(d.Pages{2}.Name, 'P3');
+        end
+
+        function testRemovePageBeforeActiveKeepsActive(testCase)
+        %TESTREMOVEPAGEBEFOREACTIVEKEEPSACTIVE Removing a page before ActivePage keeps the same page active.
+            d = DashboardEngine('mp');
+            d.addPage('P1'); d.addPage('P2'); d.addPage('P3');
+            d.switchPage(3);
+            testCase.verifyEqual(d.ActivePage, 3);
+            d.removePage(1);
+            testCase.verifyEqual(numel(d.Pages), 2);
+            testCase.verifyEqual(d.Pages{d.ActivePage}.Name, 'P3');
+        end
+
+        function testRemoveActivePageClampsActive(testCase)
+        %TESTREMOVEACTIVEPAGECLAMPSACTIVE Removing the active (last) page leaves ActivePage valid.
+            d = DashboardEngine('mp');
+            d.addPage('P1'); d.addPage('P2');
+            d.switchPage(2);
+            d.removePage(2);
+            testCase.verifyEqual(numel(d.Pages), 1);
+            testCase.verifyTrue(d.ActivePage >= 1 && d.ActivePage <= numel(d.Pages));
+        end
+
+        function testRemoveLastRemainingPage(testCase)
+        %TESTREMOVELASTREMAININGPAGE Removing the only page resets ActivePage to 0.
+            d = DashboardEngine('mp');
+            d.addPage('P1');
+            d.removePage(1);
+            testCase.verifyEmpty(d.Pages);
+            testCase.verifyEqual(d.ActivePage, 0);
+        end
+
+        function testRemovePageInvalidIndexErrors(testCase)
+        %TESTREMOVEPAGEINVALIDINDEXERRORS Out-of-range index errors with a namespaced id.
+            d = DashboardEngine('mp');
+            d.addPage('P1');
+            testCase.verifyError(@() d.removePage(99), 'DashboardEngine:invalidIndex');
+        end
+
     end
 
 end

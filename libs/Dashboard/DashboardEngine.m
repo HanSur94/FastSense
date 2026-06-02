@@ -1483,6 +1483,36 @@ classdef DashboardEngine < handle
             end
         end
 
+        function removePage(obj, idx)
+        %REMOVEPAGE Remove the page at index idx, keeping ActivePage valid.
+        %   Mirror of removeWidget for pages. Throws DashboardEngine:invalidIndex
+        %   on a bad index. Deletes the page's widgets and the page, adjusts
+        %   ActivePage (decrements when removing a page before it; clamps when
+        %   removing the active page; resets to 0 when no pages remain), and
+        %   re-renders when a figure is live.
+            if idx < 1 || idx > numel(obj.Pages)
+                error('DashboardEngine:invalidIndex', ...
+                    'Page index %d out of range [1, %d].', idx, numel(obj.Pages));
+            end
+            pg = obj.Pages{idx};
+            ws = pg.Widgets;
+            for i = 1:numel(ws)
+                delete(ws{i});
+            end
+            obj.Pages(idx) = [];
+            delete(pg);
+            if isempty(obj.Pages)
+                obj.ActivePage = 0;
+            elseif idx < obj.ActivePage
+                obj.ActivePage = obj.ActivePage - 1;
+            elseif idx == obj.ActivePage
+                obj.ActivePage = max(1, min(obj.ActivePage, numel(obj.Pages)));
+            end
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.rerenderWidgets();
+            end
+        end
+
         function setWidgetPosition(obj, idx, pos)
         %SETWIDGETPOSITION Set the grid position of a widget by index.
         %   Clamps width to grid columns and resolves overlaps with other
