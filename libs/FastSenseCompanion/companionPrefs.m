@@ -16,7 +16,13 @@ function out = companionPrefs(action, prefs)
 %   not validate field names so future settings can be added without
 %   schema migration.
 %
-%   See also FastSenseCompanion, prefdir.
+%   Persisted fields (partial list; all struct fields survive round-trip):
+%     theme       — char 'dark'|'light'
+%     livePeriod  — positive finite scalar (seconds)
+%     timeRange   — struct from CompanionTimeRange.toStruct(); absent -> default Last 7 days
+%                   (Phase 1041-04; written by FastSenseCompanion.onRangeChanged_)
+%
+%   See also FastSenseCompanion, CompanionTimeRange, prefdir.
 
     out = struct();
     if nargin < 1

@@ -137,6 +137,9 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
     hFig = engine.hFigure;
     if ~isempty(hFig) && ishandle(hFig)
         set(hFig, 'CloseRequestFcn', @(s, ~) closeFcn_(s, engine));
+        % Phase 1041-04: stash engine on figure appdata so FastSenseCompanion
+        % can recover it on RangeChanged (getappdata(hFig,'DashboardEngine')).
+        setappdata(hFig, 'DashboardEngine', engine);
     end
 end
 
