@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Multi-User LAN Concurrency
 status: executing
-last_updated: "2026-06-02T16:35:05.283Z"
+last_updated: "2026-06-02T16:47:37.237Z"
 last_activity: 2026-06-02
 progress:
   total_phases: 17
   completed_phases: 4
   total_plans: 25
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 ## Current Position
 
 Phase: 1041 (global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
-Status: Executing Phase 1041 — Plan 03 complete (FastSenseWidget windowed pulls + DashboardEngine.setTimeWindow + SensorDetailPlot TimeWindow + Overlay), Plan 04 next
-Last activity: 2026-06-02 -- Phase 1041 Plan 03 complete (view-layer time-window threading)
+Status: Plan 04 complete (CompanionTimeBar + companion wiring); Plan 05 next (integration/UI test suite + manual checklist)
+Last activity: 2026-06-02 -- Phase 1041 Plan 04 complete (CompanionTimeBar picker + RangeChanged wiring + open-site window passing)
 
 ### Note on parallel v4.0 work (main branch state)
 
