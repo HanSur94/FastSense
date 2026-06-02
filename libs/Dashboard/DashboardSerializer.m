@@ -332,58 +332,31 @@ classdef DashboardSerializer
 
         function w = createWidgetFromStruct(ws)
             %CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+            %   Dispatches through DashboardWidgetRegistry — the single source of
+            %   truth for widget type->class. The deprecated 'kpi' resolves to
+            %   NumberWidget via the registry alias. 'mock' is a test-only widget
+            %   kept as a thin special-case here: MockDashboardWidget lives under
+            %   tests/ and is intentionally NOT seeded into the library registry,
+            %   so the library has no dependency on test code. Unknown types warn
+            %   DashboardSerializer:unknownType and return [].
             w = [];
-            switch ws.type
-                case 'fastsense'
-                    w = FastSenseWidget.fromStruct(ws);
-                case 'number'
-                    w = NumberWidget.fromStruct(ws);
-                case 'kpi'
-                    w = NumberWidget.fromStruct(ws);
-                case 'status'
-                    w = StatusWidget.fromStruct(ws);
-                case 'text'
-                    w = TextWidget.fromStruct(ws);
-                case 'gauge'
-                    w = GaugeWidget.fromStruct(ws);
-                case 'table'
-                    w = TableWidget.fromStruct(ws);
-                case 'rawaxes'
-                    w = RawAxesWidget.fromStruct(ws);
-                case 'timeline'
-                    w = EventTimelineWidget.fromStruct(ws);
-                case 'group'
-                    w = GroupWidget.fromStruct(ws);
-                case 'heatmap'
-                    w = HeatmapWidget.fromStruct(ws);
-                case 'barchart'
-                    w = BarChartWidget.fromStruct(ws);
-                case 'histogram'
-                    w = HistogramWidget.fromStruct(ws);
-                case 'scatter'
-                    w = ScatterWidget.fromStruct(ws);
-                case 'image'
-                    w = ImageWidget.fromStruct(ws);
-                case 'multistatus'
-                    w = MultiStatusWidget.fromStruct(ws);
-                case 'divider'
-                    w = DividerWidget.fromStruct(ws);
-                case 'iconcard'
-                    w = IconCardWidget.fromStruct(ws);
-                case 'chipbar'
-                    w = ChipBarWidget.fromStruct(ws);
-                case 'sparkline'
-                    w = SparklineCardWidget.fromStruct(ws);
-                case 'mock'
-                    % MockDashboardWidget used in tests — load via fromStruct if available
+            resolved = DashboardWidgetRegistry.resolveAlias(ws.type);
+            if strcmp(resolved, 'mock')
+                if exist('MockDashboardWidget', 'class') == 8 || ...
+                        exist('MockDashboardWidget', 'file') == 2
                     try
                         w = MockDashboardWidget.fromStruct(ws);
                     catch
                         w = [];
                     end
-                otherwise
-                    warning('DashboardSerializer:unknownType', ...
-                        'Unknown widget type: %s — skipping', ws.type);
+                end
+                return;
+            end
+            if DashboardWidgetRegistry.isRegistered(resolved)
+                w = DashboardWidgetRegistry.fromStruct(ws.type, ws);
+            else
+                warning('DashboardSerializer:unknownType', ...
+                    'Unknown widget type: %s — skipping', ws.type);
             end
         end
 

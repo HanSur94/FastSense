@@ -244,5 +244,38 @@ classdef TestDashboardSerializerRoundTrip < matlab.unittest.TestCase
             testCase.verifyTrue(contains(txt, 'ValueFcn'), ...
                 'save() must emit the number ValueFcn binding');
         end
+
+        function testCustomTypeDeserializesViaRegistry(testCase)
+            %TESTCUSTOMTYPEDESERIALIZESVIAREGISTRY P1: a registered custom type
+            %   deserializes through the registry (the old switch warned + dropped it).
+            testCase.addTeardown(@() DashboardWidgetRegistry.reset());
+            DashboardWidgetRegistry.register('mytype', @NumberWidget);
+            base = NumberWidget('Title', 'X', 'Position', [1 1 4 2], 'StaticValue', 7);
+            s = base.toStruct();
+            s.type = 'mytype';
+            w = DashboardSerializer.createWidgetFromStruct(s);
+            testCase.verifyClass(w, 'NumberWidget');
+        end
+
+        function testKpiStructDeserializesToNumber(testCase)
+            %TESTKPISTRUCTDESERIALIZESTONUMBER P1: 'kpi' resolves to NumberWidget via the registry alias.
+            base = NumberWidget('Title', 'K', 'Position', [1 1 4 2], 'StaticValue', 1);
+            s = base.toStruct();
+            s.type = 'kpi';
+            w = DashboardSerializer.createWidgetFromStruct(s);
+            testCase.verifyClass(w, 'NumberWidget');
+        end
+
+        function testUnknownTypeWarnsAndReturnsEmpty(testCase)
+            %TESTUNKNOWNTYPEWARNSANDRETURNSEMPTY P1: unknown type still warns+skips (preserved).
+            base = NumberWidget('Title', 'U', 'Position', [1 1 4 2], 'StaticValue', 1);
+            s = base.toStruct();
+            s.type = 'definitelynope';
+            lastwarn('');
+            w = DashboardSerializer.createWidgetFromStruct(s);
+            testCase.verifyEmpty(w);
+            [~, id] = lastwarn();
+            testCase.verifyEqual(id, 'DashboardSerializer:unknownType');
+        end
     end
 end

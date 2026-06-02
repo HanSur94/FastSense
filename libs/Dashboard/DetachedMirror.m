@@ -131,8 +131,9 @@ classdef DetachedMirror < handle
         function w = cloneWidget(original)
         %CLONEWIDGET Clone a DashboardWidget via toStruct/fromStruct round-trip.
         %
-        %   Dispatch is explicit to ensure all 15 widget types are handled.
-        %   After fromStruct, live references lost by serialization are restored:
+        %   Dispatches through DashboardWidgetRegistry (the single source of truth
+        %   for widget type->class). After fromStruct, live references lost by
+        %   serialization are restored:
         %     - FastSenseWidget: Sensor reference + UseGlobalTime = false (DETACH-05)
         %     - RawAxesWidget:   PlotFcn and DataRangeFcn function handles
 
@@ -143,48 +144,11 @@ classdef DetachedMirror < handle
             % restoreLiveRefs copies live Tag references directly afterward.
             s = DetachedMirror.stripSensorRefs(s);
 
-            switch s.type
-                case 'fastsense'
-                    w = FastSenseWidget.fromStruct(s);
-                case 'number'
-                    w = NumberWidget.fromStruct(s);
-                case 'status'
-                    w = StatusWidget.fromStruct(s);
-                case 'text'
-                    w = TextWidget.fromStruct(s);
-                case 'gauge'
-                    w = GaugeWidget.fromStruct(s);
-                case 'table'
-                    w = TableWidget.fromStruct(s);
-                case 'rawaxes'
-                    w = RawAxesWidget.fromStruct(s);
-                case 'timeline'
-                    w = EventTimelineWidget.fromStruct(s);
-                case 'group'
-                    w = GroupWidget.fromStruct(s);
-                case 'heatmap'
-                    w = HeatmapWidget.fromStruct(s);
-                case 'barchart'
-                    w = BarChartWidget.fromStruct(s);
-                case 'histogram'
-                    w = HistogramWidget.fromStruct(s);
-                case 'scatter'
-                    w = ScatterWidget.fromStruct(s);
-                case 'image'
-                    w = ImageWidget.fromStruct(s);
-                case 'multistatus'
-                    w = MultiStatusWidget.fromStruct(s);
-                case 'divider'
-                    w = DividerWidget.fromStruct(s);
-                case 'iconcard'
-                    w = IconCardWidget.fromStruct(s);
-                case 'chipbar'
-                    w = ChipBarWidget.fromStruct(s);
-                case 'sparkline'
-                    w = SparklineCardWidget.fromStruct(s);
-                otherwise
-                    error('DetachedMirror:unknownType', ...
-                        'Unknown widget type: %s', s.type);
+            if DashboardWidgetRegistry.isRegistered(DashboardWidgetRegistry.resolveAlias(s.type))
+                w = DashboardWidgetRegistry.fromStruct(s.type, s);
+            else
+                error('DetachedMirror:unknownType', ...
+                    'Unknown widget type: %s', s.type);
             end
 
             % Restore live references lost during serialization round-trip
