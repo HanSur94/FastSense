@@ -29,7 +29,7 @@ fp.addLine(x, y, 'DisplayName', 'Sensor');
 fp.render();
 ```
 
-Available presets: 'default', 'dark', 'light', 'industrial', 'scientific', 'ocean'. See [[API Reference: Themes]] for customization options.
+Available presets: `'dark'` and `'light'` (the default). Legacy names `'default'`, `'industrial'`, `'scientific'`, and `'ocean'` are accepted and map to `'light'` for backward compatibility. See [[API Reference: Themes]] for customization options.
 
 ## 3. Thresholds and Violations
 
@@ -46,7 +46,7 @@ Red circles appear where data exceeds the threshold.
 ## 4. Multiple Lines
 
 ```matlab
-fp = FastSense('Theme', 'scientific');
+fp = FastSense('Theme', 'scientific');  % legacy alias, same as 'light'
 fp.addLine(x, sin(x), 'DisplayName', 'Channel A');
 fp.addLine(x, cos(x), 'DisplayName', 'Channel B');
 fp.addLine(x, sin(2*x) * 0.5, 'DisplayName', 'Channel C');
@@ -77,6 +77,8 @@ fp.addFill(x, abs(y), 'FaceColor', [0 0.5 1], 'Baseline', 0, 'DisplayName', 'Ene
 fp.addMarker([10 30 70], [0.9 0.9 0.9], 'Marker', 'v', 'MarkerSize', 10, 'Color', [1 0 0], 'Label', 'Events');
 ```
 
+All annotations must be added **before** calling `render()`. After rendering, use `updateData()` to change line data, or create a new `FastSense` instance for new series.
+
 ## 6. Dashboard Layout
 
 ```matlab
@@ -99,13 +101,15 @@ fig.setTileTitle(3, 'Vibration');
 fig.renderAll();
 ```
 
+You can also embed raw MATLAB axes ( `fig.axes(n)` ) or uipanels ( `fig.tilePanel(n)` ) for custom widgets.
+
 ## 7. Toolbar
 
 ```matlab
 tb = FastSenseToolbar(fig);
 ```
 
-Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Refresh, Live Mode, Metadata, Violations.
+Buttons: Data Cursor, Crosshair, Grid, Legend, Autoscale Y, Export PNG, Export Data, Refresh, Live Mode, Follow, Metadata, Violations.
 
 ## 8. Linked Axes
 
@@ -122,7 +126,7 @@ fp2.addLine(x, cos(x), 'DisplayName', 'Temperature');
 fp2.render();
 ```
 
-Zoom in one subplot, the other follows.
+Zooming or panning in one subplot synchronizes the X‑axis in the other.
 
 ## 9. Datetime Axes
 
@@ -148,7 +152,7 @@ fp2.setScale('YScale', 'log');
 fp2.render();
 ```
 
-Use `setScale('XScale', 'log')` for logarithmic X-axis or both together.
+Use `setScale('XScale', 'log')` for a logarithmic X‑axis, or combine both.
 
 ## 11. Updating Data
 
@@ -160,7 +164,7 @@ fp.updateData(1, x, newY);
 
 ## 12. Downsampling Methods
 
-MinMax (default) preserves signal envelope. LTTB preserves visual shape.
+MinMax (default) preserves signal envelope. LTTB (Largest‑Triangle‑Three‑Buckets) preserves visual shape.
 
 ```matlab
 fp = FastSense('DefaultDownsampleMethod', 'lttb');
@@ -168,7 +172,7 @@ fp.addLine(x, y, 'DisplayName', 'LTTB');
 fp.render();
 ```
 
-Or per-line:
+Or per‑line:
 ```matlab
 fp.addLine(x, y1, 'DownsampleMethod', 'minmax', 'DisplayName', 'MinMax');
 fp.addLine(x, y2, 'DownsampleMethod', 'lttb', 'DisplayName', 'LTTB');
@@ -197,9 +201,10 @@ FastSense.distFig('Rows', 2, 'Cols', 3);
 
 - [[FastPlot|API Reference: FastPlot]] — full constructor options, properties, methods
 - [[Dashboard|API Reference: Dashboard]] — tiled and tabbed layouts
-- [[Sensors|API Reference: Sensors]] — state-dependent thresholds
+- [[Themes|API Reference: Themes]] — customize background, palette, and fonts
+- [[Sensors|API Reference: Sensors]] — state‑dependent thresholds
 - [[Event Detection|API Reference: Event Detection]] — event detection and viewer
-- [[Live Mode Guide]] — live data polling
+- [[Live Mode Guide]] — live data polling in depth
 - [[Datetime Guide]] — datetime axes
 - [[Dashboard Engine Guide]] — DashboardEngine + DashboardBuilder
 - [[Examples]] — 40+ runnable examples
