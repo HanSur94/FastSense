@@ -1833,7 +1833,14 @@ classdef DashboardEngine < handle
                     end
                 end
             end
-            obj.rerenderWidgets();
+            % Only rebuild widget panels when the dashboard is actually rendered.
+            % Setting the window before render just primes each widget's
+            % TimeWindow_ (fanned out above); render() then applies it on first
+            % display. Calling rerenderWidgets() with no figure would index into
+            % an empty figure Position inside DashboardLayout.ensureViewport.
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.rerenderWidgets();
+            end
         end
 
         function w = getTimeWindow(obj)
