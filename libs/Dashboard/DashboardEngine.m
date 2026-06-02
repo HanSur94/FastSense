@@ -371,6 +371,14 @@ classdef DashboardEngine < handle
             end
             % Phase 1039 — recompute the current-view box for the newly active page.
             try obj.updateCurrentViewIndicator_(); catch, end
+            % 260602-mri — re-prime crosshair broadcast hooks for the now-active page.
+            % Previous-page crosshairs are dropped (they are no longer in activePageWidgets).
+            try
+                obj.rewireCrosshairLinks_();
+            catch ME
+                warning('DashboardEngine:crosshairRewireFailed', ...
+                    'rewireCrosshairLinks_ failed after switchPage: %s', ME.message);
+            end
         end
 
         function w = addWidget(obj, type, varargin)
@@ -1545,6 +1553,20 @@ classdef DashboardEngine < handle
         %   is a handle class, so mutations to it are visible through all
         %   references.
 
+            % 260602-mri — best-effort clear this widget's broadcast hook before
+            % detaching so it stops participating in the active-page link set.
+            % The widget keeps CrosshairLinked=true in serialized state but will
+            % no longer be in activePageWidgets() after detach, so
+            % collectLinkedCrosshairs_ naturally excludes it. The explicit clear
+            % here avoids a stale closure firing between the detach and the next
+            % rewireCrosshairLinks_ call.
+            try
+                if isa(widget, 'FastSenseWidget') && ~isempty(widget.FastSenseObj) && ...
+                        ~isempty(widget.FastSenseObj.HoverCrosshair_)
+                    widget.FastSenseObj.HoverCrosshair_.setBroadcastFcn([], []);
+                end
+            catch
+            end
             themeStruct = obj.getCachedTheme();
             % containers.Map is a handle object — mutations after closure creation
             % are visible through the captured reference (unlike cells/structs).
@@ -1568,6 +1590,12 @@ classdef DashboardEngine < handle
             catch err
                 warning('DashboardEngine:plantLogOverlayFailed', ...
                     'detachWidget plant-log re-attach failed: %s', err.message);
+            end
+            % 260602-mri — re-derive active-page link set after detach so
+            % remaining widgets' broadcast hooks reflect the updated set.
+            try
+                obj.rewireCrosshairLinks_();
+            catch
             end
         end
 
@@ -1802,6 +1830,14 @@ classdef DashboardEngine < handle
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % 260513-snt — re-wire Create-Event callback for the same reason.
             obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
+            % 260602-mri — re-prime crosshair broadcast hooks on freshly-built
+            % HoverCrosshair_ handles (each realizeWidget creates a new HC).
+            try
+                obj.rewireCrosshairLinks_();
+            catch ME
+                warning('DashboardEngine:crosshairRewireFailed', ...
+                    'rewireCrosshairLinks_ failed after rerenderWidgets: %s', ME.message);
+            end
         end
 
         function updateGlobalTimeRange(obj)
@@ -2853,6 +2889,122 @@ classdef DashboardEngine < handle
             ws = {};
             for i = 1:numel(obj.Pages)
                 ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
+            end
+        end
+
+        % 260602-mri — crosshair-link coordination
+        function linked = collectLinkedCrosshairs_(obj, widgets)
+        %COLLECTLINKEDCROSSHAIRS_ Enumerate linked+rendered crosshairs on active page (260602-mri).
+        %   linked = collectLinkedCrosshairs_(obj, widgets) flattens widgets via
+        %   flattenWidgetsForPreview_ and returns a cell array of structs:
+        %     {struct('widget', w, 'hc', hc), ...}
+        %   for every flattened FastSenseWidget with CrosshairLinked=true AND a
+        %   valid rendered HoverCrosshair_.  Widgets failing any guard are silently
+        %   skipped.  PURE (no side effects) so it is unit-testable with a
+        %   hand-built widget list.
+        %   Made public (Access=public) so tests and DashboardLayout can call it.
+            linked = {};
+            if nargin < 2 || isempty(widgets); return; end
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            try
+                flat = obj.flattenWidgetsForPreview_(widgets);
+            catch
+                flat = {};
+            end
+            for i = 1:numel(flat)
+                w = flat{i};
+                try
+                    if ~isa(w, 'FastSenseWidget'); continue; end
+                    if ~w.CrosshairLinked; continue; end
+                    if isempty(w.FastSenseObj); continue; end
+                    if ~isa(w.FastSenseObj, 'FastSense'); continue; end
+                    if ~w.FastSenseObj.IsRendered; continue; end
+                    hc = w.FastSenseObj.HoverCrosshair_;
+                    if isempty(hc); continue; end
+                    if ~isOctave && ~isvalid(hc); continue; end
+                    linked{end + 1} = struct('widget', w, 'hc', hc); %#ok<AGROW>
+                catch
+                    % skip any widget that errors during guard checks
+                end
+            end
+        end
+
+        function rewireCrosshairLinks_(obj)
+        %REWIRECEOSSHAIRLINKS_ Re-prime BroadcastFcn_ on active-page linked crosshairs (260602-mri).
+        %   1. Clear BroadcastFcn_/BroadcastLeaveFcn_ on ALL active-page FastSense
+        %      crosshairs (handles toggled-OFF widgets + previous-page crosshairs).
+        %   2. For each currently-linked+rendered crosshair, install the engine
+        %      broadcast callbacks.  Must be called after rerenderWidgets (fresh
+        %      HoverCrosshair_ handles), after switchPage, and after detachWidget.
+        %   Wrapped in try/catch at call sites; inner per-handle errors are silently
+        %   skipped so a single bad crosshair never breaks the whole sweep.
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            try
+                flat = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
+            catch
+                flat = {};
+            end
+            % Pass 1: clear all active-page crosshairs.
+            for i = 1:numel(flat)
+                w = flat{i};
+                try
+                    if ~isa(w, 'FastSenseWidget'); continue; end
+                    if isempty(w.FastSenseObj); continue; end
+                    hc = w.FastSenseObj.HoverCrosshair_;
+                    if isempty(hc); continue; end
+                    if ~isOctave && ~isvalid(hc); continue; end
+                    hc.setBroadcastFcn([], []);
+                catch
+                end
+            end
+            % Pass 2: wire the linked crosshairs.
+            linked = obj.collectLinkedCrosshairs_(obj.activePageWidgets());
+            if numel(linked) < 1; return; end
+            for i = 1:numel(linked)
+                entry = linked{i};
+                hc = entry.hc;
+                try
+                    hc.setBroadcastFcn( ...
+                        @(x) obj.broadcastCrosshairX_(hc, x), ...
+                        @()  obj.broadcastCrosshairLeave_(hc));
+                catch
+                end
+            end
+        end
+
+        function broadcastCrosshairX_(obj, sourceHc, xQuery)
+        %BROADCASTCROSSHAIRX_ Mirror xQuery onto all OTHER linked crosshairs on active page (260602-mri).
+        %   Fired at end of source crosshair's onMove (via BroadcastFcn_).
+        %   Re-collects the linked set each call (cheap; active page only;
+        %   upstream throttle limits call rate to ~40 Hz; N widgets small).
+            linked = obj.collectLinkedCrosshairs_(obj.activePageWidgets());
+            for i = 1:numel(linked)
+                entry = linked{i};
+                if entry.hc == sourceHc; continue; end
+                try entry.hc.onMoveExternal(xQuery); catch; end
+            end
+        end
+
+        function broadcastCrosshairLeave_(obj, sourceHc)
+        %BROADCASTCROSSHAIRLEAVE_ Tell all OTHER linked crosshairs to hide (260602-mri).
+        %   Fired at end of source crosshair's onLeave (via BroadcastLeaveFcn_).
+            linked = obj.collectLinkedCrosshairs_(obj.activePageWidgets());
+            for i = 1:numel(linked)
+                entry = linked{i};
+                if entry.hc == sourceHc; continue; end
+                try entry.hc.onLeaveExternal(); catch; end
+            end
+        end
+
+        function onCrosshairLinkToggle(obj, widget)
+        %ONCROSSHAIRLINKTOGGLE Called by DashboardLayout after widget.setCrosshairLink(tf) (260602-mri).
+        %   Re-derives the whole active-page link set from current flags — idempotent.
+        %   Wrapped in try/catch so a single toggle failure never crashes the bar.
+            try
+                obj.rewireCrosshairLinks_();
+            catch ME
+                warning('DashboardEngine:crosshairLinkToggleFailed', ...
+                    'rewireCrosshairLinks_ failed during onCrosshairLinkToggle: %s', ME.message);
             end
         end
 

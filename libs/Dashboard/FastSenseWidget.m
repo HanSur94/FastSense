@@ -64,6 +64,15 @@ classdef FastSenseWidget < DashboardWidget
         %   4. YLimitMode dispatch:    'locked' -> no-op; otherwise
         %                              auto-visible / auto-all branches run.
         YLimitMode = 'auto-visible'
+
+        % CrosshairLinked — when true this widget joins the active-page
+        %   crosshair-link set (260602-mri). Moving the hover crosshair
+        %   over any linked FastSenseWidget broadcasts the data-x to all
+        %   OTHER linked widgets on the same page, so each mirrors the
+        %   crosshair + per-series datatip at that x for cross-plot
+        %   comparison. Default false -> backward-compatible (existing
+        %   dashboards and serialized JSON are byte-identical).
+        CrosshairLinked = false
     end
     %   (Tag property now lives on the DashboardWidget base class — Plan 1009-02.)
 
@@ -589,6 +598,25 @@ classdef FastSenseWidget < DashboardWidget
                     % autoScaleY_'s mode dispatch treats 'locked' as no-op.
                     obj.autoScaleY_([]);
             end
+        end
+
+        function setCrosshairLink(obj, tf)
+        %SETCROSSHAIRLINK Set the crosshair-link flag (260602-mri).
+        %   setCrosshairLink(obj, tf) sets CrosshairLinked to logical(tf).
+        %   tf must be a logical scalar or a numeric 0/1 scalar.
+        %   Does NOT touch graphics — the engine owns broadcast wiring.
+        %   Throws FastSenseWidget:invalidCrosshairLink for invalid input.
+        %
+        %   This method is the duck-type hook: DashboardLayout calls
+        %   ismethod(widget,'setCrosshairLink') to decide whether to render
+        %   the crosshair-link toggle button on the WidgetButtonBar.
+            if ~((islogical(tf) || isnumeric(tf)) && isscalar(tf) && ...
+                    (tf == 0 || tf == 1 || islogical(tf)))
+                error('FastSenseWidget:invalidCrosshairLink', ...
+                    'CrosshairLinked must be a logical scalar (or numeric 0/1); got %s.', ...
+                    class(tf));
+            end
+            obj.CrosshairLinked = logical(tf);
         end
 
         function autoScaleY_(obj, y)
@@ -1205,6 +1233,11 @@ classdef FastSenseWidget < DashboardWidget
             if ~strcmp(obj.YLimitMode, 'auto-visible')
                 s.yLimitMode = obj.YLimitMode;
             end
+            % 260602-mri — emit crosshairLinked only when true so legacy
+            % JSON stays byte-identical for old dashboards (default false).
+            if obj.CrosshairLinked
+                s.crosshairLinked = true;
+            end
             % NOTE: EventStore is a runtime handle — intentionally NOT serialized (Pitfall E).
 
             if ~isempty(obj.Tag) && ~isempty(obj.Tag.Key)
@@ -1569,6 +1602,13 @@ classdef FastSenseWidget < DashboardWidget
                 catch
                     % Invalid serialized value; keep default 'auto-visible'.
                 end
+            end
+            % 260602-mri — restore CrosshairLinked if serialized. Absent means
+            % "legacy dashboard, default false" so JSON round-trip is byte-identical.
+            % Do NOT call setCrosshairLink here (fromStruct runs pre-render;
+            % graphics wiring is the engine's responsibility at realize time).
+            if isfield(s, 'crosshairLinked')
+                obj.CrosshairLinked = logical(s.crosshairLinked);
             end
         end
     end

@@ -142,9 +142,10 @@ classdef DashboardWidget < handle
             % v3.1 Phase 1032 PLOG-VIZ-05 — protect plant-log toggle from re-render sweeps.
             % v4.0 — '+Event' button (Tag='CreateEventButton') + V/A Y-limit cluster
             % (Tags 'YLimitVisibleBtn', 'YLimitAllBtn') also preserved.
+            % 260602-mri — protect crosshair-link toggle button from re-render sweeps.
             protectedTags = {'InfoIconButton', 'DetachButton', 'WidgetButtonBar', ...
                              'YLimitVisibleBtn', 'YLimitAllBtn', 'CreateEventButton', ...
-                             'PlantLogToggleButton'};
+                             'PlantLogToggleButton', 'CrosshairLinkButton'};
             % Sweep depth-1 uicontrols (legacy-positioned buttons).
             kids = findobj(hPanel, '-depth', 1, 'Type', 'uicontrol');
             for i = 1:numel(kids)

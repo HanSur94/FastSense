@@ -49,6 +49,11 @@ classdef HoverCrosshair < handle
         FigDeleteListener = []  % listener handle on figure ObjectBeingDestroyed
         AxDeleteListener  = []  % listener handle on axes ObjectBeingDestroyed
         ThrottleSeconds = 0.025 % minimum interval between motion-driven updates
+        % 260602-mri — crosshair-link broadcast support
+        BroadcastFcn_      = []   % @(x) callback fired at end of onMove (link source->peers)
+        BroadcastLeaveFcn_ = []   % @() callback fired at end of onLeave (source hides->peers)
+        IsMirrored_        = false % driven by a peer via onMoveExternal; own self-leave then no-ops (deterministic, no wall-clock)
+        InBroadcast_       = false % re-entrancy guard: peers must not re-broadcast
     end
 
     methods (Access = public)
@@ -100,6 +105,54 @@ classdef HoverCrosshair < handle
             end
         end
 
+        function setBroadcastFcn(obj, moveFn, leaveFn)
+            %SETBROADCASTFCN Set (or clear) crosshair-link broadcast callbacks (260602-mri).
+            %   setBroadcastFcn(obj, moveFn, leaveFn)
+            %   moveFn  — @(x) callback, or [] to clear.  Called at end of onMove.
+            %   leaveFn — @() callback, or []. Called at end of onLeave on source.
+            %   nargin < 3: leaveFn defaults to [].
+            if ~isvalid(obj); return; end
+            if nargin < 2
+                moveFn = [];
+            end
+            if nargin < 3
+                leaveFn = [];
+            end
+            obj.BroadcastFcn_      = moveFn;
+            obj.BroadcastLeaveFcn_ = leaveFn;
+        end
+
+        function onMoveExternal(obj, xQuery)
+            %ONMOVEEXTERNAL Mirror an external crosshair data-x without re-broadcasting.
+            %   Called by DashboardEngine.broadcastCrosshairX_ to drive a peer
+            %   crosshair at xQuery.  Sets IsMirrored_ so the peer's own
+            %   onFigureMove_->onLeave (fired in the same motion dispatch when
+            %   the cursor is not over this widget) is swallowed and the
+            %   mirrored crosshair stays visible. IsMirrored_ is cleared either
+            %   when this widget becomes the hover source (its own real onMove)
+            %   or by onLeaveExternal (the source's leave-broadcast).
+            if ~isvalid(obj); return; end
+            obj.IsMirrored_ = true;
+            obj.InBroadcast_ = true;
+            try
+                obj.onMove(xQuery);
+            catch
+                % swallow — never let mirroring errors surface
+            end
+            obj.InBroadcast_ = false;
+        end
+
+        function onLeaveExternal(obj)
+            %ONLEAVEEXTERNAL Clear mirror state and hide crosshair on command.
+            %   Called by DashboardEngine.broadcastCrosshairLeave_ when the
+            %   source crosshair's own onLeave fires (cursor left all linked axes).
+            %   Hides DIRECTLY (does NOT call onLeave) so it never re-broadcasts
+            %   leave — that would ping-pong between linked peers indefinitely.
+            if ~isvalid(obj); return; end
+            obj.IsMirrored_ = false;
+            obj.hideGraphics_();
+        end
+
         function onMove(obj, xQuery)
             %ONMOVE Update + show the crosshair at data x-coordinate xQuery.
             %   Public so tests can drive motion deterministically without
@@ -111,6 +164,13 @@ classdef HoverCrosshair < handle
 
             fp = obj.Target;
             if isempty(fp) || ~isvalid(fp); return; end
+
+            % 260602-mri — a real (non-mirrored) hover makes this crosshair the
+            % link source. Clearing IsMirrored_ here means a later self-leave
+            % WILL hide it and broadcast leave to peers (see onLeave).
+            if ~obj.InBroadcast_
+                obj.IsMirrored_ = false;
+            end
 
             yLim = get(obj.hAxes, 'YLim');
             xLim = get(obj.hAxes, 'XLim');
@@ -187,11 +247,39 @@ classdef HoverCrosshair < handle
                     'String', rows, ...
                     'Visible', 'on');
             end
+            % 260602-mri — broadcast data-x to peer crosshairs (link source only).
+            % InBroadcast_ guard prevents re-entrancy when onMove is called
+            % via onMoveExternal (peers must not re-broadcast).
+            if ~obj.InBroadcast_ && isa(obj.BroadcastFcn_, 'function_handle')
+                try obj.BroadcastFcn_(xQuery); catch; end
+            end
         end
 
         function onLeave(obj)
             %ONLEAVE Hide the crosshair line + datatip.
             if ~isvalid(obj); return; end
+            % 260602-mri — suppress-leave: a crosshair currently mirrored by a
+            % peer (IsMirrored_ set in onMoveExternal) must NOT hide on its own
+            % same-dispatch self-leave (the cursor is over the source, not over
+            % this widget). It hides only via onLeaveExternal (the source's
+            % leave-broadcast). This is deterministic — no wall-clock window —
+            % so it cannot race the synchronous motion dispatch.
+            if obj.IsMirrored_
+                return;
+            end
+            obj.hideGraphics_();
+            % 260602-mri — this is the source crosshair (not externally driven):
+            % broadcast leave so peer crosshairs hide. onLeaveExternal hides
+            % peers DIRECTLY (it does not call onLeave), so there is no leave
+            % ping-pong / unbounded recursion between linked peers.
+            if ~obj.InBroadcast_ && isa(obj.BroadcastLeaveFcn_, 'function_handle')
+                try obj.BroadcastLeaveFcn_(); catch; end
+            end
+        end
+
+        function hideGraphics_(obj)
+            %HIDEGRAPHICS_ Hide the crosshair line + datatip (no broadcast).
+            %   Shared by onLeave (source path) and onLeaveExternal (peer path).
             if ~isempty(obj.hLineV) && ishandle(obj.hLineV)
                 set(obj.hLineV, 'Visible', 'off');
             end
@@ -204,6 +292,10 @@ classdef HoverCrosshair < handle
             %DELETE Restore prior WindowButtonMotionFcn and remove graphics.
             % Restore unconditionally — '' is a legal callback value, so
             % we must NOT guard with ~isempty(PrevWBMFcn_).
+            % 260602-mri — null broadcast callbacks first (defensive: avoids a
+            % dangling engine ref firing after delete via stale closure).
+            obj.BroadcastFcn_      = [];
+            obj.BroadcastLeaveFcn_ = [];
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 try %#ok<TRYNC>
                     set(obj.hFigure, 'WindowButtonMotionFcn', obj.PrevWBMFcn_);
