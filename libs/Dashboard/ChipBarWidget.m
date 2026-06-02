@@ -303,12 +303,9 @@ classdef ChipBarWidget < DashboardWidget
                     val = chip.value;
                 end
                 if isempty(val), chipColor = [0.5 0.5 0.5]; return; end
-                tVals = t.allValues();
                 state = 'ok';
-                for v = 1:numel(tVals)
-                    if (t.IsUpper && val > tVals(v)) || (~t.IsUpper && val < tVals(v))
-                        state = 'alarm'; break;
-                    end
+                if isThresholdViolated(t, val)
+                    state = 'alarm';
                 end
             elseif isfield(chip, 'statusFcn') && ~isempty(chip.statusFcn)
                 try
@@ -322,16 +319,10 @@ classdef ChipBarWidget < DashboardWidget
                     latestY = sensor.Y(end);
                     state = 'ok';
                     for k = 1:numel(sensor.Thresholds)
-                        t = sensor.Thresholds{k};
-                        tVals = t.allValues();
-                        for v = 1:numel(tVals)
-                            if (t.IsUpper && latestY > tVals(v)) || ...
-                                    (~t.IsUpper && latestY < tVals(v))
-                                state = 'alarm';
-                                break;
-                            end
+                        if isThresholdViolated(sensor.Thresholds{k}, latestY)
+                            state = 'alarm';
+                            break;
                         end
-                        if strcmp(state, 'alarm'), break; end
                     end
                 else
                     state = 'ok';

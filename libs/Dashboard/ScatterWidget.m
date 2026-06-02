@@ -45,10 +45,13 @@ classdef ScatterWidget < DashboardWidget
             xData = [];
             yData = [];
             if ~isempty(obj.SensorX) && ~isempty(obj.SensorY)
-                if isempty(obj.SensorX.Y) || isempty(obj.SensorY.Y), return; end
-                n = min(numel(obj.SensorX.Y), numel(obj.SensorY.Y));
-                xData = obj.SensorX.Y(1:n);
-                yData = obj.SensorY.Y(1:n);
+                % Read via the Tag.getXY() contract (Derived/Composite tags have no .Y).
+                [~, yx] = obj.SensorX.getXY();
+                [~, yy] = obj.SensorY.getXY();
+                if isempty(yx) || isempty(yy), return; end
+                n = min(numel(yx), numel(yy));
+                xData = yx(1:n);
+                yData = yy(1:n);
             end
             if isempty(xData), return; end
 
@@ -71,8 +74,14 @@ classdef ScatterWidget < DashboardWidget
             end
 
             cla(obj.hAxes);
-            if ~isempty(obj.SensorColor) && ~isempty(obj.SensorColor.Y)
-                cData = obj.SensorColor.Y(1:min(numel(obj.SensorColor.Y), numel(xData)));
+            cData = [];
+            if ~isempty(obj.SensorColor)
+                [~, yc] = obj.SensorColor.getXY();
+                if ~isempty(yc)
+                    cData = yc(1:min(numel(yc), numel(xData)));
+                end
+            end
+            if ~isempty(cData)
                 % Use line with markers for Octave compatibility
                 obj.hScatter = scatter(obj.hAxes, xData, yData, obj.MarkerSize, cData, 'filled');
                 colormap(obj.hAxes, obj.Colormap);
@@ -112,9 +121,11 @@ classdef ScatterWidget < DashboardWidget
             lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
 
             if height >= 2
-                if ~isempty(obj.SensorX) && ~isempty(obj.SensorY) && ...
-                        ~isempty(obj.SensorX.Y) && ~isempty(obj.SensorY.Y)
-                    n = min(numel(obj.SensorX.Y), numel(obj.SensorY.Y));
+                yx = []; yy = [];
+                if ~isempty(obj.SensorX), [~, yx] = obj.SensorX.getXY(); end
+                if ~isempty(obj.SensorY), [~, yy] = obj.SensorY.getXY(); end
+                if ~isempty(yx) && ~isempty(yy)
+                    n = min(numel(yx), numel(yy));
                     info = sprintf('%d points', n);
                 else
                     info = '[-- scatter --]';
@@ -176,6 +187,29 @@ classdef ScatterWidget < DashboardWidget
             end
             if isfield(s, 'markerSize'), obj.MarkerSize = s.markerSize; end
             if isfield(s, 'colormap'), obj.Colormap = s.colormap; end
+            % Restore the dual-sensor bindings via TagRegistry — dropped before P0-3.
+            % Old structs without these keys load with no binding and no warning.
+            if isfield(s, 'sensorX'), obj.SensorX = ScatterWidget.resolveTag_(s.sensorX, obj.Title); end
+            if isfield(s, 'sensorY'), obj.SensorY = ScatterWidget.resolveTag_(s.sensorY, obj.Title); end
+            if isfield(s, 'sensorColor'), obj.SensorColor = ScatterWidget.resolveTag_(s.sensorColor, obj.Title); end
+        end
+
+        function t = resolveTag_(key, title)
+        %RESOLVETAG_ Resolve a Tag key via TagRegistry; warn (no throw) if absent.
+        %   Mirrors FastSenseWidget:tagNotFound semantics: a missing key yields []
+        %   and a namespaced warning rather than an error, so a dashboard saved
+        %   against a different registry still loads.
+            t = [];
+            if isempty(key), return; end
+            if exist('TagRegistry', 'class')
+                try
+                    t = TagRegistry.get(key);
+                catch
+                    t = [];
+                    warning('ScatterWidget:sourceUnresolved', ...
+                        'Unresolved sensor ''%s'' for Scatter ''%s''.', key, title);
+                end
+            end
         end
     end
 end

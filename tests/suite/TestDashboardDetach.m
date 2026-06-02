@@ -348,6 +348,17 @@ classdef TestDashboardDetach < matlab.unittest.TestCase
                 'mirror.Widget handle must differ from original widget handle (not same reference)');
         end
 
+        function testMirrorUnknownTypeErrors(testCase)
+        % P1: cloneWidget now dispatches through DashboardWidgetRegistry. A type not
+        %   in the library registry — here 'mock', a test-only widget intentionally
+        %   NOT seeded into the registry — must still error DetachedMirror:unknownType.
+            mockW = MockDashboardWidget('Title', 'M', 'Position', [1 1 6 2]);
+            themeStruct = DashboardTheme('light');
+            noop = @() [];
+            testCase.verifyError(@() DetachedMirror(mockW, themeStruct, noop), ...
+                'DetachedMirror:unknownType');
+        end
+
     end
 
 end

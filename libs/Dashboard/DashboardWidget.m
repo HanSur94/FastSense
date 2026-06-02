@@ -13,7 +13,7 @@ classdef DashboardWidget < handle
         Position    = [1 1 6 2]    % [col, row, width, height] in grid units
         ThemeOverride = struct()   % Per-widget theme overrides (merged on top of dashboard theme)
         UseGlobalTime = true       % false when user manually zooms this widget
-        Description = ''           % Optional tooltip text shown via info icon hover
+        Description = ''           % Doc text shown in a popup when the widget's info (i) button is clicked
         Tag         = []           % v2.0 Tag API — any Tag subclass
         ParentTheme = []           % Theme inherited from DashboardEngine
         Dirty       = true         % true when widget needs refresh (data changed)
@@ -57,7 +57,16 @@ classdef DashboardWidget < handle
                 end
             end
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                key = varargin{k};
+                % Reject unknown/misspelled options with a namespaced error
+                % (house convention). The 'Sensor'->'Tag' remap above runs first,
+                % so legacy scripts and old serialized dashboards still work.
+                if ~isprop(obj, key)
+                    error('DashboardWidget:unknownOption', ...
+                        'Unknown option ''%s''. Valid options: %s', ...
+                        key, strjoin(properties(obj), ', '));
+                end
+                obj.(key) = varargin{k+1};
             end
             % Title cascade from Tag.
             if isempty(obj.Title) && ~isempty(obj.Tag)

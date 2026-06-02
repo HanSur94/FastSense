@@ -129,5 +129,31 @@ classdef TestDashboardWidget < matlab.unittest.TestCase
             MockDashboardWidget.invokeClearPanelControls(fakeHandle);
             testCase.verifyTrue(true, 'no-op path completed without error');
         end
+
+        function testWidgetUnknownOptionThrows(testCase)
+        %TESTWIDGETUNKNOWNOPTIONTHROWS P0-4: the base ctor rejects unknown options
+        %   with a namespaced id (was a generic MATLAB 'no public property' error).
+            threw = false; id = '';
+            try
+                NumberWidget('Bogus', 1);
+            catch err
+                threw = true; id = err.identifier;
+            end
+            testCase.verifyTrue(threw);
+            testCase.verifyEqual(id, 'DashboardWidget:unknownOption');
+        end
+
+        function testWidgetSensorAliasStillWorks(testCase)
+        %TESTWIDGETSENSORALIASSTILLWORKS P0-4 backward-compat: legacy 'Sensor' maps to Tag.
+            t = SensorTag('s', 'X', 1:5, 'Y', 1:5);
+            threw = false;
+            try
+                w = NumberWidget('Sensor', t);   % legacy alias -> Tag, must NOT throw
+            catch
+                threw = true;
+            end
+            testCase.verifyFalse(threw, 'legacy Sensor alias must not throw');
+            testCase.verifyTrue(~isempty(w.Tag) && w.Tag == t);
+        end
     end
 end

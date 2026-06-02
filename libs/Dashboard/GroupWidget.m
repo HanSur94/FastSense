@@ -1,4 +1,38 @@
 classdef GroupWidget < DashboardWidget
+%GROUPWIDGET Container widget that groups child widgets in one of three modes.
+%
+%   GroupWidget delivers the dashboard's nested-layout feature. Set Mode to:
+%     'panel'       — children laid out in a sub-grid inside a bordered panel
+%     'collapsible' — like panel, with a header bar that collapses/expands
+%     'tabbed'      — children organised into named tabs with a tab strip
+%
+%   Children are added and removed through parallel APIs that depend on Mode:
+%     addChild(widget)            — panel/collapsible (appends to Children)
+%     addChild(widget, tabName)   — tabbed (appends to the named tab, creating it)
+%     removeChild(idx)            — panel/collapsible
+%     removeChild(idx, tabName)   — tabbed
+%     removeTab(tabName)          — drop a whole tab
+%   Navigation / state: switchTab(tabName), collapse(), expand().
+%
+%   Groups may nest one level deep (a GroupWidget inside a GroupWidget); a
+%   maximum nesting depth of 2 is enforced by addChild (GroupWidget:maxDepth).
+%
+%   Key public properties:
+%     Mode          — 'panel' | 'collapsible' | 'tabbed'
+%     Label         — header bar title
+%     Children      — cell of child widgets (panel/collapsible)
+%     Tabs          — cell of struct('name', ..., 'widgets', {{...}}) (tabbed)
+%     ActiveTab     — current tab name (tabbed)
+%     ChildColumns  — sub-grid column count
+%
+%   Example:
+%     g = GroupWidget('Label', 'Analysis', 'Mode', 'tabbed');
+%     g.addChild(NumberWidget('Title', 'RPM'), 'Overview');
+%     g.addChild(HistogramWidget('Title', 'Dist'), 'Details');
+%     g.switchTab('Details');
+%
+%   See also DashboardWidget, DashboardEngine, NumberWidget.
+
     properties (Access = public)
         Mode            = 'panel'  % 'panel', 'collapsible', 'tabbed'
         Label           = ''       % Title shown in header bar
@@ -60,12 +94,52 @@ classdef GroupWidget < DashboardWidget
             end
         end
 
-        function removeChild(obj, idx)
-            if idx < 1 || idx > numel(obj.Children)
-                error('GroupWidget:invalidIndex', ...
-                    'Child index %d out of range [1, %d]', idx, numel(obj.Children));
+        function removeChild(obj, idx, tabName)
+        %REMOVECHILD Remove a child widget by index.
+        %   removeChild(idx) removes obj.Children(idx) — panel/collapsible mode.
+        %   removeChild(idx, tabName) removes the idx-th widget of the named tab
+        %   (tabbed mode), mirroring addChild(widget, tabName). Throws
+        %   GroupWidget:unknownTab for an unknown tab and GroupWidget:invalidIndex
+        %   for an out-of-range index in either mode.
+            if nargin >= 3 && ~isempty(tabName)
+                tIdx = obj.findTab(tabName);
+                if tIdx == 0
+                    error('GroupWidget:unknownTab', ...
+                        'No tab named ''%s''.', tabName);
+                end
+                if idx < 1 || idx > numel(obj.Tabs{tIdx}.widgets)
+                    error('GroupWidget:invalidIndex', ...
+                        'Child index %d out of range [1, %d]', idx, numel(obj.Tabs{tIdx}.widgets));
+                end
+                obj.Tabs{tIdx}.widgets(idx) = [];
+            else
+                if idx < 1 || idx > numel(obj.Children)
+                    error('GroupWidget:invalidIndex', ...
+                        'Child index %d out of range [1, %d]', idx, numel(obj.Children));
+                end
+                obj.Children(idx) = [];
             end
-            obj.Children(idx) = [];
+        end
+
+        function removeTab(obj, tabName)
+        %REMOVETAB Remove an entire tab and its widgets (tabbed mode).
+        %   Throws GroupWidget:unknownTab if the tab does not exist. When the
+        %   removed tab was the active one, ActiveTab moves to the first remaining
+        %   tab, or '' when none remain.
+            tIdx = obj.findTab(tabName);
+            if tIdx == 0
+                error('GroupWidget:unknownTab', ...
+                    'No tab named ''%s''.', tabName);
+            end
+            wasActive = strcmp(obj.ActiveTab, tabName);
+            obj.Tabs(tIdx) = [];
+            if wasActive
+                if isempty(obj.Tabs)
+                    obj.ActiveTab = '';
+                else
+                    obj.ActiveTab = obj.Tabs{1}.name;
+                end
+            end
         end
 
         function render(obj, parentPanel)

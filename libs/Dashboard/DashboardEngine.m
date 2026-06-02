@@ -63,8 +63,6 @@ classdef DashboardEngine < handle
         % Theme caching
         ThemeCache_        = []  % Cached DashboardTheme struct; lazy-computed by getCachedTheme()
         ThemeCachePreset_  = ''  % Theme preset string that ThemeCache_ was built for
-        % Widget dispatch table
-        WidgetTypeMap_     = []  % containers.Map: type string -> constructor function handle
         % Time control
         TimePanelHeight = 0.085   % bumped from 0.06 to fit data-range labels below slider (260512-hrn-followup)
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
@@ -162,17 +160,8 @@ classdef DashboardEngine < handle
             end
             obj.Layout = DashboardLayout();
             obj.Layout.EngineRef = obj;  % Phase 1032 PLOG-VIZ-05 — used by addPlantLogToggle callback
-            obj.WidgetTypeMap_ = containers.Map({ ...
-                'fastsense',   'number',     'status',    'text', ...
-                'gauge',       'table',      'rawaxes',   'timeline', ...
-                'group',       'heatmap',    'barchart',  'histogram', ...
-                'scatter',     'image',      'multistatus', 'divider', ...
-                'iconcard',    'chipbar',    'sparkline'}, ...
-                {@FastSenseWidget, @NumberWidget, @StatusWidget, @TextWidget, ...
-                 @GaugeWidget, @TableWidget, @RawAxesWidget, @EventTimelineWidget, ...
-                 @GroupWidget, @HeatmapWidget, @BarChartWidget, @HistogramWidget, ...
-                 @ScatterWidget, @ImageWidget, @MultiStatusWidget, @DividerWidget, ...
-                 @IconCardWidget, @ChipBarWidget, @SparklineCardWidget});
+            % Widget type->constructor dispatch now lives in DashboardWidgetRegistry
+            % (the single source of truth shared with the serializer + detach paths).
         end
 
         function pg = addPage(obj, name)
@@ -393,8 +382,8 @@ classdef DashboardEngine < handle
                     type = 'number';
                 end
 
-                if isKey(obj.WidgetTypeMap_, type)
-                    ctor = obj.WidgetTypeMap_(type);
+                if DashboardWidgetRegistry.isRegistered(DashboardWidgetRegistry.resolveAlias(type))
+                    ctor = DashboardWidgetRegistry.constructorFor(type);
                     w = ctor(varargin{:});
                 else
                     error('DashboardEngine:unknownType', ...
@@ -1188,7 +1177,8 @@ classdef DashboardEngine < handle
                 width = 48;
             end
 
-            nWidgets = numel(obj.Widgets);
+            ws = obj.activePageWidgets();
+            nWidgets = numel(ws);
 
             % Empty dashboard
             if nWidgets == 0
@@ -1200,7 +1190,7 @@ classdef DashboardEngine < handle
             cols = obj.Layout.Columns;
             maxRow = 1;
             for i = 1:nWidgets
-                p = obj.Widgets{i}.Position;
+                p = ws{i}.Position;
                 bottomRow = p(2) + p(4) - 1;
                 if bottomRow > maxRow
                     maxRow = bottomRow;
@@ -1218,7 +1208,7 @@ classdef DashboardEngine < handle
 
             % Render each widget
             for i = 1:nWidgets
-                w = obj.Widgets{i};
+                w = ws{i};
                 p = w.Position;  % [col, row, wCols, hRows]
 
                 % Character coordinates (1-based)
@@ -1501,13 +1491,44 @@ classdef DashboardEngine < handle
             end
         end
 
+        function removePage(obj, idx)
+        %REMOVEPAGE Remove the page at index idx, keeping ActivePage valid.
+        %   Mirror of removeWidget for pages. Throws DashboardEngine:invalidIndex
+        %   on a bad index. Deletes the page's widgets and the page, adjusts
+        %   ActivePage (decrements when removing a page before it; clamps when
+        %   removing the active page; resets to 0 when no pages remain), and
+        %   re-renders when a figure is live.
+            if idx < 1 || idx > numel(obj.Pages)
+                error('DashboardEngine:invalidIndex', ...
+                    'Page index %d out of range [1, %d].', idx, numel(obj.Pages));
+            end
+            pg = obj.Pages{idx};
+            ws = pg.Widgets;
+            for i = 1:numel(ws)
+                delete(ws{i});
+            end
+            obj.Pages(idx) = [];
+            delete(pg);
+            if isempty(obj.Pages)
+                obj.ActivePage = 0;
+            elseif idx < obj.ActivePage
+                obj.ActivePage = obj.ActivePage - 1;
+            elseif idx == obj.ActivePage
+                obj.ActivePage = max(1, min(obj.ActivePage, numel(obj.Pages)));
+            end
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.rerenderWidgets();
+            end
+        end
+
         function setWidgetPosition(obj, idx, pos)
         %SETWIDGETPOSITION Set the grid position of a widget by index.
         %   Clamps width to grid columns and resolves overlaps with other
-        %   widgets.
-            if idx < 1 || idx > numel(obj.Widgets)
+        %   widgets. Operates on the active page in multi-page mode.
+            ws = obj.activePageWidgets();
+            if idx < 1 || idx > numel(ws)
                 error('DashboardEngine:invalidIndex', ...
-                    'Widget index %d out of range [1, %d].', idx, numel(obj.Widgets));
+                    'Widget index %d out of range [1, %d].', idx, numel(ws));
             end
             % Clamp to grid bounds
             cols = obj.Layout.Columns;
@@ -1516,25 +1537,28 @@ classdef DashboardEngine < handle
             pos(2) = max(1, pos(2));
             pos(4) = max(1, pos(4));
             % Resolve overlaps against other widgets
-            existingPositions = cell(1, numel(obj.Widgets) - 1);
+            existingPositions = cell(1, numel(ws) - 1);
             k = 0;
-            for i = 1:numel(obj.Widgets)
+            for i = 1:numel(ws)
                 if i ~= idx
                     k = k + 1;
-                    existingPositions{k} = obj.Widgets{i}.Position;
+                    existingPositions{k} = ws{i}.Position;
                 end
             end
             pos = obj.Layout.resolveOverlap(pos, existingPositions);
-            obj.Widgets{idx}.Position = pos;
+            % ws{idx} is a handle, so this mutates the widget stored in the page.
+            ws{idx}.Position = pos;
         end
 
         function w = getWidgetByTitle(obj, title)
         %GETWIDGETBYTITLE Find a widget by its Title property.
-        %   Returns the widget object, or empty if not found.
+        %   Searches every page in multi-page mode (active page or single-page
+        %   Widgets otherwise). Returns the widget object, or empty if not found.
             w = [];
-            for i = 1:numel(obj.Widgets)
-                if strcmp(obj.Widgets{i}.Title, title)
-                    w = obj.Widgets{i};
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                if strcmp(ws{i}.Title, title)
+                    w = ws{i};
                     return;
                 end
             end
@@ -2293,8 +2317,10 @@ classdef DashboardEngine < handle
         function markAllDirty(obj)
         %MARKALLDIRTY Flag all widgets as needing refresh.
         %   Called on theme change, figure resize, or other global state changes.
-            for i = 1:numel(obj.Widgets)
-                obj.Widgets{i}.markDirty();
+        %   Covers every page in multi-page mode.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                ws{i}.markDirty();
             end
         end
 
@@ -4473,25 +4499,57 @@ classdef DashboardEngine < handle
 
     methods (Static)
         function types = widgetTypes()
-            %WIDGETTYPES List supported widget type strings.
-            types = {
-                'fastsense',    'Time-series plot (FastSenseWidget)'
-                'number',      'Single numeric value with trend (NumberWidget)'
-                'status',      'Status indicator with dot and label (StatusWidget)'
-                'gauge',       'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)'
-                'table',       'Data table from sensor (TableWidget)'
-                'text',        'Static text block (TextWidget)'
-                'timeline',    'Event timeline display (EventTimelineWidget)'
-                'rawaxes',     'Raw MATLAB axes for custom plotting (RawAxesWidget)'
-                'group',       'Widget container with panel/collapsible/tabbed modes (GroupWidget)'
-                'heatmap',     'Heatmap color grid (HeatmapWidget)'
-                'barchart',    'Bar chart for categories (BarChartWidget)'
-                'histogram',   'Value distribution histogram (HistogramWidget)'
-                'scatter',     'X vs Y scatter plot (ScatterWidget)'
-                'image',       'Static image display (ImageWidget)'
-                'multistatus', 'Multi-sensor status grid (MultiStatusWidget)'
-                'divider',     'Horizontal divider line (DividerWidget)'
-            };
+            %WIDGETTYPES Supported widget types + descriptions, as an Nx2 cell.
+            %   Derived from DashboardWidgetRegistry.types() (the single source of
+            %   truth), so it can no longer drift from what addWidget accepts, and
+            %   user-registered types (registerWidgetType) appear automatically with
+            %   a generic description.
+            descMap = containers.Map( ...
+                {'fastsense', 'number', 'status', 'gauge', 'table', 'text', ...
+                 'timeline', 'rawaxes', 'group', 'heatmap', 'barchart', ...
+                 'histogram', 'scatter', 'image', 'multistatus', 'divider', ...
+                 'iconcard', 'chipbar', 'sparkline'}, ...
+                {'Time-series plot (FastSenseWidget)', ...
+                 'Single numeric value with trend (NumberWidget)', ...
+                 'Status indicator with dot and label (StatusWidget)', ...
+                 'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)', ...
+                 'Data table from sensor (TableWidget)', ...
+                 'Static text block (TextWidget)', ...
+                 'Event timeline display (EventTimelineWidget)', ...
+                 'Raw MATLAB axes for custom plotting (RawAxesWidget)', ...
+                 'Widget container with panel/collapsible/tabbed modes (GroupWidget)', ...
+                 'Heatmap color grid (HeatmapWidget)', ...
+                 'Bar chart for categories (BarChartWidget)', ...
+                 'Value distribution histogram (HistogramWidget)', ...
+                 'X vs Y scatter plot (ScatterWidget)', ...
+                 'Static image display (ImageWidget)', ...
+                 'Multi-sensor status grid (MultiStatusWidget)', ...
+                 'Horizontal divider line (DividerWidget)', ...
+                 'Icon + value card (IconCardWidget)', ...
+                 'Chip/badge status bar (ChipBarWidget)', ...
+                 'Sparkline value card (SparklineCardWidget)'});
+            names = DashboardWidgetRegistry.types();
+            types = cell(numel(names), 2);
+            for i = 1:numel(names)
+                types{i, 1} = names{i};
+                if descMap.isKey(names{i})
+                    types{i, 2} = descMap(names{i});
+                else
+                    types{i, 2} = sprintf('%s widget', names{i});
+                end
+            end
+        end
+
+        function registerWidgetType(type, ctorHandle)
+            %REGISTERWIDGETTYPE Register a custom widget type with the dashboard.
+            %   DashboardEngine.registerWidgetType('mytype', @MyWidget) makes
+            %   'mytype' usable through addWidget, serialization, and detach — the
+            %   documented extension point for third-party widgets. The widget class
+            %   must subclass DashboardWidget and provide a static fromStruct.
+            %   Errors DashboardWidgetRegistry:duplicateType on a name collision.
+            %
+            %   See also DashboardWidgetRegistry.register, DashboardEngine.widgetTypes.
+            DashboardWidgetRegistry.register(type, ctorHandle);
         end
 
         function obj = load(filepath, varargin)

@@ -35,5 +35,46 @@ classdef TestHistogramWidget < matlab.unittest.TestCase
             testCase.verifyEqual(s.numBins, 20);
             testCase.verifyEqual(s.showNormalFit, true);
         end
+
+        function testDerivedTagRefreshNoCrash(testCase)
+        %TESTDERIVEDTAGREFRESHNOCRASH P0-2: a DerivedTag (no public .Y) must refresh via getXY().
+            a = SensorTag('a', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('b', 'X', 1:10, 'Y', 2:11);
+            d = DerivedTag('d', {a, b}, @(p) deal(p{1}.X, p{1}.Y + p{2}.Y));
+            w = HistogramWidget('Title', 'Hist');
+            w.Tag = d;
+            fig = figure('Visible', 'off');
+            cleanup = onCleanup(@() close(fig)); %#ok<NASGU>
+            hp = uipanel(fig, 'Position', [0 0 1 1]);
+            w.ParentTheme = DashboardTheme('dark');
+            threw = false; msg = '';
+            try
+                w.render(hp);   % refresh() read obj.Sensor.Y -> threw before P0-2 fix
+            catch err
+                threw = true; msg = err.message;
+            end
+            testCase.verifyFalse(threw, msg);
+        end
+
+        function testHistogramCallbackRoundTrip(testCase)
+        %TESTHISTOGRAMCALLBACKROUNDTRIP P0-3: DataFcn survives toStruct/fromStruct.
+            w = HistogramWidget('Title', 'H');
+            w.DataFcn = @() [1 2 3 4 5];
+            w2 = HistogramWidget.fromStruct(w.toStruct());
+            testCase.verifyNotEmpty(w2.DataFcn);
+            testCase.verifyEqual(func2str(w2.DataFcn), func2str(w.DataFcn));
+        end
+
+        function testHistogramAsciiRenderTag(testCase)
+        %TESTHISTOGRAMASCIIRENDERTAG P0-2: asciiRender probes Tag data via getXY().
+            a = SensorTag('a', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('b', 'X', 1:10, 'Y', 2:11);
+            d = DerivedTag('d', {a, b}, @(p) deal(p{1}.X, p{1}.Y + p{2}.Y));
+            w = HistogramWidget('Title', 'H');
+            w.Tag = d;
+            lines = w.asciiRender(24, 3);
+            testCase.verifyEqual(numel(lines), 3);
+            testCase.verifyTrue(contains(lines{2}, 'data points'));
+        end
     end
 end

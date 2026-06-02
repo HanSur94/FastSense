@@ -124,6 +124,113 @@ classdef TestDashboardMultiPage < matlab.unittest.TestCase
             testCase.verifyEqual(d.ActivePage, 1);
         end
 
+        function testMultiPageWidgetAddressing(testCase)
+        %TESTMULTIPAGEWIDGETADDRESSING P0-1: widget-addressing methods are page-aware.
+        %   getWidgetByTitle/setWidgetPosition/markAllDirty/preview must operate on
+        %   the active page's widgets, not the (empty) obj.Widgets, once addPage is used.
+            d = DashboardEngine('mp');
+            d.addPage('P1');
+            w = MockDashboardWidget('Title', 'Alpha', 'Position', [1 1 4 2]);
+            d.addWidget(w);
+            % Widget lives under the page; obj.Widgets stays empty in multi-page mode.
+            testCase.verifyEmpty(d.Widgets);
+            testCase.verifyEqual(numel(d.Pages{1}.Widgets), 1);
+
+            % getWidgetByTitle finds the page widget (returned [] before P0-1 fix).
+            g = d.getWidgetByTitle('Alpha');
+            testCase.verifyTrue(~isempty(g) && g == w);
+
+            % setWidgetPosition on a valid index does not throw and moves the widget
+            % (threw DashboardEngine:invalidIndex before P0-1 fix).
+            threw = false;
+            try
+                d.setWidgetPosition(1, [3 3 4 2]);
+            catch
+                threw = true;
+            end
+            testCase.verifyFalse(threw);
+            testCase.verifyEqual(w.Position(1), 3);
+
+            % markAllDirty flags the page widget (was a no-op before P0-1 fix).
+            w.Dirty = false;
+            d.markAllDirty();
+            testCase.verifyTrue(w.Dirty);
+
+            % preview reports the widget instead of "(empty)" (printed empty before fix).
+            out = evalc('d.preview(''Width'', 120)');
+            testCase.verifyFalse(contains(out, 'empty -- no widgets'));
+            testCase.verifyTrue(contains(out, '1 widgets'));
+        end
+
+        function testSinglePageWidgetAddressingUnchanged(testCase)
+        %TESTSINGLEPAGEWIDGETADDRESSINGUNCHANGED P0-1 regression: single-page path intact.
+            d = DashboardEngine('sp');
+            w = MockDashboardWidget('Title', 'Solo', 'Position', [1 1 4 2]);
+            d.addWidget(w);
+            testCase.verifyEqual(numel(d.Widgets), 1);
+            g = d.getWidgetByTitle('Solo');
+            testCase.verifyTrue(~isempty(g) && g == w);
+            threw = false;
+            try
+                d.setWidgetPosition(1, [2 2 4 2]);
+            catch
+                threw = true;
+            end
+            testCase.verifyFalse(threw);
+            testCase.verifyEqual(w.Position(1), 2);
+            w.Dirty = false;
+            d.markAllDirty();
+            testCase.verifyTrue(w.Dirty);
+        end
+
+        function testRemovePageDropsPage(testCase)
+        %TESTREMOVEPAGEDROPSPAGE removePage drops the page and keeps the rest.
+            d = DashboardEngine('mp');
+            d.addPage('P1'); d.addPage('P2'); d.addPage('P3');
+            testCase.verifyEqual(numel(d.Pages), 3);
+            d.removePage(2);
+            testCase.verifyEqual(numel(d.Pages), 2);
+            testCase.verifyEqual(d.Pages{1}.Name, 'P1');
+            testCase.verifyEqual(d.Pages{2}.Name, 'P3');
+        end
+
+        function testRemovePageBeforeActiveKeepsActive(testCase)
+        %TESTREMOVEPAGEBEFOREACTIVEKEEPSACTIVE Removing a page before ActivePage keeps the same page active.
+            d = DashboardEngine('mp');
+            d.addPage('P1'); d.addPage('P2'); d.addPage('P3');
+            d.switchPage(3);
+            testCase.verifyEqual(d.ActivePage, 3);
+            d.removePage(1);
+            testCase.verifyEqual(numel(d.Pages), 2);
+            testCase.verifyEqual(d.Pages{d.ActivePage}.Name, 'P3');
+        end
+
+        function testRemoveActivePageClampsActive(testCase)
+        %TESTREMOVEACTIVEPAGECLAMPSACTIVE Removing the active (last) page leaves ActivePage valid.
+            d = DashboardEngine('mp');
+            d.addPage('P1'); d.addPage('P2');
+            d.switchPage(2);
+            d.removePage(2);
+            testCase.verifyEqual(numel(d.Pages), 1);
+            testCase.verifyTrue(d.ActivePage >= 1 && d.ActivePage <= numel(d.Pages));
+        end
+
+        function testRemoveLastRemainingPage(testCase)
+        %TESTREMOVELASTREMAININGPAGE Removing the only page resets ActivePage to 0.
+            d = DashboardEngine('mp');
+            d.addPage('P1');
+            d.removePage(1);
+            testCase.verifyEmpty(d.Pages);
+            testCase.verifyEqual(d.ActivePage, 0);
+        end
+
+        function testRemovePageInvalidIndexErrors(testCase)
+        %TESTREMOVEPAGEINVALIDINDEXERRORS Out-of-range index errors with a namespaced id.
+            d = DashboardEngine('mp');
+            d.addPage('P1');
+            testCase.verifyError(@() d.removePage(99), 'DashboardEngine:invalidIndex');
+        end
+
     end
 
 end

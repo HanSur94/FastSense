@@ -236,7 +236,15 @@ classdef FastSense < handle
             defaults.StorageMode = cfg.StorageMode;
             defaults.MemoryLimit = cfg.MemoryLimit;
             defaults.HoverCrosshair = true;
-            [opts, ~] = parseOpts(defaults, varargin);
+            [opts, unmatched] = parseOpts(defaults, varargin);
+            % The constructor has a closed option set, so reject unknown/misspelled
+            % keys immediately rather than silently discarding them (house convention).
+            extraKeys = fieldnames(unmatched);
+            if ~isempty(extraKeys)
+                error('FastSense:unknownOption', ...
+                    'Unknown option ''%s''. Valid options: %s', ...
+                    extraKeys{1}, strjoin(fieldnames(defaults), ', '));
+            end
 
             obj.ParentAxes = opts.Parent;
             obj.LinkGroup = opts.LinkGroup;

@@ -48,9 +48,11 @@ classdef HeatmapWidget < DashboardWidget
             end
 
             data = [];
-            if ~isempty(obj.Sensor)
-                if isempty(obj.Sensor.Y), return; end
-                data = obj.Sensor.Y;
+            if ~isempty(obj.Tag)
+                % Read via the Tag.getXY() contract (Derived/Composite tags have no .Y).
+                [~, y] = obj.Tag.getXY();
+                if isempty(y), return; end
+                data = y;
             elseif ~isempty(obj.DataFcn)
                 data = obj.DataFcn();
             end
@@ -133,6 +135,17 @@ classdef HeatmapWidget < DashboardWidget
             if isfield(s, 'showColorbar'), obj.ShowColorbar = s.showColorbar; end
             if isfield(s, 'xLabels'), obj.XLabels = s.xLabels; end
             if isfield(s, 'yLabels'), obj.YLabels = s.yLabels; end
+            % Restore the data binding (callback) — dropped before P0-3.
+            if isfield(s, 'source') && isfield(s.source, 'type')
+                switch s.source.type
+                    case 'callback'
+                        obj.DataFcn = str2func(s.source.function);
+                    otherwise
+                        warning('HeatmapWidget:sourceUnresolved', ...
+                            'Unresolved source type ''%s'' for Heatmap ''%s''.', ...
+                            s.source.type, obj.Title);
+                end
+            end
         end
     end
 end

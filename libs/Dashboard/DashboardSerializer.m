@@ -32,129 +32,49 @@ classdef DashboardSerializer
                 pos = sprintf('[%d %d %d %d]', ws.position.col, ws.position.row, ...
                     ws.position.width, ws.position.height);
 
-                switch ws.type
-                    case 'fastsense'
-                        showPl = isfield(ws, 'showPlantLog') && ws.showPlantLog;
-                        if isfield(ws, 'source')
-                            switch ws.source.type
-                                case 'sensor'
-                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    if showPl
-                                        lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''), ...', ws.source.name);
-                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
-                                    else
-                                        lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.name);
-                                    end
-                                case 'file'
-                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    if showPl
-                                        lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'', ...', ...
-                                            ws.source.path, ws.source.xVar, ws.source.yVar);
-                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
-                                    else
-                                        lines{end+1} = sprintf('        ''File'', ''%s'', ''XVar'', ''%s'', ''YVar'', ''%s'');', ...
-                                            ws.source.path, ws.source.xVar, ws.source.yVar);
-                                    end
-                                case 'data'
-                                    lines{end+1} = sprintf('    w = d.addWidget(''fastsense'', ''Title'', ''%s'', ...', ws.title);
-                                    lines{end+1} = sprintf('        ''Position'', %s, ...', pos);
-                                    if showPl
-                                        lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s, ...', ...
-                                            mat2str(ws.source.x), mat2str(ws.source.y));
-                                        lines{end+1} = sprintf('        ''ShowPlantLog'', true);');
-                                    else
-                                        lines{end+1} = sprintf('        ''XData'', %s, ''YData'', %s);', ...
-                                            mat2str(ws.source.x), mat2str(ws.source.y));
-                                    end
-                                otherwise
-                                    if showPl
-                                        lines{end+1} = sprintf( ...
-                                            '    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', ...
-                                            ws.title, pos);
-                                    else
-                                        lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                                    end
-                            end
-                        else
-                            if showPl
-                                lines{end+1} = sprintf( ...
-                                    '    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s, ''ShowPlantLog'', true);', ...
-                                    ws.title, pos);
-                            else
-                                lines{end+1} = sprintf('    d.addWidget(''fastsense'', ''Title'', ''%s'', ''Position'', %s);', ws.title, pos);
-                            end
-                        end
-                    case 'number'
-                        line = sprintf('    d.addWidget(''number'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n        ''Units'', ''%s''', ws.units)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'status'
-                        line = sprintf('    d.addWidget(''status'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        lines{end+1} = [line, ');'];
-                    case 'text'
-                        line = sprintf('    d.addWidget(''text'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'content') && ~isempty(ws.content)
-                            line = [line, sprintf(', ...\n        ''Content'', ''%s''', ws.content)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'gauge'
-                        line = sprintf('    d.addWidget(''gauge'', ''Title'', ''%s'', ''Position'', %s', ws.title, pos);
-                        if isfield(ws, 'range')
-                            line = [line, sprintf(', ...\n        ''Range'', [%g %g]', ws.range(1), ws.range(2))];
-                        end
-                        if isfield(ws, 'units') && ~isempty(ws.units)
-                            line = [line, sprintf(', ...\n        ''Units'', ''%s''', ws.units)];
-                        end
-                        lines{end+1} = [line, ');'];
-                    case 'group'
-                        groupVarName = sprintf('g%d', groupCount);
-                        groupCount = groupCount + 1;
-                        line = sprintf('    %s = d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ...
-                            groupVarName, ws.label, pos);
-                        if isfield(ws, 'mode') && ~isempty(ws.mode)
-                            line = [line, sprintf(', ...\n        ''Mode'', ''%s''', ws.mode)];
-                        end
-                        lines{end+1} = [line, ');'];
-                        % Emit children
-                        if isfield(ws, 'mode') && strcmp(ws.mode, 'tabbed') && isfield(ws, 'tabs') && ~isempty(ws.tabs)
-                            tabs = normalizeToCell(ws.tabs);
-                            for ti = 1:numel(tabs)
-                                tab = tabs{ti};
-                                tabWidgets = normalizeToCell(tab.widgets);
-                                for ci = 1:numel(tabWidgets)
-                                    [childLines, childVar, groupCount] = ...
-                                        DashboardSerializer.emitChildWidget(tabWidgets{ci}, groupCount);
-                                    lines = [lines, childLines];
-                                    lines{end+1} = sprintf('    %s.addChild(%s, ''%s'');', ...
-                                        groupVarName, childVar, tab.name);
-                                end
-                            end
-                        elseif isfield(ws, 'children') && ~isempty(ws.children)
-                            ch = normalizeToCell(ws.children);
-                            for ci = 1:numel(ch)
+                if strcmp(ws.type, 'group')
+                    % Groups need a captured variable (gN) so children can be
+                    % attached via gN.addChild(...). linesForWidget emits only the
+                    % group header, so keep the group-aware emission here.
+                    groupVarName = sprintf('g%d', groupCount);
+                    groupCount = groupCount + 1;
+                    line = sprintf('    %s = d.addWidget(''group'', ''Label'', ''%s'', ''Position'', %s', ...
+                        groupVarName, ws.label, pos);
+                    if isfield(ws, 'mode') && ~isempty(ws.mode)
+                        line = [line, sprintf(', ...\n        ''Mode'', ''%s''', ws.mode)];
+                    end
+                    lines{end+1} = [line, ');'];
+                    % Emit children
+                    if isfield(ws, 'mode') && strcmp(ws.mode, 'tabbed') && isfield(ws, 'tabs') && ~isempty(ws.tabs)
+                        tabs = normalizeToCell(ws.tabs);
+                        for ti = 1:numel(tabs)
+                            tab = tabs{ti};
+                            tabWidgets = normalizeToCell(tab.widgets);
+                            for ci = 1:numel(tabWidgets)
                                 [childLines, childVar, groupCount] = ...
-                                    DashboardSerializer.emitChildWidget(ch{ci}, groupCount);
+                                    DashboardSerializer.emitChildWidget(tabWidgets{ci}, groupCount);
                                 lines = [lines, childLines];
-                                lines{end+1} = sprintf('    %s.addChild(%s);', groupVarName, childVar);
+                                lines{end+1} = sprintf('    %s.addChild(%s, ''%s'');', ...
+                                    groupVarName, childVar, tab.name);
                             end
                         end
-                    case 'divider'
-                        lines{end+1} = sprintf('    d.addWidget(''divider'', ''Position'', %s);', pos);
-                    case 'iconcard'
-                        lines{end+1} = sprintf('    d.addWidget(''iconcard'', ''Title'', ''%s'', ...', ws.title);
-                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
-                    case 'chipbar'
-                        lines{end+1} = sprintf('    d.addWidget(''chipbar'', ''Title'', ''%s'', ...', ws.title);
-                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
-                    case 'sparkline'
-                        lines{end+1} = sprintf('    d.addWidget(''sparkline'', ''Title'', ''%s'', ...', ws.title);
-                        lines{end+1} = sprintf('        ''Position'', %s);', pos);
-                    otherwise
-                        lines{end+1} = sprintf('    d.addWidget(''%s'', ''Title'', ''%s'', ''Position'', %s);', ws.type, ws.title, pos);
+                    elseif isfield(ws, 'children') && ~isempty(ws.children)
+                        ch = normalizeToCell(ws.children);
+                        for ci = 1:numel(ch)
+                            [childLines, childVar, groupCount] = ...
+                                DashboardSerializer.emitChildWidget(ch{ci}, groupCount);
+                            lines = [lines, childLines];
+                            lines{end+1} = sprintf('    %s.addChild(%s);', groupVarName, childVar);
+                        end
+                    end
+                else
+                    % Delegate all non-group widgets to the complete per-type emitter
+                    % so number/status/gauge ValueFcn/StaticValue/StatusFcn bindings
+                    % (and every other widget type) survive .m export — exactly as
+                    % exportScript already does. The old open-coded switch here was a
+                    % lossy duplicate that dropped those bindings.
+                    wLines = DashboardSerializer.linesForWidget(ws, pos, '    ');
+                    lines = [lines, wLines]; %#ok<AGROW>
                 end
                 lines{end+1} = '';
             end
@@ -317,6 +237,32 @@ classdef DashboardSerializer
             result = feval(funcname);
         end
 
+        function v = currentSchemaVersion()
+            %CURRENTSCHEMAVERSION Supported dashboard config schema version.
+            %   Writers stamp this into every config (widgetsToConfig /
+            %   widgetsPagesToConfig). The loader warns
+            %   (DashboardSerializer:schemaVersionNewer) when it reads a config
+            %   whose schemaVersion exceeds this value. Bump only when the on-disk
+            %   config shape changes in a way older loaders cannot read.
+            v = 1;
+        end
+
+        function checkSchemaVersion_(config, source)
+            %CHECKSCHEMAVERSION_ Warn if a loaded config is newer than supported.
+            %   A missing schemaVersion is treated as v1 (pre-versioning files) and
+            %   loads silently.
+            if ~isfield(config, 'schemaVersion') || isempty(config.schemaVersion)
+                return;
+            end
+            sv = config.schemaVersion;
+            if sv > DashboardSerializer.currentSchemaVersion()
+                warning('DashboardSerializer:schemaVersionNewer', ...
+                    ['Dashboard ''%s'' was saved with schemaVersion %g but this build ' ...
+                     'supports up to %g. Some widgets may not load.'], ...
+                    source, sv, DashboardSerializer.currentSchemaVersion());
+            end
+        end
+
         function config = loadJSON(filepath)
             %LOADJSON Legacy: read dashboard config from JSON file.
             fid = fopen(filepath, 'r');
@@ -344,6 +290,7 @@ classdef DashboardSerializer
                     config.widgets = {};
                 end
             end
+            DashboardSerializer.checkSchemaVersion_(config, filepath);
         end
 
         function config = widgetsToConfig(name, theme, liveInterval, widgets, infoFile)
@@ -358,6 +305,7 @@ classdef DashboardSerializer
                 config.infoFile = infoFile;
             end
             config.grid = struct('columns', 24);
+            config.schemaVersion = DashboardSerializer.currentSchemaVersion();
             config.widgets = cell(1, numel(widgets));
             for i = 1:numel(widgets)
                 config.widgets{i} = widgets{i}.toStruct();
@@ -378,6 +326,7 @@ classdef DashboardSerializer
                 config.infoFile = infoFile;
             end
             config.grid = struct('columns', 24);
+            config.schemaVersion = DashboardSerializer.currentSchemaVersion();
             config.activePage = activePage;
             config.pages = cell(1, numel(pages));
             for i = 1:numel(pages)
@@ -412,58 +361,31 @@ classdef DashboardSerializer
 
         function w = createWidgetFromStruct(ws)
             %CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+            %   Dispatches through DashboardWidgetRegistry — the single source of
+            %   truth for widget type->class. The deprecated 'kpi' resolves to
+            %   NumberWidget via the registry alias. 'mock' is a test-only widget
+            %   kept as a thin special-case here: MockDashboardWidget lives under
+            %   tests/ and is intentionally NOT seeded into the library registry,
+            %   so the library has no dependency on test code. Unknown types warn
+            %   DashboardSerializer:unknownType and return [].
             w = [];
-            switch ws.type
-                case 'fastsense'
-                    w = FastSenseWidget.fromStruct(ws);
-                case 'number'
-                    w = NumberWidget.fromStruct(ws);
-                case 'kpi'
-                    w = NumberWidget.fromStruct(ws);
-                case 'status'
-                    w = StatusWidget.fromStruct(ws);
-                case 'text'
-                    w = TextWidget.fromStruct(ws);
-                case 'gauge'
-                    w = GaugeWidget.fromStruct(ws);
-                case 'table'
-                    w = TableWidget.fromStruct(ws);
-                case 'rawaxes'
-                    w = RawAxesWidget.fromStruct(ws);
-                case 'timeline'
-                    w = EventTimelineWidget.fromStruct(ws);
-                case 'group'
-                    w = GroupWidget.fromStruct(ws);
-                case 'heatmap'
-                    w = HeatmapWidget.fromStruct(ws);
-                case 'barchart'
-                    w = BarChartWidget.fromStruct(ws);
-                case 'histogram'
-                    w = HistogramWidget.fromStruct(ws);
-                case 'scatter'
-                    w = ScatterWidget.fromStruct(ws);
-                case 'image'
-                    w = ImageWidget.fromStruct(ws);
-                case 'multistatus'
-                    w = MultiStatusWidget.fromStruct(ws);
-                case 'divider'
-                    w = DividerWidget.fromStruct(ws);
-                case 'iconcard'
-                    w = IconCardWidget.fromStruct(ws);
-                case 'chipbar'
-                    w = ChipBarWidget.fromStruct(ws);
-                case 'sparkline'
-                    w = SparklineCardWidget.fromStruct(ws);
-                case 'mock'
-                    % MockDashboardWidget used in tests — load via fromStruct if available
+            resolved = DashboardWidgetRegistry.resolveAlias(ws.type);
+            if strcmp(resolved, 'mock')
+                if exist('MockDashboardWidget', 'class') == 8 || ...
+                        exist('MockDashboardWidget', 'file') == 2
                     try
                         w = MockDashboardWidget.fromStruct(ws);
                     catch
                         w = [];
                     end
-                otherwise
-                    warning('DashboardSerializer:unknownType', ...
-                        'Unknown widget type: %s — skipping', ws.type);
+                end
+                return;
+            end
+            if DashboardWidgetRegistry.isRegistered(resolved)
+                w = DashboardWidgetRegistry.fromStruct(ws.type, ws);
+            else
+                warning('DashboardSerializer:unknownType', ...
+                    'Unknown widget type: %s — skipping', ws.type);
             end
         end
 

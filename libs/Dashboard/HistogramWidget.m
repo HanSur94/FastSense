@@ -44,9 +44,11 @@ classdef HistogramWidget < DashboardWidget
             end
 
             data = [];
-            if ~isempty(obj.Sensor)
-                if isempty(obj.Sensor.Y), return; end
-                data = obj.Sensor.Y(:)';
+            if ~isempty(obj.Tag)
+                % Read via the Tag.getXY() contract (Derived/Composite tags have no .Y).
+                [~, y] = obj.Tag.getXY();
+                if isempty(y), return; end
+                data = y(:)';
             elseif ~isempty(obj.DataFcn)
                 data = obj.DataFcn();
                 data = data(:)';
@@ -100,10 +102,14 @@ classdef HistogramWidget < DashboardWidget
             lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
 
             if height >= 2
-                hasData = (~isempty(obj.Sensor) && ~isempty(obj.Sensor.Y)) || ...
-                          ~isempty(obj.DataFcn);
-                if hasData && ~isempty(obj.Sensor)
-                    info = sprintf('%d data points', numel(obj.Sensor.Y));
+                if ~isempty(obj.Tag)
+                    [~, yProbe] = obj.Tag.getXY();
+                else
+                    yProbe = [];
+                end
+                hasData = ~isempty(yProbe) || ~isempty(obj.DataFcn);
+                if hasData && ~isempty(obj.Tag)
+                    info = sprintf('%d data points', numel(yProbe));
                 else
                     info = '[-- histogram --]';
                 end
@@ -136,6 +142,17 @@ classdef HistogramWidget < DashboardWidget
             if isfield(s, 'numBins'), obj.NumBins = s.numBins; end
             if isfield(s, 'showNormalFit'), obj.ShowNormalFit = s.showNormalFit; end
             if isfield(s, 'edgeColor'), obj.EdgeColor = s.edgeColor; end
+            % Restore the data binding (callback) — dropped before P0-3.
+            if isfield(s, 'source') && isfield(s.source, 'type')
+                switch s.source.type
+                    case 'callback'
+                        obj.DataFcn = str2func(s.source.function);
+                    otherwise
+                        warning('HistogramWidget:sourceUnresolved', ...
+                            'Unresolved source type ''%s'' for Histogram ''%s''.', ...
+                            s.source.type, obj.Title);
+                end
+            end
         end
     end
 end
