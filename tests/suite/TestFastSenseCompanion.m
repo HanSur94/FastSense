@@ -1648,6 +1648,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         function testCompanionTimeRangeButtonDefaultLabel(testCase)
         %TESTCOMPANIONTIMERANGEBUTTONDEFAULTLABEL 1041: range button exists in col 9 with label 'Last 7 days'.
         %   Also asserts toolbar ColumnWidth unchanged as a regression guard.
+            testCase.armCleanDefaultPrefs_();   % assert the built-in default label
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
             hFig = app.getFigForTest_();
@@ -1662,7 +1663,10 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             warnState = warning('off', 'MATLAB:structOnObject');
             cleanupW = onCleanup(@() warning(warnState));
             s = struct(app);
-            hToolbarGrid = findall(hFig, 'Type', 'uigridlayout', '-depth', 2);
+            % Search all descendants: the toolbar grid is nested at depth 3
+            % (hFig -> hLayout_ -> hToolbarPanel_ -> hToolbarGrid), so a
+            % '-depth', 2 search misses it.
+            hToolbarGrid = findall(hFig, 'Type', 'uigridlayout');
             % Locate the 1x10 toolbar grid by width count.
             expected = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
             found = false;
@@ -1681,6 +1685,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
 
         function testRangeChangedRequeriesManagedEngines(testCase)
         %TESTRANGECHANGEDREQUERIESMANGEDENGINES 1041: RangeChanged calls setTimeWindow on managed engines.
+            testCase.backupAndArmRestore_();   % onRangeChanged_ persists range; don't pollute prefs
             spy = SpyTimeWindowEngine();
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
@@ -1698,6 +1703,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
 
         function testRangeChangedRequeriesAdHocFigure(testCase)
         %TESTRANGECHANGEDREQUERIESADHOCFIGURE 1041: RangeChanged calls setTimeWindow on ad-hoc figures.
+            testCase.backupAndArmRestore_();   % onRangeChanged_ persists range; don't pollute prefs
             spy = SpyTimeWindowEngine();
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
@@ -1723,6 +1729,7 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
         %   MATLAB session; the seam tested here confirms the public accessor
         %   returns the resolved window so open-site callers can apply it.
         %   The visual + spawned-engine verification is covered by the manual checklist.
+            testCase.armCleanDefaultPrefs_();   % assert the built-in default window
             app = FastSenseCompanion('Theme', 'dark');
             testCase.addTeardown(@() app.close());
             % Confirm currentTimeWindow() returns a non-empty pair (default is Last 7 days).
@@ -1766,6 +1773,22 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             if exist(prefsPath, 'file') == 2
                 backupPath = [tempname, '.mat'];
                 copyfile(prefsPath, backupPath);
+            end
+            testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
+        end
+
+        function armCleanDefaultPrefs_(testCase)
+        %ARMCLEANDEFAULTPREFS_ Back up + remove the prefs file so the companion
+        %   constructs with the built-in default range (Last 7 days), then arm
+        %   restore on teardown. Needed by tests that assert the DEFAULT window:
+        %   without removing an ambient/polluted timeRange pref the companion
+        %   would load that instead (Phase 1041 onRangeChanged_ persists ranges).
+            prefsPath = fullfile(prefdir, 'FastSenseCompanion.mat');
+            backupPath = '';
+            if exist(prefsPath, 'file') == 2
+                backupPath = [tempname, '.mat'];
+                copyfile(prefsPath, backupPath);
+                delete(prefsPath);
             end
             testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
         end
