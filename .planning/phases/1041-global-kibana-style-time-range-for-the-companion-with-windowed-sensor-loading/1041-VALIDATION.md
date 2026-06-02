@@ -2,7 +2,7 @@
 phase: 1041
 slug: global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-02
 ---
@@ -54,7 +54,16 @@ created: 2026-06-02
 
 | Task ID | Plan | Wave | Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|----------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | TBD | unit/integration | TBD | ❌ W0 | ⬜ pending |
+| P01-T1 | 01 | 1 | `Tag.getXYRange` default slice + `SensorTag` override (disk + RAM) | unit | `test_sensor_tag_range()` | `tests/test_sensor_tag_range.m` | ⬜ |
+| P01-T2 | 01 | 1 | `SensorTag.getTimeRange()` disk returns `[XMin, XMax]` (not `[NaN NaN]`) | unit | `test_sensor_tag_range()` | `tests/test_sensor_tag_range.m` | ⬜ |
+| P02-T1 | 02 | 2 | `CompanionTimeRange.resolve()` relative + absolute + all; `RangeChanged` fires once per edit | unit | `test_companion_time_range()` | `tests/test_companion_time_range.m` | ⬜ |
+| P03-T1 | 03 | 3 | `DashboardEngine.setTimeWindow` fans window to all widgets | unit | `test_dashboard_time_window()` | `tests/test_dashboard_time_window.m` | ⬜ |
+| P03-T2 | 03 | 3 | `FastSenseWidget` windowed pull + empty-state label | unit | `test_dashboard_time_window()` | `tests/test_dashboard_time_window.m` | ⬜ |
+| P04-T1 | 04 | 4 | `CompanionTimeBar` range button (Tag, col 9, label, color) | UI/integration | `run_matlab_test_file('tests/suite/TestCompanionTimeBar.m')` | `tests/suite/TestCompanionTimeBar.m` | ⬜ |
+| P04-T2 | 04 | 4 | Picker singleton 400x280, preset fires RangeChanged + closes | UI/integration | `run_matlab_test_file('tests/suite/TestCompanionTimeBar.m')` | `tests/suite/TestCompanionTimeBar.m` | ⬜ |
+| P05-T1 | 05 | 4 | `RangeChanged` re-queries managed + ad-hoc engines via spy | integration | `run_matlab_test_file('tests/suite/TestFastSenseCompanion.m')` | `tests/suite/TestFastSenseCompanion.m` | ⬜ |
+| P05-T2 | 05 | 4 | `currentTimeWindow()` returns correct resolved window at open-site seam | integration | `run_matlab_test_file('tests/suite/TestFastSenseCompanion.m')` | `tests/suite/TestFastSenseCompanion.m` | ⬜ |
+| P05-T3 | 05 | 4 | Picker visuals + relative-slide on live tick | MANUAL | See `1041-MANUAL-VERIFY.md` | `1041-MANUAL-VERIFY.md` | ⬜ |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -83,11 +92,11 @@ created: 2026-06-02
 
 ## Validation Sign-Off
 
-- [ ] All tasks have an automated verify or a Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have an automated verify or a manual-checklist entry (P05-T3)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (test files created Plans 01-05)
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s (single-file quick runs)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** pending human run of 1041-MANUAL-VERIFY.md
