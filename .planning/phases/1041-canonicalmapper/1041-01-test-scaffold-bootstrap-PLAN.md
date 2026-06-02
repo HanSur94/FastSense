@@ -192,7 +192,15 @@ Reference test patterns:
     CANON-02 confidence:
     - testConfidenceHighThreshold: a near-identical pair (e.g. `'temp_motor'` vs `'temp_mtor'`, sim ≈ 0.90) -> matched entry `confidence == 'HIGH'`.
     - testConfidenceMediumThreshold: a pair with sim in [0.60, 0.90) -> `confidence == 'MEDIUM'`. Construct keys with a known mid-range similarity (e.g. `'temperature'` vs `'temp'`: editDist 7, max len 11, sim ≈ 0.3636 -> too low; instead use `'pressure_in'` vs `'pressure_out'`: pick keys you compute to land in [0.60,0.90)). Compute the expected sim in a comment and assert MEDIUM.
-    - testConfidenceLowThreshold: a pair with sim < 0.60 -> `confidence == 'LOW'`.
+    - testConfidenceLowThreshold: assert that a within-cluster member scored against the centroid can land LOW. Use the SAME LOCKED 3-member fixture as Plan 1041-02 Task 2 (identical keys — do NOT use a 2-member "sim < 0.60" pair, which forms no cluster and produces no entry to assert on):
+      ```matlab
+      lowInfos = {
+          struct('machineId','M01','localKey','abcdefghij','name','Centroid','units','u'), ...   % seed member
+          struct('machineId','M02','localKey','abcdefghij','name','Identical','units','u'), ...   % identical to M01 -> HIGH centroid
+          struct('machineId','M03','localKey','abzzzzzzzz','name','Distant','units','u') ...       % distant member, sim 0.20 to centroid
+      };
+      ```
+      Hand-confirmed math (all keys length 10, already normalized; sim = 1 - editDist/10): M01 vs M02 editDist 0 -> sim 1.00 (seed cluster, centroid = `abcdefghij`, both HIGH); M03 vs centroid `abcdefghij` editDist 8 (positions 3..10 differ) -> sim 0.20 -> M03 attaches to the only cluster as a Step-B member and its confidence == 'LOW'. Suggest, locate the entry for machineId `'M03'` under logicalId `'abcdefghij'`, and `verifyEqual(entry.confidence, 'LOW')`. Also assert `verifyEqual(entry.similarity, 0.20, 'AbsTol', 1e-9)` to pin the centroid-scored value. (The clustering mechanism that admits the distant member and scores per-member confidence against the centroid is specified and LOCKED in Plan 1041-02 Task 2; this test and that implementation MUST use the identical fixture.)
     - testConfidenceBoundaryHigh: construct a key pair whose normalized similarity is EXACTLY 0.90 (e.g. normalized lengths 10, edit distance 1 -> sim = 1 - 1/10 = 0.90) and verify `confidence == 'HIGH'` (boundary is inclusive: `sim >= 0.90`). Over-sampled risk area.
     - testConfidenceBoundaryMedium: construct a pair with sim EXACTLY 0.60 (lengths 5, edit distance 2 -> 1 - 2/5 = 0.60) and verify `confidence == 'MEDIUM'` (inclusive `>= 0.60`). Over-sampled risk area.
 
@@ -239,11 +247,12 @@ Reference test patterns:
     - All 30 method names are present. Each of the following greps returns >= 1:
       `grep -c "function testNormalizeLowercase" ...`, `testEditDistanceSymmetry`, `testEditDistanceKnownPairs`, `testSuggestTwoMatchingPairs`, `testSuggestNoMatches`, `testConfidenceHighThreshold`, `testConfidenceMediumThreshold`, `testConfidenceLowThreshold`, `testConfidenceBoundaryHigh`, `testConfidenceBoundaryMedium`, `testUnitMismatchDowngradesHigh`, `testUnitMismatchDowngradesMedium`, `testUnitMismatchEmptyUnitsIgnored`, `testUnitMatchCaseInsensitive`, `testOverrideCreatesEntry`, `testOverrideSurvivesResuggest`, `testRoundTripPreservesEntries`, `testRoundTripPreservesOverriddenStatus`, `testSaveLoadRoundTrip`, `testReviewPendingReturnsLow`, `testReviewPendingReturnsUnitMismatch`, `testReviewPendingExcludesGoodEntries`, `testUnmappedReturnsUnresolved`, `testUnmappedEmptyWhenAllMapped`, `testIsResolvableFalseForLow`, `testIsResolvableTrueForHigh`, `testEditorConstructs`, `testOctaveSafeGrepGate`, `testNoToolboxCallGrepGate`
     - Total method count: `grep -c "function test" tests/suite/TestCanonicalMapper.m` returns `30`
+    - testConfidenceLowThreshold uses the LOCKED 3-member fixture (matches Plan 02): `grep -c "abzzzzzzzz" tests/suite/TestCanonicalMapper.m` >= 1 and `grep -c "abcdefghij" tests/suite/TestCanonicalMapper.m` >= 1
     - Grep gates use fileread (not shell system): `grep -c "fileread(" tests/suite/TestCanonicalMapper.m` returns >= 1; `grep -c "system(" tests/suite/TestCanonicalMapper.m` returns `0`
     - The static analyzer reports no syntax errors: `mcp__matlab__check_matlab_code` on tests/suite/TestCanonicalMapper.m returns no error-level diagnostics
     - `runtests('tests/suite/TestCanonicalMapper')` RUNS (does not crash the harness) and reports the methods as failed/incomplete (RED) — confirming the suite is wired and the implementation is genuinely missing
   </acceptance_criteria>
-  <done>TestCanonicalMapper.m contains all 30 named test methods with real assertion bodies (not stubs), uses the addPaths/install() setup convention, uses fileread-based grep gates guarded for the not-yet-existing CanonicalMapper.m, and runs RED end-to-end.</done>
+  <done>TestCanonicalMapper.m contains all 30 named test methods with real assertion bodies (not stubs), uses the addPaths/install() setup convention, uses fileread-based grep gates guarded for the not-yet-existing CanonicalMapper.m, and runs RED end-to-end. testConfidenceLowThreshold uses the same LOCKED 3-member fixture (M01/M02 `abcdefghij` + M03 `abzzzzzzzz`) as Plan 1041-02 Task 2.</done>
 </task>
 
 </tasks>
@@ -265,3 +274,4 @@ Reference test patterns:
 <output>
 After completion, create `.planning/phases/1041-canonicalmapper/1041-01-SUMMARY.md`
 </output>
+</content>

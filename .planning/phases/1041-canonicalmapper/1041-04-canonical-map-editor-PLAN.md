@@ -14,6 +14,7 @@ must_haves:
     - "A LOW-confidence or unit-mismatch row can be promoted to Confirmed via the Promote button, gated by a uiconfirm warning, and the change reflects in mapper state"
     - "User can override a row's local key via the Override button + inputdlg, and the override persists in the mapper"
     - "testEditorConstructs smoke test passes on MATLAB (skips cleanly on Octave)"
+    - "All 30 TestCanonicalMapper test methods pass on MATLAB (28 data-model tests green from Plans 02-03, plus testEditorConstructs from this plan, plus the two grep-gate tests counted within those 30); on Octave the suite runs 29 with testEditorConstructs skipped cleanly (no hard failure)"
   artifacts:
     - path: "libs/Fleet/CanonicalMapEditor.m"
       provides: "Standalone MATLAB-only uifigure editor: 3-row uigridlayout, 6-column uitable, Promote/Override/Save/Refresh/Show-Pending actions"
@@ -318,3 +319,4 @@ Reference implementations to mirror (read these):
 <output>
 After completion, create `.planning/phases/1041-canonicalmapper/1041-04-SUMMARY.md`
 </output>
+</content>

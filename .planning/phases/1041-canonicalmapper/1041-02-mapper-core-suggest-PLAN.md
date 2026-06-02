@@ -131,9 +131,9 @@ Reference implementations to mirror:
     - .planning/phases/1041-canonicalmapper/1041-RESEARCH.md (§ Code Examples for normalize_ and editDistance_; § Project Constraints for MISS_HIT limits and header-comment requirements)
   </read_first>
   <behavior>
-    - testEditDistanceKnownPairs: editDistance_('abc','abc')=0, ('abc','axc')=1, ('abc','')=3 (asserted via the similarity formula in the test).
-    - testEditDistanceSymmetry: similarity for a pair is identical regardless of tagInfo order (distance is commutative).
-    - testNormalizeLowercase: keys differing only by case/punctuation normalize to the same string (asserted via suggest clustering, or via a public normalize wrapper if you expose one).
+    - testEditDistanceKnownPairs: editDistance_('abc','abc')=0, ('abc','axc')=1, ('abc','')=3 (asserted via the similarity formula in the test — which builds tagInfos and calls suggest(), so this test cannot pass until Task 2 implements suggest()).
+    - testEditDistanceSymmetry: similarity for a pair is identical regardless of tagInfo order (distance is commutative) — also asserted via suggest(), GREEN only after Task 2.
+    - testNormalizeLowercase: keys differing only by case/punctuation normalize to the same string (asserted via suggest clustering) — GREEN only after Task 2.
     - The two grep gates (testOctaveSafeGrepGate, testNoToolboxCallGrepGate) must go GREEN the moment the file exists: NO `contains(` anywhere; the edit-distance helper MUST be named `editDistance_` (trailing underscore) so the `editDistance(` gate does not trip.
   </behavior>
   <action>
@@ -168,12 +168,12 @@ Reference implementations to mirror:
        ```
        (normalize_ and editDistance_ may be local functions at the bottom of the file or private methods; if private methods, call as obj.normalize_(...). Decide and be consistent. RESEARCH.md shows them as standalone helpers — local functions in the same .m file is acceptable and matches DashboardSerializer's pattern. If you make them local functions, similarity_ calls them directly without obj.)
 
-    7. Run the grep gates and the three CANON-01 distance/normalize tests. They must pass (grep gates) / the distance+normalize tests pass once suggest exists in Task 2 (testNormalizeLowercase and testEditDistanceSymmetry assert via suggest). If your test for editDistance asserts via similarity formula and suggest is not built yet, those specific tests stay RED until Task 2 — that is fine within this plan; the grep gates MUST be GREEN now.
+    7. Run the grep gates. They MUST pass the moment the file exists (no contains(, helper named editDistance_). The three CANON-01 distance/normalize tests (testEditDistanceKnownPairs, testEditDistanceSymmetry, testNormalizeLowercase) all assert via suggest(), so they remain RED until Task 2 builds suggest() — that is the intended progression within this plan. Do NOT expect them GREEN after Task 1.
 
     MISS_HIT: keep functions short (each helper well under the 520-line / complexity-80 limits — these are ~20 LOC each), lines <= 160 chars, nesting <= 5.
   </action>
   <verify>
-    <automated>runtests('tests/suite/TestCanonicalMapper') — testOctaveSafeGrepGate and testNoToolboxCallGrepGate GREEN; testEditDistanceKnownPairs GREEN (if it asserts via the helper formula and does not require suggest). Run via mcp__matlab__run_matlab_test_file.</automated>
+    <automated>runtests('tests/suite/TestCanonicalMapper') — after Task 1, ONLY testOctaveSafeGrepGate and testNoToolboxCallGrepGate are GREEN. testEditDistanceKnownPairs, testEditDistanceSymmetry, testNormalizeLowercase, and ALL other data-model tests remain RED until Task 2 completes suggest() (every CANON-01/02 test asserts via suggest(), which does not exist after Task 1). Run via mcp__matlab__run_matlab_test_file.</automated>
   </verify>
   <acceptance_criteria>
     - File exists: `ls libs/Fleet/CanonicalMapper.m` exits 0
@@ -184,9 +184,9 @@ Reference implementations to mirror:
     - normalize_ and editDistance_ are present: `grep -c "function .*normalize_" libs/Fleet/CanonicalMapper.m` >= 1 and `grep -c "function .*editDistance_" libs/Fleet/CanonicalMapper.m` >= 1
     - Entries_ initialized as containers.Map: `grep -c "containers.Map" libs/Fleet/CanonicalMapper.m` >= 1
     - `mcp__matlab__check_matlab_code` on libs/Fleet/CanonicalMapper.m reports no error-level diagnostics
-    - `runtests('tests/suite/TestCanonicalMapper')`: testOctaveSafeGrepGate and testNoToolboxCallGrepGate PASS
+    - `runtests('tests/suite/TestCanonicalMapper')`: testOctaveSafeGrepGate and testNoToolboxCallGrepGate PASS; the CANON-01 data-model tests remain RED (they call suggest(), built in Task 2) — this is the correct intermediate state, not a failure of this task
   </acceptance_criteria>
-  <done>CanonicalMapper.m exists as a handle class with the Entries_ map, threshold constants, and the normalize_/editDistance_/similarity_ helpers; both grep gates are GREEN; the file is Octave-safe and toolbox-free.</done>
+  <done>CanonicalMapper.m exists as a handle class with the Entries_ map, threshold constants, and the normalize_/editDistance_/similarity_ helpers; both grep gates are GREEN; the file is Octave-safe and toolbox-free. The CANON-01 data-model tests stay RED until Task 2 adds suggest().</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -198,8 +198,9 @@ Reference implementations to mirror:
   </read_first>
   <behavior>
     - testSuggestTwoMatchingPairs: 4 tagInfos forming 2 cross-machine clusters -> 2 distinct logicalIds in Entries_.
-    - testSuggestNoMatches: mutually dissimilar keys -> 0 logicalIds; every key in unmapped(machineId).
+    - testSuggestNoMatches: mutually dissimilar keys (no cross-machine pair reaches 0.60) -> 0 logicalIds; every key in unmapped(machineId).
     - testConfidenceHighThreshold/Medium/Low + boundaries: confidence assigned EXACTLY per >=0.90 / >=0.60 / else (inclusive boundaries: sim==0.90 -> HIGH, sim==0.60 -> MEDIUM).
+    - testConfidenceLowThreshold: a 3-member cluster yields one within-cluster LOW entry, because per-member confidence is scored against the CENTROID and the distant third member scores < 0.60 against it (see the LOCKED fixture + confirmed sim math in the action step). This is NOT a 2-member non-clustering pair — a 2-member pair below 0.60 forms no cluster and produces no entry.
     - testUnitMismatchDowngradesHigh: HIGH + mismatched units -> MEDIUM + unitMismatch=true.
     - testUnitMismatchDowngradesMedium: MEDIUM + mismatch -> LOW + unitMismatch=true.
     - testUnitMismatchEmptyUnitsIgnored: empty unit on either side -> unitMismatch=false, no downgrade.
@@ -212,13 +213,35 @@ Reference implementations to mirror:
        - If `~iscell(tagInfos)`: `error('CanonicalMapper:invalidInput', 'suggest expects a cell array of tag-info structs.')`.
        - Each element must be a struct with fields machineId, localKey, name, units (use isfield checks; missing units treated as '' if absent — but RESEARCH.md says units is required, so error if machineId/localKey/name absent; default units to '' if the field is missing).
 
-    2. CLUSTERING ALGORITHM (CANON-01). Flatten tagInfos into a list of (machineId, localKey, name, units). Cross-machine greedy clustering:
-       - For each unordered pair of tag-infos from DIFFERENT machines, compute `sim = obj.similarity_(a.localKey, b.localKey)`.
-       - A pair is a candidate match when `sim >= obj.MEDIUM_THRESHOLD_` (0.60) — below MEDIUM is LOW and per the state machine still recorded as LOW/AUTO/PENDING, but to avoid clustering every dissimilar key together, only group keys with sim >= MEDIUM into a shared logicalId. (testSuggestNoMatches uses keys with sim < 0.60 -> 0 logicalIds. testConfidenceLowThreshold constructs a pair that DOES cluster but lands LOW — to make both true, cluster on sim >= MEDIUM for grouping BUT also produce a LOW entry when a within-cluster member scores below MEDIUM against the centroid. Simplest correct approach: build clusters by single-link grouping at threshold MEDIUM; the cluster's logicalId is the normalized centroid; then for EACH member compute its similarity to the centroid key and assign confidence from THAT sim — a member can be LOW relative to the centroid. Document this clearly. For testConfidenceLowThreshold, construct the cluster so one member's sim-to-centroid is < 0.60 -> LOW. Match the exact fixture keys the test uses.)
-       - logicalId = `obj.normalize_(centroidKey)` where centroidKey is the LONGEST localKey in the cluster (tie -> lexicographically smallest normalized). NEVER assign logicalId = a machine's raw localKey verbatim (Pitfall 3).
-       - Skip any (logicalId, machineId) pair already present with status ~= 'AUTO' (precedence — relevant once Plan 03 adds override; harmless now). Use `isKey(obj.Entries_, logId)` guards.
+    2. CLUSTERING ALGORITHM (CANON-01) — SEED-then-assign. Flatten tagInfos into a list of (machineId, localKey, name, units). The algorithm has TWO distinct steps, and the GROUPING threshold is separate from the per-member CONFIDENCE — this separation is what lets a within-cluster member land LOW (the testConfidenceLowThreshold requirement):
 
-    3. ENTRY CONSTRUCTION: for each cluster member create an entry struct with ALL nine fields (Pattern 2). similarity = member's sim to centroid. status = 'AUTO'. confidence = `obj.assignConfidence_(sim)`. unitMismatch = false (set by step 5).
+       STEP A — form SEED clusters (the grouping threshold gates THIS step only):
+         - Examine every unordered pair of tag-infos from DIFFERENT machines; compute `sim = obj.similarity_(a.localKey, b.localKey)`.
+         - A SEED cluster is created only when at least one cross-machine pair has `sim >= obj.MEDIUM_THRESHOLD_` (0.60). Merge transitively (single-link) at >=0.60 to grow seeds. If NO cross-machine pair reaches 0.60, NO seed cluster forms — every tag-info is a singleton (this is what makes testSuggestNoMatches yield 0 logicalIds, all keys unmapped).
+         - For each seed cluster, the centroidKey = the LONGEST localKey in the cluster (tie -> lexicographically smallest normalized). logicalId = `obj.normalize_(centroidKey)`. NEVER assign logicalId = a machine's raw localKey verbatim (Pitfall 3).
+
+       STEP B — assign remaining members to the NEAREST seed centroid (NO floor here):
+         - For every tag-info NOT already in a seed cluster, find the seed centroid with the highest `simToCentroid = obj.similarity_(member.localKey, centroidKey)` AND a different machine than centroid members; assign the member to THAT cluster. There is NO 0.60 floor in this step — a member is admitted to its nearest existing cluster regardless of simToCentroid (this is precisely how a distant member becomes a within-cluster LOW entry).
+         - A tag-info remains a singleton (-> unmapped) ONLY when NO seed cluster exists for it to attach to (i.e. Step A produced none reachable from a different machine). Do not create a one-machine "cluster".
+
+       PER-MEMBER CONFIDENCE (scored against the centroid, NOT against the grouping threshold):
+         - For EACH cluster member (seed members and Step-B members alike), compute `simToCentroid = obj.similarity_(member.localKey, centroidKey)` and `entry.confidence = obj.assignConfidence_(simToCentroid)`; store `entry.similarity = simToCentroid`. A Step-B member with simToCentroid < 0.60 therefore gets confidence == 'LOW' while still being a cluster member — this is the mechanism the test depends on.
+         - Skip any (logicalId, machineId) pair already present with status ~= 'AUTO' (precedence — relevant once Plan 03 adds override; harmless now). Use `isKey(obj.Entries_, logId)` guards.
+
+       LOCKED FIXTURE for testConfidenceLowThreshold (use these EXACT keys; Plan 01 Task 2 builds the IDENTICAL fixture; sim math hand-confirmed below — all keys are already normalized, length 10, so the similarity formula is `1 - editDistance_/10`):
+       ```matlab
+       tagInfos = {
+           struct('machineId','M01','localKey','abcdefghij','name','Centroid','units','u'), ...   % seed member
+           struct('machineId','M02','localKey','abcdefghij','name','Identical','units','u'), ...   % seed member (identical to M01)
+           struct('machineId','M03','localKey','abzzzzzzzz','name','Distant','units','u') ...       % Step-B member, distant from centroid
+       };
+       ```
+       CONFIRMED sim math (Wagner-Fischer, by hand — reproduce these exact numbers in a code comment in suggest() and in testConfidenceLowThreshold):
+         - M01 `abcdefghij` vs M02 `abcdefghij`: identical -> editDistance_ = 0 -> sim = 1 - 0/10 = 1.00 (>= 0.60) -> SEED cluster forms; centroidKey = `abcdefghij` (longest; M01/M02 tie, lexicographically smallest = `abcdefghij`); logicalId = `abcdefghij`. M01 & M02 simToCentroid = 1.00 -> confidence HIGH.
+         - M03 `abzzzzzzzz` vs centroid `abcdefghij`: positions 1-2 (`ab`) match, positions 3-10 (`cdefghij` vs `zzzzzzzz`) are 8 substitutions; equal length so all-substitution is optimal -> editDistance_ = 8 -> simToCentroid = 1 - 8/10 = 0.20. M03 is NOT a seed pair with anyone (its best cross-machine sim is 0.20 < 0.60), so Step A leaves it unseeded; Step B attaches M03 to its nearest existing centroid `abcdefghij` (the only seed) with NO floor -> M03 becomes a cluster member with simToCentroid = 0.20 -> `assignConfidence_(0.20)` == 'LOW'.
+       RESULT: one cluster (logicalId `abcdefghij`) with three entries — M01 HIGH, M02 HIGH, M03 **LOW**. testConfidenceLowThreshold asserts the M03 entry has confidence == 'LOW'. (If you discover the executor's editDistance_ produces a different value for any of these three pairs — it will not, these are exact — keep the fixture and update the comment; do NOT silently weaken the assertion.)
+
+    3. ENTRY CONSTRUCTION: for each cluster member create an entry struct with ALL nine fields (Pattern 2). similarity = member's simToCentroid. status = 'AUTO'. confidence = `obj.assignConfidence_(simToCentroid)`. unitMismatch = false (set by step 5).
 
     4. PRIVATE HELPER `assignConfidence_(obj, sim)` — copy from RESEARCH.md § Code Examples:
        ```matlab
@@ -242,7 +265,7 @@ Reference implementations to mirror:
            end
        end
        ```
-       Store the resulting entries back into `obj.Entries_(logicalId)`.
+       Store the resulting entries back into `obj.Entries_(logicalId)`. (Note: in the LOCKED LOW fixture all three units are `'u'`, so no downgrade fires — M03 is LOW purely from its 0.20 similarity, isolating the confidence-from-centroid behavior the test targets.)
 
     6. UNMAPPED BOOKKEEPING: record every input (machineId, localKey) so `unmapped(machineId)` (built in Plan 03) can return keys that never landed in any cluster. Store the raw input list in a private property (e.g. `LastTagInfos_` SetAccess=private) so Plan 03's unmapped() can cross-reference. Add that property now: `LastTagInfos_ = {}`. Set `obj.LastTagInfos_ = tagInfos;` inside suggest. (This is the minimal seam so Plan 03 can implement unmapped without re-running suggest.)
 
@@ -262,8 +285,9 @@ Reference implementations to mirror:
     - Octave-safety still holds: `grep -rn "contains(" libs/Fleet/CanonicalMapper.m` returns `0`; `grep -rn "editDistance(" libs/Fleet/CanonicalMapper.m` returns `0`
     - `mcp__matlab__check_matlab_code` on libs/Fleet/CanonicalMapper.m reports no error-level diagnostics
     - `runtests('tests/suite/TestCanonicalMapper')` PASSES all 16 of: testNormalizeLowercase, testEditDistanceSymmetry, testEditDistanceKnownPairs, testSuggestTwoMatchingPairs, testSuggestNoMatches, testConfidenceHighThreshold, testConfidenceMediumThreshold, testConfidenceLowThreshold, testConfidenceBoundaryHigh, testConfidenceBoundaryMedium, testUnitMismatchDowngradesHigh, testUnitMismatchDowngradesMedium, testUnitMismatchEmptyUnitsIgnored, testUnitMatchCaseInsensitive, testOctaveSafeGrepGate, testNoToolboxCallGrepGate
+    - testConfidenceLowThreshold specifically passes via the LOCKED 3-member fixture (M01/M02 `abcdefghij` seed centroid + M03 `abzzzzzzzz` Step-B member at simToCentroid 0.20 -> LOW), NOT via a 2-member non-clustering pair
   </acceptance_criteria>
-  <done>suggest(tagInfos) clusters cross-machine keys via toolbox-free edit-distance similarity, assigns HIGH/MEDIUM/LOW confidence at the locked 0.90/0.60 inclusive boundaries, flags unit mismatches and caps confidence per the downgrade rule, records the input tag-infos for Plan 03's unmapped(), and all 14 CANON-01/02 tests + 2 grep gates are GREEN.</done>
+  <done>suggest(tagInfos) clusters cross-machine keys via toolbox-free edit-distance similarity (seed clusters at the 0.60 grouping threshold, remaining members assigned to the nearest seed centroid with no floor, per-member confidence scored against the centroid so a distant member lands LOW), assigns HIGH/MEDIUM/LOW confidence at the locked 0.90/0.60 inclusive boundaries, flags unit mismatches and caps confidence per the downgrade rule, records the input tag-infos for Plan 03's unmapped(), and all 14 CANON-01/02 tests + 2 grep gates are GREEN.</done>
 </task>
 
 </tasks>
@@ -285,3 +309,4 @@ Reference implementations to mirror:
 <output>
 After completion, create `.planning/phases/1041-canonicalmapper/1041-02-SUMMARY.md`
 </output>
+</content>
