@@ -419,13 +419,9 @@ classdef IconCardWidget < DashboardWidget
             end
             val = obj.CurrentValue;
             if isempty(val), state = 'inactive'; return; end
-            tVals = obj.Threshold.allValues();
-            for v = 1:numel(tVals)
-                if (obj.Threshold.IsUpper && val > tVals(v)) || ...
-                        (~obj.Threshold.IsUpper && val < tVals(v))
-                    state = 'alarm';
-                    return;
-                end
+            if isThresholdViolated(obj.Threshold, val)
+                state = 'alarm';
+                return;
             end
         end
 
@@ -441,14 +437,9 @@ classdef IconCardWidget < DashboardWidget
             end
             latestY = obj.Sensor.Y(end);
             for i = 1:numel(obj.Sensor.Thresholds)
-                t = obj.Sensor.Thresholds{i};
-                tVals = t.allValues();
-                for v = 1:numel(tVals)
-                    if (t.IsUpper && latestY > tVals(v)) || ...
-                            (~t.IsUpper && latestY < tVals(v))
-                        state = 'alarm';
-                        return;
-                    end
+                if isThresholdViolated(obj.Sensor.Thresholds{i}, latestY)
+                    state = 'alarm';
+                    return;
                 end
             end
         end
