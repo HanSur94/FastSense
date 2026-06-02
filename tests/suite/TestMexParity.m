@@ -341,6 +341,13 @@ classdef TestMexParity < matlab.unittest.TestCase
             yOut(odd(~minFirst))  = yMaxVals(~minFirst);
             xOut(even(~minFirst)) = xMinVals(~minFirst);
             yOut(even(~minFirst)) = yMinVals(~minFirst);
+            % Tail-anchor (260512-c5x): mirror minmax_core_mex.c /
+            % minmax_downsample.m. Append (segX(end), segY(end)) iff its X
+            % strictly exceeds the last emitted X. Length: 2*nb or 2*nb+1.
+            if segX(end) > xOut(end)
+                xOut(end + 1) = segX(end);
+                yOut(end + 1) = segY(end);
+            end
         end
 
         function [xOut, yOut] = lttb_core_matlab(x, y, numOut)

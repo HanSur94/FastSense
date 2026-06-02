@@ -1144,20 +1144,31 @@ classdef FastSense < handle
                 S = obj.Shadings(i);
                 if numel(S.X) > shadingCacheSize * 2
                     % Build cache from raw, then render from cache
-                    [cx, cy1] = minmax_downsample(S.X, S.Y1, shadingCacheSize);
-                    [~,  cy2] = minmax_downsample(S.X, S.Y2, shadingCacheSize);
+                    [cx,  cy1] = minmax_downsample(S.X, S.Y1, shadingCacheSize);
+                    [~,   cy2] = minmax_downsample(S.X, S.Y2, shadingCacheSize);
+                    % minmax_downsample's tail-anchor makes the output length
+                    % data-dependent, so Y1 and Y2 may differ in length. The
+                    % cache is re-sliced by a single shared index range in
+                    % updateShadings, so trim all three to a common length to
+                    % keep that slice in bounds.
+                    Lc = min([numel(cx), numel(cy1), numel(cy2)]);
+                    cx  = cx(1:Lc);
+                    cy1 = cy1(1:Lc);
+                    cy2 = cy2(1:Lc);
                     obj.Shadings(i).CacheX  = cx;
                     obj.Shadings(i).CacheY1 = cy1;
                     obj.Shadings(i).CacheY2 = cy2;
-                    % Downsample cache to screen resolution
-                    [xd, y1d] = minmax_downsample(cx, cy1, obj.PixelWidth);
-                    [~,  y2d] = minmax_downsample(cx, cy2, obj.PixelWidth);
-                    patchX = [xd, fliplr(xd)];
+                    % Downsample cache to screen resolution. Each boundary
+                    % keeps its own X (xd / xd2) so the closed patch polygon
+                    % always has matching vertex counts.
+                    [xd,  y1d] = minmax_downsample(cx, cy1, obj.PixelWidth);
+                    [xd2, y2d] = minmax_downsample(cx, cy2, obj.PixelWidth);
+                    patchX = [xd, fliplr(xd2)];
                     patchY = [y1d, fliplr(y2d)];
                 elseif numel(S.X) > obj.MinPointsForDownsample
-                    [xd, y1d] = minmax_downsample(S.X, S.Y1, obj.PixelWidth);
-                    [~,  y2d] = minmax_downsample(S.X, S.Y2, obj.PixelWidth);
-                    patchX = [xd, fliplr(xd)];
+                    [xd,  y1d] = minmax_downsample(S.X, S.Y1, obj.PixelWidth);
+                    [xd2, y2d] = minmax_downsample(S.X, S.Y2, obj.PixelWidth);
+                    patchX = [xd, fliplr(xd2)];
                     patchY = [y1d, fliplr(y2d)];
                 else
                     patchX = [S.X, fliplr(S.X)];
@@ -4044,9 +4055,9 @@ classdef FastSense < handle
                 y2Vis = srcY2(idxStart:idxEnd);
 
                 if nVis > obj.MinPointsForDownsample
-                    [xd, y1d] = minmax_downsample(xVis, y1Vis, pw);
-                    [~, y2d]  = minmax_downsample(xVis, y2Vis, pw);
-                    patchX = [xd, fliplr(xd)];
+                    [xd,  y1d] = minmax_downsample(xVis, y1Vis, pw);
+                    [xd2, y2d] = minmax_downsample(xVis, y2Vis, pw);
+                    patchX = [xd, fliplr(xd2)];
                     patchY = [y1d, fliplr(y2d)];
                 else
                     patchX = [xVis, fliplr(xVis)];
