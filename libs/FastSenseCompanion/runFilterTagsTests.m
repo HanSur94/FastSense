@@ -136,17 +136,18 @@ function runFilterTagsTests()
     assert(numel(ft10) >= 1, 'Test 10: at least one safety tag expected');
     nPassed = nPassed + 1;
 
-    % Test 10b: byGroup ordering - alphabetical by GroupName, Ungrouped last
+    % Test 10b: byGroup ordering — alphabetical by GroupName, Ungrouped last.
+    % The fixture includes alarm_d (MonitorTag, Labels={}) -> Ungrouped.
+    % Ordering contract: all named groups come first alphabetically, then Ungrouped.
     [~, bg10] = filterTags(allTags, '', {}, {});
     assert(isstruct(bg10) && numel(bg10) >= 1, 'Test 10b: byGroup should be non-empty');
-    if numel(bg10) > 1
-        lastGroup = bg10(end).GroupName;
-        assert(strcmp(lastGroup, 'Ungrouped'), ...
-            sprintf('Test 10b: last group should be Ungrouped, got %s', lastGroup));
-        for i = 1:numel(bg10) - 1
-            assert(~strcmp(bg10(i).GroupName, 'Ungrouped'), ...
-                'Test 10b: Ungrouped should only appear at end');
-        end
+    % Ungrouped must be the last group (alarm_d has empty Labels -> Ungrouped).
+    lastGroup = bg10(end).GroupName;
+    assert(strcmp(lastGroup, 'Ungrouped'), ...
+        sprintf('Test 10b: last group should be Ungrouped, got %s', lastGroup));
+    for i = 1:numel(bg10) - 1
+        assert(~strcmp(bg10(i).GroupName, 'Ungrouped'), ...
+            'Test 10b: Ungrouped should only appear at end');
     end
     nPassed = nPassed + 1;
 
@@ -203,12 +204,12 @@ function runFilterTagsTests()
         sprintf('Test 14: expected key s1, got %s', idata12{2}));
     nPassed = nPassed + 1;
 
-    % Test 15: 'Ungrouped' always last (even if alphabetically first/only)
+    % Test 15: SensorTag with empty Labels -> 'Ungrouped'; Ungrouped must come last.
     tUngrp = SensorTag('u1', 'Name', 'Ungrouped Tag', 'Labels', {}, 'X', 1:3, 'Y', rand(1, 3));
-    tZeta = SensorTag('z1', 'Name', 'Zeta Tag', 'Labels', {'Zeta'}, 'X', 1:3, 'Y', rand(1, 3));
+    tZeta  = SensorTag('z1', 'Name', 'Zeta Tag', 'Labels', {'Zeta'}, 'X', 1:3, 'Y', rand(1, 3));
     [items15, ~] = groupByLabel({tUngrp, tZeta});
     ungroupedIdx = 0;
-    zetaIdx = 0;
+    zetaIdx      = 0;
     for i = 1:numel(items15)
         if ~isempty(strfind(items15{i}, 'Ungrouped'))
             ungroupedIdx = i;
@@ -221,13 +222,13 @@ function runFilterTagsTests()
     assert(ungroupedIdx > zetaIdx, 'Test 15: Ungrouped header should appear after Zeta group');
     nPassed = nPassed + 1;
 
-    % Test 16: multiple groups ordered alphabetically before Ungrouped
-    tAlpha = SensorTag('a1', 'Name', 'Alpha Tag', 'Labels', {'Alpha'}, 'X', 1:3, 'Y', rand(1, 3));
-    tZeta2 = SensorTag('z2', 'Name', 'Zeta Tag 2', 'Labels', {'Zeta'}, 'X', 1:3, 'Y', rand(1, 3));
+    % Test 16: multiple groups ordered alphabetically, Ungrouped last.
+    tAlpha  = SensorTag('a1', 'Name', 'Alpha Tag', 'Labels', {'Alpha'}, 'X', 1:3, 'Y', rand(1, 3));
+    tZeta2  = SensorTag('z2', 'Name', 'Zeta Tag 2', 'Labels', {'Zeta'}, 'X', 1:3, 'Y', rand(1, 3));
     tUngrp2 = SensorTag('u2', 'Name', 'Ungrouped Tag 2', 'Labels', {}, 'X', 1:3, 'Y', rand(1, 3));
     [items16, ~] = groupByLabel({tZeta2, tAlpha, tUngrp2});
-    alphaIdx = 0;
-    zetaIdx2 = 0;
+    alphaIdx      = 0;
+    zetaIdx2      = 0;
     ungroupedIdx2 = 0;
     for i = 1:numel(items16)
         if ~isempty(strfind(items16{i}, 'Alpha'))
@@ -244,6 +245,57 @@ function runFilterTagsTests()
         'Test 16: all groups should appear');
     assert(alphaIdx < zetaIdx2, 'Test 16: Alpha should come before Zeta (alphabetical)');
     assert(zetaIdx2 < ungroupedIdx2, 'Test 16: Zeta should come before Ungrouped');
+    nPassed = nPassed + 1;
+
+    % -------------------------------------------------------------------------
+    % Tests 17-19: case-insensitive group merge (the ONE genuine new behaviour)
+    % When two Labels{1} values are the same word with different casing,
+    % they must collapse into a single group.
+    % -------------------------------------------------------------------------
+
+    % Test 17: 'FeedLine' and 'Feedline' (casing variants) merge into 1 group.
+    tFeedLine = SensorTag('feedline.health', 'Name', 'FeedLine Health', ...
+        'Labels', {'FeedLine'}, 'X', 1:3, 'Y', rand(1, 3));
+    tFeedline = SensorTag('feedline.pressure', 'Name', 'Feedline Pressure', ...
+        'Labels', {'Feedline'}, 'X', 1:3, 'Y', rand(1, 3));
+    tFeedline2 = SensorTag('feedline.flow', 'Name', 'Feedline Flow', ...
+        'Labels', {'Feedline'}, 'X', 1:3, 'Y', rand(1, 3));
+
+    [~, bg17] = filterTags({tFeedLine, tFeedline, tFeedline2}, '', {}, {});
+    feedlineGroupCount = 0;
+    for i = 1:numel(bg17)
+        if strcmpi(bg17(i).GroupName, 'feedline')
+            feedlineGroupCount = feedlineGroupCount + 1;
+        end
+    end
+    assert(feedlineGroupCount == 1, ...
+        sprintf('Test 17: FeedLine/Feedline casing variants must merge to 1 group, got %d', ...
+        feedlineGroupCount));
+    nPassed = nPassed + 1;
+
+    % Test 18: The merged group contains all 3 tags.
+    mergedTags = {};
+    for i = 1:numel(bg17)
+        if strcmpi(bg17(i).GroupName, 'feedline')
+            mergedTags = bg17(i).Tags;
+        end
+    end
+    assert(numel(mergedTags) == 3, ...
+        sprintf('Test 18: merged FeedLine group should have 3 tags, got %d', numel(mergedTags)));
+    nPassed = nPassed + 1;
+
+    % Test 19: groupByLabel also merges casing variants into exactly 1 group header.
+    [items19, ~] = groupByLabel({tFeedLine, tFeedline, tFeedline2});
+    feedlineHeaderCount = 0;
+    for i = 1:numel(items19)
+        if ~isempty(strfind(lower(items19{i}), 'feedline')) && ...
+                ~isempty(strfind(items19{i}, char(9660)))
+            feedlineHeaderCount = feedlineHeaderCount + 1;
+        end
+    end
+    assert(feedlineHeaderCount == 1, ...
+        sprintf('Test 19: groupByLabel must produce exactly 1 feedline group header, got %d', ...
+        feedlineHeaderCount));
     nPassed = nPassed + 1;
 
     fprintf('    All %d tests passed.\n', nPassed);

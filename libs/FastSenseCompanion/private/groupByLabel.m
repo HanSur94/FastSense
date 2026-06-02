@@ -14,6 +14,19 @@ function [items, itemsData] = groupByLabel(filteredTags)
 %                 [] (scalar double) for group-header rows
 %                 tag.Key (char) for child rows
 %
+%   Grouping rules:
+%     - All tag kinds: use Labels{1} as the group name when non-empty.
+%     - If Labels is empty: group is 'Ungrouped'.
+%   Labels is the Tag classification field (set at construction); callers are
+%   responsible for populating it with a subsystem name.  Labels must NOT carry
+%   state-value vocabularies — that misuse causes 'closed'/'idle' groups.
+%
+%   After all groups are collected, case-insensitive duplicates are merged so
+%   that 'FeedLine' and 'Feedline' (casing variants of the same subsystem) land
+%   in a single group.  The canonical name is the first-seen spelling.
+%
+%   'Ungrouped' is always sorted last.
+%
 %   No UI dependencies. Octave-compatible.
 %   See also filterTags, TagCatalogPane.
 
@@ -24,13 +37,13 @@ function [items, itemsData] = groupByLabel(filteredTags)
         return;
     end
 
-    % Determine each tag's group (first label or 'Ungrouped')
-    % Accumulate into ordered map
-    groupNames = {};
-    groupMap   = containers.Map();
+    % Determine each tag's group (first label or 'Ungrouped').
+    % Accumulate into ordered map; key is the raw group string.
+    rawGroupNames = {};
+    groupMap      = containers.Map();
 
     for i = 1:numel(filteredTags)
-        t = filteredTags{i};
+        t   = filteredTags{i};
         if isempty(t.Labels)
             grp = 'Ungrouped';
         else
@@ -41,9 +54,13 @@ function [items, itemsData] = groupByLabel(filteredTags)
             groupMap(grp) = [groupMap(grp), {t}];
         else
             groupMap(grp) = {t};
-            groupNames{end+1} = grp; %#ok<AGROW>
+            rawGroupNames{end+1} = grp; %#ok<AGROW>
         end
     end
+
+    % Merge case-insensitive duplicate group names (e.g. 'FeedLine'/'Feedline').
+    % Canonical name = first-seen spelling for that case-folded key.
+    [groupNames, groupMap] = mergeCaseGroups_(rawGroupNames, groupMap);
 
     % Sort alphabetically; Ungrouped always last
     hasUngrouped = any(strcmp(groupNames, 'Ungrouped'));
@@ -75,6 +92,49 @@ function [items, itemsData] = groupByLabel(filteredTags)
         for k = 1:nGroup
             items{end+1}     = ['  ', grpTags{k}.Name]; %#ok<AGROW>
             itemsData{end+1} = grpTags{k}.Key;          %#ok<AGROW>
+        end
+    end
+end
+
+% -------------------------------------------------------------------------
+
+function [names, mergedMap] = mergeCaseGroups_(rawNames, rawMap)
+%MERGECASEGROUPS_ Merge case-insensitive duplicate group names.
+%   When two groups differ only in case (e.g. 'FeedLine' and 'Feedline'),
+%   merge their tag lists under a single canonical name.  The canonical name
+%   is the first-seen spelling for that case-folded key (i.e. insertion-order
+%   stable; determined by the order tags were processed in the caller loop).
+%
+%   Returns the deduplicated name list and an updated containers.Map.
+    if isempty(rawNames)
+        names     = {};
+        mergedMap = containers.Map();
+        return;
+    end
+
+    % Build a lowercase -> canonical-name mapping (first-seen wins).
+    lowerToCanon = containers.Map();
+    for i = 1:numel(rawNames)
+        n    = rawNames{i};
+        nLow = lower(n);
+        if ~isKey(lowerToCanon, nLow)
+            lowerToCanon(nLow) = n;
+        end
+    end
+
+    % Build merged map: accumulate tags from rawMap under canonical names.
+    mergedMap = containers.Map();
+    names     = {};
+    for i = 1:numel(rawNames)
+        n      = rawNames{i};
+        nLow   = lower(n);
+        canon  = lowerToCanon(nLow);
+        tags   = rawMap(n);
+        if isKey(mergedMap, canon)
+            mergedMap(canon) = [mergedMap(canon), tags];
+        else
+            mergedMap(canon) = tags;
+            names{end+1} = canon; %#ok<AGROW>
         end
     end
 end
