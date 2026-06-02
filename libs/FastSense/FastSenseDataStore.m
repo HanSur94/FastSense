@@ -109,6 +109,13 @@ classdef FastSenseDataStore < handle
             end
         end
 
+        function [xMin, xMax] = getTimeExtent(obj)
+            %GETTIMEEXTENT Return the stored [XMin, XMax] time extent.
+            %   O(1) -- XMin/XMax are captured at construction from x(1)/x(end).
+            xMin = obj.XMin;
+            xMax = obj.XMax;
+        end
+
         function [xOut, yOut] = readSlice(obj, startIdx, endIdx)
             %READSLICE Read a contiguous slice of data by row index.
             if ~obj.IsValid
