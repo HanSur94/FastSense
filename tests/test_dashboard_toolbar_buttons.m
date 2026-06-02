@@ -53,7 +53,7 @@ function test_dashboard_toolbar_buttons()
             d.Toolbar.hExportBtn, d.Toolbar.hSyncBtn, ...
             d.Toolbar.hResetBtn, ...
             d.Toolbar.hInfoBtn};
-        names = {'Live', 'Config', 'Image', 'Export', 'Sync', 'Reset', 'Info'};
+        names = {'Live', 'Config', 'Image', 'Export', 'Sync', 'Redraw', 'Info'};
         for i = 1:numel(handles)
             tip = get(handles{i}, 'TooltipString');
             assert(~isempty(tip), ...
@@ -100,18 +100,18 @@ function test_dashboard_toolbar_buttons()
         nFailed = nFailed + 1;
     end
 
-    % Reset button is created and labelled "Reset" after render
+    % Redraw button is created and labelled "Redraw" after render
     try
         d = DashboardEngine('ResetButtonExistsTest');
         d.addWidget('number', 'Title', 'T', 'Position', [1 1 6 2], 'StaticValue', 1);
         d.render();
         set(d.hFigure, 'Visible', 'off');
         assert(~isempty(d.Toolbar.hResetBtn), ...
-            'reset button should exist after render');
+            'redraw button should exist after render');
         assert(ishandle(d.Toolbar.hResetBtn), ...
-            'reset button should be a valid handle');
-        assert(strcmp(get(d.Toolbar.hResetBtn, 'String'), 'Reset'), ...
-            'reset button label should be "Reset"');
+            'redraw button should be a valid handle');
+        assert(strcmp(get(d.Toolbar.hResetBtn, 'String'), 'Redraw'), ...
+            'redraw button label should be "Redraw"');
         close(d.hFigure);
         nPassed = nPassed + 1;
     catch err
