@@ -24,6 +24,7 @@ The Dashboard Engine (`DashboardEngine`) is a feature‑complete dashboarding sy
 | Live mode             | Per‑figure timer | Engine‑level timer refreshing all widgets |
 | Plant‑log overlay     | No              | Per‑widget vertical markers from plant‑log files |
 | Detachable widgets    | No              | Detach any widget as a standalone live‑mirrored window |
+| Crosshair linking     | No              | Link crosshairs across multiple FastSense widgets |
 
 **When to use FastSenseGrid:** Simple tiled FastSense time‑series plots with linked axes and a toolbar.
 
@@ -57,6 +58,8 @@ d.render();  % must be called once after construction
 d.save('myDashboard.json');
 ```
 
+> **Tip:** Always call `render()` after creating the engine and adding widgets. Changes to the layout or theme require a re‑render (use the toolbar **Reset** button or call `d.rerenderWidgets()`).
+
 ---
 
 ## Grid System
@@ -76,13 +79,15 @@ Overlapping widgets are automatically pushed downward to the next free row.
 
 ## Widget Types
 
+All widgets can be constructed via `d.addWidget('<type>', ...)` or by creating the widget object directly and then passing it to `addWidget`. The `Position` property is always in grid units `[col row w h]`.
+
 ### FastSense (time‑series)
 
 Primary data‑binding widget. Wraps a `FastSense` instance.
 
 ```matlab
-% Sensor‑bound (auto‑title, units, thresholds)
-d.addWidget('fastsense', 'Position', [1 1 12 8], 'Sensor', sensorObj);
+% Sensor‑bound (auto‑title, units, thresholds) — see Sensor Binding section
+d.addWidget('fastsense', 'Position', [1 1 12 8], 'Tag', sensorObj);
 
 % Inline data
 d.addWidget('fastsense', 'Title', 'Raw', 'Position', [13 1 12 8], ...
@@ -97,17 +102,17 @@ d.addWidget('fastsense', 'Title', 'Store', 'Position', [1 15 24 6], ...
     'DataStore', myDataStore);
 ```
 
-Threshold lines and violations are drawn automatically when bound to a `Sensor` with resolved rules.
+Threshold lines and violations are drawn automatically when bound to a `Sensor` (or a `Tag` that provides threshold rules).
 
 ### Number (KPI card)
 
 Large numeric display with optional trend arrow.
 
 ```matlab
-% From a Sensor
+% From a Sensor/Tag
 d.addWidget('number', 'Title', 'Temperature', ...
     'Position', [1 1 6 2], ...
-    'Sensor', sTemp, 'Units', 'degF', 'Format', '%.1f');
+    'Tag', tempTag, 'Units', 'degF', 'Format', '%.1f');
 
 % Static value
 d.addWidget('number', 'Title', 'Total Count', ...
@@ -122,12 +127,12 @@ d.addWidget('number', 'Title', 'CPU', ...
 
 ### Status (health indicator)
 
-Colored dot (green/amber/red) with auto‑derived state from a `Sensor` or threshold rule.
+Colored dot (green/amber/red) with auto‑derived state from a `Tag` or threshold rule.
 
 ```matlab
 % Sensor‑bound (state from threshold rules)
 d.addWidget('status', 'Title', 'Pump', 'Position', [7 1 5 2], ...
-    'Sensor', sTemp);
+    'Tag', tempTag);
 
 % Threshold‑driven (no Sensor needed)
 d.addWidget('status', 'Title', 'System', 'Position', [12 1 5 2], ...
@@ -143,7 +148,7 @@ d.addWidget('status', 'Title', 'System', 'Position', [12 1 5 2], ...
 ```matlab
 d.addWidget('gauge', 'Title', 'Flow Rate', ...
     'Position', [1 3 8 6], ...
-    'Sensor', sFlow, 'Range', [0 160], 'Units', 'L/min', ...
+    'Tag', flowTag, 'Range', [0 160], 'Units', 'L/min', ...
     'Style', 'donut');
 
 % Static value
@@ -153,7 +158,7 @@ d.addWidget('gauge', 'Title', 'Efficiency', ...
     'Style', 'arc');
 ```
 
-When `Sensor`‑bound, range, units and thresholds are auto‑derived.
+When `Tag`‑bound, range, units and thresholds are auto‑derived.
 
 ### Text (label / header)
 
@@ -173,15 +178,15 @@ d.addWidget('table', 'Title', 'Alarm Log', ...
     'ColumnNames', {'Time','Tag','Value'}, ...
     'Data', {{'12:00','T-401','85.2';'12:05','P-201','72.1'}});
 
-% Last N rows from Sensor
+% Last N rows from Tag/Sensor
 d.addWidget('table', 'Title', 'Recent Data', ...
     'Position', [1 9 12 4], ...
-    'Sensor', sTemp, 'N', 15);
+    'Tag', tempTag, 'N', 15);
 
 % Event mode (requires EventStore)
 d.addWidget('table', 'Title', 'Events', ...
     'Position', [1 17 12 4], ...
-    'Sensor', sTemp, 'Mode', 'events', ...
+    'Tag', tempTag, 'Mode', 'events', ...
     'EventStoreObj', myEventStore, 'N', 10);
 ```
 
@@ -196,7 +201,7 @@ d.addWidget('rawaxes', 'Title', 'Temperature Distribution', ...
 % Sensor‑bound with time range
 d.addWidget('rawaxes', 'Title', 'Custom Analysis', ...
     'Position', [9 5 8 4], ...
-    'Sensor', sTemp, ...
+    'Tag', tempTag, ...
     'PlotFcn', @(ax, sensor, tRange) customPlot(ax, sensor, tRange));
 ```
 
@@ -222,18 +227,18 @@ KPI card combining a big number, delta indicator, and a mini sparkline chart.
 ```matlab
 d.addWidget('sparkline', 'Title', 'CPU Load', ...
     'Position', [1 1 6 3], ...
-    'Sensor', sCPU, 'Units', '%', 'Format', '%.0f', ...
+    'Tag', cpuTag, 'Units', '%', 'Format', '%.0f', ...
     'NSparkPoints', 60);
 ```
 
-You can also provide `StaticValue` and `SparkData` vector directly.
+You can also supply `StaticValue` and `SparkData` vector directly.
 
 ### Icon Card (Mushroom‑style)
 
 ```matlab
 d.addWidget('iconcard', 'Title', 'Temp', ...
     'Position', [1 1 4 2], ...
-    'Sensor', sTemp, 'Units', 'degC');
+    'Tag', tempTag, 'Units', 'degC');
 ```
 
 State‑colored circle icon, numeric value, and label.
@@ -283,7 +288,7 @@ d.addWidget('histogram', 'Title', 'Distribution', ...
 ```matlab
 d.addWidget('scatter', 'Title', 'Temp vs Press', ...
     'Position', [1 1 12 8], ...
-    'SensorX', sTemp, 'SensorY', sPress, 'MarkerSize', 4);
+    'SensorX', tempSensor, 'SensorY', pressSensor, 'MarkerSize', 4);
 ```
 
 ### Image
@@ -323,7 +328,7 @@ d.switchPage(1);                 % now active page is 'Overview'
 d.addWidget('text', ...);
 ```
 
-Pages are serialized/deserialized automatically.
+Pages are serialized/deserialized automatically. You can also remove a page with `d.removePage(idx)`.
 
 ---
 
@@ -342,40 +347,35 @@ g.addChild(widgetB, 'Trend');
 d.addWidget(g);
 ```
 
-Groups support nesting, reflow on collapse/expand, and are fully serializable.
+Groups support nesting (up to two levels), reflow on collapse/expand, and are fully serializable.
 
 ---
 
 ## Sensor Binding
 
-Bind a `Sensor` object to any data widget for automatic title, units, and range derivation.
+Bind a `Tag` (v2.0) or the legacy `Sensor` object to any data widget for automatic title, units, and range derivation. The `'Sensor'` name‑value pair is still supported and internally maps to the `Tag` property.
 
 ```matlab
-sTemp = Sensor('T-401', 'Name', 'Temperature');
-sTemp.Units = 'degF';
-sTemp.X = t;   sTemp.Y = temp;
-sTemp.addThresholdRule(struct('machine',1), 78, 'Direction','upper','Label','Hi Warn');
-sTemp.addThresholdRule(struct('machine',1), 85, 'Direction','upper','Label','Hi Alarm');
-sTemp.resolve();
+tempTag = TagRegistry.get('T-401');   % Retrieve a registered Tag
 
 % Auto‑configure widgets
-d.addWidget('fastsense', 'Sensor', sTemp, 'Position', [1 1 12 8]);
-d.addWidget('number',    'Sensor', sTemp, 'Position', [13 1 6 2]);
-d.addWidget('status',    'Sensor', sTemp, 'Position', [19 1 6 2]);
-d.addWidget('gauge',     'Sensor', sTemp, 'Position', [13 3 12 6]);
+d.addWidget('fastsense', 'Tag', tempTag, 'Position', [1 1 12 8]);
+d.addWidget('number',    'Tag', tempTag, 'Position', [13 1 6 2]);
+d.addWidget('status',    'Tag', tempTag, 'Position', [19 1 6 2]);
+d.addWidget('gauge',     'Tag', tempTag, 'Position', [13 3 12 6]);
 ```
 
-Widgets react to sensor changes on `refresh()`.
+Widgets react to tag changes on `refresh()`. Legacy sensor objects can be passed via `'Tag', sensorObj` or `'Sensor', sensorObj`.
 
 ---
 
 ## Theming
 
 ```matlab
-d.Theme = 'dark';   % 'light', 'dark' 
+d.Theme = 'dark';   % 'light' or 'dark' 
 d.render();
 
-% per‑widget override
+% Per‑widget override
 widget.ThemeOverride = struct('WidgetBackground', [0.1 0.1 0.2]);
 ```
 
@@ -435,6 +435,8 @@ d.detachWidget(someWidget);
 % The mirror is updated by the engine’s live timer.
 ```
 
+To remove a stale mirror (e.g., after the user closes the window) call `d.removeDetached()`.
+
 ---
 
 ## Visual Editor
@@ -459,14 +461,12 @@ d.setWidgetPosition(idx, [col row w h]);
 
 ## Info File
 
-Link an external Markdown file to the dashboard’s Info button.
+Link an external Markdown file to the dashboard’s **Info** button. Clicking the button renders the Markdown and displays it in the app.
 
 ```matlab
 d.InfoFile = 'dashboard_help.md';
 d.render();
 ```
-
-Clicking Info renders the Markdown as HTML and displays it in‑app.
 
 ---
 
@@ -477,7 +477,7 @@ Clicking Info renders the Markdown as HTML and displays it in‑app.
 ```matlab
 d.save('dashboard.json');
 d2 = DashboardEngine.load('dashboard.json', ...
-    'SensorResolver', @(name) SensorRegistry.get(name));
+    'SensorResolver', @(name) TagRegistry.get(name));
 d2.render();
 ```
 
@@ -490,8 +490,26 @@ d.exportScript('rebuild_dashboard.m');
 ### Image (PNG / JPEG)
 
 ```matlab
-d.exportImage('output.png');   % format from extension
+d.exportImage('output.png');          % format from extension
+d.exportImage('output.jpg', 'jpeg');  % or explicit format
 ```
+
+---
+
+## ASCII Preview
+
+For debugging or quick inspection, print an ASCII representation of the dashboard to the console.
+
+```matlab
+d.preview();               % 120 chars wide
+d.preview('Width', 100);
+```
+
+---
+
+## Crosshair Linking
+
+You can link the crosshair (hover) across multiple `FastSenseWidget` instances on the same page. Click the **X** button on any FastSense widget’s chrome to toggle linking. When linked, moving the crosshair in one widget mirrors the position in all other linked widgets.
 
 ---
 
@@ -504,11 +522,13 @@ install;
 rng(42);
 t = linspace(0, 86400, 10000);
 yTemp = 74 + 3*sin(2*pi*t/3600) + 1.2*randn(size(t));
-sTemp = Sensor('T-401','Name','Temperature','Units','degF');
-sTemp.X = t; sTemp.Y = yTemp;
-sTemp.addThresholdRule(struct(), 78, 'Direction','upper','Label','Hi Warn');
-sTemp.addThresholdRule(struct(), 85, 'Direction','upper','Label','Hi Alarm');
-sTemp.resolve();
+
+% Create a Tag via TagRegistry (v2.0 API)
+tempTag = TagRegistry.register('T-401', 'Temperature');
+tempTag.Units = 'degF';
+tempTag.X = t;  tempTag.Y = yTemp;
+tempTag.addThresholdRule(struct(), 78, 'Direction','upper','Label','Hi Warn');
+tempTag.addThresholdRule(struct(), 85, 'Direction','upper','Label','Hi Alarm');
 
 d = DashboardEngine('Process Monitoring — Line 4');
 d.Theme = 'light';
@@ -518,18 +538,18 @@ d.LiveInterval = 5;
 d.addWidget('text', 'Title', 'Overview', 'Position', [1 1 4 2], ...
     'Content', 'Line 4 — Shift A', 'FontSize', 16);
 d.addWidget('number', 'Title', 'Temperature', 'Position', [5 1 5 2], ...
-    'Sensor', sTemp, 'Format', '%.1f');
+    'Tag', tempTag, 'Format', '%.1f');
 d.addWidget('status', 'Title', 'Status', 'Position', [10 1 5 2], ...
-    'Sensor', sTemp);
+    'Tag', tempTag);
 d.addWidget('sparkline', 'Title', 'CPU', 'Position', [15 1 5 2], ...
-    'Sensor', sTemp, 'Units', 'degF');
+    'Tag', tempTag, 'Units', 'degF');
 
 % Main plot row
-d.addWidget('fastsense', 'Position', [1 3 12 8], 'Sensor', sTemp);
+d.addWidget('fastsense', 'Position', [1 3 12 8], 'Tag', tempTag);
 d.addWidget('rawaxes', 'Title', 'Histogram', 'Position', [13 3 12 8], ...
-    'PlotFcn', @(ax) histogram(ax, sTemp.Y, 50));
+    'PlotFcn', @(ax) histogram(ax, tempTag.Y, 50));
 d.addWidget('gauge', 'Title', 'Temp Gauge', 'Position', [1 11 8 6], ...
-    'Sensor', sTemp, 'Range', [0 100], 'Units', 'degF');
+    'Tag', tempTag, 'Range', [0 100], 'Units', 'degF');
 d.addWidget('divider', 'Position', [9 11 1 6]);
 
 d.render();
@@ -541,6 +561,6 @@ d.save(fullfile(tempdir,'process_dashboard.json'));
 ## See Also
 
 - [[API Reference: Dashboard]] – Full API reference for all dashboard classes
-- [[API Reference: Sensors]] – Sensor, StateChannel, ThresholdRule
+- [[API Reference: Sensors]] – Tag, Sensor, ThresholdRule
 - [[Live Mode Guide]] – Live data polling
 - [[Examples]] – `example_dashboard_engine`, `example_dashboard_all_widgets`
