@@ -117,18 +117,19 @@ function testRangeChangedFires()
         return;
     end
     r = CompanionTimeRange();
-    cnt = struct('n', 0);
-    lh = addlistener(r, 'RangeChanged', @(~, ~) bumpCnt(cnt));
+    % Use containers.Map as a handle type so the closure can mutate the counter.
+    cntMap = containers.Map({'n'}, {0});
+    lh = addlistener(r, 'RangeChanged', @(~, ~) bumpCnt(cntMap));
     r.setRelative(7, 'days');
-    assert(cnt.n == 1, ...
+    assert(cntMap('n') == 1, ...
         'test_companion_time_range:testRangeChangedFires', ...
-        'testRangeChangedFires: expected 1 RangeChanged event, got %d', cnt.n);
+        'testRangeChangedFires: expected 1 RangeChanged event, got %d', cntMap('n'));
     delete(lh);
 end
 
-function bumpCnt(cnt)
-%BUMPCNT Increment counter struct field n.
-    cnt.n = cnt.n + 1;
+function bumpCnt(cntMap)
+%BUMPCNT Increment counter in handle-typed containers.Map.
+    cntMap('n') = cntMap('n') + 1;
 end
 
 function testIsDefault()
