@@ -114,9 +114,14 @@ classdef TestCompanionTimeBar < matlab.unittest.TestCase
 
         function testPresetFiresEventAndUpdatesLabel(testCase)
             %TESTPRESETFIRESEVENTSANDUPDATESLABEL ''Last 30 days'' preset fires RangeChanged and updates label.
-            fireCount = 0;
+            % Handle-type counter: an anonymous function cannot assign into the
+            % test workspace (the old assignin('caller',...) wrote into the event
+            % dispatcher's frame and captured fireCount=0), so use a containers.Map
+            % whose handle the listener mutates in place.
+            fireCounter = containers.Map('KeyType', 'char', 'ValueType', 'double');
+            fireCounter('n') = 0;
             lh = addlistener(testCase.Range_, 'RangeChanged', ...
-                @(~,~) assignin('caller', 'fireCount', fireCount + 1));
+                @(~,~) bumpFireCounter_(fireCounter));
             cleanupL = onCleanup(@() delete(lh));
 
             % Open picker and find the 'Last 30 days' preset button.
@@ -144,7 +149,7 @@ classdef TestCompanionTimeBar < matlab.unittest.TestCase
             drawnow;
 
             % Assert RangeChanged fired.
-            testCase.verifyGreaterThanOrEqual(fireCount, 1, ...
+            testCase.verifyGreaterThanOrEqual(fireCounter('n'), 1, ...
                 'testPresetFiresEventAndUpdatesLabel: RangeChanged must have fired');
 
             % Assert the resolved window is ~30 days.
@@ -267,4 +272,11 @@ classdef TestCompanionTimeBar < matlab.unittest.TestCase
 
     end
 
+end
+
+function bumpFireCounter_(c)
+%BUMPFIRECOUNTER_ Increment the handle-type (containers.Map) event counter.
+%   Local function so the RangeChanged listener can mutate a shared counter
+%   in place (anonymous functions cannot contain assignment statements).
+    c('n') = c('n') + 1;
 end
