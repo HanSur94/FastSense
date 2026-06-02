@@ -122,6 +122,11 @@ classdef FastSenseCompanion < handle
         % Phase 1034 — Wiki button + shared WikiBrowser handle.
         hWikiBtn_     = []   % toolbar uibutton: Wiki / Help launch
         WikiBrowser_  = []   % shared WikiBrowser handle (or [])
+        % Phase 1040 — Companion Notification Center (bell + collapsible 4th column).
+        hBellBtn_          = []   % toolbar bell uibutton with unacked-count badge
+        hNotifPanel_       = []   % uipanel hosting NotifPane_ (root grid Row 2, Col 4)
+        NotifPane_         = []   % NotificationCenterPane instance
+        hDetachedNotifFig_ = []   % uifigure when the notification pane is detached, else []
     end
 
     methods (Access = public)
@@ -296,8 +301,8 @@ classdef FastSenseCompanion < handle
             obj.hFig_.Color = obj.Theme_.DashboardBackground;
 
             % Step 8 — Root grid (3 rows: top toolbar = 32 px, panes = 1x, log strip = 360 px)
-            obj.hLayout_ = uigridlayout(obj.hFig_, [3 3]);
-            obj.hLayout_.ColumnWidth   = {220, '1x', 360};
+            obj.hLayout_ = uigridlayout(obj.hFig_, [3 4]);
+            obj.hLayout_.ColumnWidth   = {220, '1x', 360, 0};   % Phase 1040: col 4 = notification center (hidden until bell toggles)
             obj.hLayout_.RowHeight     = {32, '1x', 360};
             obj.hLayout_.Padding       = [24 24 24 24];
             obj.hLayout_.ColumnSpacing = 16;
@@ -307,7 +312,7 @@ classdef FastSenseCompanion < handle
             % Step 9a — Top toolbar panel (row 1, spans all 3 columns).
             obj.hToolbarPanel_ = uipanel(obj.hLayout_);
             obj.hToolbarPanel_.Layout.Row    = 1;
-            obj.hToolbarPanel_.Layout.Column = [1 3];
+            obj.hToolbarPanel_.Layout.Column = [1 4];
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
             % Inner 1x9 grid (v3.1 Plant Log + v4.0 Wiki Browser merged):
@@ -318,10 +323,11 @@ classdef FastSenseCompanion < handle
             %   col 5 = Tile windows (v4.0 S0Y-01)                      ( 70)
             %   col 6 = Close all (v4.0 S0Y-02)                         ( 90)
             %   col 7 = Wiki / Help launch (v4.0 Phase 1034)            ( 70)
-            %   col 8 = flex spacer                                     ('1x')
-            %   col 9 = Settings gear                                   ( 36)
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 9]);
-            hToolbarGrid.ColumnWidth     = {110, 110, 110, 130, 70, 90, 70, '1x', 36};
+            %   col 8 = Notification center bell (Phase 1040)           ( 70)
+            %   col 9 = flex spacer                                     ('1x')
+            %   col 10 = Settings gear                                  ( 36)
+            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 10]);
+            hToolbarGrid.ColumnWidth     = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -417,10 +423,27 @@ classdef FastSenseCompanion < handle
             obj.hWikiBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hWikiBtn_.ButtonPushedFcn = @(~,~) obj.openWiki_('Companion-Overview');
 
-            % Col 9 — Settings gear (moved as new buttons accumulated).
+            % Col 8 — Phase 1040 Notification center bell with unacked-count badge.
+            obj.hBellBtn_ = uibutton(hToolbarGrid, 'push');
+            obj.hBellBtn_.Layout.Row    = 1;
+            obj.hBellBtn_.Layout.Column = 8;
+            obj.hBellBtn_.Text          = obj.bellGlyph_();
+            obj.hBellBtn_.FontSize      = 12;
+            obj.hBellBtn_.FontWeight    = 'bold';
+            obj.hBellBtn_.Tag           = 'CompanionBellBtn';
+            obj.hBellBtn_.Tooltip       = 'Toggle notification center';
+            obj.hBellBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+            obj.hBellBtn_.FontColor       = obj.Theme_.ForegroundColor;
+            obj.hBellBtn_.ButtonPushedFcn = @(~,~) obj.toggleNotificationCenter_();
+            if isempty(obj.EventStore_)
+                obj.hBellBtn_.Enable  = 'off';
+                obj.hBellBtn_.Tooltip = 'No EventStore registered';
+            end
+
+            % Col 10 — Settings gear (Phase 1040 shifted it 9 -> 10 to make room for the bell).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 9;
+            obj.hSettingsBtn_.Layout.Column = 10;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -436,8 +459,15 @@ classdef FastSenseCompanion < handle
             obj.hRightPanel_ = uipanel(obj.hLayout_);
             obj.hRightPanel_.Layout.Row = 2; obj.hRightPanel_.Layout.Column = 3;
             obj.hLogPanel_ = uipanel(obj.hLayout_);
-            obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = [1 3];
+            obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = [1 4];
             % Phase 1027.1 -- LogPaneRoot tag moves to the two sub-panels below.
+
+            % Phase 1040 — notification center panel (row 2, col 4; hidden until bell toggles).
+            obj.hNotifPanel_ = uipanel(obj.hLayout_);
+            obj.hNotifPanel_.Layout.Row    = 2;
+            obj.hNotifPanel_.Layout.Column = 4;
+            obj.hNotifPanel_.BorderType      = 'none';
+            obj.hNotifPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
 
             % Apply panel styling from theme. uifigure-uipanel border
             % properties (BorderColor, BorderWidth) are R2021a+; on R2020b
@@ -501,6 +531,15 @@ classdef FastSenseCompanion < handle
             % Attach both panes inline by default.
             obj.setLogState_('events', 'Inline');
             obj.setLogState_('live',   'Inline');
+            % Phase 1040 — instantiate + attach the notification center pane.
+            % Attached now (Visible='off', column width 0) so the first bell toggle
+            % renders cleanly (RESEARCH Pitfall 3). The bell drives show/hide.
+            obj.NotifPane_ = NotificationCenterPane(obj.Theme_);
+            obj.NotifPane_.setCompanion(obj);
+            obj.NotifPane_.attach(obj.hNotifPanel_, obj.Theme_);
+            obj.Listeners_{end+1} = addlistener(obj.NotifPane_, 'DetachRequested', ...
+                @(~,~) obj.setNotifDetached_(true));
+            obj.updateBellBadge_();   % reflect any pre-loaded events while still Visible='off'
             % Seed the events log with the ready line.
             obj.addLogEntry('info', 'Companion ready.');
 
@@ -659,6 +698,26 @@ classdef FastSenseCompanion < handle
                 fprintf(2, '[FastSenseCompanion] LiveLogPane cleanup failed: %s\n', err.message);
             end
             obj.LiveLogPane_ = [];
+            % Phase 1040 — close the detached notification window (clear its
+            % CloseRequestFcn first to prevent recursion), then destroy the pane.
+            try
+                if ~isempty(obj.hDetachedNotifFig_) && isvalid(obj.hDetachedNotifFig_)
+                    obj.hDetachedNotifFig_.CloseRequestFcn = '';
+                    delete(obj.hDetachedNotifFig_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] hDetachedNotifFig cleanup failed: %s\n', err.message);
+            end
+            obj.hDetachedNotifFig_ = [];
+            try
+                if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                    obj.NotifPane_.detach();
+                    delete(obj.NotifPane_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] NotifPane cleanup failed: %s\n', err.message);
+            end
+            obj.NotifPane_ = [];
             % Release orchestrator-level listeners. delete(cellArray) is
             % interpreted as filename-delete by MATLAB ("Name must be a
             % text scalar"). Iterate explicitly.
@@ -773,6 +832,11 @@ classdef FastSenseCompanion < handle
             if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
                 obj.Listeners_{end+1} = addlistener(obj.LiveLogPane_, 'DetachRequested', ...
                     @(~,~) obj.setLogState_('live', 'Detached'));
+            end
+            % Phase 1040 — re-register the notification pane's DetachRequested listener.
+            if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                obj.Listeners_{end+1} = addlistener(obj.NotifPane_, 'DetachRequested', ...
+                    @(~,~) obj.setNotifDetached_(true));
             end
             obj.applyPlaceholderColors_();
         end
@@ -979,6 +1043,14 @@ classdef FastSenseCompanion < handle
                 if ~isempty(obj.hDetachedLiveFig_) && isvalid(obj.hDetachedLiveFig_)
                     obj.hDetachedLiveFig_.Color = obj.Theme_.DashboardBackground;
                 end
+                % Phase 1040 — notification pane manages its own theming; recolor the bell badge.
+                if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                    obj.NotifPane_.applyTheme(obj.Theme_);
+                end
+                if ~isempty(obj.hDetachedNotifFig_) && isvalid(obj.hDetachedNotifFig_)
+                    obj.hDetachedNotifFig_.Color = obj.Theme_.DashboardBackground;
+                end
+                obj.updateBellBadge_();
                 obj.updateLiveButton_();
                 drawnow;
             catch err
@@ -1366,6 +1438,48 @@ classdef FastSenseCompanion < handle
             obj.trackOpenedFigure_(hFig);
         end
 
+        function toggleNotificationCenter_(obj)
+        %TOGGLENOTIFICATIONCENTER_ Show/hide the 4th root column hosting the notification pane.
+        %   Public so the toolbar bell ButtonPushedFcn (and user scripts/tests) can
+        %   toggle the inbox programmatically.
+            try
+                cw = obj.hLayout_.ColumnWidth;
+                if isnumeric(cw{4}) && isequal(cw{4}, 0)
+                    cw{4} = 320;                 % show (UI-SPEC width)
+                    obj.hLayout_.ColumnWidth = cw;
+                    drawnow;                     % clean first-expand render (Pitfall 3) — OK here, not in pane.refresh
+                    if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                        obj.NotifPane_.refresh(obj.getEventStore());   % populate immediately
+                    end
+                    obj.updateBellBadge_();
+                else
+                    cw{4} = 0;                   % hide
+                    obj.hLayout_.ColumnWidth = cw;
+                end
+            catch err
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, err.message, 'Notification Center', 'Icon', 'error');
+                end
+            end
+        end
+
+        % --- Phase 1040 Notification Center test seams (Hidden, do not call from production) ---
+
+        function cw = getRootColumnWidthForTest_(obj)
+        %GETROOTCOLUMNWIDTHFORTEST_ Test helper: the root grid ColumnWidth cell.
+            cw = obj.hLayout_.ColumnWidth;
+        end
+
+        function onLiveTickForTest_(obj)
+        %ONLIVETICKFORTEST_ Test seam: drive one onLiveTick_ without the timer.
+            obj.onLiveTick_();
+        end
+
+        function p = notifPaneForTest_(obj)
+        %NOTIFPANEFORTEST_ Test helper: the NotificationCenterPane handle (or []).
+            p = obj.NotifPane_;
+        end
+
     end
 
     methods (Access = private)
@@ -1659,6 +1773,89 @@ classdef FastSenseCompanion < handle
                 obj.hLiveBtn_.Text            = 'Live: OFF';
                 obj.hLiveBtn_.BackgroundColor = t.WidgetBorderColor;
                 obj.hLiveBtn_.FontColor       = t.ForegroundColor;
+            end
+        end
+
+        function g = bellGlyph_(~)
+        %BELLGLYPH_ Bell emoji on a desktop; ASCII '[!]' fallback otherwise (headless/Windows).
+            g = '[!]';
+            try
+                if usejava('desktop')
+                    g = char(128276);   % U+1F514 bell
+                end
+            catch
+                % Stay with the ASCII fallback.
+            end
+        end
+
+        function setNotifDetached_(obj, tf)
+        %SETNOTIFDETACHED_ Pop the notification pane to its own uifigure (tf=true) or re-inline (false).
+            try
+                if tf
+                    if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_) && obj.NotifPane_.IsAttached
+                        obj.NotifPane_.detach();
+                    end
+                    newFig = uifigure( ...
+                        'Name',     'Notification Center — FastSenseCompanion', ...
+                        'Position', [0 0 420 600], ...
+                        'Color',    obj.Theme_.DashboardBackground);
+                    movegui(newFig, 'center');
+                    newFig.CloseRequestFcn = @(~,~) obj.setNotifDetached_(false);
+                    obj.hDetachedNotifFig_ = newFig;
+                    obj.NotifPane_.attach(newFig, obj.Theme_);
+                    cw = obj.hLayout_.ColumnWidth; cw{4} = 0; obj.hLayout_.ColumnWidth = cw;  % collapse inline col
+                else
+                    if ~isempty(obj.hDetachedNotifFig_) && isvalid(obj.hDetachedNotifFig_)
+                        obj.hDetachedNotifFig_.CloseRequestFcn = '';
+                        delete(obj.hDetachedNotifFig_);
+                    end
+                    obj.hDetachedNotifFig_ = [];
+                    if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_) && obj.NotifPane_.IsAttached
+                        obj.NotifPane_.detach();
+                    end
+                    obj.NotifPane_.attach(obj.hNotifPanel_, obj.Theme_);
+                    cw = obj.hLayout_.ColumnWidth; cw{4} = 320; obj.hLayout_.ColumnWidth = cw;  % show inline col
+                end
+                if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                    obj.NotifPane_.refresh(obj.getEventStore());
+                end
+                obj.updateBellBadge_();
+            catch err
+                if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                    uialert(obj.hFig_, err.message, 'Notification Center', 'Icon', 'error');
+                end
+            end
+        end
+
+        function updateBellBadge_(obj)
+        %UPDATEBELLBADGE_ Reflect unacked count + max-severity color on the bell (read-error tolerant).
+            try
+                if isempty(obj.hBellBtn_) || ~isvalid(obj.hBellBtn_); return; end
+                store = obj.getEventStore();
+                if isempty(store) || ~isvalid(store)
+                    obj.hBellBtn_.Text            = obj.bellGlyph_();
+                    obj.hBellBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                    obj.hBellBtn_.FontColor       = obj.Theme_.ForegroundColor;
+                    return;
+                end
+                allEvents = Event.empty;
+                try
+                    allEvents = store.getEvents();   % stale-safe; badge tolerates a read failure
+                catch
+                end
+                unacked = NotificationCenterPane.filterUnacked_(allEvents);
+                n = numel(unacked);
+                obj.hBellBtn_.Text = NotificationCenterPane.badgeText_(n, obj.bellGlyph_());
+                if n == 0
+                    obj.hBellBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                    obj.hBellBtn_.FontColor       = obj.Theme_.ForegroundColor;
+                else
+                    obj.hBellBtn_.BackgroundColor = NotificationCenterPane.badgeColor_( ...
+                        NotificationCenterPane.maxSeverity_(unacked), obj.Theme_);
+                    obj.hBellBtn_.FontColor       = obj.Theme_.DashboardBackground;
+                end
+            catch
+                % Badge update must never crash.
             end
         end
 
