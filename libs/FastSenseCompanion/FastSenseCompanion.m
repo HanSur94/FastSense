@@ -124,6 +124,9 @@ classdef FastSenseCompanion < handle
         WikiBrowser_  = []   % shared WikiBrowser handle (or [])
         % Phase 1040 — toolbar bell: unacked-count indicator that opens the Event Viewer.
         hBellBtn_          = []   % toolbar bell uibutton with unacked-count badge
+        % Phase 1041-04 — global time range picker.
+        TimeRange_ = []   % CompanionTimeRange — global window source of truth
+        TimeBar_   = []   % CompanionTimeBar   — toolbar picker control
     end
 
     methods (Access = public)
@@ -167,6 +170,12 @@ classdef FastSenseCompanion < handle
                         stored.livePeriod > 0
                     userLivePeriod = double(stored.livePeriod);
                 end
+            end
+            % Phase 1041-04 — resolve TimeRange_ from prefs (default: Last 7 days).
+            if isstruct(stored) && isfield(stored, 'timeRange') && isstruct(stored.timeRange)
+                obj.TimeRange_ = CompanionTimeRange.fromStruct(stored.timeRange);
+            else
+                obj.TimeRange_ = CompanionTimeRange();   % default: relative N=7 unit='days'
             end
 
             % Step 3 — Parse varargin (explicit Name-Value wins over prefdir).
@@ -437,6 +446,10 @@ classdef FastSenseCompanion < handle
                 obj.hBellBtn_.Tooltip = 'No EventStore registered';
             end
 
+            % Col 9 — Phase 1041-04: Time Range picker button (fills the '1x' spacer slot).
+            % CompanionTimeBar owns this button internally; col 9 ColumnWidth stays '1x'.
+            obj.TimeBar_ = CompanionTimeBar(hToolbarGrid, 9, obj.TimeRange_, obj.Theme_, obj);
+
             % Col 10 — Settings gear (Phase 1040 shifted it 9 -> 10 to make room for the bell).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
@@ -545,6 +558,9 @@ classdef FastSenseCompanion < handle
                 @(s, e) obj.InspectorPane_.setState(e.State, e.Payload));
             obj.Listeners_{end+1} = addlistener(obj, 'OpenAdHocPlotRequested', ...
                 @(s, e) obj.onOpenAdHocPlotRequested_(s, e));
+            % Phase 1041-04 — push window to all engines when range changes.
+            obj.Listeners_{end+1} = addlistener(obj.TimeRange_, 'RangeChanged', ...
+                @(~,~) obj.onRangeChanged_());
             obj.applyPlaceholderColors_();
 
             % Step 11 — Wire CloseRequestFcn
@@ -705,6 +721,16 @@ classdef FastSenseCompanion < handle
                 fprintf(2, '[FastSenseCompanion] SettingsDlg cleanup failed: %s\n', err.message);
             end
             obj.SettingsDlg_ = [];
+            % Phase 1041-04 — tear down the time-range picker bar.
+            % The RangeChanged listener is already in Listeners_ (torn down above).
+            try
+                if ~isempty(obj.TimeBar_) && isvalid(obj.TimeBar_)
+                    delete(obj.TimeBar_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] TimeBar cleanup failed: %s\n', err.message);
+            end
+            obj.TimeBar_ = [];
             % Always delete the uifigure last and unconditionally — this is
             % what makes the X click actually close the window.
             try
@@ -1005,6 +1031,13 @@ classdef FastSenseCompanion < handle
                 % Phase 1040 — recolor the toolbar bell badge under the new theme tokens.
                 obj.updateBellBadge_();
                 obj.updateLiveButton_();
+                % Phase 1041-04 — restyle the time-range bar under the new theme.
+                if ~isempty(obj.TimeBar_) && isvalid(obj.TimeBar_)
+                    try
+                        obj.TimeBar_.setTheme(obj.Theme_);
+                    catch
+                    end
+                end
                 drawnow;
             catch err
                 obj.Theme  = prevTheme;
@@ -1189,6 +1222,14 @@ classdef FastSenseCompanion < handle
                 pageName = 'Companion-Overview';
             end
             obj.openWiki_(pageName);
+        end
+
+        function [t0, t1] = currentTimeWindow(obj)
+        %CURRENTTIMEWINDOW Resolve the global range to a concrete [t0, t1] datenum.
+        %   'all' resolves to [] []. Callers (e.g. InspectorPane opening a
+        %   SensorDetailPlot) pass this into the view so it starts windowed.
+        %   Phase 1041-04.
+            [t0, t1] = obj.TimeRange_.resolve();
         end
 
         function trackOpenedFigure(obj, hFig)
@@ -1812,6 +1853,60 @@ classdef FastSenseCompanion < handle
             end
         end
 
+        function onRangeChanged_(obj)
+        %ONRANGECHANGED_ Push the resolved window to all managed + ad-hoc engines.
+        %   Called via addlistener on TimeRange_.RangeChanged. Persists the new
+        %   spec to companionPrefs so the next session restores it.
+        %   Phase 1041-04.
+            try
+                [t0, t1] = obj.TimeRange_.resolve();
+                % Persist to prefs (best-effort — never block on save failure).
+                try
+                    p = companionPrefs('load');
+                    p.timeRange = obj.TimeRange_.toStruct();
+                    companionPrefs('save', p);
+                catch
+                end
+                % Managed dashboards — direct engine handles.
+                for i = 1:numel(obj.Engines_)
+                    e = obj.Engines_{i};
+                    if ~isempty(e) && isvalid(e)
+                        try
+                            e.setTimeWindow(t0, t1);
+                        catch
+                        end
+                    end
+                end
+                % Ad-hoc + detail figures — recover engine from appdata.
+                obj.syncOpenedFigures_();   % prunes dead + pulls Engines_ figures
+                for k = 1:numel(obj.OpenedFigures_)
+                    hf = obj.OpenedFigures_(k);
+                    if ~ishandle(hf); continue; end
+                    try
+                        eng = getappdata(hf, 'DashboardEngine');
+                        if ~isempty(eng) && isvalid(eng)
+                            eng.setTimeWindow(t0, t1);
+                        end
+                    catch
+                    end
+                end
+                % Refresh the toolbar button label.
+                if ~isempty(obj.TimeBar_) && isvalid(obj.TimeBar_)
+                    try
+                        obj.TimeBar_.refreshButton();
+                    catch
+                    end
+                end
+            catch ME
+                try
+                    if ~isempty(obj.hFig_) && isvalid(obj.hFig_)
+                        uialert(obj.hFig_, ME.message, 'Time Range Error');
+                    end
+                catch
+                end
+            end
+        end
+
         function onOpenDashboardRequested_(obj, ~, ed)
         %ONOPENDASHBOARDREQUESTED_ Listener for DashboardListPane.OpenDashboardRequested.
         %   The pane already calls engine.render() with try/catch + uialert. The
@@ -1828,6 +1923,15 @@ classdef FastSenseCompanion < handle
                     if ~isempty(ed.Engine) && isvalid(ed.Engine) && ...
                             ~isempty(ed.Engine.hFigure) && ishandle(ed.Engine.hFigure)
                         obj.trackOpenedFigure_(ed.Engine.hFigure);
+                    end
+                catch
+                end
+                % Phase 1041-04: pass the current global window to the just-opened engine.
+                try
+                    if ~isempty(ed.Engine) && isvalid(ed.Engine) && ...
+                            ismethod(ed.Engine, 'setTimeWindow')
+                        [t0, t1] = obj.TimeRange_.resolve();
+                        ed.Engine.setTimeWindow(t0, t1);
                     end
                 catch
                 end
@@ -2199,6 +2303,17 @@ classdef FastSenseCompanion < handle
                                 obj.trackOpenedFigure_(hFig_k);
                             catch
                             end
+                            % Phase 1041-04: apply current window to the freshly spawned engine.
+                            try
+                                if ~isempty(hFig_k) && ishandle(hFig_k)
+                                    eng_k = getappdata(hFig_k, 'DashboardEngine');
+                                    if ~isempty(eng_k) && isvalid(eng_k)
+                                        [t0_k, t1_k] = obj.TimeRange_.resolve();
+                                        eng_k.setTimeWindow(t0_k, t1_k);
+                                    end
+                                end
+                            catch
+                            end
                             try
                                 nm = tgK.Name;
                             catch
@@ -2238,6 +2353,17 @@ classdef FastSenseCompanion < handle
                     % S0Y-01: track the ad-hoc figure so Tile / Close all see it.
                     try
                         obj.trackOpenedFigure_(hFig);
+                    catch
+                    end
+                    % Phase 1041-04: apply current window to the freshly spawned engine.
+                    try
+                        if ~isempty(hFig) && ishandle(hFig)
+                            eng = getappdata(hFig, 'DashboardEngine');
+                            if ~isempty(eng) && isvalid(eng)
+                                [t0, t1] = obj.TimeRange_.resolve();
+                                eng.setTimeWindow(t0, t1);
+                            end
+                        end
                     catch
                     end
                     obj.addLogEntry('info', sprintf( ...

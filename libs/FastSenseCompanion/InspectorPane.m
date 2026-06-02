@@ -862,6 +862,19 @@ classdef InspectorPane < handle
                     end
                 catch
                 end
+                % Phase 1041-04: apply the global time window so the detail plot starts windowed.
+                try
+                    if ~isempty(obj.Orchestrator_) && isvalid(obj.Orchestrator_) && ...
+                            ismethod(obj.Orchestrator_, 'currentTimeWindow') && ...
+                            ~isempty(hFig) && ishandle(hFig)
+                        eng = getappdata(hFig, 'DashboardEngine');
+                        if ~isempty(eng) && isvalid(eng)
+                            [t0, t1] = obj.Orchestrator_.currentTimeWindow();
+                            eng.setTimeWindow(t0, t1);
+                        end
+                    end
+                catch
+                end
                 obj.log_('info', sprintf('Opened detail plot: %s', char(tag.Key)));
             catch ME
                 obj.log_('error', sprintf('Open detail failed (%s): %s', char(tag.Key), ME.message));
