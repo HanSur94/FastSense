@@ -411,12 +411,24 @@ classdef DashboardLayout < handle
                             'addPlantLogToggle failed during realizeWidget: %s', ME.message);
                     end
                 end
+                % 260602-mri — crosshair-link toggle. Duck-typed via
+                % ismethod(widget,'setCrosshairLink') so only FastSenseWidget
+                % opts in today (setCrosshairLink is the duck-type hook).
+                % Lives inside needsBar because it requires the WidgetButtonBar.
+                if ismethod(widget, 'setCrosshairLink')
+                    try
+                        obj.addCrosshairLinkToggle(widget);
+                    catch ME
+                        warning('DashboardLayout:crosshairToggleFailed', ...
+                            'addCrosshairLinkToggle failed during realizeWidget: %s', ME.message);
+                    end
+                end
                 % v4.0 260513-snt — settle final right-anchored button positions.
                 %   addInfoIcon runs BEFORE addCreateEventButton, so Info's
                 %   initial X collides with Create's slot. reflowChrome_ knows
                 %   the full layout (V/A left cluster + Info/Create/Detach right
-                %   cluster + Plant Log toggle) and re-anchors everything in one
-                %   pass.
+                %   cluster + Plant Log toggle + CrosshairLink leftmost) and
+                %   re-anchors everything in one pass.
                 DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
             else
                 % No chrome — render directly into the cell panel as before.
@@ -751,6 +763,81 @@ classdef DashboardLayout < handle
                     fig = ancestor(src, 'figure');
                     if ~isempty(fig) && ishandle(fig) && isa(fig, 'matlab.ui.Figure')
                         uialert(fig, ME.message, 'Plant log toggle failed', 'Icon', 'error');
+                    end
+                catch
+                end
+            end
+        end
+
+        function addCrosshairLinkToggle(obj, widget)
+        %ADDCROSSHAIRLINKTOGGLE Inject crosshair-link 'X' button into WidgetButtonBar (260602-mri).
+        %   Duck-typed: only called for widgets where ismethod(widget,'setCrosshairLink').
+        %   Idempotent: removes any prior CrosshairLinkButton before creating the new one.
+        %   Glyph: 'X' (ASCII, Octave-safe — matches existing V/A/L/i/^ glyphs).
+        %   Position: leftmost chrome button, placed to the LEFT of the V/A cluster;
+        %   final position settled by reflowChrome_ (reflowChrome_ is called from
+        %   both realizeWidget and from this method for callback-driven rebuilds).
+        %   Active (linked) state highlighted via chooseYLimitActiveBg_ (same as V/A).
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            % Idempotent: delete any prior CrosshairLinkButton.
+            prior = findobj(bar, 'Tag', 'CrosshairLinkButton', '-depth', 1);
+            if ~isempty(prior)
+                try delete(prior); catch, end
+            end
+            % Provisional position (reflowChrome_ will re-anchor on resize).
+            % Use xLink = 2 as placeholder so the button is always inside
+            % the bar. reflowChrome_ computes the definitive left-of-V/A coord.
+            xLink = 2;
+            if widget.CrosshairLinked
+                tipStr  = 'Unlink crosshair (stop mirroring)';
+                bgColor = DashboardLayout.chooseYLimitActiveBg_(theme);
+            else
+                tipStr  = 'Link crosshair across page';
+                bgColor = theme.ToolbarBackground;
+            end
+            uicontrol('Parent', bar, ...
+                'Style',           'pushbutton', ...
+                'String',          'X', ...
+                'Units',           'pixels', ...
+                'Position',        [xLink 2 24 24], ...
+                'FontSize',        9, ...
+                'FontWeight',      'bold', ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', bgColor, ...
+                'Tag',             'CrosshairLinkButton', ...
+                'TooltipString',   tipStr, ...
+                'Callback',        @(s, ~) obj.onCrosshairLinkTogglePressed_(s, widget));
+            try
+                DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
+            catch
+                % Best-effort reflow — must not break the toggle.
+            end
+        end
+
+        function onCrosshairLinkTogglePressed_(obj, src, widget)
+        %ONCROSSHAIRLINKTOGLEPRESSED_ CrosshairLink toggle callback (260602-mri).
+        %   Flips widget.CrosshairLinked, notifies the engine, and rebuilds the
+        %   button visual. All errors are caught and surfaced as namespaced
+        %   warnings so no toggle failure can crash the dashboard refresh loop.
+            try
+                widget.setCrosshairLink(~widget.CrosshairLinked);
+                if ~isempty(obj.EngineRef) && isa(obj.EngineRef, 'DashboardEngine')
+                    obj.EngineRef.onCrosshairLinkToggle(widget);
+                end
+                % Rebuild button look (highlight / tooltip).
+                obj.addCrosshairLinkToggle(widget);
+            catch ME
+                warning('DashboardLayout:crosshairToggleFailed', ...
+                    'Crosshair-link toggle callback failed: %s', ME.message);
+                try
+                    fig = ancestor(src, 'figure');
+                    if ~isempty(fig) && ishandle(fig) && isa(fig, 'matlab.ui.Figure')
+                        uialert(fig, ME.message, 'Crosshair link toggle failed', 'Icon', 'error');
                     end
                 catch
                 end
@@ -1143,6 +1230,16 @@ classdef DashboardLayout < handle
                 end
                 if ~isempty(visibleBtn) && ishandle(visibleBtn(1))
                     set(visibleBtn(1), 'Position', [xVisible, 2, bw, bw]);
+                end
+                % 260602-mri — CrosshairLinkButton: LEFTMOST chrome button,
+                % sits to the LEFT of the V/A cluster.
+                % Assumption: FastSenseWidget always has V/A, so xVisible is
+                % always set when CrosshairLinkButton is present. Add a brief
+                % comment noting the leftmost-button assumption.
+                linkBtn = findobj(bar(1), 'Tag', 'CrosshairLinkButton', '-depth', 1);
+                if ~isempty(linkBtn) && ishandle(linkBtn(1))
+                    xLink = xVisible - gap - bw;
+                    set(linkBtn(1), 'Position', [xLink, 2, bw, bw]);
                 end
             end
             if ~isempty(content) && ishandle(content(1))
