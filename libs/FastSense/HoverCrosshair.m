@@ -49,6 +49,12 @@ classdef HoverCrosshair < handle
         FigDeleteListener = []  % listener handle on figure ObjectBeingDestroyed
         AxDeleteListener  = []  % listener handle on axes ObjectBeingDestroyed
         ThrottleSeconds = 0.025 % minimum interval between motion-driven updates
+        % 260602-mri — crosshair-link broadcast support
+        BroadcastFcn_      = []   % @(x) callback fired at end of onMove (link source->peers)
+        BroadcastLeaveFcn_ = []   % @() callback fired at end of onLeave (source hides->peers)
+        SuppressLeaveUntil_ = []  % tic timestamp; while toc < SuppressWindow_, onLeave is no-op
+        SuppressWindow_    = 0.075 % ~3*ThrottleSeconds; keep mirrored crosshair alive per dispatch
+        InBroadcast_       = false % re-entrancy guard: peers must not re-broadcast
     end
 
     methods (Access = public)
@@ -98,6 +104,49 @@ classdef HoverCrosshair < handle
                 obj.AxDeleteListener = addlistener(obj.hAxes, ...
                     'ObjectBeingDestroyed', @(~,~) obj.onTargetDestroyed_());
             end
+        end
+
+        function setBroadcastFcn(obj, moveFn, leaveFn)
+            %SETBROADCASTFCN Set (or clear) crosshair-link broadcast callbacks (260602-mri).
+            %   setBroadcastFcn(obj, moveFn, leaveFn)
+            %   moveFn  — @(x) callback, or [] to clear.  Called at end of onMove.
+            %   leaveFn — @() callback, or []. Called at end of onLeave on source.
+            %   nargin < 3: leaveFn defaults to [].
+            if ~isvalid(obj); return; end
+            if nargin < 2
+                moveFn = [];
+            end
+            if nargin < 3
+                leaveFn = [];
+            end
+            obj.BroadcastFcn_      = moveFn;
+            obj.BroadcastLeaveFcn_ = leaveFn;
+        end
+
+        function onMoveExternal(obj, xQuery)
+            %ONMOVEEXTERNAL Mirror an external crosshair data-x without re-broadcasting.
+            %   Called by DashboardEngine.broadcastCrosshairX_ to drive a peer
+            %   crosshair at xQuery.  Sets SuppressLeaveUntil_ so the peer's
+            %   own onFigureMove_->onLeave (fired in the same motion dispatch)
+            %   is swallowed and the mirrored crosshair stays visible.
+            if ~isvalid(obj); return; end
+            obj.SuppressLeaveUntil_ = tic;
+            obj.InBroadcast_ = true;
+            try
+                obj.onMove(xQuery);
+            catch
+                % swallow — never let mirroring errors surface
+            end
+            obj.InBroadcast_ = false;
+        end
+
+        function onLeaveExternal(obj)
+            %ONLEAVEEXTERNAL Clear suppress guard and hide crosshair on command.
+            %   Called by DashboardEngine.broadcastCrosshairLeave_ when the
+            %   source crosshair's own onLeave fires (cursor left all linked axes).
+            if ~isvalid(obj); return; end
+            obj.SuppressLeaveUntil_ = [];
+            obj.onLeave();
         end
 
         function onMove(obj, xQuery)
@@ -187,16 +236,41 @@ classdef HoverCrosshair < handle
                     'String', rows, ...
                     'Visible', 'on');
             end
+            % 260602-mri — broadcast data-x to peer crosshairs (link source only).
+            % InBroadcast_ guard prevents re-entrancy when onMove is called
+            % via onMoveExternal (peers must not re-broadcast).
+            if ~obj.InBroadcast_ && isa(obj.BroadcastFcn_, 'function_handle')
+                try obj.BroadcastFcn_(xQuery); catch; end
+            end
         end
 
         function onLeave(obj)
             %ONLEAVE Hide the crosshair line + datatip.
             if ~isvalid(obj); return; end
+            % 260602-mri — suppress-leave guard: when this crosshair was recently
+            % mirrored (SuppressLeaveUntil_ was set by onMoveExternal), a same-
+            % dispatch onLeave from onFigureMove_ must be a no-op so the mirrored
+            % crosshair stays visible. The guard window is ~3*ThrottleSeconds.
+            if ~isempty(obj.SuppressLeaveUntil_)
+                try
+                    if toc(obj.SuppressLeaveUntil_) < obj.SuppressWindow_
+                        return;
+                    end
+                catch
+                    obj.SuppressLeaveUntil_ = [];
+                end
+            end
             if ~isempty(obj.hLineV) && ishandle(obj.hLineV)
                 set(obj.hLineV, 'Visible', 'off');
             end
             if ~isempty(obj.hTipBox) && ishandle(obj.hTipBox)
                 set(obj.hTipBox, 'Visible', 'off');
+            end
+            % 260602-mri — if this is the source crosshair (not in external drive,
+            % no active suppress), broadcast leave to peer crosshairs so they hide.
+            if ~obj.InBroadcast_ && isempty(obj.SuppressLeaveUntil_) && ...
+                    isa(obj.BroadcastLeaveFcn_, 'function_handle')
+                try obj.BroadcastLeaveFcn_(); catch; end
             end
         end
 
@@ -204,6 +278,10 @@ classdef HoverCrosshair < handle
             %DELETE Restore prior WindowButtonMotionFcn and remove graphics.
             % Restore unconditionally — '' is a legal callback value, so
             % we must NOT guard with ~isempty(PrevWBMFcn_).
+            % 260602-mri — null broadcast callbacks first (defensive: avoids a
+            % dangling engine ref firing after delete via stale closure).
+            obj.BroadcastFcn_      = [];
+            obj.BroadcastLeaveFcn_ = [];
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 try %#ok<TRYNC>
                     set(obj.hFigure, 'WindowButtonMotionFcn', obj.PrevWBMFcn_);
