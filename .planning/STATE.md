@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Multi-User LAN Concurrency
-status: verifying
-last_updated: "2026-06-02T11:44:53.304Z"
+milestone: v5.0
+milestone_name: Multi-Machine Fleet
+status: defining_requirements
+last_updated: "2026-06-02T14:59:09.000Z"
 last_activity: 2026-06-02
 progress:
-  total_phases: 16
-  completed_phases: 4
-  total_plans: 20
-  completed_plans: 39
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 
 ## Current Position
 
-Phase: 1040
-Plan: Not started
-Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
-Status: Phase complete — ready for verification
-Last activity: 2026-06-02
+Phase: Not started (defining requirements)
+Plan: —
+Milestone: v5.0 Multi-Machine Fleet — started 2026-06-02 (continues phase numbering from 1040). Prior: v4.0 Multi-User LAN Concurrency (verifying); v3.0 FastSense Companion (shipped 2026-04-30).
+Status: Defining requirements
+Last activity: 2026-06-02 — Milestone v5.0 Multi-Machine Fleet started
 
 ### Note on parallel v4.0 work (main branch state)
 

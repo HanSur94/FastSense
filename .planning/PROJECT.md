@@ -46,7 +46,7 @@ Users can organize complex dashboards into navigable sections and pop out any wi
 
 ## Current State
 
-**Shipped:** v2.0 Tag-Based Domain Model (2026-04-17)
+**Shipped:** v2.0 Tag-Based Domain Model (2026-04-17); v3.0 FastSense Companion (2026-04-30); v4.0 Multi-User LAN Concurrency (verifying, 2026-06-02)
 
 The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundation. Legacy `Sensor`/`Threshold`/`StateChannel`/`CompositeThreshold` classes are deleted. All consumers (FastSenseWidget, dashboard widgets, EventDetection, LiveEventPipeline) operate through the Tag API (`addTag`, `getXY`, `valueAt`). Events bind to tags via `EventBinding` registry and render as toggleable round markers in FastSense. All `examples/` scripts have been migrated to the Tag API and a dedicated 5-script showcase lives under `examples/02-sensors/tags/`.
 
@@ -54,31 +54,33 @@ The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundat
 
 **Companion (Phase 1040, 2026-06-02):** the FastSenseCompanion **Event Viewer** now hosts an acknowledgeable notification inbox (`NotificationCenterPane`) as a horizontally-resizable right panel (draggable divider); a toolbar **bell** shows the unacked count + highest-severity color and opens the viewer. Dismiss == shared, audited `EventStore.acknowledgeEvent`.
 
-## Current Milestone: v2.1 Tag-API Tech Debt Cleanup
+## Current Milestone: v5.0 Multi-Machine Fleet
 
-**Goal:** Close the 4 non-blocking tech debt items surfaced by the v2.0 milestone audit so the Tag-API codebase is free of dead code, test-skip gaps, and stubbed example demos.
+**Goal:** Ingest, browse, dashboard, and compare data across a growing fleet of near-identical machines from the FastSense Companion — including overlaying the same logical sensor across machines whose sensor keys differ.
 
-**Target items (from `.planning/milestones/v2.0-MILESTONE-AUDIT.md`):**
-- Stub or delete `EventDetector.detect(tag, threshold)` dead code referencing the deleted `Threshold` API
-- Fix `DashboardSerializer` `.m` script export to handle `source.type='tag'` (currently silently omits Tag-bound widgets; JSON path works)
-- Clean up 93 `Threshold(` constructor references across 42 MATLAB-only suite test files (fail on MATLAB, skip on Octave today)
-- Rewrite `examples/05-events/example_event_detection_live.m` and `example_event_viewer_from_file.m` as fully-migrated `MonitorTag + EventStore + EventBinding` pipelines (remove deprecation stubs)
+**Target features:**
+- Fleet/Machine data model — new `libs/Fleet/`: `Machine` (own isolated tag catalog + `DataRoot` + dashboards + ingestion, mirrors `TagRegistry` read API) and `Fleet` (searchable machines + config persistence). Global `TagRegistry` singleton left untouched.
+- Per-machine ingestion — existing `BatchTagPipeline`/`LiveTagPipeline` scoped per machine (own `DataRoot`); default global-registry path unchanged (backward compatible).
+- Canonical/logical-sensor mapping — automated rules + overrides + unmapped/ambiguous-tail surfacing; bridges differing keys across machines and scales to 20+/growing fleets.
+- Companion machine dimension — searchable machine selector; selecting a machine reuses the existing `setProject(machine.Dashboards, machine)`; legacy `Registry`/`Dashboards` constructor args still work (single implicit machine).
+- Per-machine dashboards + clone/remap — hand-built, independent per machine; clone a dashboard onto another machine with tag bindings rebound via the canonical map; `DashboardSerializer` gains a machine-scoped resolver.
+- Cross-machine comparison view — pick a logical sensor → overlay its series across selected machines (reuses `openAdHocPlot` Overlay mode, pulling Tag objects from each machine's catalog).
 
-**Deferred to future milestones:**
-- Asset hierarchy (Asset tree, templates, tag-to-asset binding, browse rollups)
-- Custom event GUI (click-drag region selection in FastSense → label dialog)
-- Calc tags / formula evaluator for arbitrary derived tags
-- Tri-state / continuous severity MonitorTag output
-- WebBridge parity for Tag API features
+**Key decisions carried in (from in-session brainstorm):**
+- Data model = Approach ① (Machine/Fleet layer). `TagRegistry` is static-only (a `persistent` map, 72 static call sites across 31 files) so it cannot be instanced — each `Machine` owns its own `containers.Map` instead, leaving the global registry and all existing single-machine usage untouched.
+- The one existing-code seam: `DashboardSerializer` must resolve `(machineId, localKey)` via Fleet→Machine instead of the global `TagRegistry.get` when (de)serializing a machine's tag-bound dashboards. Runtime widget resolution is unaffected (widgets hold Tag objects).
+
+**Deferred:**
+- Exact machine-selector placement (left rail vs top dropdown vs tabs) and comparison-view layout — resolved in a dedicated UI phase.
+- WebBridge parity for fleet features.
+- Cross-machine MonitorTag/event rollups and fleet-wide background monitoring (builds on v4.0 concurrency + Phase 1039/1040 monitoring; not in this milestone).
 
 ### Out of Scope
 
-- Drag-and-drop visual rearrangement — complexity vs. value for MATLAB-script-driven workflows
-- Cross-filtering between widgets — would require a data binding framework
-- Interactive controls (dropdowns, sliders) — DashboardEngine is visualization, not control panel
-- Browser/WebBridge parity for new features — future milestone
-- GroupWidget children individual detach buttons — v1 limitation, top-level only
-- Time panel in multi-page mode — works on active page only (known limitation)
+- Forced dashboard templating across machines — user chose hand-built, independent per-machine dashboards (clone/remap tooling instead).
+- Refactoring `TagRegistry` to be instantiable (Approach ③) — rejected for backward-compat risk to 72 call sites.
+- Namespaced compound keys in the global registry (Approach ②) — rejected for key-sprawl and forced per-machine filtering everywhere.
+- Drag-and-drop visual rearrangement, cross-widget filtering, interactive controls — unchanged from prior milestones (DashboardEngine is visualization, not control panel).
 
 ## Context
 
@@ -148,4 +150,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-02 — Phase 1040 (Companion Notification Center) complete*
+*Last updated: 2026-06-02 — Milestone v5.0 Multi-Machine Fleet started*
