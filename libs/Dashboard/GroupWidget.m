@@ -60,12 +60,31 @@ classdef GroupWidget < DashboardWidget
             end
         end
 
-        function removeChild(obj, idx)
-            if idx < 1 || idx > numel(obj.Children)
-                error('GroupWidget:invalidIndex', ...
-                    'Child index %d out of range [1, %d]', idx, numel(obj.Children));
+        function removeChild(obj, idx, tabName)
+        %REMOVECHILD Remove a child widget by index.
+        %   removeChild(idx) removes obj.Children(idx) — panel/collapsible mode.
+        %   removeChild(idx, tabName) removes the idx-th widget of the named tab
+        %   (tabbed mode), mirroring addChild(widget, tabName). Throws
+        %   GroupWidget:unknownTab for an unknown tab and GroupWidget:invalidIndex
+        %   for an out-of-range index in either mode.
+            if nargin >= 3 && ~isempty(tabName)
+                tIdx = obj.findTab(tabName);
+                if tIdx == 0
+                    error('GroupWidget:unknownTab', ...
+                        'No tab named ''%s''.', tabName);
+                end
+                if idx < 1 || idx > numel(obj.Tabs{tIdx}.widgets)
+                    error('GroupWidget:invalidIndex', ...
+                        'Child index %d out of range [1, %d]', idx, numel(obj.Tabs{tIdx}.widgets));
+                end
+                obj.Tabs{tIdx}.widgets(idx) = [];
+            else
+                if idx < 1 || idx > numel(obj.Children)
+                    error('GroupWidget:invalidIndex', ...
+                        'Child index %d out of range [1, %d]', idx, numel(obj.Children));
+                end
+                obj.Children(idx) = [];
             end
-            obj.Children(idx) = [];
         end
 
         function render(obj, parentPanel)
