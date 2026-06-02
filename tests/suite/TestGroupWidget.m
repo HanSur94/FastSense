@@ -398,5 +398,38 @@ classdef TestGroupWidget < matlab.unittest.TestCase
             g.addChild(MockDashboardWidget('Title', 'A1'), 'TabA');
             testCase.verifyError(@() g.removeChild(99, 'TabA'), 'GroupWidget:invalidIndex');
         end
+
+        function testRemoveTab(testCase)
+            g = GroupWidget('Label', 'Test', 'Mode', 'tabbed');
+            g.addChild(MockDashboardWidget('Title', 'A1'), 'TabA');
+            g.addChild(MockDashboardWidget('Title', 'B1'), 'TabB');
+            testCase.verifyLength(g.Tabs, 2);
+            g.removeTab('TabA');
+            testCase.verifyLength(g.Tabs, 1);
+            testCase.verifyEqual(g.Tabs{1}.name, 'TabB');
+        end
+
+        function testRemoveActiveTabReassignsActiveTab(testCase)
+            g = GroupWidget('Label', 'Test', 'Mode', 'tabbed');
+            g.addChild(MockDashboardWidget('Title', 'A1'), 'TabA');   % ActiveTab defaults to TabA
+            g.addChild(MockDashboardWidget('Title', 'B1'), 'TabB');
+            testCase.verifyEqual(g.ActiveTab, 'TabA');
+            g.removeTab('TabA');
+            testCase.verifyEqual(g.ActiveTab, 'TabB');
+        end
+
+        function testRemoveLastTabClearsActiveTab(testCase)
+            g = GroupWidget('Label', 'Test', 'Mode', 'tabbed');
+            g.addChild(MockDashboardWidget('Title', 'A1'), 'TabA');
+            g.removeTab('TabA');
+            testCase.verifyEmpty(g.Tabs);
+            testCase.verifyEqual(g.ActiveTab, '');
+        end
+
+        function testRemoveTabUnknownErrors(testCase)
+            g = GroupWidget('Label', 'Test', 'Mode', 'tabbed');
+            g.addChild(MockDashboardWidget('Title', 'A1'), 'TabA');
+            testCase.verifyError(@() g.removeTab('Nope'), 'GroupWidget:unknownTab');
+        end
     end
 end

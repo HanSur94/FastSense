@@ -87,6 +87,27 @@ classdef GroupWidget < DashboardWidget
             end
         end
 
+        function removeTab(obj, tabName)
+        %REMOVETAB Remove an entire tab and its widgets (tabbed mode).
+        %   Throws GroupWidget:unknownTab if the tab does not exist. When the
+        %   removed tab was the active one, ActiveTab moves to the first remaining
+        %   tab, or '' when none remain.
+            tIdx = obj.findTab(tabName);
+            if tIdx == 0
+                error('GroupWidget:unknownTab', ...
+                    'No tab named ''%s''.', tabName);
+            end
+            wasActive = strcmp(obj.ActiveTab, tabName);
+            obj.Tabs(tIdx) = [];
+            if wasActive
+                if isempty(obj.Tabs)
+                    obj.ActiveTab = '';
+                else
+                    obj.ActiveTab = obj.Tabs{1}.name;
+                end
+            end
+        end
+
         function render(obj, parentPanel)
             obj.hPanel = parentPanel;
             theme = obj.getTheme();
