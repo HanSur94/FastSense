@@ -156,16 +156,26 @@ CLEANUPINFOTEMPFILE Delete the temporary HTML file if it exists.
 
 REMOVEWIDGET Remove widget at given index and re-layout.
 
+#### `removePage(obj, idx)`
+
+REMOVEPAGE Remove the page at index idx, keeping ActivePage valid.
+  Mirror of removeWidget for pages. Throws DashboardEngine:invalidIndex
+  on a bad index. Deletes the page's widgets and the page, adjusts
+  ActivePage (decrements when removing a page before it; clamps when
+  removing the active page; resets to 0 when no pages remain), and
+  re-renders when a figure is live.
+
 #### `setWidgetPosition(obj, idx, pos)`
 
 SETWIDGETPOSITION Set the grid position of a widget by index.
   Clamps width to grid columns and resolves overlaps with other
-  widgets.
+  widgets. Operates on the active page in multi-page mode.
 
 #### `w = getWidgetByTitle(obj, title)`
 
 GETWIDGETBYTITLE Find a widget by its Title property.
-  Returns the widget object, or empty if not found.
+  Searches every page in multi-page mode (active page or single-page
+  Widgets otherwise). Returns the widget object, or empty if not found.
 
 #### `detachWidget(obj, widget)`
 
@@ -300,6 +310,7 @@ ONSCROLLREALIZE Realize widgets that scroll into view.
 
 MARKALLDIRTY Flag all widgets as needing refresh.
   Called on theme change, figure resize, or other global state changes.
+  Covers every page in multi-page mode.
 
 #### `onResize(obj)`
 
@@ -569,7 +580,20 @@ FORMATTIMEVAL Format a numeric time value as a human-readable string.
 
 #### `DashboardEngine.types = widgetTypes()`
 
-WIDGETTYPES List supported widget type strings.
+WIDGETTYPES Supported widget types + descriptions, as an Nx2 cell.
+  Derived from DashboardWidgetRegistry.types() (the single source of
+  truth), so it can no longer drift from what addWidget accepts, and
+  user-registered types (registerWidgetType) appear automatically with
+  a generic description.
+
+#### `DashboardEngine.registerWidgetType(type, ctorHandle)`
+
+REGISTERWIDGETTYPE Register a custom widget type with the dashboard.
+  DashboardEngine.registerWidgetType('mytype', @MyWidget) makes
+  'mytype' usable through addWidget, serialization, and detach — the
+  documented extension point for third-party widgets. The widget class
+  must subclass DashboardWidget and provide a static fromStruct.
+  Errors DashboardWidgetRegistry:duplicateType on a name collision.
 
 #### `DashboardEngine.obj = load(filepath, varargin)`
 
@@ -667,7 +691,7 @@ of serialized dashboards.
 | Position | `[1 1 6 2]` | [col, row, width, height] in grid units |
 | ThemeOverride | `struct()` | Per-widget theme overrides (merged on top of dashboard theme) |
 | UseGlobalTime | `true` | false when user manually zooms this widget |
-| Description | `''` | Optional tooltip text shown via info icon hover |
+| Description | `''` | Doc text shown in a popup when the widget's info (i) button is clicked |
 | Tag | `[]` | v2.0 Tag API — any Tag subclass |
 | ParentTheme | `[]` | Theme inherited from DashboardEngine |
 | Dirty | `true` | true when widget needs refresh (data changed) |
@@ -1014,6 +1038,21 @@ LOAD Load dashboard config from file.
   For .m files: uses feval to execute the function and return the engine.
   For .json files: uses legacy JSON parsing.
 
+#### `DashboardSerializer.v = currentSchemaVersion()`
+
+CURRENTSCHEMAVERSION Supported dashboard config schema version.
+  Writers stamp this into every config (widgetsToConfig /
+  widgetsPagesToConfig). The loader warns
+  (DashboardSerializer:schemaVersionNewer) when it reads a config
+  whose schemaVersion exceeds this value. Bump only when the on-disk
+  config shape changes in a way older loaders cannot read.
+
+#### `DashboardSerializer.checkSchemaVersion_(config, source)`
+
+CHECKSCHEMAVERSION_ Warn if a loaded config is newer than supported.
+  A missing schemaVersion is treated as v1 (pre-versioning files) and
+  loads silently.
+
 #### `DashboardSerializer.config = loadJSON(filepath)`
 
 LOADJSON Legacy: read dashboard config from JSON file.
@@ -1038,6 +1077,13 @@ CONFIGTOWIDGETS Create widget objects from config struct.
 #### `DashboardSerializer.w = createWidgetFromStruct(ws)`
 
 CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+  Dispatches through DashboardWidgetRegistry — the single source of
+  truth for widget type->class. The deprecated 'kpi' resolves to
+  NumberWidget via the registry alias. 'mock' is a test-only widget
+  kept as a thin special-case here: MockDashboardWidget lives under
+  tests/ and is intentionally NOT seeded into the library registry,
+  so the library has no dependency on test code. Unknown types warn
+  DashboardSerializer:unknownType and return [].
 
 #### `DashboardSerializer.exportScript(config, filepath)`
 
@@ -1411,6 +1457,91 @@ GETCONTENTAREA Compute the widget content area in normalized units.
   applyVisibilityAndRelayout(); this helper exists for
   consistency with consumers that read directly from the
   toolbar (e.g. DashboardBuilder canvas calc).
+
+---
+
+## `DashboardWidgetRegistry` --- Single source of truth for dashboard widget types.
+
+DashboardWidgetRegistry maps a widget type string (e.g. 'number') to the
+  class that implements it, so that EVERY consumer — DashboardEngine.addWidget,
+  DashboardEngine.widgetTypes, DashboardSerializer.createWidgetFromStruct and
+  DetachedMirror.cloneWidget — dispatches through ONE table instead of four
+  hand-maintained switch statements that drift out of sync.
+
+  It mirrors the TagRegistry static-singleton pattern (a classdef of static
+  methods over a persistent containers.Map), with three intentional deltas:
+
+    1. The catalog is seeded NON-empty on first use with the built-in widget
+       types (TagRegistry starts empty).
+    2. Type ALIASES (deprecated/renamed type strings) are a separate concern,
+       resolved via resolveAlias() — e.g. the deprecated 'kpi' -> 'number'.
+    3. reset() RE-SEEDS the built-ins and built-in aliases rather than wiping
+       to empty; it exists for test isolation after register()/registerAlias().
+
+  DashboardWidgetRegistry Methods (Static, public):
+    types          — sorted cellstr of all registered canonical type strings
+    isRegistered   — true if a canonical type is registered (aliases excluded)
+    resolveAlias   — map an alias to its canonical type (passthrough otherwise)
+    constructorFor — the @ClassName constructor handle for a type (resolves alias)
+    fromStruct     — deserialize a widget struct via the type's static fromStruct
+    register       — add a NEW canonical type (hard error on collision)
+    registerAlias  — add an alias for an already-registered canonical type
+    reset          — restore the built-in catalog + aliases (test isolation)
+
+### Static Methods
+
+#### `DashboardWidgetRegistry.t = types()`
+
+TYPES Sorted cellstr of all registered canonical widget type strings.
+  The single source of truth — DashboardEngine.widgetTypes() derives
+  its list from this.
+
+#### `DashboardWidgetRegistry.tf = isRegistered(type)`
+
+ISREGISTERED True if TYPE is a registered canonical type.
+  Aliases (e.g. 'kpi') are NOT counted — use resolveAlias() first if
+  you need alias-aware membership.
+
+#### `DashboardWidgetRegistry.c = resolveAlias(type)`
+
+RESOLVEALIAS Map an alias to its canonical type.
+  Returns TYPE unchanged when it is not an alias.
+
+#### `DashboardWidgetRegistry.h = constructorFor(type)`
+
+CONSTRUCTORFOR Constructor handle (@ClassName) for a widget type.
+  Resolves aliases first. Throws DashboardWidgetRegistry:unknownType
+  when the (resolved) type is not registered.
+
+#### `DashboardWidgetRegistry.w = fromStruct(type, s)`
+
+FROMSTRUCT Deserialize a widget struct via its class fromStruct.
+  w = DashboardWidgetRegistry.fromStruct(type, s) resolves TYPE to a
+  constructor handle, derives the class name, and calls
+  <Class>.fromStruct(s). Throws DashboardWidgetRegistry:unknownType
+  when TYPE (resolved) is not registered.
+
+#### `DashboardWidgetRegistry.register(type, ctorHandle)`
+
+REGISTER Add a NEW canonical widget type to the catalog.
+  DashboardWidgetRegistry.register(type, @ClassName) registers a
+  constructor handle under TYPE. Like TagRegistry.register, this
+  HARD-ERRORS on collision (DashboardWidgetRegistry:duplicateType) so
+  a custom widget cannot silently clobber a built-in. Call reset()
+  to drop custom registrations (test isolation).
+
+#### `DashboardWidgetRegistry.registerAlias(alias, canonical)`
+
+REGISTERALIAS Map an alias type string to a registered canonical type.
+  The canonical type must already be registered, else
+  DashboardWidgetRegistry:unknownType is thrown.
+
+#### `DashboardWidgetRegistry.reset()`
+
+RESET Restore the built-in catalog and aliases (test isolation).
+  Re-seeds the persistent maps in place so register()/registerAlias()
+  side effects from a prior test do not leak. Mirrors TagRegistry.clear,
+  but re-seeds the built-ins rather than wiping to empty.
 
 ---
 
@@ -1833,9 +1964,33 @@ obj = GaugeWidget(varargin)
 
 ---
 
-## `GroupWidget`
+## `GroupWidget` --- Container widget that groups child widgets in one of three modes.
 
 > Inherits from: `DashboardWidget`
+
+GroupWidget delivers the dashboard's nested-layout feature. Set Mode to:
+    'panel'       — children laid out in a sub-grid inside a bordered panel
+    'collapsible' — like panel, with a header bar that collapses/expands
+    'tabbed'      — children organised into named tabs with a tab strip
+
+  Children are added and removed through parallel APIs that depend on Mode:
+    addChild(widget)            — panel/collapsible (appends to Children)
+    addChild(widget, tabName)   — tabbed (appends to the named tab, creating it)
+    removeChild(idx)            — panel/collapsible
+    removeChild(idx, tabName)   — tabbed
+    removeTab(tabName)          — drop a whole tab
+  Navigation / state: switchTab(tabName), collapse(), expand().
+
+  Groups may nest one level deep (a GroupWidget inside a GroupWidget); a
+  maximum nesting depth of 2 is enforced by addChild (GroupWidget:maxDepth).
+
+  Key public properties:
+    Mode          — 'panel' | 'collapsible' | 'tabbed'
+    Label         — header bar title
+    Children      — cell of child widgets (panel/collapsible)
+    Tabs          — cell of struct('name', ..., 'widgets', {{...}}) (tabbed)
+    ActiveTab     — current tab name (tabbed)
+    ChildColumns  — sub-grid column count
 
 ### Constructor
 
@@ -1863,7 +2018,21 @@ obj = GroupWidget(varargin)
 
 Check nesting depth for GroupWidget children
 
-#### `removeChild(obj, idx)`
+#### `removeChild(obj, idx, tabName)`
+
+REMOVECHILD Remove a child widget by index.
+  removeChild(idx) removes obj.Children(idx) — panel/collapsible mode.
+  removeChild(idx, tabName) removes the idx-th widget of the named tab
+  (tabbed mode), mirroring addChild(widget, tabName). Throws
+  GroupWidget:unknownTab for an unknown tab and GroupWidget:invalidIndex
+  for an out-of-range index in either mode.
+
+#### `removeTab(obj, tabName)`
+
+REMOVETAB Remove an entire tab and its widgets (tabbed mode).
+  Throws GroupWidget:unknownTab if the tab does not exist. When the
+  removed tab was the active one, ActiveTab moves to the first remaining
+  tab, or '' when none remain.
 
 #### `render(obj, parentPanel)`
 
@@ -2251,6 +2420,13 @@ obj = ScatterWidget(varargin)
 ### Static Methods
 
 #### `ScatterWidget.obj = fromStruct(s)`
+
+#### `ScatterWidget.t = resolveTag_(key, title)`
+
+RESOLVETAG_ Resolve a Tag key via TagRegistry; warn (no throw) if absent.
+  Mirrors FastSenseWidget:tagNotFound semantics: a missing key yields []
+  and a namespaced warning rather than an error, so a dashboard saved
+  against a different registry still loads.
 
 ---
 
