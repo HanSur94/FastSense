@@ -308,7 +308,8 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
 
         % --- Task 4: root uigridlayout layout tests ---
 
-        function testRootLayoutIs1x2WithLeftAndRightColumns(testCase)
+        function testRootLayoutIs1x4WithNotificationColumn(testCase)
+            % Phase 1040: root is [catalog | content | divider | notification inbox].
             es = makeStore_(testCase);
             comp = makeRealCompanion_(testCase);
             v = CompanionEventViewer(es, TagRegistry, comp);
@@ -320,10 +321,12 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             isRoot = arrayfun(@(g) isequal(g.Parent, v.hFigure), grids);
             root = grids(isRoot);
             testCase.verifyEqual(numel(root), 1, 'Exactly one root uigridlayout.');
-            testCase.verifyEqual(numel(root.ColumnWidth), 2, ...
-                'Root grid must be 1x2.');
+            testCase.verifyEqual(numel(root.ColumnWidth), 4, ...
+                'Root grid must be 1x4 (catalog | content | divider | inbox).');
             testCase.verifyEqual(root.ColumnWidth{1}, 260, ...
                 'Left column must default to LeftPaneWidth (260).');
+            testCase.verifyEqual(root.ColumnWidth{4}, 320, ...
+                'Notification column must default to NotifPaneWidth (320).');
         end
 
         % --- Task 5: catalog pane wiring tests ---
