@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Multi-User LAN Concurrency
-status: "Phase 1028 closed. WithIO `tickMin` reduced 4497 ms → 3603 ms (−19.9%) on Octave Linux x86_64 CI run 26089658442, almost entirely from Plan 02d's in-memory prior-state cache. Plan 06 ships per-tick fs-stat coalescing reducing 1600 → 1 syscalls/tick (−99.94% mechanism-level; wall-time +3.2% within variance on tmpfs CI). PR #114 carries the phase. Follow-up candidates for a future perf phase: in-memory propagation refactor; `containers.Map` → struct-array refactor; `.mat` save-side optimization. K2/K3/K4 deferred per data (target regions bucket as 0 ms post-cache)."
-last_updated: "2026-06-02T06:59:42.567Z"
-last_activity: "2026-05-29 - Completed 260529-fnt (via /gsd:fast): FunctionTransport adapter — reuse an external/company MATLAB mailer as a NotificationService Transport, no SMTP config"
+status: executing
+last_updated: "2026-06-02T08:40:36.900Z"
+last_activity: 2026-06-02
 progress:
-  total_phases: 15
+  total_phases: 16
   completed_phases: 3
-  total_plans: 16
-  completed_plans: 35
+  total_plans: 20
+  completed_plans: 36
 ---
 
 # State
@@ -19,15 +19,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** Phase 1029 — Concurrency Foundation
+**Current focus:** Phase 1040 — companion-notification-center
 
 ## Current Position
 
-Phase: 1028 (tag-update-perf-mex-simd) — COMPLETE 2026-05-19 (this branch)
-Plan: 6 of 6 executed (with 03/04 deferred per Plan 02d data). Shipped plans: 01, 02, 02b, 02d, 05, 06.
+Phase: 1040 (companion-notification-center) — EXECUTING
+Plan: 2 of 4
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
-Status: Phase 1028 closed. WithIO `tickMin` reduced 4497 ms → 3603 ms (−19.9%) on Octave Linux x86_64 CI run 26089658442, almost entirely from Plan 02d's in-memory prior-state cache. Plan 06 ships per-tick fs-stat coalescing reducing 1600 → 1 syscalls/tick (−99.94% mechanism-level; wall-time +3.2% within variance on tmpfs CI). PR #114 carries the phase. Follow-up candidates for a future perf phase: in-memory propagation refactor; `containers.Map` → struct-array refactor; `.mat` save-side optimization. K2/K3/K4 deferred per data (target regions bucket as 0 ms post-cache).
-Last activity: 2026-05-29 - Completed 260529-fnt (via /gsd:fast): FunctionTransport adapter — reuse an external/company MATLAB mailer as a NotificationService Transport, no SMTP config
+Status: Ready to execute
+Last activity: 2026-06-02
 
 ### Note on parallel v4.0 work (main branch state)
 
