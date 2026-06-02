@@ -54,6 +54,8 @@ The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundat
 
 **Companion (Phase 1040, 2026-06-02):** the FastSenseCompanion **Event Viewer** now hosts an acknowledgeable notification inbox (`NotificationCenterPane`) as a horizontally-resizable right panel (draggable divider); a toolbar **bell** shows the unacked count + highest-severity color and opens the viewer. Dismiss == shared, audited `EventStore.acknowledgeEvent`.
 
+**Companion (Phase 1041, 2026-06-02):** a global **Kibana-style time-range picker** (`CompanionTimeBar` toolbar button + relative/absolute/quick-preset popup; default **Last 7 days**, persisted via `companionPrefs`). Opening any sensor/plot now loads only the selected window via an additive `Tag.getXYRange(t0,t1)` (`getXY()` untouched) — disk-backed sensors read only overlapping chunks via `DataStore.getRange`, in-RAM sensors slice in place. `CompanionTimeRange` is the source of truth; `RangeChanged` re-queries all managed + ad-hoc engines; out-of-window widgets show a "No data in selected range" empty-state. Visual checklist (picker visuals + relative-slide-on-live-tick) tracked in `1041-HUMAN-UAT.md`.
+
 ## Current Milestone: v2.1 Tag-API Tech Debt Cleanup
 
 **Goal:** Close the 4 non-blocking tech debt items surfaced by the v2.0 milestone audit so the Tag-API codebase is free of dead code, test-skip gaps, and stubbed example demos.
@@ -148,4 +150,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-02 — Phase 1040 (Companion Notification Center) complete*
+*Last updated: 2026-06-02 — Phase 1041 (Global time range for the Companion) complete*
