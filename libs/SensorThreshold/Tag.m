@@ -139,6 +139,13 @@ classdef Tag < handle
                 X = []; Y = [];
                 return;
             end
+            if tEnd < X(1) || tStart > X(end)
+                % Window lies entirely outside the data extent -> empty.
+                % (Without this guard the one-point padding below would pull
+                % in a boundary sample for a non-overlapping window.)
+                X = []; Y = [];
+                return;
+            end
             iLo = binary_search(X, tStart, 'left');
             iHi = binary_search(X, tEnd,   'right');
             iLo = max(1, iLo - 1);           % one-point padding (matches DataStore.getRange)
