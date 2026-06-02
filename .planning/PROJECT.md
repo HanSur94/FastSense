@@ -64,7 +64,7 @@ The SensorThreshold subsystem has been fully rebooted on a unified `Tag` foundat
 - Canonical/logical-sensor mapping — automated rules + overrides + unmapped/ambiguous-tail surfacing; bridges differing keys across machines and scales to 20+/growing fleets.
 - Companion machine dimension — searchable machine selector; selecting a machine reuses the existing `setProject(machine.Dashboards, machine)`; legacy `Registry`/`Dashboards` constructor args still work (single implicit machine).
 - Per-machine dashboards + clone/remap — hand-built, independent per machine; clone a dashboard onto another machine with tag bindings rebound via the canonical map; `DashboardSerializer` gains a machine-scoped resolver.
-- Cross-machine comparison view — pick a logical sensor → overlay its series across selected machines (reuses `openAdHocPlot` Overlay mode, pulling Tag objects from each machine's catalog).
+- Cross-machine comparison view — a **machine-first compare builder**: select machines, then set each machine's data (a shared-sensor quick-fill via the canonical map, or a separate tag per machine), overlaid in its own figure (reuses `openAdHocPlot` Overlay; pulls Tag objects from each machine's catalog).
 
 **Key decisions carried in (from in-session brainstorm):**
 - Data model = Approach ① (Machine/Fleet layer). `TagRegistry` is static-only (a `persistent` map, 72 static call sites across 31 files) so it cannot be instanced — each `Machine` owns its own `containers.Map` instead, leaving the global registry and all existing single-machine usage untouched.

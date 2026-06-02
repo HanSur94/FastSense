@@ -1,67 +1,79 @@
-# Requirements: FastSense v4.0 Multi-User LAN Concurrency
+# Requirements: FastSense v5.0 Multi-Machine Fleet
 
-**Defined:** 2026-05-13
-**Core Value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes. v4.0 preserves this while allowing up to 50 such engineers to work against the same data on a shared LAN file system.
+**Defined:** 2026-06-02
+**Core Value:** A MATLAB engineer can ingest, browse, dashboard, and compare data across a growing fleet of near-identical machines from the FastSense Companion — including overlaying the *same logical sensor* across machines whose raw sensor keys differ — without leaving MATLAB and without external toolboxes.
 
 ## v1 Requirements
 
-Requirements for v4.0 release. Each maps to roadmap phases. Numbering continues from prior milestones (v3.0 ended at phase 1023.1; pending unscoped 1025-1028 are carry-forward, NOT v4.0).
+Requirements for the v5.0 release. New category prefixes (FLEET/CANON/MACH/CMP/DASH) begin at 01. Phase numbering continues from v4.0 (last phase 1040), so v5.0 phases start at **1041**.
 
-### Concurrency Primitives (CONC)
+Design is locked to **Approach ①** (Machine/Fleet layer; global `TagRegistry` untouched). The canonical map is the gating dependency for comparison and clone/remap.
 
-Foundation layer — cross-host file locking, stale-lock recovery, atomic writes. Without these, none of the rest works.
+### Fleet & Machine Data Model (FLEET)
 
-- [x] **CONC-01**: User can run 2+ Companion sessions writing the same per-tag `.mat` file via the shared share without producing a corrupted MAT (verified by parallel-write integration test on real SMB share).
-- [x] **CONC-02**: When a Companion holding a per-tag write lock crashes (kill -9 or hard-power-off), another Companion takes over the lock within `staleTimeout + 5s` (default `staleTimeout = 90s`) without manual cleanup. Stale-lock recovery uses **server-side filesystem mtime**, not wall-clock TTL.
-- [x] **CONC-03**: Every shared-file write (`.mat`, NDJSON log, snapshot, SQLite) uses atomic temp-file + rename so concurrent readers never observe partially-written data. CI lint forbids raw `save()` to shared paths.
+The additive `libs/Fleet/` layer: isolated per-machine tag catalogs, per-machine ingestion, and fleet config persistence. Foundation for everything else.
 
-### Identity & Audit (IDENT)
+- [ ] **FLEET-01**: User can define a `Machine` (Id, Name, `DataRoot` folder, optional metadata) and add it to a `Fleet` via a script API (`Fleet.addMachine(...)`).
+- [ ] **FLEET-02**: User can register two machines that share an identical local sensor key (e.g. both have `temperature`) with no duplicate-key error — each `Machine` owns an isolated tag catalog and machine tags never enter the global `TagRegistry` (verified: `grep "TagRegistry.register" libs/Fleet/` returns 0; `TagRegistry.list()` shows 0 machine tags after loading a 2-machine fleet).
+- [ ] **FLEET-03**: A machine ingests its raw/live data into its own `DataRoot` via the existing `BatchTagPipeline`/`LiveTagPipeline`, scoped to that machine's tags (pipeline `tagSource_` DI seam). Existing single-machine pipeline usage (global registry) is byte-for-byte unchanged.
+- [ ] **FLEET-04**: User can save a fleet configuration (machines, `DataRoot`s, metadata, canonical overrides) to a JSON file and reload it, round-tripping identically on both MATLAB R2020b+ and Octave 7+.
+- [ ] **FLEET-05**: Opening a fleet of many machines loads tag *metadata* only — sample data for a machine loads lazily on first access (startup with a 5-machine test set stays under a documented memory/time budget).
+- [ ] **FLEET-06**: User can assign a machine to a group and filter/browse the fleet by group, composable with free-text search (`Machine.Group` + `Fleet.filterByGroup`). *(differentiator)*
 
-Who did what — sourced from OS, no login screen, FDA Part 11 §11.10(e) audit trail compliance.
+### Canonical Sensor Mapping (CANON)
 
-- [x] **IDENT-01**: Every shared write (event ack, NDJSON entry, snapshot, lockfile) is stamped with `user@host (pid, epoch)`. `userIdentity.m` resolves via `getenv('USERNAME'|'USER')` + `system('hostname')` + optional Java InetAddress fallback (Octave-guarded by `usejava('jvm')`). In cluster mode, identity failure throws — no silent `'unknown'` writes.
-- [x] **IDENT-02**: Every event acknowledgement records (user, host, timestamp, action, target event-id). Audit trail is queryable and viewable in the Companion app's event log column.
+The logical-sensor layer bridging differing per-machine keys. Must be reviewable so wrong comparisons can't happen silently.
 
-### Shared Event Store (EVTLOG)
+- [ ] **CANON-01**: For machines that name the same sensor differently, the mapper auto-suggests a logical-sensor mapping (`logicalId → {machineId → localKey}`) from name/unit similarity using only toolbox-free primitives (hand-rolled edit distance + normalization).
+- [ ] **CANON-02**: Every mapping entry carries a confidence level (HIGH/MEDIUM/LOW), and the mapper flags matches whose units are inconsistent.
+- [ ] **CANON-03**: User can manually override or correct a mapping (in the mapping review surface, or promoted from a per-machine choice in the comparison builder); the override persists in the fleet config and takes precedence over auto-suggestions.
+- [ ] **CANON-04**: User can query which of a machine's tags are unmapped or ambiguous (the tail needing attention) — `reviewPending()` / `unmapped(machineId)`.
+- [ ] **CANON-05**: User can review and edit the canonical map in the companion via a table (logical name / per-machine local key / status / confidence) and promote entries.
 
-Replace the single MAT-file EventStore with a concurrent-safe append-only NDJSON log + leader-elected snapshot consolidator. Reader merges log onto canonical snapshot.
+### Companion Machine Dimension (MACH)
 
-- [x] **EVTLOG-01**: Events and acks are persisted as append-only NDJSON lines on the shared share. Appends are serialised through the per-tag `FileLock` (NOT `O_APPEND` atomicity, which is unreliable on SMB/NFS). On any `EventStore` save path on shared share, `journal_mode=DELETE` + `busy_timeout=10000` + `BEGIN IMMEDIATE` + application-level retry replaces WAL.
-- [x] **EVTLOG-02**: 50-process append stress test produces exactly the expected number of valid JSON lines; `EventLogReader` skips and counts any corrupt lines defensively.
-- [x] **EVTLOG-03**: A reader observing a file being mid-rewritten (temp+rename in progress) either gets the previous version or the new version — never a parse error. Reader retries on transient parse failure with 50ms backoff; surfaces a persistent failure after 3 retries.
+Adds machine browsing/selection to the companion by reusing the existing `setProject` "active project" seam.
 
-### Acknowledgement & Event Lifecycle (ACK)
+- [ ] **MACH-01**: User can browse and free-text-search the fleet's machines in the companion at fleet scale (20+, lazy-populated).
+- [ ] **MACH-02**: Selecting a machine makes it the active context — the tag catalog and dashboard list show that machine's tags and dashboards (via `setProject(machine.Dashboards, machine)`; the four static `TagRegistry.find` call sites are re-pointed to the active machine).
+- [ ] **MACH-03**: The companion always indicates which machine is the active context.
+- [ ] **MACH-04**: Switching machines stops the previously-active dashboard's live timer before starting the new one — timer count is stable across repeated machine switches (no accumulation).
+- [ ] **MACH-05**: Existing companion construction (`'Registry'`/`'Dashboards'` args, no `Fleet`) continues to work unchanged as a single implicit machine. *(backward compatibility)*
 
-User-facing event acknowledgement workflow + single-source event emission across the cluster.
+### Cross-Machine Comparison (CMP)
 
-- [x] **ACK-01**: When User A acknowledges an alarm, the ack becomes visible to the other 49 Companions within ~5 seconds (eventual-consistency target; UDP multicast hint accelerates propagation but disk state is canonical).
-- [x] **ACK-02**: An event displays a distinct visual state for "acked but condition still active" vs "acked and cleared" vs "unacked active" (per ISA-18.2 / EEMUA 191 alarm-state model — condition state and ack state are orthogonal).
-- [x] **ACK-03**: User can attach an optional free-text comment when acknowledging an event. Comment is persisted with the ack record.
-- [x] **ACK-04**: A `MonitorTag` threshold violation produces exactly ONE event in the shared EventStore regardless of how many Companions are running. Single-source guarantee derives from "lock holder for tag data is sole emitter for tag events" — `LiveTagPipeline.processTag_` and `LiveEventPipeline.processMonitorTag_` share the same per-tag `FileLock` domain.
+The headline capability. The flow is **machine-first** (Approach A — a modeless compare-builder dialog that opens its own overlay figure; reuses the `openAdHocPlot` Overlay path; no changes to the 3 panes or `setProject`): select machines, then choose each machine's data.
 
-### Resilience & Operator Communication (OPS)
+- [ ] **CMP-01**: User can build a comparison by (1) selecting machines, then (2) choosing the data for each — either a single "same sensor for all" quick-fill (auto-resolved per machine via the canonical map) or a tag chosen separately per machine — and overlay the result on one axes.
+- [ ] **CMP-02**: Each machine's series gets a distinct color (stable **per machine**, not per selection order) and a machine-qualified legend label (`[machineName]: [localTag]`).
+- [ ] **CMP-03**: A machine that lacks the chosen sensor shows `— none —` and is skipped gracefully with a surfaced warning by default — never a crash, never a silent wrong-data substitution; the user may explicitly substitute a different tag (see CMP-06).
+- [ ] **CMP-04**: The builder refuses to auto-include LOW-confidence / unreviewed canonical matches (confidence gate) — they are surfaced and need an explicit per-machine confirm; a unit mismatch on a manual substitution is warned. Prevents silent wrong comparisons.
+- [ ] **CMP-05**: A comparison resolves its tags once at open time (cached); live ticks call `updateData` only and do not degrade dashboard/companion refresh rate (`CanonicalMapper.resolve` absent from steady-state tick profile).
+- [ ] **CMP-06**: In the builder, the user can set each machine's data independently — accept the auto-match, confirm a low-confidence match, pick a different local tag (separate data per machine), or skip the machine; a manual override can be promoted into the canonical map.
 
-System-level survivability and the documented contract operators need to trust the system.
+### Per-Machine Dashboards & Clone/Remap (DASH)
 
-- [x] **OPS-01**: A temporary loss of the shared file share (network blip, server reboot) does not crash any Companion. Companions enter a degraded "read-only / waiting for share" state, retry transparently, and resume on share return. Existing single-user `.m` scripts run unchanged with no shared share.
-- [x] **OPS-02**: An operator-facing document (`examples/cluster-setup/README` or equivalent) specifies: (a) the eventual-consistency contract ("you may see ack propagation lag up to ~5s"), (b) the SMB-over-NFS recommendation on mixed-OS LANs, (c) the SMB-oplocks-must-be-disabled-on-EventStore-directory operational requirement with Windows-Server and Samba syntax, (d) the multicast firewall rule for `udpport` notification hints, (e) the NFSv3-detection startup warning.
+Hand-built independent per-machine dashboards, made maintainable by canonical-map-driven cloning.
 
-## v2 Requirements (deferred to v4.1+)
+- [ ] **DASH-01**: A machine's tag-bound dashboards serialize and reload correctly, resolving `(machineId, localKey)` via the Fleet→Machine resolver — including multi-page dashboards (closes the `FastSenseWidget.fromStruct:1516` + `DashboardEngine:4384` resolver gaps).
+- [ ] **DASH-02**: Pre-v5.0 single-machine dashboards (JSON and `.m`) continue to load unchanged via the global registry (resolver defaults to `TagRegistry.get`). *(backward compatibility)*
+- [ ] **DASH-03**: User can clone a dashboard from one machine onto another; tag bindings are rebound to the target machine's tags via the canonical map.
+- [ ] **DASH-04**: When a clone target lacks a sensor used by the source dashboard, the unresolved bindings are surfaced as a warnings list (not silent empty widgets).
 
-P2 differentiators identified by FEATURES.md research, deferred from v4.0 to keep scope tight.
+## Future Requirements (deferred to v5.x)
 
-### Presence & Awareness (PRES)
+Identified by research / scoping, deferred to keep v5.0 tight.
 
-- **PRES-01**: Companion app shows a "who's online" list of currently-running Companions (user@host) using `udpport` multicast heartbeats.
-- **PRES-02**: Event-log row displays "acked by user@host (Δt ago)" once acked.
-- **PRES-03**: Non-blocking toast when `TagWriteCoordinator` skips a tick because another Companion holds the lock ("Tag X being updated by user@host, 5s ago").
-
-### Alarm Management (ALARM)
-
-- **ALARM-01**: User can "shelve" an alarm to temporarily suppress it without acknowledging (ISA-18.2 §5.4.4 requirement; deferred only because of scope).
-- **ALARM-02**: Optional ack revocation grace window (configurable per tag).
-- **ALARM-03**: Threaded comments on events (multiple comments per event).
-- **ALARM-04**: Shift-handover snapshot (export current alarm state for the next operator).
+| Deferred | Reason |
+|----------|--------|
+| Regex batch mapping rules (naming-convention rules → O(rules)) | Valuable for systematic naming; defer until the base auto-suggest + override is proven |
+| Clone dry-run preview (unresolvable bindings shown before clone) | Safety nicety on top of DASH-03/04; defer |
+| Recent machines list | Minor navigation nicety |
+| Machine health/status badge (green/amber/red) | Requires fleet-wide background monitoring (builds on v4.0 + Ph. 1039/1040); separate milestone |
+| Batch clone (one source → N targets) | Add once single-clone is proven stable |
+| Normalized-time (batch-aligned) comparison overlay | Requires batch-event infrastructure; wall-clock overlay is the v5.0 default |
+| Statistical fleet envelope (min/max band across machines) | Requires a new aggregation compute layer |
+| WebBridge parity for fleet features | Browser layer follows the MATLAB feature, as in prior milestones |
 
 ## Out of Scope
 
@@ -69,45 +81,32 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Cloud / SaaS / WAN replication | LAN-only deployment per PROJECT.md constraint; eliminates partition / latency failure modes |
-| Browser-primary UI | WebBridge is a read-only viewer; Companion remains primary UI per PROJECT.md |
-| Authentication, RBAC, login screens | Trusted-network LAN deployment; OS username + hostname is sufficient identity; no security benefit on trusted LAN |
-| In-app chat / messaging (AF-1) | Siphons operator decisions out of the audit trail; no major SCADA platform (Ignition, AVEVA, WinCC) offers it — strong negative-space signal |
-| Live cursors / presence-aware editing (AF-2) | Meaningless for multi-tag dashboards; engineering effort with no operational value |
-| Native mobile push notifications (AF-3) | BYO external gateway via existing `NotificationService` hook; no native mobile stack |
-| Native email alerting (AF-4) | Same as AF-3 — use BYO gateway, do not build native SMTP into the platform |
-| Per-user alarm filtering (AF-12) | ISA-18.2 §10 anti-pattern; operators must all see the same alarm reality. Filtering belongs on dashboards (UI-only), never on the event store |
-| Pessimistic locking on dashboards (AF-8) | Dashboards are CODE (every Companion runs the same `.m` script); no runtime dashboard sharing exists |
-| SQLite WAL on shared share | Structurally impossible — `wal-index` requires shared memory not available across hosts. Confirmed by SQLite team docs |
-| Python / Node / Redis / Postgres in v4.0 runtime stack | PROJECT.md constraint: pure MATLAB. Bundled mksqlite + MEX C are permitted; new external services are not |
-| Multi-WAN / federated sites | Out of scope per PROJECT.md; single office, single LAN |
+| AF-style asset hierarchy tree | A flat searchable list + one `Group` field is sufficient for 20–50 machines; a full tree is over-engineering |
+| Automatic machine discovery from the filesystem | Explicit `Fleet.addMachine(...)` in user scripts is the correct, predictable pattern |
+| Refactoring `TagRegistry` to be instantiable (Approach ③) | 72 static call sites across 31 files; rejected for backward-compat risk |
+| Namespaced compound keys in the global registry (Approach ②) | Key-sprawl + forced per-machine filtering everywhere; rejected |
+| ML / semantic tag matching | Breaks the no-external-dependency constraint; edit-distance + overrides is sufficient |
+| Forced dashboard templating across machines | User chose hand-built independent per-machine dashboards + clone/remap |
+| Cross-machine MonitorTag/event rollups; fleet-wide background monitoring | Builds on v4.0 concurrency + Ph. 1039/1040 monitoring; out of this milestone |
 
 ## Traceability
 
-Each requirement maps to exactly one phase. Phase numbering continues from v3.0 (last phase 1023.1); pending 1025-1028 are carry-forward NOT v4.0, so v4.0 starts at phase **1029**.
+Each requirement maps to exactly one phase. **To be filled by the roadmapper** (phases start at 1041). Suggested dependency-ordered grouping from research (roadmapper validates/finalizes):
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| CONC-02 (stale recovery) | Phase 1029 (Foundation) | Pending |
-| CONC-03 (atomic writes) | Phase 1029 (Foundation) | Pending |
-| IDENT-01 (identity) | Phase 1029 (Foundation) | Pending |
-| CONC-01 (per-tag locks) | Phase 1030 (TagWriteCoordinator) | Pending |
-| EVTLOG-01 (NDJSON + rollback-mode SQLite) | Phase 1031 (EventLog) | Pending |
-| EVTLOG-02 (50-proc stress) | Phase 1031 (EventLog) | Pending |
-| EVTLOG-03 (read-path resilience) | Phase 1031 (EventLog) | Pending |
-| ACK-04 (single-source emission) | Phase 1032 (Single-Source Events) | Pending |
-| ACK-01 (ack propagation) | Phase 1032 (Single-Source Events) | Pending |
-| ACK-02 (acked-but-active state) | Phase 1032 (Single-Source Events) | Pending |
-| ACK-03 (ack comment) | Phase 1032 (Single-Source Events) | Pending |
-| IDENT-02 (audit trail on acks) | Phase 1032 (Single-Source Events) | Pending |
-| OPS-01 (network-failure tolerance) | Phase 1033 (Companion Integration) | Pending |
-| OPS-02 (operator docs) | Phase 1033 (Companion Integration) | Pending |
+| Requirement(s) | Suggested Phase | Status |
+|----------------|-----------------|--------|
+| CANON-01..05 | Phase 1041 (CanonicalMapper) | Pending |
+| FLEET-01..06 | Phase 1042 (Machine + Fleet + pipeline DI) | Pending |
+| DASH-01, DASH-02 | Phase 1043 (Serializer resolver seam + backward-compat) | Pending |
+| MACH-01..05 | Phase 1044 (Companion machine dimension) | Pending |
+| CMP-01..06 | Phase 1045 (Comparison view) | Pending |
+| DASH-03, DASH-04 | Phase 1046 (Clone/remap) | Pending |
 
 **Coverage:**
-- v1 requirements: 14 total
-- Mapped to phases: 14 (confirmed by roadmapper 2026-05-13)
-- Unmapped: 0 ✓
+- v1 requirements: 26 total (FLEET 6, CANON 5, MACH 5, CMP 6, DASH 4)
+- Mapped to phases: pending roadmapper confirmation
+- Unmapped: TBD
 
 ---
-*Requirements defined: 2026-05-13*
-*Last updated: 2026-05-13 — Roadmapper confirmed Traceability mapping; all 14 P1 REQ-IDs map to phases 1029-1033 with no redistribution needed.*
+*Requirements defined: 2026-06-02*
+*Last updated: 2026-06-02 — v5.0 requirements scoped; comparison UX locked to a machine-first compare builder with per-machine data (CMP-06 added; CMP now 6).*
