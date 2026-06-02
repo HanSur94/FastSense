@@ -13,7 +13,7 @@ classdef DashboardWidget < handle
         Position    = [1 1 6 2]    % [col, row, width, height] in grid units
         ThemeOverride = struct()   % Per-widget theme overrides (merged on top of dashboard theme)
         UseGlobalTime = true       % false when user manually zooms this widget
-        Description = ''           % Optional tooltip text shown via info icon hover
+        Description = ''           % Doc text shown in a popup when the widget's info (i) button is clicked
         Tag         = []           % v2.0 Tag API — any Tag subclass
         ParentTheme = []           % Theme inherited from DashboardEngine
         Dirty       = true         % true when widget needs refresh (data changed)

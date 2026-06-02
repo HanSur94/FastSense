@@ -1,4 +1,38 @@
 classdef GroupWidget < DashboardWidget
+%GROUPWIDGET Container widget that groups child widgets in one of three modes.
+%
+%   GroupWidget delivers the dashboard's nested-layout feature. Set Mode to:
+%     'panel'       — children laid out in a sub-grid inside a bordered panel
+%     'collapsible' — like panel, with a header bar that collapses/expands
+%     'tabbed'      — children organised into named tabs with a tab strip
+%
+%   Children are added and removed through parallel APIs that depend on Mode:
+%     addChild(widget)            — panel/collapsible (appends to Children)
+%     addChild(widget, tabName)   — tabbed (appends to the named tab, creating it)
+%     removeChild(idx)            — panel/collapsible
+%     removeChild(idx, tabName)   — tabbed
+%     removeTab(tabName)          — drop a whole tab
+%   Navigation / state: switchTab(tabName), collapse(), expand().
+%
+%   Groups may nest one level deep (a GroupWidget inside a GroupWidget); a
+%   maximum nesting depth of 2 is enforced by addChild (GroupWidget:maxDepth).
+%
+%   Key public properties:
+%     Mode          — 'panel' | 'collapsible' | 'tabbed'
+%     Label         — header bar title
+%     Children      — cell of child widgets (panel/collapsible)
+%     Tabs          — cell of struct('name', ..., 'widgets', {{...}}) (tabbed)
+%     ActiveTab     — current tab name (tabbed)
+%     ChildColumns  — sub-grid column count
+%
+%   Example:
+%     g = GroupWidget('Label', 'Analysis', 'Mode', 'tabbed');
+%     g.addChild(NumberWidget('Title', 'RPM'), 'Overview');
+%     g.addChild(HistogramWidget('Title', 'Dist'), 'Details');
+%     g.switchTab('Details');
+%
+%   See also DashboardWidget, DashboardEngine, NumberWidget.
+
     properties (Access = public)
         Mode            = 'panel'  % 'panel', 'collapsible', 'tabbed'
         Label           = ''       % Title shown in header bar
