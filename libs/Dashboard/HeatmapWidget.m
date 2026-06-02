@@ -48,9 +48,11 @@ classdef HeatmapWidget < DashboardWidget
             end
 
             data = [];
-            if ~isempty(obj.Sensor)
-                if isempty(obj.Sensor.Y), return; end
-                data = obj.Sensor.Y;
+            if ~isempty(obj.Tag)
+                % Read via the Tag.getXY() contract (Derived/Composite tags have no .Y).
+                [~, y] = obj.Tag.getXY();
+                if isempty(y), return; end
+                data = y;
             elseif ~isempty(obj.DataFcn)
                 data = obj.DataFcn();
             end

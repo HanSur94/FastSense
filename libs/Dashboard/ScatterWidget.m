@@ -45,10 +45,13 @@ classdef ScatterWidget < DashboardWidget
             xData = [];
             yData = [];
             if ~isempty(obj.SensorX) && ~isempty(obj.SensorY)
-                if isempty(obj.SensorX.Y) || isempty(obj.SensorY.Y), return; end
-                n = min(numel(obj.SensorX.Y), numel(obj.SensorY.Y));
-                xData = obj.SensorX.Y(1:n);
-                yData = obj.SensorY.Y(1:n);
+                % Read via the Tag.getXY() contract (Derived/Composite tags have no .Y).
+                [~, yx] = obj.SensorX.getXY();
+                [~, yy] = obj.SensorY.getXY();
+                if isempty(yx) || isempty(yy), return; end
+                n = min(numel(yx), numel(yy));
+                xData = yx(1:n);
+                yData = yy(1:n);
             end
             if isempty(xData), return; end
 
@@ -71,8 +74,14 @@ classdef ScatterWidget < DashboardWidget
             end
 
             cla(obj.hAxes);
-            if ~isempty(obj.SensorColor) && ~isempty(obj.SensorColor.Y)
-                cData = obj.SensorColor.Y(1:min(numel(obj.SensorColor.Y), numel(xData)));
+            cData = [];
+            if ~isempty(obj.SensorColor)
+                [~, yc] = obj.SensorColor.getXY();
+                if ~isempty(yc)
+                    cData = yc(1:min(numel(yc), numel(xData)));
+                end
+            end
+            if ~isempty(cData)
                 % Use line with markers for Octave compatibility
                 obj.hScatter = scatter(obj.hAxes, xData, yData, obj.MarkerSize, cData, 'filled');
                 colormap(obj.hAxes, obj.Colormap);
@@ -112,9 +121,11 @@ classdef ScatterWidget < DashboardWidget
             lines{1} = [ttl, repmat(' ', 1, width - numel(ttl))];
 
             if height >= 2
-                if ~isempty(obj.SensorX) && ~isempty(obj.SensorY) && ...
-                        ~isempty(obj.SensorX.Y) && ~isempty(obj.SensorY.Y)
-                    n = min(numel(obj.SensorX.Y), numel(obj.SensorY.Y));
+                yx = []; yy = [];
+                if ~isempty(obj.SensorX), [~, yx] = obj.SensorX.getXY(); end
+                if ~isempty(obj.SensorY), [~, yy] = obj.SensorY.getXY(); end
+                if ~isempty(yx) && ~isempty(yy)
+                    n = min(numel(yx), numel(yy));
                     info = sprintf('%d points', n);
                 else
                     info = '[-- scatter --]';
