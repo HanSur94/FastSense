@@ -33,7 +33,12 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
   3. User can call `mapper.override(logicalId, machineId, localKey)` and the override persists with precedence over auto-suggestions; `mapper.unmapped(machineId)` returns the tail of unresolved tags
   4. User can view and edit the canonical map in the Companion via a table (logical name / per-machine local key / status / confidence) and promote entries
   5. `grep -rn "contains(" libs/Fleet/CanonicalMapper.m` returns 0 (Octave-safe); no Statistics Toolbox `editDistance` call present
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 1041-01-test-scaffold-bootstrap-PLAN.md — Wave 0: TestCanonicalMapper.m (30 RED tests) + install.m Fleet path + libs/Fleet/ bootstrap
+- [ ] 1041-02-mapper-core-suggest-PLAN.md — Wave 1: CanonicalMapper core — normalize + edit-distance + suggest + confidence + unit-mismatch (CANON-01, CANON-02)
+- [ ] 1041-03-override-persist-query-PLAN.md — Wave 2: override/confirm precedence + JSON round-trip + reviewPending/unmapped/isResolvable (CANON-03, CANON-04)
+- [ ] 1041-04-canonical-map-editor-PLAN.md — Wave 3: standalone CanonicalMapEditor uifigure + human-verify checkpoint (CANON-05)
 
 ### Phase 1042: Machine + Fleet + Pipeline DI Seam
 **Goal**: Each Machine owns an isolated tag catalog and a DataRoot; a Fleet holds searchable machines; pipelines can be scoped to a machine; machine tags never enter the global TagRegistry
@@ -99,7 +104,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1041. CanonicalMapper | 0/? | Not started | - |
+| 1041. CanonicalMapper | 0/4 | Not started | - |
 | 1042. Machine + Fleet + Pipeline DI Seam | 0/? | Not started | - |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 0/? | Not started | - |
 | 1044. Companion Machine Dimension | 0/? | Not started | - |
