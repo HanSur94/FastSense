@@ -1,379 +1,278 @@
-# Feature Research — v2.1 Tag-API Tech Debt Cleanup
+# Feature Research — v5.0 Multi-Machine Fleet
 
-**Domain:** Post-v2.0 tech debt closure for a MATLAB Tag-based sensor dashboard (no net-new features). Tag API, TagRegistry, EventBinding, EventStore already exist.
-**Researched:** 2026-04-22
-**Mode:** Project Research — behavior-shape scoping of 4 audit-flagged cleanup items.
-**Confidence:** HIGH (all evidence read directly from the codebase; v2.0 audit is authoritative).
+**Domain:** Multi-asset / fleet monitoring and comparison — MATLAB-based sensor-data dashboard for engineering analysis across a growing fleet of near-identical machines.
+**Researched:** 2026-06-02
+**Confidence:** HIGH (prior art verified from AVEVA PI Vision, Seeq, Grafana, TrendMiner; codebase context HIGH from PROJECT.md)
+
+---
 
 ## Scope Statement
 
-This is NOT new-feature research. The 4 items below are scoped cleanups: dead-code deletion, a serializer gap, ~93 test-file constructor references to a deleted class, and 2 stubbed example rewrites. Every referenced API (SensorTag / StateTag / MonitorTag / CompositeTag / TagRegistry / EventBinding / EventStore / `LiveEventPipeline` / `FastSense.addTag`) already ships in v2.0 and must not be re-invented.
+This document covers the FEATURE EXPECTATIONS (behaviors users will look for) across the four v5.0 areas: machine browsing, cross-asset comparison, canonical/logical sensor mapping, and per-asset dashboards. Implementation details are out of scope here — those are resolved in roadmap phases. Every finding is categorized as TABLE STAKES (missing = product feels incomplete), DIFFERENTIATOR (valued but not assumed), or ANTI-FEATURE (explicitly out of scope, with rationale).
+
+**Architecture locked-in decisions that bound feature scope (from PROJECT.md):**
+- Machine layer is `Machine` + `Fleet` in `libs/Fleet/`; global `TagRegistry` untouched (backward compat)
+- Per-machine dashboards are hand-built and independent (no forced templates); clone/remap is the deployment mechanism
+- Comparison view reuses `openAdHocPlot` Overlay mode pulling Tag objects from each machine's catalog
+- `DashboardSerializer` gains machine-scoped resolver for `(machineId, localKey)` lookups
+- Visualization-only; no control panel, no drag-and-drop, no interactive actuation
 
 ---
 
-## Item 1 — `EventDetector.detect(tag, threshold)` dead code
-
-### Current state (verified)
-
-- `libs/EventDetection/EventDetector.m:39-75` — `detect(obj, tag, threshold)` calls `threshold.allValues()`, `.Direction`, `.Name`, `.Key`. **`Threshold` class does not exist** (`libs/**/Threshold.m` glob empty — deleted Phase 1011). First invocation → `MATLAB:undefinedClass` crash before any method call.
-- `libs/EventDetection/IncrementalEventDetector.m:31-41` — `process()` already a **hard-error stub** (`IncrementalEventDetector:legacyRemoved`, points to `MonitorTag.appendData`). Clean precedent for the stub shape.
-- `libs/EventDetection/EventConfig.m:35-42` — `addSensor()` same stub pattern already applied.
-- `libs/EventDetection/EventConfig.m:59-85` — `runDetection()` returns empty events; body no-ops the legacy path. `buildDetector()` still constructs a working `EventDetector` (for the legacy 6-arg `detect_(t, values, thresholdValue, direction, thresholdLabel, sensorName)` path, which uses NONE of the deleted classes).
-- `tests/suite/TestEventDetectorTag.m:32-56` still calls `det.detect(st, thr)` where `thr = Threshold(...)` — these tests are broken on MATLAB, skipped on Octave (part of Item 3).
-
-### Production callers of `EventDetector.detect(tag, threshold)`
-
-**Zero.** Grep across `libs/`, `examples/`, `benchmarks/` for the 2-arg `.detect(` on a Tag produced no production hits. Only test code (`TestEventDetectorTag.m`) calls it.
-
-### Still-used pieces of `EventDetector`
-
-- `EventDetector.detect_` private body — called nowhere in production either; the only `.detect(...)` hits in live code are the 6-arg legacy signature inside tests (`TestEventDetectorTag.testLegacySixArgOverloadUnchanged`). `EventConfig.buildDetector()` returns a configured `EventDetector` but no one invokes `.detect` on it in production.
-- Conclusion: **the entire `EventDetector` class body is unreachable in production**. Only test code exercises it.
+## Area 1 — Machine/Asset Browsing & Selection at Scale
 
 ### Table Stakes
 
-| Feature | Why Must-Do | Complexity | Notes |
-|---------|-------------|------------|-------|
-| Hard-error stub `detect(tag, threshold)` with legacy-removed message | Matches established v2.0 pattern (`IncrementalEventDetector.process`, `EventConfig.addSensor`) — callers get a loud, migration-pointing error instead of `undefinedClass` crash | LOW | Copy the `EventConfig.addSensor` template: `error('EventDetector:legacyRemoved', 'detect(tag, threshold) depended on the deleted Threshold class. Use MonitorTag + EventStore for event detection.')` |
-| Delete the 2-arg overload body entirely (no placeholder) — leave only `detect_` + legacy-positional detect | Defensible alternative: v2.0 REQs are all closed, the 2-arg overload was Phase 1009 scaffolding for a carrier pattern Phase 1010 replaced with `EventBinding` | LOW | Requires checking whether any consumer still depends on the method being callable (answer: no — only tests) |
-| Keep `detect_` private body callable via a preserved legacy positional `detect(t, values, ...)` | `TestEventDetectorTag.testLegacySixArgOverloadUnchanged` verifies this signature still works; removing it breaks a test we otherwise keep | LOW | Simplest path: rename 6-arg body to be the public `detect` entry; this IS what the test exercises |
-| Update `TestEventDetectorTag.m` — delete `testTagOverloadDetectsEvents`, `testTagOverloadWithEmptyTag`, `testPitfall1NoSubclassIsaInDetect` | They all construct `Threshold(...)` and invoke the removed 2-arg overload | LOW | `testLegacySixArgOverloadUnchanged` + `testNonTagNonSensorErrors` are the survivors |
+| Feature | Why Expected | Complexity | Dependency Notes |
+|---------|--------------|------------|-----------------|
+| Free-text search across machine names/IDs | Every fleet tool (PI Vision Switch Asset, Seeq asset tree, Grafana variable dropdown) provides instant search filtering; users with 20+ machines can't scroll a flat list. Wildcard/substring matching is the minimum expectation. | LOW | Requires `Fleet` holding a list of `Machine` objects with searchable metadata (name, id, group). |
+| Select one machine as the "active machine" in Companion | The companion's existing three-pane layout (tag catalog / dashboard list / inspector) already scopes to a single machine at a time. Users expect a clear indicator of which machine is currently active — PI Vision calls this "asset context"; Seeq calls it the "selected asset." | LOW | `FastSenseCompanion.setProject(machine.Dashboards, machine)` is the existing seam. |
+| Visual indicator of active machine | All industrial tools (PI Vision context bar, Seeq workbench header, Grafana top-of-dashboard variable row) prominently show what asset is currently being viewed. Absence causes "which machine am I looking at?" confusion. | LOW | Companion UI update only; no new data model. |
+| Machine list grouped by a user-defined category/group | PI Vision groups by AF element level; Grafana uses chained variables; Seeq uses asset tree folders. Engineers with multi-site fleets naturally group by line, cell, or site. Even a flat list with a category label is sufficient for 20–50 machines. | MEDIUM | `Machine` must carry a `Group` field; `Fleet` must support group-filtered queries. |
+| Loading a machine's dashboards and tag catalog on selection | Seeq and PI Vision both load the context-relevant signals and dashboards when an asset is selected. The companion already does this via `setProject`; the expectation is that it works for any machine in the fleet, not just a hardcoded set. | LOW | Core of the `Machine` model; existing `setProject` seam accommodates this. |
 
 ### Differentiators
 
-| Feature | Value | Complexity | Notes |
-|---------|-------|------------|-------|
-| Replace `EventConfig.runDetection()` with a clear hard-error stub | Currently silently returns `[]` — a worse DX than `addSensor`'s hard-error. Consistency win. | LOW | `error('EventConfig:legacyRemoved', ...)` matching `addSensor` |
-| Delete `IncrementalEventDetector` class entirely | The stubbed `.process()` cannot be called and its only purpose was to wrap the deleted `Sensor/Threshold` pipeline; `LiveEventPipeline` still constructs one (line 64-68) but never invokes a method on it | MEDIUM | Requires untangling the `obj.detector_` field in `LiveEventPipeline` — low risk since `processMonitorTag_` drives everything now |
-| Delete `EventConfig` class entirely | `addSensor` errors, `runDetection` returns empty; the class is unreachable except through `buildDetector` which returns a functioning `EventDetector` no one uses. Full deletion closes a major chunk of Item 3's test cleanup (TestEventConfig + TestEventStore's usage) | MEDIUM-HIGH | Cross-cutting: 11 EventStore/EventConfig tests rely on it. Defer or couple with Item 3. |
+| Feature | Value Proposition | Complexity | Dependency Notes |
+|---------|-------------------|------------|-----------------|
+| "Recent machines" list (last N selected) | Reduces navigation friction for analysts who rotate between 3–5 machines routinely. Present in file-manager conventions everywhere; not always present in industrial tools at this granularity. | LOW | Small persistence layer (prefs or companion state); no data model change. |
+| Machine health/status badge in the list | Showing a green/amber/red indicator next to each machine in the selector (derived from active MonitorTag violations) helps triage which machine to investigate next. Not just browsing — it surfaces urgency. | HIGH | Requires cross-machine event rollup per machine, which touches the `Fleet` model and per-machine `EventStore` reads. Depends on fleet-wide background monitoring (deferred to later milestone per PROJECT.md). Flag: do NOT block machine selector on this. |
+| Filter by group + search simultaneously | Combining text search with group filter (e.g., "Line A" + "pump") is more useful than either alone for 50+ machine fleets. Grafana supports chained variables for exactly this. | LOW-MEDIUM | `Fleet` query API needs `filterByGroup(group)` + `filterByName(pattern)` composable. |
+| Pin/star specific machines | Users frequently return to the same 3–5 machines; starring them surfaces them at the top of the selector. Common in developer tools, less common in industrial historians but immediately intuitive. | LOW | UI preference only; no data-model change. |
 
-### Anti-Features (explicitly DO NOT do)
+### Anti-Features
 
-| Anti-Feature | Why Avoid | Alternative |
-|--------------|-----------|-------------|
-| Silent no-op stub (return `[]`) for `detect(tag, threshold)` | Masks bugs; callers think detection ran. `addSensor` already chose hard-error — inconsistency is worse than the noise. | Hard-error stub matching `IncrementalEventDetector.process` precedent |
-| Keep `detect(tag, threshold)` working via `MonitorTag` synthesis under the hood | Would require constructing a synthetic `MonitorTag` + `EventStore` from a `Threshold`, defeating the whole cleanup — and would need to re-introduce `Threshold` or a façade | Document that callers must construct a MonitorTag themselves (per `example_sensor_threshold.m`) |
-| Re-introduce `Threshold` as a simple value struct for backward compat | Phase 1011 Pitfall 12 (feature creep in cleanup) and Pitfall 11 (test rewrite without golden) explicitly forbid this. TagRegistry is the one-namespace-one-search-surface decision. | MonitorTag + ConditionFn closure (the documented replacement) |
-| Add warning-then-delegate shim | v2.0 is a clean break ("no users" codebase per Key Decisions table). Warning tech-debt is worse than hard-error tech-debt. | Hard-error is the decision |
-
-### Complexity estimate
-
-**SIMPLE** (1-2 hours). Two function bodies swapped to error-stubs; ~4 test methods deleted. Worst case with optional `EventConfig`/`IncrementalEventDetector` class deletion = MEDIUM.
-
-### Dependencies on existing Tag API
-
-- `MonitorTag + EventStore + EventBinding` (the pointed-to replacement) — all already ship in v2.0.
-- `Event.Id` auto-assigned by `EventStore.append` (line 29) — already shipped Phase 1010.
-- No new API needed.
+| Feature | Why Avoid | Alternative |
+|----------|-----------|-------------|
+| Full asset hierarchy tree (multi-level AF-style tree with expand/collapse nodes) | PI AF trees are powerful but require dedicated tree-browsing UI, AF server integration, and significant complexity for 20-50 flat-fleet use cases. The FastSense Companion is a MATLAB uifigure — a proper tree widget (uitree) exists but adds drag-and-drop + expand/collapse complexity that is out of scope. The fleet is near-identical and flat, not a deep hierarchy. | Flat searchable list with a single group/category field. This scales to hundreds of machines and is idiomatic for engineering scripts. |
+| Automatic machine discovery from filesystem | Scanning a data root directory to auto-register new machines couples Fleet to a specific folder convention; breaks for remote paths, mapped drives, and non-standard layouts. PI Vision/Seeq both require explicit asset registration. | Explicit `Fleet.addMachine(...)` call in user setup scripts; machine list is user-managed. |
+| Live telemetry "is machine online" presence indicator | Requires a ping/health check mechanism to each machine's DataRoot, creating timing and network assumptions that don't fit a pure MATLAB file-based model. Out of scope per PROJECT.md (WebBridge parity deferred). | Stale/fresh data timestamp on last ingestion run (LOW complexity) is a deferred differentiator, not a live ping. |
+| Drag-and-drop machine reordering | DashboardEngine is visualization, not a control panel. User ordering is controlled by script/config, not drag-and-drop. | Named groups + alphabetic sort within group. |
 
 ---
 
-## Item 2 — `DashboardSerializer` `.m` export gap for `source.type='tag'`
-
-### Current state (verified)
-
-- `libs/Dashboard/FastSenseWidget.m:257-258` — `toStruct` emits `s.source = struct('type', 'tag', 'key', obj.Tag.Key)`. This is the CURRENT canonical shape.
-- `libs/Dashboard/FastSenseWidget.m:374-383` — `fromStruct` correctly handles `case 'tag'` via `TagRegistry.get(s.source.key)`. JSON round-trip works.
-- `libs/Dashboard/DashboardSerializer.m:38-55` (in `save()` — the .m function file path) — handles `'sensor'`, `'file'`, `'data'`, but **no `'tag'` case**. Silently falls through to the `otherwise` branch which emits `d.addWidget('fastsense', 'Title', ..., 'Position', ...)` **dropping the Tag binding entirely**.
-- `libs/Dashboard/DashboardSerializer.m:598-618` (in `linesForWidget` — the `exportScript` / `exportScriptPages` .m script path) — same gap: `'sensor'` case uses `TagRegistry.get(ws.source.name)`, no `'tag'` case, silently drops the binding via `otherwise`.
-- Partial fallback: the `'sensor'` case ALREADY uses `TagRegistry.get(ws.source.name)` — meaning the legacy JSON format with `type='sensor'` already round-trips through the registry. The new `type='tag'` format just needs a parallel case with `ws.source.key` instead of `ws.source.name`.
-
-### Scope — which widgets have this gap?
-
-Only `FastSenseWidget` emits `source.type='tag'` today (verified via grep: exactly one emitter at `FastSenseWidget.m:258`). The `source.type` construct is used by 9 widgets total but only FastSenseWidget serializes a Tag binding through it.
-
-**Question from the prompt:** "Does this include `CompositeTag` / `MonitorTag` / `StateTag`-bound widgets or only `SensorTag`?"
-
-**Answer:** `FastSenseWidget.Tag` accepts any `Tag` subclass (see Phase 1009-01, `FastSense.addTag` dispatch on `tag.getKind()`). `toStruct` stores only `Key`, so the kind is irrelevant to serialization — resolving via `TagRegistry.get(key)` returns the correct polymorphic handle. **The fix is kind-agnostic** — one `case 'tag'` handles all four.
-
-### Convention survey — what do other unknown types do?
-
-- `DashboardSerializer.createWidgetFromStruct` line 353: `warning('DashboardSerializer:unknownType', 'Unknown widget type: %s — skipping', ws.type);` returns `[]`.
-- `linesForWidget` `otherwise` (line 728): silent fallback `d.addWidget('%s', 'Title', ..., 'Position', ...)` — lossy but doesn't warn.
-- `save()` `switch ws.source.type` `otherwise` branches: silent `d.addWidget('fastsense', 'Title', ..., 'Position', ...)` — silent data loss.
-
-**Convention:** unknown widget *types* warn; unknown `source.type` values silently degrade. The gap here is that `'tag'` is a KNOWN source.type (emitted by our own `toStruct`) that the exporter forgot to implement — this is a bug, not an extension point.
+## Area 2 — Cross-Asset Comparison of the Same Measurement
 
 ### Table Stakes
 
-| Feature | Why Must-Do | Complexity | Notes |
-|---------|-------------|------------|-------|
-| Add `case 'tag'` in `DashboardSerializer.save()` (around line 38) | Closes the `.m` function-file export path; emits `'Tag', TagRegistry.get('KEY'))` just like the `'sensor'` case | LOW | Code-shape: `lines{end+1} = sprintf('        ''Tag'', TagRegistry.get(''%s''));', ws.source.key);` — 3 lines matching the existing `'sensor'` block verbatim but with `.key` not `.name` |
-| Add `case 'tag'` in `DashboardSerializer.linesForWidget()` (around line 598) | Closes the `.m` script-export path (`exportScript`, `exportScriptPages`) | LOW | Same 3-line pattern with `indent` prefix; copy-paste of the `'sensor'` branch |
-| Round-trip test: build dashboard with `FastSenseWidget.Tag=SensorTag`, call `DashboardSerializer.save(config, '/tmp/x.m')`, `feval('x')`, verify widget's `Tag` handle resolves to the same registry entry | Only way to prove the fix works; currently `TestDashboardSerializerRoundTrip.m` exists but does not cover `source.type='tag'` through .m export (verified by grep on existing test file names) | LOW-MEDIUM | Test fixture: `TagRegistry.clear(); TagRegistry.register('k', SensorTag('k', 'X', 1:5, 'Y', 1:5));` construct FastSenseWidget, exportScript, feval, assert `w.Tag.Key == 'k'` |
+| Feature | Why Expected | Complexity | Dependency Notes |
+|---------|--------------|------------|-----------------|
+| Overlay N machines' same logical sensor on one FastSense axes | This is the core comparison value. PI Vision overlay trend, Seeq Compare View, Grafana multi-value variable panels, TrendMiner layer comparison — all converge on this primitive. Expected behavior: pick a logical sensor name → one FastSense axes with one series per machine, auto-colored, legendized. | MEDIUM | Requires canonical map to resolve logical name → per-machine Tag key. Depends on Area 3 mapping layer. |
+| Per-machine color assignment (distinct, auto-assigned) | Every tool assigns a distinct color per asset when overlaying. Users expect to distinguish "Machine 01 (blue)" from "Machine 03 (orange)" in the legend. Grafana's lack of consistent color auto-assignment across panels is a documented pain point — FastSense should solve this explicitly. | LOW | `openAdHocPlot` Overlay mode already color-cycles; need to propagate machine label into legend. |
+| Legend showing machine name or ID (not just sensor key) | When 5 machines' temperature series are overlaid, the legend must say "M01 / M03 / M07" not "temperature_channel_1 / temperature_channel_1 / temperature_channel_1." All industrial tools do this. | LOW | Legend label = `[machineName]: [sensorDisplayName]` concatenation in the addTag/addLine call. |
+| Same-time (wall-clock) overlay as the primary alignment | Absolute timestamp alignment is the default in all time-series tools and expected for: "what happened to all machines on Tuesday at 14:00?" Seeq Compare View uses normalized time — but that is a specialized mode, not the default. PI Vision overlay trend uses wall-clock by default. | LOW | This is already how `openAdHocPlot` Overlay mode works; no change needed. |
+| Handle "sensor missing on some machines" gracefully | Not all machines in a fleet have identical sensor coverage. Seeq's `spy.swap` documents this explicitly: if `Area F does not include a Temperature signal, spy.swap() reports failure for that asset.` PI Vision's element-relative displays similarly silently omit missing attributes. Users expect: machines with the sensor show up; machines without it are skipped (with a warning, not a crash). | LOW-MEDIUM | Comparison view must iterate machine.getTag(localKey) with try/catch or a `hasTag(key)` guard; skip + warn for missing. |
+| Select machines for comparison (multi-select from the fleet) | The companion must let the user pick which subset of machines to include in a comparison, not force "all machines." Grafana multi-value variable, PI Vision Switch Asset list, Seeq workbench signal selection all require explicit multi-select. | MEDIUM | UI component in comparison initiation flow; `Fleet.getMachines(subset)` query needed. |
 
 ### Differentiators
 
-| Feature | Value | Complexity | Notes |
-|---------|-------|------------|-------|
-| Require TagRegistry lookup to succeed (don't silently wrap in try/catch) | The `FastSenseWidget.fromStruct` has try/catch + warning today (line 377-382) — that's the JSON path's safety net. The .m export should emit the same `TagRegistry.get(...)` call literally — `TagRegistry.get` hard-errors on unknown keys (Pitfall 7 decision), which is the correct behavior for a round-trip script | LOW | Do NOT wrap emitted code in try/catch — let it error loudly if the registry wasn't pre-populated |
-| Emit a header comment in exported .m files reminding users to populate TagRegistry before running | Avoids confusing "TagRegistry:unknownKey" errors when users share scripts | LOW | `%% Note: This script requires the following tags to be registered: <list>` |
-| Cover multi-page round-trip (`exportScriptPages` path) in the same test | The two .m export codepaths (`save`/`exportScript` single-page and `exportScriptPages` multi-page) share `linesForWidget`, but `save()` has its own inline switch at line 38 — must exercise BOTH | MEDIUM | Two-test-method pattern mirrors Phase 6 serialization approach |
+| Feature | Value Proposition | Complexity | Dependency Notes |
+|---------|-------------------|------------|-----------------|
+| Normalized-time (batch-start-aligned) overlay | Seeq Compare View's primary mode is time-normalized relative to capsule/batch start, enabling "how does each machine's temperature curve evolve through its cycle?" This is powerful for batch processes but requires a batch/event anchor. FastSense already has event markers — a batch-start event could be the alignment anchor. | HIGH | Requires: (a) a per-machine batch-start event concept, (b) re-indexing time arrays relative to that anchor. Defer unless batch processes are confirmed in target user workflow. |
+| Show per-machine min/max envelope band on overlay | When comparing 10+ machines, individual traces become cluttered. Showing a min/max band + median trace is a fleet-scale pattern (industrial IoT research papers, GE Proficy fleet analytics). More informative than 10 overlapping lines. | HIGH | Requires statistical aggregation across Tag arrays; significant new computation not in existing FastSense primitives. Defer to v5.x. |
+| Comparison initiated from a context menu on a logical sensor | Instead of a separate "compare" mode, right-clicking (or a button action) on a logical sensor in the tag catalog opens the comparison view pre-populated with that sensor. Intuitive UX flow consistent with how FastSenseCompanion already opens ad-hoc plots from tag selection. | LOW | Wiring change only in companion event handling; the comparison view logic is independent. |
+| Save a comparison configuration (N machines + logical sensor) as a named preset | Analysts often run the same comparison repeatedly. Allowing them to save `{logicalSensor, machineSubset}` as a named preset reduces repetition. | MEDIUM | Small serialization; no new data model complexity. |
 
 ### Anti-Features
 
-| Anti-Feature | Why Avoid | Alternative |
-|--------------|-----------|-------------|
-| Emit full SensorTag constructor code in the .m export (`SensorTag('k', 'X', [...], 'Y', [...])`) | Defeats the registry pattern; makes exported scripts huge; loses the singleton identity needed for cross-widget sharing | Emit `TagRegistry.get('key')` — requires registry to be pre-populated, which is how the sibling 'sensor' case already works |
-| Bake MonitorTag / CompositeTag construction into the exporter | Kind-specific codepaths violate the Tag abstraction (Pitfall 1 — no subclass isa in dispatch); registry lookup is kind-agnostic | Single `case 'tag'` covering all Tag subclasses |
-| Silently skip Tag-bound widgets (current behavior) | That IS the bug — users lose their widget binding on save/load round-trip through .m export | Explicit `case 'tag'` emission |
-| Emit a warning on tag miss AT SAVE TIME instead of fixing the emission | The JSON path works fine today; save-time warning would be false-positive noise for the JSON codepath | Fix the .m emission to match the JSON behavior |
-
-### Complexity estimate
-
-**SIMPLE** (2-3 hours). Two switch-cases to extend + 2 round-trip tests. Gap is localized to `DashboardSerializer.m`. No cross-class refactor needed.
-
-### Dependencies on existing Tag API
-
-- `TagRegistry.get(key)` — already shipped Phase 1004.
-- `FastSenseWidget.toStruct` / `fromStruct` — already emit/consume `source.type='tag'` (Phase 1009-01).
-- `DashboardEngine.addWidget('fastsense', ..., 'Tag', tag)` — the NV-pair accepting a Tag handle already works (Phase 1009-01).
+| Feature | Why Avoid | Alternative |
+|----------|-----------|-------------|
+| Cross-machine MonitorTag/event rollup in the comparison view | Rolling up violations across N machines in real-time requires cross-machine event queries and fleet-wide monitoring infrastructure, which PROJECT.md explicitly defers to after v5.0. | Per-machine event overlays in individual machine dashboards remain independent. Cross-machine rollup is a future milestone. |
+| Interactive cross-widget filtering (click one machine in comparison → filter other panels) | FastSense Companion is visualization-only; cross-widget filtering requires a coordination bus and event propagation across DashboardEngine instances. Explicitly out of scope per PROJECT.md. | Use comparison view as a standalone overlay window; users manually open per-machine dashboards for drill-down. |
+| Animated "race" timeline where machines' series step forward in sync | Purely visual novelty; creates playback/timer infrastructure that conflicts with the static-analysis-first design. | Side-by-side overlay with synchronized x-axis zoom is sufficient for analytical comparison. |
+| Statistical aggregation (mean/std/percentile across fleet) as a widget type | Compelling for fleet health monitoring but requires a new compute layer above individual Tag reads. Scope creep for v5.0. | Single-machine NumberWidget/GaugeWidget per machine in per-machine dashboards. Fleet aggregation is a future differentiator. |
 
 ---
 
-## Item 3 — 93 `Threshold(` constructor references across 42 test files
-
-### Current state (verified)
-
-- Grep `=\s*Threshold\(` in `tests/` → **93 occurrences across 22 files**. (The audit's "42 files" count includes parallel flat-script `tests/test_*.m` + suite `tests/suite/Test*.m`, so ~22 pairs = ≤44 files. 93 constructor refs is exact.)
-- All 22 files instantiate `Threshold(key, 'Name', 'X', 'Direction', 'upper'|'lower')`, call `t.addCondition(struct(), <value>)`, and pass to `sensor.addThreshold(t)`. **`Threshold` class deleted in Phase 1011; `SensorTag` has no `addThreshold` method** (verified by `ls libs/SensorThreshold/` — only Tag, SensorTag, StateTag, MonitorTag, CompositeTag, TagRegistry remain).
-- State today: these tests CRASH on MATLAB (`Undefined function 'Threshold'`) and silently SKIP on Octave (implicit try/catch in test runner).
-
-### Classification of the 22 files
-
-Reading the test bodies (TestEventConfig, TestEventStore, TestStatusWidget, TestIncrementalDetector, TestEventDetectorTag, TestLiveEventPipelineTag, TestGaugeWidget, TestMultiStatusWidget, TestIconCardWidget samples):
-
-**Category A — Test dead code (DELETE):**
-- `TestEventConfig.m` — every test body calls `Threshold(...) + addCondition + addThreshold + cfg.addTag + cfg.runDetection`. All paths hit stubbed hard-errors. Tests are dead; function under test is dead.
-- `TestEventStore.m` — 7 refs inside tests that use `cfg.runDetection()` to produce events before asserting save/load. Event production is dead; save/load itself still works. **Rewrite** with `EventStore.append(Event(...))` direct fixtures, don't delete.
-- `TestIncrementalDetector.m` — every test calls `det.process(...)` which is stubbed to hard-error. Entire class is dead (Item 1 candidate for deletion). DELETE.
-- `TestEventDetectorTag.m` — testTagOverloadDetectsEvents/EmptyTag/Pitfall1 exercise the deleted 2-arg detect. DELETE those 3 methods; keep testLegacySixArgOverloadUnchanged + testNonTagNonSensorErrors.
-- `TestLiveEventPipelineTag.m:113-115, 135-137, 165-167` — use `Threshold(...) + addCondition + sensor.addThreshold` purely to construct a "legacy sensor target" for the pipeline. But `LiveEventPipeline` no longer detects via that path; the `Threshold` construction is noise that doesn't affect the tested assertion (testLegacySensorPathUnchanged verifies Status='stopped'). **Rewrite:** drop the Threshold scaffolding, use bare SensorTag.
-
-**Category B — Test LIVE behavior through DEAD constructor (REWRITE):**
-- `TestStatusWidget.m` (12 refs), `TestGaugeWidget.m` (8 refs), `TestIconCardWidget.m` (6 refs), `TestChipBarWidget.m` (3 refs), `TestMultiStatusWidget.m` (11 refs), `TestIconCardWidgetTag.m` (2 refs), `TestMultiStatusWidgetTag.m` (1 ref), `TestDashboardEngine.m` (1 ref), `TestFastSenseWidget.m` (1 ref), `TestSensorDetailPlot.m` (1 ref) — these test widget-threshold binding (Status/Gauge/IconCard threshold property), which still exists in the v2.0 codebase. The WIDGETS are alive; the construction fixture is dead. **Rewrite** using MonitorTag + ConditionFn closure as the new "threshold" (matches `example_sensor_threshold.m` pattern).
-- Check: grep `obj.Threshold` in widget source → widgets likely reference Threshold-handle properties still. Needs quick audit during execution.
-
-**Category C — Parallel flat-script copies (MIRROR Category A/B):**
-- `tests/test_SensorDetailPlot.m`, `tests/test_multistatus_widget_tag.m`, `tests/test_gauge_widget.m`, `tests/test_event_store.m`, `tests/test_icon_card_widget_tag.m`, `tests/test_event_config.m`, `tests/test_add_threshold.m`, `tests/test_multi_threshold.m`, `tests/test_toolbar.m` — Octave-safe duplicates of Category B suite tests. Apply identical treatment in parallel.
-
-### Migration pattern (canonical)
-
-From `example_sensor_threshold.m:43-46`:
-
-```matlab
-% OLD (deleted):
-t_warn = Threshold('warn', 'Name', 'warn', 'Direction', 'upper');
-t_warn.addCondition(struct(), 10);
-sensor.addThreshold(t_warn);
-
-% NEW (Tag API):
-conditionFn = @(x, y) y > 10;   % upper direction, static value 10
-warn = MonitorTag('warn', sensor, conditionFn, ...
-    'Name', 'warn', ...
-    'EventStore', store);
-TagRegistry.register('warn', warn);
-```
-
-For widget-threshold binding (StatusWidget, GaugeWidget), the equivalent is: the MonitorTag IS the threshold. Pass the MonitorTag handle to widget's `Tag` property (Phase 1009-02 direct-tag-binding).
-
-**Reference fixture:** `tests/suite/makePhase1009Fixtures.m` already provides `makeSensorTag`, `makeMonitorTag`, `makeCompositeTag`, `makeEventStoreTmp`. All new migrated tests should use this.
+## Area 3 — Canonical/Logical Sensor Mapping & Asset Templates
 
 ### Table Stakes
 
-| Feature | Why Must-Do | Complexity | Notes |
-|---------|-------------|------------|-------|
-| DELETE TestEventConfig.m + test_event_config.m | Entirely dead; EventConfig.addSensor + runDetection both stubbed | LOW | 2 files, ~150 LOC total |
-| DELETE TestIncrementalDetector.m | `IncrementalEventDetector.process` stubbed; class is dead | LOW | 1 file, 120 LOC |
-| REWRITE TestEventStore.m + test_event_store.m event-production fixtures to use `EventStore.append(Event(...))` directly or via MonitorTag emission | EventStore save/load/backup/atomic-write behavior is still live and shipped; must preserve coverage | MEDIUM | 21 refs across 2 files; rewrite sticks to EventStore public API |
-| REWRITE TestStatusWidget/TestGaugeWidget/TestIconCardWidget/TestChipBarWidget/TestMultiStatusWidget (and the 2 *Tag variants) to use `MonitorTag` (or direct struct source) instead of `Threshold` | Widget-threshold binding is active production code; deleting the tests loses real coverage | MEDIUM | 37 refs across 7 files; use `makePhase1009Fixtures.makeMonitorTag` as the fixture factory |
-| TRIM TestEventDetectorTag.m to the 6-arg-legacy + error-path methods; delete 3 tag-overload methods | Consistent with Item 1 stub; leaves legacy positional signature coverage intact | LOW | 4 refs to drop |
-| TRIM TestLiveEventPipelineTag.m: remove `Threshold(...) + addCondition + addThreshold` boilerplate from testLegacySensorPathUnchanged / testMonitorsNVPairOptional / testMixedSensorsAndMonitors — the Threshold construction is scaffolding for dead code | Test assertions don't depend on the Threshold object; removing clarifies intent | LOW | 9 refs to drop; keep MonitorTag-based assertions intact |
+| Feature | Why Expected | Complexity | Dependency Notes |
+|---------|--------------|------------|-----------------|
+| A canonical map: `logical_name → {machine_id → local_key}` | Every fleet tool that enables cross-asset comparison requires this layer. PI AF element templates use substitution parameters (e.g., `%..\Element%.%Attribute%.PV`). Seeq `spy.swap` requires identically-named signals — or a manual swap group mapping. This is the foundational data structure for all comparison features. | MEDIUM | The `Machine` model must expose `getTag(localKey)` and the canonical map must live in `Fleet` (or a new `CanonicalMap` class). |
+| Auto-suggest canonical mappings from key similarity across machines | PI AF uses naming conventions + substitution patterns. Tag mapping patents (US10460240) describe normalizing tag descriptions and computing similarity scores. For near-identical machines, most sensors share a common stem; auto-suggest surfaces likely matches (e.g., `temp_ch1` on M01 ↔ `temp_sensor_1` on M02) for user confirmation. Without this, users must manually map 50+ sensors per machine. | MEDIUM | Requires string similarity heuristic (edit distance or regex-based stem extraction); no ML needed; pure MATLAB. |
+| Manual override for any mapping | Auto-suggest will be wrong for edge cases. PI AF allows per-element attribute override of the template default. Seeq `spy.swap` requires explicit swap group specification when auto-match fails. Manual override is TABLE STAKES — the analyst must always have final say. | LOW | A `CanonicalMap.setOverride(logicalName, machineId, localKey)` API; persisted in `Fleet` config. |
+| Surface unmapped / ambiguous-tail sensors | After auto-mapping, some sensors will remain unmapped (absent on some machines) or ambiguous (two candidate local keys match the same logical name). This "unmapped tail" must be visible to the user — not silently discarded. PI Vision's element-relative displays show empty/broken attribute cells for missing tags. Seeq's asset tree shows signal gaps. | LOW-MEDIUM | A `CanonicalMap.getUnmapped(machineId)` and `getAmbiguous(logicalName)` query API; surfaced in a companion view. |
+| Persist the canonical map across sessions | The map is built once (with user confirmation/overrides) and reused. PI AF templates persist to the AF server. Seeq asset groups persist to workbench. In FastSense's file-based model, the canonical map must serialize to JSON/mat alongside `Fleet` config. | LOW | `Fleet.save(path)` / `Fleet.load(path)` already planned; canonical map is a sub-struct of fleet config. |
 
 ### Differentiators
 
-| Feature | Value | Complexity | Notes |
-|---------|-------|------------|-------|
-| Move Category-A-equivalent integration tests to a single consolidated `TestLegacyEventDetectionRemoved.m` | Single doc file asserts `error('EventConfig:legacyRemoved', ...)` + `error('IncrementalEventDetector:legacyRemoved', ...)` + `error('EventDetector:legacyRemoved', ...)` fire correctly | LOW | Replaces 3 deleted suites with one focused deprecation-contract test |
-| Add a grep-based "no Threshold( in tests/" regression gate to `tests/run_all_tests.m` | Prevents the debt from being re-introduced in future test PRs (parallels Phase 1011's `grep -rE 'Sensor\('` gate) | LOW | 5-line regex check at the top of the runner |
-| Audit parallel `tests/test_*.m` files for equivalence with `tests/suite/Test*.m` and collapse duplicates | 42 files → 22 distinct concerns; the flat-script versions predate the suite migration and are mostly Octave-parity copies. Post-cleanup is a good moment to consolidate | HIGH | Out of scope for this milestone — flag as v2.2 candidate |
-| Standardize TestMethodSetup to call `TagRegistry.clear()` + `EventBinding.clear()` | Phase 1010 Pitfall 7 hard-errors on duplicate `.register()`; rerun in same session crashes — already applied in 4 suite tests (TestEventDetectorTag, TestLiveEventPipelineTag, etc.), should be universal | LOW | Pattern exists at `tests/suite/TestEventDetectorTag.m:18-28` — copy to all migrated tests |
+| Feature | Value Proposition | Complexity | Dependency Notes |
+|---------|-------------------|------------|-----------------|
+| Interactive mapping review UI in companion | A pane (or modal) that shows the full canonical map — logical name, per-machine local key, status (auto-matched / manual override / unmapped) — so analysts can review and edit. TrendMiner allows duplicating searches and remapping variables. PI Vision's Configure Context Switching panel is a lightweight precedent. | MEDIUM | New companion pane or dialog; reads/writes `CanonicalMap`; relies on `Fleet` and per-machine tag catalogs. |
+| Regex-based batch rule for naming conventions | For machines that follow a convention like `M{id}_temp_*`, a single rule `M*_temp_(\w+) → temperature_\1` maps all temperature sensors in one line. PI AF substitution parameters do this implicitly via `%Element%` tokens. Reduces setup time from O(N * M) to O(rules). | MEDIUM | Rule engine in `CanonicalMap` with pattern-match + capture-group substitution; pure MATLAB string ops. |
+| Re-run auto-suggest incrementally as new machines are added | When a new machine is added to the fleet, the canonical map should automatically propose mappings for it without invalidating existing confirmed mappings. This is the "growing fleet" use case in PROJECT.md. | LOW-MEDIUM | `CanonicalMap.addMachine(machine)` triggers partial re-suggest limited to the new machine's unmapped keys. |
+| Export canonical map as a MATLAB script | Consistent with DashboardSerializer's `.m` export philosophy — the canonical map can be exported as a script so engineers can version-control and review it as code. | LOW | Template: `map.setOverride('temperature', 'M01', 'temp_ch1'); ...` — mechanically generated. |
 
 ### Anti-Features
 
-| Anti-Feature | Why Avoid | Alternative |
-|--------------|-----------|-------------|
-| Find-and-replace `Threshold(key, ...)` with `MonitorTag(key, parent, @(x,y) y > V)` without understanding the test assertions | Many tests assert on `ThresholdValue`, `ThresholdLabel`, `Direction` fields of the resulting `Event` — MonitorTag sets these via Parent.Key/monitor.Key carriers, NOT via a `Threshold.Name/.Direction`. Mechanical rewrite will produce silently-wrong assertions. | Read each test body, identify what's asserted, pick MonitorTag vs EventStore-direct fixture per case |
-| Re-introduce `Threshold` as a deprecated thin wrapper just to unblock the tests | Exact Phase 1011 Pitfall 12 (feature creep in cleanup). Tests must be adapted to the shipped API, not the reverse. | Rewrite the tests |
-| Add a try/catch Octave-skip guard to every failing MATLAB test to "hide" the failures | Keeps skip on Octave but turns a MATLAB crash into an error-message-check. Neither test the actual behavior. | Delete + rewrite properly |
-| Defer Category B rewrites to v2.2 and only delete Category A | Leaves widget-threshold binding without any test coverage on MATLAB for another milestone — binding is user-facing and recently refactored (Phases 1001-1003 then 1009-02) | Do Category A deletion AND Category B rewrite in the same milestone |
-
-### Complexity estimate
-
-**MEDIUM** (2-3 days). The volume (22 files, 93 refs) is the cost driver. No architectural work — just focused, per-file rewrites against `example_sensor_threshold.m` + `makePhase1009Fixtures`.
-
-### Dependencies on existing Tag API
-
-- `MonitorTag + EventStore + EventBinding` — shipped v2.0.
-- `makePhase1009Fixtures` test-fixture factory — shipped Phase 1009.
-- `TagRegistry.clear()` / `EventBinding.clear()` reset protocol — shipped Phase 1010.
-- Widget `Tag` property on Status/Gauge/IconCard/MultiStatus — shipped Phase 1009-02.
-- No new API required.
+| Feature | Why Avoid | Alternative |
+|----------|-----------|-------------|
+| Forced identical tag keys across machines (global namespace namespace shim) | PROJECT.md explicitly rejected Approach ② (namespaced compound keys in the global registry) for key-sprawl and forced per-machine filtering at every call site (72 static call sites). | Per-machine isolated `containers.Map` + canonical map bridge. |
+| ML-based semantic tag matching (embedding similarity, LLM tag description matching) | Adds Python/external-service dependency; breaks the "pure MATLAB, no external dependencies" constraint. Overkill for near-identical machines with predictable naming conventions. | String similarity (edit distance, common-stem extraction) is sufficient and stays within MATLAB. |
+| Automatic application of canonical map without user review | Auto-suggest is valuable; auto-applying without surfacing conflicts would silently produce wrong comparisons. Seeq requires user confirmation for asset swaps; PI AF requires template instantiation. | Show suggestions + require accept/override before a mapping is active in comparisons. |
+| Per-logical-sensor unit normalization/conversion | Unit conversion (psi ↔ bar, °C ↔ °F) across machines is a data transformation concern outside the visualization scope. FastSense renders what Tags provide; normalizing units is the pipeline responsibility. | Document as user responsibility in setup scripts; flag as a pitfall in PITFALLS.md. |
 
 ---
 
-## Item 4 — Live-demo rewrites (`example_event_detection_live.m` + `example_event_viewer_from_file.m`)
+## Area 4 — Per-Asset Dashboards (Independent + Clone/Remap)
 
-### Current state (verified)
+### Table Stakes
 
-Both files have the Phase 1012-07 deprecation banner + `return;` early-out, with the original body retained below for reference. The bodies call `EventConfig()`, `cfg.addSensor(s)` (hard-errors now), `cfg.runDetection()` (returns empty), and `cfg.ThresholdColors` (still works but unused).
-
-Pre-existing working reference:
-- `examples/02-sensors/example_sensor_threshold.m` — canonical MonitorTag + EventStore + EventBinding pipeline (85 LOC, reads like a tutorial).
-- `examples/02-sensors/tags/example_tag_monitor.m` — 3-MonitorTag primitive showcase (108 LOC, state-dependent / hysteresis / debounce).
-- `examples/05-events/example_live_pipeline.m` — already-live-migrated v2.0 demo that uses `LiveEventPipeline` with `MonitorTargets` + `MockDataSource` + `EventStore.loadFile` + `EventViewer.fromFile`. This is the strongest template for the live-refresh file.
-
-### What must the rewrites demonstrate?
-
-**`example_event_detection_live.m` — live detection + live dashboard:**
-- 2-3 `SensorTag` instances with synthetic data (temperature/pressure/vibration — preserve the narrative from the current deprecated body).
-- `MonitorTag` per sensor with `MinDuration` (debounce) + bound `EventStore`.
-- `TagRegistry.register` for each.
-- `LiveEventPipeline` with `MonitorTargets` map (key→MonitorTag), `DataSourceMap` with `MockDataSource` per key.
-- `pipeline.start()` (timer-driven) OR `for cycle = 1:N; pipeline.runCycle(); end` (manual, matches `example_live_pipeline.m`).
-- FastSense figure with `addTag(sensor)` + `addTag(monitor)` — `ShowEventMarkers=true` (default) draws Phase 1010 event overlays live.
-- Stop-flow: close figure → delete timer; OR bounded cycle count for smoke-test-safe.
-
-**`example_event_viewer_from_file.m` — persistence + EventViewer:**
-- Generate events into an `EventStore` via MonitorTag emission (offline batch, no live timer).
-- `store.save()` — persist to `.mat`.
-- `EventViewer.fromFile(eventFile)` — reload and display. (EventViewer is still alive per `libs/EventDetection/EventViewer.m` existence — verified via `TestEventViewer.m` in suite.)
-- Show backup-rotation behavior (`MaxBackups` → run detection twice → list backup files).
-- Optional: a `LiveEventPipeline` or raw timer that appends new events to the file every N seconds + `EventViewer.startAutoRefresh` for live-refresh demonstration.
-
-### Idiomatic choice — `LiveEventPipeline` vs raw pipeline?
-
-**`LiveEventPipeline`** is the idiom for both rewrites. Evidence:
-1. `example_live_pipeline.m` (the already-working sibling) uses it.
-2. `LiveEventPipeline.processMonitorTag_` (lines 160-244 of `LiveEventPipeline.m`) enforces the critical Pitfall Y parent-before-child ordering for MonitorTag.appendData — hand-rolling this in the examples would duplicate a ~40-LOC correctness-critical snippet.
-3. The class is part of the shipped v2.0 API (`Phase 1009-03 SC#4`).
-
-One exception: `example_event_viewer_from_file.m` Part 1 (detect-and-save) does NOT need a live pipeline — `store.append(Event(...))` or a one-shot `MonitorTag.getXY()` (which fires events on first read, per `example_sensor_threshold.m:54`) is simpler. Only Part 4 (background updates) benefits from `LiveEventPipeline`.
-
-### Table Stakes — `example_event_detection_live.m`
-
-| Feature | Why Must-Do | Complexity | Notes |
-|---------|-------------|------------|-------|
-| SensorTag + MonitorTag + EventStore setup for 3 sensors (temperature/pressure/vibration, matching current banner narrative) | Replaces the deleted EventConfig scaffold; preserves the example's pedagogical arc | LOW | Template: `example_sensor_threshold.m` x 3 sensors |
-| LiveEventPipeline with MonitorTargets map + DataSourceMap(MockDataSource per key) | The canonical live-detection idiom; copies from `example_live_pipeline.m` | LOW | ~30 LOC; MockDataSource already supports StateValues for state-dependent thresholds if desired |
-| FastSense figure with `addTag(sensor)` + `addTag(monitor)` per sensor — event markers auto-appear via Phase 1010 overlay | Shows the full end-to-end pipeline visually; replaces the deprecated startLive + mat-file plumbing | LOW | 3 subplots matching current layout; no `startLive` — pipeline.runCycle inside timer updates the MonitorTag.EventStore, and FastSense's renderEventLayer_ picks it up on refresh |
-| Manual N-cycle loop (for demos) + optional timer-driven mode (commented) | Smoke-test-safe; matches `example_live_pipeline.m` convention | LOW | `for cycle = 1:3; pipeline.runCycle(); end` first, `% pipeline.start()` block below |
-| Clean TagRegistry.clear + EventBinding.clear at top | Required for re-run safety (Pitfall 7 hard-error on duplicate register) | LOW | 2-liner matching `example_sensor_threshold.m:17-18` |
-
-### Table Stakes — `example_event_viewer_from_file.m`
-
-| Feature | Why Must-Do | Complexity | Notes |
-|---------|-------------|------------|-------|
-| Part 1: Offline detect-and-save via MonitorTag.getXY() with bound EventStore | Simpler than a pipeline for a one-shot batch run; matches `example_sensor_threshold.m` | LOW | 6 sensors × MonitorTag × store.save(); no timer |
-| Part 2: `EventViewer.fromFile(eventFile)` — verify viewer opens with persisted events | Viewer is live v2.0 code; demonstrates load path | LOW | 1-liner |
-| Part 3: Re-run detection → observe backup file created (`<file>_backup_*.mat`) | Demonstrates `EventStore.MaxBackups` (shipped feature) | LOW | Re-call MonitorTag.appendData with new tail, then store.save; list backup files via dir |
-| Part 4 (optional): Background timer that appends new MonitorTag.appendData samples + EventViewer.startAutoRefresh | Shows live-refresh narrative from the original example | MEDIUM | Requires LiveEventPipeline OR a raw MATLAB timer calling pipeline.runCycle; viewer polls file |
+| Feature | Why Expected | Complexity | Dependency Notes |
+|---------|--------------|------------|-----------------|
+| Each machine holds its own independent set of dashboards | PROJECT.md locked this decision: hand-built, independent per-machine dashboards. This is the validated engineering-team pattern: each machine may have different sensors warranting a custom layout. Forcing templates breaks this. The expectation from engineers who build their own dashboards is that they have full autonomy over layout, widget types, and sensor bindings per machine. | LOW | `Machine.Dashboards` is a `{DashboardEngine}` cell array; already in the v5.0 spec. |
+| Clone a dashboard onto another machine with tag bindings rebound | Adobe Commerce, Datadog, and Seeq all describe cloning dashboards with remapped data bindings as a standard workflow: "clone to get the same layout, then fix the data sources." For near-identical machines, this is the deployment pattern: build once on M01, clone to M02–M20 with bindings rebound via the canonical map. | MEDIUM | `DashboardSerializer.toStruct(engine)` + `DashboardSerializer.fromStruct(s, machine)` where `fromStruct` resolves tag keys via `fleet.resolve(machineId, localKey)` instead of `TagRegistry.get(key)`. Already identified in PROJECT.md as the one existing seam. |
+| Machine-scoped tag resolution in DashboardSerializer | When saving/loading a machine's dashboard, widget tag bindings must resolve to that machine's local tag keys — not the global TagRegistry. Without this, deserializing a machine's dashboard on a different machine would silently bind to wrong (or non-existent) tags. This is the core correctness requirement for fleet deployment. | MEDIUM | `DashboardSerializer` gains a machine-scoped resolver path as identified in PROJECT.md Key Decisions. |
+| Per-machine dashboard save/load round-trip | DashboardSerializer already supports JSON and `.m` export. Machine-scoped dashboards must round-trip correctly — loaded from disk, bindings resolve to the correct machine's tags, and serialization re-emits the correct machine-qualified key. | LOW-MEDIUM | Extension of existing serialization; the scoped resolver is the new piece. Existing `toStruct/fromStruct` infrastructure is the foundation. |
 
 ### Differentiators
 
-| Feature | Value | Complexity | Notes |
-|---------|-------|------------|-------|
-| State-dependent thresholds (MonitorTag ConditionFn closing over a StateTag) | Showcases `example_sensor_threshold.m`'s most-compelling pattern — thresholds that vary by machine mode | LOW | One sensor gets this treatment; others stay static; matches existing tag_monitor showcase |
-| Use `EventBinding.getEventsForTag('sensor_key', store)` to query events by tag, not by carrier-field match | Demonstrates Phase 1010 EVENT-01 binding explicitly | LOW | 1 line in the print-summary section |
-| Show the `FastSense.ShowEventMarkers` toggle (round-marker overlay from Phase 1010) | Demonstrates a flagship v2.0 feature | LOW | Comment + one-line toggle; visual payoff |
-| Wire NotificationService (DryRun=true) like `example_live_pipeline.m` does | Consolidates the two live demos' narratives — 05-events becomes the obvious place to see notifications | LOW | Copy the NotificationRule block from `example_live_pipeline.m` |
+| Feature | Value Proposition | Complexity | Dependency Notes |
+|---------|-------------------|------------|-----------------|
+| Preview of unresolvable tag bindings before clone completes | When cloning M01's dashboard onto M03, some of M01's tag keys may not map to M03 via the canonical map. Seeq's spy.swap reports this in a `Result` column. A clone UX that shows "3 bindings cannot be resolved — here are the gaps" before writing the clone gives analysts an actionable checklist rather than a broken dashboard. | MEDIUM | Requires a dry-run mode in `DashboardSerializer.fromStruct` that returns a resolution report without materializing the engine. |
+| Batch clone: apply one source dashboard to all (or selected) machines | For a fleet of 20+ machines, cloning one at a time is tedious. A `Fleet.cloneDashboard(sourceEngine, sourceMachine, targetMachines)` function that runs the clone/remap loop is a significant time-saver. | MEDIUM | Wraps the single-machine clone operation in a loop; depends on canonical map being confirmed for all target machines. |
+| Export a machine's dashboard suite as a standalone `.m` script | Consistent with existing DashboardSerializer `.m` export; allows version-controlling per-machine dashboards in a Git repo and re-running them from scratch on any machine in the fleet. | LOW | Extension of existing `exportScript` path with machine-scoped resolver; follows the established DashboardSerializer pattern from v2.1. |
+| Show which dashboards are "out of sync" with the canonical template | If M01's dashboard was updated (new widget added) but M03–M20's clones were not updated, showing a stale/fresh indicator per machine-dashboard lets analysts prioritize re-cloning. Analogous to how AF template updates propagate to element instances in PI Vision. | HIGH | Requires comparing dashboard struct checksums across machines, plus a definition of what "template version" means for an independent-dashboard model. Likely too complex for v5.0. Defer. |
 
-### Anti-Features
+### Anti-Features (Consistent With "Independent Dashboard" Decision)
 
-| Anti-Feature | Why Avoid | Alternative |
-|--------------|-----------|-------------|
-| `startLive` + `fp.addLine` + `.mat`-file round-trip from the old example | That whole codepath is the deprecated `Sensor.resolve()`-era plumbing. FastSense now renders Tags directly via `addTag`; event overlays are automatic via Phase 1010; no mat-file poll loop needed | `fp.addTag(sensor); fp.addTag(monitor); pipeline.runCycle` + `drawnow` in the timer |
-| `EventConfig`, `EventConfig.addSensor`, `EventConfig.runDetection`, `EventConfig.setColor` | All stubbed/no-op after Phase 1011 and Item 1 cleanup | `MonitorTag.EventStore = store` + `LiveEventPipeline` |
-| `IncrementalEventDetector.process` (called in old example bodies) | Stubbed hard-error since Phase 1011 | `MonitorTag.appendData` via `LiveEventPipeline.processMonitorTag_` |
-| Per-sample violation callbacks or `OnEventPerSample` | Explicit Phase 1006 anti-pattern (MONITOR-10) | `MonitorTag.OnEventStart` / `OnEventEnd` |
-| `addThreshold` with a raw numeric value on FastSense as the PRIMARY detection mechanism | `addThreshold` still exists on FastSense for visual threshold LINES, but it is NOT the v2.0 detection mechanism (it draws a horizontal line; no events are produced) | Detection via MonitorTag; `addThreshold` only for visual reference lines (matches `example_sensor_threshold.m:76-78` usage) |
-| Leave the deprecated banner + `return;` in place with longer body below | Clean break — Phase 1012-07 summary explicitly flagged this as deferred for "a small dedicated phase" (i.e., v2.1) | Full rewrite, delete legacy body |
-| Use `Sensor`, `StateChannel`, `Threshold`, `CompositeThreshold`, `SensorRegistry`, `ThresholdRegistry`, `ExternalSensorRegistry` — any of the 8 deleted classes | All deleted Phase 1011 | `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `TagRegistry` |
-| Return from inside timer callbacks without flushing EventStore | `LiveEventPipeline.stop()` already handles this; raw-timer rewrites must replicate it | Always end demos with `pipeline.stop()` or equivalent `store.save()` |
-
-### Complexity estimate
-
-**MEDIUM** (1-2 days). Both files need full rewrites (~150-200 LOC each) but the templates (`example_sensor_threshold.m`, `example_tag_monitor.m`, `example_live_pipeline.m`) cover every required pattern. No new API, no novel design.
-
-### Dependencies on existing Tag API
-
-- `SensorTag`, `StateTag`, `MonitorTag`, `TagRegistry` — shipped Phase 1004-1007.
-- `EventBinding`, `EventStore.eventsForTag`, `FastSense.ShowEventMarkers` — shipped Phase 1010.
-- `LiveEventPipeline.MonitorTargets`, `MonitorTag.appendData` — shipped Phase 1007/1009-03.
-- `EventViewer.fromFile` — pre-v2.0, still active.
-- `MockDataSource`, `DataSourceMap`, `NotificationService`, `NotificationRule` — pre-v2.0, still active.
-- Smoke-test harness `tests/test_examples_smoke.m` — shipped Phase 1012-01; must either include the rewritten examples OR keep them on the skip list with justification.
-- No new API required.
+| Feature | Why Avoid | Alternative |
+|----------|-----------|-------------|
+| Forced template propagation (edit one template → auto-updates all machines) | PROJECT.md explicitly out-of-scoped this: user chose hand-built independent dashboards. PI AF template propagation ("update template → immediately reflects in all instances") only works when all instances are structural copies of the same template. FastSense machines can have legitimately different widgets. | Clone/remap on demand; no auto-propagation. Users control when to re-clone. |
+| Lock machine dashboards to prevent independent customization | Locking defeats the purpose of hand-built per-machine dashboards. Engineers need to add machine-specific widgets (a sensor that only exists on M07, for example). | All dashboards remain independently editable; no locking mechanism. |
+| Cross-machine widget linking (clicking a widget on M01's dashboard highlights M03's) | This is cross-widget filtering, explicitly out of scope per PROJECT.md for all milestones. Adds coordination bus complexity. | Open comparison view for side-by-side; each machine's dashboard remains independent. |
+| Automatic dashboard generation from canonical map (no hand-building) | If the canonical map defines all logical sensors, one could auto-generate a generic dashboard from it. But auto-generated dashboards lose the domain-specific layout choices (which sensors go on which page, thresholds, color choices) that make per-machine dashboards valuable. | Hand-build or clone/customize; auto-generation is a future low-priority differentiator, not a v5.0 goal. |
 
 ---
 
-## Feature Dependencies — v2.1 cleanup items
+## Feature Dependencies
 
 ```
-[Item 1 — EventDetector stub]
-       └── precedent for ──> [Item 3 — test cleanup]
-                                    ├── delete TestEventConfig ────> (independent)
-                                    ├── delete TestIncrementalDetector ──> (independent)
-                                    ├── trim TestEventDetectorTag ──> (depends on Item 1)
-                                    └── trim TestLiveEventPipelineTag ──> (independent of Item 1)
+[Canonical Map — Area 3]
+    └──required by──> [Cross-asset comparison — Area 2]
+                          └──required by──> [Comparison view overlay with logical sensor name]
+    └──required by──> [Clone/remap dashboard — Area 4]
+                          └──required by──> [Machine-scoped DashboardSerializer resolver]
 
-[Item 2 — DashboardSerializer .m export]
-       └── depends on ──> [existing FastSenseWidget toStruct] (already ships)
-       └── independent of all other items
+[Machine/Fleet data model]
+    └──required by──> [All 4 areas]
+    └──enables──> [Machine selector in companion — Area 1]
+    └──enables──> [Per-machine tag catalog — Area 2 & 3]
+    └──enables──> [Per-machine dashboards — Area 4]
 
-[Item 4 — example rewrites]
-       ├── depends on ──> [MonitorTag + EventStore + EventBinding] (ships)
-       ├── depends on ──> [LiveEventPipeline.MonitorTargets] (ships)
-       ├── template from ──> [example_sensor_threshold.m + example_live_pipeline.m] (ships)
-       └── independent of Items 1/2/3 — can run in parallel
+[Area 1 — Machine selector]
+    └──prerequisite for──> [Area 2 comparison view] (must select machines before comparing)
+    └──prerequisite for──> [Area 4 per-machine dashboard browsing]
+
+[Area 3 — Canonical map (auto-suggest)]
+    └──enhances──> [Area 3 — Manual override] (override fills gaps auto-suggest misses)
+    └──enhances──> [Area 4 — Clone/remap preview] (dry-run uses same resolution logic)
+
+[Machine health badge — Area 1 differentiator]
+    └──depends on──> [Fleet-wide background monitoring — DEFERRED to future milestone]
+    !!DO NOT BLOCK machine selector on this!!
 ```
 
 ### Dependency Notes
 
-- **Items 1/2/3/4 are mostly independent.** Item 3's trim of `TestEventDetectorTag.m` depends on Item 1's stub being in place (otherwise the test would fail differently), but the 4 items can plausibly ship in 1-2 commits each.
-- **No item depends on a new API.** Every referenced replacement (MonitorTag / EventStore / EventBinding / LiveEventPipeline / TagRegistry) is already shipping v2.0 code.
-- **Item 3 is the long pole** — 22 files of rewrite volume, even though each individual rewrite is simple.
+- **Canonical map is the foundational dependency.** Areas 2 and 4 both require it. The canonical map must be built (even partially) before comparison or clone/remap is usable.
+- **Machine/Fleet model must precede everything.** All four areas build on `Machine` + `Fleet` being instantiable with per-machine tag catalogs.
+- **Area 1 is the entry point.** Users must be able to browse and select a machine before they can do anything with it. Machine selector is Phase 1 material.
+- **Area 3 auto-suggest can be iterative.** Users can start with manual mapping for a small subset; auto-suggest makes it scale to 20+ machines.
+- **Health badges in Area 1 are explicitly deferred** pending fleet-wide background monitoring (a later milestone). Do not let this block the machine selector shipping.
+- **Clone/remap dry-run preview (Area 4 differentiator) depends on the canonical map being confirmed** — it is a post-map feature, not a Phase 1 requirement.
 
-## Complexity Summary
+---
 
-| Item | Complexity | Rough LOC | Rough duration | Notes |
-|------|------------|-----------|----------------|-------|
-| 1. EventDetector stub + IncrementalEventDetector assessment | SIMPLE | ~30 LOC net | 1-2 hours | Pattern already set by `EventConfig.addSensor` stub |
-| 2. DashboardSerializer .m export `case 'tag'` | SIMPLE | ~20 LOC + 2 tests | 2-3 hours | Copy-paste existing `'sensor'` branch with `.key` not `.name` |
-| 3. 93 Threshold( refs in 22 test files (Category A delete + B rewrite + C parallel) | MEDIUM | ~500 LOC churn | 2-3 days | Volume-driven, not complexity-driven |
-| 4. Rewrite 2 `examples/05-events/` live demos | MEDIUM | ~300-400 LOC | 1-2 days | Follow `example_live_pipeline.m` template |
+## MVP Definition (v5.0)
 
-**Total milestone effort:** 3-5 days for one engineer; parallel-friendly since items are mostly independent.
+### Launch With (Core Fleet Support)
 
-## Out of Scope (defer to v2.2 or later)
+- [x] Machine/Fleet data model (`Machine` + `Fleet` in `libs/Fleet/`) — all other features depend on this
+- [x] Machine selector in companion: searchable flat list, one-machine-at-a-time active context — users cannot do anything without this
+- [x] `Machine.getTag(localKey)` catalog — per-machine tag isolation, backward-compatible with global registry
+- [x] Canonical map data structure + manual override API — foundational for comparison and clone/remap
+- [x] Auto-suggest canonical mappings from key similarity — required to make the canonical map tractable for 20+ machines
+- [x] Unmapped/ambiguous-tail surfacing — without this, silent gaps create wrong comparisons
+- [x] Cross-machine comparison view: pick logical sensor → overlay N machines, auto-color + machine-labeled legend, skip missing gracefully
+- [x] Machine-scoped DashboardSerializer resolver — required for clone/remap correctness
+- [x] Clone a dashboard onto another machine with canonical-map rebinding — the primary fleet deployment workflow
 
-- **Asset hierarchy** (Asset tree, templates, tag-to-asset binding, browse rollups) — per PROJECT.md explicit deferral.
-- **Custom event GUI** (click-drag region selection → label dialog) — per PROJECT.md.
-- **Calc tags / formula evaluator** for arbitrary derived tags — per PROJECT.md.
-- **Tri-state / continuous severity MonitorTag output** — per PROJECT.md.
-- **WebBridge parity for Tag API** — per PROJECT.md.
-- **Consolidate 42 parallel `tests/test_*.m` + `tests/suite/Test*.m` files into one canonical layout** — legitimate follow-on but out of scope; this milestone migrates, doesn't restructure.
-- **Delete `EventConfig` + `IncrementalEventDetector` classes entirely** — flagged as Item 1 "Differentiator"; aggressive but saves ~250 LOC. Keep as a stretch goal inside Item 1 if test-file cleanup (Item 3 Category A) makes the classes fully orphaned.
-- **Add grep-based regression gate** (`grep -rE 'Threshold\(' tests/` → zero hits) — flagged as Item 3 differentiator; low-cost nice-to-have.
+### Add After Validation (v5.x)
+
+- [ ] Recent machines list — quality-of-life; add once basic browsing is proven
+- [ ] Group + text filter combination — add when fleet size grows beyond ~30 machines in practice
+- [ ] Batch clone (one source → N targets) — add once single-clone is proven stable
+- [ ] Clone dry-run preview (unresolvable bindings report) — add once clone is used enough to expose edge cases
+- [ ] Pin/star machines — add once usage patterns emerge
+- [ ] Regex batch-rule for canonical mapping — add once manual+auto workflow is understood by users
+- [ ] Export canonical map as `.m` script — low-risk addition whenever serialization is reviewed
+
+### Future Consideration (v5.x or later)
+
+- [ ] Normalized-time (batch-aligned) comparison overlay — requires batch event infrastructure
+- [ ] Machine health badge in selector — requires fleet-wide monitoring milestone
+- [ ] Interactive mapping review pane — complex UI; useful but not blocking
+- [ ] Statistical fleet envelope (min/max band) in comparison — requires new aggregation compute layer
+- [ ] "Out of sync" dashboard staleness indicator — high complexity; deferred
+
+---
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Machine/Fleet data model | HIGH | MEDIUM | P1 |
+| Machine selector (search + active context) | HIGH | LOW | P1 |
+| Canonical map (manual + auto-suggest) | HIGH | MEDIUM | P1 |
+| Cross-machine comparison overlay | HIGH | MEDIUM | P1 |
+| Clone/remap dashboard | HIGH | MEDIUM | P1 |
+| Machine-scoped DashboardSerializer | HIGH | LOW-MEDIUM | P1 |
+| Unmapped/ambiguous tail surfacing | HIGH | LOW | P1 |
+| Recent machines / pin | MEDIUM | LOW | P2 |
+| Group + text filter combo | MEDIUM | LOW | P2 |
+| Batch clone | MEDIUM | LOW-MEDIUM | P2 |
+| Clone dry-run preview | MEDIUM | MEDIUM | P2 |
+| Regex batch mapping rules | MEDIUM | MEDIUM | P2 |
+| Normalized-time comparison | LOW-MEDIUM | HIGH | P3 |
+| Fleet health badge | MEDIUM | HIGH | P3 |
+| Statistical envelope overlay | MEDIUM | HIGH | P3 |
+
+---
+
+## Prior Art Summary
+
+| Tool | Key Lessons for v5.0 |
+|------|----------------------|
+| **AVEVA PI Vision + PI AF** | Element templates + substitution parameters = canonical map model. "Switch Asset" panel = machine selector with wildcard search and hierarchy filter. Context switching = single-dropdown replaces entire display. Override per-element attribute = manual mapping override. At 50,000+ assets: flat list + search scales better than tree browsing for fast context switching. |
+| **Seeq Asset Groups + spy.swap** | Exact-name matching is the simplest canonical map; auto-suggest fills the gap when names differ. Missing signal → per-asset failure report (not silent skip, not crash). Asset swap = rebinding an analysis from one asset to another using matching signal names. |
+| **Seeq Compare View** | Normalized-time overlay is powerful for batch processes but is a specialized mode, not the default. Default = wall-clock overlay. |
+| **Grafana template variables** | Multi-value variable = select N machines → N series on one panel. Auto-color across series is a known pain point (inconsistent unless manually pinned). Dashboard repeat panels = per-machine panel rows. Variable chaining = group + machine two-level filter. |
+| **TrendMiner layer comparison** | Statistical comparison (KS test, Pearson correlation, relative difference) is a differentiator for batch engineers; not table stakes for general sensor monitoring. |
+| **GE Proficy Knowledge Center** | Fleet-level asset-centric views for plant-of-plants rollups = future milestone (not v5.0). |
+
+---
 
 ## Sources
 
-| Source | Files | Confidence |
-|--------|-------|------------|
-| Direct code read (libs/EventDetection/*) | EventDetector.m, IncrementalEventDetector.m, EventConfig.m, LiveEventPipeline.m, EventStore.m, EventBinding.m | HIGH |
-| Direct code read (libs/Dashboard/) | DashboardSerializer.m, FastSenseWidget.m | HIGH |
-| Direct code read (examples/) | example_sensor_threshold.m, example_tag_{sensor,state,monitor,composite,registry}.m, example_live_pipeline.m, 05-events/{live,viewer} stubs | HIGH |
-| Direct code read (tests/suite/) | TestEventConfig.m, TestEventStore.m, TestIncrementalDetector.m, TestEventDetectorTag.m, TestLiveEventPipelineTag.m, TestStatusWidget.m, TestAddThreshold.m, makePhase1009Fixtures.m | HIGH |
-| Audit & roadmap | .planning/milestones/v2.0-MILESTONE-AUDIT.md, v2.0-ROADMAP.md, PROJECT.md, Phase 1012-07-SUMMARY.md | HIGH |
-| Grep counts | `=\s*Threshold\(` → 93 refs in 22 files (audit's 42 counted flat-script mirrors) | HIGH |
-| Grep negative (no `libs/**/Threshold.m` or `libs/**/Sensor.m`) | Confirms legacy classes deleted | HIGH |
+- [AVEVA PI Vision Documentation — PI AF Blog](https://www.aveva.com/en/perspectives/blog/easy-as-pi-asset-framework/)
+- [PI Vision Architecture](https://docs.aveva.com/bundle/pi-vision/page/1009400.html)
+- [PI Vision Switch Asset community thread — PI Square](https://pisquare.osisoft.com/s/question/0D51I00004UHnHzSAL/asset-context-switching-in-pi-vision-2017r2)
+- [PI Vision Swap Related Assets — YouTube tutorial reference](https://www.youtube.com/watch?v=SIxUbTPZWtU)
+- [Seeq Compare View documentation — R65](https://support.seeq.com/kb/R65/cloud/compare-view)
+- [Seeq spy.swap documentation — Python module user guide](https://python-docs.seeq.com/user_guide/spy.swap.html)
+- [Seeq Asset Groups — knowledge base](https://support.seeq.com/kb/R58/cloud/asset-groups)
+- [Grafana variables — dynamic dashboards blog 2024](https://grafana.com/blog/2024/10/30/grafana-variables-what-they-are-and-how-they-create-dynamic-dashboards/)
+- [Grafana Node / Fleet Overview dashboard](https://grafana.com/grafana/dashboards/22269-node-fleet-overview/)
+- [Grafana repeat panels tutorial](https://grafana.com/blog/2020/06/09/learn-grafana-how-to-automatically-repeat-rows-and-panels-in-dynamic-dashboards/)
+- [TrendMiner layer comparison — User Guide 2025.R1](https://userguide.trendminer.com/2025.R1.0/en/layer-comparison.html)
+- [PI AF tag naming patterns — PISharp](https://www.pisharp.com/article/202/building-flexible-pi-af-templates-with-variable-tagname-patterns) (returned 403; content reconstructed from search summaries)
+- [AVEVA PI Vision 2024 Release Notes](https://docs.aveva.com/bundle/pi-vision/page/1254880.html)
+- [Tag Mapping for Industrial Machines — USPTO patent US10460240](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10460240)
+
+---
+
+*Feature research for: Multi-asset fleet monitoring + comparison — MATLAB sensor data dashboard*
+*Researched: 2026-06-02*

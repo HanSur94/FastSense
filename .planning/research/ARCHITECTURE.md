@@ -1,452 +1,489 @@
-# ARCHITECTURE.md — v2.0 Tag-Based Domain Model
+# Architecture Research
 
-**Domain:** FastSense Advanced Dashboard — v2.0 Tag-Based Domain Model
-**Researched:** 2026-04-16
-**Confidence:** HIGH on integration points (read all listed source files); MEDIUM on Octave abstract-class semantics; HIGH on suggested build order (derived directly from dependency graph).
-
----
-
-## Summary
-
-The current `libs/SensorThreshold/` library has three parallel but conceptually overlapping abstractions: `Sensor` (raw time-series with side-effect violation pre-computation), `StateChannel` (zero-order-hold discrete signal), and `Threshold`/`CompositeThreshold` (condition-value rules + aggregation). Each has its own registry, its own constructor pattern, and its own consumer touchpoint. Every downstream library — `FastSense`, `Dashboard` widgets, `EventDetection` — knows about all three by name.
-
-v2.0 collapses these into a **single `Tag` root** with subclasses for each kind, and replaces the side-effect threshold computation in `Sensor.resolve()` with a first-class derived signal (`MonitorTag`) that is itself a Tag. Aggregation moves into `CompositeTag`. Events become first-class objects bound to one or more tags and rendered as overlays through a new FastSense API surface.
-
-The integration risk is concentrated in three places:
-1. **`Sensor.resolve()`'s bundled outputs** (`ResolvedThresholds`, `ResolvedViolations`, `ResolvedStateBands`) are consumed by FastSense, FastSenseWidget, EventDetection, MultiStatusWidget, IconCardWidget, EventViewer, and `detectEventsFromSensor`. Every consumer must move to reading `MonitorTag` outputs instead. This is the largest single migration.
-2. **`FastSense.addSensor()` and `FastSense.addThreshold()`** are the rendering ingress. A new `addTag()` (or polymorphic dispatch via tag kind) must subsume both. The internal `Lines`/`Thresholds` struct arrays may stay; only the ingress method is replaced.
-3. **`Threshold.conditions_` + `StateChannel`** evaluation is the violation-detection core. `MonitorTag` must take this over (read condition rules + state inputs from its parent SensorTag, produce a step-function or 0/1/severity Y signal).
-
-The render core (`FastSense` downsampling, MEX kernels, `FastSenseDataStore`, `DashboardEngine`, `DashboardLayout`, `DashboardSerializer`, `DashboardTheme`) **does not change**. Only consumers of the old domain types do.
+**Domain:** v5.0 Multi-Machine Fleet — integration architecture grounded in actual code
+**Researched:** 2026-06-02
+**Confidence:** HIGH (all claims backed by file:line code audit)
 
 ---
 
-## Tag Interface Contract
+## System Overview
 
-### Minimum surface every Tag must expose
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      FastSenseCompanion (uifigure)                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  [new: machine     │
+│  │TagCatalogPane│  │DashboardList │  │InspectorPane │   selector row]     │
+│  │(snapshots    │  │Pane          │  │              │                     │
+│  │ Machine.find)│  │(Machine.     │  │(multi-tag /  │                     │
+│  └──────┬───────┘  │ Dashboards)  │  │ comparison   │                     │
+│         │          └──────┬───────┘  └──────┬───────┘                     │
+│ TagSelectionChanged  DashboardSelected  OpenAdHocPlot                     │
+└─────────┼──────────────────┼───────────────────────────────────────────────┘
+          │  setProject(machine.Dashboards, machine)
+          ▼
+┌─────────────────────────────────────┐    ┌─────────────────────────────┐
+│  Fleet (new — libs/Fleet/)           │    │  Global TagRegistry         │
+│  ┌────────────────────────────────┐  │    │  (static-only, UNTOUCHED)   │
+│  │  Machine (= "project")         │  │    │  72 static call sites       │
+│  │  ┌────────────────────────┐    │  │    │  across 31 files unchanged  │
+│  │  │  containers.Map        │    │  │    └─────────────────────────────┘
+│  │  │  (key -> Tag handle)   │    │  │
+│  │  │  DataRoot (char)       │    │  │
+│  │  │  Dashboards (cell)     │    │  │
+│  │  │  BatchTagPipeline*     │    │  │
+│  │  │  LiveTagPipeline*      │    │  │
+│  │  └────────────────────────┘    │  │
+│  │  CanonicalMapper               │  │
+│  └────────────────────────────────┘  │
+└─────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────────────────────────────────────────────┐
+│  DashboardSerializer (modified — machine-scoped resolver) │
+│  FastSenseWidget.fromStruct:                              │
+│    source.type='tag' → resolver(machineId, localKey)      │
+│    (falls back to TagRegistry.get for no-machine path)    │
+└──────────────────────────────────────────────────────────┘
+```
 
-Cross-referenced against every consumer touchpoint:
+---
 
-| Member | Required by | Notes |
-|--------|-------------|-------|
-| `Key` (char) | TagRegistry, every widget, serializer, EventDetection (`sensorKey`) | Unique within registry |
-| `Name` (char) | FastSenseWidget legend, DashboardWidget Title cascade, IconCardWidget label, MultiStatusWidget label | Empty allowed; consumers fall back to Key |
-| `Units` (char) | FastSenseWidget YLabel cascade, IconCardWidget value formatting | Currently on Sensor; lift to Tag root |
-| `Description` (char) | Widget tooltip pipeline (`DashboardWidget.Description` cascade) | New on Tag — currently absent on Sensor |
-| `Tags` (cell of char) | `ThresholdRegistry.findByTag` (cross-cutting categorization) | Lift from Threshold to Tag root |
-| `getXY()` → `(X, Y)` | FastSense `addLine`, `updateData`; FastSenseWidget refresh | Polymorphic: SensorTag returns raw; MonitorTag returns derived |
-| `valueAt(t)` → scalar | StateChannel pattern (zero-order-hold), Sensor.getThresholdsAt, IconCardWidget.ValueFcn replacement, CompositeTag children | Vectorized form: `valueAt(tVec)` |
-| `getTimeRange()` → `[tMin tMax]` | FastSenseWidget caching, DashboardWidget global time | Already a method on DashboardWidget; tag-side parallel |
-| `getDataStore()` → handle or `[]` | FastSense.addSensor disk-backed branch (line 561–564) | Optional; only SensorTag with `toDisk()` returns non-empty |
-| `getKind()` → char (e.g. `'sensor'`, `'monitor'`, `'composite'`, `'state'`) | TagRegistry, serializer dispatch, FastSense polymorphic render | String, not class name; survives renames |
-| `toStruct()` / `fromStruct(s)` (static) | DashboardSerializer round-trip; CompositeTag child resolution order | Pattern already used by `CompositeThreshold` |
-| `metadata` (struct, optional) | New: free-form per-tag attribution (asset id, source file, etc.) | Replaces ad-hoc Source / MatFile / ID props |
+## Question 1: Machine-as-Registry Duck Type — Exhaustive Call Audit
 
-### Abstract methods convention
+### Registry Object Calls Made By Panes/Companion
 
-Octave's `classdef` supports `Abstract` method attribute but with partial compatibility per the Octave wiki. The codebase already uses `DashboardWidget < handle` and `DataSource` as abstract-by-convention base classes **without using the `Abstract` attribute** — the contract is documented in the header comment and enforced by `error()` if the base method is called.
+The companion and panes make calls on the registry **object** in three places.
+Every other TagRegistry usage is **static** (not on the object reference):
 
-**Recommendation:** Follow the existing project convention. Do NOT use `methods (Abstract)`. Use the "throw-from-base" pattern:
+**Companion — object call (file:line):**
+- `FastSenseCompanion.m:2182` — `obj.Registry_.get(keys{k})` — last-resort fallback in `onOpenAdHocPlotRequested_` when a key is not found in the catalog snapshot. This is the ONLY object-method call on `Registry_` in the companion body.
+
+**TagCatalogPane.m — static calls (not object calls):**
+- `:60` — `TagRegistry.find(@(t) true)` in `attach()`
+- `:205` — `TagRegistry.find(@(t) true)` in `refresh()`
+
+The pane stores `obj.Registry_ = registry` (`:52`) but never calls a method on it. All actual tag enumeration goes directly to the static `TagRegistry.find`.
+
+**FastSenseCompanion.m — static calls on TagRegistry (not on Registry_):**
+- `:1616` — `TagRegistry.find(@(t) isa(t, 'Tag'))` in `scanLiveTagUpdates_` (broad scan when status table is open)
+- `:1618` — `TagRegistry.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'))` in `scanLiveTagUpdates_` (normal live scan)
+
+**openAdHocPlot.m (private) — static calls:**
+- `:165` — `TagRegistry.find(@(tt) isa(tt, 'MonitorTag') && ...)` in `findEventStoreFor_` — finds monitors whose parent key matches a tag, to auto-wire EventStore.
+
+**FastSenseWidget.m — static calls in render/fromStruct paths:**
+- `:178` — `TagRegistry.getEventStore()` in `render()`
+- `:1440` — `TagRegistry.getEventStore()` in `rebuildForTag_()`
+- `:1516` — `TagRegistry.get(s.source.key)` in `fromStruct()` (the serializer seam — see Q2)
+
+### Minimum Duck-Type Method Set for Machine
+
+For panes to consume `Machine` unchanged by passing it as `registry`, Machine must implement:
+
+| Method | Signature | Caller / File:Line | Purpose |
+|--------|-----------|-------------------|---------|
+| `get` | `t = obj.get(key)` | FastSenseCompanion.m:2182 (fallback) | Resolve tag by key; throw on missing |
+| `find` | `ts = obj.find(predicateFn)` | TagCatalogPane.m:60,205 | Return cell of matching Tag handles |
+| `findByKind` | `ts = obj.findByKind(kind)` | Not called on object today; needed for pane filter completeness | Kind-filter |
+| `findByLabel` | `ts = obj.findByLabel(label)` | Not called on object today; needed for label-based workflows | Label-filter |
+| `keys` | Not called on object; needed for iteration | Pipeline eligibleTags_ pattern | Return all keys as cell |
+
+The static calls (`TagRegistry.find` in `attach`/`refresh`, `scanLiveTagUpdates_`, `findEventStoreFor_`) are NOT calls on the object reference — they are calls on the static class. These CANNOT be redirected by passing a Machine as `registry`. They hit the global TagRegistry unconditionally.
+
+### Static TagRegistry Calls Inside Companion That Must Become Machine-Scoped
+
+These sites enumerate the GLOBAL registry but should enumerate the active machine's catalog in v5.0:
+
+| File | Line | Current Call | v5.0 Required Change |
+|------|------|-------------|---------------------|
+| `TagCatalogPane.m` | 60 | `TagRegistry.find(@(t) true)` in `attach()` | Route through `Registry_` object if it supports `find()` — OR swap to `obj.Registry_.find(@(t) true)` |
+| `TagCatalogPane.m` | 205 | `TagRegistry.find(@(t) true)` in `refresh()` | Same |
+| `FastSenseCompanion.m` | 1616 | `TagRegistry.find(@(t) isa(t,'Tag'))` in `scanLiveTagUpdates_` | Scope to active machine |
+| `FastSenseCompanion.m` | 1618 | `TagRegistry.find(@(t) isa(t,'SensorTag')||isa(t,'StateTag'))` in `scanLiveTagUpdates_` | Scope to active machine |
+| `private/openAdHocPlot.m` | 165 | `TagRegistry.find(@(tt) isa(tt,'MonitorTag')&&...)` in `findEventStoreFor_` | Must search active machine's catalog, not global registry |
+
+**Migration strategy for the four sites:** Change `TagCatalogPane.attach` to call `obj.Registry_.find(...)` instead of `TagRegistry.find(...)` (since `Registry_` is already stored). The companion's `scanLiveTagUpdates_` call should be replaced by `obj.Registry_.find(...)` using the companion's `Registry_` reference. `findEventStoreFor_` in `openAdHocPlot.m` needs a machine context passed from the caller or uses the already-resolved Tag handles' catalog.
+
+The two `FastSenseWidget` static calls (`TagRegistry.getEventStore()` at lines 178 and 1440) are best left untouched for now — they fall back to the global registry default EventStore slot, which is correct for single-machine use and is explicitly deferred for fleet-wide event wiring.
+
+---
+
+## Question 2: DashboardSerializer Resolver Seam
+
+### How Tag-Bound Widgets Are Serialized Today
+
+**Serialize path (FastSenseWidget.toStruct, line 1211):**
+```matlab
+s.source = struct('type', 'tag', 'key', obj.Tag.Key);
+```
+Writes `source.type='tag'` and `source.key=<localKey>` into the struct. No machine ID is stored.
+
+**Deserialize path (FastSenseWidget.fromStruct, lines 1513-1521):**
+```matlab
+case 'tag'
+    if exist('TagRegistry', 'class')
+        try
+            obj.Tag = TagRegistry.get(s.source.key);
+        catch
+            warning('FastSenseWidget:tagNotFound', ...
+                'TagRegistry key ''%s'' not found.', s.source.key);
+        end
+    end
+```
+Calls `TagRegistry.get(key)` directly — no injected resolver, no machine context.
+
+**DashboardSerializer.configToWidgets resolver hook (lines 388-411):**
+```matlab
+function widgets = configToWidgets(config, resolver)
+    if nargin < 2, resolver = []; end
+    ...
+    if ~isempty(resolver) && isfield(ws, 'source') && strcmp(ws.source.type, 'sensor')
+        try
+            widgets{i}.Sensor = resolver(ws.source.name);
+        ...
+```
+There IS a resolver hook, but it checks for `source.type='sensor'` (legacy path), not `source.type='tag'` (current v2.0 path). The tag-bind path is handled entirely inside `FastSenseWidget.fromStruct` — the resolver is bypassed.
+
+### Minimal Change: Machine-Scoped Resolver Seam
+
+**Approach:** Add a static resolver hook to `FastSenseWidget.fromStruct` that accepts an optional function handle. Default is `[]`, which falls back to `TagRegistry.get` (backward compat preserved).
 
 ```matlab
-methods
-    function [X, Y] = getXY(obj) %#ok<STOUT,MANU>
-        error('Tag:notImplemented', ...
-            '%s must implement getXY().', class(obj));
-    end
+% FastSenseWidget.fromStruct (modified)
+function obj = fromStruct(s, tagResolver)
+    if nargin < 2, tagResolver = []; end
+    ...
+    case 'tag'
+        if ~isempty(tagResolver)
+            try
+                obj.Tag = tagResolver(s.source.key);
+            catch
+                warning('FastSenseWidget:tagNotFound', ...
+                    'Resolver could not find key ''%s''.', s.source.key);
+            end
+        elseif exist('TagRegistry', 'class')
+            try
+                obj.Tag = TagRegistry.get(s.source.key);
+            catch
+                warning(...)
+            end
+        end
+```
+
+**DashboardSerializer.createWidgetFromStruct** (line 418) becomes:
+```matlab
+case 'fastsense'
+    w = FastSenseWidget.fromStruct(ws, tagResolver);
+```
+
+**DashboardSerializer.configToWidgets** gets a new optional `tagResolver` arg threaded through to `createWidgetFromStruct`. The resolver signature is:
+```
+tagResolver = @(localKey) machine.get(localKey)
+```
+
+**Call site in the companion / Fleet:**
+```matlab
+resolver = @(k) machine.get(k);
+engine = DashboardEngine.load(jsonPath, resolver);
+% or:
+widgets = DashboardSerializer.configToWidgets(config, resolver);
+```
+
+DashboardEngine.load already calls `DashboardSerializer.loadJSON` then reconstructs widgets. A `resolver` arg threaded into `DashboardEngine.load` covers the full round-trip.
+
+**JSON serialization** does NOT change — `source.type='tag'` + `source.key=<localKey>` is already the right shape. The `machineId` is known at load time from context (which machine's JSON you're loading), not stored in the widget struct.
+
+**Files to modify:**
+- `libs/Dashboard/FastSenseWidget.m` — `fromStruct` gains optional `tagResolver` arg
+- `libs/Dashboard/DashboardSerializer.m` — `configToWidgets` + `createWidgetFromStruct` thread `tagResolver`
+- `libs/Dashboard/DashboardEngine.m` — `load()` accepts optional resolver; threads it to DashboardSerializer
+
+---
+
+## Question 3: Per-Machine Ingestion
+
+### Current Pipeline Tag Enumeration
+
+Both pipelines use an identical `eligibleTags_` private method that calls the global static registry:
+
+**BatchTagPipeline.m:256:**
+```matlab
+function tags = eligibleTags_(~)
+    tags = TagRegistry.find(@(t) ...
+        (isa(t, 'SensorTag') || isa(t, 'StateTag')) && ...
+        isstruct(t.RawSource) && ...
+        isfield(t.RawSource, 'file') && ...
+        ~isempty(t.RawSource.file));
 end
 ```
 
-This is **proven Octave-safe** (already shipped in `DashboardWidget`, `DataSource`) and matches existing error-ID conventions (`ClassName:problem`).
+**LiveTagPipeline.m:801:** Identical body, same static `TagRegistry.find` call.
 
----
+### Minimal Change: Tag Source Injection
 
-## Subclass Hierarchy
-
-### Recommendation: FLAT hierarchy
-
-```
-Tag (handle, abstract-by-convention)
-├── SensorTag      — raw time-series, on-disk capable (replaces Sensor's data role)
-├── StateTag       — zero-order-hold discrete signal (replaces StateChannel)
-├── MonitorTag     — derived 0/1/severity series from a parent Tag + condition (replaces Threshold/ThresholdRule + Sensor.resolve()'s violation pipeline)
-└── CompositeTag   — aggregates child Tags via mode (replaces CompositeThreshold)
-```
-
-### Trade-offs vs layered
-
-A layered design (`Tag → DataTag → SensorTag, StateTag` and `Tag → DerivedTag → MonitorTag, CompositeTag`) was considered. Reasons to reject:
-
-| Argument for layered | Counter |
-|---|---|
-| "Data tags share `getXY` semantics" | They don't really — SensorTag's `getXY` reads from memory or DataStore; StateTag's is a step function. Different enough to belong in subclasses, not a shared base. |
-| "Derived tags share invalidation logic" | MonitorTag's recompute trigger (parent data changed, condition changed) is different from CompositeTag's (any child status changed). Different invalidation graphs. |
-| "Future calc tags fit DerivedTag" | Calc tags are deferred per PROJECT.md. Adding a layer for hypothetical future use is YAGNI. |
-
-**Flat wins on:** simpler `isa()` checks in switch statements (registry dispatch, serializer), shallower MRO for Octave (which has known issues with deep inheritance), and matches the `DashboardWidget` precedent (20+ widget types, all flat children of `DashboardWidget`).
-
-### What goes on the root
-
-- `Key`, `Name`, `Units`, `Description`, `Tags` (cell), `metadata` (struct) — universal
-- `Color`, `LineStyle` — only SensorTag and MonitorTag need rendering attributes; **defer to subclass**
-
-### What stays subclass-only
-
-- **SensorTag:** `DataStore`, `toDisk()`, `toMemory()`, `isOnDisk()`, raw `X`/`Y` properties (kept exactly as on current Sensor)
-- **StateTag:** `valueAt` zero-order-hold semantics with cell or numeric Y (port from StateChannel)
-- **MonitorTag:** `Parent` (Tag handle), `Conditions` (cell of ThresholdRule), `StateInputs` (cell of StateTag handles), `Severity` (numeric label e.g. 0/1/2), `Direction`
-- **CompositeTag:** `AggregateMode`, `Children` (cell)
-
----
-
-## MonitorTag Computation Strategy
-
-This is the most important architectural decision because it replaces `Sensor.resolve()`'s side-effect pre-computation.
-
-### Recommendation: LAZY-with-memoization, parent-driven invalidation
-
-| Strategy | Pro | Con | Verdict |
-|---|---|---|---|
-| Eager (compute at construction) | Simple; matches current `resolve()` | Wastes work when MonitorTag is never plotted; can't be constructed before parent has data; recomputes on every parent update even if MonitorTag is offscreen | Reject |
-| Pure lazy (compute on each query) | No cache, simplest correctness | Re-runs MEX violation kernel on every FastSense pan/zoom — would catastrophically degrade performance | Reject |
-| **Lazy + cached + invalidation flag** | Computes once on first read, reuses until invalidated, scales to many MonitorTags per SensorTag, integrates cleanly with FastSenseDataStore's existing `clearResolved` pattern | Needs invalidation discipline (parent must signal change) | **Recommend** |
-
-### Cache + invalidation mechanics
+Add a `TagSource` property (function handle) to both pipelines. Default is `@TagRegistry.find` — backward compat. Machine-scoped pipelines pass `@(pred) machine.find(pred)`.
 
 ```matlab
-classdef MonitorTag < Tag
-    properties (Access = private)
-        cachedX_  = []
-        cachedY_  = []
-        dirty_    = true
-    end
-    properties (SetAccess = private)
-        Parent              % Tag handle
-        Conditions          % cell of ThresholdRule
-        StateInputs         % cell of StateTag handles
-        Direction
-    end
-    methods
-        function [X, Y] = getXY(obj)
-            if obj.dirty_ || isempty(obj.cachedX_)
-                obj.recompute_();
-            end
-            X = obj.cachedX_; Y = obj.cachedY_;
-        end
-        function invalidate(obj)
-            obj.dirty_ = true;
-            obj.cachedX_ = []; obj.cachedY_ = [];
-        end
-    end
-    methods (Access = private)
-        function recompute_(obj)
-            % Read parent (X, Y) — recursive if Parent is itself a MonitorTag
-            [pX, pY] = obj.Parent.getXY();
-            % Reuse existing private/compute_violations_batch.m and
-            % private/buildThresholdEntry.m logic — ported from Sensor.resolve()
-            % Y is a 0/severity step-function; X is segment boundaries from StateInputs
-        end
-    end
+% In BatchTagPipeline constructor, add:
+properties (Access = private)
+    tagSource_ = @TagRegistry.find   % DI seam; tests + machine use can override
+end
+
+% eligibleTags_ becomes:
+function tags = eligibleTags_(obj)
+    tags = obj.tagSource_(@(t) ...
+        (isa(t, 'SensorTag') || isa(t, 'StateTag')) && ...
+        isstruct(t.RawSource) && ...
+        isfield(t.RawSource, 'file') && ...
+        ~isempty(t.RawSource.file));
 end
 ```
 
-### Interaction with FastSenseDataStore
+Add a constructor option `'TagSource'` NV pair, or a Hidden setter `setTagSourceForTesting_` matching the existing DI seam pattern (see `setWriteFnForTesting_`).
 
-**Recommendation: do NOT persist MonitorTag-derived Y to its own SQLite chunks in v2.0.**
+### Machine.ingestBatch / Machine.startLive Wrappers
 
-Reasons:
-- `FastSenseDataStore` is currently per-SensorTag. Adding per-MonitorTag stores multiplies SQLite file footprint.
-- The current `resolve()` cache (`DataStore.storeResolved` / `loadResolved`) is exactly the pattern to keep: **a SensorTag with a DataStore can host its derived MonitorTags' caches in the same store**. Add a `storeMonitor(monitorKey, X, Y)` / `loadMonitor(monitorKey)` API to `FastSenseDataStore` mirroring the existing `storeResolved`/`loadResolved`.
-- Defer per-MonitorTag SQLite to a later milestone if MonitorTags become large enough to warrant it. For v2.0's typical step-function output (tens to hundreds of segments), in-memory cache is sufficient.
-
-### Invalidation triggers
-
-| Trigger | Currently handled by | New MonitorTag responsibility |
-|---|---|---|
-| Parent SensorTag's X/Y replaced (`updateData`) | Sensor doesn't auto-invalidate; consumer must call `resolve()` again | MonitorTag listens to parent or is invalidated by `SensorTag.updateData` |
-| StateTag transitions changed | Sensor.addStateChannel calls `DataStore.clearResolved()` (line 187) | Same: any input StateTag's `updateData` calls `monitor.invalidate()` for monitors that depend on it |
-| Condition added/removed | Same as state | MonitorTag.addCondition() sets `obj.dirty_ = true` |
-| Live tick appends new data | `IncrementalEventDetector` uses a temp Sensor + `resolve()` (lines 60–84) | MonitorTag exposes an `appendData` method that incrementally extends `cachedY_` rather than full recompute (deferred optimization) |
-
-**For v2.0:** simple invalidate + full recompute on next `getXY()`. Match the simplicity of current Sensor.resolve(); optimize incrementally.
-
----
-
-## CompositeTag Alignment Strategy
-
-### Recommendation: Option (c) — LAZY EVALUATION at query points (`valueAt`); plus on-demand UNION GRID for `getXY`
-
-| Option | Pro | Con |
-|---|---|---|
-| (a) Union of all child X, fill last-known | Single canonical series; works with FastSense unchanged | Memory O(sum of N_i); recomputes on any child change |
-| (b) Resample to target grid | Fixed cost; predictable; FastSense-friendly | Loses temporal precision of edge transitions; arbitrary grid choice |
-| **(c) Lazy via valueAt at query points + union for full series** | `computeStatus()` (current-instant query) is just `valueAt(now)` over children; full plot generates union only when needed | Two code paths, but they share `valueAt` |
-
-### Concrete approach
+Machine owns per-machine ingestion. The minimal implementation:
 
 ```matlab
-classdef CompositeTag < Tag
-    methods
-        function val = valueAt(obj, t)
-            % Aggregate children at point t
-            childVals = zeros(1, numel(obj.Children));
-            for i = 1:numel(obj.Children)
-                childVals(i) = obj.Children{i}.valueAt(t);
-            end
-            val = obj.applyAggregate_(childVals);
-        end
+% Machine.m
+function report = ingestBatch(obj)
+    p = BatchTagPipeline('OutputDir', obj.DataRoot, ...
+        'TagSource', @(pred) obj.find(pred));
+    report = p.run();
+end
 
-        function [X, Y] = getXY(obj)
-            % Union grid: all unique transition times from all children
-            allX = [];
-            for i = 1:numel(obj.Children)
-                [cX, ~] = obj.Children{i}.getXY();
-                allX = [allX, cX];
-            end
-            X = unique(allX);
-            Y = obj.valueAt(X);  % vectorized
-        end
-    end
+function startLive(obj, interval)
+    obj.LivePipeline_ = LiveTagPipeline('OutputDir', obj.DataRoot, ...
+        'TagSource', @(pred) obj.find(pred), ...
+        'Interval',  interval);
+    obj.LivePipeline_.start();
 end
 ```
 
-### Why this fits FastSense/MEX best
+`OutputDir` is `machine.DataRoot` — each machine writes `.mat` files into its own isolated data root. No global registry pollution.
 
-- The existing pipeline already relies on **step-function representations** (`buildThresholdEntry`, `to_step_function_mex`, `mergeResolvedByLabel`).
-- `valueAt(tVec)` for StateTag uses `binary_search_mex` — already SIMD-optimized.
-- The union grid is bounded by sum of segment counts (typically dozens to thousands). FastSense downsampling kicks in only above `MinPointsForDownsample = 5000`; CompositeTag output is virtually always below that.
+### Interaction With v4.0 SharedRoot / Cluster Mode
 
----
-
-## TagRegistry Organization
-
-### Recommendation: FLAT keyspace, with `getKind()` discrimination + `findByKind()` filter
+`LiveTagPipeline` cluster mode is keyed on the `'SharedRoot'` NV-pair (line 227: `obj.IsClusterMode_ = ~isempty(opts.SharedRoot)`). Machine wrappers can pass `'SharedRoot'` forward if the machine is part of a multi-writer cluster:
 
 ```matlab
-classdef TagRegistry
-    methods (Static)
-        function t = get(key)              % unified lookup, single namespace
-        function register(key, tag)
-        function unregister(key)
-        function clear()
-        function tags = findByKind(kind)   % 'sensor'|'state'|'monitor'|'composite'
-        function tags = findByTag(tag)     % searches Tags property
-        function list()
-        function printTable()
-        function viewer()
-    end
-end
+obj.LivePipeline_ = LiveTagPipeline('OutputDir', obj.DataRoot, ...
+    'TagSource',   @(pred) obj.find(pred), ...
+    'SharedRoot',  sharedRoot, ...  % optional; machine knows its own cluster status
+    'Interval',    interval);
 ```
 
-### Why flat over namespaced
+Single-machine use omits `SharedRoot` — zero cluster code path runs (the pipeline's own `CONTEXT.md Success Criterion 5 / byte-identical guarantee` already covers this).
 
-| Option | Pro | Con |
-|---|---|---|
-| **Flat (`'press_hi'`)** with `getKind()` discrimination | One lookup; matches current `SensorRegistry`+`ThresholdRegistry` API; uniform `add(key)`-resolves-to-tag in widgets | Must enforce key uniqueness across all kinds |
-| Namespaced (`'sensor/press'`, `'monitor/press_hi'`) | Self-documenting keys; can't collide across kinds | Awkward to type; serialization keys become more verbose |
-| Per-kind separate registries | Familiar (current state) | The whole point of v2.0 is unification — back-tracks |
+---
 
-**Key uniqueness:** enforce via `register()` raising `TagRegistry:duplicateKey` if `isKey(k)` and the existing entry is a different handle.
+## Question 4: EventStore + MonitorTag Per Machine
 
-### Two-phase deserialization — fixes the CompositeThreshold ordering trap
+### Current Global Slot
 
-Current `CompositeThreshold.fromStruct()` (lines 276–334) requires all child Threshold objects to be registered BEFORE the parent composite is reconstructed. This caveat is documented but error-prone. v2.0 should fix it.
+`TagRegistry.setEventStore` / `TagRegistry.getEventStore` use a `persistent containers.Map` (lines 123-152). This is a single global slot used by `FastSenseWidget.render` (line 178), `FastSenseWidget.rebuildForTag_` (line 1440), `EventTimelineWidget`, and `TableWidget(events)` when no per-instance EventStore is configured.
+
+### In-Scope vs Deferred
+
+**In scope for v5.0 (per PROJECT.md):**
+Per-machine tags (SensorTag, MonitorTag) that belong to Machine's catalog work normally when their EventStore is wired explicitly — either on the widget directly (`widget.EventStore = store`) or via `machine.EventStore` property that Machine exposes.
+
+The `FastSenseWidget` already has a priority chain: widget-level `EventStore` (line 176-183) takes priority over the registry default. So wiring `machine.EventStore` at the `openAdHocPlot` / dashboard-load level is sufficient — no global slot change needed.
+
+**Deferred (per PROJECT.md explicit deferral):**
+Cross-machine MonitorTag/event rollups and fleet-wide background monitoring. The global `TagRegistry.setEventStore` slot is not touched.
+
+**Minimum required for per-machine tags to work:**
+- `Machine` exposes an `EventStore` property (or `getEventStore()` method) returning the machine-scoped EventStore handle.
+- `openAdHocPlot.m`'s `findEventStoreFor_` (line 159-177) uses `TagRegistry.find` to locate monitors. When called for a machine-context ad-hoc plot, it must search the machine's catalog instead. The fix: pass the machine (or its `find` handle) into `openAdHocPlot` as an optional argument, or use the already-resolved Tag handles' parent-machine reference.
+- `CompanionEventViewer` and the companion bell continue to use the single `EventStore_` wired at construction / `setProject` — for the active machine, this is `machine.EventStore`.
+
+**EventStore per machine:** Machine owns `EventStore_ = EventStore(machine.DataRoot)` (cluster-safe per Phase 1039 pattern). `TagRegistry.setEventStore` is not called per machine — the machine's EventStore is threaded explicitly.
+
+---
+
+## Question 5: Comparison Data Flow
+
+### Fleet.resolveLogical → openAdHocPlot Overlay
+
+```
+Fleet.resolveLogical(logicalId)
+    → CanonicalMapper.machinesForLogical(logicalId)
+    → for each machine: machine.get(machine.localKeyFor(logicalId))
+    → returns cell of {machine, Tag} pairs
+
+Companion OpenComparison handler:
+    tags = cellfun(@(pair) pair{2}, resolved, 'UniformOutput', false)
+    openAdHocPlot(tags, 'Overlay', themePreset)
+```
+
+### Does openAdHocPlot Accept Tag Objects Directly?
+
+YES. `openAdHocPlot.m:47`: the function accepts `tags` as "1xN cell of Tag handles (already resolved by caller)". It calls `tg.getXY()` (line 69) and `tg.Name` (line 63) — these are part of the Tag abstract interface implemented by all Tag subclasses. No TagRegistry lookup is performed for the tags themselves.
+
+The `findEventStoreFor_` sub-helper (line 159) does call `TagRegistry.find` to locate monitors — this is the one site that needs scoping to the machine's catalog for comparison overlays. Options:
+1. Pass an optional `monitorSource` argument to `openAdHocPlot` alongside the tag cell.
+2. Each Tag could carry a weak back-reference to its owning Machine (simpler for the comparison path but adds coupling).
+3. Accept that `findEventStoreFor_` returns `[]` for machine-catalog tags (safe — widget simply has no auto-wired EventStore, which is acceptable for v5.0 comparison views where EventStore overlay is secondary).
+
+**Option 3 is the safest minimal path** for v5.0: comparison overlays work without EventStore auto-wiring. EventStore per-machine can be wired explicitly by the caller if needed.
+
+### Per-Series Color/Legend
+
+`openAdHocPlot` Overlay mode (line 143-157) calls `plot(ax, tv, y, 'DisplayName', char(names{k}), 'LineWidth', 1.2)`. MATLAB auto-assigns colors from the axes ColorOrder. There is no per-series color injection today.
+
+For comparison overlays, the `plotOverlay_` helper needs to accept per-series colors. Minimal change: add an optional `colors` arg to `openAdHocPlot` (or augment the tags input to be a struct array `{tag, color, machineName}`). For v5.0, the machine name is the natural legend entry:
 
 ```matlab
-methods (Static)
-    function loadFromStructs(structs)
-        % Phase 1: instantiate all tags (composites get empty children)
-        for i = 1:numel(structs)
-            s = structs{i};
-            switch s.kind
-                case 'sensor',    t = SensorTag.fromStruct(s);
-                case 'state',     t = StateTag.fromStruct(s);
-                case 'monitor',   t = MonitorTag.fromStruct(s);   % parent ref deferred
-                case 'composite', t = CompositeTag.fromStruct(s); % children refs deferred
-            end
-            TagRegistry.register(s.key, t);
-        end
-        % Phase 2: resolve cross-references
-        for i = 1:numel(structs)
-            s = structs{i};
-            t = TagRegistry.get(s.key);
-            if ismethod(t, 'resolveRefs')
-                t.resolveRefs(s);  % MonitorTag resolves Parent, CompositeTag resolves Children
-            end
-        end
-    end
-end
+% openAdHocPlot comparison call from Companion:
+tagNames = cellfun(@(p) sprintf('%s / %s', p{1}.Name, p{2}.Name), resolved, 'UniformOutput', false);
+% p{1} = machine, p{2} = Tag
+openAdHocPlot(tags, 'Overlay', themePreset, 'DisplayNames', tagNames)
 ```
 
-This eliminates the order-dependent registration trap.
+The `plotOverlay_` helper already uses `validNames` as `DisplayName` — passing machine-qualified names is sufficient for legend differentiation without deeper changes.
 
 ---
 
-## Event ↔ Tag Binding
+## Question 6: Suggested Build Order
 
-### Recommendation: BIDIRECTIONAL binding; Event holds tag references; tags hold a *queryable* event list (not stored)
+### New vs Modified Files
 
-- `Event` gains `TagKeys` (cell of char) — replaces current `SensorName`/`ThresholdLabel` strings. Many-to-many supported.
-- `Event` keeps its current stat fields (PeakValue, NumPoints, Min/Max/Mean/RMS/Std, Direction, Duration).
-- `EventStore` gains `eventsForTag(key)` that filters by `TagKeys`. No back-pointer on Tag itself.
-- FastSense gains an `attachEventStore(store)` method (or accepts events at addTag time): when rendering a tag, it queries `store.eventsForTag(tag.Key)` and overlays them.
+```
+libs/Fleet/                      NEW
+├── Machine.m                    NEW — owns containers.Map catalog; mirrors TagRegistry read API
+├── Fleet.m                      NEW — searchable machines + config persistence
+└── CanonicalMapper.m            NEW — per-machine localKey ↔ logicalId mapping
 
-### FastSense overlay API
+libs/Dashboard/
+├── DashboardEngine.m            MODIFIED — load() accepts optional tagResolver arg
+├── DashboardSerializer.m        MODIFIED — configToWidgets/createWidgetFromStruct thread tagResolver
+└── FastSenseWidget.m            MODIFIED — fromStruct gains optional tagResolver arg
 
-**Recommendation:** Add `addEventBand(xStart, xEnd, varargin)` — analogous to the existing horizontal `addBand(yLow, yHigh, ...)`. Then `addEventOverlay(events)` is sugar over a loop of `addEventBand` calls. The internal `Bands` struct array gains a `Direction` field (`'horizontal'` or `'vertical'`) so the same render code path handles both.
+libs/FastSenseCompanion/
+├── FastSenseCompanion.m         MODIFIED — setProject accepts Machine; adds machine selector; wires static TagRegistry.find → machine.find in catalog/live-scan paths
+├── TagCatalogPane.m             MODIFIED — attach/refresh call obj.Registry_.find instead of TagRegistry.find (4-line change)
+└── private/openAdHocPlot.m     MODIFIED — findEventStoreFor_ accepts optional machine source arg
 
-### Where the binding lives
+libs/SensorThreshold/
+├── BatchTagPipeline.m           MODIFIED — tagSource_ DI seam; TagSource constructor NV pair
+└── LiveTagPipeline.m            MODIFIED — identical tagSource_ DI seam
 
-**In Event.** Tags do NOT carry an Events cell. Reasons:
-- Events outlive their tags being plotted (EventStore is persistent; tags are recreated)
-- Many-to-many cardinality is naturally a property of the relationship's "owning" side (Event)
-- Symmetry with current Event having `SensorName` / `ThresholdLabel` already — just generalize them
+tests/
+├── suite/TestMachine.m          NEW
+├── suite/TestFleet.m            NEW
+├── suite/TestCanonicalMapper.m  NEW
+└── suite/TestFleetIntegration.m NEW — end-to-end: Machine ingestion + Companion setProject
+```
 
----
+### Dependency-Ordered Build Sequence
 
-## Suggested Build Order
+**Phase 1 — CanonicalMapper (canonical-map-first, no dependencies):**
+- `libs/Fleet/CanonicalMapper.m` NEW
+- `tests/suite/TestCanonicalMapper.m` NEW
+- No existing code changes. Standalone; fully testable.
 
-| Phase | Deliverable | Depends on | Justification |
-|---|---|---|---|
-| **1** | `Tag` abstract base + `TagRegistry` (with two-phase load) | nothing | Foundation; no consumers yet, but unblocks all later phases. Tests: registry CRUD, getKind dispatch. |
-| **2** | `SensorTag` (keep `toDisk`/DataStore semantics intact); `StateTag` | Phase 1 | Both are pure data carriers; no derived computation. **Build in same phase** (independent siblings; shipping one without the other leaves consumers half-migrated). |
-| **3** | Update `FastSense.addSensor` → `addTag` (polymorphic) and `FastSenseWidget` to bind to `SensorTag`. Migrate consumers: `MultiStatusWidget`, `IconCardWidget`, `EventTimelineWidget`, `SensorDetailPlot`, `MockDataSource`/`MatFileDataSource` | Phase 2 | At this point SensorTag fully replaces Sensor for raw plotting. Tests pass for non-thresholded plots. |
-| **4** | `MonitorTag` — port `Sensor.resolve()` + `compute_violations_batch` + `buildThresholdEntry` + `mergeResolvedByLabel` into MonitorTag's `recompute_`. Replace `Sensor.ResolvedThresholds`/`ResolvedViolations` consumers. | Phase 3 | The old `resolve()` becomes an internal MonitorTag method. Threshold/ThresholdRule classes remain temporarily as helper structs for Conditions, then are deleted in Phase 7. |
-| **5** | Update `EventDetection` to consume MonitorTag: rewrite `detectEventsFromSensor` → `detectEventsFromMonitor`; rewrite `IncrementalEventDetector`. Update `EventStore`/`EventViewer`. | Phase 4 | Largest single integration. |
-| **6** | `CompositeTag` — port `CompositeThreshold` aggregation logic. Update `MultiStatusWidget` and `IconCardWidget`. | Phase 5 | Composite needs MonitorTag to exist. |
-| **7** | Events on tags: `Event.TagKeys`; `EventStore.eventsForTag`; `FastSense.addEventBand`/`addEventOverlay`; widget integration. **Delete** old classes. | Phase 6 | Final integration; deletion of legacy types only after no consumers reference them. |
+**Phase 2 — Machine (depends on CanonicalMapper):**
+- `libs/Fleet/Machine.m` NEW
+- `libs/SensorThreshold/BatchTagPipeline.m` MODIFIED (tagSource_ seam only)
+- `libs/SensorThreshold/LiveTagPipeline.m` MODIFIED (tagSource_ seam only)
+- `tests/suite/TestMachine.m` NEW
+- Pipeline seam changes are additive (default unchanged); safe to merge.
 
-### Key adjustments from initial proposal
+**Phase 3 — Fleet (depends on Machine):**
+- `libs/Fleet/Fleet.m` NEW
+- `tests/suite/TestFleet.m` NEW
+- No existing code changes.
 
-- **Combine SensorTag + StateTag** into one phase (independent siblings; splitting creates awkward half-migrated state).
-- **MonitorTag before CompositeTag**, before EventDetection migration. Building Composite before EventDetection is migrated would leave EventDetector still consuming old Sensor while CompositeTag references new MonitorTag — split brain.
-- **Events on tags is last + deletion phase** — defer all legacy-class deletions to here so each intermediate phase can run tests against the old code as a reference.
+**Phase 4 — DashboardSerializer resolver seam (depends on nothing, backward-compat):**
+- `libs/Dashboard/FastSenseWidget.m` MODIFIED (fromStruct optional tagResolver)
+- `libs/Dashboard/DashboardSerializer.m` MODIFIED (configToWidgets threads resolver)
+- `libs/Dashboard/DashboardEngine.m` MODIFIED (load() optional resolver)
+- Additive: existing dashboards with no resolver arg work identically.
 
-### Each phase ships a working slice
+**Phase 5 — Companion machine dimension (depends on Phases 1-4):**
+- `libs/FastSenseCompanion/FastSenseCompanion.m` MODIFIED
+- `libs/FastSenseCompanion/TagCatalogPane.m` MODIFIED
+- `libs/FastSenseCompanion/private/openAdHocPlot.m` MODIFIED
+- Machine selector UI (deferred from v5.0 per PROJECT.md, but setProject(machine) wire-up is Phase 5)
 
-After Phase 2, raw plots work; after Phase 3, all non-monitor widgets work; after Phase 4, monitors render; after Phase 5, events work end-to-end; after Phase 6, composite status displays work; after Phase 7, the system is unified and old types are gone.
+**Phase 6 — Integration tests:**
+- `tests/suite/TestFleetIntegration.m` NEW
 
----
+### Rationale for Ordering
 
-## Backward Compatibility
-
-**Recommendation: REWRITE TESTS WITH EACH PHASE; no adapter layer.**
-
-Per PROJECT.md: *"No users — backward compatibility is NOT a constraint"* and *"Greenfield rewrite of `libs/SensorThreshold/`"*.
-
-### Why reject adapter layer
-
-| Adapter approach | Cost | Verdict |
-|---|---|---|
-| Build `Sensor extends SensorTag` shim | Adapter classes proliferate; defeats greenfield intent; doubles the surface | Reject |
-| Keep Threshold class as ConditionBag inside MonitorTag | Internal helper struct is fine; do not export it | OK as private helper, not as public class |
-| Deprecation warnings on old APIs | Premature for no-user codebase | Reject |
-
-### Test migration discipline
-
-For each phase:
-1. **Identify tests that touch the migrated class** (`tests/test_sensor.m`, `tests/test_threshold.m`, `tests/suite/TestSensor.m`, etc.)
-2. **Rewrite in-place** — do not branch. Replace `Sensor('x')` with `SensorTag('x')`, `Threshold(...).addCondition(...)` with `MonitorTag(...).addCondition(...)`.
-3. **Run `tests/run_all_tests.m`** at end of each phase. Phase is complete only when all tests green.
-4. Tests that test integration patterns get rewritten in their phase even if the underlying class hasn't been touched yet.
-
-### Coverage maintenance
-
-- Phase 4 (MonitorTag) is the highest test churn — most existing `resolve()` tests, `compute_violations_batch` tests, `mergeResolvedByLabel` tests need their setup rewritten.
-- Phase 7 (deletion) is mostly removing tests for deleted classes; new event-overlay rendering tests added.
+- CanonicalMapper first because Fleet.resolveLogical depends on it, and it has zero external dependencies — validates the core logical-sensor mapping logic before any wiring.
+- Machine second because pipelines and companion depend on it; the DI seam changes to pipelines are the lowest-risk modifications (additive, no default behavior change).
+- Fleet third because it's a container over Machine — needs Machine stable.
+- Serializer seam fourth because it's independent of Fleet/Machine and touches Dashboard code that has its own test suite. Isolating it lets existing DashboardSerializer tests validate backward compat before companion wiring starts.
+- Companion last because it consumes everything above; it is the highest integration surface and changes there are the most expensive to debug.
 
 ---
 
 ## Integration Points
 
-| File | Phase | Change |
-|---|---|---|
-| `libs/SensorThreshold/Tag.m` | 1 | **NEW** — abstract base; throw-from-base contract |
-| `libs/SensorThreshold/TagRegistry.m` | 1 | **NEW** — replaces `SensorRegistry.m` + `ThresholdRegistry.m`; two-phase loadFromStructs |
-| `libs/SensorThreshold/SensorTag.m` | 2 | **NEW** — port from `Sensor.m` lines 58–313 (props, load, toDisk, toMemory, isOnDisk); drop `addStateChannel`, `addThreshold`, `resolve`, `getThresholdsAt`, `countViolations`, `currentStatus`, `Resolved*` props |
-| `libs/SensorThreshold/StateTag.m` | 2 | **NEW** — port from `StateChannel.m` (rename, change parent class only; preserve `valueAt` and `bsearchRight`) |
-| `libs/FastSense/FastSense.m` | 3 | **MODIFY** — replace `addSensor` (lines 516–597) with polymorphic `addTag(tag, varargin)`; route by `tag.getKind()` |
-| `libs/FastSense/SensorDetailPlot.m` | 3 | **MODIFY** — consumes `Sensor` directly; rewrite to consume `SensorTag` |
-| `libs/Dashboard/FastSenseWidget.m` | 3 | **MODIFY** — `Sensor` property replaced with `Tag` property; auto-detect kind |
-| `libs/Dashboard/DashboardWidget.m` | 3 | **MODIFY** — base-class `Sensor` property → `Tag`; Title cascade reads `.Tag.Name` / `.Tag.Key` |
-| `libs/Dashboard/MultiStatusWidget.m` | 3, then 6 | **MODIFY twice** — Phase 3: `Sensors{}` → `Tags{}`; Phase 6: rewrite `expandSensors_` for `CompositeTag` |
-| `libs/Dashboard/IconCardWidget.m` | 3, then 6 | **MODIFY twice** — Phase 3: `Sensor`→`Tag`; Phase 6: `Threshold` prop → `Tag` prop (any kind, including CompositeTag) |
-| `libs/Dashboard/EventTimelineWidget.m` | 3, then 7 | **MODIFY** — Phase 3: filter by Tag.Key; Phase 7: consume new `Event.TagKeys` |
-| `libs/SensorThreshold/MonitorTag.m` | 4 | **NEW** — Parent, Conditions, StateInputs, invalidate/recompute pattern; `recompute_` ports `Sensor.resolve()` body |
-| `libs/SensorThreshold/private/compute_violations_batch.m` | 4 | **MOVE** — stays as private helper, called from MonitorTag instead of Sensor |
-| `libs/SensorThreshold/private/buildThresholdEntry.m`, `mergeResolvedByLabel.m`, `appendResults.m` | 4 | **MOVE / SIMPLIFY** — only used by MonitorTag's recompute |
-| `libs/FastSense/FastSenseDataStore.m` | 4 | **MODIFY** — add `storeMonitor`/`loadMonitor` mirroring existing `storeResolved`/`loadResolved` |
-| `libs/EventDetection/detectEventsFromSensor.m` | 5 | **REPLACE** — new `detectEventsFromMonitor(monitorTag, detector)` |
-| `libs/EventDetection/EventDetector.m` | 5 | **MODIFY** — `detect()` simplifies: takes (tag, X, Y) |
-| `libs/EventDetection/IncrementalEventDetector.m` | 5 | **REWRITE** — current code (lines 31–175) builds temp Sensor + resolves; new code calls `monitorTag.appendData(newX, newY)` |
-| `libs/EventDetection/Event.m` | 5 then 7 | **MODIFY** — Phase 5: keep `SensorName`/`ThresholdLabel` for compat; Phase 7: replace with `TagKeys` cell |
-| `libs/EventDetection/EventStore.m` | 7 | **MODIFY** — add `eventsForTag(key)`; persistence gains `tagKeys` field |
-| `libs/EventDetection/EventViewer.m` | 5 | **MODIFY** — column renaming (Sensor → Tag); click-to-plot uses TagRegistry.get |
-| `libs/EventDetection/MockDataSource.m`, `MatFileDataSource.m` | 5 | **MODIFY** — return Tag-shaped data |
-| `libs/SensorThreshold/CompositeTag.m` | 6 | **NEW** — port from `CompositeThreshold.m`; `applyAggregateMode_` preserved; valueAt/getXY new |
-| `libs/FastSense/FastSense.m` | 7 | **MODIFY** — add `addEventBand`, `addEventOverlay`; extend `Bands` struct with Direction field |
-| `libs/Dashboard/FastSenseWidget.m` | 7 | **MODIFY** — auto-overlay events from bound EventStore |
-| `libs/Dashboard/DashboardSerializer.m` | 1, 7 | **MODIFY** — Phase 1: support `tag` source type; Phase 7: drop legacy `sensor` source path |
-| **DELETE** in Phase 7 | 7 | `Sensor.m`, `Threshold.m`, `ThresholdRule.m`, `CompositeThreshold.m`, `StateChannel.m`, `SensorRegistry.m`, `ThresholdRegistry.m`, `ExternalSensorRegistry.m` |
-| `tests/test_sensor.m`, `test_threshold.m`, etc. | 2–7 | **REWRITE** in the phase that touches the producing class |
-| `libs/WebBridge/` | none | **NO CHANGE** — consumes serialized dashboard config + SQLite files; tag changes are transparent |
+### Confirmed Exact Seams
 
-### Render layer untouched
+| Seam | Current Code | v5.0 Change | File:Line |
+|------|-------------|-------------|-----------|
+| Companion registry object call | `obj.Registry_.get(key)` | Works unchanged if Machine implements `get(key)` | FastSenseCompanion.m:2182 |
+| CatalogPane tag enumeration | `TagRegistry.find(@(t) true)` (static) | Change to `obj.Registry_.find(@(t) true)` | TagCatalogPane.m:60,205 |
+| Live scan enumeration | `TagRegistry.find(@(t) isa(t,'Tag'))` (static) | Change to `obj.Registry_.find(...)` | FastSenseCompanion.m:1616,1618 |
+| openAdHocPlot monitor lookup | `TagRegistry.find(@(tt) isa(tt,'MonitorTag')...)` (static) | Accept no-result gracefully (Option 3) or add machine arg | openAdHocPlot.m:165 |
+| Widget tag resolution in fromStruct | `TagRegistry.get(s.source.key)` | Add optional `tagResolver` arg; default unchanged | FastSenseWidget.m:1516 |
+| EventStore forwarding in render | `TagRegistry.getEventStore()` | Unchanged — global slot; machine uses explicit widget.EventStore | FastSenseWidget.m:178,1440 |
 
-These files **do not change**:
-- All `libs/FastSense/private/mex_src/*.c` and corresponding `.m` fallbacks
-- `libs/FastSense/FastSenseDataStore.m` core read/write API (only adds helpers in Phase 4)
-- `libs/FastSense/FastSenseTheme.m`, `FastSenseGrid.m`, `FastSenseDock.m`, `FastSenseToolbar.m`, `NavigatorOverlay.m`
-- `libs/Dashboard/DashboardEngine.m`, `DashboardLayout.m`, `DashboardTheme.m`, `DashboardToolbar.m`, `DashboardBuilder.m`, `DashboardPage.m`, `DetachedMirror.m`, `MarkdownRenderer.m`, `DividerWidget.m`
-- `bridge/python/`, `bridge/web/` (entire WebBridge stack)
+### Internal Boundaries
+
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| Machine ↔ TagCatalogPane | Machine passed as `registry` arg; pane calls `registry.find(pred)` | Machine must implement `find(predicateFn)` |
+| Machine ↔ FastSenseCompanion | Via `setProject(machine.Dashboards, machine)` | Existing setProject contract reused exactly |
+| Machine ↔ DashboardSerializer | Via `tagResolver = @(k) machine.get(k)` passed at load time | New optional arg; old callers unaffected |
+| Fleet ↔ CanonicalMapper | `fleet.mapper.machinesForLogical(id)` | CanonicalMapper is owned by Fleet |
+| Machine ↔ Pipelines | `'TagSource', @(pred) machine.find(pred)` in pipeline constructor | New NV pair; default `@TagRegistry.find` preserved |
 
 ---
 
-## Open Questions
+## Anti-Patterns
 
-1. **MonitorTag severity encoding.** Y as `0/1` (binary), `0/severity-level` (multi-level integer), or `0/threshold-value` (float)? **Suggest:** integer severity (0=ok, 1=warn, 2=alarm) with the threshold-value-at-time available as a separate channel.
-2. **Should `StateTag` be plottable as a Tag in FastSense?** Currently StateChannel is a condition input only. **Suggest:** allow but render as bands by default (kind='state' branch in FastSense.addTag).
-3. **CompositeTag with mixed-kind children.** Can a CompositeTag have a SensorTag child? **Suggest:** error in Phase 6 — CompositeTag children must be MonitorTag or CompositeTag.
-4. **Live append performance for MonitorTag.** Phase 4 ships full-recompute on invalidation. **Suggest:** add `MonitorTag.appendData(newX, newY)` in Phase 5 that extends `cachedY_` by computing only the new tail.
-5. **Event-tag binding cardinality enforcement.** When an Event references multiple tags via `TagKeys`, what happens if one tag is deleted? **Suggest:** keep TagKeys as strings (not handles); orphaned references tolerated with `(unknown tag)` placeholder in EventViewer.
-6. **Migration state for existing SQLite caches.** No users per PROJECT.md; verify no test fixtures depend on the old schema.
-7. **`metadata` struct convention on Tag root.** Free-form is flexible but rapidly becomes a dumping ground. Suggest documenting expected keys (`asset`, `source`, `id`) even if unenforced.
+### Anti-Pattern 1: Modifying TagRegistry to be Instantiable
 
----
+**What people do:** Try to make `TagRegistry` a handle class to avoid the duck-type seam.
+**Why it's wrong:** 72 static call sites across 31 files; persistent `catalog()` cannot be instanced without breaking all existing single-machine code paths.
+**Do this instead:** Machine owns a `containers.Map` internally and exposes the same read API (`get`, `find`, `findByKind`, `findByLabel`).
 
-## Confidence Assessment
+### Anti-Pattern 2: Storing machineId in Widget Structs
 
-| Area | Level | Reason |
-|------|-------|--------|
-| Tag interface contract | HIGH | Derived directly from grep of consumer touchpoints in source files |
-| Subclass hierarchy | HIGH | Small surface, flat is consistent with DashboardWidget precedent |
-| MonitorTag computation | MEDIUM | Lazy+cache is standard but performance under FastSense pan/zoom unverified — needs Phase 4 benchmarking |
-| CompositeTag alignment | HIGH | Step-function representation is what existing MEX kernels already operate on |
-| TagRegistry organization | HIGH | Two-phase loading is a textbook fix for the documented CompositeThreshold ordering trap |
-| Event-tag binding | MEDIUM | Recommendation rests on judgement; "Tag.Events back-pointer" alternative is also defensible |
-| Build order | HIGH | Direct dependency analysis; each phase boundary keeps test suite runnable |
-| Octave abstract semantics | MEDIUM | Abstract attribute support partial per Octave wiki; throw-from-base pattern HIGH confidence (already shipped) |
+**What people do:** Serialize `source.machineId` alongside `source.key` in `FastSenseWidget.toStruct`.
+**Why it's wrong:** Dashboard JSON becomes machine-specific instead of portable. Clone/remap workflows become harder. The resolver is the right injection point — it knows the machine context from the load site, not from the JSON.
+**Do this instead:** Keep JSON as `{type:'tag', key:'localKey'}`. Inject machine context via the resolver function handle at load time.
 
----
+### Anti-Pattern 3: Calling TagRegistry.find Inside Machine Methods
 
-## Roadmap Implications
-
-**Suggested 7-phase structure:**
-1. Tag root + TagRegistry (foundation, low risk)
-2. SensorTag + StateTag (paired data carriers)
-3. FastSense.addTag + all dashboard widget consumer migration
-4. MonitorTag (largest single phase — ports Sensor.resolve)
-5. EventDetection migration (second-largest)
-6. CompositeTag (small, isolated)
-7. Events-on-tags + legacy class deletion
-
-Phase 4 and Phase 5 are the largest. Consider research flags for both:
-- Phase 4: re-verify `compute_violations_batch` semantics survive the move into MonitorTag with no behavior change
-- Phase 5: Incremental detector rewrite is novel; benchmark Phase 4's MonitorTag invalidation pattern under live tick load before committing
+**What people do:** Machine.find internally delegates to `TagRegistry.find` filtered by a namespace prefix.
+**Why it's wrong:** This is Approach 2 (namespaced compound keys) which was explicitly rejected — it requires forced per-machine filtering everywhere and causes key-sprawl.
+**Do this instead:** Machine owns its own `containers.Map`; `Machine.find` iterates that map directly.
 
 ---
 
 ## Sources
 
-- [Octave Classdef wiki](https://wiki.octave.org/Classdef)
-- [classdef Classes (GNU Octave 10.3.0)](https://docs.octave.org/interpreter/classdef-Classes.html)
+All findings are based on direct code audit of the following files at commit HEAD on branch `claude/friendly-leakey-0bc166`:
+
+- `libs/SensorThreshold/TagRegistry.m` — full file
+- `libs/SensorThreshold/SensorTag.m` — full file
+- `libs/SensorThreshold/BatchTagPipeline.m` — full file (eligibleTags_ at line 256)
+- `libs/SensorThreshold/LiveTagPipeline.m` — full file (eligibleTags_ at line 801)
+- `libs/Dashboard/DashboardSerializer.m` — full file (configToWidgets resolver hook at line 388; linesForWidget tag path at line 793)
+- `libs/Dashboard/FastSenseWidget.m` — full file (toStruct line 1211; fromStruct lines 1501-1573; TagRegistry.getEventStore lines 178, 1440)
+- `libs/FastSenseCompanion/FastSenseCompanion.m` — constructor (lines 131-500), setProject (lines 725-801), scanLiveTagUpdates_ (lines 1600-1657), onOpenAdHocPlotRequested_ (lines 2150-2240)
+- `libs/FastSenseCompanion/TagCatalogPane.m` — attach (lines 45-180), refresh (lines 201-211), getSelectedTags (lines 220-238)
+- `libs/FastSenseCompanion/DashboardListPane.m` — attach (lines 46-126)
+- `libs/FastSenseCompanion/private/openAdHocPlot.m` — full file (findEventStoreFor_ at line 159)
+- `.planning/PROJECT.md` — v5.0 scope and decisions
+
+---
+*Architecture research for: FastSense v5.0 Multi-Machine Fleet integration*
+*Researched: 2026-06-02*

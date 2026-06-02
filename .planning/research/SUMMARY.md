@@ -1,172 +1,211 @@
-# Project Research Summary — v2.1 Tag-API Tech Debt Cleanup
+# Project Research Summary
 
-**Project:** FastSense Advanced Dashboard
-**Milestone:** v2.1 — Tag-API Tech Debt Cleanup
-**Domain:** Post-migration cleanup on a shipped v2.0 Tag-based MATLAB/Octave dashboard codebase
-**Researched:** 2026-04-22
+**Project:** FastSense Advanced Dashboard — v5.0 Multi-Machine Fleet
+**Domain:** Multi-asset fleet monitoring, canonical sensor mapping, and cross-machine comparison — pure MATLAB sensor dashboard
+**Researched:** 2026-06-02
 **Confidence:** HIGH
 
 ---
 
-## TL;DR
+## Executive Summary
 
-v2.1 is a **pure tech-debt cleanup** closing the 4 non-blocking items from the v2.0 milestone audit — NOT new feature work. Every replacement API (`MonitorTag`, `EventStore`, `EventBinding`, `LiveEventPipeline`, `TagRegistry`, `FastSense.addTag`, `DashboardSerializer.linesForWidget`) already ships in v2.0. There are **zero new dependencies** and **zero new abstractions**; every fix is a mechanical migration, deletion, or copy-paste-with-minor-edit against existing patterns. The work is "small on paper" but sits in the highest-risk cleanup category: the incentive to scope-creep ("while I'm in here…") is maximal, and several silent-skip mechanisms (Octave subprocess runner, `test_examples_smoke` skip list) could hide regressions introduced by the cleanup itself.
+v5.0 adds a fleet layer — `Machine`, `Fleet`, and `CanonicalMapper` in a new `libs/Fleet/` library — on top of a production-grade MATLAB dashboard engine that has zero external dependencies and must remain backward-compatible with 72 static `TagRegistry` call sites across 31 files. The core architectural decision is already locked: each `Machine` owns an isolated `containers.Map` tag catalog and never touches the global `TagRegistry` singleton. The fleet layer is purely additive: no existing single-machine code path changes except five precisely-identified call sites in `TagCatalogPane`, `FastSenseCompanion`, `FastSenseWidget.fromStruct`, and the multi-page load path in `DashboardEngine`.
 
-**We are NOT building:** new classes, new APIs, asset hierarchy, custom event GUI, calc tags, tri-state severity, WebBridge tag parity, a parametric test framework, a codegen library, a mocking layer, or any Python/web changes. This is discipline, not invention.
+The recommended approach follows a strict build order: `CanonicalMapper` first (no dependencies, validates the mapping logic in isolation), then `Machine` + pipeline DI seam, then `Fleet` + config persistence, then the `DashboardSerializer` resolver seam (independently testable), and finally the Companion machine-dimension wiring. Every phase is independently deployable and has a concrete exit gate. The single biggest implementation risk is the resolver seam: the existing `DashboardSerializer.configToWidgets` resolver hook covers only the legacy `source.type='sensor'` path; the `source.type='tag'` path in `FastSenseWidget.fromStruct:1516` bypasses it entirely, and the multi-page load path at `DashboardEngine.m:4384` drops the resolver silently. This must be fixed in isolation (Phase 4) with a backward-compat regression test before any fleet dashboard is serialized.
 
----
-
-## Scope
-
-Four items from `.planning/milestones/v2.0-MILESTONE-AUDIT.md`. Count numbers below reflect direct grep verification against the live codebase (audit figures were slightly stale).
-
-| # | Item | Surface | Complexity | Net LOC |
-|---|------|---------|------------|---------|
-| 1 | Stub/delete `EventDetector.detect(tag, threshold)` dead code (also `IncrementalEventDetector.process`, `EventConfig.addSensor`, possibly full-class deletions) | `libs/EventDetection/EventDetector.m` + zombie test files | **Simple** (Medium if full-class chain delete) | -300 to -500 |
-| 2 | `DashboardSerializer` `.m` export — add `case 'tag'` branch (currently silently drops Tag binding; JSON path already works) | `libs/Dashboard/DashboardSerializer.m` (two switch blocks at line 38 `save()` and line 598 `linesForWidget`) + round-trip test | **Simple** | +40 to +80 |
-| 3 | Clean up ~73–98 `Threshold(`/`CompositeThreshold(`/`StateChannel(`/`ThresholdRule(` constructor refs across ~16–22 MATLAB-only suite test files (plus ~6 Octave-flat siblings) | `tests/suite/Test*.m` + `tests/test_*.m`; some DELETE, some MIGRATE, leave `fp.addThreshold()` surviving API alone | **Medium** (volume-driven, not complexity-driven) | -500 to -1500 |
-| 4 | Rewrite `examples/05-events/example_event_detection_live.m` + `example_event_viewer_from_file.m` as fully-migrated `MonitorTag + EventStore + EventBinding` pipelines; fix any strays in `example_live_pipeline.m` | `examples/05-events/*.m` + skip-list parity updates | **Medium** (~150–200 LOC each, templates exist) | +300 to +450 |
-
-**Audit figure note:** the audit said "93 refs in 42 files." Direct grep at v2.1 kickoff found **73 `Threshold(` constructor refs in 16 suite files** — the audit's 42 counted Octave-flat sidecars that don't actually reference `Threshold` (it's MATLAB-only / deleted). PITFALLS.md uses 98 when counting `CompositeThreshold`/`StateChannel`/`ThresholdRule` patterns together; both figures are correct depending on regex precision. Plan in terms of **~16–22 files, ~73–98 refs**, and classify per-file before editing.
+The second highest risk is canonical mapping correctness: fuzzy matching that silently maps physically-different sensors produces wrong comparisons with no error signal. The mitigation is mandatory `confidence` levels (HIGH/MEDIUM/LOW) baked into the mapper schema from day one, a comparison-view gate that refuses to overlay LOW/unreviewed mappings, and a unit-consistency check. All string operations must use `lower`/`regexprep`/`strsplit`/`strfind` (never `contains` or toolbox functions) to maintain Octave parity in the data model. The companion UI is MATLAB-only and guarded by an existing Octave check — no new Octave guard needed there.
 
 ---
 
-## Stack Decision
+## Key Findings
 
-**No new dependencies. Zero new libraries. One CI gate.**
+### Recommended Stack
 
-Everything v2.1 needs already ships in v2.0:
+All functionality is covered by built-in MATLAB/Octave primitives already used in this codebase. No new dependencies. The "DO NOT ADD" list is firm: no Statistics Toolbox `editDistance`, no Text Analytics Toolbox, no `contains()` in Octave-targeted data-model code, no `jsonencode` called directly on cell-array-of-heterogeneous-structs, and no `dir('**/*.ext')` recursive glob in Octave-targeted code.
 
-- **MATLAB R2020b+ / Octave 11.1.0** — CI pinned; R2025b drift is explicitly **out of scope** for v2.1 (catalogued in `.planning/debug/matlab-tests-failures-investigation.md`).
-- **matlab.unittest** with `testCase.assumeTrue(false, 'reason')` — already the project idiom for skip-with-reason (43 usages across 17 suite files). No new test framework.
-- **Custom Octave subprocess runner** in `tests/run_all_tests.m` — no change.
-- **MISS_HIT lint/style/metrics** — no rule changes (`miss_hit.cfg` limits at cyc=85, function_length=550, line_length=160 all hold).
-- **Tag API surface** (`SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `TagRegistry`, `EventBinding`, `EventStore`, `LiveEventPipeline`, `MockDataSource`, `MatFileDataSource`, `EventViewer.fromFile`, `FastSense.addTag`) — fully covers every demand of every item.
-- **Fixture factories** (`tests/suite/makePhase1009Fixtures.m`, `MockTag.m`) — reuse for all test rewrites.
+**Core technologies:**
 
-**ONE recommended addition — grep regression gate in `.github/workflows/tests.yml` `lint` job.** Fails CI on any new reference to the 8 classes deleted in Phase 1011 (`Threshold`, `CompositeThreshold`, `StateChannel`, `ThresholdRule`, `Sensor`, `SensorRegistry`, `ThresholdRegistry`, `ExternalSensorRegistry`). Phase 1012 Plan 10 already ran this grep manually during the v2.0 regression sweep; v2.1 promotes it to CI. 15 lines of YAML, 0 dependencies, <5 s per run. The grep filter must preserve `fp.addThreshold()` / `obj.addThreshold()` — those are the **surviving** FastSense plot-annotation API, not the deleted class. See STACK.md §"New Tooling" for the exact YAML snippet.
+- `lower` / `regexprep` / `strsplit` / `strtrim` / `strfind` — key normalization pipeline for `CanonicalMapper`; all present identically on R2020b+ and Octave 7+; already used in `filterTags.m` and `filterDashboards.m`
+- Hand-rolled Wagner-Fischer edit distance (`editDistance_` private helper, ~20 LOC) — approximate token matching for auto-rule scoring; call count is at most `n_keys x n_canonical_ids` at config-load time (200 x 50 = 10,000 pairs, < 1 ms); no toolbox required
+- `jsonencode` / `jsondecode` + `strjoin(parts, ',')` for heterogeneous arrays — fleet config persistence (machine list, DataRoot, canonical overrides); already used throughout codebase for project artifacts (`DashboardSerializer.saveJSON/loadJSON`, `ndjsonEncode/Decode`); fleet config is a project artifact (human-readable, VCS-committable) so `.mat` is wrong here
+- `uilistbox` + `uieditfield` with 150 ms debounce timer — machine selector in Companion; exact pattern already live in `TagCatalogPane` (uilistbox with `Multiselect='on'`, `Items`/`ItemsData`) and `DashboardListPane`; copy verbatim
+- `dir(fullfile(root, '*.ext'))` with an explicit recursive helper (not `**` glob) — per-machine `DataRoot` file discovery; `**` is unsupported in Octave 7; iterative `dir` + `isdir` loop is already the codebase pattern
+- `containers.Map('KeyType','char','ValueType','any')` — per-machine tag catalog in `Machine.Tags_`; mirrors `TagRegistry` internal structure; same form required for Octave
+- `movefile(tmp, dest, 'f')` atomic-write pattern — safe fleet config save; already in `companionPrefs.m` and `EventStore.save()`
 
-**Rejected alternatives:** matlab.mock (deletion beats mocking for dead code), codegen library for `.m` export (copy-paste the existing `case 'sensor'` pattern), parametric test framework (no leverage over heterogeneous test setups), `dictionary` R2022b type (Octave lacks it, MATLAB CI pins to R2020b), re-introducing `Threshold` as a deprecation shim (explicit Phase 1011 Pitfall 12 violation).
+### Expected Features
 
-Full rationale: `.planning/research/STACK.md`.
+All prior-art tools (AVEVA PI Vision, Seeq, Grafana, TrendMiner) converge on the same feature set for fleet comparison. The canonical map is the gating dependency for Areas 2 and 4; nothing in comparison or clone/remap is usable without it.
 
----
+**Must have (table stakes):**
 
-## Feature Priorities
+- Free-text search across machine names/IDs — every fleet tool requires this; `Fleet` must support `filterByName(pattern)` returning a machine subset
+- Active-machine indicator in Companion — users need to know which machine context is current; "which machine am I looking at?" confusion is the documented pain point across all industrial tools
+- `Machine.getTag(localKey)` per-machine tag catalog isolation — the core invariant; machine tags never enter the global `TagRegistry`
+- Canonical map: `logicalId -> {machineId -> localKey}` — foundational for all comparison and clone/remap; auto-suggest from key similarity + manual override; unmapped/ambiguous-tail surfacing
+- Mandatory confidence levels (HIGH/MEDIUM/LOW) on every mapping entry — silent wrong comparisons are the most dangerous failure mode
+- Cross-machine comparison overlay: pick logical sensor -> one FastSense axes, one series per machine, auto-colored, machine-labeled legend (format: `[machineName]: [sensorDisplayName]`), wall-clock alignment (default), missing-sensor graceful skip with warning
+- Machine-scoped `DashboardSerializer` resolver — correctness requirement for fleet dashboard round-trips
+- Clone a dashboard onto another machine with tag bindings rebound via canonical map; failed remaps surfaced as a warnings list, not silent empty widgets
 
-Collapsed across all 4 items.
+**Should have (differentiators):**
 
-### Table stakes (must-do)
+- Machine list grouped by user-defined category/group — `Machine.Group` field + `Fleet.filterByGroup(group)` composable with text search
+- Recent machines list — reduces navigation friction for analysts rotating between 3-5 machines
+- Clone dry-run preview — shows unresolvable bindings before clone completes; depends on canonical map being confirmed
+- Regex batch mapping rules for naming conventions — reduces setup from O(N x M) to O(rules)
+- Interactive mapping review pane in companion — full canonical map table (logical name / per-machine local key / status / confidence) with edit capability
 
-- **Item 1:** Hard-error stub matching the established `EventConfig.addSensor` / `IncrementalEventDetector.process` pattern — `error('EventDetector:legacyRemoved', 'detect(tag, threshold) depended on the deleted Threshold class. Use MonitorTag + EventStore for event detection.')` — OR full deletion of `EventDetector.m` + `IncrementalEventDetector.m` + `EventConfig.m` + their test zombies.
-- **Item 2:** `case 'tag'` branch added to BOTH `DashboardSerializer.save()` (line 38) AND `DashboardSerializer.linesForWidget()` (line 598); emit `TagRegistry.get('KEY')` mirroring the existing `'sensor'` case; round-trip test covering save-to-`.m` → `feval` → assert widget `Tag` handle resolves.
-- **Item 3:** Per-file classification (DELETE / MIGRATE / LEAVE); per-file commit for MIGRATE bucket (bisect discipline); delete `TestEventConfig.m` + `TestIncrementalDetector.m` outright (zombie tests for stubbed code); rewrite `TestStatusWidget`/`TestGaugeWidget`/`TestIconCardWidget`/`TestMultiStatusWidget`/etc. using `MonitorTag` + `makePhase1009Fixtures`; trim `TestEventDetectorTag.m` to the 6-arg legacy signature + error-path methods only.
-- **Item 4:** Drop the `return;` deprecation-banner stubs; rewrite as `SensorTag` + `MonitorTag` + `EventStore` + `LiveEventPipeline` + `MockDataSource`/`MatFileDataSource` compositions; `TagRegistry.clear()` + `EventBinding.clear()` at top of each file; remove from `test_examples_smoke.m` AND `examples/run_all_examples.m` skip lists (parity-maintained).
+**Defer to v5.x:**
 
-### Differentiators (should-do; low-cost value)
+- Machine health/status badge (green/amber/red) — requires fleet-wide background monitoring milestone; do NOT block machine selector on this
+- Batch clone (one source -> N targets) — add once single-clone is proven stable
+- Normalized-time (batch-aligned) comparison overlay — requires batch event infrastructure
+- Statistical fleet envelope (min/max band) — requires new aggregation compute layer
+- "Out of sync" dashboard staleness indicator — high complexity; not v5.0
 
-- **Promote Phase 1012's manual grep regression sweep to a CI lint step** (one-time, protects every future milestone).
-- **Add a file-header `% DO NOT REWRITE` banner** to `TestGoldenIntegration.m` + `test_golden_integration.m` (Pitfall 3 prevention — currently only documented in v2.0 STATE.md, not the file itself).
-- **Consolidate legacy-deprecation contract tests** into a single `TestLegacyEventDetectionRemoved.m` that asserts the `EventDetector:legacyRemoved` / `EventConfig:legacyRemoved` / `IncrementalEventDetector:legacyRemoved` error IDs fire — replaces 3 deleted suite files with one focused deprecation-contract test.
-- **Update skip-list parity from comment-enforced to script-enforced** (`scripts/check_skip_list_parity.sh` callable from CI).
-- **Wire `NotificationService(DryRun=true)`** into at least one rewritten demo for pedagogical parity with `example_live_pipeline.m`.
+**Anti-features (explicitly out of scope):**
 
-### Anti-features (explicitly DO NOT)
+- Full AF-style asset hierarchy tree — flat searchable list + one `Group` field is sufficient for 20-50 machines
+- Automatic machine discovery from filesystem — explicit `Fleet.addMachine(...)` in user scripts is the correct pattern
+- `TagRegistry` refactored to be instantiable — 72 static call sites across 31 files; rejected
+- Namespaced compound keys in global registry — key-sprawl and forced per-machine filtering everywhere; rejected
+- ML-based semantic tag matching — breaks no-external-dependency constraint; edit distance + regex is sufficient
 
-- Re-introduce `Threshold` as a thin deprecation shim (Phase 1011 Pitfall 12 violation).
-- Bulk `sed -i 's/Threshold(/Tag(/g'` — breaks `fp.addThreshold()` surviving API + loses assertion semantics.
-- Add warning-then-delegate shim for `EventDetector.detect(tag, threshold)` — codebase has "no users"; hard-error is the decision.
-- Emit `SensorTag('k', 'X', [...], 'Y', [...])` inline in `.m` export — creates 10k-line scripts; use `TagRegistry.get('k')` + register-before-run contract (matches existing `'sensor'` case).
-- Keep `source.type='sensor'` emitter branch alongside new `'tag'` branch — two-path drift; delete legacy emitter, keep reader only if compat policy says so (decide in PLAN.md).
-- Use `datetime` / `table` / `categorical` in rewritten examples (Octave smoke breaks; not needed — canonical demos use `linspace`).
-- Leave `persistent` variables or unbounded MATLAB `timer` objects in rewritten demos (cross-example contamination in smoke runner).
-- Scope-creep into refactor of `linesForWidget` or any unrelated file while in the neighborhood.
+### Architecture Approach
 
-Full rationale: `.planning/research/FEATURES.md`.
+The v5.0 architecture is a pure addition layer: `libs/Fleet/` (`Machine`, `Fleet`, `CanonicalMapper`) sits above the existing `SensorThreshold` / `Dashboard` / `FastSenseCompanion` stack and communicates downward through five concrete seams identified by code audit at commit HEAD. All other existing code paths are unchanged. The key structural decision is that `Machine` owns its own `containers.Map` and exposes the same read API as `TagRegistry` (`get`, `find`, `findByKind`, `findByLabel`, `keys`), so existing panes can be retargeted to a machine by changing four static `TagRegistry.find` call sites to call the `Registry_` object reference already stored in each pane.
 
----
+**Major components:**
 
-## Architecture Picture
+1. `libs/Fleet/CanonicalMapper.m` (NEW) — normalization pipeline, hand-rolled Wagner-Fischer edit distance, confidence-level tagging, manual override `containers.Map`, unit-consistency check, `reviewPending()` / `unmapped(machineId)` query API
+2. `libs/Fleet/Machine.m` (NEW) — `containers.Map`-backed tag catalog; duck-type methods `get(key)`, `find(predFn)`, `findByKind`, `findByLabel`, `keys`; `DataRoot`, `Dashboards`, `EventStore`; `ingestBatch()` / `startLive()` wrappers using `tagSource_` DI; lazy metadata vs. data loading; NEVER calls `TagRegistry.register`
+3. `libs/Fleet/Fleet.m` (NEW) — searchable machine list; `filterByName`/`filterByGroup` composable query API; `resolveLogical(logicalId)` -> CanonicalMapper -> `{machine, Tag}` pairs; `save(path)` / `load(path)` with `fleetConfigVersion`; owns `CanonicalMapper`
+4. `libs/Dashboard/{FastSenseWidget, DashboardSerializer, DashboardEngine}.m` (MODIFIED) — optional `tagResolver` function handle threaded from `DashboardEngine.load()` -> `DashboardSerializer.configToWidgets()` -> `DashboardSerializer.createWidgetFromStruct()` -> `FastSenseWidget.fromStruct()`; resolver signature `@(localKey) machine.get(localKey)`; fallback to `TagRegistry.get` when resolver absent (backward compat)
+5. `libs/FastSenseCompanion/{FastSenseCompanion, TagCatalogPane}.m` + `private/openAdHocPlot.m` (MODIFIED) — four static `TagRegistry.find` call sites redirected to `obj.Registry_.find(...)`; machine selector UI; `setProject(machine.Dashboards, machine)` wired to `Machine` handle; machine-switch stops old DashboardEngine timer before starting new one
+6. `libs/SensorThreshold/{BatchTagPipeline, LiveTagPipeline}.m` (MODIFIED) — `tagSource_` private property defaulting to `@TagRegistry.find`; new `'TagSource'` NV constructor pair; `eligibleTags_` calls `obj.tagSource_` instead of static `TagRegistry.find`
 
-**Integration story.** Every fix lives **inside an existing file** (or deletes files that already exist). No new classes. Items are largely independent; Item 3 has a minor ordering dependency on Item 1 (DELETE test file for `EventDetectorTag` only makes sense once the `detect(tag,threshold)` stub semantics are locked in). The dependency graph is shallow:
+**Exact seams with file:line:**
 
-```
-[Item 1: EventDetector dead code]
-      └── informs ──> [Item 3: test cleanup]
-                            ├── DELETE TestEventConfig / TestIncrementalDetector (independent)
-                            ├── DELETE TestEventDetectorTag (depends on Item 1 stub shape)
-                            ├── REWRITE TestStatusWidget / TestGaugeWidget / TestMultiStatusWidget / etc. (independent)
-                            └── TRIM TestLiveEventPipelineTag (independent)
+| Seam | File:Line | Change |
+|------|-----------|--------|
+| Widget tag resolution in fromStruct | `FastSenseWidget.m:1516` | Add optional `tagResolver` arg; default falls back to `TagRegistry.get` |
+| Resolver dropped on multi-page load | `DashboardEngine.m:4384` | Propagate resolver into every `createWidgetFromStruct` call |
+| CatalogPane tag enumeration (x2) | `TagCatalogPane.m:60,205` | `TagRegistry.find(...)` -> `obj.Registry_.find(...)` |
+| Live-scan enumeration (x2) | `FastSenseCompanion.m:1616,1618` | `TagRegistry.find(...)` -> `obj.Registry_.find(...)` |
+| Pipeline tag source | `BatchTagPipeline.m:256` / `LiveTagPipeline.m:801` | `tagSource_` DI seam; default unchanged |
+| openAdHocPlot monitor lookup | `openAdHocPlot.m:165` | Accept no-result gracefully (comparison overlays work without auto-wired EventStore) |
 
-[Item 2: .m export case 'tag']
-      └── independent of Items 1/3/4
+### Critical Pitfalls
 
-[Item 4: examples/05-events rewrites]
-      └── independent of Items 1/2/3 (Tag API ships; templates ship)
-      └── MUST coordinate skip-list parity in tests/test_examples_smoke.m + examples/run_all_examples.m
-```
+1. **Machine tags accidentally entering the global TagRegistry** — `TagRegistry:duplicateKey` is a hard unrecoverable error; 20 machines with identical key `'temperature'` crashes on machine 2. Gate: `grep -rn "TagRegistry.register" libs/Fleet/` must return 0. Must be enforced in Phase 1 — retrofitting later requires touching every fleet ingestion call site.
 
-**Build order (recommended): Item 1 → Item 3, with Items 2 and 4 in parallel.** Item 1 first because it settles the delete-vs-stub decision that Item 3's DELETE bucket depends on. Items 2 and 4 are independent and can run in any order relative to Items 1/3.
+2. **Resolver propagation gap in `fromStruct` + multi-page load** — `FastSenseWidget.fromStruct:1516` calls `TagRegistry.get` directly bypassing any injected resolver; `DashboardEngine.m:4384` drops the resolver silently on the multi-page path. Fleet dashboards load with `Tag = []` or bind to the wrong machine's tag. Fix both gaps together in Phase 3; phase exit gate includes a backward-compat regression test.
 
-**Files untouched.** FastSense render core (downsampling, MEX kernels, `FastSenseDataStore` core, `DashboardEngine`, `DashboardLayout`, `DashboardTheme`, `DashboardBuilder`, all widgets except their test files, WebBridge end-to-end) all remain as-shipped. This is cleanup around the edges, not a core touch.
+3. **Canonical mapping false matches — silent wrong comparisons** — over-eager fuzzy matching maps physically-different sensors; code works, chart renders, data is wrong. This is the most dangerous failure mode. Confidence field (HIGH/MEDIUM/LOW) must be in the mapper schema from day one; comparison view gates on confidence and refuses LOW/unreviewed entries; unit-consistency check rejects matches where sensor units differ.
 
-Full integration map + per-item new/modified/deleted file tables: `.planning/research/ARCHITECTURE.md`.
+4. **`localKey` vs `logicalId` vs `registry Key` namespace confusion** — three distinct `char` namespaces that look identical; conflating them produces wrong-tag bindings that are hard to diagnose. Enforce naming discipline in API signatures; assertion in `Machine.getTag(localKey)` errors if key contains `/` (canonical namespace separator never appears in machine-local keys).
 
----
-
-## Pitfall Watch List
-
-Top 5 of 12+6+2 cataloged. Each has a falsifiable CI-style gate in PITFALLS.md.
-
-1. **Scope creep ("while I'm in here…")** — declare `affected_files` + net-line budget in each PLAN.md; reject commits that edit files outside the list. Gate: `git diff --name-only` vs PLAN `affected_files` intersection must be empty.
-
-2. **Golden test creep** — `TestGoldenIntegration.m` + `test_golden_integration.m` must have **zero diff** across every v2.1 phase (comments included). Gate: `git diff HEAD~..HEAD -- tests/**/*olden*` → 0 lines. Add a `% DO NOT REWRITE` file-header if not present.
-
-3. **Bulk test migration drift (sed breaks assertion semantics)** — per-file review only. `fp.addThreshold()` is a surviving API and must not be replaced. `MonitorTag` emits events with different timing semantics than the deleted `EventDetector.detect()`; assertion values must be **re-derived from the fixture**, not copy-pasted from the pre-migration test. Gate: post-migration grep for `(^|[^.a-zA-Z_])(Threshold|CompositeThreshold|StateChannel|ThresholdRule)\(` in `tests/` — 0 non-surviving-API hits.
-
-4. **Silently-skipped tests stay silently skipped** — the Octave subprocess runner's `is_cleanup_crash` passthrough was correct for Octave 8.4.0 but bug #67749 is fixed in 11.1.0; it now masks real crashes. `test_examples_smoke.m` skip list is comment-enforced-parity with `examples/run_all_examples.m`. Gate: convert `is_cleanup_crash` branch to warn-and-count; script-enforce skip-list parity via `scripts/check_skip_list_parity.sh`.
-
-5. **Live-demo timer & singleton leaks across smoke runs** — MATLAB timers are process-global; `persistent` variables survive function calls; `TagRegistry.clear()` mid-timer-tick crashes the next example. Gate: zero `persistent` in rewrites; bounded `TasksToExecute` or `onCleanup` on any timer; smoke runner asserts `timerfindall()` empty between examples.
-
-Honorable mentions (see PITFALLS.md for full treatment):
-
-- **Dead code that isn't actually dead** (Pitfall 2) — greps must cover `libs/`, `tests/`, `examples/`, `benchmarks/`, `docs/`, `wiki/`.
-- **R2025b drift is NOT v2.1's job** (Pitfall 6) — explicit out-of-scope forbidden-files list in PLAN.md, drawn from `.planning/debug/matlab-tests-failures-investigation.md`.
-- **Per-widget commit bisect discipline** (Pitfall 7) — no commit touches > 3 test files unless it's pure deletion.
-- **`.m` export emits unregistered Tag references** (Pitfall 8) — choose strategy A/B/C explicitly in PLAN.md before editing.
-- **`source.type='sensor'` vs `'tag'` ambiguity** (Pitfall 9) — decide backward-compat policy in PLAN.md; delete legacy emitter.
-- **Demo duplicates `example_sensor_threshold.m`** (Pitfall 11) — each of the 3 demos must have a distinct pedagogical purpose written in its file header.
-- **MATLAB-only APIs break Octave smoke** (Pitfall 12) — no `datetime`/`table`/`categorical`/`duration`; match `example_sensor_threshold.m`'s `linspace` pattern.
-
-Full list (12 critical + 6 moderate + 2 minor) with recovery strategies: `.planning/research/PITFALLS.md`.
+5. **Lazy-load discipline absent at 20+ machines** — `machine.loadAllTags()` at Fleet startup = ~640 MB before first UI frame on a 20-machine fleet. `Machine` uses metadata-only load at startup; `X`/`Y` arrays on first `getTag` call only. Phase exit gate: Fleet startup with 5-machine test dataset < 2 s, < 50 MB.
 
 ---
 
-## Proposed Phase Shape
+## Implications for Roadmap
 
-**4 phases, dependency-driven, 1 plan per phase** (item=phase mapping, matching the natural granularity of the cleanup).
+Based on the dependency analysis in ARCHITECTURE.md and the phase-to-pitfall mapping in PITFALLS.md, six phases are suggested. The ordering is dependency-driven.
 
-| Phase | Item | Depends on | Complexity | Expected net LOC |
-|-------|------|------------|------------|------------------|
-| **v2.1-Phase-1** — Dead-code deletion | Item 1 | none | Simple | -300 to -500 |
-| **v2.1-Phase-2** — `.m` export `case 'tag'` | Item 2 | none (Tag API stable) | Simple | +40 to +80 |
-| **v2.1-Phase-3** — Test cleanup | Item 3 | Phase 1 (DELETE bucket informed by stub/delete decision) | Medium (volume) | -500 to -1500 |
-| **v2.1-Phase-4** — `05-events` rewrites | Item 4 | none in v2.1 | Medium | +300 to +450 |
+### Phase 1: CanonicalMapper
 
-**Parallelism:** Phases 2 and 4 are independent of 1 and 3 and of each other. The user may parallelize them or run strictly sequentially; both work. The linear ordering **1 → 2 → 3 → 4** is the simplest and recommended.
+**Rationale:** Zero external dependencies; validates the core logical-sensor mapping logic before any wiring; foundational for every subsequent feature that touches comparison or clone/remap. Confidence-level schema must be correct from the start — retrofitting after mappings are persisted requires re-evaluating every entry.
 
-**Per-phase exit gate (reuse Phase 1012 Plan 10 six-gate pattern):**
+**Delivers:** `libs/Fleet/CanonicalMapper.m` with normalization pipeline (`lower`/`regexprep`/`strsplit`), hand-rolled Wagner-Fischer edit distance, confidence levels (HIGH/MEDIUM/LOW), manual override `containers.Map`, unit-consistency check, `reviewPending()` / `unmapped(machineId)` query API; `tests/suite/TestCanonicalMapper.m`.
 
-- **Gate A:** `affected_files` respected — `git diff --name-only` ⊆ PLAN `affected_files` (Pitfall 1).
-- **Gate B:** Golden test untouched — `git diff -- tests/**/*olden*` → 0 lines (Pitfall 3).
-- **Gate C:** No surviving dead-code stubs or legacy-class refs — grep gates from Pitfalls 2, 16, and STACK.md §"New Tooling" (Pitfalls 2, 16).
-- **Gate D:** Octave smoke green — `tests/test_examples_smoke.m` passes; `timerfindall()` empty between examples (Pitfalls 10, 12).
-- **Gate E:** MATLAB R2020b CI green — `run_all_tests.m` count doesn't regress (with documented drops for deleted test files) (Pitfalls 4, 7).
-- **Gate F:** Skip-list parity — `test_examples_smoke.m` / `run_all_examples.m` diff empty (Pitfall 18).
+**Addresses:** Area 3 table stakes (canonical map structure, auto-suggest, manual override, unmapped-tail surfacing).
 
-**Research flags.** None of the 4 phases need `/gsd:research-phase` — v2.0 research + this synthesis already cover the ground. Every API exists; every pattern has a precedent file; every pitfall has a prior-phase gate. Recommend **skip phase research for all 4 phases** and jump straight to planning.
+**Avoids:** Pitfalls 3 (false matches), 4 (false misses), 5 (namespace confusion).
 
-**Alternative shape: 1 phase / 4 plans.** Defensible if the user prefers a single milestone-shaped surface, but loses some parallelism and bisect granularity. Not recommended for v2.1's per-item-distinct cleanup work.
+**Exit gates:** Confidence field present on every entry; LOW-confidence comparison gate test passes; unit-consistency test passes; `grep -rn "contains(" libs/Fleet/CanonicalMapper.m` returns 0.
+
+### Phase 2: Machine + Fleet Data Model + Pipeline DI Seam
+
+**Rationale:** Depends on CanonicalMapper for `Fleet.resolveLogical`; pipeline DI seam changes are additive (default unchanged) and lowest-risk; `Machine` must be stable before companion wiring.
+
+**Delivers:** `libs/Fleet/Machine.m` (isolated tag catalog, duck-type API, lazy metadata/data loading, `ingestBatch`/`startLive` wrappers, `DataRoot`, `EventStore`); `libs/Fleet/Fleet.m` (searchable machines, `filterByName`/`filterByGroup`, `resolveLogical`, `save`/`load` with `fleetConfigVersion`); `BatchTagPipeline.m` + `LiveTagPipeline.m` `tagSource_` DI seam; `tests/suite/TestMachine.m`; `tests/suite/TestFleet.m`.
+
+**Addresses:** Area 1 (machine browsing data model), Area 3 (canonical map integration).
+
+**Avoids:** Pitfalls 1 (TagRegistry containment gate), 5 (namespace discipline), 6 (lazy-load in Machine design), 9 (per-machine DataRoot isolation), 12 (fleet config schema versioning), 13 (no `ui*` in `libs/Fleet/`), 14 (Octave parity).
+
+**Exit gates:** `grep -rn "TagRegistry.register" libs/Fleet/` returns 0; `grep -rn "uifigure\|uicontrol\|uitree\|uigridlayout\|uiprogressdlg" libs/Fleet/` returns 0; Fleet startup < 2 s / < 50 MB; `Fleet.save`/`Fleet.load` round-trip passes on both MATLAB and Octave.
+
+### Phase 3: DashboardSerializer Resolver Seam + Backward-Compat Tests
+
+**Rationale:** Independent of Fleet/Machine; Dashboard code has its own test suite; isolating it proves backward compat before companion wiring starts. Must be complete before any fleet dashboard is serialized.
+
+**Delivers:** `FastSenseWidget.fromStruct` optional `tagResolver` arg (default: `TagRegistry.get`, backward compat preserved); `DashboardSerializer.configToWidgets` + `createWidgetFromStruct` threading `tagResolver`; `DashboardEngine.load()` optional resolver arg propagated into multi-page path at line 4384; backward-compat regression test loading pre-v5.0 single-machine JSON with no fleet objects present.
+
+**Addresses:** Area 4 (machine-scoped dashboard round-trip correctness).
+
+**Avoids:** Pitfall 2 (resolver propagation gap — central correctness requirement), Pitfall 10 (backward-compat break on load).
+
+**Exit gates:** Pre-v5.0 `examples/` JSON files load without change; multi-page fleet JSON load: Tags resolved on page 2 widgets; no-resolver load of fleet dashboard emits warning (not silent empty tags); `linesForWidget` `.m` export does not emit bare `TagRegistry.get(...)` for fleet widgets.
+
+### Phase 4: Companion Machine Dimension + Machine Selector UI
+
+**Rationale:** Depends on Phases 1-3; highest integration surface; most expensive to debug. Machine selector ships without health badge (deferred to monitoring milestone — do not block on it).
+
+**Delivers:** `FastSenseCompanion.setProject(machine.Dashboards, machine)` accepting a `Machine` handle; four static `TagRegistry.find` call sites redirected to `obj.Registry_.find(...)` (TagCatalogPane.m:60,205; FastSenseCompanion.m:1616,1618); machine selector pane (uilistbox + debounce); active-machine indicator; machine-switch timer lifecycle (`oldEngine.stop()` before `newEngine.start()`); `openAdHocPlot.m:165` graceful no-result; `tests/suite/TestFleetIntegration.m`.
+
+**Addresses:** Area 1 (machine browsing + active context).
+
+**Avoids:** Pitfall 7 (inactive-machine timer refresh — timer lifecycle is machine-selection-driven).
+
+**Exit gates:** Legacy `Registry`/`Dashboards` constructor args still work; `timerfindall` count stable across machine switches; `TagRegistry.list()` shows 0 machine tags after loading a 2-machine fleet.
+
+### Phase 5: Cross-Machine Comparison View
+
+**Rationale:** Depends on Phase 4 (machine selector must exist to pick machines) and Phase 2 (Fleet.resolveLogical and CanonicalMapper confidence gate).
+
+**Delivers:** Companion comparison flow — pick logical sensor -> `Fleet.resolveLogical(logicalId)` called once at open time -> Tag handles cached in local cell array -> `openAdHocPlot(tags, 'Overlay', theme, 'DisplayNames', machineQualifiedNames)` with machine-labeled legend (`[machineName]: [sensorDisplayName]`); missing-sensor graceful skip with warning; wall-clock overlay as default; Tags resolved once at comparison-open, `fp.updateData()` per tick only.
+
+**Addresses:** Area 2 table stakes (overlay N machines, auto-color, machine-labeled legend, wall-clock alignment, missing-sensor graceful skip, multi-select from fleet).
+
+**Avoids:** Pitfall 8 (comparison view re-resolving on every tick — cache-at-open); Pitfall 3 (LOW-confidence mapping gate in comparison view).
+
+**Exit gates:** `CanonicalMapper.resolve` absent from steady-state tick profiler output; LOW-confidence mapping excluded from comparison with warning; missing sensor on one machine skips gracefully without crash.
+
+### Phase 6: Per-Machine Dashboard Clone/Remap
+
+**Rationale:** Depends on Phases 2-4; canonical map must be confirmed for target machines; DashboardSerializer resolver seam (Phase 3) must be in place.
+
+**Delivers:** `FleetDashboardCloner` (or method on `Fleet`) implementing clone of source dashboard onto target machine via canonical map; failed-remap collection and warning surfacing (not silent empty widgets); `RebindPending` flag on widgets with unresolved bindings; per-machine dashboard save/load round-trip via scoped resolver.
+
+**Addresses:** Area 4 table stakes (clone/remap deployment workflow, machine-scoped resolver round-trip).
+
+**Avoids:** Pitfall 11 (clone/remap silent failure — failed remaps collected and surfaced as non-empty warnings list).
+
+**Exit gates:** Clone a 5-widget dashboard where target machine lacks one sensor: warnings list has 1 entry, 4 widgets rebound correctly; end-to-end round-trip: serialize machine dashboard -> load on different machine -> all tags bound correctly.
+
+### Phase Ordering Rationale
+
+- CanonicalMapper first because confidence-level schema must be correct before any mapping is persisted; retrofitting later requires re-evaluating every stored entry.
+- Machine/Fleet second because pipelines and companion depend on it; DI seam to pipelines is the lowest-risk existing-code modification (additive, default unchanged).
+- Serializer seam third because it touches a high-value existing module independently; its backward-compat regression test is a risk gate for everything that follows; isolating it prevents Dashboard regressions from mixing into companion integration work.
+- Companion fourth because it consumes all three prior phases and has the highest integration surface.
+- Comparison view fifth because it requires both the machine selector (Phase 4) and Fleet.resolveLogical (Phase 2) to be stable.
+- Clone/remap last because it requires the canonical map to be confirmed for target machines and is the highest-complexity serialization workflow.
+
+### Research Flags
+
+Phases with well-documented patterns (no additional research phase needed):
+- **Phase 1 (CanonicalMapper):** all primitives confirmed in codebase; Wagner-Fischer is textbook algorithm; no ambiguity
+- **Phase 2 (Machine/Fleet data model):** `containers.Map` and JSON serialization patterns confirmed in 5+ existing files; lazy-load architecture is straightforward
+- **Phase 3 (Serializer seam):** exact file:line seams identified by code audit; change is mechanical; backward-compat test pattern established
+
+Phases where a targeted pre-phase review is advisable (re-read relevant ARCHITECTURE.md sections before planning):
+- **Phase 4 (Companion machine dimension):** machine selector placement (left rail vs. top dropdown vs. tabs) was explicitly deferred in PROJECT.md; requires a focused UI decision before the phase plan is written; re-read ARCHITECTURE.md Q5 + FEATURES.md Area 1 differentiators
+- **Phase 5 (Comparison view):** `openAdHocPlot` per-series color injection design is not pinned (`colors` arg vs. struct-array input); resolve before plan is locked; re-read ARCHITECTURE.md Q5
+- **Phase 6 (Clone/remap):** `FleetDashboardCloner` placement (standalone function vs. method on `Fleet` vs. `DashboardSerializer` static method) is unresolved; needs one design decision pass
 
 ---
 
@@ -174,43 +213,51 @@ Full list (12 critical + 6 moderate + 2 minor) with recovery strategies: `.plann
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | **HIGH** | No new deps proposed; every cited API verified against live codebase; matlab.unittest + MISS_HIT + Tag API all in production v2.0 |
-| Features | **HIGH** | All 4 items grounded in direct grep + read of affected files; audit counts re-verified |
-| Architecture | **HIGH** | Integration points are localized; no new components; existing patterns (`linesForWidget` switch, `assumeTrue` skip, `makePhase1009Fixtures`) apply directly |
-| Pitfalls | **HIGH** | 20 pitfalls with falsifiable gates; precedent set by Phase 1004 Pitfall 5, Phase 1008 Pitfall 1, Phase 1011 Pitfall 12, Phase 1012 six-gate sweep |
+| Stack | HIGH | Every primitive confirmed with file:line codebase evidence; no new dependencies; all MATLAB/Octave divergences identified with workarounds already present in this codebase |
+| Features | HIGH | Prior art verified from PI Vision, Seeq, Grafana, TrendMiner; feature categories agree across all four tools; dependency graph grounded in codebase architecture |
+| Architecture | HIGH | All findings from direct code audit at commit HEAD on branch `claude/friendly-leakey-0bc166`; exact file:line seams identified for every integration point; anti-patterns grounded in rejected design approaches from PROJECT.md |
+| Pitfalls | HIGH | All 14 pitfalls traced to concrete files; recovery strategies and phase-to-pitfall mapping provided; prior v4.0 pitfall research consulted for concurrency patterns |
 
-**Overall confidence: HIGH.**
+**Overall confidence:** HIGH
 
-### Open Questions (decide before REQUIREMENTS.md)
+### Gaps to Address
 
-1. **Item 1 — stub vs delete.** Stub preserves method signature + matches `EventConfig.addSensor` precedent; delete is cleaner (Pitfall 16) and cascades to removing `EventDetector.m` / `IncrementalEventDetector.m` / `EventConfig.m` entirely (≈-250 LOC extra). **Recommendation:** delete (no users, no external callers).
-
-2. **Item 2 — `.m` export missing-Tag strategy.** Three options from Pitfall 8:
-   - (A) Emit `% TODO: register tag 'foo'` comment + `TagRegistry.get(...)` — fails at run if not pre-registered.
-   - (B) Emit `TagRegistry.register('foo', SensorTag(...))` with inline data — self-contained but can produce huge files.
-   - (C) Guarded lookup: `if ~TagRegistry.has('foo'); error(...); end; TagRegistry.get('foo')`.
-   **Recommendation:** (C) — mirrors existing `'sensor'` case semantics, never emits broken widgets silently, clean error message if user forgets to register.
-
-3. **Item 2 — keep or delete legacy `case 'sensor'` emitter branch?** No users means no in-the-wild JSON fixtures; keeping it creates drift (Pitfall 9). **Recommendation:** delete the emitter; keep the reader if compat-policy-kept (decide in PLAN.md).
-
-4. **Item 3 — scope of DELETE bucket.** Confirm whether `TestEventConfig.m` + `TestIncrementalDetector.m` + `TestCompositeThreshold.m` should be fully deleted (recommended if Item 1 goes full-class-delete route) or just trimmed. Affects net-LOC budget and test-count baseline.
-
-5. **Item 4 — timer strategy.** Bounded (`TasksToExecute=5`) vs `onCleanup`-wrapped vs no-timer-at-all for `example_event_viewer_from_file.m`. **Recommendation:** `example_event_viewer_from_file.m` has no need for a timer (persistence-narrative); `example_event_detection_live.m` uses bounded `TasksToExecute` with `onCleanup` for safety (mirrors `example_live_pipeline.m`).
-
-6. **Differentiators in/out?** The 5 should-do items (CI grep gate, golden-test banner, consolidated deprecation-contract test, script-enforced skip parity, NotificationService in a demo) are all LOW complexity but add surface. **Recommendation:** include all 5 — each directly prevents a future rebound of the very debt v2.1 is closing.
-
-All six are **policy decisions with clear defaults**, not research gaps. Ready for user decision during REQUIREMENTS.md authoring.
+- **Machine selector UI placement** — PROJECT.md explicitly deferred left-rail vs. top-dropdown vs. tabs; must be resolved before Phase 4 planning; data model is placement-agnostic
+- **`openAdHocPlot` per-series color injection** — existing `plotOverlay_` uses MATLAB `ColorOrder` auto-assignment; explicit per-machine color injection requires either a `colors` arg or struct-array input; form not pinned; resolve at Phase 5 planning
+- **`FleetDashboardCloner` placement** — behavior is specified; whether it lives in `libs/Fleet/`, as a static method on `DashboardSerializer`, or as a method on `Fleet` is unresolved; resolve at Phase 6 planning
+- **Octave CI fleet test coverage** — `TestMachine.m` and `TestCanonicalMapper.m` must be explicitly added to the Octave CI job in the Phase 2 plan (not automatic)
 
 ---
 
 ## Sources
 
-Research files (this directory):
-- `.planning/research/STACK.md` — no-new-deps rationale + grep-gate YAML
-- `.planning/research/FEATURES.md` — per-item table-stakes / differentiators / anti-features + MATLAB code sketches
-- `.planning/research/ARCHITECTURE.md` — per-item integration map, dependency graph, new/modified/deleted file tables
-- `.planning/research/PITFALLS.md` — 12 critical + 6 moderate + 2 minor pitfalls with falsifiable gates and phase mapping
+### Primary (HIGH confidence — direct code audit at commit HEAD)
+
+- `libs/FastSenseCompanion/TagCatalogPane.m` — confirmed uilistbox + debounce pattern; static `TagRegistry.find` at lines 60, 205
+- `libs/FastSenseCompanion/FastSenseCompanion.m` — static `TagRegistry.find` at lines 1616, 1618; `obj.Registry_.get` object call at line 2182; `setProject` seam; Octave guard at lines 136-139
+- `libs/FastSenseCompanion/DashboardListPane.m` — per-row grid + scrollable panel pattern
+- `libs/FastSenseCompanion/private/filterTags.m` — `strfind(lower(...))` Octave-portable search (not `contains`)
+- `libs/FastSenseCompanion/private/filterDashboards.m` — `strfind` not `contains` convention
+- `libs/Dashboard/FastSenseWidget.m` — `TagRegistry.get(s.source.key)` at line 1516 (resolver seam); `TagRegistry.getEventStore()` at lines 178, 1440; `toStruct` at line 1211
+- `libs/Dashboard/DashboardSerializer.m` — resolver hook at lines 388-411 covering only `source.type='sensor'`; `linesForWidget` `TagRegistry.get(...)` emission at lines 44, 47, 793, 796
+- `libs/Dashboard/DashboardEngine.m` — multi-page path at line 4384 drops resolver; `load()` resolver arg threading gap
+- `libs/SensorThreshold/TagRegistry.m` — hard-error on duplicate key (line 90); persistent catalog (lines 417-420); `getEventStore` persistent slot (lines 423-431)
+- `libs/SensorThreshold/BatchTagPipeline.m` — `eligibleTags_` static call at line 256
+- `libs/SensorThreshold/LiveTagPipeline.m` — `eligibleTags_` static call at line 801; SharedRoot/cluster mode (lines 161, 225-241)
+- `libs/Concurrency/ndjsonDecode.m` line 29 — "Both MATLAB R2016b+ and Octave 5+ ship jsondecode"
+- `libs/FastSenseCompanion/companionPrefs.m` — `.mat` pattern for user prefs; `movefile` atomic-write
+- `libs/EventDetection/EventStore.m` lines 108, 636 — `dir(fullfile(dir, '*.ext'))` pattern
+- `libs/Dashboard/private/normalizeToCell.m` — post-`jsondecode` cell normalization helper
+- `.planning/PROJECT.md` — locked v5.0 scope, out-of-scope decisions, Approach 1 architecture choice
+
+### Secondary (MEDIUM confidence — industry prior art)
+
+- AVEVA PI Vision documentation — element templates + substitution parameters; "Switch Asset" panel; context-switching UX
+- Seeq `spy.swap` documentation — exact-name matching as canonical map; per-asset failure report; asset swap rebinding
+- Grafana variables documentation — multi-value variable pattern; per-series auto-color pain point; dashboard repeat panels
+- TrendMiner layer comparison user guide — normalized-time overlay is specialized mode, not default
+- USPTO patent US10460240 — tag normalization and similarity scoring patterns for industrial machines
 
 ---
-*Research completed: 2026-04-22*
-*Ready for REQUIREMENTS.md: yes — 6 open questions are policy decisions with clear defaults, not research gaps*
+*Research completed: 2026-06-02*
+*Ready for roadmap: yes*
