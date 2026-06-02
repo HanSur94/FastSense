@@ -277,5 +277,68 @@ classdef TestDashboardSerializerRoundTrip < matlab.unittest.TestCase
             [~, id] = lastwarn();
             testCase.verifyEqual(id, 'DashboardSerializer:unknownType');
         end
+
+        function testSavedConfigHasSchemaVersion(testCase)
+            %TESTSAVEDCONFIGHASSCHEMAVERSION P1: every saved config is stamped with schemaVersion.
+            config = DashboardSerializer.widgetsToConfig('SV', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            testCase.verifyTrue(isfield(config, 'schemaVersion'));
+            testCase.verifyEqual(config.schemaVersion, 1);
+        end
+
+        function testSavedJSONContainsSchemaVersion(testCase)
+            %TESTSAVEDJSONCONTAINSSCHEMAVERSION P1: schemaVersion survives to JSON and back.
+            config = DashboardSerializer.widgetsToConfig('SV', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            fp = fullfile(testCase.TempDir, 'sv.json');
+            DashboardSerializer.saveJSON(config, fp);
+            txt = fileread(fp);
+            testCase.verifyTrue(contains(txt, 'schemaVersion'));
+            cfg = DashboardSerializer.loadJSON(fp);
+            testCase.verifyEqual(cfg.schemaVersion, 1);
+        end
+
+        function testOldConfigWithoutSchemaVersionLoadsSilently(testCase)
+            %TESTOLDCONFIGWITHOUTSCHEMAVERSIONLOADSSILENTLY P1 backward-compat: a pre-versioning
+            %   file (no schemaVersion field) loads as v1 with NO warning.
+            config = DashboardSerializer.widgetsToConfig('Old', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            if isfield(config, 'schemaVersion')
+                config = rmfield(config, 'schemaVersion');
+            end
+            fp = fullfile(testCase.TempDir, 'old.json');
+            DashboardSerializer.saveJSON(config, fp);
+            lastwarn('');
+            cfg = DashboardSerializer.loadJSON(fp); %#ok<NASGU>
+            [~, id] = lastwarn();
+            testCase.verifyFalse(strcmp(id, 'DashboardSerializer:schemaVersionNewer'));
+        end
+
+        function testNewerSchemaVersionWarnsOnLoad(testCase)
+            %TESTNEWERSCHEMAVERSIONWARNSONLOAD P1: a file newer than supported warns on load.
+            config = DashboardSerializer.widgetsToConfig('New', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            config.schemaVersion = 999;
+            fp = fullfile(testCase.TempDir, 'new.json');
+            DashboardSerializer.saveJSON(config, fp);
+            lastwarn('');
+            cfg = DashboardSerializer.loadJSON(fp); %#ok<NASGU>
+            [~, id] = lastwarn();
+            testCase.verifyEqual(id, 'DashboardSerializer:schemaVersionNewer');
+        end
+
+        function testKpiJSONLoadsAsNumberThroughFullPath(testCase)
+            %TESTKPIJSONLOADSASNUMBERTHROUGHFULLPATH P1: a legacy 'kpi' widget survives the
+            %   full JSON load path (loadJSON -> configToWidgets) as a NumberWidget.
+            base = NumberWidget('Title', 'K', 'Position', [1 1 4 2], 'StaticValue', 3);
+            config = DashboardSerializer.widgetsToConfig('Kpi', 'dark', 5, {base});
+            config.widgets{1}.type = 'kpi';   % simulate a pre-rename serialized widget
+            fp = fullfile(testCase.TempDir, 'kpi.json');
+            DashboardSerializer.saveJSON(config, fp);
+            cfg = DashboardSerializer.loadJSON(fp);
+            rebuilt = DashboardSerializer.configToWidgets(cfg);
+            testCase.verifyEqual(numel(rebuilt), 1);
+            testCase.verifyClass(rebuilt{1}, 'NumberWidget');
+        end
     end
 end

@@ -237,6 +237,32 @@ classdef DashboardSerializer
             result = feval(funcname);
         end
 
+        function v = currentSchemaVersion()
+            %CURRENTSCHEMAVERSION Supported dashboard config schema version.
+            %   Writers stamp this into every config (widgetsToConfig /
+            %   widgetsPagesToConfig). The loader warns
+            %   (DashboardSerializer:schemaVersionNewer) when it reads a config
+            %   whose schemaVersion exceeds this value. Bump only when the on-disk
+            %   config shape changes in a way older loaders cannot read.
+            v = 1;
+        end
+
+        function checkSchemaVersion_(config, source)
+            %CHECKSCHEMAVERSION_ Warn if a loaded config is newer than supported.
+            %   A missing schemaVersion is treated as v1 (pre-versioning files) and
+            %   loads silently.
+            if ~isfield(config, 'schemaVersion') || isempty(config.schemaVersion)
+                return;
+            end
+            sv = config.schemaVersion;
+            if sv > DashboardSerializer.currentSchemaVersion()
+                warning('DashboardSerializer:schemaVersionNewer', ...
+                    ['Dashboard ''%s'' was saved with schemaVersion %g but this build ' ...
+                     'supports up to %g. Some widgets may not load.'], ...
+                    source, sv, DashboardSerializer.currentSchemaVersion());
+            end
+        end
+
         function config = loadJSON(filepath)
             %LOADJSON Legacy: read dashboard config from JSON file.
             fid = fopen(filepath, 'r');
@@ -264,6 +290,7 @@ classdef DashboardSerializer
                     config.widgets = {};
                 end
             end
+            DashboardSerializer.checkSchemaVersion_(config, filepath);
         end
 
         function config = widgetsToConfig(name, theme, liveInterval, widgets, infoFile)
@@ -278,6 +305,7 @@ classdef DashboardSerializer
                 config.infoFile = infoFile;
             end
             config.grid = struct('columns', 24);
+            config.schemaVersion = DashboardSerializer.currentSchemaVersion();
             config.widgets = cell(1, numel(widgets));
             for i = 1:numel(widgets)
                 config.widgets{i} = widgets{i}.toStruct();
@@ -298,6 +326,7 @@ classdef DashboardSerializer
                 config.infoFile = infoFile;
             end
             config.grid = struct('columns', 24);
+            config.schemaVersion = DashboardSerializer.currentSchemaVersion();
             config.activePage = activePage;
             config.pages = cell(1, numel(pages));
             for i = 1:numel(pages)
