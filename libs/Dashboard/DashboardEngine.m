@@ -63,8 +63,6 @@ classdef DashboardEngine < handle
         % Theme caching
         ThemeCache_        = []  % Cached DashboardTheme struct; lazy-computed by getCachedTheme()
         ThemeCachePreset_  = ''  % Theme preset string that ThemeCache_ was built for
-        % Widget dispatch table
-        WidgetTypeMap_     = []  % containers.Map: type string -> constructor function handle
         % Time control
         TimePanelHeight = 0.085   % bumped from 0.06 to fit data-range labels below slider (260512-hrn-followup)
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
@@ -162,17 +160,8 @@ classdef DashboardEngine < handle
             end
             obj.Layout = DashboardLayout();
             obj.Layout.EngineRef = obj;  % Phase 1032 PLOG-VIZ-05 — used by addPlantLogToggle callback
-            obj.WidgetTypeMap_ = containers.Map({ ...
-                'fastsense',   'number',     'status',    'text', ...
-                'gauge',       'table',      'rawaxes',   'timeline', ...
-                'group',       'heatmap',    'barchart',  'histogram', ...
-                'scatter',     'image',      'multistatus', 'divider', ...
-                'iconcard',    'chipbar',    'sparkline'}, ...
-                {@FastSenseWidget, @NumberWidget, @StatusWidget, @TextWidget, ...
-                 @GaugeWidget, @TableWidget, @RawAxesWidget, @EventTimelineWidget, ...
-                 @GroupWidget, @HeatmapWidget, @BarChartWidget, @HistogramWidget, ...
-                 @ScatterWidget, @ImageWidget, @MultiStatusWidget, @DividerWidget, ...
-                 @IconCardWidget, @ChipBarWidget, @SparklineCardWidget});
+            % Widget type->constructor dispatch now lives in DashboardWidgetRegistry
+            % (the single source of truth shared with the serializer + detach paths).
         end
 
         function pg = addPage(obj, name)
@@ -385,8 +374,8 @@ classdef DashboardEngine < handle
                     type = 'number';
                 end
 
-                if isKey(obj.WidgetTypeMap_, type)
-                    ctor = obj.WidgetTypeMap_(type);
+                if DashboardWidgetRegistry.isRegistered(DashboardWidgetRegistry.resolveAlias(type))
+                    ctor = DashboardWidgetRegistry.constructorFor(type);
                     w = ctor(varargin{:});
                 else
                     error('DashboardEngine:unknownType', ...
@@ -4328,25 +4317,57 @@ classdef DashboardEngine < handle
 
     methods (Static)
         function types = widgetTypes()
-            %WIDGETTYPES List supported widget type strings.
-            types = {
-                'fastsense',    'Time-series plot (FastSenseWidget)'
-                'number',      'Single numeric value with trend (NumberWidget)'
-                'status',      'Status indicator with dot and label (StatusWidget)'
-                'gauge',       'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)'
-                'table',       'Data table from sensor (TableWidget)'
-                'text',        'Static text block (TextWidget)'
-                'timeline',    'Event timeline display (EventTimelineWidget)'
-                'rawaxes',     'Raw MATLAB axes for custom plotting (RawAxesWidget)'
-                'group',       'Widget container with panel/collapsible/tabbed modes (GroupWidget)'
-                'heatmap',     'Heatmap color grid (HeatmapWidget)'
-                'barchart',    'Bar chart for categories (BarChartWidget)'
-                'histogram',   'Value distribution histogram (HistogramWidget)'
-                'scatter',     'X vs Y scatter plot (ScatterWidget)'
-                'image',       'Static image display (ImageWidget)'
-                'multistatus', 'Multi-sensor status grid (MultiStatusWidget)'
-                'divider',     'Horizontal divider line (DividerWidget)'
-            };
+            %WIDGETTYPES Supported widget types + descriptions, as an Nx2 cell.
+            %   Derived from DashboardWidgetRegistry.types() (the single source of
+            %   truth), so it can no longer drift from what addWidget accepts, and
+            %   user-registered types (registerWidgetType) appear automatically with
+            %   a generic description.
+            descMap = containers.Map( ...
+                {'fastsense', 'number', 'status', 'gauge', 'table', 'text', ...
+                 'timeline', 'rawaxes', 'group', 'heatmap', 'barchart', ...
+                 'histogram', 'scatter', 'image', 'multistatus', 'divider', ...
+                 'iconcard', 'chipbar', 'sparkline'}, ...
+                {'Time-series plot (FastSenseWidget)', ...
+                 'Single numeric value with trend (NumberWidget)', ...
+                 'Status indicator with dot and label (StatusWidget)', ...
+                 'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)', ...
+                 'Data table from sensor (TableWidget)', ...
+                 'Static text block (TextWidget)', ...
+                 'Event timeline display (EventTimelineWidget)', ...
+                 'Raw MATLAB axes for custom plotting (RawAxesWidget)', ...
+                 'Widget container with panel/collapsible/tabbed modes (GroupWidget)', ...
+                 'Heatmap color grid (HeatmapWidget)', ...
+                 'Bar chart for categories (BarChartWidget)', ...
+                 'Value distribution histogram (HistogramWidget)', ...
+                 'X vs Y scatter plot (ScatterWidget)', ...
+                 'Static image display (ImageWidget)', ...
+                 'Multi-sensor status grid (MultiStatusWidget)', ...
+                 'Horizontal divider line (DividerWidget)', ...
+                 'Icon + value card (IconCardWidget)', ...
+                 'Chip/badge status bar (ChipBarWidget)', ...
+                 'Sparkline value card (SparklineCardWidget)'});
+            names = DashboardWidgetRegistry.types();
+            types = cell(numel(names), 2);
+            for i = 1:numel(names)
+                types{i, 1} = names{i};
+                if descMap.isKey(names{i})
+                    types{i, 2} = descMap(names{i});
+                else
+                    types{i, 2} = sprintf('%s widget', names{i});
+                end
+            end
+        end
+
+        function registerWidgetType(type, ctorHandle)
+            %REGISTERWIDGETTYPE Register a custom widget type with the dashboard.
+            %   DashboardEngine.registerWidgetType('mytype', @MyWidget) makes
+            %   'mytype' usable through addWidget, serialization, and detach — the
+            %   documented extension point for third-party widgets. The widget class
+            %   must subclass DashboardWidget and provide a static fromStruct.
+            %   Errors DashboardWidgetRegistry:duplicateType on a name collision.
+            %
+            %   See also DashboardWidgetRegistry.register, DashboardEngine.widgetTypes.
+            DashboardWidgetRegistry.register(type, ctorHandle);
         end
 
         function obj = load(filepath, varargin)
