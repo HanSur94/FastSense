@@ -57,7 +57,16 @@ classdef DashboardWidget < handle
                 end
             end
             for k = 1:2:numel(varargin)
-                obj.(varargin{k}) = varargin{k+1};
+                key = varargin{k};
+                % Reject unknown/misspelled options with a namespaced error
+                % (house convention). The 'Sensor'->'Tag' remap above runs first,
+                % so legacy scripts and old serialized dashboards still work.
+                if ~isprop(obj, key)
+                    error('DashboardWidget:unknownOption', ...
+                        'Unknown option ''%s''. Valid options: %s', ...
+                        key, strjoin(properties(obj), ', '));
+                end
+                obj.(key) = varargin{k+1};
             end
             % Title cascade from Tag.
             if isempty(obj.Title) && ~isempty(obj.Tag)

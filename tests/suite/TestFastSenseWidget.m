@@ -138,5 +138,24 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             actualYLim = ylim(ax(1));
             testCase.verifyEqual(actualYLim, [0 100], 'AbsTol', 1e-10);
         end
+
+        function testFastSenseUnknownOptionThrows(testCase)
+        %TESTFASTSENSEUNKNOWNOPTIONTHROWS P0-4: FastSense ctor rejects unknown options
+        %   instead of silently discarding the typo into the unmatched struct.
+            threw = false; id = '';
+            try
+                FastSense('Themee', 'dark');
+            catch err
+                threw = true; id = err.identifier;
+            end
+            testCase.verifyTrue(threw);
+            testCase.verifyEqual(id, 'FastSense:unknownOption');
+        end
+
+        function testFastSenseGoodOptionConstructs(testCase)
+        %TESTFASTSENSEGOODOPTIONCONSTRUCTS P0-4: a valid option still constructs fine.
+            f = FastSense('Theme', 'dark');
+            testCase.verifyClass(f, 'FastSense');
+        end
     end
 end
