@@ -1180,7 +1180,8 @@ classdef DashboardEngine < handle
                 width = 48;
             end
 
-            nWidgets = numel(obj.Widgets);
+            ws = obj.activePageWidgets();
+            nWidgets = numel(ws);
 
             % Empty dashboard
             if nWidgets == 0
@@ -1192,7 +1193,7 @@ classdef DashboardEngine < handle
             cols = obj.Layout.Columns;
             maxRow = 1;
             for i = 1:nWidgets
-                p = obj.Widgets{i}.Position;
+                p = ws{i}.Position;
                 bottomRow = p(2) + p(4) - 1;
                 if bottomRow > maxRow
                     maxRow = bottomRow;
@@ -1210,7 +1211,7 @@ classdef DashboardEngine < handle
 
             % Render each widget
             for i = 1:nWidgets
-                w = obj.Widgets{i};
+                w = ws{i};
                 p = w.Position;  % [col, row, wCols, hRows]
 
                 % Character coordinates (1-based)
@@ -1496,10 +1497,11 @@ classdef DashboardEngine < handle
         function setWidgetPosition(obj, idx, pos)
         %SETWIDGETPOSITION Set the grid position of a widget by index.
         %   Clamps width to grid columns and resolves overlaps with other
-        %   widgets.
-            if idx < 1 || idx > numel(obj.Widgets)
+        %   widgets. Operates on the active page in multi-page mode.
+            ws = obj.activePageWidgets();
+            if idx < 1 || idx > numel(ws)
                 error('DashboardEngine:invalidIndex', ...
-                    'Widget index %d out of range [1, %d].', idx, numel(obj.Widgets));
+                    'Widget index %d out of range [1, %d].', idx, numel(ws));
             end
             % Clamp to grid bounds
             cols = obj.Layout.Columns;
@@ -1508,25 +1510,28 @@ classdef DashboardEngine < handle
             pos(2) = max(1, pos(2));
             pos(4) = max(1, pos(4));
             % Resolve overlaps against other widgets
-            existingPositions = cell(1, numel(obj.Widgets) - 1);
+            existingPositions = cell(1, numel(ws) - 1);
             k = 0;
-            for i = 1:numel(obj.Widgets)
+            for i = 1:numel(ws)
                 if i ~= idx
                     k = k + 1;
-                    existingPositions{k} = obj.Widgets{i}.Position;
+                    existingPositions{k} = ws{i}.Position;
                 end
             end
             pos = obj.Layout.resolveOverlap(pos, existingPositions);
-            obj.Widgets{idx}.Position = pos;
+            % ws{idx} is a handle, so this mutates the widget stored in the page.
+            ws{idx}.Position = pos;
         end
 
         function w = getWidgetByTitle(obj, title)
         %GETWIDGETBYTITLE Find a widget by its Title property.
-        %   Returns the widget object, or empty if not found.
+        %   Searches every page in multi-page mode (active page or single-page
+        %   Widgets otherwise). Returns the widget object, or empty if not found.
             w = [];
-            for i = 1:numel(obj.Widgets)
-                if strcmp(obj.Widgets{i}.Title, title)
-                    w = obj.Widgets{i};
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                if strcmp(ws{i}.Title, title)
+                    w = ws{i};
                     return;
                 end
             end
@@ -2257,8 +2262,10 @@ classdef DashboardEngine < handle
         function markAllDirty(obj)
         %MARKALLDIRTY Flag all widgets as needing refresh.
         %   Called on theme change, figure resize, or other global state changes.
-            for i = 1:numel(obj.Widgets)
-                obj.Widgets{i}.markDirty();
+        %   Covers every page in multi-page mode.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                ws{i}.markDirty();
             end
         end
 
