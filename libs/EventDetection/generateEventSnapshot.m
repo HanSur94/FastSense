@@ -38,6 +38,18 @@ function files = generateEventSnapshot(event, sensorData, varargin)
 
     evStart = event.StartTime;
     evEnd   = event.EndTime;
+    % Open events (still in violation) carry EndTime=NaN. Using NaN downstream
+    % makes evDur/padAmount/xMin/xMax NaN and xlim() throws ("Limits must be a
+    % 2-element vector of increasing numeric values"). Clamp the open-event end
+    % to the last available sample (mirrors LiveEventPipeline.sensorDataForEvent_)
+    % so snapshots render for open events too.
+    if isnan(evEnd)
+        if ~isempty(X)
+            evEnd = X(end);
+        else
+            evEnd = evStart;
+        end
+    end
     evDur   = evEnd - evStart;
 
     % --- Plot 1: Event Detail ---
@@ -58,6 +70,10 @@ end
 
 function renderSnapshot(X, Y, thVal, thDir, evStart, evEnd, xMin, xMax, figSize, outFile, titleStr)
     fig = figure('Visible', 'off', 'Position', [100 100 figSize]);
+    % Guarantee the off-screen figure is closed even if print() throws (disk
+    % full, bad path, etc.) — otherwise invisible handles accumulate and a
+    % long-running background monitor eventually hits the figure limit.
+    figCleaner = onCleanup(@() close(fig)); %#ok<NASGU>
     ax = axes(fig);
 
     % Clip data to view
@@ -88,6 +104,15 @@ function renderSnapshot(X, Y, thVal, thDir, evStart, evEnd, xMin, xMax, figSize,
         plot(ax, X(vMask), Y(vMask), 'r.', 'MarkerSize', 8);
     end
 
+    % Guard against a degenerate / non-increasing window (open or zero-width
+    % events): xlim requires strictly increasing finite limits.
+    if ~isfinite(xMin) || ~isfinite(xMax) || xMax <= xMin
+        xMin = evStart - 30/86400;
+        xMax = evEnd   + 30/86400;
+        if xMax <= xMin
+            xMax = xMin + 60/86400;  % final fallback: 1-minute window
+        end
+    end
     xlim(ax, [xMin xMax]);
     datetick(ax, 'x', 'HH:MM:SS', 'keeplimits');
     title(ax, titleStr, 'Interpreter', 'none');
@@ -95,7 +120,6 @@ function renderSnapshot(X, Y, thVal, thDir, evStart, evEnd, xMin, xMax, figSize,
     grid(ax, 'on');
     hold(ax, 'off');
 
-    % Export
+    % Export (figCleaner closes fig on return or on any throw above)
     print(fig, outFile, '-dpng', sprintf('-r%d', 150));
-    close(fig);
 end

@@ -154,6 +154,7 @@ Full details: [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md)
 | 1036. Live Tail + Slider Preview Overlay | v3.1 | 3/3 | Complete | 2026-05-14 |
 | 1037. Per-Widget Plant Log Overlay | v3.1 | 3/3 | Complete | 2026-05-19 |
 | 1038. Dashboard + Companion Integration & Serialization | v3.1 | 3/3 | Complete | 2026-05-19 |
+| 1039. Background monitoring with email notifications | pending | 4/4 | Complete    | 2026-05-29 |
 
 ## Phase Details (v4.0 Multi-User LAN Concurrency)
 
@@ -392,6 +393,24 @@ Plans:
 - [x] 1028-06-PLAN.md — Wave 5: Per-tick fs-stat coalescing (1600 → 1 syscalls/tick) + phase wrap (VERIFICATION.md final, ROADMAP.md, STATE.md, SUMMARY.md)
 
 > Note on the serial plan chain: Plans 02-06 each extend the SensorThreshold MEX block in `libs/FastSense/build_mex.m` (Plan 02 only — K2/K3/K4 deferred), append measurements to `bench_tag_pipeline_1k.m`, and write a new subsection to `1028-VERIFICATION.md`. The serial chain prevented shared-file conflicts and produced a continuous before/after data trail. Plans 03/04 are kept as `[~]` (deferred, not failed) in the list because their PLAN.md files exist on disk and remain available as a starting point for any future phase that finds direct `tic/toc` evidence of their target regions being non-trivial.
+
+### Phase 1039: Background monitoring with email notifications — COMPLETE 2026-05-29
+
+**Goal:** Add a headless entry point `runBackgroundMonitoring(setupFcn)` for `matlab -batch` use under launchd/systemd/cron; ship a demo example + README with SMTP and service-supervision config; harden the notification snapshot path (open-event guards + figure-leak fix); add tests for the runner entry and the live snapshot-data contract.
+
+**Reconciliation note (2026-05-29):** Sibling PR #171 ("Background-monitoring email alerts: real SMTP send + pluggable external mailer") merged to main first and independently delivered the `notify(ev, struct())` → real-sensorData fix (via `processMonitorTag_` returning `sensorData`) plus the `NotificationService` Transport/cooldown rework. On merge, Phase 1039's two overlapping pieces were **dropped as superseded**: the `LiveEventPipeline` `'NotificationService'` constructor NV-pair and the duplicate `sensorDataForEvent_`/`runCycle` sensorData fix. The phase's `test_live_event_pipeline_notif_sensor_data` was retained and now serves as a regression guard for #171's sensorData mechanism (demo/tests inject the service via the public property post-construction). Net unique contribution of #170: the headless runner, ops README, open-event/fig-leak robustness, and the demo + tests.
+
+**Verification:** passed. Post-#171-merge: `test_live_event_pipeline_notif_sensor_data` 2/2, `test_run_background_monitoring` 5/5 (MATLAB) / 3/3+skip (Octave), `TestBackgroundEmailMonitoring` 9/9 — all green on Octave + MATLAB. Timer-driven live loop is MATLAB-only (Octave lacks `timer`); real-email/PNG smoke needs an SMTP relay. Also fixed two latent library bugs en route — missing `monitor.EventStore` wiring in setup, and NaN-`EndTime` open-event crash in `NotificationRule.fillTemplate` / `generateEventSnapshot`.
+
+**Depends on:** Phase 1032 (`MonitorTag.emitEvent_` deferred-notify). Lands on top of PR #171 (shares the `NotificationService`/`LiveEventPipeline` email path).
+**Requirements:** none — CONTEXT.md decisions (D-01..D-06) are the contract; D-01/D-03 superseded by #171.
+**Plans:** 4/4 plans complete (01's NV-pair/sensorData portion superseded by #171; runner/docs/tests retained)
+
+Plans:
+- [x] 1039-01-PLAN.md — (sensorData fix + NV-pair superseded by #171; no net change retained from this plan)
+- [x] 1039-02-PLAN.md — new libs/EventDetection/runBackgroundMonitoring.m headless entry function (Wave 1, no deps)
+- [x] 1039-03-PLAN.md — examples/05-events/example_background_email_monitor*.m + README_background_email.md + open-event/fig-leak hardening (Wave 2)
+- [x] 1039-04-PLAN.md — tests/test_live_event_pipeline_notif_sensor_data.m + tests/test_run_background_monitoring.m + tests/CaptureNotificationService.m + tests/suite/TestBackgroundEmailMonitoring.m (Wave 2)
 
 ## Backlog
 
