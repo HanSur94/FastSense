@@ -55,6 +55,7 @@ classdef CompanionEventViewer < handle
     properties (Access = public, AbortSet = true)
         LeftPaneWidth = 260       % Width of the tag-catalog pane in pixels.
         ViewMode      = 'gantt'   % 'gantt' | 'table' — which view is visible.
+        NotifPaneWidth = 320      % Width of the notification panel in px (Phase 1040; drag-resizable).
     end
 
     methods
@@ -68,6 +69,21 @@ classdef CompanionEventViewer < handle
                 cw = obj.RootGrid_.ColumnWidth;
                 cw{1} = val;
                 obj.RootGrid_.ColumnWidth = cw;
+            end
+        end
+
+        function set.NotifPaneWidth(obj, val)
+            if ~isnumeric(val) || ~isscalar(val) || ~isfinite(val) || val < 120
+                error('CompanionEventViewer:invalidNotifPaneWidth', ...
+                    'NotifPaneWidth must be a numeric scalar >= 120 pixels.');
+            end
+            obj.NotifPaneWidth = val;
+            if ~isempty(obj.RootGrid_) && isvalid(obj.RootGrid_)
+                cw = obj.RootGrid_.ColumnWidth;
+                if numel(cw) >= 4
+                    cw{4} = val;
+                    obj.RootGrid_.ColumnWidth = cw;
+                end
             end
         end
 
@@ -119,6 +135,15 @@ classdef CompanionEventViewer < handle
         TableToolbarPanel_   = []   % uipanel above the uitable hosting the multi-select toolbar
         PlotSelectedBtn_     = []   % uibutton 'Plot Selected (N)'
         SelectedTableRows_   = []   % sorted unique vector of currently-highlighted table row indices
+        % Phase 1040 — notification panel (RootGrid_ col 4) + draggable divider (col 3).
+        NotifPane_         = []   % NotificationCenterPane instance
+        NotifPanel_        = []   % uipanel host for NotifPane_
+        DividerPanel_      = []   % thin uipanel acting as the resize handle
+        IsDraggingDivider_ = false
+        PrevWBD_           = []   % saved WindowButtonDownFcn (chained, never clobbered)
+        PrevWBM_           = []   % saved WindowButtonMotionFcn (chained — preserves the crosshair)
+        PrevWBU_           = []   % saved WindowButtonUpFcn (chained)
+        hDetachedNotifFig_ = []   % uifigure when the pane is popped out, else []
     end
 
     methods
@@ -219,11 +244,25 @@ classdef CompanionEventViewer < handle
             obj.updateTableData_(filtered);
             obj.updateSliderPreview_(evs);
             obj.updateSliderReadouts_();
+            % Phase 1040 — refresh the notification inbox off the same redraw tick.
+            if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                obj.NotifPane_.refresh(obj.Store_);
+            end
         end
 
         function c = getCanvasForTest_(obj)
         %GETCANVASFORTEST_ Test-only accessor for the canvas helper.
             c = obj.Canvas_;
+        end
+
+        function p = notifPaneForTest_(obj)
+        %NOTIFPANEFORTEST_ Test-only accessor: the NotificationCenterPane handle (or []).
+            p = obj.NotifPane_;
+        end
+
+        function cw = rootColumnWidthForTest_(obj)
+        %ROOTCOLUMNWIDTHFORTEST_ Test-only accessor: RootGrid_ ColumnWidth cell.
+            cw = obj.RootGrid_.ColumnWidth;
         end
 
         function setSingleClickHandlerForTest_(obj, fn)
@@ -334,6 +373,23 @@ classdef CompanionEventViewer < handle
             catch
             end
             obj.AutoTimer_ = [];
+            % Phase 1040 — tear down the notification pane + any detached window.
+            try
+                if ~isempty(obj.hDetachedNotifFig_) && isvalid(obj.hDetachedNotifFig_)
+                    obj.hDetachedNotifFig_.CloseRequestFcn = '';
+                    delete(obj.hDetachedNotifFig_);
+                end
+            catch
+            end
+            obj.hDetachedNotifFig_ = [];
+            try
+                if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                    obj.NotifPane_.detach();
+                    delete(obj.NotifPane_);
+                end
+            catch
+            end
+            obj.NotifPane_ = [];
             try
                 if ~isempty(obj.SingleClickTimer_) && isvalid(obj.SingleClickTimer_)
                     if strcmp(obj.SingleClickTimer_.Running, 'on'); stop(obj.SingleClickTimer_); end
@@ -481,9 +537,10 @@ classdef CompanionEventViewer < handle
                 'CloseRequestFcn', @(~,~) obj.close(), ...
                 'Visible',         'on');
 
-            % Root layout: 1x2 (left tag pane | right column).
-            obj.RootGrid_ = uigridlayout(obj.hFigure, [1 2]);
-            obj.RootGrid_.ColumnWidth     = {obj.LeftPaneWidth, '1x'};
+            % Root layout: 1x4 (left tag pane | content | divider | notification panel).
+            % Phase 1040 — col 3 is a thin draggable divider; col 4 hosts the inbox.
+            obj.RootGrid_ = uigridlayout(obj.hFigure, [1 4]);
+            obj.RootGrid_.ColumnWidth     = {obj.LeftPaneWidth, '1x', 6, obj.NotifPaneWidth};
             obj.RootGrid_.RowHeight       = {'1x'};
             obj.RootGrid_.Padding         = [0 0 0 0];
             obj.RootGrid_.ColumnSpacing   = 0;
@@ -557,6 +614,19 @@ classdef CompanionEventViewer < handle
             obj.RightGrid_.Padding       = [0 0 0 0];
             obj.RightGrid_.RowSpacing    = 0;
             obj.RightGrid_.BackgroundColor = t.DashboardBackground;
+
+            % Phase 1040 — thin draggable divider (col 3) + notification panel (col 4).
+            obj.DividerPanel_ = uipanel(obj.RootGrid_);
+            obj.DividerPanel_.Layout.Row      = 1;
+            obj.DividerPanel_.Layout.Column   = 3;
+            obj.DividerPanel_.BorderType      = 'none';
+            obj.DividerPanel_.BackgroundColor = t.WidgetBorderColor;
+
+            obj.NotifPanel_ = uipanel(obj.RootGrid_);
+            obj.NotifPanel_.Layout.Row      = 1;
+            obj.NotifPanel_.Layout.Column   = 4;
+            obj.NotifPanel_.BorderType      = 'none';
+            obj.NotifPanel_.BackgroundColor = t.WidgetBackground;
 
             obj.FilterPanel_ = uipanel(obj.RightGrid_);
             obj.FilterPanel_.Layout.Row      = 1;
@@ -877,6 +947,15 @@ classdef CompanionEventViewer < handle
                 @(s, ~) obj.onCompanionLiveChanged_(s.IsLive));
             obj.onCompanionLiveChanged_(obj.Companion_.IsLive);  % initial sync
 
+            % Phase 1040 — host the acknowledgeable notification inbox in the right panel.
+            obj.NotifPane_ = NotificationCenterPane(obj.Theme_);
+            obj.NotifPane_.setCompanion(obj.Companion_);   % ackOne_ resolves the store via the companion
+            obj.NotifPane_.attach(obj.NotifPanel_, obj.Theme_);
+            obj.Listeners_{end+1} = addlistener(obj.NotifPane_, 'DetachRequested', ...
+                @(~,~) obj.toggleNotifDetached_());
+            obj.NotifPane_.refresh(obj.Store_);
+            obj.installDividerDrag_();
+
             obj.updateSliderReadouts_();
         end
 
@@ -893,6 +972,109 @@ classdef CompanionEventViewer < handle
                 if strcmp(obj.TimePresetMode, 'roll')
                     obj.TimePresetMode = 'snapshot';
                 end
+            end
+        end
+
+        function installDividerDrag_(obj)
+        %INSTALLDIVIDERDRAG_ Chain figure mouse handlers so the col-3 divider resizes the inbox.
+        %   Chains (never clobbers) the existing WindowButton*Fcn — the Gantt crosshair
+        %   owns WindowButtonMotionFcn, so each handler calls the prior one first.
+            if isempty(obj.hFigure) || ~isgraphics(obj.hFigure); return; end
+            obj.PrevWBD_ = get(obj.hFigure, 'WindowButtonDownFcn');
+            obj.PrevWBM_ = get(obj.hFigure, 'WindowButtonMotionFcn');
+            obj.PrevWBU_ = get(obj.hFigure, 'WindowButtonUpFcn');
+            set(obj.hFigure, 'WindowButtonDownFcn',   @(s, e) obj.onDividerDown_(s, e));
+            set(obj.hFigure, 'WindowButtonMotionFcn', @(s, e) obj.onDividerMotion_(s, e));
+            set(obj.hFigure, 'WindowButtonUpFcn',     @(s, e) obj.onDividerUp_(s, e));
+        end
+
+        function onDividerDown_(obj, src, evt)
+        %ONDIVIDERDOWN_ Start a drag if the press landed on the divider boundary.
+            obj.chainCall_(obj.PrevWBD_, src, evt);
+            try
+                if isempty(obj.hFigure) || ~isgraphics(obj.hFigure); return; end
+                cpx      = obj.hFigure.CurrentPoint(1);
+                dividerX = obj.hFigure.Position(3) - obj.NotifPaneWidth - 3;
+                if abs(cpx - dividerX) <= 8
+                    obj.IsDraggingDivider_ = true;
+                end
+            catch
+            end
+        end
+
+        function onDividerMotion_(obj, src, evt)
+        %ONDIVIDERMOTION_ Preserve the prior handler (crosshair), then resize while dragging.
+            obj.chainCall_(obj.PrevWBM_, src, evt);
+            if ~obj.IsDraggingDivider_; return; end
+            try
+                figW = obj.hFigure.Position(3);
+                cpx  = obj.hFigure.CurrentPoint(1);
+                newW = figW - cpx - 3;
+                maxW = max(120, figW - obj.LeftPaneWidth - 200);   % keep room for the content column
+                obj.NotifPaneWidth = max(120, min(newW, maxW));    % setter updates ColumnWidth{4}
+            catch
+            end
+        end
+
+        function onDividerUp_(obj, src, evt)
+        %ONDIVIDERUP_ End the divider drag; chain to the prior handler.
+            obj.IsDraggingDivider_ = false;
+            obj.chainCall_(obj.PrevWBU_, src, evt);
+        end
+
+        function toggleNotifDetached_(obj)
+        %TOGGLENOTIFDETACHED_ Pop the inbox to its own window (or re-inline if already out).
+            try
+                if isempty(obj.hDetachedNotifFig_) || ~isvalid(obj.hDetachedNotifFig_)
+                    if obj.NotifPane_.IsAttached; obj.NotifPane_.detach(); end
+                    f = uifigure('Name', 'Notification Center — Event Viewer', ...
+                        'Position', [0 0 420 600], 'Color', obj.Theme_.DashboardBackground);
+                    movegui(f, 'center');
+                    f.CloseRequestFcn = @(~,~) obj.reinlineNotif_();
+                    obj.hDetachedNotifFig_ = f;
+                    obj.NotifPane_.attach(f, obj.Theme_);
+                    obj.NotifPane_.refresh(obj.Store_);
+                    cw = obj.RootGrid_.ColumnWidth; cw{3} = 0; cw{4} = 0;
+                    obj.RootGrid_.ColumnWidth = cw;
+                else
+                    obj.reinlineNotif_();
+                end
+            catch err
+                if ~isempty(obj.hFigure) && isgraphics(obj.hFigure)
+                    uialert(obj.hFigure, err.message, 'Notification Center', 'Icon', 'error');
+                end
+            end
+        end
+
+        function reinlineNotif_(obj)
+        %REINLINENOTIF_ Re-dock the inbox into the Event Viewer's right column.
+            try
+                if ~isempty(obj.hDetachedNotifFig_) && isvalid(obj.hDetachedNotifFig_)
+                    obj.hDetachedNotifFig_.CloseRequestFcn = '';
+                    delete(obj.hDetachedNotifFig_);
+                end
+                obj.hDetachedNotifFig_ = [];
+                if ~isempty(obj.NotifPane_) && isvalid(obj.NotifPane_)
+                    if obj.NotifPane_.IsAttached; obj.NotifPane_.detach(); end
+                    obj.NotifPane_.attach(obj.NotifPanel_, obj.Theme_);
+                    obj.NotifPane_.refresh(obj.Store_);
+                end
+                cw = obj.RootGrid_.ColumnWidth; cw{3} = 6; cw{4} = obj.NotifPaneWidth;
+                obj.RootGrid_.ColumnWidth = cw;
+            catch
+            end
+        end
+
+        function chainCall_(~, fcn, src, evt)
+        %CHAINCALL_ Safely invoke a saved WindowButton*Fcn (function-handle/cell/empty).
+            if isempty(fcn); return; end
+            try
+                if iscell(fcn)
+                    feval(fcn{1}, src, evt, fcn{2:end});
+                elseif isa(fcn, 'function_handle')
+                    fcn(src, evt);
+                end
+            catch
             end
         end
 

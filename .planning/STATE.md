@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Multi-User LAN Concurrency
-status: shipping
-stopped_at: PR #152 ready for merge (v4.0); PR #114 (Phase 1028 perf) shipped 2026-05-19 on parallel branch.
-last_updated: "2026-05-19T10:00:00Z"
-last_activity: 2026-05-19 -- Phase 1028 (Tag update perf — MEX + SIMD) COMPLETE on parallel branch claude/adoring-ishizaka-edc93c; v4.0 milestone separately shipping via PR #152.
+status: verifying
+last_updated: "2026-06-02T11:44:53.304Z"
+last_activity: 2026-06-02
 progress:
-  total_phases: 12
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 30
+  total_phases: 16
+  completed_phases: 4
+  total_plans: 20
+  completed_plans: 39
 ---
 
 # State
@@ -20,25 +19,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** Phase 1029 — Concurrency Foundation
+**Current focus:** Phase 1040 — companion-notification-center
 
 ## Current Position
 
-Phase: 1028 (tag-update-perf-mex-simd) — COMPLETE 2026-05-19 (this branch)
-Plan: 6 of 6 executed (with 03/04 deferred per Plan 02d data). Shipped plans: 01, 02, 02b, 02d, 05, 06.
+Phase: 1040
+Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
-Status: Phase 1028 closed. WithIO `tickMin` reduced 4497 ms → 3603 ms (−19.9%) on Octave Linux x86_64 CI run 26089658442, almost entirely from Plan 02d's in-memory prior-state cache. Plan 06 ships per-tick fs-stat coalescing reducing 1600 → 1 syscalls/tick (−99.94% mechanism-level; wall-time +3.2% within variance on tmpfs CI). PR #114 carries the phase. Follow-up candidates for a future perf phase: in-memory propagation refactor; `containers.Map` → struct-array refactor; `.mat` save-side optimization. K2/K3/K4 deferred per data (target regions bucket as 0 ms post-cache).
-Last activity: 2026-05-29 - Completed 260529-fnt (via /gsd:fast): FunctionTransport adapter — reuse an external/company MATLAB mailer as a NotificationService Transport, no SMTP config
+Status: Phase complete — ready for verification
+Last activity: 2026-06-02
 
 ### Note on parallel v4.0 work (main branch state)
 
 While Phase 1028 was in flight on this branch, main shipped v4.0 Multi-User LAN Concurrency (phases 1029-1033) via PR #152. The two efforts touched some shared files (`LiveTagPipeline.m`, `build_mex.m`) — merged here on this commit with both feature sets preserved:
+
 - Plan 02d in-memory prior-state cache + Plan 06 fs-stat coalescing live in the single-user code path of `LiveTagPipeline.processTag_`.
 - v4.0 cluster-mode (TagWriteCoordinator + AtomicWriter) lives in the `if obj.IsClusterMode_` branch.
 - `bench_tag_pipeline_1k` continues to drive the single-user path (no SharedRoot set).
 - v4.0's STATE.md / ROADMAP.md entries (phases 1029-1033 Complete) preserved verbatim; phase 1028 Complete entry added alongside.
 
 Three main PRs touched files v4.0 also modified — all auto/manually merged without functional conflict:
+
 - PR #143 (260513-s0y) — Tile + Close all toolbar buttons. Tracking fixes (syncOpenedFigures_ Engines_ walk, public trackOpenedFigure hook, de-maximize + Units=pixels coercion) live alongside v4.0 cluster-mode wiring.
 - PR #149 (260519-bs4) — Tag Status Table window. TagStatusTableWindow handle + Tags toolbar button live alongside v4.0 cluster-mode + pipeline-observer state.
 
@@ -113,6 +114,7 @@ Phase 1019 [██████████] 100% (3/3 plans complete in Phase 10
 - 2026-04-29 — v3.0 phase 1023 added (Industrial Plant Demo Integration): wraps `demo/industrial_plant/run_demo.m` in `FastSenseCompanion`; 4 new COMPDEMO REQ-IDs; total now 6 phases / 32 REQ-IDs
 - 2026-05-13 — Milestone v4.0 Multi-User LAN Concurrency started; PROJECT.md updated, REQUIREMENTS.md created (14 P1 REQ-IDs across CONC/IDENT/EVTLOG/ACK/OPS categories; 6 P2 deferred to v4.1); research/ phase produced SUMMARY/STACK/FEATURES/ARCHITECTURE/PITFALLS markdown
 - 2026-05-13 — v4.0 roadmap created: 5 phases (1029-1033) covering all 14 P1 REQ-IDs, full coverage no orphans; phase structure mirrors research-recommended build order (Foundation → TagWriteCoordinator → EventLog → Single-Source Events → Companion Integration); three PITFALLS corrections (OFD locks, mtime heartbeat, lock-serialised appends) baked into Phase 1029 success criteria
+- 2026-06-02 — Phase 1040 added: Companion Notification Center (acknowledgeable in-app inbox pane in `FastSenseCompanion`; design brainstormed in-session and approved; EventStore-backed feed, dismiss = `acknowledgeEvent`, new collapsible right column + toolbar bell badge; `1040-CONTEXT.md` written)
 
 ### Phase Numbering Note
 

@@ -308,7 +308,8 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
 
         % --- Task 4: root uigridlayout layout tests ---
 
-        function testRootLayoutIs1x2WithLeftAndRightColumns(testCase)
+        function testRootLayoutIs1x4WithNotificationColumn(testCase)
+            % Phase 1040: root is [catalog | content | divider | notification inbox].
             es = makeStore_(testCase);
             comp = makeRealCompanion_(testCase);
             v = CompanionEventViewer(es, TagRegistry, comp);
@@ -320,10 +321,12 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             isRoot = arrayfun(@(g) isequal(g.Parent, v.hFigure), grids);
             root = grids(isRoot);
             testCase.verifyEqual(numel(root), 1, 'Exactly one root uigridlayout.');
-            testCase.verifyEqual(numel(root.ColumnWidth), 2, ...
-                'Root grid must be 1x2.');
+            testCase.verifyEqual(numel(root.ColumnWidth), 4, ...
+                'Root grid must be 1x4 (catalog | content | divider | inbox).');
             testCase.verifyEqual(root.ColumnWidth{1}, 260, ...
                 'Left column must default to LeftPaneWidth (260).');
+            testCase.verifyEqual(root.ColumnWidth{4}, 320, ...
+                'Notification column must default to NotifPaneWidth (320).');
         end
 
         % --- Task 5: catalog pane wiring tests ---
@@ -783,6 +786,60 @@ classdef TestCompanionEventViewer < matlab.unittest.TestCase
             testCase.verifyEmpty(comp.getEventViewerForTest_(), ...
                 'After close, EventViewer_ handle must be cleared.');
         end
+
+        % --- Phase 1040: hosted notification inbox + resizable right panel ---
+
+        function testNotifPaneHostedInViewer(testCase)
+        %TESTNOTIFPANEHOSTEDINVIEWER The viewer hosts an attached inbox listing unacked events.
+            es = makeStore_(testCase);
+            es.append(makeEvents_());   % 4 unacked events
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            p = v.notifPaneForTest_();
+            testCase.verifyNotEmpty(p, 'viewer should host a NotificationCenterPane');
+            testCase.verifyTrue(p.IsAttached, 'hosted pane should be attached');
+            testCase.verifyEqual(p.lastGoodCount_(), 4, 'pane should list the 4 unacked events');
+        end
+
+        function testNotifRootGridHasFourColumns(testCase)
+        %TESTNOTIFROOTGRIDHASFOURCOLUMNS Root grid is [catalog | content | divider | inbox]; inbox 320 px.
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            cw = v.rootColumnWidthForTest_();
+            testCase.verifyEqual(numel(cw), 4, 'root grid should have 4 columns');
+            testCase.verifyEqual(cw{4}, 320, 'notification column should default to 320 px');
+        end
+
+        function testNotifPaneWidthResizesColumn(testCase)
+        %TESTNOTIFPANEWIDTHRESIZESCOLUMN Setting NotifPaneWidth (what the divider drives) resizes column 4.
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            v.NotifPaneWidth = 480;
+            cw = v.rootColumnWidthForTest_();
+            testCase.verifyEqual(cw{4}, 480, 'NotifPaneWidth setter should resize column 4');
+            testCase.verifyError(@() setNotifPaneWidth_(v, 50), ...
+                'CompanionEventViewer:invalidNotifPaneWidth');
+        end
+
+        function testNotifPaneDetachReinline(testCase)
+        %TESTNOTIFPANEDETACHREINLINE DetachRequested pops the inbox to its own window; close tears it down.
+            es = makeStore_(testCase);
+            comp = makeRealCompanion_(testCase);
+            v = CompanionEventViewer(es, TagRegistry, comp);
+            testCase.addTeardown(@() v.close());
+            figName = sprintf('Notification Center %s Event Viewer', char(8212));
+            notify(v.notifPaneForTest_(), 'DetachRequested'); drawnow;
+            det = findall(groot, 'Type', 'figure', 'Name', figName);
+            testCase.verifyNotEmpty(det, 'DetachRequested should pop a notification window');
+            v.close(); drawnow;
+            det2 = findall(groot, 'Type', 'figure', 'Name', figName);
+            testCase.verifyEmpty(det2, 'closing the viewer should tear down the detached window');
+        end
     end
 end
 
@@ -813,6 +870,10 @@ end
 
 function setLeftPaneWidth_(v, val)
     v.LeftPaneWidth = val;
+end
+
+function setNotifPaneWidth_(v, val)
+    v.NotifPaneWidth = val;
 end
 
 function setViewMode_(v, val)
