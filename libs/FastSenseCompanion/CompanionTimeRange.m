@@ -81,7 +81,7 @@ classdef CompanionTimeRange < handle
             obj.SpecType_ = 'relative';
             obj.RelN_     = N;
             obj.RelUnit_  = unit;
-            notify(obj, 'RangeChanged');
+            obj.fireRangeChanged_();
         end
 
         function setAbsolute(obj, t0, t1)
@@ -98,7 +98,7 @@ classdef CompanionTimeRange < handle
             obj.SpecType_ = 'absolute';
             obj.AbsT0_    = t0;
             obj.AbsT1_    = t1;
-            notify(obj, 'RangeChanged');
+            obj.fireRangeChanged_();
         end
 
         function setAll(obj)
@@ -106,7 +106,7 @@ classdef CompanionTimeRange < handle
         %
         %   Resolves to t0=[], t1=[] (full series).
             obj.SpecType_ = 'all';
-            notify(obj, 'RangeChanged');
+            obj.fireRangeChanged_();
         end
 
         function lbl = label(obj)
@@ -185,6 +185,18 @@ classdef CompanionTimeRange < handle
     end
 
     methods (Access = private)
+
+        function fireRangeChanged_(obj)
+        %FIRERANGECHANGED_ Notify listeners of a spec change (MATLAB only).
+        %   Octave does not implement notify()/events, and the only listener is
+        %   the MATLAB-uifigure companion (no listeners exist on Octave), so the
+        %   notify is skipped there. The spec setters remain fully usable on
+        %   Octave for the pure resolve()/label()/toStruct() logic.
+            if exist('OCTAVE_VERSION', 'builtin') ~= 0
+                return;
+            end
+            notify(obj, 'RangeChanged');
+        end
 
         function d = relN_asDays_(obj)
         %RELN_ASDAYS_ Convert RelN_ to fractional days for resolve().
