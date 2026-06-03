@@ -211,9 +211,145 @@ classdef CanonicalMapper < handle
 
             obj.Entries_ = newMap;
         end
+
+        function override(obj, logicalId, machineId, localKey)
+            %OVERRIDE Force a (logicalId,machineId)->localKey mapping (CANON-03).
+            %   The entry is marked OVERRIDDEN with HIGH confidence and takes precedence:
+            %   a subsequent suggest() will not replace it.
+            if ~ischar(logicalId) || isempty(logicalId) ...
+                    || ~ischar(machineId) || isempty(machineId) ...
+                    || ~ischar(localKey) || isempty(localKey)
+                error('CanonicalMapper:invalidInput', ...
+                    'override requires non-empty char logicalId, machineId, localKey.');
+            end
+            localName = '';
+            localUnits = '';
+            for k = 1:numel(obj.LastTagInfos_)
+                t = obj.LastTagInfos_{k};
+                if strcmp(t.machineId, machineId) && strcmp(t.localKey, localKey)
+                    localName = t.name;
+                    if isfield(t, 'units')
+                        localUnits = t.units;
+                    end
+                    break;
+                end
+            end
+            e = struct( ...
+                'logicalId',    logicalId, ...
+                'machineId',    machineId, ...
+                'localKey',     localKey, ...
+                'localName',    localName, ...
+                'localUnits',   localUnits, ...
+                'similarity',   1.0, ...
+                'confidence',   'HIGH', ...
+                'status',       'OVERRIDDEN', ...
+                'unitMismatch', false);
+            obj.upsertEntry_(e);
+        end
+
+        function confirm(obj, logicalId, machineId)
+            %CONFIRM Endorse an auto-suggested entry (status -> CONFIRMED; confidence kept).
+            if ~isKey(obj.Entries_, logicalId)
+                error('CanonicalMapper:unknownLogicalId', ...
+                    'No logical sensor "%s".', logicalId);
+            end
+            bucket = obj.Entries_(logicalId);
+            for i = 1:numel(bucket)
+                if strcmp(bucket{i}.machineId, machineId)
+                    bucket{i}.status = 'CONFIRMED';
+                    obj.Entries_(logicalId) = bucket;
+                    return;
+                end
+            end
+            error('CanonicalMapper:unknownMachine', ...
+                'No entry for machine "%s" under "%s".', machineId, logicalId);
+        end
+
+        function pending = reviewPending(obj)
+            %REVIEWPENDING Entries needing human review (CANON-04).
+            %   An entry is pending iff it is a LOW-confidence AUTO entry OR has a unit
+            %   mismatch. This is the gate Phase 1045 uses to keep unreviewed (possibly
+            %   wrong) matches out of comparison.
+            pending = {};
+            logIds = keys(obj.Entries_);
+            for i = 1:numel(logIds)
+                bucket = obj.Entries_(logIds{i});
+                for j = 1:numel(bucket)
+                    e = bucket{j};
+                    needsReview = (strcmp(e.status, 'AUTO') && strcmp(e.confidence, 'LOW')) ...
+                        || e.unitMismatch;
+                    if needsReview
+                        pending{end + 1} = e; %#ok<AGROW>
+                    end
+                end
+            end
+        end
+
+        function ok = isResolvable(obj, logicalId, machineId)
+            %ISRESOLVABLE Whether a (logicalId,machineId) entry is safe to compare (CANON-04).
+            %   False for LOW+AUTO entries and for unconfirmed unit mismatches; true otherwise.
+            ok = false;
+            if ~isKey(obj.Entries_, logicalId)
+                return;
+            end
+            bucket = obj.Entries_(logicalId);
+            for i = 1:numel(bucket)
+                e = bucket{i};
+                if strcmp(e.machineId, machineId)
+                    isBlocked = (strcmp(e.status, 'AUTO') && strcmp(e.confidence, 'LOW')) ...
+                        || (e.unitMismatch && ~strcmp(e.status, 'CONFIRMED') ...
+                            && ~strcmp(e.status, 'OVERRIDDEN'));
+                    ok = ~isBlocked;
+                    return;
+                end
+            end
+        end
+
+        function leftover = unmapped(obj, machineId)
+            %UNMAPPED Local keys for machineId from the last suggest() that landed in no cluster.
+            %   Returns a cellstr (sorted ascending for determinism), or {} when all mapped.
+            mapped = {};
+            logIds = keys(obj.Entries_);
+            for i = 1:numel(logIds)
+                bucket = obj.Entries_(logIds{i});
+                for j = 1:numel(bucket)
+                    if strcmp(bucket{j}.machineId, machineId)
+                        mapped{end + 1} = bucket{j}.localKey; %#ok<AGROW>
+                    end
+                end
+            end
+            leftover = {};
+            for k = 1:numel(obj.LastTagInfos_)
+                t = obj.LastTagInfos_{k};
+                if strcmp(t.machineId, machineId) && ~any(strcmp(t.localKey, mapped))
+                    leftover{end + 1} = t.localKey; %#ok<AGROW>
+                end
+            end
+            if ~isempty(leftover)
+                leftover = unique(leftover);
+            end
+        end
     end
 
     methods (Access = private)
+        function upsertEntry_(obj, e)
+            %UPSERTENTRY_ Insert or replace the entry for (e.logicalId, e.machineId).
+            if isKey(obj.Entries_, e.logicalId)
+                bucket = obj.Entries_(e.logicalId);
+            else
+                bucket = {};
+            end
+            for i = 1:numel(bucket)
+                if strcmp(bucket{i}.machineId, e.machineId)
+                    bucket{i} = e;
+                    obj.Entries_(e.logicalId) = bucket;
+                    return;
+                end
+            end
+            bucket{end + 1} = e;
+            obj.Entries_(e.logicalId) = bucket;
+        end
+
         function conf = assignConfidence_(obj, sim)
             %ASSIGNCONFIDENCE_ Map a similarity to a confidence level (inclusive boundaries).
             %   A 1e-12 tolerance protects the exact-boundary cases (e.g. 1-1/10 -> 0.90)
