@@ -72,6 +72,19 @@ No other deviations — layout, table contract, copy, and the three `uiconfirm` 
 ## Issues Encountered
 - One static-analysis warning (redundant `t = struct()` before try/catch in `resolveTheme_`) — removed; `check_matlab_code` now clean.
 
+## Post-Implementation Code Review
+
+An independent `gsd-code-reviewer` pass (`1041-REVIEW.md`) found 1 critical + 4 warnings + 3 info. Fixed before completion (commit `8f67297f`, 30/30 still green):
+- **CR-01 (critical, fixed):** `reviewPending()` left the `unitMismatch` branch ungated by status → a CONFIRMED/OVERRIDDEN unit-mismatch entry stayed "pending" forever and disagreed with `isResolvable()`. Now gated on not-vouched status; added a confirmed-mismatch regression case to `testReviewPendingExcludesGoodEntries`.
+- **WR-02 (fixed):** `save()` wraps `movefile` in try/catch and deletes the orphaned `.tmp` on failure.
+- **IN-02 (fixed):** editor filter now searches `machineId` too.
+
+Deferred (advisory; tracked as a follow-up task):
+- **WR-01:** same-machine duplicate keys can both land in one cluster (violates one-entry-per-(logicalId,machineId)); needs a dedupe/keep-best guard in `suggest`.
+- **WR-03:** two distinct seed clusters normalizing to the same `logicalId` silently overwrite; needs a collision merge/warn.
+- **WR-04:** a LOW+unit-mismatch row shows only the mismatch dialog (not the LOW warning too) — UI polish.
+- **IN-01 / IN-03:** `Listeners_` destructor cleanup and the unused `PENDING` status are Phase 1044 seams.
+
 ## Next Phase Readiness
 - Phase 1041 (CanonicalMapper) is complete: data model + editor + persistence + the reviewPending/isResolvable safety gate.
 - Phase 1044 can embed `CanonicalMapEditor` into the Companion (deferred per RESEARCH.md Q4). Phase 1045's comparison view consumes `isResolvable()`/`reviewPending()`.
