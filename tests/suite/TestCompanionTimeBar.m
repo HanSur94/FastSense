@@ -1,15 +1,20 @@
 classdef TestCompanionTimeBar < matlab.unittest.TestCase
 %TESTCOMPANIONTIMEBAR MATLAB-only UI smoke suite for CompanionTimeBar.
 %
-%   Tests the range button + picker popup produced by Plan 1041-04:
-%     - Range button exists in toolbar col 9 with Tag 'CompanionTimeRangeBtn'
-%     - Default label is 'Last 7 days'
-%     - openPicker() creates exactly one 400x280 uifigure named 'Time Range'
-%     - Calling openPicker() twice leaves exactly one popup (singleton)
-%     - Clicking a preset button fires RangeChanged, updates the label, closes the popup
-%     - 'All data' preset sets the all-spec (empty t0/t1) and correct button label
+%   Tests the inline toolbar dropdown + Custom editor strip (the redesign that
+%   replaced the separate-window popup):
+%     - Range dropdown exists in toolbar col 9 with Tag 'CompanionTimeRangeBtn'
+%     - Items are the six presets plus a trailing 'Custom…' item
+%     - Default Value is 'Last 7 days'
+%     - Selecting a preset fires RangeChanged + updates the dropdown Value
+%     - 'All data' preset sets the all-spec (empty t0/t1)
+%     - Selecting 'Custom…' (or openPicker()) reveals an IN-WINDOW overlay strip
+%       (Tag 'CompanionTimeRangeStrip') — NO separate figure is ever created
+%     - The Custom strip exposes date pickers (Absolute) + a relative builder
+%     - Apply on the Absolute tab commits an absolute range; Apply on Relative
+%       commits a relative range; Cancel leaves the range unchanged
 %     - Non-default range uses Accent BackgroundColor; default uses WidgetBorderColor
-%     - setTheme() restyles the button without error
+%     - setTheme() restyles the dropdown without error
 %
 %   All tests are MATLAB-only (uifigure). The TestMethodSetup skipOnOctave
 %   guard skips the entire suite on Octave, matching the companion test pattern.
@@ -42,26 +47,16 @@ classdef TestCompanionTimeBar < matlab.unittest.TestCase
 
         function buildFixtures(testCase)
             %BUILDFIXTURES Create the hidden host figure, toolbar grid, range, theme, and bar.
-            testCase.HostFig_    = uifigure('Visible', 'off');
+            %   The 1320x800 figure matches the companion's default geometry so the
+            %   strip's pixel positioning lands on-figure. The app handle is passed
+            %   as [] (as in production the strip derives its host figure from the
+            %   dropdown's ancestor, so no real FastSenseCompanion is required).
+            testCase.HostFig_     = uifigure('Visible', 'off', 'Position', [100 100 1320 800]);
             testCase.ToolbarGrid_ = uigridlayout(testCase.HostFig_, [1 10]);
             testCase.ToolbarGrid_.ColumnWidth = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
             testCase.ToolbarGrid_.RowHeight   = {'1x'};
             testCase.Range_  = CompanionTimeRange();
             testCase.Theme_  = CompanionTheme.get('dark');
-            % Build a minimal app stand-in that exposes hFig_ so CompanionTimeBar
-            % can position the popup and use uialert. We pass the companion figure
-            % handle directly. CompanionTimeBar reads app.hFig_ for position/uialert.
-            % Use a struct-in-handle trick: provide an anonymous handle object with
-            % hFig_ pointing to HostFig_ via a property struct stored as appdata.
-            % Simpler: construct a real (hidden) FastSenseCompanion so we get the
-            % full wiring. But that is heavyweight. Instead, pass the HostFig_ as
-            % the app handle -- CompanionTimeBar only reads app.hFig_ (the uifigure).
-            % We create a minimal anonymous handle class stand-in stored on HostFig_
-            % via appdata, then pass it. Because we CANNOT easily create an inline
-            % handle class here, we construct a real FastSenseCompanion hidden
-            % companion as the lightest supported approach (mirrors TestFastSenseCompanion).
-            % We pass [] as app when we want the standalone path -- the bar
-            % gracefully handles empty app (all try/catch guarded).
             testCase.Bar_ = CompanionTimeBar( ...
                 testCase.ToolbarGrid_, 9, testCase.Range_, testCase.Theme_, []);
             testCase.addTeardown(@() testCase.tearDownFixtures_());
@@ -70,174 +65,245 @@ classdef TestCompanionTimeBar < matlab.unittest.TestCase
 
     methods (Test)
 
-        function testRangeButtonExists(testCase)
-            %TESTRANGEBUTTONEXISTS Range button with Tag 'CompanionTimeRangeBtn' sits in col 9.
-            btn = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
-            testCase.verifyEqual(numel(btn), 1, ...
-                'testRangeButtonExists: expected exactly one CompanionTimeRangeBtn');
-            testCase.verifyEqual(btn.Layout.Column, 9, ...
-                'testRangeButtonExists: CompanionTimeRangeBtn must sit in column 9');
+        function testRangeControlExists(testCase)
+            %TESTRANGECONTROLEXISTS Range dropdown with Tag 'CompanionTimeRangeBtn' sits in col 9.
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            testCase.verifyEqual(numel(dd), 1, ...
+                'testRangeControlExists: expected exactly one CompanionTimeRangeBtn');
+            testCase.verifyClass(dd, 'matlab.ui.control.DropDown', ...
+                'testRangeControlExists: the range control must be a uidropdown');
+            testCase.verifyEqual(dd.Layout.Column, 9, ...
+                'testRangeControlExists: control must sit in column 9');
         end
 
-        function testRangeButtonDefaultLabel(testCase)
-            %TESTRANGEBUTTONDEFAULTLABEL Button Text equals ''Last 7 days'' by default.
-            btn = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
-            testCase.verifyEqual(btn.Text, 'Last 7 days', ...
-                'testRangeButtonDefaultLabel: default Text must be ''Last 7 days''');
+        function testDropdownItemsAndDefault(testCase)
+            %TESTDROPDOWNITEMSANDDEFAULT Items = 6 presets + 'Custom…'; default Value 'Last 7 days'.
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            expectedPresets = {'Last 24 hours', 'Last 7 days', 'Last 30 days', ...
+                               'Last 90 days', 'Last 1 year', 'All data'};
+            for i = 1:numel(expectedPresets)
+                testCase.verifyTrue(any(strcmp(dd.Items, expectedPresets{i})), ...
+                    sprintf('testDropdownItemsAndDefault: missing preset ''%s''', expectedPresets{i}));
+            end
+            testCase.verifyTrue(any(strcmp(dd.Items, testCase.customLabel_())), ...
+                'testDropdownItemsAndDefault: dropdown must include a ''Custom…'' item');
+            testCase.verifyEqual(dd.Value, 'Last 7 days', ...
+                'testDropdownItemsAndDefault: default Value must be ''Last 7 days''');
         end
 
-        function testOpenPickerCreatesOnePopup(testCase)
-            %TESTOPENPICKERCREATEONEPOPUP openPicker() creates exactly one 400x280 popup.
-            testCase.Bar_.openPicker();
-            testCase.addTeardown(@() testCase.closePopup_());
+        function testCustomItemOpensInlineStripNoWindow(testCase)
+            %TESTCUSTOMITEMOPENSINLINESTRIPNOWINDOW Selecting 'Custom…' reveals an in-window strip; no figure spawns.
+            nBefore = numel(findall(groot, 'Type', 'figure'));
+            testCase.selectDropdown_(testCase.customLabel_());
             drawnow;
-            figs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
-            testCase.verifyEqual(numel(figs), 1, ...
-                'testOpenPickerCreatesOnePopup: expected exactly one ''Time Range'' figure');
-            testCase.verifyEqual(figs(1).Position(3), 400, ...
-                'testOpenPickerCreatesOnePopup: popup width must be 400');
-            testCase.verifyEqual(figs(1).Position(4), 280, ...
-                'testOpenPickerCreatesOnePopup: popup height must be 280');
+            nAfter = numel(findall(groot, 'Type', 'figure'));
+
+            % No separate window — figure count unchanged and no 'Time Range' figure.
+            testCase.verifyEqual(nAfter, nBefore, ...
+                'testCustomItemOpensInlineStripNoWindow: selecting Custom… must NOT create a new figure');
+            testCase.verifyEmpty(findall(groot, 'Type', 'figure', 'Name', 'Time Range'), ...
+                'testCustomItemOpensInlineStripNoWindow: no separate ''Time Range'' window may exist');
+
+            % Strip exists as an in-window overlay panel parented to the host figure.
+            strip = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeStrip');
+            testCase.verifyEqual(numel(strip), 1, ...
+                'testCustomItemOpensInlineStripNoWindow: exactly one in-window Custom strip expected');
         end
 
-        function testOpenPickerSingleton(testCase)
-            %TESTOPENPICKERSINGLETON Calling openPicker() twice leaves exactly one popup.
+        function testCustomStripHasDatePickers(testCase)
+            %TESTCUSTOMSTRIPHASDATEPICKERS Custom strip exposes date pickers + relative builder + actions.
             testCase.Bar_.openPicker();
-            testCase.addTeardown(@() testCase.closePopup_());
+            drawnow;
+            testCase.verifyEqual(numel(findall(testCase.HostFig_, 'Type', 'uidatepicker')), 2, ...
+                'testCustomStripHasDatePickers: Absolute mode must provide two date pickers');
+            testCase.verifyEqual(numel(findall(testCase.HostFig_, 'Type', 'uispinner')), 1, ...
+                'testCustomStripHasDatePickers: Relative mode must provide one spinner');
+            testCase.verifyNotEmpty(testCase.findStripButton_('Apply'), ...
+                'testCustomStripHasDatePickers: an Apply button must exist');
+            testCase.verifyNotEmpty(testCase.findStripButton_('Cancel'), ...
+                'testCustomStripHasDatePickers: a Cancel button must exist');
+            testCase.verifyNotEmpty(testCase.findStripButton_('Relative'), ...
+                'testCustomStripHasDatePickers: a Relative tab must exist');
+            testCase.verifyNotEmpty(testCase.findStripButton_('Absolute'), ...
+                'testCustomStripHasDatePickers: an Absolute tab must exist');
+        end
+
+        function testCustomStripSingleton(testCase)
+            %TESTCUSTOMSTRIPSINGLETON openPicker() twice leaves exactly one strip.
+            testCase.Bar_.openPicker();
             drawnow;
             testCase.Bar_.openPicker();
             drawnow;
-            figs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
-            testCase.verifyEqual(numel(figs), 1, ...
-                'testOpenPickerSingleton: second openPicker() must NOT spawn a new popup');
+            testCase.verifyEqual(numel(findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeStrip')), 1, ...
+                'testCustomStripSingleton: second openPicker() must NOT spawn a second strip');
         end
 
-        function testPresetFiresEventAndUpdatesLabel(testCase)
-            %TESTPRESETFIRESEVENTSANDUPDATESLABEL ''Last 30 days'' preset fires RangeChanged and updates label.
-            % Handle-type counter: an anonymous function cannot assign into the
-            % test workspace (the old assignin('caller',...) wrote into the event
-            % dispatcher's frame and captured fireCount=0), so use a containers.Map
-            % whose handle the listener mutates in place.
+        function testPresetFiresEventAndUpdatesValue(testCase)
+            %TESTPRESETFIRESEVENTSANDUPDATESVALUE 'Last 30 days' preset fires RangeChanged and updates the dropdown.
+            % Handle-type counter: an anonymous listener cannot assign into the
+            % test workspace, so mutate a shared containers.Map in place.
             fireCounter = containers.Map('KeyType', 'char', 'ValueType', 'double');
             fireCounter('n') = 0;
             lh = addlistener(testCase.Range_, 'RangeChanged', ...
                 @(~,~) bumpFireCounter_(fireCounter));
-            cleanupL = onCleanup(@() delete(lh));
+            cleanupL = onCleanup(@() delete(lh)); %#ok<NASGU>
 
-            % Open picker and find the 'Last 30 days' preset button.
-            testCase.Bar_.openPicker();
-            testCase.addTeardown(@() testCase.closePopup_());
-            drawnow;
-            popupFigs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
-            testCase.assertNotEmpty(popupFigs, ...
-                'testPresetFiresEventAndUpdatesLabel: picker popup must exist');
-            popupFig = popupFigs(1);
-            allBtns = findall(popupFig, 'Type', 'uibutton');
-            preset30Btn = [];
-            for i = 1:numel(allBtns)
-                if strcmp(allBtns(i).Text, 'Last 30 days')
-                    preset30Btn = allBtns(i);
-                    break;
-                end
-            end
-            testCase.assertNotEmpty(preset30Btn, ...
-                'testPresetFiresEventAndUpdatesLabel: ''Last 30 days'' preset button not found');
-
-            % Invoke the preset button callback.
-            cb = preset30Btn.ButtonPushedFcn;
-            cb(preset30Btn, struct());
+            testCase.selectDropdown_('Last 30 days');
             drawnow;
 
-            % Assert RangeChanged fired.
             testCase.verifyGreaterThanOrEqual(fireCounter('n'), 1, ...
-                'testPresetFiresEventAndUpdatesLabel: RangeChanged must have fired');
+                'testPresetFiresEventAndUpdatesValue: RangeChanged must have fired');
 
-            % Assert the resolved window is ~30 days.
             [t0, t1] = testCase.Range_.resolve();
             testCase.verifyEqual(t1 - t0, 30, 'AbsTol', 1e-4, ...
-                'testPresetFiresEventAndUpdatesLabel: resolved span must be ~30 days');
+                'testPresetFiresEventAndUpdatesValue: resolved span must be ~30 days');
 
-            % Assert the toolbar button label updated.
-            btn = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
-            testCase.verifyEqual(btn.Text, 'Last 30 days', ...
-                'testPresetFiresEventAndUpdatesLabel: button Text must be ''Last 30 days''');
-
-            % Assert popup closed (one-click preset).
-            figsAfter = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
-            testCase.verifyEqual(numel(figsAfter), 0, ...
-                'testPresetFiresEventAndUpdatesLabel: popup must close after preset click');
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            testCase.verifyEqual(dd.Value, 'Last 30 days', ...
+                'testPresetFiresEventAndUpdatesValue: dropdown Value must be ''Last 30 days''');
         end
 
         function testAllDataPresetSetsAll(testCase)
-            %TESTALLDATAPRESETSSETSALL ''All data'' preset sets the all-spec (empty t0/t1).
-            testCase.Bar_.openPicker();
-            testCase.addTeardown(@() testCase.closePopup_());
-            drawnow;
-            popupFigs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
-            testCase.assertNotEmpty(popupFigs, ...
-                'testAllDataPresetSetsAll: picker popup must exist');
-            allBtns = findall(popupFigs(1), 'Type', 'uibutton');
-            allDataBtn = [];
-            for i = 1:numel(allBtns)
-                if strcmp(allBtns(i).Text, 'All data')
-                    allDataBtn = allBtns(i);
-                    break;
-                end
-            end
-            testCase.assertNotEmpty(allDataBtn, ...
-                'testAllDataPresetSetsAll: ''All data'' button not found');
-            cb = allDataBtn.ButtonPushedFcn;
-            cb(allDataBtn, struct());
+            %TESTALLDATAPRESETSSETSALL 'All data' preset sets the all-spec (empty t0/t1).
+            testCase.selectDropdown_('All data');
             drawnow;
             [t0, t1] = testCase.Range_.resolve();
             testCase.verifyTrue(isempty(t0) && isempty(t1), ...
                 'testAllDataPresetSetsAll: resolve() must return empty t0 and t1 for all-data');
-            btn = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
-            testCase.verifyEqual(btn.Text, 'All data', ...
-                'testAllDataPresetSetsAll: button Text must be ''All data''');
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            testCase.verifyEqual(dd.Value, 'All data', ...
+                'testAllDataPresetSetsAll: dropdown Value must be ''All data''');
+        end
+
+        function testAbsoluteCommitSetsRange(testCase)
+            %TESTABSOLUTECOMMITSETSRANGE Apply on the Absolute tab commits an absolute range + closes the strip.
+            testCase.Bar_.openPicker();   % opens on the Absolute tab by default
+            drawnow;
+            applyBtn = testCase.findStripButton_('Apply');
+            testCase.assertNotEmpty(applyBtn, ...
+                'testAbsoluteCommitSetsRange: Apply button must exist');
+            testCase.invokeButton_(applyBtn);
+            drawnow;
+
+            s = testCase.Range_.toStruct();
+            testCase.verifyEqual(s.type, 'absolute', ...
+                'testAbsoluteCommitSetsRange: committing Absolute must set an absolute spec');
+            testCase.verifyEmpty(findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeStrip'), ...
+                'testAbsoluteCommitSetsRange: the strip must close after Apply');
+
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            testCase.verifyEqual(dd.Value, testCase.Range_.label(), ...
+                'testAbsoluteCommitSetsRange: dropdown Value must show the committed date-range label');
+            testCase.verifyEqual(dd.BackgroundColor, testCase.Theme_.Accent, 'AbsTol', 1e-3, ...
+                'testAbsoluteCommitSetsRange: a non-default range must use the Accent background');
+        end
+
+        function testRelativeCommitSetsRange(testCase)
+            %TESTRELATIVECOMMITSETSRANGE Apply on the Relative tab commits a relative range.
+            testCase.Bar_.openPicker();
+            drawnow;
+            sp = findall(testCase.HostFig_, 'Type', 'uispinner');
+            testCase.assertNotEmpty(sp, 'testRelativeCommitSetsRange: spinner must exist');
+            sp(1).Value = 14;
+            testCase.invokeButton_(testCase.findStripButton_('Relative'));   % switch to Relative tab
+            drawnow;
+            testCase.invokeButton_(testCase.findStripButton_('Apply'));
+            drawnow;
+
+            s = testCase.Range_.toStruct();
+            testCase.verifyEqual(s.type, 'relative', ...
+                'testRelativeCommitSetsRange: committing Relative must set a relative spec');
+            testCase.verifyEqual(s.N, 14, ...
+                'testRelativeCommitSetsRange: spinner value (14) must be committed as N');
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            testCase.verifyEqual(dd.Value, 'Last 14 days', ...
+                'testRelativeCommitSetsRange: dropdown Value must read ''Last 14 days''');
+        end
+
+        function testCancelLeavesRangeUnchanged(testCase)
+            %TESTCANCELLEAVESRANGEUNCHANGED Cancel closes the strip without changing the range.
+            before = testCase.Range_.toStruct();
+            testCase.Bar_.openPicker();
+            drawnow;
+            testCase.invokeButton_(testCase.findStripButton_('Cancel'));
+            drawnow;
+            after = testCase.Range_.toStruct();
+            testCase.verifyEqual(after.type, before.type, ...
+                'testCancelLeavesRangeUnchanged: Cancel must not change the spec type');
+            testCase.verifyEqual(after.N, before.N, ...
+                'testCancelLeavesRangeUnchanged: Cancel must not change N');
+            testCase.verifyEmpty(findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeStrip'), ...
+                'testCancelLeavesRangeUnchanged: the strip must close on Cancel');
         end
 
         function testNonDefaultUsesAccent(testCase)
             %TESTNONDEFAULTUSESACCENT Non-default range uses Accent; default uses WidgetBorderColor.
-            btn = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
-            % After 'Last 30 days', button should be Accent color.
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
             testCase.Range_.setRelative(30, 'days');
             testCase.Bar_.refreshButton();
-            testCase.verifyEqual(btn.BackgroundColor, testCase.Theme_.Accent, 'AbsTol', 1e-3, ...
+            testCase.verifyEqual(dd.BackgroundColor, testCase.Theme_.Accent, 'AbsTol', 1e-3, ...
                 'testNonDefaultUsesAccent: non-default range must use Accent BackgroundColor');
-            % Reset to default 'Last 7 days'; button should be WidgetBorderColor.
             testCase.Range_.setRelative(7, 'days');
             testCase.Bar_.refreshButton();
-            testCase.verifyEqual(btn.BackgroundColor, testCase.Theme_.WidgetBorderColor, 'AbsTol', 1e-3, ...
+            testCase.verifyEqual(dd.BackgroundColor, testCase.Theme_.WidgetBorderColor, 'AbsTol', 1e-3, ...
                 'testNonDefaultUsesAccent: default range must use WidgetBorderColor');
         end
 
-        function testThemeSwitchRestylesButton(testCase)
-            %TESTTHEMESWITCHRESTYLESBUTTON setTheme() changes button colors without error.
-            btn = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
-            darkFontColor = testCase.Theme_.ForegroundColor;
-            lightTheme = CompanionTheme.get('light');
+        function testThemeSwitchRestylesControl(testCase)
+            %TESTTHEMESWITCHRESTYLESCONTROL setTheme() changes the dropdown FontColor without warning.
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            darkFontColor  = testCase.Theme_.ForegroundColor;
+            lightTheme     = CompanionTheme.get('light');
             lightFontColor = lightTheme.ForegroundColor;
-            % Ensure the two themes produce different foreground colors (sanity).
             testCase.assumeNotEqual(darkFontColor, lightFontColor, ...
-                'testThemeSwitchRestylesButton: dark/light foreground colors must differ');
-            % Switch to light theme.
+                'testThemeSwitchRestylesControl: dark/light foreground colors must differ');
             testCase.verifyWarningFree( ...
                 @() testCase.Bar_.setTheme(lightTheme), ...
-                'testThemeSwitchRestylesButton: setTheme() must not warn');
-            testCase.verifyEqual(btn.FontColor, lightFontColor, 'AbsTol', 1e-3, ...
-                'testThemeSwitchRestylesButton: FontColor must match light theme foreground');
+                'testThemeSwitchRestylesControl: setTheme() must not warn');
+            testCase.verifyEqual(dd.FontColor, lightFontColor, 'AbsTol', 1e-3, ...
+                'testThemeSwitchRestylesControl: FontColor must match light theme foreground');
         end
 
     end
 
     methods (Access = private)
 
+        function s = customLabel_(~)
+            %CUSTOMLABEL_ The dropdown item label that opens the Custom editor strip.
+            s = ['Custom', char(8230)];   % 'Custom…'
+        end
+
+        function selectDropdown_(testCase, val)
+            %SELECTDROPDOWN_ Drive the dropdown ValueChangedFcn as a user selection would.
+            dd = findall(testCase.HostFig_, 'Tag', 'CompanionTimeRangeBtn');
+            dd.Value = val;
+            cb = dd.ValueChangedFcn;
+            cb(dd, []);
+        end
+
+        function btn = findStripButton_(testCase, txt)
+            %FINDSTRIPBUTTON_ Find a uibutton in the Custom strip by its Text.
+            btn = [];
+            all = findall(testCase.HostFig_, 'Type', 'uibutton');
+            for i = 1:numel(all)
+                if strcmp(all(i).Text, txt)
+                    btn = all(i);
+                    return;
+                end
+            end
+        end
+
+        function invokeButton_(~, btn)
+            %INVOKEBUTTON_ Fire a uibutton's ButtonPushedFcn callback.
+            f = btn.ButtonPushedFcn;
+            f(btn, struct());
+        end
+
         function tearDownFixtures_(testCase)
-            %TEARDOWNFIXTURES_ Close popup, delete bar, delete host figure.
-            testCase.closePopup_();
+            %TEARDOWNFIXTURES_ Close strip, delete bar, delete host figure.
             try
                 if ~isempty(testCase.Bar_) && isvalid(testCase.Bar_)
+                    testCase.Bar_.close();
                     delete(testCase.Bar_);
                 end
             catch
@@ -248,22 +314,7 @@ classdef TestCompanionTimeBar < matlab.unittest.TestCase
                 end
             catch
             end
-            % Belt-and-suspenders: assert no orphan 'Time Range' figure remains.
-            figs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
-            for i = 1:numel(figs)
-                try; delete(figs(i)); catch; end
-            end
-        end
-
-        function closePopup_(testCase)
-            %CLOSEPOPUP_ Close the picker popup if open.
-            try
-                if ~isempty(testCase.Bar_) && isvalid(testCase.Bar_)
-                    testCase.Bar_.close();
-                end
-            catch
-            end
-            drawnow;
+            % Belt-and-suspenders: assert the redesign never spawns a separate window.
             figs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
             for i = 1:numel(figs)
                 try; delete(figs(i)); catch; end

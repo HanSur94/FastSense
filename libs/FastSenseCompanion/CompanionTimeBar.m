@@ -1,9 +1,14 @@
 classdef CompanionTimeBar < handle
-%COMPANIONTIMEBAR Toolbar range button + singleton picker popup for FastSenseCompanion.
+%COMPANIONTIMEBAR Inline toolbar time-range control for FastSenseCompanion.
 %
-%   Owns the 'CompanionTimeRangeBtn' uibutton in the companion toolbar's
-%   col-9 flex spacer, and a singleton 400x280 uifigure picker with three
-%   modes: Quick presets, Relative builder, Absolute date pickers.
+%   Owns the 'CompanionTimeRangeBtn' uidropdown in the companion toolbar's
+%   col-9 flex slot. The dropdown lists quick presets (Last 24 hours …
+%   All data) that apply immediately, plus a 'Custom…' item that reveals an
+%   inline relative/absolute editor strip *inside the companion window* — an
+%   overlay panel just under the toolbar, NOT a separate figure or modal.
+%
+%   The Custom strip opens on the Absolute tab by default so a date can be
+%   typed/picked directly; a Relative tab (N + unit) is one click away.
 %
 %   All edits flow through the shared CompanionTimeRange handle passed at
 %   construction — this class calls setRelative/setAbsolute/setAll on it;
@@ -12,11 +17,11 @@ classdef CompanionTimeBar < handle
 %
 %   Usage:
 %     bar = CompanionTimeBar(hToolbarGrid, 9, timeRange, theme, app)
-%     bar.refreshButton()
-%     bar.openPicker()
+%     bar.refreshButton()     % sync dropdown Value + accent from TimeRange_
+%     bar.openPicker()        % reveal the inline Custom editor strip
 %     bar.setTheme(newTheme)
-%     bar.close()     % close popup only
-%     delete(bar)     % full teardown
+%     bar.close()             % dismiss the Custom strip (no-op if closed)
+%     delete(bar)             % full teardown
 %
 %   Constructor:
 %     bar = CompanionTimeBar(parentGrid, col, timeRange, theme, app)
@@ -24,31 +29,30 @@ classdef CompanionTimeBar < handle
 %       col         — 9 (the '1x' flex spacer column)
 %       timeRange   — CompanionTimeRange handle (shared source of truth)
 %       theme       — resolved CompanionTheme struct
-%       app         — FastSenseCompanion handle (for uialert + applyThemeToChildren_)
+%       app         — FastSenseCompanion handle (for hFig_ overlay + uialert)
 %
 %   Public methods:
-%     openPicker()            — open or focus the picker popup
-%     refreshButton()         — sync button Text + BackgroundColor from TimeRange_
-%     setTheme(theme)         — restyle button (and open popup) to new theme
-%     close()                 — delete popup; no-op on button
+%     openPicker()            — reveal the inline Custom relative/absolute strip
+%     refreshButton()         — sync dropdown Value + BackgroundColor from TimeRange_
+%     setTheme(theme)         — restyle dropdown (and open strip) to new theme
+%     close()                 — delete the Custom strip; no-op on the dropdown
 %     delete()                — full teardown
 %
 %   See also CompanionTimeRange, FastSenseCompanion, CompanionSettingsDialog.
 
     properties (Access = private)
-        hBtn_             = []    % toolbar uibutton (Tag 'CompanionTimeRangeBtn')
-        hPopup_           = []    % picker uifigure ([] when closed)
+        hDropdown_        = []    % toolbar uidropdown (Tag 'CompanionTimeRangeBtn') — inline preset selector
         TimeRange_        = []    % CompanionTimeRange handle (shared; NOT owned)
         Theme_            = []    % resolved CompanionTheme struct
         App_              = []    % FastSenseCompanion handle
         Listeners_        = {}    % all addlistener returns; deleted in delete()
-        ActiveMode_       = 'Quick'   % 'Quick' | 'Relative' | 'Absolute'
-        % Tab strip handles
-        hTabQuick_        = []
+        ActiveMode_       = 'Absolute'   % 'Relative' | 'Absolute' (active tab in the Custom strip)
+        % Inline Custom strip (overlay uipanel on the companion figure; NOT a separate window)
+        hStrip_           = []
+        % Custom-strip Relative/Absolute toggle handles
         hTabRelative_     = []
         hTabAbsolute_     = []
-        % Mode panel handles (parented into the mode-host row of the popup grid)
-        hPanelQuick_      = []
+        % Mode panel handles (parented into the Custom strip's panel host)
         hPanelRelative_   = []
         hPanelAbsolute_   = []
         % Action row
@@ -67,35 +71,37 @@ classdef CompanionTimeBar < handle
     methods (Access = public)
 
         function obj = CompanionTimeBar(parentGrid, col, timeRange, theme, app)
-        %COMPANIONTIMEBAR Build the range button into parentGrid at col.
+        %COMPANIONTIMEBAR Build the range dropdown into parentGrid at col.
             obj.TimeRange_ = timeRange;
             obj.Theme_     = theme;
             obj.App_       = app;
 
             t = theme;
 
-            % Build the toolbar range button.
-            obj.hBtn_ = uibutton(parentGrid, 'push');
-            obj.hBtn_.Layout.Row    = 1;
-            obj.hBtn_.Layout.Column = col;
-            obj.hBtn_.FontSize      = 11;
-            obj.hBtn_.FontWeight    = 'bold';
-            obj.hBtn_.FontColor     = t.ForegroundColor;
-            obj.hBtn_.Tag           = 'CompanionTimeRangeBtn';
-            obj.hBtn_.Tooltip       = 'Set the global time range for all companion-opened views';
-            obj.hBtn_.ButtonPushedFcn = @(~,~) obj.openPicker();
+            % Build the inline toolbar range dropdown (no separate window).
+            % Selecting a preset applies it immediately via the shared
+            % CompanionTimeRange; the 'Custom…' item reveals an inline
+            % relative/absolute editor strip under the bar.
+            obj.hDropdown_ = uidropdown(parentGrid);
+            obj.hDropdown_.Layout.Row    = 1;
+            obj.hDropdown_.Layout.Column = col;
+            obj.hDropdown_.Items         = [obj.presetLabels_(), {obj.customLabel_()}];
+            obj.hDropdown_.FontSize      = 11;
+            obj.hDropdown_.FontWeight    = 'bold';
+            obj.hDropdown_.FontColor     = t.ForegroundColor;
+            obj.hDropdown_.Tag           = 'CompanionTimeRangeBtn';
+            obj.hDropdown_.Tooltip       = 'Set the global time range for all companion-opened views';
+            obj.hDropdown_.ValueChangedFcn = @(s,~) obj.onDropdownChanged_(s.Value);
 
             obj.refreshButton();
         end
 
         function openPicker(obj)
-        %OPENPICKER Open the singleton picker popup, or bring the existing one to front.
-            if ~isempty(obj.hPopup_) && isvalid(obj.hPopup_)
-                figure(obj.hPopup_);
-                return;
-            end
+        %OPENPICKER Reveal the inline Custom relative/absolute editor strip.
+        %   The strip is an overlay panel inside the companion window (under the
+        %   toolbar) — NOT a separate figure. Re-calling focuses the open strip.
             try
-                obj.buildPopup_();
+                obj.openCustomStrip_();
             catch ME
                 try
                     if ~isempty(obj.App_) && isvalid(obj.App_) && ...
@@ -108,34 +114,47 @@ classdef CompanionTimeBar < handle
         end
 
         function refreshButton(obj)
-        %REFRESHBUTTON Sync button Text + BackgroundColor from TimeRange_.
-            if isempty(obj.hBtn_) || ~isvalid(obj.hBtn_); return; end
+        %REFRESHBUTTON Sync dropdown selection + BackgroundColor from TimeRange_.
+        %   A preset range selects the matching item; a non-preset (custom)
+        %   range is shown as a transient first item so the label stays visible.
+        %   The 'Custom…' editor item is always appended last.
+            if isempty(obj.hDropdown_) || ~isvalid(obj.hDropdown_); return; end
             try
-                obj.hBtn_.Text = obj.TimeRange_.label();
-                if obj.TimeRange_.isDefault()
-                    obj.hBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                lbl    = obj.TimeRange_.label();
+                base   = obj.presetLabels_();
+                custom = obj.customLabel_();
+                if any(strcmp(lbl, base))
+                    obj.hDropdown_.Items = [base, {custom}];
                 else
-                    obj.hBtn_.BackgroundColor = obj.Theme_.Accent;
+                    % Non-preset (custom) range: show its label as a transient
+                    % leading item so it stays visible alongside the presets.
+                    obj.hDropdown_.Items = [{lbl}, base, {custom}];
+                end
+                obj.hDropdown_.Value = lbl;
+                if obj.TimeRange_.isDefault()
+                    obj.hDropdown_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                else
+                    obj.hDropdown_.BackgroundColor = obj.Theme_.Accent;
                 end
             catch
             end
         end
 
         function setTheme(obj, theme)
-        %SETTHEME Restyle the button (and open popup if valid) to a new theme.
+        %SETTHEME Restyle the dropdown (and open Custom strip if valid) to a new theme.
             obj.Theme_ = theme;
             t = theme;
-            if ~isempty(obj.hBtn_) && isvalid(obj.hBtn_)
+            if ~isempty(obj.hDropdown_) && isvalid(obj.hDropdown_)
                 try
-                    obj.hBtn_.FontColor = t.ForegroundColor;
+                    obj.hDropdown_.FontColor = t.ForegroundColor;
                     obj.refreshButton();
                 catch
                 end
             end
-            if ~isempty(obj.hPopup_) && isvalid(obj.hPopup_)
+            if ~isempty(obj.hStrip_) && isvalid(obj.hStrip_)
                 try
-                    obj.hPopup_.Color = t.DashboardBackground;
-                    applyThemeToChildren_(obj.hPopup_, t);
+                    obj.hStrip_.BackgroundColor = t.DashboardBackground;
+                    applyThemeToChildren_(obj.hStrip_, t);
                     % Re-assert Accent on the active mode tab and Apply.
                     obj.switchMode_(obj.ActiveMode_);
                 catch
@@ -144,18 +163,18 @@ classdef CompanionTimeBar < handle
         end
 
         function close(obj)
-        %CLOSE Delete the popup uifigure if open. Does NOT delete the button.
-            if ~isempty(obj.hPopup_) && isvalid(obj.hPopup_)
+        %CLOSE Delete the inline Custom strip if open. Does NOT delete the dropdown.
+            if ~isempty(obj.hStrip_) && isvalid(obj.hStrip_)
                 try
-                    delete(obj.hPopup_);
+                    delete(obj.hStrip_);
                 catch
                 end
             end
-            obj.hPopup_ = [];
+            obj.hStrip_ = [];
         end
 
         function delete(obj)
-        %DELETE Handle-class destructor — deletes listeners, closes popup, deletes button.
+        %DELETE Handle-class destructor — deletes listeners, closes strip, deletes dropdown.
             for ii = 1:numel(obj.Listeners_)
                 try
                     lh = obj.Listeners_{ii};
@@ -167,95 +186,147 @@ classdef CompanionTimeBar < handle
             end
             obj.Listeners_ = {};
             obj.close();
-            if ~isempty(obj.hBtn_) && isvalid(obj.hBtn_)
+            if ~isempty(obj.hDropdown_) && isvalid(obj.hDropdown_)
                 try
-                    delete(obj.hBtn_);
+                    delete(obj.hDropdown_);
                 catch
                 end
             end
-            obj.hBtn_ = [];
+            obj.hDropdown_ = [];
         end
 
     end
 
     methods (Access = private)
 
-        function buildPopup_(obj)
-        %BUILDPOPUP_ Build the 400x280 singleton picker uifigure.
+        function labels = presetLabels_(~)
+        %PRESETLABELS_ Inline-dropdown preset item labels (order matters).
+            labels = {'Last 24 hours', 'Last 7 days', 'Last 30 days', ...
+                      'Last 90 days', 'Last 1 year', 'All data'};
+        end
+
+        function s = customLabel_(~)
+        %CUSTOMLABEL_ Label of the dropdown item that opens the Custom editor strip.
+            s = ['Custom', char(8230)];   % 'Custom…'
+        end
+
+        function onDropdownChanged_(obj, val)
+        %ONDROPDOWNCHANGED_ Apply the chosen preset, or open the Custom strip.
+        %   Presets map to a CompanionTimeRange edit (fires RangeChanged so the
+        %   companion re-queries open views). 'Custom…' reveals the inline editor.
+            try
+                if strcmp(val, obj.customLabel_())
+                    obj.openCustomStrip_();
+                    return;
+                end
+                switch val
+                    case 'Last 24 hours', obj.applyPresetRelative_(24, 'hours');
+                    case 'Last 7 days',   obj.applyPresetRelative_(7,  'days');
+                    case 'Last 30 days',  obj.applyPresetRelative_(30, 'days');
+                    case 'Last 90 days',  obj.applyPresetRelative_(90, 'days');
+                    case 'Last 1 year',   obj.applyPresetRelative_(1,  'years');
+                    case 'All data',      obj.applyPresetAll_();
+                    otherwise
+                        % Transient custom-range label re-selected, or unknown: no-op.
+                end
+            catch ME
+                try
+                    if ~isempty(obj.App_) && isvalid(obj.App_) && ...
+                            ~isempty(obj.App_.hFig_) && isvalid(obj.App_.hFig_)
+                        uialert(obj.App_.hFig_, ME.message, 'Time Range Error');
+                    end
+                catch
+                end
+            end
+        end
+
+        % ----------------------------------------------------------------
+        %  Inline Custom strip (overlay panel; no separate window)
+        % ----------------------------------------------------------------
+
+        function openCustomStrip_(obj)
+        %OPENCUSTOMSTRIP_ Build the Custom strip, or focus it if already open.
+            if ~isempty(obj.hStrip_) && isvalid(obj.hStrip_)
+                try
+                    uistack(obj.hStrip_, 'top');
+                catch
+                end
+                return;
+            end
+            obj.buildCustomStrip_();
+        end
+
+        function buildCustomStrip_(obj)
+        %BUILDCUSTOMSTRIP_ Build the inline Custom editor strip as an overlay panel.
+        %   Parented to the companion figure (NOT a separate window), positioned
+        %   just under the toolbar. Hosts a Relative/Absolute toggle, the matching
+        %   builder panel, a live preview, and Apply/Cancel. Seeded from the
+        %   current range; opens on the Absolute tab by default for direct date entry.
+            hFig = obj.hostFigure_();
+            if isempty(hFig) || ~isvalid(hFig)
+                error('CompanionTimeBar:noFigure', ...
+                    'Cannot open the time-range editor: host figure unavailable.');
+            end
             t = obj.Theme_;
 
-            % Position near the companion figure.
-            popW = 400;
-            popH = 280;
-            px = 200;
-            py = 200;
+            stripW = 400;
+            stripH = 220;
+            pos = obj.customStripPosition_(hFig.Position, stripW, stripH);
+
+            obj.hStrip_ = uipanel(hFig);
+            obj.hStrip_.Units           = 'pixels';
+            obj.hStrip_.Position        = pos;
+            obj.hStrip_.BackgroundColor = t.DashboardBackground;
+            obj.hStrip_.BorderType      = 'line';
+            obj.hStrip_.Tag             = 'CompanionTimeRangeStrip';
             try
-                if ~isempty(obj.App_) && isvalid(obj.App_) && ...
-                        ~isempty(obj.App_.hFig_) && isvalid(obj.App_.hFig_)
-                    fp = obj.App_.hFig_.Position;   % [x y w h]
-                    px = fp(1) + floor(fp(3)/2) - floor(popW/2);
-                    py = fp(2) + floor(fp(4)/2) - floor(popH/2);
-                    % Clamp to screen.
-                    mons = get(groot, 'MonitorPositions');
-                    sr = mons(1, :);
-                    px = max(sr(1), min(sr(1)+sr(3)-popW, px));
-                    py = max(sr(2), min(sr(2)+sr(4)-popH, py));
-                end
+                obj.hStrip_.BorderColor = t.Accent;
+                obj.hStrip_.BorderWidth = 1;
+            catch
+            end
+            try
+                uistack(obj.hStrip_, 'top');
             catch
             end
 
-            % Popup: 400 280 px (width x height per UI-SPEC locked values).
-            obj.hPopup_ = uifigure( ...
-                'Name',               'Time Range', ...
-                'Position',           [px py popW popH], ...
-                'Resize',             'off', ...
-                'AutoResizeChildren', 'off', ...
-                'Color',              t.DashboardBackground);
-
-            % Root [4 1] grid.
-            gRoot = uigridlayout(obj.hPopup_, [4 1]);
-            gRoot.RowHeight     = {32, '1x', 1, 40};
+            % Root [3 1] grid: toggle row / panel host / action row.
+            gRoot = uigridlayout(obj.hStrip_, [3 1]);
+            gRoot.RowHeight     = {28, '1x', 32};
             gRoot.ColumnWidth   = {'1x'};
-            gRoot.Padding       = [16 16 16 16];
-            gRoot.RowSpacing    = 12;
+            gRoot.Padding       = [12 12 12 12];
+            gRoot.RowSpacing    = 10;
             gRoot.ColumnSpacing = 0;
             gRoot.BackgroundColor = t.DashboardBackground;
 
-            % Row 1: Mode tab strip [1 3].
-            gTabs = uigridlayout(gRoot, [1 3]);
+            % Row 1: Relative / Absolute toggle.
+            gTabs = uigridlayout(gRoot, [1 2]);
             gTabs.Layout.Row    = 1;
             gTabs.Layout.Column = 1;
             gTabs.RowHeight     = {'1x'};
-            gTabs.ColumnWidth   = {'1x', '1x', '1x'};
+            gTabs.ColumnWidth   = {'1x', '1x'};
             gTabs.Padding       = [0 0 0 0];
             gTabs.ColumnSpacing = 4;
             gTabs.BackgroundColor = t.DashboardBackground;
 
-            obj.hTabQuick_ = uibutton(gTabs, 'push');
-            obj.hTabQuick_.Layout.Row    = 1;
-            obj.hTabQuick_.Layout.Column = 1;
-            obj.hTabQuick_.Text          = 'Quick';
-            obj.hTabQuick_.FontSize      = 11;
-            obj.hTabQuick_.FontWeight    = 'bold';
-            obj.hTabQuick_.ButtonPushedFcn = @(~,~) obj.onTabQuick_();
-
             obj.hTabRelative_ = uibutton(gTabs, 'push');
             obj.hTabRelative_.Layout.Row    = 1;
-            obj.hTabRelative_.Layout.Column = 2;
+            obj.hTabRelative_.Layout.Column = 1;
             obj.hTabRelative_.Text          = 'Relative';
             obj.hTabRelative_.FontSize      = 11;
             obj.hTabRelative_.FontWeight    = 'bold';
+            obj.hTabRelative_.FontColor     = t.ForegroundColor;
             obj.hTabRelative_.ButtonPushedFcn = @(~,~) obj.onTabRelative_();
 
             obj.hTabAbsolute_ = uibutton(gTabs, 'push');
             obj.hTabAbsolute_.Layout.Row    = 1;
-            obj.hTabAbsolute_.Layout.Column = 3;
+            obj.hTabAbsolute_.Layout.Column = 2;
             obj.hTabAbsolute_.Text          = 'Absolute';
             obj.hTabAbsolute_.FontSize      = 11;
             obj.hTabAbsolute_.FontWeight    = 'bold';
+            obj.hTabAbsolute_.FontColor     = t.ForegroundColor;
             obj.hTabAbsolute_.ButtonPushedFcn = @(~,~) obj.onTabAbsolute_();
 
-            % Row 2: Mode-panel host (each mode panel placed here with Visible toggling).
+            % Row 2: panel host (Relative + Absolute built in; Visible toggled).
             gPanelHost = uigridlayout(gRoot, [1 1]);
             gPanelHost.Layout.Row    = 2;
             gPanelHost.Layout.Column = 1;
@@ -265,21 +336,20 @@ classdef CompanionTimeBar < handle
             gPanelHost.RowSpacing    = 0;
             gPanelHost.BackgroundColor = t.DashboardBackground;
 
-            % Build three mode panels inside the host (Visible toggled by switchMode_).
-            obj.buildQuickPanel_(gPanelHost);
+            % Build both mode panels into the SAME host cell (1,1) so they
+            % overlap (visibility-toggled) and each gets the full host height.
+            % Without an explicit Layout, a [1 1] uigridlayout auto-expands to
+            % [2 1] and stacks the two panels, squishing/clipping their controls.
             obj.buildRelativePanel_(gPanelHost);
+            obj.hPanelRelative_.Layout.Row    = 1;
+            obj.hPanelRelative_.Layout.Column = 1;
             obj.buildAbsolutePanel_(gPanelHost);
+            obj.hPanelAbsolute_.Layout.Row    = 1;
+            obj.hPanelAbsolute_.Layout.Column = 1;
 
-            % Row 3: Visual separator (1px thin panel).
-            hSep = uipanel(gRoot);
-            hSep.Layout.Row    = 3;
-            hSep.Layout.Column = 1;
-            hSep.BackgroundColor = t.WidgetBorderColor;
-            hSep.BorderType      = 'none';
-
-            % Row 4: Action row [1 2].
+            % Row 3: action row (Apply / Cancel).
             gAction = uigridlayout(gRoot, [1 2]);
-            gAction.Layout.Row    = 4;
+            gAction.Layout.Row    = 3;
             gAction.Layout.Column = 1;
             gAction.RowHeight     = {'1x'};
             gAction.ColumnWidth   = {'1x', '1x'};
@@ -305,64 +375,113 @@ classdef CompanionTimeBar < handle
             obj.hCancelBtn_.FontWeight    = 'bold';
             obj.hCancelBtn_.BackgroundColor = t.WidgetBorderColor;
             obj.hCancelBtn_.FontColor       = t.ForegroundColor;
-            obj.hCancelBtn_.ButtonPushedFcn = @(~,~) obj.close();
+            obj.hCancelBtn_.ButtonPushedFcn = @(~,~) obj.closeStrip_();
 
-            % Theme + re-assert Accent.
-            applyThemeToChildren_(obj.hPopup_, t);
-            obj.switchMode_('Quick');
-
-            obj.hPopup_.CloseRequestFcn = @(~,~) obj.close();
+            % Apply theme to all controls, then seed from the current range and
+            % reveal the chosen mode (switchMode_ re-asserts tab + Apply accents).
+            try
+                applyThemeToChildren_(obj.hStrip_, t);
+            catch
+            end
+            obj.seedCustomFromRange_();
+            obj.switchMode_(obj.initialCustomMode_());
         end
 
-        function buildQuickPanel_(obj, parent)
-        %BUILDQUICKPANEL_ Build the Quick-presets mode panel with 6 one-click preset buttons.
-            t = obj.Theme_;
+        function closeStrip_(obj)
+        %CLOSESTRIP_ Cancel the Custom strip: delete it and restore the dropdown label.
+            obj.close();
+            obj.refreshButton();
+        end
 
-            obj.hPanelQuick_ = uigridlayout(parent, [6 1]);
-            obj.hPanelQuick_.RowHeight   = {32, 32, 32, 32, 32, 32};
-            obj.hPanelQuick_.ColumnWidth = {'1x'};
-            obj.hPanelQuick_.Padding     = [0 0 0 0];
-            obj.hPanelQuick_.RowSpacing  = 4;
-            obj.hPanelQuick_.BackgroundColor = t.DashboardBackground;
-            obj.hPanelQuick_.Visible         = 'on';
+        function pos = customStripPosition_(~, figPos, stripW, stripH)
+        %CUSTOMSTRIPPOSITION_ Pixel Position for the overlay strip under the toolbar.
+        %   Right-aligned beneath the toolbar dropdown/gear; clamped to stay
+        %   on-figure. figPos is the companion figure [x y w h]; the returned
+        %   Position is relative to the figure's lower-left corner (Units 'pixels').
+            w = figPos(3);
+            h = figPos(4);
+            % Right margin: hLayout right pad (24) + gear col (36) + spacing (8) = 68.
+            left = w - 68 - stripW;
+            % Top: hLayout top pad (24) + toolbar row (32) + small gap (2) = 58.
+            bottom = h - 58 - stripH;
+            left   = max(8, left);
+            bottom = max(8, bottom);
+            pos = [left, bottom, stripW, stripH];
+        end
 
-            presets = { ...
-                'Last 24 hours', 24, 'hours'; ...
-                'Last 7 days',    7, 'days'; ...
-                'Last 30 days',  30, 'days'; ...
-                'Last 90 days',  90, 'days'; ...
-                'Last 1 year',    1, 'years'; ...
-                'All data',       0, 'all'};
-
-            for k = 1:6
-                lbl  = presets{k, 1};
-                N    = presets{k, 2};
-                unit = presets{k, 3};
-
-                % Highlight the active preset.
-                isActive = obj.isPresetActive_(N, unit);
-                if isActive
-                    bgColor = t.Accent;
-                else
-                    bgColor = t.WidgetBorderColor;
+        function f = hostFigure_(obj)
+        %HOSTFIGURE_ The uifigure that hosts the toolbar dropdown (and the strip).
+        %   Derived from the dropdown's ancestor so the strip overlays whatever
+        %   figure the toolbar lives in; falls back to the app's hFig_.
+            f = [];
+            try
+                if ~isempty(obj.hDropdown_) && isvalid(obj.hDropdown_)
+                    f = ancestor(obj.hDropdown_, 'figure');
                 end
-
-                btn = uibutton(obj.hPanelQuick_, 'push');
-                btn.Layout.Row    = k;
-                btn.Layout.Column = 1;
-                btn.Text          = lbl;
-                btn.FontSize      = 11;
-                btn.FontWeight    = 'bold';
-                btn.HorizontalAlignment = 'left';
-                btn.BackgroundColor     = bgColor;
-                btn.FontColor           = t.ForegroundColor;
-
-                % One-click: commit + close.
-                if strcmp(unit, 'all')
-                    btn.ButtonPushedFcn = @(~,~) obj.applyPresetAll_();
-                else
-                    btn.ButtonPushedFcn = @(~,~) obj.applyPresetRelative_(N, unit);
+            catch
+            end
+            if isempty(f) || ~isvalid(f)
+                try
+                    if ~isempty(obj.App_) && isvalid(obj.App_)
+                        f = obj.App_.hFig_;
+                    end
+                catch
                 end
+            end
+        end
+
+        function mode = initialCustomMode_(obj)
+        %INITIALCUSTOMMODE_ Pick the Custom strip's opening tab.
+        %   Absolute by default (direct date entry); Relative only when the
+        %   current range is a *non-preset* relative window, so the user sees
+        %   their own custom relative setting on reopen.
+            mode = 'Absolute';
+            try
+                s = obj.TimeRange_.toStruct();
+                if strcmp(s.type, 'relative') && ~obj.isPresetRelative_(s.N, s.unit)
+                    mode = 'Relative';
+                end
+            catch
+            end
+        end
+
+        function tf = isPresetRelative_(~, N, unit)
+        %ISPRESETRELATIVE_ True if (N, unit) matches one of the quick relative presets.
+            presets = {24, 'hours'; 7, 'days'; 30, 'days'; 90, 'days'; 1, 'years'};
+            tf = false;
+            for k = 1:size(presets, 1)
+                if N == presets{k, 1} && strcmp(unit, presets{k, 2})
+                    tf = true;
+                    return;
+                end
+            end
+        end
+
+        function seedCustomFromRange_(obj)
+        %SEEDCUSTOMFROMRANGE_ Pre-fill the Relative/Absolute controls from TimeRange_.
+        %   Relative spec -> spinner N + unit dropdown; absolute spec -> date
+        %   pickers. Non-matching specs keep the builder defaults. Best-effort.
+            try
+                s = obj.TimeRange_.toStruct();
+                if strcmp(s.type, 'relative')
+                    if ~isempty(obj.hRelSpinner_) && isvalid(obj.hRelSpinner_)
+                        obj.hRelSpinner_.Value = max(1, round(s.N));
+                    end
+                    if ~isempty(obj.hRelDropdown_) && isvalid(obj.hRelDropdown_) && ...
+                            any(strcmp(s.unit, obj.hRelDropdown_.Items))
+                        obj.hRelDropdown_.Value = s.unit;
+                    end
+                elseif strcmp(s.type, 'absolute') && ~isempty(s.t0) && ~isempty(s.t1)
+                    if ~isempty(obj.hAbsStartPicker_) && isvalid(obj.hAbsStartPicker_)
+                        obj.hAbsStartPicker_.Value = datetime(s.t0, 'ConvertFrom', 'datenum');
+                    end
+                    if ~isempty(obj.hAbsEndPicker_) && isvalid(obj.hAbsEndPicker_)
+                        obj.hAbsEndPicker_.Value = datetime(s.t1, 'ConvertFrom', 'datenum');
+                    end
+                end
+                obj.updateRelPreview_();
+                obj.updateAbsPreview_();
+            catch
             end
         end
 
@@ -486,14 +605,11 @@ classdef CompanionTimeBar < handle
         end
 
         function switchMode_(obj, mode)
-        %SWITCHMODE_ Show the active mode panel; repaint tab + Apply visibility.
+        %SWITCHMODE_ Show the active mode panel; repaint the Relative/Absolute toggle.
             obj.ActiveMode_ = mode;
             t = obj.Theme_;
 
             % Toggle panels.
-            if ~isempty(obj.hPanelQuick_) && isvalid(obj.hPanelQuick_)
-                obj.hPanelQuick_.Visible = 'off';
-            end
             if ~isempty(obj.hPanelRelative_) && isvalid(obj.hPanelRelative_)
                 obj.hPanelRelative_.Visible = 'off';
             end
@@ -502,10 +618,6 @@ classdef CompanionTimeBar < handle
             end
 
             switch mode
-                case 'Quick'
-                    if ~isempty(obj.hPanelQuick_) && isvalid(obj.hPanelQuick_)
-                        obj.hPanelQuick_.Visible = 'on';
-                    end
                 case 'Relative'
                     if ~isempty(obj.hPanelRelative_) && isvalid(obj.hPanelRelative_)
                         obj.hPanelRelative_.Visible = 'on';
@@ -516,10 +628,10 @@ classdef CompanionTimeBar < handle
                     end
             end
 
-            % Repaint tab backgrounds (Accent for active, WidgetBorderColor for inactive).
-            tabs  = {obj.hTabQuick_, obj.hTabRelative_, obj.hTabAbsolute_};
-            names = {'Quick', 'Relative', 'Absolute'};
-            for k = 1:3
+            % Repaint toggle backgrounds (Accent for active, WidgetBorderColor for inactive).
+            tabs  = {obj.hTabRelative_, obj.hTabAbsolute_};
+            names = {'Relative', 'Absolute'};
+            for k = 1:2
                 if ~isempty(tabs{k}) && isvalid(tabs{k})
                     if strcmp(names{k}, mode)
                         tabs{k}.BackgroundColor = t.Accent;
@@ -529,14 +641,17 @@ classdef CompanionTimeBar < handle
                 end
             end
 
-            % Apply button hidden in Quick mode; visible in Relative/Absolute.
+            % Apply is always available in the Custom strip; re-assert accent.
             if ~isempty(obj.hApplyBtn_) && isvalid(obj.hApplyBtn_)
-                if strcmp(mode, 'Quick')
-                    obj.hApplyBtn_.Visible = 'off';
-                else
-                    obj.hApplyBtn_.Visible = 'on';
-                    obj.hApplyBtn_.BackgroundColor = t.Accent;
-                end
+                obj.hApplyBtn_.Visible         = 'on';
+                obj.hApplyBtn_.BackgroundColor = t.Accent;
+            end
+
+            % Re-run validation for the now-visible Absolute panel (toggles Apply.Enable).
+            if strcmp(mode, 'Absolute')
+                obj.updateAbsPreview_();
+            elseif ~isempty(obj.hApplyBtn_) && isvalid(obj.hApplyBtn_)
+                obj.hApplyBtn_.Enable = 'on';
             end
         end
 
@@ -545,7 +660,7 @@ classdef CompanionTimeBar < handle
         % ----------------------------------------------------------------
 
         function applyPresetRelative_(obj, N, unit)
-        %APPLYPRESETRELATIVE_ One-click relative preset commit + close.
+        %APPLYPRESETRELATIVE_ One-click relative preset commit + close strip.
             try
                 obj.TimeRange_.setRelative(N, unit);
                 obj.refreshButton();
@@ -562,7 +677,7 @@ classdef CompanionTimeBar < handle
         end
 
         function applyPresetAll_(obj)
-        %APPLYPRESETALL_ One-click All data preset commit + close.
+        %APPLYPRESETALL_ One-click All data preset commit + close strip.
             try
                 obj.TimeRange_.setAll();
                 obj.refreshButton();
@@ -578,38 +693,9 @@ classdef CompanionTimeBar < handle
             end
         end
 
-        function tf = isPresetActive_(obj, N, unit)
-        %ISPRESETACTIVE_ Check whether a preset matches the current TimeRange_ spec.
-            try
-                s = obj.TimeRange_.toStruct();
-                if strcmp(unit, 'all')
-                    tf = strcmp(s.type, 'all');
-                else
-                    tf = strcmp(s.type, 'relative') && s.N == N && strcmp(s.unit, unit);
-                end
-            catch
-                tf = false;
-            end
-        end
-
         % ----------------------------------------------------------------
         %  Tab callbacks
         % ----------------------------------------------------------------
-
-        function onTabQuick_(obj)
-        %ONTABQUICK_ Mode tab callback.
-            try
-                obj.switchMode_('Quick');
-            catch ME
-                try
-                    if ~isempty(obj.App_) && isvalid(obj.App_) && ...
-                            ~isempty(obj.App_.hFig_) && isvalid(obj.App_.hFig_)
-                        uialert(obj.App_.hFig_, ME.message, 'Time Range Error');
-                    end
-                catch
-                end
-            end
-        end
 
         function onTabRelative_(obj)
         %ONTABRELATIVE_ Mode tab callback.
@@ -654,7 +740,7 @@ classdef CompanionTimeBar < handle
                     case 'Absolute'
                         obj.commitAbsolute_();
                     otherwise
-                        % Quick mode hides Apply; defensive no-op.
+                        % Defensive no-op.
                 end
             catch ME
                 try
@@ -668,7 +754,7 @@ classdef CompanionTimeBar < handle
         end
 
         function commitRelative_(obj)
-        %COMMITRELATIVE_ Commit the Relative panel state and close.
+        %COMMITRELATIVE_ Commit the Relative panel state and close the strip.
             N    = obj.hRelSpinner_.Value;
             unit = obj.hRelDropdown_.Value;
             obj.TimeRange_.setRelative(N, unit);

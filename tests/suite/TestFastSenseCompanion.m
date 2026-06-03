@@ -1657,8 +1657,8 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'testCompanionTimeRangeButtonDefaultLabel: expected exactly one CompanionTimeRangeBtn');
             testCase.verifyEqual(btn.Layout.Column, 9, ...
                 'testCompanionTimeRangeButtonDefaultLabel: range button must be in toolbar column 9');
-            testCase.verifyEqual(btn.Text, 'Last 7 days', ...
-                'testCompanionTimeRangeButtonDefaultLabel: default label must be ''Last 7 days''');
+            testCase.verifyEqual(btn.Value, 'Last 7 days', ...
+                'testCompanionTimeRangeButtonDefaultLabel: default selection must be ''Last 7 days''');
             % Regression guard: toolbar ColumnWidth must remain {110,110,110,130,70,90,70,70,'1x',36}.
             warnState = warning('off', 'MATLAB:structOnObject');
             cleanupW = onCleanup(@() warning(warnState));
