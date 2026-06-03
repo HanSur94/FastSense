@@ -41,7 +41,7 @@ Plans:
 
 - [x] 1041-01-test-scaffold-bootstrap-PLAN.md — Wave 0: TestCanonicalMapper.m (30 RED tests) + install.m Fleet path + libs/Fleet/ bootstrap
 - [x] 1041-02-mapper-core-suggest-PLAN.md — Wave 1: CanonicalMapper core — normalize + edit-distance + suggest + confidence + unit-mismatch (CANON-01, CANON-02)
-- [ ] 1041-03-override-persist-query-PLAN.md — Wave 2: override/confirm precedence + JSON round-trip + reviewPending/unmapped/isResolvable (CANON-03, CANON-04)
+- [x] 1041-03-override-persist-query-PLAN.md — Wave 2: override/confirm precedence + JSON round-trip + reviewPending/unmapped/isResolvable (CANON-03, CANON-04)
 - [ ] 1041-04-canonical-map-editor-PLAN.md — Wave 3: standalone CanonicalMapEditor uifigure + human-verify checkpoint (CANON-05)
 
 ### Phase 1042: Machine + Fleet + Pipeline DI Seam
@@ -123,7 +123,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1041. CanonicalMapper | 2/4 | In Progress|  |
+| 1041. CanonicalMapper | 3/4 | In Progress|  |
 | 1042. Machine + Fleet + Pipeline DI Seam | 0/? | Not started | - |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 0/? | Not started | - |
 | 1044. Companion Machine Dimension | 0/? | Not started | - |
