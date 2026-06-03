@@ -2304,16 +2304,7 @@ classdef FastSenseCompanion < handle
                             catch
                             end
                             % Phase 1041-04: apply current window to the freshly spawned engine.
-                            try
-                                if ~isempty(hFig_k) && ishandle(hFig_k)
-                                    eng_k = getappdata(hFig_k, 'DashboardEngine');
-                                    if ~isempty(eng_k) && isvalid(eng_k)
-                                        [t0_k, t1_k] = obj.TimeRange_.resolve();
-                                        eng_k.setTimeWindow(t0_k, t1_k);
-                                    end
-                                end
-                            catch
-                            end
+                            obj.applyTimeWindowToFigure_(hFig_k);
                             try
                                 nm = tgK.Name;
                             catch
@@ -2356,16 +2347,7 @@ classdef FastSenseCompanion < handle
                     catch
                     end
                     % Phase 1041-04: apply current window to the freshly spawned engine.
-                    try
-                        if ~isempty(hFig) && ishandle(hFig)
-                            eng = getappdata(hFig, 'DashboardEngine');
-                            if ~isempty(eng) && isvalid(eng)
-                                [t0, t1] = obj.TimeRange_.resolve();
-                                eng.setTimeWindow(t0, t1);
-                            end
-                        end
-                    catch
-                    end
+                    obj.applyTimeWindowToFigure_(hFig);
                     obj.addLogEntry('info', sprintf( ...
                         'Opened ad-hoc plot: %d tag(s) [%s]', ...
                         numel(tags), char(mode)));
@@ -2387,6 +2369,26 @@ classdef FastSenseCompanion < handle
                         sprintf('Failed to open plot: %s', ME.message), ...
                         'FastSense Companion', 'Icon', 'error');
                 end
+            end
+        end
+
+        function applyTimeWindowToFigure_(obj, hFig)
+        %APPLYTIMEWINDOWTOFIGURE_ Push the current time window onto a freshly spawned ad-hoc engine.
+        %   Best-effort; never throws (callers are figure-spawn paths). No-op when
+        %   the figure has no DashboardEngine appdata or the engine is invalid.
+        %   (Phase 1041-04; extracted from onOpenAdHocPlotRequested_ to keep the
+        %   PerTag spawn loop within the mh_metric control-nesting limit.)
+            try
+                if isempty(hFig) || ~ishandle(hFig)
+                    return;
+                end
+                eng = getappdata(hFig, 'DashboardEngine');
+                if isempty(eng) || ~isvalid(eng)
+                    return;
+                end
+                [t0, t1] = obj.TimeRange_.resolve();
+                eng.setTimeWindow(t0, t1);
+            catch
             end
         end
 
