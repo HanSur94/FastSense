@@ -156,16 +156,26 @@ CLEANUPINFOTEMPFILE Delete the temporary HTML file if it exists.
 
 REMOVEWIDGET Remove widget at given index and re-layout.
 
+#### `removePage(obj, idx)`
+
+REMOVEPAGE Remove the page at index idx, keeping ActivePage valid.
+  Mirror of removeWidget for pages. Throws DashboardEngine:invalidIndex
+  on a bad index. Deletes the page's widgets and the page, adjusts
+  ActivePage (decrements when removing a page before it; clamps when
+  removing the active page; resets to 0 when no pages remain), and
+  re-renders when a figure is live.
+
 #### `setWidgetPosition(obj, idx, pos)`
 
 SETWIDGETPOSITION Set the grid position of a widget by index.
   Clamps width to grid columns and resolves overlaps with other
-  widgets.
+  widgets. Operates on the active page in multi-page mode.
 
 #### `w = getWidgetByTitle(obj, title)`
 
 GETWIDGETBYTITLE Find a widget by its Title property.
-  Returns the widget object, or empty if not found.
+  Searches every page in multi-page mode (active page or single-page
+  Widgets otherwise). Returns the widget object, or empty if not found.
 
 #### `detachWidget(obj, widget)`
 
@@ -300,6 +310,7 @@ ONSCROLLREALIZE Realize widgets that scroll into view.
 
 MARKALLDIRTY Flag all widgets as needing refresh.
   Called on theme change, figure resize, or other global state changes.
+  Covers every page in multi-page mode.
 
 #### `onResize(obj)`
 
@@ -458,6 +469,47 @@ ALLPAGEWIDGETS Return concatenation of all pages' Widgets.
   Used for ReflowCallback injection and Follow toggle sweep.
   When Pages is empty, returns obj.Widgets.
 
+#### `linked = collectLinkedCrosshairs_(obj, widgets)`
+
+COLLECTLINKEDCROSSHAIRS_ Enumerate linked+rendered crosshairs on active page (260602-mri).
+  linked = collectLinkedCrosshairs_(obj, widgets) flattens widgets via
+  flattenWidgetsForPreview_ and returns a cell array of structs:
+    {struct('widget', w, 'hc', hc), ...}
+  for every flattened FastSenseWidget with CrosshairLinked=true AND a
+  valid rendered HoverCrosshair_.  Widgets failing any guard are silently
+  skipped.  PURE (no side effects) so it is unit-testable with a
+  hand-built widget list.
+  Made public (Access=public) so tests and DashboardLayout can call it.
+
+#### `rewireCrosshairLinks_(obj)`
+
+REWIRECEOSSHAIRLINKS_ Re-prime BroadcastFcn_ on active-page linked crosshairs (260602-mri).
+  1. Clear BroadcastFcn_/BroadcastLeaveFcn_ on ALL active-page FastSense
+     crosshairs (handles toggled-OFF widgets + previous-page crosshairs).
+  2. For each currently-linked+rendered crosshair, install the engine
+     broadcast callbacks.  Must be called after rerenderWidgets (fresh
+     HoverCrosshair_ handles), after switchPage, and after detachWidget.
+  Wrapped in try/catch at call sites; inner per-handle errors are silently
+  skipped so a single bad crosshair never breaks the whole sweep.
+
+#### `broadcastCrosshairX_(obj, sourceHc, xQuery)`
+
+BROADCASTCROSSHAIRX_ Mirror xQuery onto all OTHER linked crosshairs on active page (260602-mri).
+  Fired at end of source crosshair's onMove (via BroadcastFcn_).
+  Re-collects the linked set each call (cheap; active page only;
+  upstream throttle limits call rate to ~40 Hz; N widgets small).
+
+#### `broadcastCrosshairLeave_(obj, sourceHc)`
+
+BROADCASTCROSSHAIRLEAVE_ Tell all OTHER linked crosshairs to hide (260602-mri).
+  Fired at end of source crosshair's onLeave (via BroadcastLeaveFcn_).
+
+#### `onCrosshairLinkToggle(obj, widget)`
+
+ONCROSSHAIRLINKTOGGLE Called by DashboardLayout after widget.setCrosshairLink(tf) (260602-mri).
+  Re-derives the whole active-page link set from current flags — idempotent.
+  Wrapped in try/catch so a single toggle failure never crashes the bar.
+
 #### `notifyEventsChanged(obj)`
 
 NOTIFYEVENTSCHANGED Refresh all event-aware widgets after store mutation (260513-snt).
@@ -528,7 +580,20 @@ FORMATTIMEVAL Format a numeric time value as a human-readable string.
 
 #### `DashboardEngine.types = widgetTypes()`
 
-WIDGETTYPES List supported widget type strings.
+WIDGETTYPES Supported widget types + descriptions, as an Nx2 cell.
+  Derived from DashboardWidgetRegistry.types() (the single source of
+  truth), so it can no longer drift from what addWidget accepts, and
+  user-registered types (registerWidgetType) appear automatically with
+  a generic description.
+
+#### `DashboardEngine.registerWidgetType(type, ctorHandle)`
+
+REGISTERWIDGETTYPE Register a custom widget type with the dashboard.
+  DashboardEngine.registerWidgetType('mytype', @MyWidget) makes
+  'mytype' usable through addWidget, serialization, and detach — the
+  documented extension point for third-party widgets. The widget class
+  must subclass DashboardWidget and provide a static fromStruct.
+  Errors DashboardWidgetRegistry:duplicateType on a name collision.
 
 #### `DashboardEngine.obj = load(filepath, varargin)`
 
@@ -626,7 +691,7 @@ of serialized dashboards.
 | Position | `[1 1 6 2]` | [col, row, width, height] in grid units |
 | ThemeOverride | `struct()` | Per-widget theme overrides (merged on top of dashboard theme) |
 | UseGlobalTime | `true` | false when user manually zooms this widget |
-| Description | `''` | Optional tooltip text shown via info icon hover |
+| Description | `''` | Doc text shown in a popup when the widget's info (i) button is clicked |
 | Tag | `[]` | v2.0 Tag API — any Tag subclass |
 | ParentTheme | `[]` | Theme inherited from DashboardEngine |
 | Dirty | `true` | true when widget needs refresh (data changed) |
@@ -851,6 +916,24 @@ ONPLANTLOGTOGGLEPRESSED_ Toggle button callback — wraps setShowPlantLog with t
   software-level guard for Enable='off' because uicontrols only
   honor Enable natively for user-driven mouse clicks.
 
+#### `addCrosshairLinkToggle(obj, widget)`
+
+ADDCROSSHAIRLINKTOGGLE Inject crosshair-link 'X' button into WidgetButtonBar (260602-mri).
+  Duck-typed: only called for widgets where ismethod(widget,'setCrosshairLink').
+  Idempotent: removes any prior CrosshairLinkButton before creating the new one.
+  Glyph: 'X' (ASCII, Octave-safe — matches existing V/A/L/i/^ glyphs).
+  Position: leftmost chrome button, placed to the LEFT of the V/A cluster;
+  final position settled by reflowChrome_ (reflowChrome_ is called from
+  both realizeWidget and from this method for callback-driven rebuilds).
+  Active (linked) state highlighted via chooseYLimitActiveBg_ (same as V/A).
+
+#### `onCrosshairLinkTogglePressed_(obj, src, widget)`
+
+ONCROSSHAIRLINKTOGLEPRESSED_ CrosshairLink toggle callback (260602-mri).
+  Flips widget.CrosshairLinked, notifies the engine, and rebuilds the
+  button visual. All errors are caught and surfaced as namespaced
+  warnings so no toggle failure can crash the dashboard refresh loop.
+
 ### Static Methods
 
 #### `DashboardLayout.reflowChrome_(hCell, barH, inset)`
@@ -955,6 +1038,21 @@ LOAD Load dashboard config from file.
   For .m files: uses feval to execute the function and return the engine.
   For .json files: uses legacy JSON parsing.
 
+#### `DashboardSerializer.v = currentSchemaVersion()`
+
+CURRENTSCHEMAVERSION Supported dashboard config schema version.
+  Writers stamp this into every config (widgetsToConfig /
+  widgetsPagesToConfig). The loader warns
+  (DashboardSerializer:schemaVersionNewer) when it reads a config
+  whose schemaVersion exceeds this value. Bump only when the on-disk
+  config shape changes in a way older loaders cannot read.
+
+#### `DashboardSerializer.checkSchemaVersion_(config, source)`
+
+CHECKSCHEMAVERSION_ Warn if a loaded config is newer than supported.
+  A missing schemaVersion is treated as v1 (pre-versioning files) and
+  loads silently.
+
 #### `DashboardSerializer.config = loadJSON(filepath)`
 
 LOADJSON Legacy: read dashboard config from JSON file.
@@ -979,6 +1077,13 @@ CONFIGTOWIDGETS Create widget objects from config struct.
 #### `DashboardSerializer.w = createWidgetFromStruct(ws)`
 
 CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+  Dispatches through DashboardWidgetRegistry — the single source of
+  truth for widget type->class. The deprecated 'kpi' resolves to
+  NumberWidget via the registry alias. 'mock' is a test-only widget
+  kept as a thin special-case here: MockDashboardWidget lives under
+  tests/ and is intentionally NOT seeded into the library registry,
+  so the library has no dependency on test code. Unknown types warn
+  DashboardSerializer:unknownType and return [].
 
 #### `DashboardSerializer.exportScript(config, filepath)`
 
@@ -1355,6 +1460,91 @@ GETCONTENTAREA Compute the widget content area in normalized units.
 
 ---
 
+## `DashboardWidgetRegistry` --- Single source of truth for dashboard widget types.
+
+DashboardWidgetRegistry maps a widget type string (e.g. 'number') to the
+  class that implements it, so that EVERY consumer — DashboardEngine.addWidget,
+  DashboardEngine.widgetTypes, DashboardSerializer.createWidgetFromStruct and
+  DetachedMirror.cloneWidget — dispatches through ONE table instead of four
+  hand-maintained switch statements that drift out of sync.
+
+  It mirrors the TagRegistry static-singleton pattern (a classdef of static
+  methods over a persistent containers.Map), with three intentional deltas:
+
+    1. The catalog is seeded NON-empty on first use with the built-in widget
+       types (TagRegistry starts empty).
+    2. Type ALIASES (deprecated/renamed type strings) are a separate concern,
+       resolved via resolveAlias() — e.g. the deprecated 'kpi' -> 'number'.
+    3. reset() RE-SEEDS the built-ins and built-in aliases rather than wiping
+       to empty; it exists for test isolation after register()/registerAlias().
+
+  DashboardWidgetRegistry Methods (Static, public):
+    types          — sorted cellstr of all registered canonical type strings
+    isRegistered   — true if a canonical type is registered (aliases excluded)
+    resolveAlias   — map an alias to its canonical type (passthrough otherwise)
+    constructorFor — the @ClassName constructor handle for a type (resolves alias)
+    fromStruct     — deserialize a widget struct via the type's static fromStruct
+    register       — add a NEW canonical type (hard error on collision)
+    registerAlias  — add an alias for an already-registered canonical type
+    reset          — restore the built-in catalog + aliases (test isolation)
+
+### Static Methods
+
+#### `DashboardWidgetRegistry.t = types()`
+
+TYPES Sorted cellstr of all registered canonical widget type strings.
+  The single source of truth — DashboardEngine.widgetTypes() derives
+  its list from this.
+
+#### `DashboardWidgetRegistry.tf = isRegistered(type)`
+
+ISREGISTERED True if TYPE is a registered canonical type.
+  Aliases (e.g. 'kpi') are NOT counted — use resolveAlias() first if
+  you need alias-aware membership.
+
+#### `DashboardWidgetRegistry.c = resolveAlias(type)`
+
+RESOLVEALIAS Map an alias to its canonical type.
+  Returns TYPE unchanged when it is not an alias.
+
+#### `DashboardWidgetRegistry.h = constructorFor(type)`
+
+CONSTRUCTORFOR Constructor handle (@ClassName) for a widget type.
+  Resolves aliases first. Throws DashboardWidgetRegistry:unknownType
+  when the (resolved) type is not registered.
+
+#### `DashboardWidgetRegistry.w = fromStruct(type, s)`
+
+FROMSTRUCT Deserialize a widget struct via its class fromStruct.
+  w = DashboardWidgetRegistry.fromStruct(type, s) resolves TYPE to a
+  constructor handle, derives the class name, and calls
+  <Class>.fromStruct(s). Throws DashboardWidgetRegistry:unknownType
+  when TYPE (resolved) is not registered.
+
+#### `DashboardWidgetRegistry.register(type, ctorHandle)`
+
+REGISTER Add a NEW canonical widget type to the catalog.
+  DashboardWidgetRegistry.register(type, @ClassName) registers a
+  constructor handle under TYPE. Like TagRegistry.register, this
+  HARD-ERRORS on collision (DashboardWidgetRegistry:duplicateType) so
+  a custom widget cannot silently clobber a built-in. Call reset()
+  to drop custom registrations (test isolation).
+
+#### `DashboardWidgetRegistry.registerAlias(alias, canonical)`
+
+REGISTERALIAS Map an alias type string to a registered canonical type.
+  The canonical type must already be registered, else
+  DashboardWidgetRegistry:unknownType is thrown.
+
+#### `DashboardWidgetRegistry.reset()`
+
+RESET Restore the built-in catalog and aliases (test isolation).
+  Re-seeds the persistent maps in place so register()/registerAlias()
+  side effects from a prior test do not leak. Mirrors TagRegistry.clear,
+  but re-seeds the built-ins rather than wiping to empty.
+
+---
+
 ## `DetachedMirror` --- Standalone live-mirrored widget window for DashboardEngine.
 
 > Inherits from: `handle`
@@ -1571,6 +1761,7 @@ obj = FastSenseWidget(varargin)
 | ShowPlantLog | `false` | Phase 1032 PLOG-VIZ-03 — opt-in per-widget plant-log vertical-line overlay |
 | LiveViewMode | `'preserve'` |  |
 | YLimitMode | `'auto-visible'` |  |
+| CrosshairLinked | `false` |  |
 | CurrentXLimOverrideForTest_ | `[]` |  |
 
 ### Methods
@@ -1631,6 +1822,14 @@ SETYLIMITMODE Set the Y-axis rescale strategy and re-fit if rendered.
     'auto-visible' - rescale to data inside the current X window
     'auto-all'     - rescale to all data the bound Tag exposes
     'locked'       - freeze YLim; no further rescale on tick/refresh
+
+#### `setCrosshairLink(obj, tf)`
+
+SETCROSSHAIRLINK Set the crosshair-link flag (260602-mri).
+  setCrosshairLink(obj, tf) sets CrosshairLinked to logical(tf).
+  tf must be a logical scalar or a numeric 0/1 scalar.
+  Does NOT touch graphics — the engine owns broadcast wiring.
+  Throws FastSenseWidget:invalidCrosshairLink for invalid input.
 
 #### `autoScaleY_(obj, y)`
 
@@ -1765,9 +1964,33 @@ obj = GaugeWidget(varargin)
 
 ---
 
-## `GroupWidget`
+## `GroupWidget` --- Container widget that groups child widgets in one of three modes.
 
 > Inherits from: `DashboardWidget`
+
+GroupWidget delivers the dashboard's nested-layout feature. Set Mode to:
+    'panel'       — children laid out in a sub-grid inside a bordered panel
+    'collapsible' — like panel, with a header bar that collapses/expands
+    'tabbed'      — children organised into named tabs with a tab strip
+
+  Children are added and removed through parallel APIs that depend on Mode:
+    addChild(widget)            — panel/collapsible (appends to Children)
+    addChild(widget, tabName)   — tabbed (appends to the named tab, creating it)
+    removeChild(idx)            — panel/collapsible
+    removeChild(idx, tabName)   — tabbed
+    removeTab(tabName)          — drop a whole tab
+  Navigation / state: switchTab(tabName), collapse(), expand().
+
+  Groups may nest one level deep (a GroupWidget inside a GroupWidget); a
+  maximum nesting depth of 2 is enforced by addChild (GroupWidget:maxDepth).
+
+  Key public properties:
+    Mode          — 'panel' | 'collapsible' | 'tabbed'
+    Label         — header bar title
+    Children      — cell of child widgets (panel/collapsible)
+    Tabs          — cell of struct('name', ..., 'widgets', {{...}}) (tabbed)
+    ActiveTab     — current tab name (tabbed)
+    ChildColumns  — sub-grid column count
 
 ### Constructor
 
@@ -1795,7 +2018,21 @@ obj = GroupWidget(varargin)
 
 Check nesting depth for GroupWidget children
 
-#### `removeChild(obj, idx)`
+#### `removeChild(obj, idx, tabName)`
+
+REMOVECHILD Remove a child widget by index.
+  removeChild(idx) removes obj.Children(idx) — panel/collapsible mode.
+  removeChild(idx, tabName) removes the idx-th widget of the named tab
+  (tabbed mode), mirroring addChild(widget, tabName). Throws
+  GroupWidget:unknownTab for an unknown tab and GroupWidget:invalidIndex
+  for an out-of-range index in either mode.
+
+#### `removeTab(obj, tabName)`
+
+REMOVETAB Remove an entire tab and its widgets (tabbed mode).
+  Throws GroupWidget:unknownTab if the tab does not exist. When the
+  removed tab was the active one, ActiveTab moves to the first remaining
+  tab, or '' when none remain.
 
 #### `render(obj, parentPanel)`
 
@@ -2183,6 +2420,13 @@ obj = ScatterWidget(varargin)
 ### Static Methods
 
 #### `ScatterWidget.obj = fromStruct(s)`
+
+#### `ScatterWidget.t = resolveTag_(key, title)`
+
+RESOLVETAG_ Resolve a Tag key via TagRegistry; warn (no throw) if absent.
+  Mirrors FastSenseWidget:tagNotFound semantics: a missing key yields []
+  and a namespaced warning rather than an error, so a dashboard saved
+  against a different registry still loads.
 
 ---
 

@@ -210,16 +210,10 @@ classdef MultiStatusWidget < DashboardWidget
                         val = s.Y(end);
                         violated = false;
                         for r = 1:numel(s.Thresholds)
-                            t = s.Thresholds{r};
-                            tVals = t.allValues();
-                            for v = 1:numel(tVals)
-                                if (t.IsUpper && val > tVals(v)) || ...
-                                        (~t.IsUpper && val < tVals(v))
-                                    violated = true;
-                                    break;
-                                end
+                            if isThresholdViolated(s.Thresholds{r}, val)
+                                violated = true;
+                                break;
                             end
-                            if violated, break; end
                         end
                         if ~violated
                             nOk = nOk + 1;
@@ -423,17 +417,15 @@ classdef MultiStatusWidget < DashboardWidget
                 val = item.value;
             end
             if isempty(val), return; end
-            % Check violation
-            tVals = t.allValues();
-            for v = 1:numel(tVals)
-                if (t.IsUpper && val >= tVals(v)) || (~t.IsUpper && val <= tVals(v))
-                    if ~isempty(t.Color)
-                        color = t.Color;
-                    else
-                        color = theme.StatusAlarmColor;
-                    end
-                    return;
+            % Check violation (strict, via the shared predicate — was inclusive >=/<=,
+            % which lit a sensor on its limit red here but green in every other widget).
+            if isThresholdViolated(t, val)
+                if ~isempty(t.Color)
+                    color = t.Color;
+                else
+                    color = theme.StatusAlarmColor;
                 end
+                return;
             end
         end
 
@@ -475,13 +467,8 @@ classdef MultiStatusWidget < DashboardWidget
             for k = 1:numel(sensor.Thresholds)
                 t = sensor.Thresholds{k};
                 if isempty(t.Color), continue; end
-                tVals = t.allValues();
-                for v = 1:numel(tVals)
-                    if t.IsUpper && val >= tVals(v)
-                        color = t.Color;
-                    elseif ~t.IsUpper && val <= tVals(v)
-                        color = t.Color;
-                    end
+                if isThresholdViolated(t, val)
+                    color = t.Color;
                 end
             end
         end

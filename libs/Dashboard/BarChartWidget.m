@@ -42,9 +42,12 @@ classdef BarChartWidget < DashboardWidget
 
             data = [];
             cats = {};
-            if ~isempty(obj.Sensor)
-                if isempty(obj.Sensor.Y), return; end
-                data = obj.Sensor.Y;
+            if ~isempty(obj.Tag)
+                % Read via the Tag.getXY() contract so Derived/Composite tags
+                % (which expose no public .Y) work, not just SensorTag/StateTag.
+                [~, y] = obj.Tag.getXY();
+                if isempty(y), return; end
+                data = y;
             elseif ~isempty(obj.DataFcn)
                 result = obj.DataFcn();
                 if isstruct(result)
@@ -140,6 +143,18 @@ classdef BarChartWidget < DashboardWidget
             end
             if isfield(s, 'orientation'), obj.Orientation = s.orientation; end
             if isfield(s, 'stacked'), obj.Stacked = s.stacked; end
+            % Restore the data binding (callback) — dropped before P0-3.
+            % Old structs without s.source load with no binding and no warning.
+            if isfield(s, 'source') && isfield(s.source, 'type')
+                switch s.source.type
+                    case 'callback'
+                        obj.DataFcn = str2func(s.source.function);
+                    otherwise
+                        warning('BarChartWidget:sourceUnresolved', ...
+                            'Unresolved source type ''%s'' for BarChart ''%s''.', ...
+                            s.source.type, obj.Title);
+                end
+            end
         end
     end
 end

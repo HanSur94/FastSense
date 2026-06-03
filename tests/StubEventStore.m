@@ -22,7 +22,7 @@ classdef StubEventStore < handle
     %   See also EventStore, Event, NotificationCenterPane, CaptureNotificationService.
 
     properties
-        Events_     = Event.empty   % Event array; configure in test setup
+        Events_     = []            % Event array (configure in test setup); [] not Event.empty for Octave parity
         AckedIds_   = {}            % cellstr: each eventId passed to acknowledgeEvent, in call order
         ThrowOnAck_ = false         % when true, acknowledgeEvent throws EventStore:unknownEventId
         ThrowOnGet_ = false         % when true, getEvents throws (exercises the stale path)

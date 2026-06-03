@@ -35,7 +35,7 @@ classdef NotificationCenterPane < handle
     end
 
     properties (SetAccess = private)
-        IsAttached  logical = false
+        IsAttached = false   % logical flag (no type-constraint syntax — Octave-incompatible)
     end
 
     properties (Access = private)
@@ -48,7 +48,7 @@ classdef NotificationCenterPane < handle
         hLastUpdateLbl_ = []           % "Updated: HH:MM:SS" label
         hPopoutBtn_     = []           % pop-out icon uibutton
         Companion_      = []           % FastSenseCompanion handle (or [])
-        LastGoodEvents_ = Event.empty  % last successfully-read unacked set (survives detach)
+        LastGoodEvents_ = []  % last successfully-read unacked set (survives detach)
         LastIds_        = {}           % cellstr of LastGoodEvents_ ids (diff key)
         Listeners_      = {}           % addlistener handles; deleted on teardown
         IsStale_        = false        % true when the last EventStore read failed
@@ -69,7 +69,7 @@ classdef NotificationCenterPane < handle
             end
             obj.ThemeStruct_    = themeStruct;
             obj.IsAttached      = false;
-            obj.LastGoodEvents_ = Event.empty;
+            obj.LastGoodEvents_ = [];
             obj.LastIds_        = {};
             obj.Listeners_      = {};
             obj.IsStale_        = false;
@@ -232,14 +232,14 @@ classdef NotificationCenterPane < handle
         %   (stale) marker; never clear the inbox and never uialert.
             if ~obj.IsAttached; return; end
             if isempty(eventStore) || ~isvalid(eventStore)
-                obj.LastGoodEvents_ = Event.empty;
+                obj.LastGoodEvents_ = [];
                 obj.LastIds_        = {};
                 obj.IsStale_        = false;
                 obj.applyFilterAndRender_();
                 obj.setUpdatedLabel_(datetime('now'), false);
                 return;
             end
-            allEvents = Event.empty;
+            allEvents = [];
             readOk = true;
             try
                 allEvents = eventStore.getEvents();
@@ -353,7 +353,13 @@ classdef NotificationCenterPane < handle
                     otherwise,    wanted = [];
                 end
                 if ~isempty(wanted)
-                    events = events([events.Severity] == wanted);
+                    % Explicit loop (Octave can't comma-list-expand [events.Severity]
+                    % over a classdef object array) — mirrors the text filter below.
+                    sevMask = false(1, numel(events));
+                    for i = 1:numel(events)
+                        sevMask(i) = (events(i).Severity == wanted);
+                    end
+                    events = events(sevMask);
                 end
             end
             % Free-text filter over SensorName + ThresholdLabel (case-insensitive).
@@ -640,7 +646,7 @@ classdef NotificationCenterPane < handle
         %   An event is unacked iff AckedAt is empty OR all-NaN (mirrors
         %   Event.computeDisplayState). Empty input returns an empty Event array.
             if isempty(allEvents)
-                evs = Event.empty;
+                evs = [];
                 return;
             end
             mask = false(1, numel(allEvents));
@@ -654,7 +660,13 @@ classdef NotificationCenterPane < handle
         function evs = sortNewestFirst_(events)
         %SORTNEWESTFIRST_ Order events by StartTime, newest first.
             if numel(events) > 1
-                [~, ord] = sort([events.StartTime], 'descend');
+                % Explicit loop (Octave can't comma-list-expand [events.StartTime]
+                % over a classdef object array).
+                starts = zeros(1, numel(events));
+                for i = 1:numel(events)
+                    starts(i) = events(i).StartTime;
+                end
+                [~, ord] = sort(starts, 'descend');
                 evs = events(ord);
             else
                 evs = events;
@@ -666,7 +678,12 @@ classdef NotificationCenterPane < handle
             if isempty(events)
                 s = 0;
             else
-                s = max([events.Severity]);
+                % Explicit loop (Octave can't comma-list-expand [events.Severity]).
+                sevs = zeros(1, numel(events));
+                for i = 1:numel(events)
+                    sevs(i) = events(i).Severity;
+                end
+                s = max(sevs);
             end
         end
 
@@ -675,7 +692,11 @@ classdef NotificationCenterPane < handle
             if isempty(events)
                 ids = {};
             else
-                ids = arrayfun(@(e) e.Id, events, 'UniformOutput', false);
+                % Explicit loop (Octave can't arrayfun over a classdef object array).
+                ids = cell(1, numel(events));
+                for i = 1:numel(events)
+                    ids{i} = events(i).Id;
+                end
             end
         end
 

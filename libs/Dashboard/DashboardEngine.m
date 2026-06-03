@@ -63,8 +63,6 @@ classdef DashboardEngine < handle
         % Theme caching
         ThemeCache_        = []  % Cached DashboardTheme struct; lazy-computed by getCachedTheme()
         ThemeCachePreset_  = ''  % Theme preset string that ThemeCache_ was built for
-        % Widget dispatch table
-        WidgetTypeMap_     = []  % containers.Map: type string -> constructor function handle
         % Time control
         TimePanelHeight = 0.085   % bumped from 0.06 to fit data-range labels below slider (260512-hrn-followup)
         DataTimeRange   = [0 1]    % [tMin tMax] across all widget data
@@ -163,17 +161,8 @@ classdef DashboardEngine < handle
             end
             obj.Layout = DashboardLayout();
             obj.Layout.EngineRef = obj;  % Phase 1032 PLOG-VIZ-05 — used by addPlantLogToggle callback
-            obj.WidgetTypeMap_ = containers.Map({ ...
-                'fastsense',   'number',     'status',    'text', ...
-                'gauge',       'table',      'rawaxes',   'timeline', ...
-                'group',       'heatmap',    'barchart',  'histogram', ...
-                'scatter',     'image',      'multistatus', 'divider', ...
-                'iconcard',    'chipbar',    'sparkline'}, ...
-                {@FastSenseWidget, @NumberWidget, @StatusWidget, @TextWidget, ...
-                 @GaugeWidget, @TableWidget, @RawAxesWidget, @EventTimelineWidget, ...
-                 @GroupWidget, @HeatmapWidget, @BarChartWidget, @HistogramWidget, ...
-                 @ScatterWidget, @ImageWidget, @MultiStatusWidget, @DividerWidget, ...
-                 @IconCardWidget, @ChipBarWidget, @SparklineCardWidget});
+            % Widget type->constructor dispatch now lives in DashboardWidgetRegistry
+            % (the single source of truth shared with the serializer + detach paths).
         end
 
         function pg = addPage(obj, name)
@@ -372,6 +361,14 @@ classdef DashboardEngine < handle
             end
             % Phase 1039 — recompute the current-view box for the newly active page.
             try obj.updateCurrentViewIndicator_(); catch, end
+            % 260602-mri — re-prime crosshair broadcast hooks for the now-active page.
+            % Previous-page crosshairs are dropped (they are no longer in activePageWidgets).
+            try
+                obj.rewireCrosshairLinks_();
+            catch ME
+                warning('DashboardEngine:crosshairRewireFailed', ...
+                    'rewireCrosshairLinks_ failed after switchPage: %s', ME.message);
+            end
         end
 
         function w = addWidget(obj, type, varargin)
@@ -386,8 +383,8 @@ classdef DashboardEngine < handle
                     type = 'number';
                 end
 
-                if isKey(obj.WidgetTypeMap_, type)
-                    ctor = obj.WidgetTypeMap_(type);
+                if DashboardWidgetRegistry.isRegistered(DashboardWidgetRegistry.resolveAlias(type))
+                    ctor = DashboardWidgetRegistry.constructorFor(type);
                     w = ctor(varargin{:});
                 else
                     error('DashboardEngine:unknownType', ...
@@ -1181,7 +1178,8 @@ classdef DashboardEngine < handle
                 width = 48;
             end
 
-            nWidgets = numel(obj.Widgets);
+            ws = obj.activePageWidgets();
+            nWidgets = numel(ws);
 
             % Empty dashboard
             if nWidgets == 0
@@ -1193,7 +1191,7 @@ classdef DashboardEngine < handle
             cols = obj.Layout.Columns;
             maxRow = 1;
             for i = 1:nWidgets
-                p = obj.Widgets{i}.Position;
+                p = ws{i}.Position;
                 bottomRow = p(2) + p(4) - 1;
                 if bottomRow > maxRow
                     maxRow = bottomRow;
@@ -1211,7 +1209,7 @@ classdef DashboardEngine < handle
 
             % Render each widget
             for i = 1:nWidgets
-                w = obj.Widgets{i};
+                w = ws{i};
                 p = w.Position;  % [col, row, wCols, hRows]
 
                 % Character coordinates (1-based)
@@ -1494,13 +1492,44 @@ classdef DashboardEngine < handle
             end
         end
 
+        function removePage(obj, idx)
+        %REMOVEPAGE Remove the page at index idx, keeping ActivePage valid.
+        %   Mirror of removeWidget for pages. Throws DashboardEngine:invalidIndex
+        %   on a bad index. Deletes the page's widgets and the page, adjusts
+        %   ActivePage (decrements when removing a page before it; clamps when
+        %   removing the active page; resets to 0 when no pages remain), and
+        %   re-renders when a figure is live.
+            if idx < 1 || idx > numel(obj.Pages)
+                error('DashboardEngine:invalidIndex', ...
+                    'Page index %d out of range [1, %d].', idx, numel(obj.Pages));
+            end
+            pg = obj.Pages{idx};
+            ws = pg.Widgets;
+            for i = 1:numel(ws)
+                delete(ws{i});
+            end
+            obj.Pages(idx) = [];
+            delete(pg);
+            if isempty(obj.Pages)
+                obj.ActivePage = 0;
+            elseif idx < obj.ActivePage
+                obj.ActivePage = obj.ActivePage - 1;
+            elseif idx == obj.ActivePage
+                obj.ActivePage = max(1, min(obj.ActivePage, numel(obj.Pages)));
+            end
+            if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                obj.rerenderWidgets();
+            end
+        end
+
         function setWidgetPosition(obj, idx, pos)
         %SETWIDGETPOSITION Set the grid position of a widget by index.
         %   Clamps width to grid columns and resolves overlaps with other
-        %   widgets.
-            if idx < 1 || idx > numel(obj.Widgets)
+        %   widgets. Operates on the active page in multi-page mode.
+            ws = obj.activePageWidgets();
+            if idx < 1 || idx > numel(ws)
                 error('DashboardEngine:invalidIndex', ...
-                    'Widget index %d out of range [1, %d].', idx, numel(obj.Widgets));
+                    'Widget index %d out of range [1, %d].', idx, numel(ws));
             end
             % Clamp to grid bounds
             cols = obj.Layout.Columns;
@@ -1509,25 +1538,28 @@ classdef DashboardEngine < handle
             pos(2) = max(1, pos(2));
             pos(4) = max(1, pos(4));
             % Resolve overlaps against other widgets
-            existingPositions = cell(1, numel(obj.Widgets) - 1);
+            existingPositions = cell(1, numel(ws) - 1);
             k = 0;
-            for i = 1:numel(obj.Widgets)
+            for i = 1:numel(ws)
                 if i ~= idx
                     k = k + 1;
-                    existingPositions{k} = obj.Widgets{i}.Position;
+                    existingPositions{k} = ws{i}.Position;
                 end
             end
             pos = obj.Layout.resolveOverlap(pos, existingPositions);
-            obj.Widgets{idx}.Position = pos;
+            % ws{idx} is a handle, so this mutates the widget stored in the page.
+            ws{idx}.Position = pos;
         end
 
         function w = getWidgetByTitle(obj, title)
         %GETWIDGETBYTITLE Find a widget by its Title property.
-        %   Returns the widget object, or empty if not found.
+        %   Searches every page in multi-page mode (active page or single-page
+        %   Widgets otherwise). Returns the widget object, or empty if not found.
             w = [];
-            for i = 1:numel(obj.Widgets)
-                if strcmp(obj.Widgets{i}.Title, title)
-                    w = obj.Widgets{i};
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                if strcmp(ws{i}.Title, title)
+                    w = ws{i};
                     return;
                 end
             end
@@ -1546,6 +1578,20 @@ classdef DashboardEngine < handle
         %   is a handle class, so mutations to it are visible through all
         %   references.
 
+            % 260602-mri — best-effort clear this widget's broadcast hook before
+            % detaching so it stops participating in the active-page link set.
+            % The widget keeps CrosshairLinked=true in serialized state but will
+            % no longer be in activePageWidgets() after detach, so
+            % collectLinkedCrosshairs_ naturally excludes it. The explicit clear
+            % here avoids a stale closure firing between the detach and the next
+            % rewireCrosshairLinks_ call.
+            try
+                if isa(widget, 'FastSenseWidget') && ~isempty(widget.FastSenseObj) && ...
+                        ~isempty(widget.FastSenseObj.HoverCrosshair_)
+                    widget.FastSenseObj.HoverCrosshair_.setBroadcastFcn([], []);
+                end
+            catch
+            end
             themeStruct = obj.getCachedTheme();
             % containers.Map is a handle object — mutations after closure creation
             % are visible through the captured reference (unlike cells/structs).
@@ -1569,6 +1615,12 @@ classdef DashboardEngine < handle
             catch err
                 warning('DashboardEngine:plantLogOverlayFailed', ...
                     'detachWidget plant-log re-attach failed: %s', err.message);
+            end
+            % 260602-mri — re-derive active-page link set after detach so
+            % remaining widgets' broadcast hooks reflect the updated set.
+            try
+                obj.rewireCrosshairLinks_();
+            catch
             end
         end
 
@@ -1803,6 +1855,14 @@ classdef DashboardEngine < handle
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % 260513-snt — re-wire Create-Event callback for the same reason.
             obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
+            % 260602-mri — re-prime crosshair broadcast hooks on freshly-built
+            % HoverCrosshair_ handles (each realizeWidget creates a new HC).
+            try
+                obj.rewireCrosshairLinks_();
+            catch ME
+                warning('DashboardEngine:crosshairRewireFailed', ...
+                    'rewireCrosshairLinks_ failed after rerenderWidgets: %s', ME.message);
+            end
         end
 
         function setTimeWindow(obj, t0, t1)
@@ -2303,8 +2363,10 @@ classdef DashboardEngine < handle
         function markAllDirty(obj)
         %MARKALLDIRTY Flag all widgets as needing refresh.
         %   Called on theme change, figure resize, or other global state changes.
-            for i = 1:numel(obj.Widgets)
-                obj.Widgets{i}.markDirty();
+        %   Covers every page in multi-page mode.
+            ws = obj.allPageWidgets();
+            for i = 1:numel(ws)
+                ws{i}.markDirty();
             end
         end
 
@@ -2899,6 +2961,122 @@ classdef DashboardEngine < handle
             ws = {};
             for i = 1:numel(obj.Pages)
                 ws = [ws, obj.Pages{i}.Widgets]; %#ok<AGROW>
+            end
+        end
+
+        % 260602-mri — crosshair-link coordination
+        function linked = collectLinkedCrosshairs_(obj, widgets)
+        %COLLECTLINKEDCROSSHAIRS_ Enumerate linked+rendered crosshairs on active page (260602-mri).
+        %   linked = collectLinkedCrosshairs_(obj, widgets) flattens widgets via
+        %   flattenWidgetsForPreview_ and returns a cell array of structs:
+        %     {struct('widget', w, 'hc', hc), ...}
+        %   for every flattened FastSenseWidget with CrosshairLinked=true AND a
+        %   valid rendered HoverCrosshair_.  Widgets failing any guard are silently
+        %   skipped.  PURE (no side effects) so it is unit-testable with a
+        %   hand-built widget list.
+        %   Made public (Access=public) so tests and DashboardLayout can call it.
+            linked = {};
+            if nargin < 2 || isempty(widgets); return; end
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            try
+                flat = obj.flattenWidgetsForPreview_(widgets);
+            catch
+                flat = {};
+            end
+            for i = 1:numel(flat)
+                w = flat{i};
+                try
+                    if ~isa(w, 'FastSenseWidget'); continue; end
+                    if ~w.CrosshairLinked; continue; end
+                    if isempty(w.FastSenseObj); continue; end
+                    if ~isa(w.FastSenseObj, 'FastSense'); continue; end
+                    if ~w.FastSenseObj.IsRendered; continue; end
+                    hc = w.FastSenseObj.HoverCrosshair_;
+                    if isempty(hc); continue; end
+                    if ~isOctave && ~isvalid(hc); continue; end
+                    linked{end + 1} = struct('widget', w, 'hc', hc); %#ok<AGROW>
+                catch
+                    % skip any widget that errors during guard checks
+                end
+            end
+        end
+
+        function rewireCrosshairLinks_(obj)
+        %REWIRECEOSSHAIRLINKS_ Re-prime BroadcastFcn_ on active-page linked crosshairs (260602-mri).
+        %   1. Clear BroadcastFcn_/BroadcastLeaveFcn_ on ALL active-page FastSense
+        %      crosshairs (handles toggled-OFF widgets + previous-page crosshairs).
+        %   2. For each currently-linked+rendered crosshair, install the engine
+        %      broadcast callbacks.  Must be called after rerenderWidgets (fresh
+        %      HoverCrosshair_ handles), after switchPage, and after detachWidget.
+        %   Wrapped in try/catch at call sites; inner per-handle errors are silently
+        %   skipped so a single bad crosshair never breaks the whole sweep.
+            isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            try
+                flat = obj.flattenWidgetsForPreview_(obj.activePageWidgets());
+            catch
+                flat = {};
+            end
+            % Pass 1: clear all active-page crosshairs.
+            for i = 1:numel(flat)
+                w = flat{i};
+                try
+                    if ~isa(w, 'FastSenseWidget'); continue; end
+                    if isempty(w.FastSenseObj); continue; end
+                    hc = w.FastSenseObj.HoverCrosshair_;
+                    if isempty(hc); continue; end
+                    if ~isOctave && ~isvalid(hc); continue; end
+                    hc.setBroadcastFcn([], []);
+                catch
+                end
+            end
+            % Pass 2: wire the linked crosshairs.
+            linked = obj.collectLinkedCrosshairs_(obj.activePageWidgets());
+            if numel(linked) < 1; return; end
+            for i = 1:numel(linked)
+                entry = linked{i};
+                hc = entry.hc;
+                try
+                    hc.setBroadcastFcn( ...
+                        @(x) obj.broadcastCrosshairX_(hc, x), ...
+                        @()  obj.broadcastCrosshairLeave_(hc));
+                catch
+                end
+            end
+        end
+
+        function broadcastCrosshairX_(obj, sourceHc, xQuery)
+        %BROADCASTCROSSHAIRX_ Mirror xQuery onto all OTHER linked crosshairs on active page (260602-mri).
+        %   Fired at end of source crosshair's onMove (via BroadcastFcn_).
+        %   Re-collects the linked set each call (cheap; active page only;
+        %   upstream throttle limits call rate to ~40 Hz; N widgets small).
+            linked = obj.collectLinkedCrosshairs_(obj.activePageWidgets());
+            for i = 1:numel(linked)
+                entry = linked{i};
+                if entry.hc == sourceHc; continue; end
+                try entry.hc.onMoveExternal(xQuery); catch; end
+            end
+        end
+
+        function broadcastCrosshairLeave_(obj, sourceHc)
+        %BROADCASTCROSSHAIRLEAVE_ Tell all OTHER linked crosshairs to hide (260602-mri).
+        %   Fired at end of source crosshair's onLeave (via BroadcastLeaveFcn_).
+            linked = obj.collectLinkedCrosshairs_(obj.activePageWidgets());
+            for i = 1:numel(linked)
+                entry = linked{i};
+                if entry.hc == sourceHc; continue; end
+                try entry.hc.onLeaveExternal(); catch; end
+            end
+        end
+
+        function onCrosshairLinkToggle(obj, widget)
+        %ONCROSSHAIRLINKTOGGLE Called by DashboardLayout after widget.setCrosshairLink(tf) (260602-mri).
+        %   Re-derives the whole active-page link set from current flags — idempotent.
+        %   Wrapped in try/catch so a single toggle failure never crashes the bar.
+            try
+                obj.rewireCrosshairLinks_();
+            catch ME
+                warning('DashboardEngine:crosshairLinkToggleFailed', ...
+                    'rewireCrosshairLinks_ failed during onCrosshairLinkToggle: %s', ME.message);
             end
         end
 
@@ -4367,25 +4545,57 @@ classdef DashboardEngine < handle
 
     methods (Static)
         function types = widgetTypes()
-            %WIDGETTYPES List supported widget type strings.
-            types = {
-                'fastsense',    'Time-series plot (FastSenseWidget)'
-                'number',      'Single numeric value with trend (NumberWidget)'
-                'status',      'Status indicator with dot and label (StatusWidget)'
-                'gauge',       'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)'
-                'table',       'Data table from sensor (TableWidget)'
-                'text',        'Static text block (TextWidget)'
-                'timeline',    'Event timeline display (EventTimelineWidget)'
-                'rawaxes',     'Raw MATLAB axes for custom plotting (RawAxesWidget)'
-                'group',       'Widget container with panel/collapsible/tabbed modes (GroupWidget)'
-                'heatmap',     'Heatmap color grid (HeatmapWidget)'
-                'barchart',    'Bar chart for categories (BarChartWidget)'
-                'histogram',   'Value distribution histogram (HistogramWidget)'
-                'scatter',     'X vs Y scatter plot (ScatterWidget)'
-                'image',       'Static image display (ImageWidget)'
-                'multistatus', 'Multi-sensor status grid (MultiStatusWidget)'
-                'divider',     'Horizontal divider line (DividerWidget)'
-            };
+            %WIDGETTYPES Supported widget types + descriptions, as an Nx2 cell.
+            %   Derived from DashboardWidgetRegistry.types() (the single source of
+            %   truth), so it can no longer drift from what addWidget accepts, and
+            %   user-registered types (registerWidgetType) appear automatically with
+            %   a generic description.
+            descMap = containers.Map( ...
+                {'fastsense', 'number', 'status', 'gauge', 'table', 'text', ...
+                 'timeline', 'rawaxes', 'group', 'heatmap', 'barchart', ...
+                 'histogram', 'scatter', 'image', 'multistatus', 'divider', ...
+                 'iconcard', 'chipbar', 'sparkline'}, ...
+                {'Time-series plot (FastSenseWidget)', ...
+                 'Single numeric value with trend (NumberWidget)', ...
+                 'Status indicator with dot and label (StatusWidget)', ...
+                 'Gauge display in arc/donut/bar/thermometer style (GaugeWidget)', ...
+                 'Data table from sensor (TableWidget)', ...
+                 'Static text block (TextWidget)', ...
+                 'Event timeline display (EventTimelineWidget)', ...
+                 'Raw MATLAB axes for custom plotting (RawAxesWidget)', ...
+                 'Widget container with panel/collapsible/tabbed modes (GroupWidget)', ...
+                 'Heatmap color grid (HeatmapWidget)', ...
+                 'Bar chart for categories (BarChartWidget)', ...
+                 'Value distribution histogram (HistogramWidget)', ...
+                 'X vs Y scatter plot (ScatterWidget)', ...
+                 'Static image display (ImageWidget)', ...
+                 'Multi-sensor status grid (MultiStatusWidget)', ...
+                 'Horizontal divider line (DividerWidget)', ...
+                 'Icon + value card (IconCardWidget)', ...
+                 'Chip/badge status bar (ChipBarWidget)', ...
+                 'Sparkline value card (SparklineCardWidget)'});
+            names = DashboardWidgetRegistry.types();
+            types = cell(numel(names), 2);
+            for i = 1:numel(names)
+                types{i, 1} = names{i};
+                if descMap.isKey(names{i})
+                    types{i, 2} = descMap(names{i});
+                else
+                    types{i, 2} = sprintf('%s widget', names{i});
+                end
+            end
+        end
+
+        function registerWidgetType(type, ctorHandle)
+            %REGISTERWIDGETTYPE Register a custom widget type with the dashboard.
+            %   DashboardEngine.registerWidgetType('mytype', @MyWidget) makes
+            %   'mytype' usable through addWidget, serialization, and detach — the
+            %   documented extension point for third-party widgets. The widget class
+            %   must subclass DashboardWidget and provide a static fromStruct.
+            %   Errors DashboardWidgetRegistry:duplicateType on a name collision.
+            %
+            %   See also DashboardWidgetRegistry.register, DashboardEngine.widgetTypes.
+            DashboardWidgetRegistry.register(type, ctorHandle);
         end
 
         function obj = load(filepath, varargin)

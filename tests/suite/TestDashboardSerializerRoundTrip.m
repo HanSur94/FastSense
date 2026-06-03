@@ -189,5 +189,156 @@ classdef TestDashboardSerializerRoundTrip < matlab.unittest.TestCase
             testCase.verifyEqual(etw.Events(2).label, 'B', ...
                 'EventTimelineWidget second event label should be B');
         end
+
+        function testChartCallbackRoundTrip(testCase)
+            %TESTCHARTCALLBACKROUNDTRIP P0-3: a callback chart widget's DataFcn
+            %   must survive toStruct/fromStruct (was silently dropped before).
+            w = BarChartWidget('Title', 'Bars');
+            w.DataFcn = @() [1 2 3];
+            s = w.toStruct();
+            w2 = BarChartWidget.fromStruct(s);
+            testCase.verifyNotEmpty(w2.DataFcn, 'DataFcn must be restored from s.source');
+            testCase.verifyEqual(func2str(w2.DataFcn), func2str(w.DataFcn));
+        end
+
+        function testScatterSensorRoundTrip(testCase)
+            %TESTSCATTERSENSORROUNDTRIP P0-3: Scatter SensorX/SensorY must be
+            %   restored from TagRegistry on load (was silently dropped before).
+            TagRegistry.clear();
+            testCase.addTeardown(@() TagRegistry.clear());
+            tx = SensorTag('sx', 'X', 1:5, 'Y', 1:5);
+            ty = SensorTag('sy', 'X', 1:5, 'Y', 2:6);
+            TagRegistry.register('sx', tx);
+            TagRegistry.register('sy', ty);
+            w = ScatterWidget('Title', 'Sc');
+            w.SensorX = tx;
+            w.SensorY = ty;
+            s = w.toStruct();
+            w2 = ScatterWidget.fromStruct(s);
+            testCase.verifyNotEmpty(w2.SensorX, 'SensorX must be restored');
+            testCase.verifyNotEmpty(w2.SensorY, 'SensorY must be restored');
+            testCase.verifyEqual(w2.SensorX.Key, 'sx');
+        end
+
+        function testChartOldStructNoSourceLoadsQuietly(testCase)
+            %TESTCHARTOLDSTRUCTNOSOURCELOADSQUIETLY P0-3 backward-compat: an old
+            %   chart struct WITHOUT s.source must load with no binding and NO warning.
+            s = struct('type', 'barchart', 'title', 'B', ...
+                'position', struct('col', 1, 'row', 1, 'width', 8, 'height', 4));
+            lastwarn('');
+            w2 = BarChartWidget.fromStruct(s);
+            [~, wid] = lastwarn();
+            testCase.verifyEmpty(wid, 'Old struct without source must not emit a warning');
+            testCase.verifyEmpty(w2.DataFcn);
+        end
+
+        function testSaveEmitsNumberBinding(testCase)
+            %TESTSAVEEMITSNUMBERBINDING P0-3: DashboardSerializer.save (.m export)
+            %   must emit the ValueFcn binding (it was dropped before the fix).
+            d = DashboardEngine('rt');
+            d.addWidget('number', 'Title', 'Speed', 'Position', [1 1 4 2], ...
+                'ValueFcn', @() 42);
+            filepath = fullfile(testCase.TempDir, 'rtbind.m');
+            d.save(filepath);
+            txt = fileread(filepath);
+            testCase.verifyTrue(contains(txt, 'ValueFcn'), ...
+                'save() must emit the number ValueFcn binding');
+        end
+
+        function testCustomTypeDeserializesViaRegistry(testCase)
+            %TESTCUSTOMTYPEDESERIALIZESVIAREGISTRY P1: a registered custom type
+            %   deserializes through the registry (the old switch warned + dropped it).
+            testCase.addTeardown(@() DashboardWidgetRegistry.reset());
+            DashboardWidgetRegistry.register('mytype', @NumberWidget);
+            base = NumberWidget('Title', 'X', 'Position', [1 1 4 2], 'StaticValue', 7);
+            s = base.toStruct();
+            s.type = 'mytype';
+            w = DashboardSerializer.createWidgetFromStruct(s);
+            testCase.verifyClass(w, 'NumberWidget');
+        end
+
+        function testKpiStructDeserializesToNumber(testCase)
+            %TESTKPISTRUCTDESERIALIZESTONUMBER P1: 'kpi' resolves to NumberWidget via the registry alias.
+            base = NumberWidget('Title', 'K', 'Position', [1 1 4 2], 'StaticValue', 1);
+            s = base.toStruct();
+            s.type = 'kpi';
+            w = DashboardSerializer.createWidgetFromStruct(s);
+            testCase.verifyClass(w, 'NumberWidget');
+        end
+
+        function testUnknownTypeWarnsAndReturnsEmpty(testCase)
+            %TESTUNKNOWNTYPEWARNSANDRETURNSEMPTY P1: unknown type still warns+skips (preserved).
+            base = NumberWidget('Title', 'U', 'Position', [1 1 4 2], 'StaticValue', 1);
+            s = base.toStruct();
+            s.type = 'definitelynope';
+            lastwarn('');
+            w = DashboardSerializer.createWidgetFromStruct(s);
+            testCase.verifyEmpty(w);
+            [~, id] = lastwarn();
+            testCase.verifyEqual(id, 'DashboardSerializer:unknownType');
+        end
+
+        function testSavedConfigHasSchemaVersion(testCase)
+            %TESTSAVEDCONFIGHASSCHEMAVERSION P1: every saved config is stamped with schemaVersion.
+            config = DashboardSerializer.widgetsToConfig('SV', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            testCase.verifyTrue(isfield(config, 'schemaVersion'));
+            testCase.verifyEqual(config.schemaVersion, 1);
+        end
+
+        function testSavedJSONContainsSchemaVersion(testCase)
+            %TESTSAVEDJSONCONTAINSSCHEMAVERSION P1: schemaVersion survives to JSON and back.
+            config = DashboardSerializer.widgetsToConfig('SV', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            fp = fullfile(testCase.TempDir, 'sv.json');
+            DashboardSerializer.saveJSON(config, fp);
+            txt = fileread(fp);
+            testCase.verifyTrue(contains(txt, 'schemaVersion'));
+            cfg = DashboardSerializer.loadJSON(fp);
+            testCase.verifyEqual(cfg.schemaVersion, 1);
+        end
+
+        function testOldConfigWithoutSchemaVersionLoadsSilently(testCase)
+            %TESTOLDCONFIGWITHOUTSCHEMAVERSIONLOADSSILENTLY P1 backward-compat: a pre-versioning
+            %   file (no schemaVersion field) loads as v1 with NO warning.
+            config = DashboardSerializer.widgetsToConfig('Old', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            if isfield(config, 'schemaVersion')
+                config = rmfield(config, 'schemaVersion');
+            end
+            fp = fullfile(testCase.TempDir, 'old.json');
+            DashboardSerializer.saveJSON(config, fp);
+            lastwarn('');
+            cfg = DashboardSerializer.loadJSON(fp); %#ok<NASGU>
+            [~, id] = lastwarn();
+            testCase.verifyFalse(strcmp(id, 'DashboardSerializer:schemaVersionNewer'));
+        end
+
+        function testNewerSchemaVersionWarnsOnLoad(testCase)
+            %TESTNEWERSCHEMAVERSIONWARNSONLOAD P1: a file newer than supported warns on load.
+            config = DashboardSerializer.widgetsToConfig('New', 'dark', 5, ...
+                {NumberWidget('Title', 'N', 'Position', [1 1 4 2], 'StaticValue', 1)});
+            config.schemaVersion = 999;
+            fp = fullfile(testCase.TempDir, 'new.json');
+            DashboardSerializer.saveJSON(config, fp);
+            lastwarn('');
+            cfg = DashboardSerializer.loadJSON(fp); %#ok<NASGU>
+            [~, id] = lastwarn();
+            testCase.verifyEqual(id, 'DashboardSerializer:schemaVersionNewer');
+        end
+
+        function testKpiJSONLoadsAsNumberThroughFullPath(testCase)
+            %TESTKPIJSONLOADSASNUMBERTHROUGHFULLPATH P1: a legacy 'kpi' widget survives the
+            %   full JSON load path (loadJSON -> configToWidgets) as a NumberWidget.
+            base = NumberWidget('Title', 'K', 'Position', [1 1 4 2], 'StaticValue', 3);
+            config = DashboardSerializer.widgetsToConfig('Kpi', 'dark', 5, {base});
+            config.widgets{1}.type = 'kpi';   % simulate a pre-rename serialized widget
+            fp = fullfile(testCase.TempDir, 'kpi.json');
+            DashboardSerializer.saveJSON(config, fp);
+            cfg = DashboardSerializer.loadJSON(fp);
+            rebuilt = DashboardSerializer.configToWidgets(cfg);
+            testCase.verifyEqual(numel(rebuilt), 1);
+            testCase.verifyClass(rebuilt{1}, 'NumberWidget');
+        end
     end
 end
