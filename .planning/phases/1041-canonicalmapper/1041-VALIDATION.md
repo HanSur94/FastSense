@@ -44,6 +44,7 @@ created: 2026-06-02
 | Requirement | Behavior | Test Type | Test Method | File Exists | Status |
 |-------------|----------|-----------|-------------|-------------|--------|
 | CANON-01 | Normalization: lowercase + punctuation collapse | unit | `testNormalizeLowercase` | ❌ W0 | ⬜ pending |
+| CANON-01 | Normalization: collapse repeated separators + trim | unit | `testNormalizeCollapsesRepeats` | ❌ W0 | ⬜ pending |
 | CANON-01 | Edit-distance symmetry `d(a,b)==d(b,a)` | unit | `testEditDistanceSymmetry` | ❌ W0 | ⬜ pending |
 | CANON-01 | Edit-distance known pairs (`abc/abc=0`, `abc/axc=1`, `abc/''=3`) | unit | `testEditDistanceKnownPairs` | ❌ W0 | ⬜ pending |
 | CANON-01 | `suggest` 3 machines / 2 matching pairs → 2 logicalIds | unit | `testSuggestTwoMatchingPairs` | ❌ W0 | ⬜ pending |
