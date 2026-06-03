@@ -42,6 +42,7 @@ classdef SensorDetailPlot < handle
         IsPropagating       % Guard against infinite sync loops
         XLimListener        % Listener for main axes XLim changes
         OwnsFigure          % True if we created the figure
+        TimeWindow_  = []   % [t0 t1] datenum load window; [] = full range (Phase 1041-03)
     end
 
     methods
@@ -87,6 +88,7 @@ classdef SensorDetailPlot < handle
             conDefaults.Title = obj.TagRef.Name;
             if isempty(conDefaults.Title), conDefaults.Title = obj.TagRef.Key; end
             conDefaults.XType = 'numeric';
+            conDefaults.TimeWindow = [];  % 'TimeWindow' [t0 t1] datenum; [] = full range (Phase 1041-03)
             [opts, ~] = parseOpts(conDefaults, varargin);
 
             % Inherit theme from parent panel (set by FastSenseGrid.tilePanel)
@@ -108,6 +110,7 @@ classdef SensorDetailPlot < handle
             obj.ParentPanel = opts.Parent;
             obj.Title = opts.Title;
             obj.XType = opts.XType;
+            obj.TimeWindow_ = opts.TimeWindow;  % Phase 1041-03
 
             % Resolve events
             obj.Events = obj.resolveEvents(opts.Events);
@@ -123,7 +126,15 @@ classdef SensorDetailPlot < handle
             obj.createLayout();
 
             % Resolve the (X, Y) vectors + display name from Tag.
-            [xVec, yVec] = obj.TagRef.getXY();
+            % When a TimeWindow is set, load only the bounded slice (Phase 1041-03).
+            % The ctor-validation getXY() at line ~60 is intentionally left as-is
+            % (it only proves the tag exists and warns if empty; we want that check
+            % to reflect full-extent availability, not the window).
+            if ~isempty(obj.TimeWindow_)
+                [xVec, yVec] = obj.TagRef.getXYRange(obj.TimeWindow_(1), obj.TimeWindow_(2));
+            else
+                [xVec, yVec] = obj.TagRef.getXY();
+            end
             displayName = obj.TagRef.Name;
             if isempty(displayName); displayName = obj.TagRef.Key; end
 

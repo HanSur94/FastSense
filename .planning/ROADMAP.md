@@ -438,3 +438,17 @@ Plans:
 - [x] 1040-02-notification-pane-PLAN.md (Wave 2, depends 01) — full detachable inbox pane (attach/detach/refresh/ack/filter/stale/theme) + TestNotificationCenterPane
 - [x] 1040-03-companion-integration-PLAN.md (Wave 3, depends 02) — Companion 4th-column grid + toolbar bell+badge + onLiveTick_ refresh hook + detach wiring
 - [x] 1040-04-companion-tests-verify-PLAN.md (Wave 4, depends 03) — TestFastSenseCompanion toolbar-col updates + 9 integration tests + full-suite gate + human live-verify
+
+### Phase 1041: Global Kibana-style time range for the Companion with windowed sensor loading
+
+**Goal:** Give companion users a global Kibana-style time-range picker (relative/absolute + quick presets, default Last 7 days) so opening any sensor/plot loads only that window instead of the full up-to-10-year history. Disk-backed sensors read only overlapping chunks via `DataStore.getRange` (real savings); in-RAM `.mat` sensors slice in place. Implemented via an additive `getXYRange(t0,t1)` Tag method (existing `getXY()` untouched), a `CompanionTimeRange` source-of-truth + toolbar `CompanionTimeBar`, with open views re-queried on range change.
+**Requirements**: none mapped — ad-hoc phase; must_haves derived from the phase GOAL + the approved 1041-CONTEXT.md acceptance defaults (no formal REQ-IDs)
+**Depends on:** Phase 1040
+**Plans:** 5/5 plans complete
+
+Plans:
+- [x] 1041-01-PLAN.md — Data layer: additive Tag.getXYRange (base default) + SensorTag override (disk getRange / RAM slice) + SensorTag.getTimeRange disk-fix + FastSenseDataStore.getTimeExtent + Octave-safe tests (Wave 1, no deps)
+- [x] 1041-02-PLAN.md — CompanionTimeRange source-of-truth handle class: relative/absolute/all spec, resolve to datenum, label, RangeChanged event + logic tests (Wave 1, no deps)
+- [x] 1041-03-PLAN.md — View layer: DashboardEngine.setTimeWindow fan-out + FastSenseWidget TimeWindow_ + windowed pulls at the 3 sites + empty-state, SensorDetailPlot 'TimeWindow', Overlay window-awareness + headless tests (Wave 2, depends 01)
+- [x] 1041-04-PLAN.md — CompanionTimeBar uifigure picker + FastSenseCompanion integration (toolbar button, RangeChanged re-query of Engines_ + ad-hoc figures via appdata stash, open-site windowing, Last-7-days companionPrefs default) (Wave 3, depends 02+03)
+- [x] 1041-05-PLAN.md — TestCompanionTimeBar UI suite + TestFastSenseCompanion integration tests + SpyTimeWindowEngine + full-suite gate + manual-verify checklist + human checkpoint (Wave 4, depends 04)

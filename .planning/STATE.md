@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Multi-User LAN Concurrency
-status: verifying
-last_updated: "2026-06-02T11:44:53.304Z"
+status: completed
+last_updated: "2026-06-02T18:53:03.135Z"
 last_activity: 2026-06-02
 progress:
-  total_phases: 16
-  completed_phases: 4
-  total_plans: 20
-  completed_plans: 39
+  total_phases: 17
+  completed_phases: 5
+  total_plans: 25
+  completed_plans: 44
 ---
 
 # State
@@ -19,15 +19,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** Phase 1040 — companion-notification-center
+**Current focus:** Phase 1041 — global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading
 
 ## Current Position
 
-Phase: 1040
+Phase: 1041
 Plan: Not started
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
-Status: Phase complete — ready for verification
-Last activity: 2026-06-02 - Completed quick task 260602-p2t: renamed dashboard toolbar "Reset" button to "Redraw" (the button forces a full widget re-render, not a reset)
+Status: Phase 1041 complete — inline time-range control (toolbar dropdown + Custom date strip) shipped; PR #189 open for review
+Last activity: 2026-06-03 - Reworked CompanionTimeBar from a separate-window picker to an inline toolbar dropdown + in-window Custom relative/absolute strip per UAT; TestCompanionTimeBar 12/12; PR #189 opened
 
 ### Note on parallel v4.0 work (main branch state)
 
@@ -117,6 +117,7 @@ Phase 1019 [██████████] 100% (3/3 plans complete in Phase 10
 - 2026-05-13 — Milestone v4.0 Multi-User LAN Concurrency started; PROJECT.md updated, REQUIREMENTS.md created (14 P1 REQ-IDs across CONC/IDENT/EVTLOG/ACK/OPS categories; 6 P2 deferred to v4.1); research/ phase produced SUMMARY/STACK/FEATURES/ARCHITECTURE/PITFALLS markdown
 - 2026-05-13 — v4.0 roadmap created: 5 phases (1029-1033) covering all 14 P1 REQ-IDs, full coverage no orphans; phase structure mirrors research-recommended build order (Foundation → TagWriteCoordinator → EventLog → Single-Source Events → Companion Integration); three PITFALLS corrections (OFD locks, mtime heartbeat, lock-serialised appends) baked into Phase 1029 success criteria
 - 2026-06-02 — Phase 1040 added: Companion Notification Center (acknowledgeable in-app inbox pane in `FastSenseCompanion`; design brainstormed in-session and approved; EventStore-backed feed, dismiss = `acknowledgeEvent`, new collapsible right column + toolbar bell badge; `1040-CONTEXT.md` written)
+- 2026-06-02 — Phase 1041 added: Global Kibana-style time range for the Companion with windowed sensor loading (design brainstormed in-session and approved; Approach 1 window-as-parameter chosen; additive `Tag.getXYRange(t0,t1)` with `getXY()` untouched; `SensorTag` uses `DataStore.getRange` (disk) or slices (RAM); fix `SensorTag.getTimeRange()` disk-backed + add `FastSenseDataStore` XMin/XMax getter; new `CompanionTimeRange` source-of-truth + toolbar `CompanionTimeBar` (relative/absolute/presets); `DashboardEngine.setTimeWindow`; FastSenseWidget 3 call-sites + SensorDetailPlot `'TimeWindow'` + RawAxesWidget overlay updated; open views re-queried on `RangeChanged`; default Last 7 days via companionPrefs; v1 defers auto-refresh interval / sub-day UI / scrub-beyond-window load / per-view pin / recently-used)
 
 ### Phase Numbering Note
 

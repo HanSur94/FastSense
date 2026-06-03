@@ -120,6 +120,47 @@ classdef SensorTag < Tag
             Y = obj.Y_;
         end
 
+        function [X, Y] = getXYRange(obj, tStart, tEnd)
+            %GETXYRANGE Return windowed (X, Y).
+            %   Disk-backed: delegates to DataStore.getRange (reads only overlapping
+            %   chunks). In-RAM: binary-search-slices X_/Y_. Empty/[] bounds or an
+            %   inverted/out-of-extent window return the full series / empty as the
+            %   base contract specifies. getXY() is left untouched.
+            if nargin < 3 || isempty(tStart) || isempty(tEnd)
+                [X, Y] = obj.getXY();
+                return;
+            end
+            if obj.isOnDisk()
+                [X, Y] = obj.DataStore_.getRange(tStart, tEnd);
+                return;
+            end
+            if isempty(obj.X_)
+                X = []; Y = [];
+                return;
+            end
+            if tStart > tEnd
+                X = []; Y = [];
+                return;
+            end
+            if tEnd < obj.X_(1) || tStart > obj.X_(end)
+                % Window lies entirely outside the data extent -> empty.
+                % (Without this guard the one-point padding below would pull
+                % in a boundary sample for a non-overlapping window.)
+                X = []; Y = [];
+                return;
+            end
+            iLo = binary_search(obj.X_, tStart, 'left');
+            iHi = binary_search(obj.X_, tEnd,   'right');
+            iLo = max(1, iLo - 1);
+            iHi = min(numel(obj.X_), iHi + 1);
+            if iLo > iHi
+                X = []; Y = [];
+                return;
+            end
+            X = obj.X_(iLo:iHi);
+            Y = obj.Y_(iLo:iHi);
+        end
+
         function v = valueAt(obj, t)
             %VALUEAT Return Y at the last index where X <= t (ZOH, clamped).
             %   Returns NaN on empty data.
@@ -133,9 +174,14 @@ classdef SensorTag < Tag
 
         function [tMin, tMax] = getTimeRange(obj)
             %GETTIMERANGE Return [X(1), X(end)].  [NaN NaN] if empty.
+            %   Disk-backed sensors read the extent from the DataStore (the X_
+            %   array is empty after toDisk()), fixing the prior [NaN NaN] gap.
+            if obj.isOnDisk()
+                [tMin, tMax] = obj.DataStore_.getTimeExtent();
+                return;
+            end
             if isempty(obj.X_)
-                tMin = NaN;
-                tMax = NaN;
+                tMin = NaN; tMax = NaN;
                 return;
             end
             tMin = obj.X_(1);

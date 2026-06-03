@@ -1643,6 +1643,125 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             end
         end
 
+        % ---- Phase 1041: global time-range wiring integration tests ----
+
+        function testCompanionTimeRangeButtonDefaultLabel(testCase)
+        %TESTCOMPANIONTIMERANGEBUTTONDEFAULTLABEL 1041: range button exists in col 9 with label 'Last 7 days'.
+        %   Also asserts toolbar ColumnWidth unchanged as a regression guard.
+            testCase.armCleanDefaultPrefs_();   % assert the built-in default label
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            hFig = app.getFigForTest_();
+            btn = findall(hFig, 'Tag', 'CompanionTimeRangeBtn');
+            testCase.verifyEqual(numel(btn), 1, ...
+                'testCompanionTimeRangeButtonDefaultLabel: expected exactly one CompanionTimeRangeBtn');
+            testCase.verifyEqual(btn.Layout.Column, 9, ...
+                'testCompanionTimeRangeButtonDefaultLabel: range button must be in toolbar column 9');
+            testCase.verifyEqual(btn.Value, 'Last 7 days', ...
+                'testCompanionTimeRangeButtonDefaultLabel: default selection must be ''Last 7 days''');
+            % Regression guard: toolbar ColumnWidth must remain {110,110,110,130,70,90,70,70,'1x',36}.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            % Search all descendants: the toolbar grid is nested at depth 3
+            % (hFig -> hLayout_ -> hToolbarPanel_ -> hToolbarGrid), so a
+            % '-depth', 2 search misses it.
+            hToolbarGrid = findall(hFig, 'Type', 'uigridlayout');
+            % Locate the 1x10 toolbar grid by width count.
+            expected = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
+            found = false;
+            for i = 1:numel(hToolbarGrid)
+                cw = hToolbarGrid(i).ColumnWidth;
+                if numel(cw) == 10
+                    testCase.verifyEqual(cw, expected, ...
+                        'testCompanionTimeRangeButtonDefaultLabel: toolbar ColumnWidth regression');
+                    found = true;
+                    break;
+                end
+            end
+            testCase.verifyTrue(found, ...
+                'testCompanionTimeRangeButtonDefaultLabel: 10-column toolbar grid not found');
+        end
+
+        function testRangeChangedRequeriesManagedEngines(testCase)
+        %TESTRANGECHANGEDREQUERIESMANGEDENGINES 1041: RangeChanged calls setTimeWindow on managed engines.
+            testCase.backupAndArmRestore_();   % onRangeChanged_ persists range; don't pollute prefs
+            spy = SpyTimeWindowEngine();
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            app.addDashboard(spy);
+            % Fire a range change via the companion's TimeRange_.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            s.TimeRange_.setRelative(30, 'days');
+            testCase.verifyGreaterThanOrEqual(spy.CallCount, 1, ...
+                'testRangeChangedRequeriesManagedEngines: setTimeWindow must have been called');
+            testCase.verifyEqual(spy.LastT1 - spy.LastT0, 30, 'AbsTol', 1/24, ...
+                'testRangeChangedRequeriesManagedEngines: resolved span must be ~30 days');
+        end
+
+        function testRangeChangedRequeriesAdHocFigure(testCase)
+        %TESTRANGECHANGEDREQUERIESADHOCFIGURE 1041: RangeChanged calls setTimeWindow on ad-hoc figures.
+            testCase.backupAndArmRestore_();   % onRangeChanged_ persists range; don't pollute prefs
+            spy = SpyTimeWindowEngine();
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            % Stash the spy engine onto a hidden figure.
+            hf = figure('Visible', 'off');
+            testCase.addTeardown(@() delete(hf));
+            setappdata(hf, 'DashboardEngine', spy);
+            app.trackOpenedFigureForTest_(hf);
+            % Fire a range change.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            s.TimeRange_.setRelative(14, 'days');
+            testCase.verifyGreaterThanOrEqual(spy.CallCount, 1, ...
+                'testRangeChangedRequeriesAdHocFigure: setTimeWindow must have been called on ad-hoc spy');
+            testCase.verifyEqual(spy.LastT1 - spy.LastT0, 14, 'AbsTol', 1/24, ...
+                'testRangeChangedRequeriesAdHocFigure: resolved span must be ~14 days');
+        end
+
+        function testOpenSiteAppliesWindow(testCase)
+        %TESTOPENSITEAPPLIESWINDOW 1041: currentTimeWindow() returns a non-empty window for a non-all spec.
+        %   Full end-to-end windowing of a newly opened engine requires a live
+        %   MATLAB session; the seam tested here confirms the public accessor
+        %   returns the resolved window so open-site callers can apply it.
+        %   The visual + spawned-engine verification is covered by the manual checklist.
+            testCase.armCleanDefaultPrefs_();   % assert the built-in default window
+            app = FastSenseCompanion('Theme', 'dark');
+            testCase.addTeardown(@() app.close());
+            % Confirm currentTimeWindow() returns a non-empty pair (default is Last 7 days).
+            [t0, t1] = app.currentTimeWindow();
+            testCase.verifyNotEmpty(t0, ...
+                'testOpenSiteAppliesWindow: t0 must be non-empty for relative (Last 7 days) default');
+            testCase.verifyNotEmpty(t1, ...
+                'testOpenSiteAppliesWindow: t1 must be non-empty for relative (Last 7 days) default');
+            testCase.verifyEqual(t1 - t0, 7, 'AbsTol', 1/24, ...
+                'testOpenSiteAppliesWindow: default window must be ~7 days');
+        end
+
+        function testTeardownDeletesTimeBar(testCase)
+        %TESTTEARDOWNDELETESTIMEBAR 1041: companion close() removes the range bar + listener cleanly.
+            app = FastSenseCompanion('Theme', 'dark');
+            % Verify bar is alive before close.
+            warnState = warning('off', 'MATLAB:structOnObject');
+            cleanupW = onCleanup(@() warning(warnState));
+            s = struct(app);
+            testCase.assertNotEmpty(s.TimeBar_, ...
+                'testTeardownDeletesTimeBar: TimeBar_ must exist after construction');
+            testCase.assertTrue(isvalid(s.TimeBar_), ...
+                'testTeardownDeletesTimeBar: TimeBar_ must be valid after construction');
+            % Close companion.
+            testCase.verifyWarningFree(@() app.close(), ...
+                'testTeardownDeletesTimeBar: close() must not warn');
+            % No 'Time Range' picker popup should remain.
+            figs = findall(groot, 'Type', 'figure', 'Name', 'Time Range');
+            testCase.verifyEqual(numel(figs), 0, ...
+                'testTeardownDeletesTimeBar: no ''Time Range'' figure should remain after close()');
+        end
+
     end
 
     methods (Access = private)
@@ -1654,6 +1773,22 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             if exist(prefsPath, 'file') == 2
                 backupPath = [tempname, '.mat'];
                 copyfile(prefsPath, backupPath);
+            end
+            testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
+        end
+
+        function armCleanDefaultPrefs_(testCase)
+        %ARMCLEANDEFAULTPREFS_ Back up + remove the prefs file so the companion
+        %   constructs with the built-in default range (Last 7 days), then arm
+        %   restore on teardown. Needed by tests that assert the DEFAULT window:
+        %   without removing an ambient/polluted timeRange pref the companion
+        %   would load that instead (Phase 1041 onRangeChanged_ persists ranges).
+            prefsPath = fullfile(prefdir, 'FastSenseCompanion.mat');
+            backupPath = '';
+            if exist(prefsPath, 'file') == 2
+                backupPath = [tempname, '.mat'];
+                copyfile(prefsPath, backupPath);
+                delete(prefsPath);
             end
             testCase.addTeardown(@() restorePrefs_(prefsPath, backupPath));
         end

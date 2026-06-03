@@ -122,6 +122,42 @@ classdef Tag < handle
             error('Tag:notImplemented', 'Subclass must implement getXY().');
         end
 
+        function [X, Y] = getXYRange(obj, tStart, tEnd)
+            %GETXYRANGE Return X, Y sliced to the window [tStart, tEnd].
+            %   Default implementation: call getXY() then binary-search-slice.
+            %   Empty/[] bounds return the full series (delegates to getXY()).
+            %   SensorTag overrides this for disk-backed efficiency.
+            if nargin < 3 || isempty(tStart) || isempty(tEnd)
+                [X, Y] = obj.getXY();
+                return;
+            end
+            [X, Y] = obj.getXY();
+            if isempty(X)
+                return;
+            end
+            if tStart > tEnd
+                X = []; Y = [];
+                return;
+            end
+            if tEnd < X(1) || tStart > X(end)
+                % Window lies entirely outside the data extent -> empty.
+                % (Without this guard the one-point padding below would pull
+                % in a boundary sample for a non-overlapping window.)
+                X = []; Y = [];
+                return;
+            end
+            iLo = binary_search(X, tStart, 'left');
+            iHi = binary_search(X, tEnd,   'right');
+            iLo = max(1, iLo - 1);           % one-point padding (matches DataStore.getRange)
+            iHi = min(numel(X), iHi + 1);
+            if iLo > iHi
+                X = []; Y = [];
+                return;
+            end
+            X = X(iLo:iHi);
+            Y = Y(iLo:iHi);
+        end
+
         function v = valueAt(obj, t) %#ok<STOUT,INUSD>
             %VALUEAT Return scalar value at time t.  Subclass must override.
             error('Tag:notImplemented', 'Subclass must implement valueAt(t).');

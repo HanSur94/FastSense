@@ -92,9 +92,12 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
         case 'Overlay'
             % One single widget: a RawAxesWidget that overlays every tag.
             % cla() runs in the widget's refresh, then PlotFcn redraws.
+            % Phase 1041-03: two-arg PlotFcn so RawAxesWidget can pass its TimeRange
+            % (set by DashboardEngine.setTimeWindow -> rerenderWidgets) to plotOverlay_.
+            % On first render TimeRange is [] -> plotOverlay_ falls back to getXY() (full range).
             engine.addWidget('rawaxes', ...
                 'Title',    figName, ...
-                'PlotFcn',  @(ax) plotOverlay_(ax, validTags, validNames), ...
+                'PlotFcn',  @(ax, tRange) plotOverlay_(ax, validTags, validNames, tRange), ...
                 'Position', [1 1 24 12]);
 
         case 'LinkedGrid'
@@ -134,17 +137,30 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
     hFig = engine.hFigure;
     if ~isempty(hFig) && ishandle(hFig)
         set(hFig, 'CloseRequestFcn', @(s, ~) closeFcn_(s, engine));
+        % Phase 1041-04: stash engine on figure appdata so FastSenseCompanion
+        % can recover it on RangeChanged (getappdata(hFig,'DashboardEngine')).
+        setappdata(hFig, 'DashboardEngine', engine);
     end
 end
 
 % --------------------------- helpers --------------------------------
 
-function plotOverlay_(ax, tags, names)
+function plotOverlay_(ax, tags, names, tRange)
 %PLOTOVERLAY_ Draw every tag as a line in the same axes; called on every refresh.
+%   Phase 1041-03: optional tRange argument. When non-empty, each tag is read
+%   via getXYRange(tRange(1),tRange(2)) so the overlay honors the companion's
+%   global time window. When absent or empty, falls back to getXY() (full series).
+    if nargin < 4
+        tRange = [];
+    end
     hold(ax, 'on');
     for k = 1:numel(tags)
         try
-            [tv, y] = tags{k}.getXY();
+            if ~isempty(tRange)
+                [tv, y] = tags{k}.getXYRange(tRange(1), tRange(2));
+            else
+                [tv, y] = tags{k}.getXY();
+            end
             if isempty(tv); continue; end
             plot(ax, tv, y, 'DisplayName', char(names{k}), 'LineWidth', 1.2);
         catch
