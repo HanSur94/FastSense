@@ -14,7 +14,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 
 ## Phases
 
-- [ ] **Phase 1041: CanonicalMapper** - Logical-sensor mapping foundation with confidence levels, auto-suggest, manual overrides, and unmapped-tail surfacing
+- [x] **Phase 1041: CanonicalMapper** - Logical-sensor mapping foundation with confidence levels, auto-suggest, manual overrides, and unmapped-tail surfacing (completed 2026-06-03)
 - [ ] **Phase 1042: Machine + Fleet + Pipeline DI Seam** - Isolated per-machine tag catalogs, fleet config persistence, lazy load, and pipeline tagSource_ DI
 - [ ] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test
 - [ ] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch
@@ -42,7 +42,7 @@ Plans:
 - [x] 1041-01-test-scaffold-bootstrap-PLAN.md — Wave 0: TestCanonicalMapper.m (30 RED tests) + install.m Fleet path + libs/Fleet/ bootstrap
 - [x] 1041-02-mapper-core-suggest-PLAN.md — Wave 1: CanonicalMapper core — normalize + edit-distance + suggest + confidence + unit-mismatch (CANON-01, CANON-02)
 - [x] 1041-03-override-persist-query-PLAN.md — Wave 2: override/confirm precedence + JSON round-trip + reviewPending/unmapped/isResolvable (CANON-03, CANON-04)
-- [ ] 1041-04-canonical-map-editor-PLAN.md — Wave 3: standalone CanonicalMapEditor uifigure + human-verify checkpoint (CANON-05)
+- [x] 1041-04-canonical-map-editor-PLAN.md — Wave 3: standalone CanonicalMapEditor uifigure + human-verify checkpoint (CANON-05)
 
 ### Phase 1042: Machine + Fleet + Pipeline DI Seam
 
@@ -123,7 +123,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1041. CanonicalMapper | 3/4 | In Progress|  |
+| 1041. CanonicalMapper | 4/4 | Complete   | 2026-06-03 |
 | 1042. Machine + Fleet + Pipeline DI Seam | 0/? | Not started | - |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 0/? | Not started | - |
 | 1044. Companion Machine Dimension | 0/? | Not started | - |
