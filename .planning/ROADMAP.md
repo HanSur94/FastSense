@@ -123,7 +123,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1041. CanonicalMapper | 4/4 | Complete   | 2026-06-03 |
+| 1041. CanonicalMapper | 4/4 | Complete    | 2026-06-03 |
 | 1042. Machine + Fleet + Pipeline DI Seam | 0/? | Not started | - |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 0/? | Not started | - |
 | 1044. Companion Machine Dimension | 0/? | Not started | - |

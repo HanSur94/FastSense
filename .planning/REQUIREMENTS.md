@@ -24,11 +24,11 @@ The additive `libs/Fleet/` layer: isolated per-machine tag catalogs, per-machine
 
 The logical-sensor layer bridging differing per-machine keys. Must be reviewable so wrong comparisons can't happen silently.
 
-- [ ] **CANON-01**: For machines that name the same sensor differently, the mapper auto-suggests a logical-sensor mapping (`logicalId → {machineId → localKey}`) from name/unit similarity using only toolbox-free primitives (hand-rolled edit distance + normalization).
-- [ ] **CANON-02**: Every mapping entry carries a confidence level (HIGH/MEDIUM/LOW), and the mapper flags matches whose units are inconsistent.
-- [ ] **CANON-03**: User can manually override or correct a mapping (in the mapping review surface, or promoted from a per-machine choice in the comparison builder); the override persists in the fleet config and takes precedence over auto-suggestions.
-- [ ] **CANON-04**: User can query which of a machine's tags are unmapped or ambiguous (the tail needing attention) — `reviewPending()` / `unmapped(machineId)`.
-- [ ] **CANON-05**: User can review and edit the canonical map in the companion via a table (logical name / per-machine local key / status / confidence) and promote entries.
+- [x] **CANON-01**: For machines that name the same sensor differently, the mapper auto-suggests a logical-sensor mapping (`logicalId → {machineId → localKey}`) from name/unit similarity using only toolbox-free primitives (hand-rolled edit distance + normalization).
+- [x] **CANON-02**: Every mapping entry carries a confidence level (HIGH/MEDIUM/LOW), and the mapper flags matches whose units are inconsistent.
+- [x] **CANON-03**: User can manually override or correct a mapping (in the mapping review surface, or promoted from a per-machine choice in the comparison builder); the override persists in the fleet config and takes precedence over auto-suggestions.
+- [x] **CANON-04**: User can query which of a machine's tags are unmapped or ambiguous (the tail needing attention) — `reviewPending()` / `unmapped(machineId)`.
+- [x] **CANON-05**: User can review and edit the canonical map in the companion via a table (logical name / per-machine local key / status / confidence) and promote entries.
 
 ### Companion Machine Dimension (MACH)
 
@@ -95,11 +95,11 @@ Each requirement maps to exactly one phase. Confirmed by roadmapper 2026-06-02.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CANON-01 | Phase 1041 (CanonicalMapper) | Pending |
-| CANON-02 | Phase 1041 (CanonicalMapper) | Pending |
-| CANON-03 | Phase 1041 (CanonicalMapper) | Pending |
-| CANON-04 | Phase 1041 (CanonicalMapper) | Pending |
-| CANON-05 | Phase 1041 (CanonicalMapper) | Pending |
+| CANON-01 | Phase 1041 (CanonicalMapper) | Complete |
+| CANON-02 | Phase 1041 (CanonicalMapper) | Complete |
+| CANON-03 | Phase 1041 (CanonicalMapper) | Complete |
+| CANON-04 | Phase 1041 (CanonicalMapper) | Complete |
+| CANON-05 | Phase 1041 (CanonicalMapper) | Complete |
 | FLEET-01 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
 | FLEET-02 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
 | FLEET-03 | Phase 1042 (Machine + Fleet + Pipeline DI Seam) | Pending |
@@ -123,6 +123,7 @@ Each requirement maps to exactly one phase. Confirmed by roadmapper 2026-06-02.
 | DASH-04 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | Pending |
 
 **Coverage:**
+
 - v1 requirements: 26 total (FLEET 6, CANON 5, MACH 5, CMP 6, DASH 4)
 - Mapped to phases: 26/26 (100%)
 - Unmapped: 0
