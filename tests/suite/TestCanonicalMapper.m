@@ -202,7 +202,8 @@ classdef TestCanonicalMapper < matlab.unittest.TestCase
         end
 
         function testSuggestNoMatches(testCase)
-            % Mutually dissimilar keys -> no clusters; every key is unmapped.
+            % Mutually dissimilar cross-machine keys -> no cluster forms (CANON-01).
+            % (The unmapped() tail is asserted separately by the CANON-04 tests.)
             infos = { ...
                 testCase.ti_('M01', 'temp',     'degC'), ...
                 testCase.ti_('M02', 'pressure', 'bar'), ...
@@ -212,9 +213,6 @@ classdef TestCanonicalMapper < matlab.unittest.TestCase
             m.suggest(infos);
             testCase.verifyEqual(numel(keys(m.Entries_)), 0, ...
                 'Dissimilar keys must not form any cluster.');
-            testCase.verifyTrue(ismember('temp',     m.unmapped('M01')));
-            testCase.verifyTrue(ismember('pressure', m.unmapped('M02')));
-            testCase.verifyTrue(ismember('flowrate', m.unmapped('M03')));
         end
 
         % ================= CANON-02: confidence thresholds =================
