@@ -60,6 +60,7 @@ function varargout = install(varargin)
     addpath(fullfile(root, 'libs', 'PlantLog'));
     addpath(fullfile(root, 'libs', 'Concurrency'));
     addpath(fullfile(root, 'libs', 'Help'));
+    addpath(fullfile(root, 'libs', 'Fleet'));
 
     % Demo workspaces (Phase 1015+): add each demo dir so the entry-point
     % function (e.g. run_demo) is callable without manual addpath.
