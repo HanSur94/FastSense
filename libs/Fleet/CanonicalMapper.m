@@ -329,6 +329,89 @@ classdef CanonicalMapper < handle
                 leftover = unique(leftover);
             end
         end
+
+        function s = toStruct(obj)
+            %TOSTRUCT Serialize to a struct (version 1) with a flat cell of all entries.
+            s.version = 1;
+            entryList = {};
+            logIds = keys(obj.Entries_);
+            for i = 1:numel(logIds)
+                bucket = obj.Entries_(logIds{i});
+                for j = 1:numel(bucket)
+                    entryList{end + 1} = bucket{j}; %#ok<AGROW>
+                end
+            end
+            s.entries = entryList;
+        end
+
+        function save(obj, filepath)
+            %SAVE Atomically write the mapper to JSON (per-entry encode + movefile).
+            %   Never jsonencode the whole cell-of-structs directly (Pitfall 5): encode
+            %   each entry and assemble the array, then write to a .tmp and movefile.
+            s = obj.toStruct();
+            nEntries = numel(s.entries);
+            if nEntries == 0
+                entriesJson = '[]';
+            else
+                parts = cell(1, nEntries);
+                for i = 1:nEntries
+                    parts{i} = jsonencode(s.entries{i});
+                end
+                entriesJson = ['[' strjoin(parts, ',') ']'];
+            end
+            json = sprintf('{"version":%d,"entries":%s}', s.version, entriesJson);
+            tmp = [filepath '.tmp'];
+            fid = fopen(tmp, 'w');
+            if fid == -1
+                error('CanonicalMapper:fileError', 'Cannot open file for writing: %s', tmp);
+            end
+            fwrite(fid, json);
+            fclose(fid);
+            movefile(tmp, filepath, 'f');
+        end
+    end
+
+    methods (Static)
+        function obj = fromStruct(s)
+            %FROMSTRUCT Rebuild a CanonicalMapper from a toStruct()/jsondecode() struct.
+            obj = CanonicalMapper();
+            if ~isfield(s, 'version') || s.version ~= 1
+                warning('CanonicalMapper:unknownVersion', ...
+                    'Unknown schema version; loading as v1.');
+            end
+            if ~isfield(s, 'entries')
+                return;
+            end
+            entries = s.entries;
+            if isstruct(entries)
+                entries = normalizeToCell_(entries);   % jsondecode collapses homogeneous arrays
+            end
+            for i = 1:numel(entries)
+                e = entries{i};
+                if isKey(obj.Entries_, e.logicalId)
+                    bucket = obj.Entries_(e.logicalId);
+                else
+                    bucket = {};
+                end
+                bucket{end + 1} = e; %#ok<AGROW>
+                obj.Entries_(e.logicalId) = bucket;
+            end
+        end
+
+        function obj = load(filepath)
+            %LOAD Read a mapper from a JSON file written by save().
+            if ~isfile(filepath)
+                error('CanonicalMapper:fileNotFound', 'File not found: %s', filepath);
+            end
+            fid = fopen(filepath, 'r');
+            if fid == -1
+                error('CanonicalMapper:fileError', 'Cannot open file: %s', filepath);
+            end
+            raw = fread(fid, '*char')';
+            fclose(fid);
+            s = jsondecode(raw);
+            obj = CanonicalMapper.fromStruct(s);
+        end
     end
 
     methods (Access = private)
@@ -446,6 +529,23 @@ function entry = applyUnitDowngrade_(entry, canonicalUnits)
             case 'MEDIUM'
                 entry.confidence = 'LOW';
         end
+    end
+end
+
+function c = normalizeToCell_(x)
+    %NORMALIZETOCELL_ Normalize jsondecode output to a cell array.
+    %   Ported verbatim from libs/Dashboard/private/normalizeToCell.m so Phase 1041
+    %   carries no Dashboard dependency. jsondecode collapses a homogeneous JSON array
+    %   of objects into a struct array; this restores consistent {i} cell indexing.
+    if isempty(x)
+        c = {};
+    elseif isstruct(x)
+        c = cell(1, numel(x));
+        for k = 1:numel(x)
+            c{k} = x(k);
+        end
+    else
+        c = x;
     end
 end
 
