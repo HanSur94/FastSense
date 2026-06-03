@@ -40,6 +40,7 @@ Implement `libs/Fleet/Machine.m` — a handle class that owns an isolated `conta
 
 Purpose: FLEET-01 (define a Machine + add tags), FLEET-02 (isolated catalogs; identical local keys coexist; registry untouched), FLEET-03 (machine-scoped ingest), FLEET-05 (lazy load via reused SensorTag.RawSource deferred-read). This is the core data-model unit Fleet (Plan 04) composes.
 Output: One new class file; the RED `TestMachine.m` (Plan 01) turns GREEN; the Octave `test_machine.m` isolation/duplicate paths turn GREEN.
+CONTEXT.md decisions implemented here: D-01 (programmatic addTag), D-02 (lazy load via SensorTag.RawSource), D-04 (no filesystem auto-discovery), D-10 (Machine requires a non-empty Id), D-13 (ingestBatch/startLive tagSource_ wrappers), D-14 (per-machine EventStore).
 </objective>
 
 <execution_context>
@@ -154,6 +155,16 @@ See `1042-01-...-PLAN.md` <artifacts_this_phase_produces> for the full phase sym
 </task>
 
 </tasks>
+
+## Decisions Covered
+
+Implements CONTEXT.md decisions (traceability for the decision-coverage gate):
+- **D-01** — tags populated programmatically via `Machine.addTag` (Task 1; no manifest/catalog file format).
+- **D-02** — lazy load reuses the existing `SensorTag.RawSource` deferred-read: `addTag` never calls `getXY`; 5-machine metadata-only startup verified (Task 1 + Task 2).
+- **D-04** — filesystem tag auto-discovery is excluded; catalog population is explicit (`addTag` only).
+- **D-10** — `Machine` requires a non-empty `Id` (`Machine:missingId`); `Name` defaults to `Id` (Task 1 constructor). Fleet-level uniqueness is enforced in Plan 04.
+- **D-13** — `ingestBatch`/`startLive` wrap the pipelines at `OutputDir = DataRoot` with `'TagSource', @(pred) obj.find(pred)`, forwarding `SharedRoot` (Task 2).
+- **D-14** — each `Machine` owns its own `EventStore(DataRoot)`; the global `TagRegistry.setEventStore` slot is untouched (Task 1/2).
 
 <threat_model>
 ## Trust Boundaries

@@ -57,11 +57,18 @@ Plans:
   4. Fleet startup with a 5-machine test set stays under the documented memory/time budget (< 2 s, < 50 MB) because tag metadata loads lazily and sample data loads only on first access
   5. User can filter/browse the fleet by group and free-text search composably (`Machine.Group` + `Fleet.filterByGroup`); `grep -rn "uifigure\|uicontrol\|uitree\|uigridlayout" libs/Fleet/` returns 0 (no UI code in data model)
 
-**Plans**: 4 plans
-Plans:
+**Plans**: 4 plansPlans:
+**Wave 1**
+
 - [ ] 1042-01-test-scaffold-normalize-helper-PLAN.md — Wave 1: RED TestMachine/TestFleet suites + Octave flat tests + Fleet-private normalizeToCell_ helper
 - [ ] 1042-02-pipeline-tagsource-di-seam-PLAN.md — Wave 1: tagSource_ DI seam in BatchTagPipeline + LiveTagPipeline (FLEET-03; single-machine byte-for-byte unchanged)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 1042-03-machine-catalog-class-PLAN.md — Wave 2: Machine class — isolated catalog, duck-type read API, ingest wrappers, EventStore, lazy load, timer-safe delete (FLEET-01/02/03/05)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 1042-04-fleet-persistence-search-PLAN.md — Wave 3: Fleet class — addMachine, composable filters, JSON round-trip with embedded canonical map + fleetConfigVersion (FLEET-01/04/06)
 
 ### Phase 1043: DashboardSerializer Resolver Seam + Backward Compat

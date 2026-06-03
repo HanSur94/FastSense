@@ -40,6 +40,7 @@ Implement `libs/Fleet/Fleet.m` — a handle class owning a `containers.Map` of `
 
 Purpose: FLEET-01 (Fleet.addMachine factory + handle form, duplicate-Id guard), FLEET-04 (round-trip config persistence on both runtimes with embedded canonical map + DataRoot resolution + schema version), FLEET-06 (composable group + free-text filtering). Closes the phase by composing Machine into a searchable, persistable fleet.
 Output: One new class file; the RED `TestFleet.m` (Plan 01) turns GREEN; the Octave `test_fleet.m` round-trip + filter paths turn GREEN.
+CONTEXT.md decisions implemented here: D-03 (config persists machine definitions + embedded canonical map, not the tag catalog), D-08 (auto-relativize-on-save deferred), D-09 (Fleet.addMachine factory + pre-built-handle form), D-10 (Id unique within a Fleet via Fleet:duplicateMachineId), D-11 (Group single freeform char; composable filterByName/filterByGroup).
 </objective>
 
 <execution_context>
@@ -152,6 +153,15 @@ See `1042-01-...-PLAN.md` <artifacts_this_phase_produces> for the full phase sym
 </task>
 
 </tasks>
+
+## Decisions Covered
+
+Implements CONTEXT.md decisions (traceability for the decision-coverage gate):
+- **D-03** — fleet config persists machine *definitions* + the embedded canonical map, NOT the tag catalog (Task 2 save/load).
+- **D-08** — auto-relativizing an absolute DataRoot on save is deferred (not implemented this phase; paths stored as-given, resolved on load per D-07 in Plan 03).
+- **D-09** — `Fleet.addMachine` accepts the name-value factory form AND a pre-built `Machine` handle, returning the handle (Task 1).
+- **D-10** — `Id` is unique within a Fleet; collision raises `Fleet:duplicateMachineId` (Task 1).
+- **D-11** — `Group` is a single freeform char; `filterByGroup`/`filterByName` use Octave-safe `strfind(lower(...))` and compose by chaining/candidate-set (Task 1).
 
 <threat_model>
 ## Trust Boundaries
