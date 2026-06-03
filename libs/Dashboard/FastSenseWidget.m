@@ -1367,10 +1367,13 @@ classdef FastSenseWidget < DashboardWidget
         end
 
         function renderEmptyState_(obj, parentPanel)
-        %RENDEREMPTYSTATE_ Render 'No data in selected range' centered label.
-        %   Mirrors DashboardListPane.renderEmptyState_ — a 1x1 grid filling
-        %   the panel with a centered bold label. Called when a windowed pull
-        %   yields empty data.
+        %RENDEREMPTYSTATE_ Render 'No data in selected range' centered placeholder.
+        %   Uses an invisible axes + centered text rather than uigridlayout/
+        %   uilabel: those are uifigure-only and error ('MATLAB:ui:GridLayout:
+        %   unknownInput') when the widget renders into a classic figure() — the
+        %   ad-hoc / SensorDetailPlot path and the R2020b CI baseline. axes+text
+        %   work in classic figures, uifigures, and Octave. Called when a
+        %   windowed pull yields empty data.
             theme = struct('WidgetBackground', [0.15 0.15 0.17], ...
                            'PlaceholderTextColor', [0.5 0.5 0.55]);
             try
@@ -1385,21 +1388,19 @@ classdef FastSenseWidget < DashboardWidget
                 end
             catch
             end
-            g = uigridlayout(parentPanel, [1, 1]);
-            g.RowHeight       = {'1x'};
-            g.ColumnWidth     = {'1x'};
-            g.Padding         = [16 16 16 16];
-            g.BackgroundColor = theme.WidgetBackground;
-            lbl = uilabel(g);
-            lbl.Layout.Row          = 1;
-            lbl.Layout.Column       = 1;
-            lbl.Text                = 'No data in selected range';
-            lbl.FontSize            = 14;
-            lbl.FontWeight          = 'bold';
-            lbl.FontColor           = theme.PlaceholderTextColor;
-            lbl.BackgroundColor     = theme.WidgetBackground;
-            lbl.HorizontalAlignment = 'center';
-            lbl.VerticalAlignment   = 'center';
+            try
+                parentPanel.BackgroundColor = theme.WidgetBackground;
+            catch
+            end
+            ax = axes('Parent', parentPanel, 'Units', 'normalized', ...
+                      'Position', [0 0 1 1]);
+            set(ax, 'Visible', 'off');
+            text(ax, 0.5, 0.5, 'No data in selected range', ...
+                'Units', 'normalized', ...
+                'HorizontalAlignment', 'center', ...
+                'VerticalAlignment', 'middle', ...
+                'FontSize', 14, 'FontWeight', 'bold', ...
+                'Color', theme.PlaceholderTextColor);
         end
 
         function y = getYFromTagOrInline_(obj)
