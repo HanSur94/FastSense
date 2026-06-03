@@ -434,6 +434,18 @@ classdef TestCanonicalMapper < matlab.unittest.TestCase
             testCase.verifyFalse(testCase.entryInList_(m.reviewPending(), 'abcdefghij', 'M03'));
             m.override('abcdefghij', 'M03', 'abzzzzzzzz');   % OVERRIDDEN -> excluded
             testCase.verifyFalse(testCase.entryInList_(m.reviewPending(), 'abcdefghij', 'M03'));
+
+            % CR-01 regression: a CONFIRMED unit-mismatch entry must ALSO be excluded.
+            % reviewPending must agree with isResolvable — the unitMismatch flag alone
+            % must not keep a user-vouched entry pending forever.
+            m2 = CanonicalMapper();
+            m2.suggest({ testCase.ti_('M01', 'temp_motor', 'degC'), ...
+                         testCase.ti_('M02', 'temp_motor', 'K') });
+            testCase.verifyTrue(testCase.entryInList_(m2.reviewPending(), 'temp_motor', 'M02'), ...
+                'A unit-mismatch AUTO entry should be pending before review.');
+            m2.confirm('temp_motor', 'M02');
+            testCase.verifyFalse(testCase.entryInList_(m2.reviewPending(), 'temp_motor', 'M02'), ...
+                'A CONFIRMED unit-mismatch entry must NOT remain pending (CR-01).');
         end
 
         function testUnmappedReturnsUnresolved(testCase)

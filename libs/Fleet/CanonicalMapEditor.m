@@ -237,7 +237,7 @@ classdef CanonicalMapEditor < handle
                     end
                 end
                 if ~isempty(f)
-                    hay = lower([e.logicalId ' ' e.localKey]);
+                    hay = lower([e.logicalId ' ' e.localKey ' ' e.machineId]);
                     if isempty(strfind(hay, f)) %#ok<STREMP> Octave-safe idiom (no contains())
                         continue;
                     end

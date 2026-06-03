@@ -276,8 +276,12 @@ classdef CanonicalMapper < handle
                 bucket = obj.Entries_(logIds{i});
                 for j = 1:numel(bucket)
                     e = bucket{j};
-                    needsReview = (strcmp(e.status, 'AUTO') && strcmp(e.confidence, 'LOW')) ...
-                        || e.unitMismatch;
+                    % Vouched entries (CONFIRMED/OVERRIDDEN) are never pending — this keeps
+                    % reviewPending aligned with isResolvable. An entry needs review when it
+                    % is NOT user-vouched and carries a risk signal (LOW or unit mismatch).
+                    isVouched = strcmp(e.status, 'CONFIRMED') || strcmp(e.status, 'OVERRIDDEN');
+                    needsReview = ~isVouched ...
+                        && (strcmp(e.confidence, 'LOW') || e.unitMismatch);
                     if needsReview
                         pending{end + 1} = e; %#ok<AGROW>
                     end
@@ -367,7 +371,15 @@ classdef CanonicalMapper < handle
             end
             fwrite(fid, json);
             fclose(fid);
-            movefile(tmp, filepath, 'f');
+            try
+                movefile(tmp, filepath, 'f');
+            catch mvErr
+                if exist(tmp, 'file') == 2
+                    delete(tmp);   % don't leave an orphaned .tmp on a failed move
+                end
+                error('CanonicalMapper:fileError', ...
+                    'Failed to save to %s: %s', filepath, mvErr.message);
+            end
         end
     end
 
