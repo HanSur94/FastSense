@@ -70,6 +70,13 @@ SET.CRITICALITY Validate enum before assigning.
 
 GETXY Return [X, Y] data vectors.  Subclass must override.
 
+#### `[X, Y] = getXYRange(obj, tStart, tEnd)`
+
+GETXYRANGE Return X, Y sliced to the window [tStart, tEnd].
+  Default implementation: call getXY() then binary-search-slice.
+  Empty/[] bounds return the full series (delegates to getXY()).
+  SensorTag overrides this for disk-backed efficiency.
+
 #### `v = valueAt(obj, t)`
 
 VALUEAT Return scalar value at time t.  Subclass must override.
@@ -191,6 +198,14 @@ GETXY Return X, Y by reference (zero-copy via COW).
   MATLAB copy-on-write guarantees no memory allocation until
   the caller mutates X or Y.
 
+#### `[X, Y] = getXYRange(obj, tStart, tEnd)`
+
+GETXYRANGE Return windowed (X, Y).
+  Disk-backed: delegates to DataStore.getRange (reads only overlapping
+  chunks). In-RAM: binary-search-slices X_/Y_. Empty/[] bounds or an
+  inverted/out-of-extent window return the full series / empty as the
+  base contract specifies. getXY() is left untouched.
+
 #### `v = valueAt(obj, t)`
 
 VALUEAT Return Y at the last index where X <= t (ZOH, clamped).
@@ -199,6 +214,8 @@ VALUEAT Return Y at the last index where X <= t (ZOH, clamped).
 #### `[tMin, tMax] = getTimeRange(obj)`
 
 GETTIMERANGE Return [X(1), X(end)].  [NaN NaN] if empty.
+  Disk-backed sensors read the extent from the DataStore (the X_
+  array is empty after toDisk()), fixing the prior [NaN NaN] gap.
 
 #### `k = getKind(obj)`
 

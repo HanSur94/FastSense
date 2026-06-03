@@ -219,6 +219,21 @@ Also cancel any timers that ARE currently scheduled — they
 are about to be invalidated by this rerender anyway.
 (260513-q7w fu2)
 
+#### `setTimeWindow(obj, t0, t1)`
+
+SETTIMEWINDOW Set the global load window and re-resolve all widgets.
+  t0, t1 datenum scalars; both [] resets to full range. User-triggered
+  (e.g. from the companion time bar) -- NOT called per live tick. Fans
+  the window out to every widget via allPageWidgets(), then rebuilds
+  widget panels once so they reload windowed data.
+  Does NOT touch the scrubber's data range (no updateGlobalTimeRange call).
+
+#### `w = getTimeWindow(obj)`
+
+GETTIMEWINDOW Return the current stored load window.
+  Returns [] when no window is set (full-range default).
+  Used by tests and the companion to read back the stored window.
+
 #### `updateGlobalTimeRange(obj)`
 
 UPDATEGLOBALTIMERANGE Scan all widgets for data time bounds.
@@ -1822,6 +1837,18 @@ SETYLIMITMODE Set the Y-axis rescale strategy and re-fit if rendered.
     'auto-visible' - rescale to data inside the current X window
     'auto-all'     - rescale to all data the bound Tag exposes
     'locked'       - freeze YLim; no further rescale on tick/refresh
+
+#### `setTimeWindow(obj, t0, t1)`
+
+SETTIMEWINDOW Set the load window for this widget's data pulls.
+  t0, t1 datenum scalars; both [] resets to full range.
+  The DashboardEngine pushes this before re-rendering. Data is
+  pulled via Tag.getXYRange when set, Tag.getXY when empty.
+
+#### `tf = isShowingEmptyState(obj)`
+
+ISSHOWINGEMPYSTATE Returns true when 'No data in selected range' is displayed.
+  False when the widget has plotted data, or when no render has occurred.
 
 #### `setCrosshairLink(obj, tf)`
 

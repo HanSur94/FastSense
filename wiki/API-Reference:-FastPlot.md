@@ -517,6 +517,11 @@ FASTSENSEDATASTORE Create a disk-backed store from X/Y arrays.
 
 GETRANGE Read data within an X range (with one-point padding).
 
+#### `[xMin, xMax] = getTimeExtent(obj)`
+
+GETTIMEEXTENT Return the stored [XMin, XMax] time extent.
+  O(1) -- XMin/XMax are captured at construction from x(1)/x(end).
+
 #### `[xOut, yOut] = readSlice(obj, startIdx, endIdx)`
 
 READSLICE Read a contiguous slice of data by row index.
