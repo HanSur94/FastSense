@@ -105,9 +105,19 @@ classdef SensorTag < Tag
         function r = get.RawSource(obj)
             %GET.RAWSOURCE Return the raw-data source binding (read-only view).
             %   Populated only for SensorTags whose 'RawSource' NV-pair was
-            %   set at construction. Consumed by BatchTagPipeline /
-            %   LiveTagPipeline to locate the raw file + column for this tag.
+            %   set at construction or via direct assignment post-construction.
+            %   Consumed by BatchTagPipeline / LiveTagPipeline to locate the
+            %   raw file + column for this tag.
             r = obj.RawSource_;
+        end
+
+        function set.RawSource(obj, rs)
+            %SET.RAWSOURCE Set the raw-data source binding post-construction.
+            %   t.RawSource = struct('file', path, 'timeCol', 1, 'valueCol', 2, ...)
+            %   Validates via validateRawSource_ and stores in RawSource_.
+            %   Allows Machine.addTag workflows to assign the source after the
+            %   SensorTag is constructed (FLEET-05 lazy-load pattern).
+            obj.RawSource_ = SensorTag.validateRawSource_(rs);
         end
 
         % ---- Tag contract ----
