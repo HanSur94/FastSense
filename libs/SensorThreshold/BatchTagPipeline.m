@@ -71,6 +71,11 @@ classdef BatchTagPipeline < handle
                                     %   setter exists so future append-mode batch wiring (or any code
                                     %   path that grows per-tag fs-stat cost) can be configured
                                     %   uniformly with Live.
+        tagSource_ = @TagRegistry.find   % DI seam (FLEET-03/D-12); default = single-machine path.
+                                         % Override via 'TagSource' NV pair to scope ingestion to a
+                                         % Machine's isolated catalog instead of the global TagRegistry.
+                                         % Default is captured at class-load time so TagRegistry
+                                         % resolution is correct in both MATLAB and Octave.
     end
 
     methods
@@ -82,7 +87,7 @@ classdef BatchTagPipeline < handle
             %   Errors:
             %     TagPipeline:invalidOutputDir      -- OutputDir missing/empty/non-char
             %     TagPipeline:cannotCreateOutputDir -- mkdir failed
-            opts = struct('OutputDir', '', 'Verbose', false);
+            opts = struct('OutputDir', '', 'Verbose', false, 'TagSource', @TagRegistry.find);
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if k + 1 > numel(varargin) || ~ischar(key)
@@ -94,6 +99,8 @@ classdef BatchTagPipeline < handle
                         opts.OutputDir = varargin{k+1};
                     case 'Verbose'
                         opts.Verbose = logical(varargin{k+1});
+                    case 'TagSource'
+                        opts.TagSource = varargin{k+1};
                     otherwise
                         error('TagPipeline:invalidOutputDir', ...
                             'Unknown option ''%s''.', key);
@@ -111,8 +118,9 @@ classdef BatchTagPipeline < handle
                         'Cannot create OutputDir ''%s'': %s', opts.OutputDir, msg);
                 end
             end
-            obj.OutputDir = opts.OutputDir;
-            obj.Verbose   = opts.Verbose;
+            obj.OutputDir   = opts.OutputDir;
+            obj.Verbose     = opts.Verbose;
+            obj.tagSource_  = opts.TagSource;
             obj.priorState_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
         end
 
@@ -248,12 +256,14 @@ classdef BatchTagPipeline < handle
     end
 
     methods (Access = private)
-        function tags = eligibleTags_(~)
-            %ELIGIBLETAGS_ Filter TagRegistry to SensorTag/StateTag with non-empty RawSource.
+        function tags = eligibleTags_(obj)
+            %ELIGIBLETAGS_ Filter tag source to SensorTag/StateTag with non-empty RawSource.
             %   Uses an inline lambda rather than @BatchTagPipeline.isIngestable_ because
             %   Octave rejects cross-class private-method handles at the call site (see
             %   deferred-items.md). LiveTagPipeline.eligibleTags_ uses the same pattern.
-            tags = TagRegistry.find(@(t) ...
+            %   Delegates to obj.tagSource_ (default @TagRegistry.find; FLEET-03/D-12 seam)
+            %   so Machine can scope ingestion to its own isolated catalog.
+            tags = obj.tagSource_(@(t) ...
                 (isa(t, 'SensorTag') || isa(t, 'StateTag')) && ...
                 isstruct(t.RawSource) && ...
                 isfield(t.RawSource, 'file') && ...
