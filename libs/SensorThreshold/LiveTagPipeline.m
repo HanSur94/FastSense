@@ -161,6 +161,10 @@ classdef LiveTagPipeline < handle
         SharedRoot_     = ''       % char; cluster shared root
         LockTimeout_    = 5.0      % seconds; per-tag acquire timeout
         tagMtimeCache_             % containers.Map: abspath -> last-seen mtime (Pitfall 11 mtime change-detect)
+        tagSource_ = @TagRegistry.find   % DI seam (FLEET-03/D-12); mirrors BatchTagPipeline.
+                                         % Default = global TagRegistry (single-machine path).
+                                         % Override via 'TagSource' NV pair to scope ingestion
+                                         % to a Machine's isolated catalog.
     end
 
     methods
@@ -177,7 +181,7 @@ classdef LiveTagPipeline < handle
             %     TagPipeline:cannotCreateOutputDir -- mkdir failed
             opts = struct('OutputDir', '', 'Interval', 15, ...
                 'ErrorFcn', [], 'Verbose', false, ...
-                'SharedRoot', '', 'LockTimeout', 5.0);
+                'SharedRoot', '', 'LockTimeout', 5.0, 'TagSource', @TagRegistry.find);
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if k + 1 > numel(varargin) || ~ischar(key)
@@ -197,6 +201,8 @@ classdef LiveTagPipeline < handle
                         opts.SharedRoot = char(varargin{k+1});
                     case 'LockTimeout'
                         opts.LockTimeout = double(varargin{k+1});
+                    case 'TagSource'
+                        opts.TagSource = varargin{k+1};
                     otherwise
                         error('TagPipeline:invalidOutputDir', ...
                             'Unknown option ''%s''.', key);
@@ -214,10 +220,11 @@ classdef LiveTagPipeline < handle
                         'Cannot create OutputDir ''%s'': %s', opts.OutputDir, msg);
                 end
             end
-            obj.OutputDir = opts.OutputDir;
-            obj.Interval  = opts.Interval;
-            obj.ErrorFcn  = opts.ErrorFcn;
-            obj.Verbose   = opts.Verbose;
+            obj.OutputDir   = opts.OutputDir;
+            obj.Interval    = opts.Interval;
+            obj.ErrorFcn    = opts.ErrorFcn;
+            obj.Verbose     = opts.Verbose;
+            obj.tagSource_  = opts.TagSource;
             obj.tagState_  = containers.Map('KeyType', 'char', 'ValueType', 'any');
             obj.priorState_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
@@ -783,14 +790,13 @@ classdef LiveTagPipeline < handle
             end
         end
 
-        function tags = eligibleTags_(~)
-            %ELIGIBLETAGS_ Query TagRegistry for ingestable tags.
-            %   Uses an inline anonymous-function predicate passed to
-            %   TagRegistry.find. The lambda body is fully inlined (not a
-            %   delegation to a private static method) so Octave's
-            %   private-method access check is never triggered -- the
-            %   predicate evaluates entirely in anonymous-function scope
-            %   and needs no class-private visibility.
+        function tags = eligibleTags_(obj)
+            %ELIGIBLETAGS_ Query tag source for ingestable tags.
+            %   Uses an inline anonymous-function predicate passed to obj.tagSource_
+            %   (default @TagRegistry.find; FLEET-03/D-12 seam). The lambda body is
+            %   fully inlined (not a delegation to a private static method) so Octave's
+            %   private-method access check is never triggered -- the predicate evaluates
+            %   entirely in anonymous-function scope and needs no class-private visibility.
             %
             %   D-16 / Pitfall 10 discipline: positive-isa checks only
             %   (SensorTag || StateTag); NEVER a negative check against
@@ -798,7 +804,7 @@ classdef LiveTagPipeline < handle
             %   byte-semantically identical to BatchTagPipeline.eligibleTags_
             %   in the companion class -- adding a new eligible tag kind
             %   requires updating BOTH sites in lockstep.
-            tags = TagRegistry.find(@(t) ...
+            tags = obj.tagSource_(@(t) ...
                 (isa(t, 'SensorTag') || isa(t, 'StateTag')) && ...
                 isstruct(t.RawSource) && ...
                 isfield(t.RawSource, 'file') && ...
