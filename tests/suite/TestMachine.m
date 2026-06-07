@@ -156,9 +156,9 @@ classdef TestMachine < matlab.unittest.TestCase
             fclose(fid);
 
             m = Machine('Id', 'M01', 'DataRoot', tmp);
-            t = SensorTag('temperature', 'Name', 'Motor Temp', 'Units', 'degC');
-            t.RawSource = struct('file', csvPath, 'timeCol', 1, 'valueCol', 2, ...
-                'timeUnit', 's', 'delimiter', ',');
+            t = SensorTag('temperature', 'Name', 'Motor Temp', 'Units', 'degC', ...
+                'RawSource', struct('file', csvPath, 'timeCol', 1, 'valueCol', 2, ...
+                'timeUnit', 's', 'delimiter', ','));
             m.addTag(t);
 
             % ingestBatch should run without error; .mat lands under DataRoot
@@ -173,9 +173,9 @@ classdef TestMachine < matlab.unittest.TestCase
             tmp = tempname();
             mkdir(tmp);
             m = Machine('Id', 'M01', 'DataRoot', tmp);
-            t = SensorTag('temperature');
-            t.RawSource = struct('file', fullfile(tmp, 'fake.csv'), ...
-                'timeCol', 1, 'valueCol', 2, 'timeUnit', 's', 'delimiter', ',');
+            t = SensorTag('temperature', ...
+                'RawSource', struct('file', fullfile(tmp, 'fake.csv'), ...
+                'timeCol', 1, 'valueCol', 2, 'timeUnit', 's', 'delimiter', ','));
             m.addTag(t);
 
             nBefore = numel(timerfindall());
@@ -207,9 +207,9 @@ classdef TestMachine < matlab.unittest.TestCase
             for mi = 1:5
                 m = Machine('Id', sprintf('M%02d', mi), 'DataRoot', tmp);
                 for ti = 1:10
-                    st = SensorTag(sprintf('sensor_%02d', ti));
-                    st.RawSource = struct('file', csvPath, 'timeCol', 1, ...
-                        'valueCol', 2, 'timeUnit', 's', 'delimiter', ',');
+                    st = SensorTag(sprintf('sensor_%02d', ti), ...
+                        'RawSource', struct('file', csvPath, 'timeCol', 1, ...
+                        'valueCol', 2, 'timeUnit', 's', 'delimiter', ','));
                     m.addTag(st);
                 end
             end
