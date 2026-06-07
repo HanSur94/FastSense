@@ -4343,9 +4343,17 @@ classdef DashboardEngine < handle
         end
 
         function obj = load(filepath, varargin)
+            %LOAD Load a dashboard from a JSON or .m file.
+            %   obj = load(filepath) — load with no resolver (legacy path).
+            %   obj = load(filepath, 'TagResolver', r) — fleet path: r is a
+            %     function handle @(localKey) that returns the Tag by machine-
+            %     local key.  'TagResolver' is the canonical v5.0 NV key.
+            %   obj = load(filepath, 'SensorResolver', r) — legacy alias for
+            %     'TagResolver'; accepted for backward compatibility.
+            %   Both keys are accepted; last-wins if both are supplied.
             resolver = [];
             for k = 1:2:numel(varargin)
-                if strcmp(varargin{k}, 'SensorResolver')
+                if strcmp(varargin{k}, 'TagResolver') || strcmp(varargin{k}, 'SensorResolver')
                     resolver = varargin{k+1};
                 end
             end
@@ -4381,7 +4389,7 @@ classdef DashboardEngine < handle
                         pgWidgets = config.pages{i}.widgets;
                         if ~iscell(pgWidgets), pgWidgets = {}; end
                         for j = 1:numel(pgWidgets)
-                            w = DashboardSerializer.createWidgetFromStruct(pgWidgets{j});
+                            w = DashboardSerializer.createWidgetFromStruct(pgWidgets{j}, resolver);
                             if ~isempty(w), pg.addWidget(w); end
                         end
                         obj.Pages{end+1} = pg;
