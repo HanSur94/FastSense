@@ -15,7 +15,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 ## Phases
 
 - [x] **Phase 1041: CanonicalMapper** - Logical-sensor mapping foundation with confidence levels, auto-suggest, manual overrides, and unmapped-tail surfacing (completed 2026-06-03)
-- [ ] **Phase 1042: Machine + Fleet + Pipeline DI Seam** - Isolated per-machine tag catalogs, fleet config persistence, lazy load, and pipeline tagSource_ DI
+- [x] **Phase 1042: Machine + Fleet + Pipeline DI Seam** - Isolated per-machine tag catalogs, fleet config persistence, lazy load, and pipeline tagSource_ DI (completed 2026-06-07)
 - [ ] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test
 - [ ] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch
 - [ ] **Phase 1045: Cross-Machine Comparison View** - Machine-first compare-builder dialog (Approach A); resolve-once caching; confidence gate; auto-color per machine
@@ -60,16 +60,16 @@ Plans:
 **Plans**: 4 plansPlans:
 **Wave 1**
 
-- [ ] 1042-01-test-scaffold-normalize-helper-PLAN.md — Wave 1: RED TestMachine/TestFleet suites + Octave flat tests + Fleet-private normalizeToCell_ helper
-- [ ] 1042-02-pipeline-tagsource-di-seam-PLAN.md — Wave 1: tagSource_ DI seam in BatchTagPipeline + LiveTagPipeline (FLEET-03; single-machine byte-for-byte unchanged)
+- [x] 1042-01-test-scaffold-normalize-helper-PLAN.md — Wave 1: RED TestMachine/TestFleet suites + Octave flat tests + Fleet-private normalizeToCell_ helper
+- [x] 1042-02-pipeline-tagsource-di-seam-PLAN.md — Wave 1: tagSource_ DI seam in BatchTagPipeline + LiveTagPipeline (FLEET-03; single-machine byte-for-byte unchanged)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 1042-03-machine-catalog-class-PLAN.md — Wave 2: Machine class — isolated catalog, duck-type read API, ingest wrappers, EventStore, lazy load, timer-safe delete (FLEET-01/02/03/05)
+- [x] 1042-03-machine-catalog-class-PLAN.md — Wave 2: Machine class — isolated catalog, duck-type read API, ingest wrappers, EventStore, lazy load, timer-safe delete (FLEET-01/02/03/05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 1042-04-fleet-persistence-search-PLAN.md — Wave 3: Fleet class — addMachine, composable filters, JSON round-trip with embedded canonical map + fleetConfigVersion (FLEET-01/04/06)
+- [x] 1042-04-fleet-persistence-search-PLAN.md — Wave 3: Fleet class — addMachine, composable filters, JSON round-trip with embedded canonical map + fleetConfigVersion (FLEET-01/04/06)
 
 ### Phase 1043: DashboardSerializer Resolver Seam + Backward Compat
 
@@ -136,7 +136,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1041. CanonicalMapper | 4/4 | Complete    | 2026-06-03 |
-| 1042. Machine + Fleet + Pipeline DI Seam | 0/4 | Planned | - |
+| 1042. Machine + Fleet + Pipeline DI Seam | 4/4 | Complete   | 2026-06-07 |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 0/? | Not started | - |
 | 1044. Companion Machine Dimension | 0/? | Not started | - |
 | 1045. Cross-Machine Comparison View | 0/? | Not started | - |
