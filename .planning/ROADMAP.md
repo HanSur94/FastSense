@@ -16,7 +16,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 
 - [x] **Phase 1041: CanonicalMapper** - Logical-sensor mapping foundation with confidence levels, auto-suggest, manual overrides, and unmapped-tail surfacing (completed 2026-06-03)
 - [x] **Phase 1042: Machine + Fleet + Pipeline DI Seam** - Isolated per-machine tag catalogs, fleet config persistence, lazy load, and pipeline tagSource_ DI (completed 2026-06-07)
-- [ ] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test
+- [x] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test (completed 2026-06-07)
 - [ ] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch
 - [ ] **Phase 1045: Cross-Machine Comparison View** - Machine-first compare-builder dialog (Approach A); resolve-once caching; confidence gate; auto-color per machine
 - [ ] **Phase 1046: Per-Machine Dashboard Clone/Remap** - Canonical-map-driven clone onto target machine; failed-remap warnings list
@@ -87,15 +87,15 @@ Plans:
 Plans:
 **Wave 0**
 
-- [ ] 1043-01-test-scaffold-resolver-seam-PLAN.md — Wave 0: RED TestFleetDashboardResolver class suite (SC1-SC4) + Octave flat test_dashboard_resolver (DASH-01/02)
+- [x] 1043-01-test-scaffold-resolver-seam-PLAN.md — Wave 0: RED TestFleetDashboardResolver class suite (SC1-SC4) + Octave flat test_dashboard_resolver (DASH-01/02)
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
-- [ ] 1043-02-resolver-threading-load-path-PLAN.md — Wave 1: fromStruct tagResolver arg + createWidgetFromStruct/configToWidgets threading + DashboardEngine.load multi-page resolver + TagResolver/SensorResolver NV + tagResolverMissing warning (DASH-01/02)
+- [x] 1043-02-resolver-threading-load-path-PLAN.md — Wave 1: fromStruct tagResolver arg + createWidgetFromStruct/configToWidgets threading + DashboardEngine.load multi-page resolver + TagResolver/SensorResolver NV + tagResolverMissing warning (DASH-01/02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 1043-03-m-export-machine-scoping-PLAN.md — Wave 2: linesForWidget 'tag' case + machineVar via exportScript/exportScriptPages + save() inline 'tag' case (DASH-01)
+- [x] 1043-03-m-export-machine-scoping-PLAN.md — Wave 2: linesForWidget 'tag' case + machineVar via exportScript/exportScriptPages + save() inline 'tag' case (DASH-01)
 
 ### Phase 1044: Companion Machine Dimension
 
@@ -149,7 +149,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1041. CanonicalMapper | 4/4 | Complete    | 2026-06-03 |
 | 1042. Machine + Fleet + Pipeline DI Seam | 4/4 | Complete   | 2026-06-07 |
-| 1043. DashboardSerializer Resolver Seam + Backward Compat | 0/3 | Not started | - |
+| 1043. DashboardSerializer Resolver Seam + Backward Compat | 3/3 | Complete   | 2026-06-07 |
 | 1044. Companion Machine Dimension | 0/? | Not started | - |
 | 1045. Cross-Machine Comparison View | 0/? | Not started | - |
 | 1046. Per-Machine Dashboard Clone/Remap | 0/? | Not started | - |
