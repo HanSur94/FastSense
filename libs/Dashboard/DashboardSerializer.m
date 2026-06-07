@@ -387,15 +387,21 @@ classdef DashboardSerializer
 
         function widgets = configToWidgets(config, resolver)
             %CONFIGTOWIDGETS Create widget objects from config struct.
-            %   configToWidgets(config) — no sensor resolution
+            %   configToWidgets(config) — no sensor/tag resolution
             %   configToWidgets(config, resolver) — resolver is a function
-            %     handle @(name) that returns a Sensor object by name.
+            %     handle @(key) that returns a Tag or Sensor object by key.
+            %     For fleet dashboards the resolver is @(k) machine.get(k).
+            %     The resolver is threaded into createWidgetFromStruct so that
+            %     source.type='tag' widgets bind via the resolver inside
+            %     FastSenseWidget.fromStruct (D-01).  The legacy post-hoc
+            %     source.type='sensor' block below is retained for backward
+            %     compat with old JSON that uses type='sensor'.
             if nargin < 2, resolver = []; end
             widgets = cell(1, numel(config.widgets));
             for i = 1:numel(config.widgets)
                 ws = config.widgets{i};
-                widgets{i} = DashboardSerializer.createWidgetFromStruct(ws);
-                % Resolve sensor binding using resolver
+                widgets{i} = DashboardSerializer.createWidgetFromStruct(ws, resolver);
+                % Resolve sensor binding using resolver (legacy source.type='sensor' path)
                 if ~isempty(resolver) && ~isempty(widgets{i}) && ...
                         isfield(ws, 'source') && strcmp(ws.source.type, 'sensor')
                     try
@@ -410,12 +416,18 @@ classdef DashboardSerializer
             widgets = widgets(~cellfun('isempty', widgets));
         end
 
-        function w = createWidgetFromStruct(ws)
+        function w = createWidgetFromStruct(ws, tagResolver)
             %CREATEWIDGETFROMSTRUCT Create a single widget from a struct.
+            %   createWidgetFromStruct(ws) — 1-arg form; backward-compatible.
+            %   createWidgetFromStruct(ws, tagResolver) — 2-arg form; forwards
+            %     the optional tag resolver into FastSenseWidget.fromStruct so
+            %     source.type='tag' widgets bind via the machine resolver (D-01).
+            %     All non-fastsense widget types are unaffected.
+            if nargin < 2, tagResolver = []; end
             w = [];
             switch ws.type
                 case 'fastsense'
-                    w = FastSenseWidget.fromStruct(ws);
+                    w = FastSenseWidget.fromStruct(ws, tagResolver);
                 case 'number'
                     w = NumberWidget.fromStruct(ws);
                 case 'kpi'
