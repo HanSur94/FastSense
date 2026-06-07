@@ -1498,7 +1498,17 @@ classdef FastSenseWidget < DashboardWidget
     end
 
     methods (Static)
-        function obj = fromStruct(s)
+        function obj = fromStruct(s, tagResolver)
+            %FROMSTRUCT Restore a FastSenseWidget from a serialised struct.
+            %   fromStruct(s) — 1-arg form; legacy path uses TagRegistry.get.
+            %   fromStruct(s, tagResolver) — 2-arg form; tagResolver is a
+            %     function handle @(key) that returns the Tag by local key.
+            %     When supplied, the resolver takes precedence over TagRegistry.
+            %     A resolver that throws for an unknown key propagates as an
+            %     error (programming error — wrong resolver injected).
+            %     Graceful partial-binding on a resolver miss is deferred to
+            %     Phase 1046 (DASH-04 scope).
+            if nargin < 2, tagResolver = []; end
             obj = FastSenseWidget();
             obj.Title = s.title;
             obj.Position = [s.position.col, s.position.row, ...
@@ -1511,12 +1521,18 @@ classdef FastSenseWidget < DashboardWidget
             if isfield(s, 'source')
                 switch s.source.type
                     case 'tag'
-                        if exist('TagRegistry', 'class')
+                        if ~isempty(tagResolver)
+                            % Fleet path: caller supplied a machine-scoped resolver.
+                            % No try/catch — a throwing resolver is a programming error.
+                            obj.Tag = tagResolver(s.source.key);
+                        elseif exist('TagRegistry', 'class')
                             try
                                 obj.Tag = TagRegistry.get(s.source.key);
                             catch
-                                warning('FastSenseWidget:tagNotFound', ...
-                                    'TagRegistry key ''%s'' not found.', s.source.key);
+                                warning('FastSenseWidget:tagResolverMissing', ...
+                                    ['Tag ''%s'' not found in TagRegistry and no machine resolver ' ...
+                                     'supplied — pass a TagResolver to DashboardEngine.load to ' ...
+                                     'load a fleet dashboard.'], s.source.key);
                             end
                         end
                     case 'sensor'
