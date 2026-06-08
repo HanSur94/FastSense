@@ -60,8 +60,17 @@ function test_fleet()
     assert(numel(byMotors) == 1, ...
         'test_fleet: filterByGroup(MOTORS) must return 1 machine (case-insensitive)');
 
+    % --- MACH-01: machineIds() preserves insertion order (NOT alphabetical) ---
+    fleet4 = Fleet();
+    fleet4.addMachine('Id', 'M03', 'Name', 'Press Line 3', 'Group', 'presses');
+    fleet4.addMachine('Id', 'M01', 'Name', 'Pump Station 1', 'Group', 'pumps');
+    fleet4.addMachine('Id', 'M02', 'Name', 'Motor A',        'Group', 'motors');
+    ids = fleet4.machineIds();
+    assert(isequal(ids, {'M03', 'M01', 'M02'}), ...
+        'test_fleet: machineIds() must preserve insertion order M03,M01,M02 (not alphabetical) (MACH-01)');
+
     TagRegistry.clear();
-    fprintf('    All 5 tests passed.\n');
+    fprintf('    All 6 tests passed.\n');
 end
 
 function add_fleet_path_()

@@ -111,6 +111,12 @@ classdef Fleet < handle
             n = numel(obj.MachineIds_);
         end
 
+        function ids = machineIds(obj)
+            %MACHINEIDS Return insertion-ordered cell array of machine Ids.
+            %   ids = fleet.machineIds()
+            ids = obj.MachineIds_;
+        end
+
         function ms = filterByName(obj, pattern)
             %FILTERBYNAME Case-insensitive substring filter on Machine Name.
             %   ms = fleet.filterByName(pattern)
