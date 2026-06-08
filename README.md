@@ -1,18 +1,31 @@
-# FastSense
+<div align="center">
 
-[![Tests](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml)
-[![Benchmark](https://github.com/HanSur94/FastSense/actions/workflows/benchmark.yml/badge.svg)](https://hansur94.github.io/FastSense/dev/bench/)
-[![codecov](https://codecov.io/gh/HanSur94/FastSense/graph/badge.svg)](https://codecov.io/gh/HanSur94/FastSense)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
-[![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#install)
+<a href="https://github.com/HanSur94/FastSense"><img src="docs/images/fastsense-banner.png" alt="FastSense — sensor data, at the scale you actually have it" width="840"></a>
 
-> **Sensor data, at the scale you actually have it — in MATLAB.**
+[![Tests](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml) [![Benchmark](https://github.com/HanSur94/FastSense/actions/workflows/benchmark.yml/badge.svg)](https://hansur94.github.io/FastSense/dev/bench/) [![codecov](https://codecov.io/gh/HanSur94/FastSense/graph/badge.svg)](https://codecov.io/gh/HanSur94/FastSense) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html) [![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org) [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#install)
+
+</div>
 
 FastSense is a pure-MATLAB platform for working with massive sensor time-series. Plot 100M+ points without crashing, model sensors as **Tags** with state-aware behaviour, detect events as they happen, and compose interactive dashboards — all without a single toolbox license.
 
 Built for engineers who deal with real industrial data: long recordings, condition-dependent alarm limits, dashboards that need to stay live for hours, and the moment when MATLAB's own `plot()` falls over at 10M points.
+
+---
+
+## See it in action
+
+A six-page industrial-plant dashboard and the live **FastSense Companion** — driven by the same Tags.
+
+<p align="center"><img src="docs/images/dashboard-overview.png" alt="FastSense industrial-plant dashboard" width="900"></p>
+
+<details>
+<summary><b>🛰&nbsp;&nbsp;FastSense Companion — searchable tag catalog · dashboard list · live inspector</b></summary>
+
+<br/>
+
+<p align="center"><img src="docs/images/companion.png" alt="FastSense Companion" width="780"></p>
+
+</details>
 
 ---
 
