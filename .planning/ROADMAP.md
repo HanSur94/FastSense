@@ -109,8 +109,25 @@ Plans:
   3. Switching machines stops the previously-active dashboard's live timer before starting the new one; `timerfindall` count is stable across repeated machine switches (no accumulation)
   4. Legacy `'Registry'`/`'Dashboards'` constructor args (no Fleet) continue to work unchanged as a single implicit machine
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+Plans:
+**Wave 1**
+
+- [ ] 1044-01-PLAN.md — Wave 1: Fleet.machineIds() public accessor + insertion-order Octave-flat test (MACH-01)
+- [ ] 1044-02-PLAN.md — Wave 1: MachineSelectorPane (TagCatalogPane copy) + filterMachines helper + flat filter tests (MACH-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 1044-03-PLAN.md — Wave 2: 'Fleet' NV pair + conditional [3 3]/[3 4] grid + [1 10]/[1 11] toolbar + active-machine label slot + close() detach (MACH-01/03/05)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 1044-04-PLAN.md — Wave 3: four-call-site redirect + onMachineSelected_ switch + updateActiveMachineIndicator_ + auto-select first (MACH-02/03/04)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 1044-05-PLAN.md — Wave 4: class-suite tests — ActiveContext/ActiveMachineLabel/TimerStable/LegacyUnchanged (MACH-02/03/04/05)
 
 ### Phase 1045: Cross-Machine Comparison View
 
@@ -150,6 +167,6 @@ Plans:
 | 1041. CanonicalMapper | 4/4 | Complete    | 2026-06-03 |
 | 1042. Machine + Fleet + Pipeline DI Seam | 4/4 | Complete   | 2026-06-07 |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 3/3 | Complete   | 2026-06-07 |
-| 1044. Companion Machine Dimension | 0/? | Not started | - |
+| 1044. Companion Machine Dimension | 0/5 | Not started | - |
 | 1045. Cross-Machine Comparison View | 0/? | Not started | - |
 | 1046. Per-Machine Dashboard Clone/Remap | 0/? | Not started | - |
