@@ -11,7 +11,7 @@
 - ✅ **v3.0 FastSense Companion** — Phases 1018-1023 + 1023.1 gap closure (shipped 2026-04-30)
 - ✅ **v3.1 Plant Log Integration** — Phases 1034-1038 (shipped 2026-05-19; phases renumbered from 1029-1033 on merge to resolve collision with parallel v4.0 development)
 - 🚧 **Pending milestone** — Phases 1025-1028 (promoted from backlog 2026-05-08, awaiting milestone scoping; 1024 closed via quick task 260508-d7k; 1025/1026 substantially addressed via quick tasks 260508-d8y/260508-das)
-- 🚧 **v4.0 Multi-User LAN Concurrency** — Phases 1029-1033 (active, started 2026-05-13)
+- ✅ **v4.0 Multi-User LAN Concurrency** — Phases 1029-1033 (shipped 2026-05-13 via PR #152; phase dirs archived to milestones/v4.0-phases/)
 
 ## Phases
 
@@ -24,7 +24,7 @@
 - [x] **Phase 1032: Single-Source MonitorTag Event Emission + ack workflow** — exactly-once event generation via per-tag lock; ack/comment/visual-state; deferred listener notify; SQLite retry wrapper
 - [x] **Phase 1033: Companion Integration + Snapshot Consolidator + Operator Docs + 50-Companion Acceptance Test** — wire SharedRoot through Companion; leader-elected snapshot; ops setup README; full acceptance gate
 
-Note: v4.0 shipped on `main` via **PR #152** (developed on a parallel branch). The phase directories on this branch carry the implementation summaries (`1029-foundation/`, `1030-tag-write-coordinator/`, `1031-event-log/`, `1032-single-source-events/`, `1033-companion-integration/`). These boxes were left unchecked at merge time, which made `/gsd-progress` / `roadmap.analyze` falsely report "resume Phase 1031" — reconciled here (quick hygiene, 2026-06-09). See memory `gsd-router-stale-v4-misroute`.
+Note: v4.0 shipped on `main` via **PR #152** (developed on a parallel branch). The phase directories carrying the implementation summaries (`1029-foundation/`, `1030-tag-write-coordinator/`, `1031-event-log/`, `1032-single-source-events/`, `1033-companion-integration/`) are archived under [`milestones/v4.0-phases/`](milestones/v4.0-phases/), snapshotted in [`milestones/v4.0-ROADMAP.md`](milestones/v4.0-ROADMAP.md). These boxes were left unchecked at merge time, which made `/gsd-progress` / `roadmap.analyze` falsely report "resume Phase 1031" — reconciled 2026-06-09. See memory `gsd-router-stale-v4-misroute`.
 
 </details>
 
