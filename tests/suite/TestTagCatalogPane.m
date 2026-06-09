@@ -376,13 +376,22 @@ classdef TestTagCatalogPane < matlab.unittest.TestCase
             if isempty(headerIdx)
                 testCase.assertFail('CATALOG-03: no group-header row found in listbox');
             end
-            % Attempt to "select" the header row string
-            lb.Value = {lb.Items{headerIdx}};
-            feval(lb.ValueChangedFcn, [], []);
-            drawnow;
-            % SelectedKeys should NOT contain the header (header ItemsData is [])
-            testCase.assertEmpty(lb.Value, ...
-                'CATALOG-03: group-header row must be rejected from selection');
+            % Attempt to "select" the header row. In R2025b the ListBox itself
+            % rejects a Value not present in ItemsData (header ItemsData is [])
+            % by throwing MATLAB:ui:ListBox:notASubset — that throw IS the
+            % rejection. On older releases the assignment succeeds and the pane's
+            % onListboxChanged_ handler must clear it. Accept either path.
+            try
+                lb.Value = {lb.Items{headerIdx}};
+                feval(lb.ValueChangedFcn, [], []);
+                drawnow;
+                % SelectedKeys should NOT contain the header (header ItemsData is [])
+                testCase.assertEmpty(lb.Value, ...
+                    'CATALOG-03: group-header row must be rejected from selection');
+            catch err
+                testCase.assertEqual(err.identifier, 'MATLAB:ui:ListBox:notASubset', ...
+                    sprintf('CATALOG-03: unexpected error on header select: %s', err.message));
+            end
         end
 
         % ---- CATALOG-04: Grouping by first Label, Ungrouped last ----
@@ -526,9 +535,13 @@ classdef TestTagCatalogPane < matlab.unittest.TestCase
             src = fileread(which('TagCatalogPane'));
             testCase.assertFalse(isempty(strfind(src, 'Listeners_')), ...
                 'cross-cutting: Listeners_ property not found in TagCatalogPane.m');
-            % Also verify detach deletes listeners
-            testCase.assertFalse(isempty(strfind(src, 'delete(obj.Listeners_)')), ...
-                'cross-cutting: delete(obj.Listeners_) not found in TagCatalogPane.m');
+            % Also verify detach clears the listener cell. The pane deletes each
+            % listener in an explicit loop then resets the cell — delete(obj.Listeners_)
+            % on a CELL array is a MATLAB filename-delete bug, so it is deliberately
+            % NOT used. The behavioural guarantee (cell empty after detach) is covered
+            % by testCrossCutting_listenersClearedOnPaneDetach.
+            testCase.assertFalse(isempty(strfind(src, 'obj.Listeners_ = {}')), ...
+                'cross-cutting: detach must reset obj.Listeners_ = {} in TagCatalogPane.m');
         end
 
         % ---- Phase 1021: getSelectedKeys / deselectKey ----

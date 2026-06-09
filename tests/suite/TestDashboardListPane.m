@@ -128,46 +128,26 @@ classdef TestDashboardListPane < matlab.unittest.TestCase
         end
 
         function clearBtn = findDashboardClearButton(testCase)
-            %FINDDASHBOARDCLEARBUTTON Find the x clear button for the dashboard search.
-            %   Disambiguates from catalog pane clear button by tooltip.
-            hFig = testCase.findFig();
-            btns = findall(hFig, '-isa', 'matlab.ui.control.Button');
+            %FINDDASHBOARDCLEARBUTTON Find the × clear button for the dashboard search.
+            %   Anchors off the dashboard search field (located reliably by
+            %   placeholder) and takes the × button that is its SIBLING in the
+            %   same 1×2 search grid. Robust against the catalog pane's identical
+            %   '×' / 'Clear search' button: the previous ancestor-walk climbed up
+            %   to a shared ancestor that also contains the dashboard Open buttons,
+            %   so the catalog clear could "see" an Open sibling and be picked
+            %   under R2025b — clearing the catalog instead of the dashboard list
+            %   and leaving it narrowed (quick task 260609-uts).
+            sf   = testCase.findDashboardSearch();
+            grid = sf.Parent;   % nested 1×2 grid: [search field | × clear]
+            btns = findall(grid, '-isa', 'matlab.ui.control.Button');
             clearBtn = [];
             for i = 1:numel(btns)
-                if strcmp(btns(i).Text, char(215)) && strcmp(btns(i).Tooltip, 'Clear search')
-                    % Try to confirm we are in the dashboard pane by checking for
-                    % a sibling Open button within common ancestor panels
-                    p = btns(i).Parent;
-                    for depth = 1:6
-                        if isempty(p) || ~isvalid(p)
-                            break;
-                        end
-                        siblings = findall(p, '-isa', 'matlab.ui.control.Button');
-                        hasOpen = false;
-                        for s = 1:numel(siblings)
-                            if strcmp(siblings(s).Text, 'Open')
-                                hasOpen = true;
-                                break;
-                            end
-                        end
-                        if hasOpen
-                            clearBtn = btns(i);
-                            return;
-                        end
-                        p = p.Parent;
-                    end
+                if strcmp(btns(i).Text, char(215))
+                    clearBtn = btns(i);
+                    break;
                 end
             end
-            if isempty(clearBtn)
-                % Fall back: take any '×' button with Tooltip 'Clear search'
-                for i = 1:numel(btns)
-                    if strcmp(btns(i).Text, char(215)) && strcmp(btns(i).Tooltip, 'Clear search')
-                        clearBtn = btns(i);
-                        break;
-                    end
-                end
-            end
-            testCase.assertNotEmpty(clearBtn, 'dashboard clear (x) button not found');
+            testCase.assertNotEmpty(clearBtn, 'dashboard clear (×) button not found');
         end
 
     end

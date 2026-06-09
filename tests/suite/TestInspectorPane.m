@@ -198,14 +198,26 @@ classdef TestInspectorPane < matlab.unittest.TestCase
             testCase.selectTagsViaCatalog({'alpha_press'});
             drawnow;
             hFig = testCase.findFig();
-            lbls = findall(hFig, '-isa', 'matlab.ui.control.Label');
-            texts = arrayfun(@(L) L.Text, lbls, 'UniformOutput', false);
-            testCase.verifyTrue(any(strcmp(texts, 'alpha_press')), ...
-                'INSPECT-02: Key value label must be present');
-            testCase.verifyTrue(any(strcmp(texts, 'Alpha Pressure')), ...
-                'INSPECT-02: Name value label must be present');
-            testCase.verifyTrue(any(strcmp(texts, 'high')), ...
-                'INSPECT-02: Criticality value label must be present');
+            % Tag metadata is rendered in a uitable (hTagTable_) for fast live
+            % updates — gather its cell strings. The tag Name is the title label,
+            % so collect Label texts too, then assert across both.
+            tbls  = findall(hFig, '-isa', 'matlab.ui.control.Table');
+            cells = {};
+            for ti = 1:numel(tbls)
+                d = tbls(ti).Data;
+                if iscell(d); cells = [cells; d(:)]; end %#ok<AGROW>
+            end
+            cellStrs = cells(cellfun(@(c) ischar(c) || isstring(c), cells));
+            cellStrs = cellfun(@char, cellStrs, 'UniformOutput', false);
+            lbls   = findall(hFig, '-isa', 'matlab.ui.control.Label');
+            lblTxt = arrayfun(@(L) char(L.Text), lbls, 'UniformOutput', false);
+            allTxt = [cellStrs(:); lblTxt(:)];
+            testCase.verifyTrue(any(strcmp(allTxt, 'alpha_press')), ...
+                'INSPECT-02: Key value must be present in the metadata table');
+            testCase.verifyTrue(any(strcmp(allTxt, 'Alpha Pressure')), ...
+                'INSPECT-02: Name must be present (title label)');
+            testCase.verifyTrue(any(strcmp(allTxt, 'high')), ...
+                'INSPECT-02: Criticality value must be present in the metadata table');
         end
 
         function testINSPECT02_openDetailButtonDoesNotCrash(testCase)
@@ -384,7 +396,7 @@ classdef TestInspectorPane < matlab.unittest.TestCase
         function testCrossCutting_axesParentUipanelInInspectorFile(testCase)
         %TESTCROSSCUTTING_AXESPARENTUIPANEL Cross-cutting: axes('Parent', ...) used in source.
             src = fileread(which('InspectorPane'));
-            testCase.verifyNotEmpty(regexp(src, "axes\\('Parent'", 'once'), ...
+            testCase.verifyNotEmpty(regexp(src, "axes\('Parent'", 'once'), ...
                 'cross-cutting: InspectorPane.m must use axes(''Parent'', ...) for sparkline');
         end
 
