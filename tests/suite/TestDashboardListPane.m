@@ -76,12 +76,15 @@ classdef TestDashboardListPane < matlab.unittest.TestCase
         end
 
         function hFig = findFig(testCase)
-            %FINDFIG Locate the companion uifigure by name.
-            hFig = findobj(groot, 'Type', 'figure', 'Name', 'FastSense Companion');
-            if isempty(hFig)
-                hFig = findobj(groot, '-regexp', 'Name', 'FastSense Companion');
-            end
+            %FINDFIG Return the companion uifigure via the App's getFigForTest_ seam.
+            %   The companion figure is HandleVisibility='off' (deliberate — keeps
+            %   stray gcf / close all / findobj off the app figure), so
+            %   findobj(groot, ...) cannot see it and returns empty. The direct
+            %   handle is robust to that and name-agnostic. (quick task 260609-uif)
+            testCase.assertNotEmpty(testCase.App, 'findFig: App not constructed');
+            hFig = testCase.App.getFigForTest_();
             testCase.assertNotEmpty(hFig, 'companion uifigure not found');
+            testCase.assertTrue(isgraphics(hFig), 'findFig: companion uifigure handle invalid');
             hFig = hFig(1);
         end
 
