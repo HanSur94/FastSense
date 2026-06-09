@@ -91,6 +91,11 @@ classdef FastSenseWidget < DashboardWidget
         PreviewCacheKey_   = []    % [numel(x), x(1), x(end), nBucketsEff] sentinel
         TimeWindow_        = []    % [t0 t1] datenum pushed by DashboardEngine.setTimeWindow; [] = full range
         ShowingEmptyState_ = false % true while 'No data in selected range' label is rendered
+        % 260609-v5p data-unchanged fast path. Fingerprint is [numel(x), x(1),
+        % x(end), y(end)] — valid ONLY under the APPEND-ONLY assumption shared
+        % with PreviewCacheKey_. Reset to [] by setTimeWindow and rebuildForTag_
+        % so a window change or tag rebuild forces a full update on the next tick.
+        LastDataFingerprint_ = []
     end
 
     % Phase 1032 — XLim listener slot. Public READ (tests + engine
@@ -113,6 +118,10 @@ classdef FastSenseWidget < DashboardWidget
         % unittest runner's event flushing. The real axes<->getCurrentXLim path is
         % covered separately by TestFastSenseWidgetCurrentXLim. Empty in production.
         CurrentXLimOverrideForTest_ = []
+        % 260609-v5p test seam. Set to true by the fast path when a live tick
+        % detected unchanged data fingerprint and skipped the full update path.
+        % Set to false when new samples are detected and the full path runs.
+        LastTickSkipped_ = false
     end
 
     properties (Access = private, Constant)
@@ -405,11 +414,31 @@ classdef FastSenseWidget < DashboardWidget
             if tagUnchanged && ~obj.ShowingEmptyState_ && fpValid
                 try
                     [x, y] = obj.pullData_();
+                    % 260609-v5p data-unchanged fast path. Build a compact
+                    % fingerprint [n, x(1), x(end), y(end)]; NaN slots when
+                    % the array is empty so isequal comparisons stay scalar.
+                    % ASSUMES append-only time series (same contract as
+                    % PreviewCacheKey_). A window change or rebuild resets
+                    % LastDataFingerprint_ to [] to force the full path.
+                    n = numel(x);
+                    if n > 0
+                        fp = [n, x(1), x(end), y(end)];
+                    else
+                        fp = [0, NaN, NaN, NaN];
+                    end
+                    if isequal(fp, obj.LastDataFingerprint_)
+                        % Data unchanged — skip the expensive update path.
+                        obj.LastTickSkipped_ = true;
+                        obj.refreshEventMarkers_();  % events change independently
+                        return;
+                    end
+                    obj.LastDataFingerprint_ = fp;
+                    obj.LastTickSkipped_ = false;
                     obj.FastSenseObj.updateData(1, x, y);
                     % autoScaleY_(y) removed (260513-ovt): live ticks must
                     % not rescale Y — the user's Y view is preserved
                     % unless they explicitly pan/zoom or pin YLimits.
-                    obj.updateTimeRangeCache();
+                    obj.updateTimeRangeCache(x);
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
                     obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
@@ -435,10 +464,26 @@ classdef FastSenseWidget < DashboardWidget
             if ~obj.ShowingEmptyState_ && ~isempty(obj.FastSenseObj) && obj.FastSenseObj.IsRendered
                 try
                     [x, y] = obj.pullData_();
+                    % 260609-v5p data-unchanged fast path (mirrors refresh()).
+                    % Fingerprint is [n, x(1), x(end), y(end)] under the
+                    % append-only assumption shared with PreviewCacheKey_.
+                    n = numel(x);
+                    if n > 0
+                        fp = [n, x(1), x(end), y(end)];
+                    else
+                        fp = [0, NaN, NaN, NaN];
+                    end
+                    if isequal(fp, obj.LastDataFingerprint_)
+                        obj.LastTickSkipped_ = true;
+                        obj.refreshEventMarkers_();  % events change independently
+                        return;
+                    end
+                    obj.LastDataFingerprint_ = fp;
+                    obj.LastTickSkipped_ = false;
                     obj.FastSenseObj.updateData(1, x, y);
                     % autoScaleY_(y) removed (260513-ovt): live ticks must
                     % not rescale Y — see refresh() above for rationale.
-                    obj.updateTimeRangeCache();
+                    obj.updateTimeRangeCache(x);
                     obj.invalidatePreviewCache_();   % 260508-das
                     obj.refreshEventMarkers_();      % Phase 1012
                     obj.formatTimeAxis_(obj.FastSenseObj.hAxes);
@@ -671,6 +716,9 @@ classdef FastSenseWidget < DashboardWidget
             else
                 obj.TimeWindow_ = [t0, t1];
             end
+            % 260609-v5p: window change shifts what pullData_ returns, so the
+            % old fingerprint is no longer valid. Reset to force a full update.
+            obj.LastDataFingerprint_ = [];
         end
 
         function tf = isShowingEmptyState(obj)
@@ -1199,42 +1247,66 @@ classdef FastSenseWidget < DashboardWidget
                     theme = [];
                 end
 
+                % 260609-v5p: preallocate numeric arrays to avoid per-element
+                % AGROW. Fill in loop; mask non-finite; compute colors once
+                % per unique severity; build struct array in one shot.
                 n = numel(raw);
+                tArr  = nan(1, n);
+                sevArr = ones(1, n);
                 for i = 1:n
-                    t = NaN;
-                    sev = 1;
+                    tVal = NaN;
+                    sevVal = 1;
                     if isstruct(raw)
                         if isfield(raw, 'StartTime')
-                            t = raw(i).StartTime;
+                            tVal = raw(i).StartTime;
                         elseif isfield(raw, 'startTime')
-                            t = raw(i).startTime;
+                            tVal = raw(i).startTime;
                         end
                         if isfield(raw, 'Severity') && ~isempty(raw(i).Severity)
-                            sev = raw(i).Severity;
+                            sevVal = raw(i).Severity;
                         elseif isfield(raw, 'severity') && ~isempty(raw(i).severity)
-                            sev = raw(i).severity;
+                            sevVal = raw(i).severity;
                         end
                     else
                         if isprop(raw(i), 'StartTime')
-                            t = raw(i).StartTime;
+                            tVal = raw(i).StartTime;
                         end
                         if isprop(raw(i), 'Severity') && ~isempty(raw(i).Severity)
-                            sev = raw(i).Severity;
+                            sevVal = raw(i).Severity;
                         end
                     end
-                    if ~isnumeric(t) || ~isfinite(t)
-                        continue;
+                    if isnumeric(tVal) && isfinite(tVal)
+                        tArr(i) = tVal;
                     end
-                    if ~isnumeric(sev) || isempty(sev) || ~isfinite(sev(1))
-                        sev = 1;
+                    if ~isnumeric(sevVal) || isempty(sevVal) || ~isfinite(sevVal(1))
+                        sevArr(i) = 1;
                     else
-                        sev = sev(1);
+                        sevArr(i) = sevVal(1);
                     end
-                    m(end + 1) = struct( ...
-                        'Time',     t, ...
-                        'Severity', sev, ...
-                        'Color',    severityColor(theme, sev)); %#ok<AGROW>
                 end
+                % Discard entries where time was non-finite.
+                valid = isfinite(tArr);
+                tArr   = tArr(valid);
+                sevArr = sevArr(valid);
+                if isempty(tArr)
+                    return;
+                end
+                % Compute color once per unique severity level (typical range: 1..3).
+                uSev = unique(sevArr);
+                colorMap = zeros(numel(uSev), 3);
+                for si = 1:numel(uSev)
+                    colorMap(si, :) = severityColor(theme, uSev(si));
+                end
+                % Build per-element color cell from the lookup.
+                colorCell = cell(1, numel(tArr));
+                for i = 1:numel(tArr)
+                    si = find(uSev == sevArr(i), 1);
+                    colorCell{i} = colorMap(si, :);
+                end
+                % Build struct array in one shot (no AGROW).
+                m = struct('Time', num2cell(tArr), ...
+                           'Severity', num2cell(sevArr), ...
+                           'Color', colorCell);
             catch
                 m = struct('Time', {}, 'Severity', {}, 'Color', {});
             end
@@ -1471,6 +1543,12 @@ classdef FastSenseWidget < DashboardWidget
             %REFRESHEVENTMARKERS_ Diff LastEventIds_/LastEventOpen_ vs current EventStore state.
             %   Triggers inner FastSense.refreshEventLayer() on any change: added/removed
             %   events, or open-to-closed transitions. Always updates the cache.
+            %
+            %   260609-v5p: replaced the O(nE^2) nested strcmp/find loop with a
+            %   single conservative isequal comparison on the parallel arrays. The
+            %   comparison is ORDER-SENSITIVE, so a pure reorder may trigger one
+            %   extra redundant redraw, but a real change is NEVER missed. This is
+            %   the correct trade-off for a live-tick hot path.
             if ~obj.ShowEventMarkers || isempty(obj.EventStore) || isempty(obj.Tag), return; end
             if isempty(obj.FastSenseObj) || ~obj.FastSenseObj.IsRendered, return; end
             events = obj.EventStore.getEventsForTag(char(obj.Tag.Key));
@@ -1483,26 +1561,9 @@ classdef FastSenseWidget < DashboardWidget
                 openFlags(k) = logical(events(k).IsOpen);
                 sevs(k)      = double(events(k).Severity);
             end
-            changed = false;
-            if numel(ids) ~= numel(obj.LastEventIds_)
-                changed = true;
-            else
-                for k = 1:nE
-                    if ~any(strcmp(ids{k}, obj.LastEventIds_))
-                        changed = true; break;
-                    end
-                    idx = find(strcmp(ids{k}, obj.LastEventIds_), 1);
-                    if isempty(idx); continue; end
-                    if obj.LastEventOpen_(idx) ~= openFlags(k)
-                        changed = true; break;   % open <-> closed transition
-                    end
-                    if ~isempty(obj.LastEventSeverity_) && ...
-                            idx <= numel(obj.LastEventSeverity_) && ...
-                            obj.LastEventSeverity_(idx) ~= sevs(k)
-                        changed = true; break;   % severity bumped -> re-color
-                    end
-                end
-            end
+            changed = ~isequal(ids, obj.LastEventIds_) || ...
+                      ~isequal(openFlags, obj.LastEventOpen_) || ...
+                      ~isequal(sevs, obj.LastEventSeverity_);
             if changed
                 obj.FastSenseObj.refreshEventLayer();
             end
@@ -1525,24 +1586,34 @@ classdef FastSenseWidget < DashboardWidget
             else
                 fmt = 'MM:SS';
             end
-            lbl = cell(1, numel(xt));
-            for i = 1:numel(xt)
-                % xt(i) is seconds; serial-date day = seconds / 86400
-                lbl{i} = datestr(xt(i) / 86400, fmt);
-            end
+            % 260609-v5p: replace per-tick loop with a single vectorized call.
+            % xt is in seconds; serial-date day = seconds / 86400.
+            % cellstr(datestr(...)) returns a Kx1 cell on both MATLAB and Octave.
+            lbl = cellstr(datestr(xt(:) ./ 86400, fmt));
             set(ax, 'XTickMode', 'manual', 'XTickLabelMode', 'manual', ...
                 'XTickLabel', lbl);
         end
 
-        function updateTimeRangeCache(obj)
+        function updateTimeRangeCache(obj, x)
         %UPDATETIMERANGECACHE Maintain CachedXMin/CachedXMax incrementally.
         %   For sorted time arrays (the common case) the last element is the
         %   max candidate and the first is the min candidate, so this avoids
         %   a full-array scan on every live tick.
+        %
+        %   updateTimeRangeCache(obj, x) — 260609-v5p additive optional arg.
+        %   When x is supplied (nargin >= 2) it is used directly, skipping a
+        %   second Tag.getXY() call on the fast path. All other callers (e.g.
+        %   rebuildForTag_, fromStruct) call updateTimeRangeCache(obj) with
+        %   no second arg and get the existing pull behavior unchanged.
             if ~isempty(obj.Tag)
                 try
-                    [x, ~] = obj.Tag.getXY();
-                    n = numel(x);
+                    if nargin >= 2 && ~isempty(x)
+                        % Use the already-pulled x — avoids a redundant getXY().
+                        n = numel(x);
+                    else
+                        [x, ~] = obj.Tag.getXY();
+                        n = numel(x);
+                    end
                     if n == 0
                         obj.CachedXMin = inf;
                         obj.CachedXMax = -inf;
@@ -1570,6 +1641,9 @@ classdef FastSenseWidget < DashboardWidget
         function rebuildForTag_(obj)
         %REBUILDFORTAG_ Full teardown + rebuild FastSense from obj.Tag.
         %   Preserves zoom state (xlim) across the rebuild.
+            % 260609-v5p: full rebuild invalidates the data fingerprint so the
+            % first tick after rebuild always runs the full update path.
+            obj.LastDataFingerprint_ = [];
             % Save zoom state before teardown
             savedXLim = [];
             if ~isempty(obj.FastSenseObj) && ~isempty(obj.FastSenseObj.hAxes) && ...
