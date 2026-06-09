@@ -10,6 +10,15 @@ function test_dashboard_perf_fixes()
 %     test_engine_is_obj_valid_deleted        isObjValid_ returns false after delete
 %     test_engine_callbacks_silent_on_delete  onResize/switchPage/onLiveTick swallow deletion
 %     test_engine_preview_nbuckets_reset      PreviewNBuckets_ invalidated on resize
+%
+%   260609-v5p additions:
+%     test_fastsense_widget_fast_path_skip    LastTickSkipped_ true on no-change tick;
+%                                             false + XData grows after new samples
+%     test_engine_dedup_tiebreaker            computeEventMarkers keeps max-severity-wins
+%                                             (dedup tiebreaker) when two widgets report the
+%                                             same event Time with different Severity values
+%                                             (test_dashboard_engine_event_markers.m covers
+%                                             time-dedup but NOT the severity tiebreaker)
 
     addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
     install();
@@ -216,6 +225,134 @@ function test_dashboard_perf_fixes()
         failed = failed + 1;
         failures{end+1} = sprintf('test_engine_formatTimeVal_branches: %s', ME.message);
         fprintf('    test_engine_formatTimeVal_branches: FAIL: %s\n', ME.message);
+    end
+
+    % ------------------------------------------------------------------
+    % TEST A (260609-v5p) — FastSenseWidget fast-path skip + new-sample wake
+    %
+    % Verifies that LastTickSkipped_ is true when update() is called twice
+    % with no data change, and false (with XData growing) after appending
+    % new samples to the bound SensorTag.
+    % ------------------------------------------------------------------
+    try
+        N = 50;
+        tag = SensorTag('FP-1', 'X', 1:N, 'Y', randn(1, N));
+        w = FastSenseWidget('Tag', tag);
+        fig = figure('Visible', 'off');
+        cleanupFP = onCleanup(@() close(fig));
+        hp = uipanel(fig, 'Position', [0 0 1 1]);
+        w.ParentTheme = DashboardTheme('dark');
+        w.render(hp);
+        % Warm-up call — finger-prints the initial data; LastTickSkipped_ = false.
+        w.update();
+        assert(~w.LastTickSkipped_, ...
+            'first update() after render must not skip (fingerprint was [])');
+        % Second call with identical data — fast path must kick in.
+        w.update();
+        assert(w.LastTickSkipped_, ...
+            'second update() with unchanged data must set LastTickSkipped_ = true');
+        % Verify the plot handle is still alive.
+        assert(~isempty(w.FastSenseObj) && w.FastSenseObj.IsRendered, ...
+            'FastSenseObj must remain rendered after a skipped tick');
+        lineH = [];
+        xDataLen0 = NaN;
+        if ~isempty(w.FastSenseObj) && ~isempty(w.FastSenseObj.Lines)
+            lineH = w.FastSenseObj.Lines(1).hLine;
+            if ~isempty(lineH) && ishandle(lineH)
+                xDataLen0 = numel(get(lineH, 'XData'));
+            end
+        end
+        % Append 10 new samples — fast path must NOT fire; XData must grow.
+        tag.updateData([tag.X, (N+1):(N+10)], [tag.Y, randn(1, 10)]);
+        w.update();
+        assert(~w.LastTickSkipped_, ...
+            'update() after appending samples must set LastTickSkipped_ = false');
+        if ~isnan(xDataLen0) && ~isempty(lineH) && ishandle(lineH)
+            xDataLen1 = numel(get(lineH, 'XData'));
+            assert(xDataLen1 > xDataLen0, ...
+                sprintf('XData must grow after appending: was %d, got %d', ...
+                xDataLen0, xDataLen1));
+        end
+        passed = passed + 1;
+        fprintf('    test_fastsense_widget_fast_path_skip: PASS\n');
+    catch ME
+        failed = failed + 1;
+        failures{end+1} = sprintf('test_fastsense_widget_fast_path_skip: %s', ME.message);
+        fprintf('    test_fastsense_widget_fast_path_skip: FAIL: %s\n', ME.message);
+    end
+
+    % ------------------------------------------------------------------
+    % TEST B (260609-v5p) — DashboardEngine.computeEventMarkers dedup
+    % tiebreaker: duplicate Times across widgets -> single marker with the
+    % higher-severity color (max-severity-wins).
+    %
+    % test_dashboard_engine_event_markers.m covers time-dedup via the
+    % legacy getEventTimes() path (EventTimelineWidget, no Severity field).
+    % This block covers the Severity tiebreaker on the getEventMarkers()
+    % path: two FastSenseWidget instances share a raw EventStore event at
+    % t=100, one with Severity=1 and one with Severity=3.
+    %
+    % Uses two FastSenseWidget(inline) + StubEventStore wired via the
+    % public EventStore property. addWidget accepts pre-constructed
+    % DashboardWidget objects (DashboardEngine.addWidget line ~376).
+    % ------------------------------------------------------------------
+    try
+        % Build two raw event struct arrays (isstruct path in getEventMarkers).
+        evSev1 = struct('StartTime', 100, 'Severity', 1);
+        evSev3 = struct('StartTime', 100, 'Severity', 3);
+
+        % StubEventStore is in tests/ and has getEvents() -> Events_ property.
+        es1 = StubEventStore();
+        es1.Events_ = evSev1;
+        es2 = StubEventStore();
+        es2.Events_ = evSev3;
+
+        % FastSenseWidget with inline data (no Tag needed for getEventMarkers).
+        xd = 1:10;
+        yd = sin(xd);
+        fw1 = FastSenseWidget('XData', xd, 'YData', yd, 'Position', [1 1 12 2]);
+        fw2 = FastSenseWidget('XData', xd, 'YData', yd, 'Position', [13 1 12 2]);
+        fw1.EventStore = es1;
+        fw2.EventStore = es2;
+
+        d2 = DashboardEngine('DedupTiebreakerTest');
+        d2.addWidget(fw1);
+        d2.addWidget(fw2);
+        d2.render();
+        cleanupD2 = onCleanup(@() delete(d2));
+
+        % Trigger computeEventMarkers explicitly.
+        d2.computeEventMarkers();
+
+        if isempty(d2.TimeRangeSelector_) || ...
+                ~isa(d2.TimeRangeSelector_, 'TimeRangeSelector')
+            fprintf('    test_engine_dedup_tiebreaker: SKIPPED (TimeRangeSelector unavailable)\n');
+        else
+            % Expect ONE deduped marker at t=100, colored by Severity=3.
+            themeStruct = [];
+            try, themeStruct = DashboardTheme('dark'); catch, end
+            expectedColor = severityColor(themeStruct, 3);
+
+            nMarkers = numel(d2.EventMarkerTimesCache_);
+            assert(nMarkers == 1, ...
+                sprintf('expected 1 deduped marker at t=100, got %d', nMarkers));
+            assert(d2.EventMarkerTimesCache_(1) == 100, ...
+                sprintf('expected marker time 100, got %g', d2.EventMarkerTimesCache_(1)));
+            if ~isempty(d2.EventMarkerColorsCache_) && ...
+                    size(d2.EventMarkerColorsCache_, 1) >= 1
+                gotColor = d2.EventMarkerColorsCache_(1, :);
+                assert(norm(gotColor - expectedColor) < 1e-9, ...
+                    sprintf('expected sev-3 color [%.3f %.3f %.3f], got [%.3f %.3f %.3f]', ...
+                    expectedColor(1), expectedColor(2), expectedColor(3), ...
+                    gotColor(1), gotColor(2), gotColor(3)));
+            end
+            passed = passed + 1;
+            fprintf('    test_engine_dedup_tiebreaker: PASS\n');
+        end
+    catch ME
+        failed = failed + 1;
+        failures{end+1} = sprintf('test_engine_dedup_tiebreaker: %s', ME.message);
+        fprintf('    test_engine_dedup_tiebreaker: FAIL: %s\n', ME.message);
     end
 
     fprintf('\n    %d/%d tests passed.\n', passed, passed + failed);
