@@ -104,7 +104,8 @@ jobs:
         if: steps.diff.outputs.changed == 'true' && inputs.dry_run != true
         uses: peter-evans/create-pull-request@v8
         with:
-          branch: wiki-update/${{ github.sha }}
+          branch: wiki-update
+          delete-branch: true
           commit-message: 'docs: regenerate wiki pages'
           title: 'docs: regenerate wiki pages'
           body: |
