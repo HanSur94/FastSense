@@ -13,6 +13,19 @@ function [filteredTags, byGroup] = filterTags(tagsCell, searchTerm, activeKinds,
 %     byGroup      - struct array, fields: GroupName (char), Tags (cell of Tag handles)
 %                    ordered alphabetically by GroupName; 'Ungrouped' placed last
 %
+%   Grouping rules:
+%     - All tag kinds: use Labels{1} as the group name when non-empty.
+%     - If Labels is empty: group is 'Ungrouped'.
+%   Labels is the Tag classification field (set at construction); callers are
+%   responsible for populating it with a subsystem name.  Labels must NOT carry
+%   state-value vocabularies — that misuse causes 'closed'/'idle' groups.
+%
+%   After all groups are collected, case-insensitive duplicates are merged so
+%   that 'FeedLine' and 'Feedline' (casing variants of the same subsystem) land
+%   in a single group.  The canonical name is the first-seen spelling.
+%
+%   'Ungrouped' is always sorted last.
+%
 %   No UI dependencies - Octave-compatible.
 %   See also groupByLabel, TagCatalogPane.
 
@@ -67,9 +80,9 @@ function [filteredTags, byGroup] = filterTags(tagsCell, searchTerm, activeKinds,
     filteredTags = tagsCell;
 
     % --- Build byGroup struct array ---
-    % Determine each tag's group (first label or 'Ungrouped')
-    % Accumulate into a map from group name -> cell of tags
-    groupNames = {};
+    % Determine each tag's group (first label or 'Ungrouped').
+    % Accumulate into a map from raw group name -> cell of tags.
+    rawGroupNames = {};
     groupMap = containers.Map();
 
     for i = 1:numel(filteredTags)
@@ -84,14 +97,18 @@ function [filteredTags, byGroup] = filterTags(tagsCell, searchTerm, activeKinds,
             groupMap(grp) = [groupMap(grp), {t}];
         else
             groupMap(grp) = {t};
-            groupNames{end+1} = grp; %#ok<AGROW>
+            rawGroupNames{end+1} = grp; %#ok<AGROW>
         end
     end
 
-    if isempty(groupNames)
+    if isempty(rawGroupNames)
         byGroup = struct('GroupName', {}, 'Tags', {});
         return;
     end
+
+    % Merge case-insensitive duplicate group names (e.g. 'FeedLine'/'Feedline').
+    % Canonical name = first-seen spelling for that case-folded key.
+    [groupNames, groupMap] = mergeCaseGroups_(rawGroupNames, groupMap);
 
     % Sort group names alphabetically, then move 'Ungrouped' to end
     hasUngrouped = any(strcmp(groupNames, 'Ungrouped'));
@@ -109,5 +126,48 @@ function [filteredTags, byGroup] = filterTags(tagsCell, searchTerm, activeKinds,
     for i = 1:nGroups
         byGroup(i).GroupName = orderedNames{i};
         byGroup(i).Tags      = groupMap(orderedNames{i});
+    end
+end
+
+% -------------------------------------------------------------------------
+
+function [names, mergedMap] = mergeCaseGroups_(rawNames, rawMap)
+%MERGECASEGROUPS_ Merge case-insensitive duplicate group names.
+%   When two groups differ only in case (e.g. 'FeedLine' and 'Feedline'),
+%   merge their tag lists under a single canonical name.  The canonical name
+%   is the first-seen spelling for that case-folded key (i.e. insertion-order
+%   stable; determined by the order tags were processed in the caller loop).
+%
+%   Returns the deduplicated name list and an updated containers.Map.
+    if isempty(rawNames)
+        names     = {};
+        mergedMap = containers.Map();
+        return;
+    end
+
+    % Build a lowercase -> canonical-name mapping (first-seen wins).
+    lowerToCanon = containers.Map();
+    for i = 1:numel(rawNames)
+        n    = rawNames{i};
+        nLow = lower(n);
+        if ~isKey(lowerToCanon, nLow)
+            lowerToCanon(nLow) = n;
+        end
+    end
+
+    % Build merged map: accumulate tags from rawMap under canonical names.
+    mergedMap = containers.Map();
+    names     = {};
+    for i = 1:numel(rawNames)
+        n      = rawNames{i};
+        nLow   = lower(n);
+        canon  = lowerToCanon(nLow);
+        tags   = rawMap(n);
+        if isKey(mergedMap, canon)
+            mergedMap(canon) = [mergedMap(canon), tags];
+        else
+            mergedMap(canon) = tags;
+            names{end+1} = canon; %#ok<AGROW>
+        end
     end
 end

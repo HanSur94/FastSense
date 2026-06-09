@@ -185,7 +185,16 @@ classdef CompanionEventViewer < handle
         function bringToFront(obj)
         %BRINGTTOFRONT Raise the viewer figure. No-op if figure is gone.
             if ~isempty(obj.hFigure) && isgraphics(obj.hFigure)
-                figure(obj.hFigure);
+                % Best-effort: figure()/toFront errors on a headless CEF
+                % uifigure (no display, e.g. -batch CI) — the figure realized
+                % by buildFigure_'s drawnow has a CEF host whose toFront is
+                % unsupported there. Raising the window is non-essential, so
+                % swallow that case rather than propagate it to callers/tests.
+                try
+                    figure(obj.hFigure);
+                catch
+                    % Headless/offscreen: toFront unavailable — leave as-is.
+                end
             end
         end
 
@@ -303,6 +312,15 @@ classdef CompanionEventViewer < handle
         function s = getSliderForTest_(obj)
         %GETSLIDERFORTEST_ Test accessor: return Selector_ handle.
             s = obj.Selector_;
+        end
+
+        function p = getSliderInnerPanelForTest_(obj)
+        %GETSLIDERINNERFORTEST_ Test accessor: return SliderInnerPanel_ handle.
+        %   Used by regression tests for the initial-render stale-fragment fix:
+        %   the panel must have positive pixel dimensions at the time the
+        %   TimeRangeSelector is constructed (enforced by drawnow() in
+        %   buildFigure_ before the selector constructor runs).
+            p = obj.SliderInnerPanel_;
         end
 
         function onSliderRangeChanged_internalForTest(obj, t1, t2)
@@ -818,6 +836,16 @@ classdef CompanionEventViewer < handle
             obj.SliderInnerPanel_.Layout.Column = 1;
             obj.SliderInnerPanel_.BackgroundColor = t.WidgetBackground;
             obj.SliderInnerPanel_.BorderType      = 'none';
+
+            % Flush the uifigure layout compositor so SliderInnerPanel_ reaches
+            % its final pixel geometry BEFORE TimeRangeSelector's constructor runs
+            % buildGraphics_ + redraw_. Without this the selector draws at the
+            % uigridlayout's provisional (pre-settled) size and leaves one-time
+            % stale on-screen fragments that the settled layout never clears.
+            % A manual window resize was the only prior workaround — this is the
+            % targeted fix. drawnow() is valid on both MATLAB and Octave; it is a
+            % no-op in headless/test environments where no figure is displayed.
+            drawnow();
 
             obj.Selector_ = TimeRangeSelector(obj.SliderInnerPanel_, ...
                 'OnRangeChanged', @(t1, t2) obj.onSliderRangeChanged_(t1, t2), ...
