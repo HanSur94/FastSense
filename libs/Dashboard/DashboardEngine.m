@@ -4162,6 +4162,10 @@ classdef DashboardEngine < handle
                         sevVecW = ones(1, numel(ms));
                         if isfield(ms, 'Severity')
                             sevVecW = [ms.Severity];
+                            % Non-finite severities default to 1 (OK) — matches the
+                            % per-element fallback; NaN would otherwise sort last in
+                            % the dedup and wrongly win the max-severity tiebreak.
+                            sevVecW(~isfinite(sevVecW)) = 1;
                         end
                         % Build color matrix: one row per element.
                         cMatW = repmat(okColor, numel(ms), 1);

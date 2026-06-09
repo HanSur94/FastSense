@@ -321,8 +321,9 @@ function test_dashboard_perf_fixes()
         d2.render();
         cleanupD2 = onCleanup(@() delete(d2));
 
-        % Trigger computeEventMarkers explicitly.
-        d2.computeEventMarkers();
+        % Trigger computeEventMarkers via its public hook site
+        % (computeEventMarkers itself is Access=private).
+        d2.updateGlobalTimeRange();
 
         if isempty(d2.TimeRangeSelector_) || ...
                 ~isa(d2.TimeRangeSelector_, 'TimeRangeSelector')
