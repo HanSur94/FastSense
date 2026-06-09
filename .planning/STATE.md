@@ -19,13 +19,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** Phase 1041 — global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading
+**Current focus:** None — all planned milestones shipped (v1.0–v4.0, Companion, Plant Log, polish through Phase 1041). Repo in polish/housekeeping; backlog Phase 999.1 (in-app help) remains unplanned.
 
 ## Current Position
 
-Phase: 1041
-Plan: Not started
-Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v4.0 Multi-User LAN Concurrency — shipping via PR #152 (parallel branch); v1.0 perf line tracks phase 1028 — now COMPLETE via PR #114.
+Phase: — (none active; latest shipped = Phase 1041, MERGED via PR #189 on 2026-06-03)
+Plan: —
+Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v3.1 Plant Log Integration — SHIPPED 2026-05-19; v4.0 Multi-User LAN Concurrency — SHIPPED 2026-05 via PR #152 (parallel branch); v1.0 perf line — COMPLETE via PR #114. No milestone in flight.
 Status: Phase 1041 complete — inline time-range control (toolbar dropdown + Custom date strip) shipped; PR #189 MERGED 2026-06-03. No planned milestone in flight — repo in polish/housekeeping. Outstanding: 12 wiki-bot dup PRs were closed to 1 (#190) + workflow root-caused (260609-mcz); backlog Phase 999.1 (in-app help system) unplanned; ROADMAP v4.0 boxes stale (shipped on main via #152 — router misreports, see memory gsd-router-stale-v4-misroute).
 Last activity: 2026-06-09 - Quick task 260609-uif: fixed findFig locator in 3 companion UI test suites (figure is HandleVisibility=off → findobj(groot) missed it; now uses getFigForTest_ seam) — ~35 tests recovered, verified R2025b. Surfaced 5 pre-existing R2025b-drift stragglers (deferred). Earlier same session: 260609-mcz wiki-regen one-PR fix (PR #192 merged); PR #179 Event Viewer fix merged; 11 stale wiki PRs closed.
 

@@ -15,14 +15,16 @@
 
 ## Phases
 
-<details open>
-<summary>🚧 v4.0 Multi-User LAN Concurrency (Phases 1029-1033) — ACTIVE 2026-05-13</summary>
+<details>
+<summary>✅ v4.0 Multi-User LAN Concurrency (Phases 1029-1033) — SHIPPED 2026-05 via PR #152</summary>
 
-- [ ] **Phase 1029: Concurrency Foundation** — Identity + Paths + FileLock primitive + AtomicWriter, with OFD locks, mtime heartbeat, atomic temp+rename
-- [ ] **Phase 1030: TagWriteCoordinator + LiveTagPipeline cluster mode** — per-tag lock around raw→.mat write; timer hardening; jitter; mtime change-detect
-- [ ] **Phase 1031: EventLog (Append-Only NDJSON) + EventStore SQLite rollback-mode migration** — lock-serialised appends; reader resilience; SMB-atomicity stress test
-- [ ] **Phase 1032: Single-Source MonitorTag Event Emission + ack workflow** — exactly-once event generation via per-tag lock; ack/comment/visual-state; deferred listener notify; SQLite retry wrapper
-- [ ] **Phase 1033: Companion Integration + Snapshot Consolidator + Operator Docs + 50-Companion Acceptance Test** — wire SharedRoot through Companion; leader-elected snapshot; ops setup README; full acceptance gate
+- [x] **Phase 1029: Concurrency Foundation** — Identity + Paths + FileLock primitive + AtomicWriter, with OFD locks, mtime heartbeat, atomic temp+rename
+- [x] **Phase 1030: TagWriteCoordinator + LiveTagPipeline cluster mode** — per-tag lock around raw→.mat write; timer hardening; jitter; mtime change-detect
+- [x] **Phase 1031: EventLog (Append-Only NDJSON) + EventStore SQLite rollback-mode migration** — lock-serialised appends; reader resilience; SMB-atomicity stress test
+- [x] **Phase 1032: Single-Source MonitorTag Event Emission + ack workflow** — exactly-once event generation via per-tag lock; ack/comment/visual-state; deferred listener notify; SQLite retry wrapper
+- [x] **Phase 1033: Companion Integration + Snapshot Consolidator + Operator Docs + 50-Companion Acceptance Test** — wire SharedRoot through Companion; leader-elected snapshot; ops setup README; full acceptance gate
+
+Note: v4.0 shipped on `main` via **PR #152** (developed on a parallel branch). The phase directories on this branch carry the implementation summaries (`1029-foundation/`, `1030-tag-write-coordinator/`, `1031-event-log/`, `1032-single-source-events/`, `1033-companion-integration/`). These boxes were left unchecked at merge time, which made `/gsd-progress` / `roadmap.analyze` falsely report "resume Phase 1031" — reconciled here (quick hygiene, 2026-06-09). See memory `gsd-router-stale-v4-misroute`.
 
 </details>
 
