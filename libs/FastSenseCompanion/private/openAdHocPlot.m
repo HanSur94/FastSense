@@ -1,6 +1,8 @@
-function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
+function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset, varargin)
 %OPENADHOCPLOT Spawn an ad-hoc multi-tag plot as a live DashboardEngine.
 %   [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
+%   [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset, ...
+%                              'SeriesColors', c, 'SeriesLabels', l)
 %
 %   Replaces the classical-figure path: every "Plot" click in the
 %   companion now spawns a fresh DashboardEngine with live refresh
@@ -23,6 +25,17 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
 %                    only meaningful for >=2 tags).
 %     themePreset  - char: 'dark' or 'light'.
 %
+%   Optional name-value arguments (additive; absent = legacy behavior):
+%     'SeriesColors' - 1xN cell of [1x3] RGB row vectors, one per tag. When
+%                      present, each Overlay line is drawn with an explicit
+%                      per-series Color (immune to ColorOrderIndex state).
+%                      Must have numel == numel(tags) or be empty.
+%     'SeriesLabels' - 1xN cellstr of legend labels, one per tag. When present,
+%                      each Overlay line's DisplayName uses the supplied label
+%                      instead of the tag Name.
+%   Legacy 3-positional-arg calls are byte-unchanged: absent NV args trigger
+%   the existing ColorOrder auto-assignment + DisplayName=tag.Name path.
+%
 %   Outputs:
 %     hFig         - DashboardEngine.hFigure (figure window the engine owns)
 %     skippedNames - 1xM cellstr of skipped tag names (may be empty).
@@ -30,6 +43,8 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
 %   Errors:
 %     FastSenseCompanion:invalidPlotMode  - mode unknown or numel(tags)<1
 %     FastSenseCompanion:plotSpawnFailed  - all tags failed; no figure spawned
+%     openAdHocPlot:seriesColorsMismatch  - SeriesColors/SeriesLabels count
+%                                           does not match numel(tags)
 %
 %   Lifecycle: the engine starts its own live timer. The figure's
 %   CloseRequestFcn stops live + deletes the figure so closing the
@@ -49,14 +64,39 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
             'openAdHocPlot: requires a cell of >= 1 tag. Got %d.', numel(tags));
     end
 
+    % Parse the additive SeriesColors/SeriesLabels NV args (Phase 1045 CMP-02).
+    % Validate arity BEFORE any figure spawns so a mismatch never leaks a window.
+    p = inputParser();
+    p.addParameter('SeriesColors', {});
+    p.addParameter('SeriesLabels', {});
+    p.parse(varargin{:});
+    seriesColors = p.Results.SeriesColors;
+    seriesLabels = p.Results.SeriesLabels;
+    if ~isempty(seriesColors) && numel(seriesColors) ~= numel(tags)
+        error('openAdHocPlot:seriesColorsMismatch', ...
+            'openAdHocPlot: SeriesColors must have one entry per tag (%d). Got %d.', ...
+            numel(tags), numel(seriesColors));
+    end
+    if ~isempty(seriesLabels) && numel(seriesLabels) ~= numel(tags)
+        error('openAdHocPlot:seriesColorsMismatch', ...
+            'openAdHocPlot: SeriesLabels must have one entry per tag (%d). Got %d.', ...
+            numel(tags), numel(seriesLabels));
+    end
+
     % Coerce mode for single-tag case: Overlay only meaningful for >=2 tags.
     if numel(tags) == 1 && strcmp(mode, 'Overlay')
         mode = 'LinkedGrid';
     end
 
-    % Filter tags that have data.
+    % Filter tags that have data. Carry SeriesColors/SeriesLabels through the
+    % same filter so they stay index-aligned with validTags: a dropped tag
+    % drops its color/label too. When the NV cells are empty they stay empty.
+    haveColors   = ~isempty(seriesColors);
+    haveLabels   = ~isempty(seriesLabels);
     validTags    = {};
     validNames   = {};
+    validColors  = {};
+    validLabels  = {};
     skippedNames = {};
     for k = 1:numel(tags)
         tg = tags{k};
@@ -73,6 +113,12 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
             end
             validTags{end+1}  = tg;     %#ok<AGROW>
             validNames{end+1} = nm;     %#ok<AGROW>
+            if haveColors
+                validColors{end+1} = seriesColors{k}; %#ok<AGROW>
+            end
+            if haveLabels
+                validLabels{end+1} = seriesLabels{k}; %#ok<AGROW>
+            end
         catch ME
             skippedNames{end+1} = sprintf('%s (%s)', nm, ME.message); %#ok<AGROW>
         end
@@ -94,7 +140,7 @@ function [hFig, skippedNames] = openAdHocPlot(tags, mode, themePreset)
             % cla() runs in the widget's refresh, then PlotFcn redraws.
             engine.addWidget('rawaxes', ...
                 'Title',    figName, ...
-                'PlotFcn',  @(ax) plotOverlay_(ax, validTags, validNames), ...
+                'PlotFcn',  @(ax) plotOverlay_(ax, validTags, validNames, validColors, validLabels), ...
                 'Position', [1 1 24 12]);
 
         case 'LinkedGrid'
@@ -139,14 +185,31 @@ end
 
 % --------------------------- helpers --------------------------------
 
-function plotOverlay_(ax, tags, names)
+function plotOverlay_(ax, tags, names, seriesColors, seriesLabels)
 %PLOTOVERLAY_ Draw every tag as a line in the same axes; called on every refresh.
+%   seriesColors/seriesLabels are optional 1xN cells (index-aligned with tags).
+%   When present, each line gets an explicit per-series Color and/or a supplied
+%   DisplayName; when empty, the legacy ColorOrder + tag-Name path is used.
+    if nargin < 4; seriesColors = {}; end
+    if nargin < 5; seriesLabels = {}; end
+    haveColors = ~isempty(seriesColors);
+    haveLabels = ~isempty(seriesLabels);
     hold(ax, 'on');
     for k = 1:numel(tags)
         try
             [tv, y] = tags{k}.getXY();
             if isempty(tv); continue; end
-            plot(ax, tv, y, 'DisplayName', char(names{k}), 'LineWidth', 1.2);
+            if haveLabels
+                dispName = char(seriesLabels{k});
+            else
+                dispName = char(names{k});
+            end
+            if haveColors
+                plot(ax, tv, y, 'DisplayName', dispName, 'LineWidth', 1.2, ...
+                    'Color', seriesColors{k});
+            else
+                plot(ax, tv, y, 'DisplayName', dispName, 'LineWidth', 1.2);
+            end
         catch
         end
     end

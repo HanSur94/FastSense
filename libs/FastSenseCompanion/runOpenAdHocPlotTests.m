@@ -18,6 +18,9 @@ function runOpenAdHocPlotTests()
 %     T7 — Empty-data tag => skipped marked 'no data'; figure from valid tags
 %     T8 — Single-tag LinkedGrid happy: 1 tag spawns 1 figure with exactly 1 widget
 %     T9 — Single-tag Overlay coerced: 1 tag + 'Overlay' coerces to LinkedGrid (no error)
+%     T-NV1 — Legacy byte-compat: 3-arg Overlay spawns with tag-Name DisplayNames
+%     T-NV2 — Injection: SeriesColors/SeriesLabels apply per series (color + label)
+%     T-NV3 — Mismatch: SeriesColors count != tags throws openAdHocPlot:seriesColorsMismatch, no figure
 %
 %   See also openAdHocPlot, MockPlottableTag, runFilterDashboardsTests.
 
@@ -136,6 +139,52 @@ function runOpenAdHocPlotTests()
     spawned(end+1) = hFig;
     assert(ishandle(hFig), 'T9: 1-tag Overlay must coerce to LinkedGrid and spawn figure');
     assert(isempty(skipped), 'T9: empty skipped for valid single tag');
+    nPassed = nPassed + 1;
+
+    % T-NV1 — Legacy byte-compat: 3-positional Overlay call still spawns a
+    % figure with N lines whose DisplayNames are the tag Names (no NV args).
+    tags = {mk('nv1a', 'NV1 A', 'Default'), mk('nv1b', 'NV1 B', 'Default')};
+    [hFig, skipped] = openAdHocPlot(tags, 'Overlay', 'dark');
+    spawned(end+1) = hFig;
+    assert(ishandle(hFig) && isempty(skipped), ...
+        'T-NV1: legacy 3-arg Overlay must spawn a figure with no skips');
+    lines = findall(hFig, 'Type', 'line');
+    dispNames = arrayfun(@(h) string(get(h, 'DisplayName')), lines);
+    assert(any(dispNames == "NV1 A") && any(dispNames == "NV1 B"), ...
+        'T-NV1: legacy lines must carry tag-Name DisplayNames');
+    nPassed = nPassed + 1;
+
+    % T-NV2 — Injection: SeriesColors + SeriesLabels apply per series.
+    tags = {mk('nv2a', 'NV2 A', 'Default'), mk('nv2b', 'NV2 B', 'Default')};
+    [hFig, skipped] = openAdHocPlot(tags, 'Overlay', 'dark', ...
+        'SeriesColors', {[1 0 0], [0 1 0]}, ...
+        'SeriesLabels', {'A: x', 'B: y'});
+    spawned(end+1) = hFig;
+    assert(ishandle(hFig) && isempty(skipped), ...
+        'T-NV2: injection call must spawn a figure with no skips');
+    lines = findall(hFig, 'Type', 'line');
+    % Select the line by its injected DisplayName so ordering can't fool the test.
+    lineA = lines(arrayfun(@(h) strcmp(get(h, 'DisplayName'), 'A: x'), lines));
+    assert(~isempty(lineA), 'T-NV2: a line with DisplayName ''A: x'' must exist');
+    assert(isequal(get(lineA(1), 'Color'), [1 0 0]), ...
+        'T-NV2: the ''A: x'' line must be drawn in the injected red color');
+    nPassed = nPassed + 1;
+
+    % T-NV3 — Mismatch: SeriesColors count != tags count throws and spawns
+    % no figure.
+    tags = {mk('nv3a', 'NV3 A', 'Default'), mk('nv3b', 'NV3 B', 'Default')};
+    figsBefore = numel(findall(0, 'Type', 'figure'));
+    try
+        openAdHocPlot(tags, 'Overlay', 'dark', 'SeriesColors', {[1 0 0]});
+        error('T-NV3: mismatched SeriesColors must throw');
+    catch ME
+        assert(strcmp(ME.identifier, 'openAdHocPlot:seriesColorsMismatch'), ...
+            sprintf('T-NV3: expected openAdHocPlot:seriesColorsMismatch, got %s', ...
+                    ME.identifier));
+    end
+    figsAfter = numel(findall(0, 'Type', 'figure'));
+    assert(figsAfter == figsBefore, ...
+        'T-NV3: a SeriesColors mismatch must spawn no figure');
     nPassed = nPassed + 1;
 
     fprintf('    All %d tests passed.\n', nPassed);
