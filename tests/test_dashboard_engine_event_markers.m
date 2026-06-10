@@ -197,12 +197,24 @@ function case_nested_group_event_markers()
 end
 
 function x = markerXData(sel)
-    x = zeros(1, numel(sel.hEventMarkers));
+%MARKERXDATA Unique marker times from the selector's event-marker handles.
+%   Since 260508-slider-stuck, setEventMarkers batches same-color markers
+%   into ONE NaN-separated polyline per color group ([t t NaN t t NaN ...]),
+%   so handle count != marker count. Extract every segment start (elements
+%   1:3:end) from every handle. This helper previously assumed one handle
+%   per marker and read only XData(1) — it failed on any MATLAB with a
+%   working TimeRangeSelector (and self-skipped on Octave, masking it).
+    x = [];
     for k = 1:numel(sel.hEventMarkers)
         xd = get(sel.hEventMarkers(k), 'XData');
-        x(k) = xd(1);
+        xd = xd(:).';
+        if numel(xd) >= 3 && all(isnan(xd(3:3:end)))
+            x = [x, xd(1:3:end)]; %#ok<AGROW>  batched NaN-separated polyline
+        else
+            x = [x, xd(1)]; %#ok<AGROW>       legacy one-handle-per-marker shape
+        end
     end
-    x = sort(x);
+    x = unique(x(isfinite(x)));  % unique() returns sorted ascending
 end
 
 function closeDashboard(d)

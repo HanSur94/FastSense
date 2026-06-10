@@ -3433,8 +3433,13 @@ classdef FastSense < handle
                 else
                     name = sprintf('line%d', i);
                 end
-                S.lines(i).X = L.X;
-                S.lines(i).Y = L.Y;
+                % Disk-backed lines have L.X/L.Y == [] (data lives in the
+                % DataStore) — reading them directly exported empty columns
+                % for exactly the datasets large enough to spill to disk.
+                % lineFullData handles the disk-vs-memory branch.
+                [xFull, yFull] = obj.lineFullData(i);
+                S.lines(i).X = xFull;
+                S.lines(i).Y = yFull;
                 S.lines(i).Name = name;
             end
             S.thresholds = struct('Value', {}, 'Direction', {}, 'Label', {});
