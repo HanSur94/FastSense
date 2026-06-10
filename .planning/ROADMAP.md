@@ -17,7 +17,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 - [x] **Phase 1041: CanonicalMapper** - Logical-sensor mapping foundation with confidence levels, auto-suggest, manual overrides, and unmapped-tail surfacing (completed 2026-06-03)
 - [x] **Phase 1042: Machine + Fleet + Pipeline DI Seam** - Isolated per-machine tag catalogs, fleet config persistence, lazy load, and pipeline tagSource_ DI (completed 2026-06-07)
 - [x] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test (completed 2026-06-07)
-- [ ] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch
+- [x] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch (completed 2026-06-10)
 - [ ] **Phase 1045: Cross-Machine Comparison View** - Machine-first compare-builder dialog (Approach A); resolve-once caching; confidence gate; auto-color per machine
 - [ ] **Phase 1046: Per-Machine Dashboard Clone/Remap** - Canonical-map-driven clone onto target machine; failed-remap warnings list
 
@@ -114,20 +114,20 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 1044-01-PLAN.md — Wave 1: Fleet.machineIds() public accessor + insertion-order Octave-flat test (MACH-01)
-- [ ] 1044-02-PLAN.md — Wave 1: MachineSelectorPane (TagCatalogPane copy) + filterMachines helper + flat filter tests (MACH-01)
+- [x] 1044-01-PLAN.md — Wave 1: Fleet.machineIds() public accessor + insertion-order Octave-flat test (MACH-01)
+- [x] 1044-02-PLAN.md — Wave 1: MachineSelectorPane (TagCatalogPane copy) + filterMachines helper + flat filter tests (MACH-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 1044-03-PLAN.md — Wave 2: 'Fleet' NV pair + conditional [3 3]/[3 4] grid + [1 10]/[1 11] toolbar + active-machine label slot + close() detach (MACH-01/03/05)
+- [x] 1044-03-PLAN.md — Wave 2: 'Fleet' NV pair + conditional [3 3]/[3 4] grid + [1 10]/[1 11] toolbar + active-machine label slot + close() detach (MACH-01/03/05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 1044-04-PLAN.md — Wave 3: four-call-site redirect + onMachineSelected_ switch + updateActiveMachineIndicator_ + auto-select first (MACH-02/03/04)
+- [x] 1044-04-PLAN.md — Wave 3: four-call-site redirect + onMachineSelected_ switch + updateActiveMachineIndicator_ + auto-select first (MACH-02/03/04)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 1044-05-PLAN.md — Wave 4: class-suite tests — ActiveContext/ActiveMachineLabel/TimerStable/LegacyUnchanged (MACH-02/03/04/05)
+- [x] 1044-05-PLAN.md — Wave 4: class-suite tests — ActiveContext/ActiveMachineLabel/TimerStable/LegacyUnchanged (MACH-02/03/04/05)
 
 ### Phase 1045: Cross-Machine Comparison View
 
