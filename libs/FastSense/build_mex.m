@@ -105,13 +105,22 @@ function build_mex()
 
     % Set optimization and SIMD flags — MSVC uses /flags while GCC/Clang
     % use -flags.  The boolean useMSVC distinguishes the two conventions.
+    %
+    % -fno-finite-math-only MUST follow -ffast-math (260610-nwa):
+    % -ffast-math implies -ffinite-math-only, which lets the compiler
+    % assume no NaNs and fold the IEEE self-compare NaN test (v == v)
+    % to constant true — clang lowers even NEON/AVX compare intrinsics
+    % through IR this folding applies to. That silently broke
+    % to_step_function_mex's NaN-segment scan (all-NaN inputs scanned as
+    % fully active; NaN gaps rendered as solid steps). The reassociation,
+    % FMA-contraction and no-signed-zero wins of -ffast-math are kept.
     useMSVC = ispc && ~isOctave;
     switch arch
         case 'x86_64'
             if useMSVC
                 opt_flags = {'/O2', '/arch:AVX2', '/fp:fast'};
             else
-                opt_flags = {'-O3', '-mavx2', '-mfma', '-ftree-vectorize', '-ffast-math'};
+                opt_flags = {'-O3', '-mavx2', '-mfma', '-ftree-vectorize', '-ffast-math', '-fno-finite-math-only'};
             end
             fprintf('SIMD target: AVX2 + FMA\n');
         case 'arm64'
@@ -120,17 +129,17 @@ function build_mex()
                 opt_flags = {'/O2', '/fp:fast'};
             elseif isOctave && ~isempty(compiler)
                 % GCC on ARM needs explicit CPU target
-                opt_flags = {'-O3', '-mcpu=apple-m3', '-ftree-vectorize', '-ffast-math'};
+                opt_flags = {'-O3', '-mcpu=apple-m3', '-ftree-vectorize', '-ffast-math', '-fno-finite-math-only'};
             else
                 % Clang on Apple Silicon: NEON enabled by default
-                opt_flags = {'-O3', '-ffast-math'};
+                opt_flags = {'-O3', '-ffast-math', '-fno-finite-math-only'};
             end
             fprintf('SIMD target: ARM NEON\n');
         otherwise
             if useMSVC
                 opt_flags = {'/O2', '/fp:fast'};
             else
-                opt_flags = {'-O3', '-ffast-math'};
+                opt_flags = {'-O3', '-ffast-math', '-fno-finite-math-only'};
             end
             fprintf('SIMD target: scalar fallback\n');
     end
@@ -207,7 +216,7 @@ function build_mex()
                     if useMSVC
                         sse_flags = {'/O2', '/arch:SSE2', '/fp:fast'};
                     else
-                        sse_flags = {'-O3', '-msse2', '-ftree-vectorize', '-ffast-math'};
+                        sse_flags = {'-O3', '-msse2', '-ftree-vectorize', '-ffast-math', '-fno-finite-math-only'};
                     end
                     compile_mex(src_file, out_name, outDir, include_flag, ...
                                 [sse_flags, extra_flags], compiler, extra_srcs);
@@ -312,7 +321,7 @@ function build_mex()
                         if useMSVC
                             sse_flags = {'/O2', '/arch:SSE2', '/fp:fast'};
                         else
-                            sse_flags = {'-O3', '-msse2', '-ftree-vectorize', '-ffast-math'};
+                            sse_flags = {'-O3', '-msse2', '-ftree-vectorize', '-ffast-math', '-fno-finite-math-only'};
                         end
                         compile_mex(srcFile, outName, sensorOutDir, sensorIncFlag, ...
                                     [sse_flags, extraFlags], compiler, extraSrcs);

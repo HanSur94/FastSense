@@ -13,8 +13,17 @@
  *
  * Algorithm:
  *   Phase 1: SIMD NaN scan — detect active segments in SIMD_WIDTH chunks
- *            using self-compare (v == v is false for NaN).  Branchless
- *            conditional store builds the active index array.
+ *            via compare intrinsics (NaN lanes compare unequal to
+ *            themselves).  Branchless conditional store builds the
+ *            active index array.
+ *
+ *   FAST-MATH CONSTRAINT (260610-nwa): this kernel MUST be compiled with
+ *   NaN semantics intact (-fno-finite-math-only after -ffast-math —
+ *   build_mex.m sets this). Under plain -ffast-math the compiler assumes
+ *   no NaNs and folds self-compares — including clang's IR lowering of
+ *   the compare intrinsics — making every NaN segment scan as active.
+ *   Scalar tails use mxIsNaN (an opaque libmx call) so they survive any
+ *   fast-math mode, including MSVC /fp:fast.
  *   Phase 2: SIMD bulk copy to compute segEnds (shifted segBounds).
  *   Phase 3: SIMD gap detection — gather prevEnd/currStart pairs and
  *            compare in SIMD_WIDTH-wide batches.
@@ -78,7 +87,7 @@ static size_t simd_nan_scan(const double *values, size_t nB,
     /* Scalar tail */
     for (; i < nB; i++) {
         activeIdx[cnt] = (uint32_t)i;
-        cnt += (values[i] == values[i]); /* false for NaN */
+        cnt += (size_t)(!mxIsNaN(values[i])); /* opaque call: survives fast-math */
     }
     return cnt;
 }
@@ -141,7 +150,7 @@ static size_t simd_nan_scan(const double *values, size_t nB,
     }
     for (; i < nB; i++) {
         activeIdx[cnt] = (uint32_t)i;
-        cnt += (values[i] == values[i]);
+        cnt += (size_t)(!mxIsNaN(values[i]));
     }
     return cnt;
 }
@@ -203,7 +212,7 @@ static size_t simd_nan_scan(const double *values, size_t nB,
     }
     for (; i < nB; i++) {
         activeIdx[cnt] = (uint32_t)i;
-        cnt += (values[i] == values[i]);
+        cnt += (size_t)(!mxIsNaN(values[i]));
     }
     return cnt;
 }
@@ -251,7 +260,7 @@ static size_t simd_nan_scan(const double *values, size_t nB,
     size_t i;
     for (i = 0; i < nB; i++) {
         activeIdx[cnt] = (uint32_t)i;
-        cnt += (values[i] == values[i]);
+        cnt += (size_t)(!mxIsNaN(values[i]));
     }
     return cnt;
 }
