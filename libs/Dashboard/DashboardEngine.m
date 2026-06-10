@@ -100,6 +100,13 @@ classdef DashboardEngine < handle
         % comparisons below can skip the expensive delete/recreate cycle.
         EventMarkerTimesCache_  = []   % last uTimes passed to setEventMarkers
         EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
+        % Per-CLASS ismethod(w,'getEventMarkers') cache — ismethod on classdef
+        % objects costs ~0.8 ms/call; method presence cannot differ between
+        % instances of one class. containers.Map: class name -> logical. (260610-g0w)
+        GetEventMarkersByClass_ = []
+        % Last stale-banner message applied — skip the uicontrol String set
+        % (WebComponentController churn) when banner is visible and unchanged. (260610-g0w)
+        LastStaleMessage_       = ''
         PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
         FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
         % Phase 1031 PLOG-VIZ-01..09: plant-log slider overlay test seam.
@@ -2054,12 +2061,19 @@ classdef DashboardEngine < handle
                 intervalStr = sprintf('%.1fs', secs);
             end
             msg = obj.buildStaleMessage(staleTitles, intervalStr);
+            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
+            % Skip entirely when the banner is already showing this exact
+            % message — re-setting String/Visible every tick churns the
+            % WebComponentController for no visual change. (260610-g0w)
+            if ~wasHidden && isequal(msg, obj.LastStaleMessage_)
+                return;
+            end
             set(obj.hStaleBannerText, 'String', msg);
+            obj.LastStaleMessage_ = msg;
             % Only raise to front on first show (when transitioning from hidden
             % to visible). Calling uistack on every tick is expensive (~10 ms
             % in uifigure due to WebComponentController updates) and unnecessary
             % once the banner is already visible and at the top.
-            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
             set(obj.hStaleBanner, 'Visible', 'on');
             if wasHidden
                 try
@@ -4136,10 +4150,23 @@ classdef DashboardEngine < handle
 
                 % Prefer the modern colored-marker shape when the widget
                 % advertises it. ismethod works on classdef objects in
-                % both MATLAB and Octave 7+.
+                % both MATLAB and Octave 7+ but costs ~0.8 ms per call on
+                % MATLAB classdef objects — cache the answer per CLASS
+                % (method presence is a class property, not per-instance).
+                % (260610-g0w; profiled at 6 ms/tick on an 8-widget page.)
                 useMarkers = false;
                 try
-                    useMarkers = ismethod(w, 'getEventMarkers');
+                    cls = class(w);
+                    if isempty(obj.GetEventMarkersByClass_)
+                        obj.GetEventMarkersByClass_ = containers.Map( ...
+                            'KeyType', 'char', 'ValueType', 'logical');
+                    end
+                    if obj.GetEventMarkersByClass_.isKey(cls)
+                        useMarkers = obj.GetEventMarkersByClass_(cls);
+                    else
+                        useMarkers = ismethod(w, 'getEventMarkers');
+                        obj.GetEventMarkersByClass_(cls) = useMarkers;
+                    end
                 catch
                     useMarkers = false;
                 end
@@ -4153,24 +4180,64 @@ classdef DashboardEngine < handle
                             'Widget %d getEventMarkers failed: %s', i, err.message);
                         ms = struct('Time', {}, 'Severity', {}, 'Color', {});
                     end
-                    for k = 1:numel(ms)
-                        t = ms(k).Time;
-                        if ~isnumeric(t) || ~isfinite(t)
-                            continue;
+                    if isempty(ms), continue; end
+                    % 260609-v5p: try whole-array extraction (O(nE)) with
+                    % per-element defensive fallback if shapes are unexpected.
+                    tOk = false;
+                    try
+                        tVecW = [ms.Time];
+                        sevVecW = ones(1, numel(ms));
+                        if isfield(ms, 'Severity')
+                            sevVecW = [ms.Severity];
+                            % Non-finite severities default to 1 (OK) — matches the
+                            % per-element fallback; NaN would otherwise sort last in
+                            % the dedup and wrongly win the max-severity tiebreak.
+                            sevVecW(~isfinite(sevVecW)) = 1;
                         end
-                        sev = 1;
-                        if isfield(ms, 'Severity') && isnumeric(ms(k).Severity) && ...
-                                ~isempty(ms(k).Severity) && isfinite(ms(k).Severity(1))
-                            sev = ms(k).Severity(1);
+                        % Build color matrix: one row per element.
+                        cMatW = repmat(okColor, numel(ms), 1);
+                        if isfield(ms, 'Color')
+                            for kc = 1:numel(ms)
+                                cv = ms(kc).Color;
+                                if isnumeric(cv) && numel(cv) == 3
+                                    cMatW(kc, :) = cv(:).';
+                                end
+                            end
                         end
-                        c = okColor;
-                        if isfield(ms, 'Color') && isnumeric(ms(k).Color) && ...
-                                numel(ms(k).Color) == 3
-                            c = ms(k).Color(:).';
+                        % Validate shapes before appending.
+                        if isnumeric(tVecW) && numel(tVecW) == numel(ms) && ...
+                                isnumeric(sevVecW) && numel(sevVecW) == numel(ms) && ...
+                                isnumeric(cMatW) && size(cMatW, 1) == numel(ms)
+                            finMask = isfinite(tVecW);
+                            allTimes  = [allTimes,    tVecW(finMask)];   %#ok<AGROW>
+                            allSev    = [allSev,    sevVecW(finMask)];   %#ok<AGROW>
+                            allColors = [allColors; cMatW(finMask, :)];  %#ok<AGROW>
+                            tOk = true;
                         end
-                        allTimes(end + 1)  = t;          %#ok<AGROW>
-                        allSev(end + 1)    = sev;        %#ok<AGROW>
-                        allColors(end + 1, :) = c;       %#ok<AGROW>
+                    catch
+                        tOk = false;
+                    end
+                    if ~tOk
+                        % Defensive per-element fallback.
+                        for k = 1:numel(ms)
+                            t = ms(k).Time;
+                            if ~isnumeric(t) || ~isfinite(t)
+                                continue;
+                            end
+                            sev = 1;
+                            if isfield(ms, 'Severity') && isnumeric(ms(k).Severity) && ...
+                                    ~isempty(ms(k).Severity) && isfinite(ms(k).Severity(1))
+                                sev = ms(k).Severity(1);
+                            end
+                            c = okColor;
+                            if isfield(ms, 'Color') && isnumeric(ms(k).Color) && ...
+                                    numel(ms(k).Color) == 3
+                                c = ms(k).Color(:).';
+                            end
+                            allTimes(end + 1)  = t;          %#ok<AGROW>
+                            allSev(end + 1)    = sev;        %#ok<AGROW>
+                            allColors(end + 1, :) = c;       %#ok<AGROW>
+                        end
                     end
                 else
                     % Legacy widgets — synthesize default-severity markers.
@@ -4185,10 +4252,12 @@ classdef DashboardEngine < handle
                     if isempty(tVec), continue; end
                     tVec = tVec(:).';
                     tVec = tVec(isfinite(tVec));
-                    for k = 1:numel(tVec)
-                        allTimes(end + 1)  = tVec(k);   %#ok<AGROW>
-                        allSev(end + 1)    = 1;          %#ok<AGROW>
-                        allColors(end + 1, :) = okColor; %#ok<AGROW>
+                    % 260609-v5p: append whole vector at once instead of per-element loop.
+                    nLeg = numel(tVec);
+                    if nLeg > 0
+                        allTimes  = [allTimes,  tVec];                      %#ok<AGROW>
+                        allSev    = [allSev,    ones(1, nLeg)];             %#ok<AGROW>
+                        allColors = [allColors; repmat(okColor, nLeg, 1)];  %#ok<AGROW>
                     end
                 end
             end
@@ -4204,20 +4273,19 @@ classdef DashboardEngine < handle
                 return;
             end
 
-            % Dedup pass with max-severity-wins tiebreaker.
-            % unique() returns a sorted ascending row in both MATLAB and
-            % Octave 7+; idx maps each input row to its bucket in uTimes.
+            % 260609-v5p: O(nE log nE) sort-based dedup replacing O(U*N) loop.
+            % For each unique Time, pick the row with the HIGHEST Severity
+            % (max-severity-wins tiebreaker, unchanged from previous logic).
+            %
+            % Mechanism: sort rows by [idx, severity] so within each idx group
+            % the highest-severity row sorts last. grpEnd picks the last row of
+            % each group. Works on MATLAB R2020b+ and Octave 7+ (sortrows
+            % with a two-column numeric matrix is portable).
             [uTimes, ~, idx] = unique(allTimes);
-            uColors = zeros(numel(uTimes), 3);
-            for k = 1:numel(uTimes)
-                rows = find(idx == k);
-                if numel(rows) == 1
-                    uColors(k, :) = allColors(rows, :);
-                else
-                    [~, pickRel] = max(allSev(rows));
-                    uColors(k, :) = allColors(rows(pickRel), :);
-                end
-            end
+            [~, order] = sortrows([idx(:), allSev(:)]);
+            grpEnd = [find(diff(idx(order)) ~= 0); numel(order)];
+            pick   = order(grpEnd);
+            uColors = allColors(pick, :);
 
             % Cache check: skip the expensive delete/recreate cycle in
             % setEventMarkers when the marker set hasn't changed since the

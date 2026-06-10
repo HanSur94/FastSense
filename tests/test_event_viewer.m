@@ -68,9 +68,30 @@ function test_event_viewer()
     assert(numel(labels) == 3, 'filterLabels: 3 unique labels');
     close(viewer.hFigure);
 
+    % testOpenEventDuration (260610-fta) — open events (IsOpen=true,
+    % EndTime=NaN) must render '(open)' in the duration column, not
+    % 'NaNh NaNm'. hTable is private; locate the uitable via the figure.
+    eo = Event(70, NaN, 'Temperature', 'warning high', 80, 'upper');
+    eo.IsOpen = true;
+    viewer = EventViewer([events, eo]);
+    ht = findobj(viewer.hFigure, 'Type', 'uitable');
+    assert(~isempty(ht), 'openEvent: uitable found');
+    data = get(ht(1), 'Data');
+    durCol = data(:, 3);
+    assert(any(strcmp(durCol, '(open)')), ...
+        'openEvent: open event must show ''(open)'' duration');
+    hasNaN = false;
+    for di = 1:numel(durCol)
+        if ischar(durCol{di}) && ~isempty(strfind(durCol{di}, 'NaN')) %#ok<STREMP>
+            hasNaN = true;
+        end
+    end
+    assert(~hasNaN, 'openEvent: no duration cell may contain NaN text');
+    close(viewer.hFigure);
+
     test_bar_positions_cached();
 
-    fprintf('    All 7 event_viewer tests passed.\n');
+    fprintf('    All 8 event_viewer tests passed.\n');
 end
 
 function test_bar_positions_cached()
