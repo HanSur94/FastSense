@@ -927,6 +927,19 @@ classdef FastSenseCompanion < handle
                     'MachineSelectionChanged', ...
                     @(s, e) obj.onMachineSelected_(e.MachineId));
             end
+            % Phase 1044 (WR-04) -- re-register the EventViewer destruction
+            % listeners (mirrors openEventViewer_ at lines ~2128-2131). The
+            % clear-all above deletes them; without this re-wire, closing a
+            % viewer that was open across a machine switch never runs
+            % clearEventViewerHandle_, leaving the Events toolbar button
+            % stuck at Enable='off' for the rest of the session.
+            if ~isempty(obj.EventViewer_) && isvalid(obj.EventViewer_) && ...
+                    ~isempty(obj.EventViewer_.hFigure) && isgraphics(obj.EventViewer_.hFigure)
+                obj.Listeners_{end+1} = addlistener(obj.EventViewer_.hFigure, ...
+                    'ObjectBeingDestroyed', @(~,~) obj.clearEventViewerHandle_());
+                obj.Listeners_{end+1} = addlistener(obj.EventViewer_, ...
+                    'ObjectBeingDestroyed', @(~,~) obj.clearEventViewerHandle_());
+            end
             obj.applyPlaceholderColors_();
         end
 
