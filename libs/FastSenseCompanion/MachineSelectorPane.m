@@ -37,6 +37,7 @@ classdef MachineSelectorPane < handle
         Listeners_     = {}   % addlistener returns; deleted on detach
         AllMachines_   = {}   % snapshot cell of Machine handles (full fleet)
         SearchTerm_    = ''   % current search string
+        ActiveId_      = ''   % Id of the active machine ('' until first select)
         DebounceTimer_ = []   % timer or []; nil until first keystroke
         Theme_         = []   % resolved CompanionTheme struct
         Fleet_         = []   % Fleet handle (data source)
@@ -70,6 +71,7 @@ classdef MachineSelectorPane < handle
 
             % Reset filter state
             obj.SearchTerm_ = '';
+            obj.ActiveId_   = '';
 
             % --- Build 5-row x 1-col uigridlayout per UI-SPEC ---
             hGrid = uigridlayout(obj.hPanel_, [5 1]);
@@ -211,6 +213,19 @@ classdef MachineSelectorPane < handle
                 end
                 obj.hListbox_.Items     = items;
                 obj.hListbox_.ItemsData = itemsData;
+                % Re-assert the active machine's highlight: assigning Items
+                % silently resets a single-select Value to the first visible
+                % item WITHOUT firing ValueChangedFcn, desyncing the listbox
+                % from the toolbar indicator (MACH-03). When the active
+                % machine is filtered out, clear the selection entirely so
+                % no row visually contradicts the active context; re-showing
+                % it (clearing the search) restores its highlight. Neither
+                % assignment fires events.
+                if ~isempty(obj.ActiveId_) && any(strcmp(itemsData, obj.ActiveId_))
+                    obj.hListbox_.Value = obj.ActiveId_;
+                else
+                    try, obj.hListbox_.Value = {}; catch, end
+                end
                 n = numel(filtered);
                 if n == 0
                     obj.hCountLabel_.Text = 'No machines match';
@@ -266,6 +281,10 @@ classdef MachineSelectorPane < handle
                 if isempty(selectedId)
                     return;
                 end
+                % Track the active machine so applyFilter_ can re-assert the
+                % highlight after Items rebuilds (covers both real clicks and
+                % the selectById test seam, which routes through here).
+                obj.ActiveId_ = selectedId;
                 notify(obj, 'MachineSelectionChanged', ...
                     MachineSelectionEventData(selectedId));
             catch err
