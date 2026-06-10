@@ -281,6 +281,16 @@ classdef FastSenseCompanion < handle
                     firstMachine = obj.Fleet_.getMachine(ids{1});
                     firstDash    = firstMachine.Dashboards;
                     if ~iscell(firstDash); firstDash = {firstDash}; end
+                    % WR-06: Machine.Dashboards is a public, unvalidated
+                    % property — enforce the same Step-4 contract as the
+                    % legacy intake and setProject so bad input fails fast
+                    % and uniformly here instead of deep inside pane render.
+                    for i = 1:numel(firstDash)
+                        if ~isa(firstDash{i}, 'DashboardEngine')
+                            error('FastSenseCompanion:invalidDashboard', ...
+                                'Dashboards{%d} must be a DashboardEngine instance.', i);
+                        end
+                    end
                     obj.Engines_    = firstDash;
                     obj.Dashboards  = firstDash;
                     obj.Registry_   = firstMachine;
