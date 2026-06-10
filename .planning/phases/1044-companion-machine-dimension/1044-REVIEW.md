@@ -284,6 +284,60 @@ decision, not an omission.
 
 ---
 
+## Fix Round 1
+
+**Fixed:** 2026-06-10 — all 6 warnings addressed (WR-03 partially, by locked plan
+decision); Info findings IN-01..IN-07 not in scope this round.
+
+| Finding | Status | Commit | Files touched |
+|---------|--------|--------|---------------|
+| WR-01 | Fixed (new pane) | `6c3e4c37` | `libs/FastSenseCompanion/MachineSelectorPane.m` |
+| WR-01 (pre-existing pair) | Fixed | `0e573d81` | `libs/FastSenseCompanion/TagCatalogPane.m`, `libs/FastSenseCompanion/DashboardListPane.m` |
+| WR-02 | Fixed | `0a266bf3` | `libs/FastSenseCompanion/MachineSelectorPane.m` |
+| WR-03 | Partial — graceful degradation only; threading deferred | `879af2a2` | `libs/FastSenseCompanion/private/openAdHocPlot.m` |
+| WR-04 | Fixed | `825bf184` | `libs/FastSenseCompanion/FastSenseCompanion.m` |
+| WR-05 | Fixed | `dce60cf2` | `libs/FastSenseCompanion/TagCatalogPane.m` |
+| WR-06 | Fixed | `2d24ed4e` | `libs/FastSenseCompanion/FastSenseCompanion.m` |
+
+**Per-finding notes:**
+
+- **WR-01:** `singleShot` debounce now uses `StartDelay = 0.150` (Period is ignored
+  in that mode). The two pre-existing copies of the broken template
+  (`TagCatalogPane.m`, `DashboardListPane.m`) received the identical one-line fix
+  in a separate, non-phase-scoped commit so all three panes stay consistent.
+- **WR-02:** New `ActiveId_` state, set in `onMachineSelected_` (covers real clicks
+  and the `selectById` test seam). `applyFilter_` re-asserts the highlight when the
+  active machine is visible; when filtered out it clears the selection
+  (`Value = {}`, guarded by try/catch) so no row contradicts the toolbar indicator.
+  Neither assignment fires `ValueChangedFcn`.
+- **WR-03 (DEFERRAL):** Only the graceful-degradation half was implemented:
+  `findEventStoreFor_` in `openAdHocPlot.m` now short-circuits (with a named,
+  non-fatal `FastSenseCompanion:machineScopedTagNoOverlay` warning naming the key)
+  when the plotted tag handle is not registered in the global `TagRegistry` —
+  this both skips overlays cleanly for machine-scoped tags and blocks the
+  cross-contamination path (stale same-key global tags drawing foreign overlays).
+  **Threading the active machine context through `InspectorPane`,
+  `inspectorResolveState`, `openAdHocPlot`, `companionDiscoverEventStore`, and
+  `CompanionEventViewer` is explicitly deferred to Phase 1045 (cross-machine
+  comparison view)** — the Phase 1044 plan locked the redirect to four sites only.
+- **WR-04:** `setProject`'s re-wire block now re-registers both EventViewer
+  `ObjectBeingDestroyed` listeners (figure + object), guarded by handle validity,
+  mirroring the registration in `openEventViewer_` and the conditional pattern of
+  the other pane re-wires.
+- **WR-05:** Both `attach` and `refresh` route `isempty(Registry_)` through the
+  static `TagRegistry.find` path, restoring pre-phase tolerance for `[]`. The
+  review's optional `FastSenseCompanion:invalidRegistry` boundary validation in
+  `setProject` was NOT added (kept minimal per fix-round scope).
+- **WR-06:** Constructor fleet auto-select branch validates each
+  `firstMachine.Dashboards` element with the exact Step-4 check and
+  `FastSenseCompanion:invalidDashboard` id.
+
+_Fixed: 2026-06-10_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 1_
+
+---
+
 _Reviewed: 2026-06-10_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
