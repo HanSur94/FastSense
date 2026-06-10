@@ -341,3 +341,17 @@ _Iteration: 1_
 _Reviewed: 2026-06-10_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+## Fix Round 1 — Orchestrator Verification (2026-06-10)
+
+| Target | Result |
+|--------|--------|
+| `tests/test_machine_selector_pane.m` (WR-01/02) | 5/5 PASS |
+| `tests/test_fleet.m` | 6/6 PASS |
+| `tests/test_companion_open_ad_hoc_plot.m` (WR-03) | 9/9 PASS |
+| `tests/suite/TestCompanionEventViewer.m` (WR-04) | 57/57 PASS |
+| `tests/suite/TestFastSenseCompanion.m` (WR-02/04/05/06 + fleet + legacy) | 82/84 — identical to pre-fix baseline; both failures are the documented pre-existing PerTag/ADHOC05 orphan-timer flake pair |
+
+**Revert note:** `0e573d81` (WR-01 pre-existing pair — StartDelay in TagCatalogPane + DashboardListPane) was REVERTED in `e2b5894f`. Rationale: ~17 pre-existing `TestTagCatalogPane` interaction tests assert filter results immediately after keystrokes/clicks — they encode the instant-fire behavior, and a real 150ms debounce would break them in CI where they run natively. The correct fix (StartDelay + test modernization) is a standalone follow-up task. The NEW `MachineSelectorPane` keeps the correct `StartDelay` debounce (its tests don't race).
+
+**TestTagCatalogPane environmental note:** the suite shows 19 failures in MCP/engine-driven sessions — 18 abort in `findFig` (`findobj` cannot see uifigures with HandleVisibility off in engine sessions; same documented class as TestDashboardListPane BROWSER*; fixed in TestFastSenseCompanion via findall in 260511-mjb, never applied here) + 1 stale source-scan test (`testListenersPropertyExists` expects the literal `delete(obj.Listeners_)` removed by `889562c0` on 2026-04-30). All pre-existing; none caused by Phase 1044 or this fix round.
