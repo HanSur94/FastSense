@@ -1027,10 +1027,25 @@ classdef FastSenseWidget < DashboardWidget
                 nBuckets = double(floor(nBuckets));
 
                 % Fetch raw [x, y] from Tag, or from XData/YData.
+                % 260610-ov3: when the render-scoped cache is warm (load-time
+                % computePreviewEnvelope runs inside the render pass), reuse
+                % the already-resolved arrays without calling Tag.getXY again.
+                % Read-only reuse — getPreviewSeries never warms the cache.
+                % At live-tick time the cache is always cold (clearRenderCache_
+                % ran at end of render/rebuildForTag), so the cold path is
+                % byte-identical to pre-260610-ov3 behavior.
                 x = []; y = [];
                 if ~isempty(obj.Tag)
                     try
-                        [x, y] = obj.Tag.getXY();
+                        if ~isempty(obj.RenderDataCache_) && ...
+                                isstruct(obj.RenderDataCache_) && ...
+                                isfield(obj.RenderDataCache_, 'x') && ...
+                                isfield(obj.RenderDataCache_, 'y')
+                            x = obj.RenderDataCache_.x;
+                            y = obj.RenderDataCache_.y;
+                        else
+                            [x, y] = obj.Tag.getXY();
+                        end
                     catch
                         x = []; y = [];
                     end
