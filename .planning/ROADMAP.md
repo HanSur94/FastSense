@@ -142,8 +142,25 @@ Plans:
   4. The builder refuses to auto-include LOW-confidence / unreviewed canonical matches — they are surfaced and require explicit per-machine confirmation; a unit mismatch on a manual substitution triggers a warning; `CanonicalMapper.resolve` is absent from the steady-state tick profile (tags resolved once at open time, cached)
   5. In the builder, user can accept auto-match, confirm a low-confidence match, pick a different local tag per machine, or skip a machine; a manual override can be promoted into the canonical map
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+Plans:
+**Wave 1**
+
+- [ ] 1045-01-PLAN.md — Wave 1: CanonicalMapper.resolve + buildCompareResolution_/compareSeriesColor_ pure helpers + flat test (CMP-02/03/04/05 seam)
+- [ ] 1045-02-PLAN.md — Wave 1: openAdHocPlot SeriesColors/SeriesLabels NV args + legacy byte-compat + NV-arg tests (CMP-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 1045-03-PLAN.md — Wave 2: CompareBuilderDialog — modeless dialog shell + four-state row grid + resolve-once-at-open Open path (CMP-01/03/04/05/06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 1045-04-PLAN.md — Wave 3: per-row Confirm + Promote (uiconfirm async, in-memory override) + theme refresh (CMP-06)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 1045-05-PLAN.md — Wave 4: fleet-mode Compare toolbar button + CompareBuilderDlg_ singleton + close() teardown + CMP class-suite tests + human-verify checkpoint (CMP-01/02/05/06)
 
 ### Phase 1046: Per-Machine Dashboard Clone/Remap
 
@@ -168,5 +185,5 @@ Plans:
 | 1042. Machine + Fleet + Pipeline DI Seam | 4/4 | Complete   | 2026-06-07 |
 | 1043. DashboardSerializer Resolver Seam + Backward Compat | 3/3 | Complete   | 2026-06-07 |
 | 1044. Companion Machine Dimension | 0/5 | Not started | - |
-| 1045. Cross-Machine Comparison View | 0/? | Not started | - |
+| 1045. Cross-Machine Comparison View | 0/5 | Not started | - |
 | 1046. Per-Machine Dashboard Clone/Remap | 0/? | Not started | - |
