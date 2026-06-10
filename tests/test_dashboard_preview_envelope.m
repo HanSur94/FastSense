@@ -165,16 +165,23 @@ function case_threshold_boundary_at_101()
 end
 
 function case_large_dataset_unchanged()
-%CASE_LARGE_DATASET_UNCHANGED 500 samples -> nBuckets=200 (legacy behavior).
+%CASE_LARGE_DATASET_UNCHANGED 500 samples -> downsampled to ~200 buckets.
+%   260610-g0w: the bucket count is requested-or-more, not exact. The
+%   minmax MEX core bumps nb internally to keep buckets equal-width
+%   (260512 bucket-math: nb_eff = floor(n/floor(n/nb))), so when the MEX
+%   is reachable (tests addpath the FastSense private dir) 500/200 yields
+%   250 buckets; the pure-MATLAB fallback yields exactly 200. Both are
+%   valid downsampled previews — assert the adaptive range.
     n = 500;
     x = linspace(0, 100, n);
     y = sin(x * 0.1);
     w = FastSenseWidget('Title', 'wlarge', 'XData', x, 'YData', y);
     s = w.getPreviewSeries(200);
     assert(~isempty(s), 'Case 6: getPreviewSeries returned [] for 500-sample widget');
-    assert(numel(s.xCenters) == 200, ...
-        sprintf('Case 6: expected numel(xCenters)=200 (downsampled), got %d', ...
-                numel(s.xCenters)));
+    nbMax = floor(n / max(1, floor(n / 200)));  % MEX bucket-bump upper bound
+    assert(numel(s.xCenters) >= 200 && numel(s.xCenters) <= nbMax, ...
+        sprintf('Case 6: expected 200..%d downsampled buckets, got %d', ...
+                nbMax, numel(s.xCenters)));
 end
 
 function case_small_with_nans()

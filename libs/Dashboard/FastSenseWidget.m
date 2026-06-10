@@ -1029,40 +1029,40 @@ classdef FastSenseWidget < DashboardWidget
                     [xOut, yOut] = localMinMaxBuckets_(x, y, nBucketsEff);
                 end
 
-                % Accept BOTH 2*nb (no tail anchor) and 2*nb+1 (anchor
-                % appended by minmax cores — 260512-c5x). The slider
-                % preview only needs paired (min, max) per bucket; the
-                % anchor is informational for the main chart and is
-                % safely dropped here before the reshape (drops the
-                % single trailing anchor (x, y) pair tail).
+                % 260610-g0w: derive the pair count from the OUTPUT length
+                % instead of asserting the requested count. The minmax core
+                % may BUMP the bucket count internally (260512 bucket-math:
+                % nb_eff = floor(n/floor(n/nb)) >= nb, so output is
+                % 2*nb_eff or 2*nb_eff+1 with the tail anchor). The old
+                % equality check against 2*nBucketsEff silently returned []
+                % for most n above PreviewRawThreshold_ — slider preview
+                % lines vanished and the cache never stored.
                 %
-                % 260512-cxc: capture the tail anchor BEFORE the drop so we
-                % can thread it through to xCenters(end). The drop itself
-                % is still required because reshape(xOut, 2, nb) below
-                % needs an even-length vector. Without this capture, the
-                % slider preview's last bucket freezes at the interior
-                % min/max midpoint and never advances under live data
-                % growth (visible "stuck preview tail" on the industrial
-                % plant demo's reactor.pressure widget).
+                % Odd length = tail anchor present (260512-c5x). Capture it
+                % BEFORE the drop so it can be threaded to xCenters(end);
+                % the reshape below needs an even-length vector. (260512-cxc:
+                % without the capture the preview tail freezes at the
+                % interior midpoint under live growth.)
                 anchorX = [];
                 anchorY = []; %#ok<NASGU>  % captured for future symmetry;
                                            % yMinB/yMaxB already include
                                            % the anchor's y because
                                            % minmax_core_mex scans the
                                            % full last bucket.
-                if numel(xOut) == 2 * nBucketsEff + 1 && numel(yOut) == 2 * nBucketsEff + 1
+                if numel(xOut) ~= numel(yOut) || numel(xOut) < 2
+                    return;
+                end
+                if mod(numel(xOut), 2) == 1
                     anchorX = xOut(end);
                     anchorY = yOut(end); %#ok<NASGU>
                     xOut = xOut(1:end - 1);
                     yOut = yOut(1:end - 1);
                 end
-                if numel(xOut) ~= 2 * nBucketsEff || numel(yOut) ~= 2 * nBucketsEff
-                    return;
-                end
+                nbOut = numel(xOut) / 2;
 
                 % Interleaved (min,max) or (max,min) pairs per bucket.
-                xPairs = reshape(xOut, 2, nBucketsEff);
-                yPairs = reshape(yOut, 2, nBucketsEff);
+                xPairs = reshape(xOut, 2, nbOut);
+                yPairs = reshape(yOut, 2, nbOut);
                 yMinB  = min(yPairs, [], 1);
                 yMaxB  = max(yPairs, [], 1);
                 xCenters = (xPairs(1, :) + xPairs(2, :)) / 2;
@@ -1248,40 +1248,68 @@ classdef FastSenseWidget < DashboardWidget
                 end
 
                 % 260609-v5p: preallocate numeric arrays to avoid per-element
-                % AGROW. Fill in loop; mask non-finite; compute colors once
-                % per unique severity; build struct array in one shot.
+                % AGROW. 260610-g0w: attempt whole-array field extraction
+                % first — [raw.StartTime] is one call instead of N property
+                % reads + 2N isprop probes per tick (profiled at 8k isprop
+                % calls per 20 ticks on a 200-event store). Falls back to
+                % the defensive per-element loop on any irregular shape.
                 n = numel(raw);
                 tArr  = nan(1, n);
                 sevArr = ones(1, n);
-                for i = 1:n
-                    tVal = NaN;
-                    sevVal = 1;
-                    if isstruct(raw)
-                        if isfield(raw, 'StartTime')
+                fastOk = false;
+                try
+                    tFast   = [raw.StartTime];
+                    sevFast = [raw.Severity];
+                    % Both fields must extract to exactly one scalar per
+                    % event — a shrunk vector (some events carry empty
+                    % Severity) routes to the per-element loop so partial
+                    % severities are not silently defaulted.
+                    if isnumeric(tFast) && numel(tFast) == n && ...
+                            isnumeric(sevFast) && numel(sevFast) == n
+                        tArr = double(tFast(:).');
+                        sevArr = double(sevFast(:).');
+                        sevArr(~isfinite(sevArr)) = 1;
+                        fastOk = true;
+                    end
+                catch
+                    fastOk = false;
+                end
+                if ~fastOk
+                    % Hoist the field/property probes out of the loop —
+                    % shapes are homogeneous within one raw array.
+                    isStructRaw = isstruct(raw);
+                    if isStructRaw
+                        hasST  = isfield(raw, 'StartTime');
+                        hasSt2 = isfield(raw, 'startTime');
+                        hasSv  = isfield(raw, 'Severity');
+                        hasSv2 = isfield(raw, 'severity');
+                    else
+                        hasST  = isprop(raw(1), 'StartTime');
+                        hasSt2 = false;
+                        hasSv  = isprop(raw(1), 'Severity');
+                        hasSv2 = false;
+                    end
+                    for i = 1:n
+                        tVal = NaN;
+                        sevVal = 1;
+                        if hasST
                             tVal = raw(i).StartTime;
-                        elseif isfield(raw, 'startTime')
+                        elseif hasSt2
                             tVal = raw(i).startTime;
                         end
-                        if isfield(raw, 'Severity') && ~isempty(raw(i).Severity)
+                        if hasSv && ~isempty(raw(i).Severity)
                             sevVal = raw(i).Severity;
-                        elseif isfield(raw, 'severity') && ~isempty(raw(i).severity)
+                        elseif hasSv2 && ~isempty(raw(i).severity)
                             sevVal = raw(i).severity;
                         end
-                    else
-                        if isprop(raw(i), 'StartTime')
-                            tVal = raw(i).StartTime;
+                        if isnumeric(tVal) && isfinite(tVal)
+                            tArr(i) = tVal;
                         end
-                        if isprop(raw(i), 'Severity') && ~isempty(raw(i).Severity)
-                            sevVal = raw(i).Severity;
+                        if ~isnumeric(sevVal) || isempty(sevVal) || ~isfinite(sevVal(1))
+                            sevArr(i) = 1;
+                        else
+                            sevArr(i) = sevVal(1);
                         end
-                    end
-                    if isnumeric(tVal) && isfinite(tVal)
-                        tArr(i) = tVal;
-                    end
-                    if ~isnumeric(sevVal) || isempty(sevVal) || ~isfinite(sevVal(1))
-                        sevArr(i) = 1;
-                    else
-                        sevArr(i) = sevVal(1);
                     end
                 end
                 % Discard entries where time was non-finite.

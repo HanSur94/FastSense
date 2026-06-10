@@ -356,6 +356,37 @@ function test_dashboard_perf_fixes()
         fprintf('    test_engine_dedup_tiebreaker: FAIL: %s\n', ME.message);
     end
 
+    % ------------------------------------------------------------------
+    % TEST C (260610-g0w) — getPreviewSeries must tolerate the minmax
+    % core's internal bucket-count bump (260512 bucket-math: output is
+    % 2*nb_eff(+1) with nb_eff >= requested). The old exact-shape check
+    % silently returned [] for most n above PreviewRawThreshold_ — slider
+    % preview lines vanished and PreviewCache_ never stored.
+    % ------------------------------------------------------------------
+    try
+        xi = linspace(0, 1000, 50000);  % 50000/600 has a remainder -> bump
+        tagC = SensorTag('PVS-1', 'X', xi, 'Y', sin(xi / 7));
+        wC = FastSenseWidget('Tag', tagC);
+        s = wC.getPreviewSeries(600);
+        assert(~isempty(s) && isstruct(s), ...
+            'getPreviewSeries must return a series for 50k samples / 600 buckets');
+        assert(numel(s.xCenters) >= 600, ...
+            sprintf('expected >= 600 buckets, got %d', numel(s.xCenters)));
+        assert(numel(s.xCenters) == numel(s.yMin) && numel(s.yMin) == numel(s.yMax), ...
+            'series fields must be same length');
+        assert(all(diff(s.xCenters) > 0), 'xCenters must be strictly increasing');
+        % Cache must store and hit on the repeat call.
+        assert(~isempty(wC.PreviewCacheKey_), 'PreviewCacheKey_ must store after compute');
+        s2 = wC.getPreviewSeries(600);
+        assert(isequal(s, s2), 'repeat call must return the cached series');
+        passed = passed + 1;
+        fprintf('    test_preview_series_bucket_bump: PASS\n');
+    catch ME
+        failed = failed + 1;
+        failures{end+1} = sprintf('test_preview_series_bucket_bump: %s', ME.message);
+        fprintf('    test_preview_series_bucket_bump: FAIL: %s\n', ME.message);
+    end
+
     fprintf('\n    %d/%d tests passed.\n', passed, passed + failed);
     if failed > 0
         error('test_dashboard_perf_fixes:failed', ...

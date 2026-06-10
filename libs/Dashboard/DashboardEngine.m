@@ -100,6 +100,13 @@ classdef DashboardEngine < handle
         % comparisons below can skip the expensive delete/recreate cycle.
         EventMarkerTimesCache_  = []   % last uTimes passed to setEventMarkers
         EventMarkerColorsCache_ = []   % last uColors (Nx3) passed to setEventMarkers
+        % Per-CLASS ismethod(w,'getEventMarkers') cache — ismethod on classdef
+        % objects costs ~0.8 ms/call; method presence cannot differ between
+        % instances of one class. containers.Map: class name -> logical. (260610-g0w)
+        GetEventMarkersByClass_ = []
+        % Last stale-banner message applied — skip the uicontrol String set
+        % (WebComponentController churn) when banner is visible and unchanged. (260610-g0w)
+        LastStaleMessage_       = ''
         PreviewLinesCache_      = {}   % last linesList (cell of structs) passed to setPreviewLines
         FigureDestroyedListener_ = []  % event.listener — fires onFigureDestroyed_ when obj.hFigure is destroyed (260511-mjb)
         % Phase 1031 PLOG-VIZ-01..09: plant-log slider overlay test seam.
@@ -2054,12 +2061,19 @@ classdef DashboardEngine < handle
                 intervalStr = sprintf('%.1fs', secs);
             end
             msg = obj.buildStaleMessage(staleTitles, intervalStr);
+            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
+            % Skip entirely when the banner is already showing this exact
+            % message — re-setting String/Visible every tick churns the
+            % WebComponentController for no visual change. (260610-g0w)
+            if ~wasHidden && isequal(msg, obj.LastStaleMessage_)
+                return;
+            end
             set(obj.hStaleBannerText, 'String', msg);
+            obj.LastStaleMessage_ = msg;
             % Only raise to front on first show (when transitioning from hidden
             % to visible). Calling uistack on every tick is expensive (~10 ms
             % in uifigure due to WebComponentController updates) and unnecessary
             % once the banner is already visible and at the top.
-            wasHidden = strcmp(get(obj.hStaleBanner, 'Visible'), 'off');
             set(obj.hStaleBanner, 'Visible', 'on');
             if wasHidden
                 try
@@ -4136,10 +4150,23 @@ classdef DashboardEngine < handle
 
                 % Prefer the modern colored-marker shape when the widget
                 % advertises it. ismethod works on classdef objects in
-                % both MATLAB and Octave 7+.
+                % both MATLAB and Octave 7+ but costs ~0.8 ms per call on
+                % MATLAB classdef objects — cache the answer per CLASS
+                % (method presence is a class property, not per-instance).
+                % (260610-g0w; profiled at 6 ms/tick on an 8-widget page.)
                 useMarkers = false;
                 try
-                    useMarkers = ismethod(w, 'getEventMarkers');
+                    cls = class(w);
+                    if isempty(obj.GetEventMarkersByClass_)
+                        obj.GetEventMarkersByClass_ = containers.Map( ...
+                            'KeyType', 'char', 'ValueType', 'logical');
+                    end
+                    if obj.GetEventMarkersByClass_.isKey(cls)
+                        useMarkers = obj.GetEventMarkersByClass_(cls);
+                    else
+                        useMarkers = ismethod(w, 'getEventMarkers');
+                        obj.GetEventMarkersByClass_(cls) = useMarkers;
+                    end
                 catch
                     useMarkers = false;
                 end

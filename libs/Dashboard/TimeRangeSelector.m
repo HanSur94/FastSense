@@ -1286,6 +1286,7 @@ classdef TimeRangeSelector < handle
 
         function onButtonDown_(obj)
             %onButtonDown_  Begin a drag if the pointer is inside the axes.
+            if ~obj.isLive_(), return; end
             [inAxes, xData] = obj.pointerInAxes_();
             if ~inAxes
                 return;
@@ -1312,6 +1313,13 @@ classdef TimeRangeSelector < handle
 
         function onButtonMotion_(obj)
             %onButtonMotion_  Dispatch an in-flight drag to resize or pan.
+            % Deleted-selector guard (260610-g0w): the figure-level closure
+            % can outlive obj — PlantLogSliderHover chains the saved
+            % WindowButtonMotionFcn, and engine rerenders can replace the
+            % selector while the chained copy still references the old one.
+            % Property access on the deleted handle raised 'Invalid or
+            % deleted object' on every mouse move over the figure.
+            if ~obj.isLive_(), return; end
             if strcmp(obj.DragState, 'idle')
                 return;
             end
@@ -1333,9 +1341,29 @@ classdef TimeRangeSelector < handle
 
         function onButtonUp_(obj)
             %onButtonUp_  End the current drag and reset drag-start caches.
+            if ~obj.isLive_(), return; end
             obj.DragState = 'idle';
             obj.DragStartX = [];
             obj.DragStartSel = [];
+        end
+
+        function tf = isLive_(obj)
+            %isLive_  True when obj has not been delete()d.
+            %   Method dispatch on a deleted classdef handle succeeds; it is
+            %   the first PROPERTY access that raises 'Invalid or deleted
+            %   object'. isvalid() answers this directly on MATLAB but is
+            %   not implemented for classdef handles on Octave 7+ — fall
+            %   back to a guarded property probe there.
+            try
+                tf = isvalid(obj);
+            catch
+                try
+                    tmp = obj.DragState; %#ok<NASGU>  access throws when deleted
+                    tf = true;
+                catch
+                    tf = false;
+                end
+            end
         end
     end
 end
