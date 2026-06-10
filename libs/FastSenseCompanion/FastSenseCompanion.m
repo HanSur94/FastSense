@@ -85,6 +85,11 @@ classdef FastSenseCompanion < handle
         CatalogPane_   = []   % TagCatalogPane instance
         ListPane_      = []   % DashboardListPane instance
         InspectorPane_ = []   % InspectorPane instance
+        % Phase 1044 — machine dimension (fleet mode only; [] in legacy mode).
+        Fleet_                = []   % Fleet handle or [] (legacy single-machine)
+        MachineSelectorPane_  = []   % MachineSelectorPane instance (col-1 left rail)
+        hMachineSelectorPanel_ = []  % col-1 uipanel hosting the selector (fleet mode only)
+        hActiveMachineLabel_  = []   % toolbar active-machine uilabel (fleet mode only)
         Engines_       = {}   % internal copy of Dashboards cell (DashboardEngine handles)
         Registry_      = []   % internal Registry_ reference
         SelectedDashboardIdx_ = 0    % 1-based; 0 = nothing selected (Phase 1020)
@@ -148,6 +153,7 @@ classdef FastSenseCompanion < handle
             userSharedRoot         = '';
             userLiveTagPipelines   = {};
             userLiveEventPipelines = {};
+            userFleet              = [];
 
             % Step 2b — Override with stored prefdir values (if present and well-formed).
             % Priority: built-in default < prefdir < explicit Name-Value (Step 3).
@@ -222,11 +228,18 @@ classdef FastSenseCompanion < handle
                             end
                         end
                         userLiveEventPipelines = v;
+                    case 'Fleet'
+                        v = varargin{k+1};
+                        if ~isempty(v) && ~isa(v, 'Fleet')
+                            error('FastSenseCompanion:invalidFleet', ...
+                                'Fleet must be a Fleet handle or [] (got %s).', class(v));
+                        end
+                        userFleet = v;
                     otherwise
                         error('FastSenseCompanion:unknownOption', ...
                             ['Unknown option ''%s''. Valid options: ', ...
                              'Dashboards, Registry, Name, Theme, LivePeriod, EventStore, SharedRoot, ', ...
-                             'LiveTagPipelines, LiveEventPipelines.'], key);
+                             'LiveTagPipelines, LiveEventPipelines, Fleet.'], key);
                 end
             end
 
@@ -255,6 +268,8 @@ classdef FastSenseCompanion < handle
             obj.Theme_      = CompanionTheme.get(userTheme);
             obj.LivePeriod_ = userLivePeriod;
             obj.LivePeriod  = userLivePeriod;
+            % Phase 1044 — store the optional Fleet handle (or [] in legacy mode).
+            obj.Fleet_      = userFleet;
 
             % --- Cluster mode resolution (Phase 1033 Plan 01; OPS-01 partial) ---
             obj.SharedRoot_     = userSharedRoot;
@@ -298,18 +313,31 @@ classdef FastSenseCompanion < handle
             obj.hFig_.Color = obj.Theme_.DashboardBackground;
 
             % Step 8 — Root grid (3 rows: top toolbar = 32 px, panes = 1x, log strip = 360 px)
-            obj.hLayout_ = uigridlayout(obj.hFig_, [3 3]);
-            obj.hLayout_.ColumnWidth   = {220, '1x', 360};
+            % Phase 1044 — conditional construction: with a Fleet the grid gains a
+            % 170 px left-rail column (col 1) for the MachineSelectorPane and the
+            % three existing panes shift right by one; without a Fleet the layout
+            % is byte-identical to the legacy [3 3] window.
+            if ~isempty(obj.Fleet_)
+                obj.hLayout_ = uigridlayout(obj.hFig_, [3 4]);
+                obj.hLayout_.ColumnWidth   = {170, 220, '1x', 360};
+            else
+                obj.hLayout_ = uigridlayout(obj.hFig_, [3 3]);
+                obj.hLayout_.ColumnWidth   = {220, '1x', 360};
+            end
             obj.hLayout_.RowHeight     = {32, '1x', 360};
             obj.hLayout_.Padding       = [24 24 24 24];
             obj.hLayout_.ColumnSpacing = 16;
             obj.hLayout_.RowSpacing    = 12;
             obj.hLayout_.BackgroundColor = obj.Theme_.DashboardBackground;
 
-            % Step 9a — Top toolbar panel (row 1, spans all 3 columns).
+            % Step 9a — Top toolbar panel (row 1, spans all columns).
             obj.hToolbarPanel_ = uipanel(obj.hLayout_);
             obj.hToolbarPanel_.Layout.Row    = 1;
-            obj.hToolbarPanel_.Layout.Column = [1 3];
+            if ~isempty(obj.Fleet_)
+                obj.hToolbarPanel_.Layout.Column = [1 4];   % fleet mode: span the extra left rail
+            else
+                obj.hToolbarPanel_.Layout.Column = [1 3];
+            end
             obj.hToolbarPanel_.BorderType      = 'none';
             obj.hToolbarPanel_.BackgroundColor = obj.Theme_.WidgetBackground;
             % Inner 1x9 grid (v3.1 Plant Log + v4.0 Wiki Browser merged):
@@ -323,8 +351,16 @@ classdef FastSenseCompanion < handle
             %   col 8 = Notification center bell (Phase 1040)           ( 70)
             %   col 9 = flex spacer                                     ('1x')
             %   col 10 = Settings gear                                  ( 36)
-            hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 10]);
-            hToolbarGrid.ColumnWidth     = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
+            % Phase 1044 — fleet mode inserts an active-machine label between the
+            % flex spacer (col 9) and the gear, so the grid grows [1 10] -> [1 11]
+            % with the gear shifted to the new last column. Legacy stays [1 10].
+            if ~isempty(obj.Fleet_)
+                hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 11]);
+                hToolbarGrid.ColumnWidth = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 'fit', 36};
+            else
+                hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 10]);
+                hToolbarGrid.ColumnWidth = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
+            end
             hToolbarGrid.RowHeight       = {'1x'};
             hToolbarGrid.Padding         = [4 0 4 0];
             hToolbarGrid.ColumnSpacing   = 8;
@@ -437,10 +473,32 @@ classdef FastSenseCompanion < handle
                 obj.hBellBtn_.Tooltip = 'No EventStore registered';
             end
 
-            % Col 10 — Settings gear (Phase 1040 shifted it 9 -> 10 to make room for the bell).
+            % Phase 1044 — fleet mode: active-machine indicator label at col 10
+            % (text populated by updateActiveMachineIndicator_ in Plan 04). The
+            % gear then sits in the new last column (11). Legacy: gear stays col 10,
+            % no label created.
+            if ~isempty(obj.Fleet_)
+                obj.hActiveMachineLabel_ = uilabel(hToolbarGrid);
+                obj.hActiveMachineLabel_.Layout.Row    = 1;
+                obj.hActiveMachineLabel_.Layout.Column = 10;
+                obj.hActiveMachineLabel_.Text          = '';
+                obj.hActiveMachineLabel_.FontSize      = 11;
+                obj.hActiveMachineLabel_.FontWeight    = 'bold';
+                obj.hActiveMachineLabel_.FontColor     = obj.Theme_.Accent;
+                obj.hActiveMachineLabel_.BackgroundColor    = obj.Theme_.WidgetBackground;
+                obj.hActiveMachineLabel_.HorizontalAlignment = 'left';
+                obj.hActiveMachineLabel_.VerticalAlignment   = 'center';
+                obj.hActiveMachineLabel_.Tag           = 'CompanionActiveMachineLabel';
+                gearColumn = 11;
+            else
+                gearColumn = 10;
+            end
+
+            % Settings gear (Phase 1040 shifted it 9 -> 10 to make room for the bell;
+            % Phase 1044 shifts it 10 -> 11 in fleet mode for the active-machine label).
             obj.hSettingsBtn_ = uibutton(hToolbarGrid, 'push');
             obj.hSettingsBtn_.Layout.Row    = 1;
-            obj.hSettingsBtn_.Layout.Column = 10;
+            obj.hSettingsBtn_.Layout.Column = gearColumn;
             obj.hSettingsBtn_.Text          = char(9881);   % gear glyph
             obj.hSettingsBtn_.FontSize      = 14;
             obj.hSettingsBtn_.Tooltip       = 'Companion settings';
@@ -448,15 +506,25 @@ classdef FastSenseCompanion < handle
             obj.hSettingsBtn_.FontColor       = obj.Theme_.ForegroundColor;
             obj.hSettingsBtn_.ButtonPushedFcn = @(~,~) obj.openSettings();
 
-            % Step 9b — Three uipanels in row 2 + log panel spanning row 3.
+            % Step 9b — Pane uipanels in row 2 + log panel spanning row 3.
+            % Phase 1044 — fleet mode prepends the MachineSelectorPane panel in
+            % col 1 and shifts Tags/Dashboards/Inspector to cols 2/3/4; the log
+            % strip spans [1 4]. Legacy keeps cols 1/2/3 and a [1 3] log span.
+            if ~isempty(obj.Fleet_)
+                obj.hMachineSelectorPanel_ = uipanel(obj.hLayout_);
+                obj.hMachineSelectorPanel_.Layout.Row = 2; obj.hMachineSelectorPanel_.Layout.Column = 1;
+                tagsCol = 2; dashCol = 3; inspCol = 4; logSpan = [1 4];
+            else
+                tagsCol = 1; dashCol = 2; inspCol = 3; logSpan = [1 3];
+            end
             obj.hLeftPanel_  = uipanel(obj.hLayout_);
-            obj.hLeftPanel_.Layout.Row = 2; obj.hLeftPanel_.Layout.Column = 1;
+            obj.hLeftPanel_.Layout.Row = 2; obj.hLeftPanel_.Layout.Column = tagsCol;
             obj.hMidPanel_   = uipanel(obj.hLayout_);
-            obj.hMidPanel_.Layout.Row = 2; obj.hMidPanel_.Layout.Column = 2;
+            obj.hMidPanel_.Layout.Row = 2; obj.hMidPanel_.Layout.Column = dashCol;
             obj.hRightPanel_ = uipanel(obj.hLayout_);
-            obj.hRightPanel_.Layout.Row = 2; obj.hRightPanel_.Layout.Column = 3;
+            obj.hRightPanel_.Layout.Row = 2; obj.hRightPanel_.Layout.Column = inspCol;
             obj.hLogPanel_ = uipanel(obj.hLayout_);
-            obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = [1 3];
+            obj.hLogPanel_.Layout.Row = 3; obj.hLogPanel_.Layout.Column = logSpan;
             % Phase 1027.1 -- LogPaneRoot tag moves to the two sub-panels below.
 
             % Apply panel styling from theme. uifigure-uipanel border
@@ -464,7 +532,11 @@ classdef FastSenseCompanion < handle
             % they error with UnsupportedAppDesignerFunctionality even
             % though isprop() reports them as present. Tolerate failure
             % per-property — BackgroundColor works on all versions.
-            for hp = {obj.hLeftPanel_, obj.hMidPanel_, obj.hRightPanel_, obj.hLogPanel_}
+            stylePanels = {obj.hLeftPanel_, obj.hMidPanel_, obj.hRightPanel_, obj.hLogPanel_};
+            if ~isempty(obj.hMachineSelectorPanel_)
+                stylePanels{end+1} = obj.hMachineSelectorPanel_;   % Phase 1044 left rail
+            end
+            for hp = stylePanels
                 hp{1}.BackgroundColor = obj.Theme_.WidgetBackground;
                 try, hp{1}.BorderColor = obj.Theme_.WidgetBorderColor; catch, end
                 try, hp{1}.BorderType  = 'line';                      catch, end
@@ -534,6 +606,14 @@ classdef FastSenseCompanion < handle
             obj.CatalogPane_.attach(obj.hLeftPanel_, obj.hFig_, obj.Registry_, obj.Theme_);
             obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
             obj.InspectorPane_.attach(obj.hRightPanel_, obj.hFig_, obj.CatalogPane_, obj, obj.Theme_);
+            % Phase 1044 — fleet mode: instantiate + attach the left-rail
+            % MachineSelectorPane into its col-1 panel. The MachineSelectionChanged
+            % listener wiring and auto-select-first happen in Plan 04.
+            if ~isempty(obj.Fleet_)
+                obj.MachineSelectorPane_ = MachineSelectorPane();
+                obj.MachineSelectorPane_.attach(obj.hMachineSelectorPanel_, obj.hFig_, ...
+                    obj.Fleet_, obj.Theme_);
+            end
             % Wire pane event listeners (append to Listeners_)
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
                 @(s, e) obj.onDashboardSelected_(s, e));
@@ -642,6 +722,16 @@ classdef FastSenseCompanion < handle
                 end
             catch err
                 fprintf(2, '[FastSenseCompanion] InspectorPane.detach failed: %s\n', err.message);
+            end
+            % Phase 1044 -- detach the MachineSelectorPane (releases its debounce
+            % timer + listeners). Independent try/catch so a stale handle can't
+            % block the rest of teardown.
+            try
+                if ~isempty(obj.MachineSelectorPane_) && isvalid(obj.MachineSelectorPane_)
+                    obj.MachineSelectorPane_.detach();
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] MachineSelectorPane.detach failed: %s\n', err.message);
             end
             % Phase 1027.1 -- close any open detached uifigures FIRST (clear
             % CloseRequestFcn so it can't fire mid-teardown), then destroy
@@ -985,6 +1075,15 @@ classdef FastSenseCompanion < handle
                 end
                 if ~isempty(obj.InspectorPane_) && isvalid(obj.InspectorPane_)
                     obj.InspectorPane_.setTheme(obj.Theme_);
+                end
+                % Phase 1044 -- propagate theme to the machine selector pane and
+                % re-assert the active-machine label accent (the walker recolors
+                % labels to ForegroundColor; the indicator must stay Accent).
+                if ~isempty(obj.MachineSelectorPane_) && isvalid(obj.MachineSelectorPane_)
+                    obj.MachineSelectorPane_.setTheme(obj.Theme_);
+                end
+                if ~isempty(obj.hActiveMachineLabel_) && isvalid(obj.hActiveMachineLabel_)
+                    obj.hActiveMachineLabel_.FontColor = obj.Theme_.Accent;
                 end
                 % Phase 1027.1 -- both panes manage their own theming (walker
                 % skips both LogPaneRoot-tagged sub-panels). Companion calls
