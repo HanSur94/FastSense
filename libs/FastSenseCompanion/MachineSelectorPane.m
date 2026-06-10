@@ -185,7 +185,7 @@ classdef MachineSelectorPane < handle
                     obj.hCountLabel_.FontColor = t.PlaceholderTextColor;
                 end
             catch err
-                warning('FastSenseCompanion:setThemeFailed', ...
+                warning('MachineSelectorPane:setThemeFailed', ...
                     'MachineSelectorPane.setTheme failed: %s', err.message);
             end
         end

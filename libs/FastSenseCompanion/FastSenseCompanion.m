@@ -642,10 +642,15 @@ classdef FastSenseCompanion < handle
                 obj.MachineSelectorPane_.attach(obj.hMachineSelectorPanel_, obj.hFig_, ...
                     obj.Fleet_, obj.Theme_);
                 % Reflect the auto-selected first machine (Step 6) in the list
-                % highlight + toolbar indicator. selectById fires the pane
-                % event, but the MachineSelectionChanged listener is wired
-                % AFTER this block, so construction performs no redundant
-                % setProject round-trip.
+                % highlight + toolbar indicator.
+                % ORDERING INVARIANT (do not reorder): selectById MUST run
+                % BEFORE the addlistener below. It fires MachineSelectionChanged
+                % into a void on purpose — the active context was already set
+                % at Step 6, so a listener here would trigger a redundant
+                % full setProject pane rebuild during construction. Moving
+                % the addlistener above this block reintroduces that rebuild;
+                % removing the Step 6 context override while keeping this
+                % ordering would silently skip setProject for machine 1.
                 ids = obj.Fleet_.machineIds();
                 if ~isempty(ids)
                     obj.MachineSelectorPane_.selectById(ids{1});
