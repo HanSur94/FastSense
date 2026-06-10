@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781107234871,
+  "lastUpdate": 1781111912754,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -117704,6 +117704,430 @@ window.BENCHMARK_DATA = {
           {
             "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
             "value": 2215.129,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "50265832+HanSur94@users.noreply.github.com",
+            "name": "Hannes Suhr",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "235566138089011faa4f0ed01bc68cbac027a73b",
+          "message": "perf(dashboard): single-resolve render data cache for populated dashboard load (260610-ov3) (#202)\n\n* docs(260610-ov3): pre-dispatch plan for dashboard load-speed optimization\n\n* test(quick-260610-ov3-01): add RED-phase test for per-render Tag-data cache\n\n- test_cache_property_exists: getRenderCacheForTest_ seam cold on construction\n- test_resolve_count_le_1: at most 1 getXY call per render() pass\n- test_bound_array_parity: inner line XData equals raw tag X (no corruption)\n- test_cache_cold_after_render: RenderDataCache_ is cleared after render()\n\n* feat(quick-260610-ov3-01): add per-render Tag-data cache to FastSenseWidget\n\n260610-ov3: resolve Tag data at most once per render()/rebuildForTag_() pass.\n\n- Add RenderDataCache_ private property (render-scoped struct or [])\n- Add pullDataCached_() — returns warm cache or calls pullData_() + caches\n- Add cacheRenderData_(x,y) — stores struct into RenderDataCache_\n- Add clearRenderCache_() — resets to [] at end of render/rebuild pass\n- render(): probe result seeds cache; branch (3) uses pullDataCached_() +\n  fp.addLine (State tags keep fp.addTag via getKind guard); yInit and\n  updateTimeRangeCache reuse cached x/y; clearRenderCache_() at end\n- rebuildForTag_(): same single-resolve + cached updateTimeRangeCache;\n  clearRenderCache_() at end\n- getRenderCacheForTest_() / setRenderCacheForTest_() Hidden seams for tests\n- refresh()/update() untouched — live tick fast path is unaffected\n\n* test(quick-260610-ov3-02): RED-phase tests for preview cache reuse + load perf\n\n260610-ov3 Task 2 RED gate:\n- CountingSensorTag.m — SensorTag subclass that counts getXY() invocations\n- test_dashboard_load_perf.m — 5 cases:\n  - test_resolve_count_le_1: CountingSensorTag asserts <= 1 resolve per render\n  - test_bound_array_parity: line XData endpoints within raw tag X range\n  - test_preview_parity: warm-cache vs cold-cache getPreviewSeries byte-identical\n  - test_cache_cold_after_render: RenderDataCache_ is [] after render completes\n  - test_state_tag_fallback: StateTag staircase path still works via getKind guard\n\n* feat(quick-260610-ov3-02): preview cache reuse + load benchmark\n\n260610-ov3 Task 2:\n\nPart A — getPreviewSeries (FastSenseWidget.m):\n  Reuses RenderDataCache_ read-only when warm (load-time preview pass).\n  Falls back to Tag.getXY() when cold (live ticks) — behavior unchanged.\n  Eliminates one extra getXY resolve per widget at dashboard render time.\n\nPart B — benchmarks/bench_dashboard_load.m:\n  New benchmark isolating dashboard LOAD (Create+Render) for Tag-bound widgets.\n  Builds N_TAGS=12 SensorTags (50k pts each), converts ~1/3 to disk-backed\n  via toDisk(), wires N_EVENTS=200 in-memory EventStore to first widget.\n  Prints Create / Render / Total ms matching bench_dashboard.m label style.\n  Complements bench_dashboard.m (inline XData) and bench_dashboard_live.m\n  (live ticks); isolates the disk-backed/Tag-bound render hot path.\n\n* fix(quick-260610-ov3): make render cache consume-once and ctor range pull O(1)\n\nThe executor's render cache was cleared at the end of widget render(),\nbefore DashboardEngine's post-render preview pass — so the preview reuse\nwas dead code and the constructor still did a full Tag.getXY() pull:\n\n- updateTimeRangeCache() no-arg now asks Tag.getTimeRange() (O(1) for\n  Sensor/State tags; disk-backed reads the DataStore extent, which also\n  fixes the ctor leaving CachedXMin/Max at inf/-inf for disk tags)\n- render() leaves the cache warm; getPreviewSeries consumes it\n  (consume-once); refresh()/update() clear it on entry so live ticks\n  never read render-scoped data\n- setRenderCacheForTest_([], []) clears (test seam)\n- tests updated to the lifecycle contract; StateTag test used the\n  invalid 'States' option — now 'Labels'\n\nVerified in Octave 11.1: test_fastsense_widget_render_cache 4/4,\ntest_dashboard_load_perf 5/5, 13 dashboard/widget regression tests OK.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(quick-260610-ov3): Optimize data loading speed in populated FastSense dashboards (DashboardEngine)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-06-10T18:59:37+02:00",
+          "tree_id": "7895816d03b3ab70d3cfc2481d7432874547be0b",
+          "url": "https://github.com/HanSur94/FastSense/commit/235566138089011faa4f0ed01bc68cbac027a73b"
+        },
+        "date": 1781111906920,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 0.805,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.003,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 102.787,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 0.734,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 167.793,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 12.88,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 11.442,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 2.322,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 5.037,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.298,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 119.236,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 0.425,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 168.305,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 3.214,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 11.345,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.535,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 9.994,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.034,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 136.156,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 2.94,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 173.219,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 13.667,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 11.367,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.461,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 52.412,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 0.733,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 986.714,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 20.313,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 167.681,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 26.668,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 11.491,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.757,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 102.948,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.131,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 1671.411,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 117.814,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 168.671,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 3.254,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 11.472,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.598,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 773.985,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 104.431,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 32337.422,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 2492.762,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 211.133,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 139.586,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 11.448,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.794,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 2226.134,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 957.617,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 233.906,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 6.515,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 177.881,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 28.403,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 121.761,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 8.291,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_min_ms",
+            "value": 977.329,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_median_ms",
+            "value": 1015.757,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_min_ms",
+            "value": 1708.559,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_min_ms",
+            "value": 1708.559,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_min_ms",
+            "value": 2988.069,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_on_min_ms",
+            "value": 1708.559,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_off_min_ms",
+            "value": 1640.655,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_min_ms",
+            "value": 1708.559,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_min_ms",
+            "value": 1730.314,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_lastfsstat_count",
+            "value": 1,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_lastfsstat_count",
+            "value": 1600,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_parse_ms_per_tick",
+            "value": 9.982,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_mat_write_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_select_ms_per_tick",
+            "value": 34.17,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_other_ms_per_tick",
+            "value": 947.59,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_monitor_recompute_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_composite_merge_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_aggregate_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_listener_fanout_ms_per_tick",
+            "value": 46.264,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_total_profiled_ms_per_tick",
+            "value": 1038.005,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick",
+            "value": 455.764,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick",
+            "value": 1139.459,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick",
+            "value": 1353.79,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
+            "value": 1177.169,
             "unit": "ms"
           }
         ]
