@@ -159,9 +159,31 @@ end
 function es = findEventStoreFor_(tag)
 %FINDEVENTSTOREFOR_ Locate an EventStore via a MonitorTag whose Parent.Key matches.
 %   Returns [] when no matching monitor or no EventStore is registered.
+%
+%   Phase 1044 (WR-03, partial): this scan reads the GLOBAL TagRegistry
+%   singleton only. Machine-scoped tags (fleet mode) live in Machine.Tags_,
+%   not the global registry, so they degrade gracefully here: the plot is
+%   spawned WITHOUT threshold/event overlays and a named, non-fatal warning
+%   identifies the key. The handle-identity precheck also prevents a stale
+%   global tag with a matching key (e.g. a prior legacy session in the same
+%   MATLAB instance) from contributing foreign overlays to a fleet machine's
+%   data. Threading the active machine context through openAdHocPlot is
+%   deferred to Phase 1045 (cross-machine comparison view).
     es = [];
     try
         if ~isobject(tag) || ~isvalid(tag) || ~isprop(tag, 'Key'); return; end
+        % Handle-identity check: is THIS tag object registered globally?
+        % (handle eq is identity-based; same-key-different-handle does not
+        % match, which is exactly the cross-contamination guard we want.)
+        if isempty(TagRegistry.find(@(tt) tt == tag))
+            warning('FastSenseCompanion:machineScopedTagNoOverlay', ...
+                ['openAdHocPlot: tag ''%s'' is not in the global ', ...
+                 'TagRegistry (likely a machine-scoped tag in fleet mode). ', ...
+                 'Plotting without threshold/event overlays — ', ...
+                 'cross-machine overlays arrive with the comparison view.'], ...
+                tag.Key);
+            return;
+        end
         monitors = TagRegistry.find(@(tt) isa(tt, 'MonitorTag') && ...
             ~isempty(tt.Parent) && isprop(tt.Parent, 'Key') && ...
             strcmp(tt.Parent.Key, tag.Key));
