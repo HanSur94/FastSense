@@ -1,8 +1,9 @@
 ---
-status: investigating
+status: resolved
 trigger: "Categorize 137 failing MATLAB tests from CI run 24510852026 (PR #44)"
 created: 2026-04-16T00:00:00Z
-updated: 2026-04-16T00:00:00Z
+updated: 2026-06-10T00:00:00Z
+resolution_note: "Investigation-only session; categorization complete. Findings became Phase 1006 (fix-137-matlab-test-failures, 4/4 plans complete) — fixes shipped there."
 ---
 
 ## Current Focus

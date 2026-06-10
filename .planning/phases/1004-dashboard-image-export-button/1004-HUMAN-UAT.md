@@ -3,12 +3,14 @@ status: partial
 phase: 1004-dashboard-image-export-button
 source: [1004-VERIFICATION.md]
 started: 2026-04-15T00:00:00Z
-updated: 2026-04-15T00:00:00Z
+updated: 2026-06-10T00:00:00Z
 ---
 
 ## Current Test
 
-[awaiting human testing]
+[Test 2 (machine-verifiable suite gate) closed 2026-06-10 — 9/9 green under
+headless MATLAB R2025b. Tests 1 and 3 remain: both need human eyes (visual PNG
+quality check; Octave platform-difference acknowledgment).]
 
 ## Tests
 
@@ -19,7 +21,8 @@ how_to_test: Open a rendered dashboard in MATLAB, click the Image button, save a
 
 ### 2. MATLAB test-suite pass
 expected: `matlab -batch "cd tests; runtests('suite/TestDashboardToolbarImageExport.m')"` reports 9/9 tests green. Octave 11.1.0 suite cannot run locally due to pre-existing DashboardWidget abstract-method incompat (unrelated to Phase 1004).
-result: [pending]
+result: passed
+note: Run 2026-06-10 via `matlab -batch` (headless, MATLAB R2025b): "suite: 9 passed, 0 failed, 0 incomplete". Exact command from how_to_test.
 how_to_test: Run the command on a machine with MATLAB R2020b+ installed, or wait for CI to run the full suite under the supported Octave 7+ version.
 
 ### 3. Octave platform difference acknowledgment
@@ -30,9 +33,9 @@ how_to_test: On a machine with working Octave 7+ (not 11 locally due to preexist
 ## Summary
 
 total: 3
-passed: 0
+passed: 1
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
