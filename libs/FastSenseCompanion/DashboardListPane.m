@@ -363,7 +363,9 @@ classdef DashboardListPane < handle
                 if isempty(obj.DebounceTimer_)
                     obj.DebounceTimer_ = timer();
                     obj.DebounceTimer_.ExecutionMode = 'singleShot';
-                    obj.DebounceTimer_.Period        = 0.150;
+                    % singleShot timers fire StartDelay seconds after start();
+                    % Period only applies to the fixed* execution modes.
+                    obj.DebounceTimer_.StartDelay    = 0.150;
                     obj.DebounceTimer_.BusyMode      = 'drop';
                     obj.DebounceTimer_.TimerFcn      = @(~,~) obj.applyFilter_();
                 end
