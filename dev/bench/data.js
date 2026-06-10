@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781111912754,
+  "lastUpdate": 1781111947967,
   "repoUrl": "https://github.com/HanSur94/FastSense",
   "entries": {
     "FastPlot Performance": [
@@ -118128,6 +118128,426 @@ window.BENCHMARK_DATA = {
           {
             "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
             "value": 1177.169,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "HanSur94",
+            "username": "HanSur94"
+          },
+          "committer": {
+            "name": "HanSur94",
+            "username": "HanSur94"
+          },
+          "id": "42381dd7732e3471aed035fa00423d8af1744a0d",
+          "message": "perf(dashboard): single-resolve render data cache for populated dashboard load (260610-ov3)",
+          "timestamp": "2026-06-10T15:47:31Z",
+          "url": "https://github.com/HanSur94/FastSense/pull/202/commits/42381dd7732e3471aed035fa00423d8af1744a0d"
+        },
+        "date": 1781111945455,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Downsample mean (1M)",
+            "value": 1.346,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(1M)",
+            "value": 0.01,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (1M)",
+            "value": 160.997,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(1M)",
+            "value": 0.526,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (1M)",
+            "value": 262.405,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(1M)",
+            "value": 10.486,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (1M)",
+            "value": 17.956,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(1M)",
+            "value": 3.501,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (5M)",
+            "value": 7.96,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean std(5M)",
+            "value": 0.088,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (5M)",
+            "value": 186.331,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean std(5M)",
+            "value": 1.344,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (5M)",
+            "value": 268.103,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean std(5M)",
+            "value": 3.17,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (5M)",
+            "value": 17.221,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean std(5M)",
+            "value": 0.661,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (10M)",
+            "value": 15.886,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std10M)",
+            "value": 0.112,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (10M)",
+            "value": 211.834,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std10M)",
+            "value": 3.381,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (10M)",
+            "value": 268.958,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std10M)",
+            "value": 4.725,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (10M)",
+            "value": 17.686,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std10M)",
+            "value": 0.581,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (50M)",
+            "value": 81.573,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean  std50M)",
+            "value": 2.547,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (50M)",
+            "value": 1428.771,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean  std50M)",
+            "value": 17.287,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (50M)",
+            "value": 263.73,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean  std50M)",
+            "value": 2.138,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (50M)",
+            "value": 17.972,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean  std50M)",
+            "value": 0.918,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (100M)",
+            "value": 158.295,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 0.166,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (100M)",
+            "value": 2605.788,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 205.251,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (100M)",
+            "value": 265.471,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 1.014,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (100M)",
+            "value": 17.98,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 0.755,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean (500M)",
+            "value": 787.679,
+            "unit": "ms"
+          },
+          {
+            "name": "Downsample mean ( std00M)",
+            "value": 11.414,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean (500M)",
+            "value": 23132.417,
+            "unit": "ms"
+          },
+          {
+            "name": "Instantiation mean ( std00M)",
+            "value": 159.114,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean (500M)",
+            "value": 386.606,
+            "unit": "ms"
+          },
+          {
+            "name": "Render mean ( std00M)",
+            "value": 48.992,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean (500M)",
+            "value": 18.138,
+            "unit": "ms"
+          },
+          {
+            "name": "Zoom cycle mean ( std00M)",
+            "value": 1,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render mean",
+            "value": 1232.477,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard create+render stdmean",
+            "value": 7.222,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick mean",
+            "value": 360.057,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard live tick stdmean",
+            "value": 1.478,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch mean",
+            "value": 272.914,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard page switch stdmean",
+            "value": 12.412,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange mean",
+            "value": 180.356,
+            "unit": "ms"
+          },
+          {
+            "name": "Dashboard broadcastTimeRange stdmean",
+            "value": 1.372,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_min_ms",
+            "value": 1669.448,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_noio_median_ms",
+            "value": 1696.725,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_min_ms",
+            "value": 2827.918,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_min_ms",
+            "value": 2827.918,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_min_ms",
+            "value": 5085.912,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_on_min_ms",
+            "value": 2827.918,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_coalesce_off_min_ms",
+            "value": 2737.639,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_min_ms",
+            "value": 2827.918,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_min_ms",
+            "value": 2739.393,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_on_lastfsstat_count",
+            "value": 1,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_fs_coalesce_off_lastfsstat_count",
+            "value": 1600,
+            "unit": "count"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_parse_ms_per_tick",
+            "value": 14.601,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_mat_write_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_select_ms_per_tick",
+            "value": 53.694,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_other_ms_per_tick",
+            "value": 1588.733,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_monitor_recompute_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_composite_merge_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_aggregate_ms_per_tick",
+            "value": 0,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_listener_fanout_ms_per_tick",
+            "value": 70.681,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_breakdown_total_profiled_ms_per_tick",
+            "value": 1727.709,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_mat_write_ms_per_tick",
+            "value": 651.67,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_on_breakdown_other_ms_per_tick",
+            "value": 1897.015,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_mat_write_ms_per_tick",
+            "value": 2315.585,
+            "unit": "ms"
+          },
+          {
+            "name": "tag_pipeline_1k_withio_cache_off_breakdown_other_ms_per_tick",
+            "value": 1973.989,
             "unit": "ms"
           }
         ]
