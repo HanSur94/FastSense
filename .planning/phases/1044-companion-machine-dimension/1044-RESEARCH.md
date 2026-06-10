@@ -549,9 +549,11 @@ No security-relevant changes: no authentication, no session management, no exter
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`TagRegistry.find` via instance handle (A1)**
+> Both questions are resolved: the plan adopts the explicit-conditional redirect form (Q1) and the `MachineSelectorPane.selectById(id)` public test seam (Q2).
+
+1. **`TagRegistry.find` via instance handle (A1)** — RESOLVED: explicit conditional form adopted at all four sites (Plan 1044-04).
    - What we know: `Machine.find(pred)` is an instance method that mirrors `TagRegistry.find`. In legacy mode `obj.Registry_` is a `TagRegistry` object. MATLAB allows calling static methods via instance handles with a warning.
    - What's unclear: Whether MISS_HIT `mh_lint` will flag `obj.Registry_.find(pred)` when `obj.Registry_` is a `TagRegistry` (static-method class).
    - Recommendation: Use the explicit conditional form at all four sites. Two lines per site, zero ambiguity, no linter surprises.
