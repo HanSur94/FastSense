@@ -101,6 +101,10 @@ classdef FastSenseCompanion < handle
         OriginalLogRowHeight_ = 360    % captured at construction; restored when at least one pane is Inline
         EventStore_  = []   % EventStore handle resolved via constructor option or auto-discovery
         EventViewer_ = []   % CompanionEventViewer handle (single-instance) or [] (Task 13 wires it)
+        % Dedicated slots for the two viewer ObjectBeingDestroyed listeners —
+        % appending them to Listeners_ grew that array by two dead handles per
+        % viewer open/close cycle over a session (260610-hwj).
+        EventViewerListeners_ = {}
         % Phase 1033 Plan 01 — cluster mode internal state
         SharedRoot_               = ''    % internal mirror of public SharedRoot
         IsClusterMode_            = false % internal cluster-mode gate
@@ -712,6 +716,7 @@ classdef FastSenseCompanion < handle
                 end
             end
             obj.Listeners_ = {};
+            obj.dropEventViewerListeners_();
             % Tear down a still-open settings dialog, if any.
             try
                 if ~isempty(obj.SettingsDlg_) && isvalid(obj.SettingsDlg_)
@@ -2033,10 +2038,14 @@ classdef FastSenseCompanion < handle
             %     a prior close() — keeps the existing
             %     testViewerObjectBeingDestroyedClearsHandle contract.
             % Either path clears EventViewer_ and re-enables the toolbar button.
-            obj.Listeners_{end+1} = addlistener(obj.EventViewer_.hFigure, 'ObjectBeingDestroyed', ...
-                @(~,~) obj.clearEventViewerHandle_());
-            obj.Listeners_{end+1} = addlistener(obj.EventViewer_, 'ObjectBeingDestroyed', ...
-                @(~,~) obj.clearEventViewerHandle_());
+            % Dedicated slots (not Listeners_) so the pair is deleted on viewer
+            % close instead of accumulating two dead handles per open/close cycle.
+            obj.dropEventViewerListeners_();
+            obj.EventViewerListeners_ = { ...
+                addlistener(obj.EventViewer_.hFigure, 'ObjectBeingDestroyed', ...
+                    @(~,~) obj.clearEventViewerHandle_()), ...
+                addlistener(obj.EventViewer_, 'ObjectBeingDestroyed', ...
+                    @(~,~) obj.clearEventViewerHandle_())};
             % Disable the launch button so it visually reflects that the viewer
             % is currently open. The destruction listener re-enables it.
             if ~isempty(obj.hEventsBtn_) && isvalid(obj.hEventsBtn_)
@@ -2194,10 +2203,26 @@ classdef FastSenseCompanion < handle
                 obj.EventViewer_ = [];
             catch
             end
+            % Drop the (now-fired) viewer listeners so they don't pile up
+            % across open/close cycles (260610-hwj).
+            obj.dropEventViewerListeners_();
             if ~isempty(obj.hEventsBtn_) && isvalid(obj.hEventsBtn_)
                 obj.hEventsBtn_.Enable  = 'on';
                 obj.hEventsBtn_.Tooltip = 'Open the event viewer';
             end
+        end
+
+        function dropEventViewerListeners_(obj)
+        %DROPEVENTVIEWERLISTENERS_ Delete + clear the viewer destruction listeners.
+            for k = 1:numel(obj.EventViewerListeners_)
+                try
+                    if isvalid(obj.EventViewerListeners_{k})
+                        delete(obj.EventViewerListeners_{k});
+                    end
+                catch
+                end
+            end
+            obj.EventViewerListeners_ = {};
         end
 
         function trackOpenedFigure_(obj, hFig)

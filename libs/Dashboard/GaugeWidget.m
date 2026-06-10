@@ -56,11 +56,16 @@ classdef GaugeWidget < DashboardWidget
                     obj.Range = obj.deriveRange();
                 end
             end
-            % Threshold-based range derivation (per Pattern 4 from RESEARCH)
+            % Threshold-based range derivation (per Pattern 4 from RESEARCH).
+            % allValues() existed on the pre-v2.0 Threshold class only — the
+            % v2.0 MonitorTag carries an opaque ConditionFn with no numeric
+            % values, so probe for the method instead of crashing the
+            % constructor (any MonitorTag-bound gauge without an explicit
+            % Range errored here since the migration).
             if isempty(obj.Range) && ~isempty(obj.Threshold)
                 if isa(obj.Threshold, 'CompositeThreshold')
                     % Composites have no numeric range; skip range derivation
-                else
+                elseif ismethod(obj.Threshold, 'allValues')
                     tVals = obj.Threshold.allValues();
                     if ~isempty(tVals)
                         obj.Range = [min(tVals), max(tVals)];
@@ -207,7 +212,10 @@ classdef GaugeWidget < DashboardWidget
                     case 'threshold'
                         if exist('TagRegistry', 'class')
                             try
-                                obj.Tag = TagRegistry.get(s.source.key);
+                                % The MonitorTag belongs in Threshold (drives range
+                                % derivation + status coloring) — assigning obj.Tag
+                                % here left Threshold empty after every load.
+                                obj.Threshold = TagRegistry.get(s.source.key);
                             catch
                                 warning('GaugeWidget:thresholdNotFound', ...
                                     'Could not resolve threshold key ''%s'' on load.', s.source.key);

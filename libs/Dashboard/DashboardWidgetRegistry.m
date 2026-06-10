@@ -90,6 +90,16 @@ classdef DashboardWidgetRegistry
                 className = className(2:end);
             end
             w = feval([className '.fromStruct'], s);
+            % Central themeOverride backfill: DashboardWidget.toStruct writes
+            % s.themeOverride for EVERY widget, but only GroupWidget's
+            % fromStruct read it back — per-widget theme overrides were
+            % silently dropped on load for all other types. Restoring here
+            % covers every registered type (idempotent for widgets that
+            % already restored it themselves).
+            if isfield(s, 'themeOverride') && isstruct(s.themeOverride) && ...
+                    isa(w, 'DashboardWidget') && isempty(fieldnames(w.ThemeOverride))
+                w.ThemeOverride = s.themeOverride;
+            end
         end
 
         function register(type, ctorHandle)

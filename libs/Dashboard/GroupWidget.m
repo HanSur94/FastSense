@@ -327,6 +327,13 @@ classdef GroupWidget < DashboardWidget
                 s.children = {};
             else
                 s.collapsed = obj.Collapsed;
+                % Omit-when-empty: only collapsed groups carry ExpandedHeight.
+                % Without round-tripping it, expand() after a load is a no-op
+                % (its ~isempty(ExpandedHeight) guard never passes) and the
+                % group is permanently stuck collapsed.
+                if ~isempty(obj.ExpandedHeight)
+                    s.expandedHeight = obj.ExpandedHeight;
+                end
                 s.children = cell(1, numel(obj.Children));
                 for i = 1:numel(obj.Children)
                     s.children{i} = obj.Children{i}.toStruct();
@@ -591,6 +598,8 @@ classdef GroupWidget < DashboardWidget
             if isfield(s, 'childAutoFlow'), obj.ChildAutoFlow = s.childAutoFlow; end
             if isfield(s, 'childColumns'), obj.ChildColumns = s.childColumns; end
             if isfield(s, 'collapsed'), obj.Collapsed = s.collapsed; end
+            % Restore ExpandedHeight so expand() works after a load round-trip.
+            if isfield(s, 'expandedHeight'), obj.ExpandedHeight = s.expandedHeight; end
             if isfield(s, 'activeTab'), obj.ActiveTab = s.activeTab; end
 
             if isfield(s, 'themeOverride')

@@ -24,6 +24,10 @@ classdef EventTimelineWidget < DashboardWidget
         hAxes     = []
         hBars     = {}
         IsSettingTime = false  % guard for programmatic vs user xlim change
+        % XLim PostSet listener handle. Stored (not discarded) so delete()
+        % can release it — an axes-rooted listener holds a reference to obj
+        % for the axes' lifetime, pinning the widget in memory (260610-hwj).
+        XLimListener_ = []
     end
 
     methods
@@ -60,9 +64,29 @@ classdef EventTimelineWidget < DashboardWidget
 
             obj.refresh();
 
-            % Listen for manual zoom/pan to detach from global time
+            % Listen for manual zoom/pan to detach from global time.
+            % Release any listener left from a previous render of this widget
+            % (re-render replaces the axes) before installing the new one.
             try
-                addlistener(obj.hAxes, 'XLim', 'PostSet', @(~,~) obj.onXLimChanged());
+                if ~isempty(obj.XLimListener_) && isvalid(obj.XLimListener_)
+                    delete(obj.XLimListener_);
+                end
+            catch
+            end
+            try
+                obj.XLimListener_ = addlistener(obj.hAxes, 'XLim', 'PostSet', ...
+                    @(~,~) obj.onXLimChanged());
+            catch
+                obj.XLimListener_ = [];
+            end
+        end
+
+        function delete(obj)
+            %DELETE Release the axes-rooted XLim listener (it pins obj otherwise).
+            try
+                if ~isempty(obj.XLimListener_) && isvalid(obj.XLimListener_)
+                    delete(obj.XLimListener_);
+                end
             catch
             end
         end
