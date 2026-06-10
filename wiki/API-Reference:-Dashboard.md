@@ -1778,6 +1778,7 @@ obj = FastSenseWidget(varargin)
 | YLimitMode | `'auto-visible'` |  |
 | CrosshairLinked | `false` |  |
 | CurrentXLimOverrideForTest_ | `[]` |  |
+| LastTickSkipped_ | `false` |  |
 
 ### Methods
 
