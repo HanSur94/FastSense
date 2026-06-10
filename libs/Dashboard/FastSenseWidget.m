@@ -96,6 +96,15 @@ classdef FastSenseWidget < DashboardWidget
         % with PreviewCacheKey_. Reset to [] by setTimeWindow and rebuildForTag_
         % so a window change or tag rebuild forces a full update on the next tick.
         LastDataFingerprint_ = []
+        % 260610-ov3 render-scoped Tag-data cache. Stores struct('x',x,'y',y)
+        % for the duration of a single render()/rebuildForTag_() pass so the
+        % probe-pull, bind, yInit, updateTimeRangeCache, and getPreviewSeries
+        % steps all consume the SAME resolved arrays without calling Tag.getXY
+        % or getXYRange more than once per render pass.
+        % Cleared at the end of render()/rebuildForTag_() and never read by
+        % refresh()/update() — the live tick paths keep their own 260609-v5p
+        % fingerprint fast-path.
+        RenderDataCache_ = []
     end
 
     % Phase 1032 — XLim listener slot. Public READ (tests + engine
@@ -134,6 +143,25 @@ classdef FastSenseWidget < DashboardWidget
         %       slider preview is dense enough to genuinely benefit.
         %   Adjust here if user feedback warrants a different cut-off.
         PreviewRawThreshold_ = 100
+    end
+
+    methods (Hidden)
+        function c = getRenderCacheForTest_(obj)
+        %GETRENDERCACHEFORTEST_ 260610-ov3 test seam — return RenderDataCache_ value.
+        %   Hidden (not public) so the DashboardWidget contract is unchanged.
+        %   Used by test_fastsense_widget_render_cache.m and
+        %   test_dashboard_load_perf.m to verify the cache is cold on
+        %   construction and after render() completes.
+            c = obj.RenderDataCache_;
+        end
+
+        function setRenderCacheForTest_(obj, x, y)
+        %SETRENDERCACHEFORTEST_ 260610-ov3 test seam — force-warm RenderDataCache_.
+        %   Lets test_dashboard_load_perf.m call getPreviewSeries with a
+        %   warm cache without going through render(), verifying that
+        %   getPreviewSeries reuses the warm cache (read-only) when present.
+            obj.RenderDataCache_ = struct('x', x, 'y', y);
+        end
     end
 
     methods
@@ -203,6 +231,16 @@ classdef FastSenseWidget < DashboardWidget
                     obj.ShowingEmptyState_ = true;
                     return;
                 end
+                % 260610-ov3: seed render cache with the probe result so
+                % the bind block, yInit, and updateTimeRangeCache all reuse
+                % the SAME resolved arrays without a second Tag.getXY /
+                % getXYRange call.  Only seed when the probe block ran
+                % (needsProbeCheck_=true) and produced non-empty data;
+                % in-RAM non-disk branches (3) pull via pullDataCached_()
+                % on first access below.
+                if needsProbeCheck_ && ~isempty(xw)
+                    obj.cacheRenderData_(xw, yw);
+                end
             end
 
             % Create axes inside the panel
@@ -270,8 +308,25 @@ classdef FastSenseWidget < DashboardWidget
                     % (2) Empty window + DISK-backed: xw is full-extent data from above.
                     fp.addLine(xw, yw, 'DisplayName', obj.Tag.Name);
                 else
-                    % (3) Empty window + in-RAM tag: byte-identical to today's fp.addTag path.
-                    fp.addTag(obj.Tag);
+                    % (3) Empty window + in-RAM tag: 260610-ov3 — resolve ONCE via
+                    % pullDataCached_() and bind via fp.addLine so the same arrays
+                    % flow to yInit and updateTimeRangeCache without a second pull.
+                    % EXCEPTION: State tags use fp.addTag so their staircase rendering
+                    % (to_step_function_mex / state-change dispatch) is preserved.
+                    % ismethod guard keeps non-standard Tag subclasses on the safe
+                    % fp.addTag path if they do not expose getKind().
+                    isStateLike = ismethod(obj.Tag, 'getKind') && ...
+                                  strcmp(obj.Tag.getKind(), 'state');
+                    if isStateLike
+                        fp.addTag(obj.Tag);
+                    else
+                        try
+                            [xb, yb] = obj.pullDataCached_();
+                            fp.addLine(xb, yb, 'DisplayName', obj.Tag.Name);
+                        catch
+                            fp.addTag(obj.Tag);  % safe fallback
+                        end
+                    end
                 end
             elseif ~isempty(obj.DataStoreObj)
                 fp.addLine([], [], 'DataStore', obj.DataStoreObj);
@@ -359,7 +414,9 @@ classdef FastSenseWidget < DashboardWidget
                 yInit = [];
                 try
                     if ~isempty(obj.Tag)
-                        [~, yInit] = obj.pullData_();
+                        % 260610-ov3: reuse render cache (warm since bind above);
+                        % avoids a redundant getXY/getXYRange call for yInit.
+                        [~, yInit] = obj.pullDataCached_();
                     elseif ~isempty(obj.YData)
                         yInit = obj.YData;
                     end
@@ -371,8 +428,23 @@ classdef FastSenseWidget < DashboardWidget
             end
 
             % Update time range cache and data-source identity snapshots
+            % 260610-ov3: pass cached x when the cache is warm so
+            % updateTimeRangeCache does not call Tag.getXY a second time.
             obj.LastTagRef = obj.Tag;
-            obj.updateTimeRangeCache();
+            if ~isempty(obj.Tag) && ~isempty(obj.RenderDataCache_)
+                try
+                    [xc, ~] = obj.pullDataCached_();
+                    obj.updateTimeRangeCache(xc);
+                catch
+                    obj.updateTimeRangeCache();
+                end
+            else
+                obj.updateTimeRangeCache();
+            end
+
+            % 260610-ov3: clear render-scoped cache so live refresh/update
+            % paths never see stale render-time data.
+            obj.clearRenderCache_();
 
             % Listen for manual zoom/pan to disable global time for this widget
             try
@@ -955,10 +1027,25 @@ classdef FastSenseWidget < DashboardWidget
                 nBuckets = double(floor(nBuckets));
 
                 % Fetch raw [x, y] from Tag, or from XData/YData.
+                % 260610-ov3: when the render-scoped cache is warm (load-time
+                % computePreviewEnvelope runs inside the render pass), reuse
+                % the already-resolved arrays without calling Tag.getXY again.
+                % Read-only reuse — getPreviewSeries never warms the cache.
+                % At live-tick time the cache is always cold (clearRenderCache_
+                % ran at end of render/rebuildForTag), so the cold path is
+                % byte-identical to pre-260610-ov3 behavior.
                 x = []; y = [];
                 if ~isempty(obj.Tag)
                     try
-                        [x, y] = obj.Tag.getXY();
+                        if ~isempty(obj.RenderDataCache_) && ...
+                                isstruct(obj.RenderDataCache_) && ...
+                                isfield(obj.RenderDataCache_, 'x') && ...
+                                isfield(obj.RenderDataCache_, 'y')
+                            x = obj.RenderDataCache_.x;
+                            y = obj.RenderDataCache_.y;
+                        else
+                            [x, y] = obj.Tag.getXY();
+                        end
                     catch
                         x = []; y = [];
                     end
@@ -1466,6 +1553,42 @@ classdef FastSenseWidget < DashboardWidget
             end
         end
 
+        function [x, y] = pullDataCached_(obj)
+        %PULLDATACACHED_ 260610-ov3 render-scoped cache wrapper around pullData_.
+        %   Returns RenderDataCache_.x/.y when the cache is warm (set by
+        %   cacheRenderData_); otherwise calls pullData_(), caches the result,
+        %   and returns it.  The cache is cleared by clearRenderCache_() at the
+        %   end of render()/rebuildForTag_() — it NEVER outlives a single render
+        %   pass, so live refresh/update ticks always see a cold cache.
+            if ~isempty(obj.RenderDataCache_) && ...
+                    isstruct(obj.RenderDataCache_) && ...
+                    isfield(obj.RenderDataCache_, 'x') && ...
+                    isfield(obj.RenderDataCache_, 'y')
+                x = obj.RenderDataCache_.x;
+                y = obj.RenderDataCache_.y;
+            else
+                [x, y] = obj.pullData_();
+                obj.cacheRenderData_(x, y);
+            end
+        end
+
+        function cacheRenderData_(obj, x, y)
+        %CACHERENDERDATA_ 260610-ov3 — store [x, y] in the render-scoped cache.
+        %   Called once per render pass (either from the probe block or from the
+        %   first pullDataCached_() call).  Subsequent calls in the same pass are
+        %   handled by pullDataCached_() returning the warm cache without entering
+        %   here.
+            obj.RenderDataCache_ = struct('x', x, 'y', y);
+        end
+
+        function clearRenderCache_(obj)
+        %CLEARRENDERCACHE_ 260610-ov3 — reset RenderDataCache_ to [].
+        %   Called at the END of render() and rebuildForTag_() so the cache
+        %   never outlives the render pass that created it.  refresh()/update()
+        %   paths are completely unaffected — they never warm or read this cache.
+            obj.RenderDataCache_ = [];
+        end
+
         function renderEmptyState_(obj, parentPanel)
         %RENDEREMPTYSTATE_ Render 'No data in selected range' centered placeholder.
         %   Uses an invisible axes + centered text rather than uigridlayout/
@@ -1704,7 +1827,23 @@ classdef FastSenseWidget < DashboardWidget
                 fp.ShowEventMarkers = obj.ShowEventMarkers;
                 fp.EventStore       = esForward;
             end
-            fp.addTag(obj.Tag);
+            % 260610-ov3: same single-resolve approach as render() branch (3).
+            % Resolve once via pullDataCached_() and bind via fp.addLine so
+            % yInit and updateTimeRangeCache below reuse the cached arrays.
+            % State tags keep fp.addTag for staircase rendering (same guard as
+            % render(); ismethod guard keeps non-standard tags on safe path).
+            isStateLike = ismethod(obj.Tag, 'getKind') && ...
+                          strcmp(obj.Tag.getKind(), 'state');
+            if isStateLike
+                fp.addTag(obj.Tag);
+            else
+                try
+                    [xrb, yrb] = obj.pullDataCached_();
+                    fp.addLine(xrb, yrb, 'DisplayName', obj.Tag.Name);
+                catch
+                    fp.addTag(obj.Tag);  % safe fallback
+                end
+            end
 
             % See render() — title sits above the axes against the panel,
             % so use the dashboard theme's ToolbarFontColor for legibility.
@@ -1742,8 +1881,22 @@ classdef FastSenseWidget < DashboardWidget
             end
 
             obj.LastTagRef = obj.Tag;
-            obj.updateTimeRangeCache();
+            % 260610-ov3: pass cached x to updateTimeRangeCache to avoid an
+            % extra Tag.getXY call (mirrors the render() treatment).
+            if ~isempty(obj.Tag) && ~isempty(obj.RenderDataCache_)
+                try
+                    [xrc, ~] = obj.pullDataCached_();
+                    obj.updateTimeRangeCache(xrc);
+                catch
+                    obj.updateTimeRangeCache();
+                end
+            else
+                obj.updateTimeRangeCache();
+            end
             obj.invalidatePreviewCache_();   % 260508-das
+            % 260610-ov3: clear render-scoped cache so live refresh/update
+            % paths never see stale rebuild-time data.
+            obj.clearRenderCache_();
 
             if ~isempty(savedXLim)
                 obj.IsSettingTime = true;
