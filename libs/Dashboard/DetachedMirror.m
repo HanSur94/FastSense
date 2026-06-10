@@ -100,6 +100,20 @@ classdef DetachedMirror < handle
             result = isempty(obj.hFigure) || ~ishandle(obj.hFigure);
         end
 
+        function delete(obj)
+        %DELETE Release the cloned widget and the mirror figure.
+        %   The clone is a full DashboardWidget (a FastSenseWidget clone holds
+        %   listeners and an inner FastSense); without an explicit delete it
+        %   outlived the mirror window indefinitely (260610-hwj).
+            obj.releaseWidget_();
+            try
+                if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
+                    delete(obj.hFigure);
+                end
+            catch
+            end
+        end
+
     end
 
     methods (Access = private)
@@ -119,9 +133,25 @@ classdef DetachedMirror < handle
                 end
             end
 
+            % Release the cloned widget BEFORE the figure so its teardown
+            % (timers/listeners on a FastSenseWidget clone) sees live
+            % graphics handles. Without this, the clone leaked (260610-hwj).
+            obj.releaseWidget_();
+
             if ~isempty(obj.hFigure) && ishandle(obj.hFigure)
                 delete(obj.hFigure);
             end
+        end
+
+        function releaseWidget_(obj)
+        %RELEASEWIDGET_ Delete the cloned widget exactly once (idempotent).
+            try
+                if ~isempty(obj.Widget) && isa(obj.Widget, 'handle') && isvalid(obj.Widget)
+                    delete(obj.Widget);
+                end
+            catch
+            end
+            obj.Widget = [];
         end
 
     end
