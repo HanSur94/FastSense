@@ -7,7 +7,9 @@ function test_fastsense_widget_render_cache()
 %        clearRenderCache_).
 %     2. A single render() pass resolves Tag data at most once.
 %     3. Bound line XData/YData is byte-identical to the raw Tag data.
-%     4. The cache is cold after render() completes.
+%     4. Cache lifecycle: warm after render() (the engine's preview pass
+%        consumes it), cleared by getPreviewSeries (consume-once) and by
+%        live refresh() on entry (T-ov3-02).
 %
 %   Run via the orchestrator after execution:
 %     run_matlab_test_file('tests/test_fastsense_widget_render_cache.m')
@@ -96,9 +98,10 @@ function test_fastsense_widget_render_cache()
     end
 
     % ------------------------------------------------------------------
-    % test_cache_cold_after_render
-    %   RenderDataCache_ is cleared at the end of render() so live ticks
-    %   never see stale render-time data.
+    % test_cache_lifecycle
+    %   Warm after render() (kept for the engine's post-render preview
+    %   pass), consumed by getPreviewSeries, and cleared on entry by the
+    %   live refresh() tick so live paths never see render-time data.
     % ------------------------------------------------------------------
     try
         N = 100;
@@ -111,12 +114,21 @@ function test_fastsense_widget_render_cache()
         hp = uipanel(fig, 'Position', [0 0 1 1]);
         w.render(hp);
         cache = w.getRenderCacheForTest_();
+        assert(~isempty(cache), ...
+            'RenderDataCache_ must stay warm after render() for the preview pass');
+        w.getPreviewSeries(16);
+        cache = w.getRenderCacheForTest_();
         assert(isempty(cache), ...
-            'RenderDataCache_ must be empty after render() completes');
+            'getPreviewSeries must consume (clear) the warm cache');
+        w.setRenderCacheForTest_(xi, yi);
+        w.refresh();
+        cache = w.getRenderCacheForTest_();
+        assert(isempty(cache), ...
+            'refresh() must clear the render cache on entry (T-ov3-02)');
         passed = passed + 1;
     catch ME
         failed = failed + 1;
-        failures{end+1} = sprintf('test_cache_cold_after_render: %s', ME.message);
+        failures{end+1} = sprintf('test_cache_lifecycle: %s', ME.message);
     end
 
     % ------------------------------------------------------------------
@@ -134,7 +146,6 @@ function test_fastsense_widget_render_cache()
             '%d test(s) failed.', failed);
     end
 end
-
 
 % ==========================================================================
 %   CountingSensorTag — local subclass that counts getXY invocations.

@@ -150,17 +150,21 @@ classdef FastSenseWidget < DashboardWidget
         %GETRENDERCACHEFORTEST_ 260610-ov3 test seam — return RenderDataCache_ value.
         %   Hidden (not public) so the DashboardWidget contract is unchanged.
         %   Used by test_fastsense_widget_render_cache.m and
-        %   test_dashboard_load_perf.m to verify the cache is cold on
-        %   construction and after render() completes.
+        %   test_dashboard_load_perf.m to verify the cache lifecycle (cold on
+        %   construction, warm after render(), cleared by live-tick entry).
             c = obj.RenderDataCache_;
         end
 
         function setRenderCacheForTest_(obj, x, y)
         %SETRENDERCACHEFORTEST_ 260610-ov3 test seam — force-warm RenderDataCache_.
         %   Lets test_dashboard_load_perf.m call getPreviewSeries with a
-        %   warm cache without going through render(), verifying that
-        %   getPreviewSeries reuses the warm cache (read-only) when present.
-            obj.RenderDataCache_ = struct('x', x, 'y', y);
+        %   warm cache without going through render(), verifying the
+        %   consume-once reuse. Passing empty x AND y clears the cache.
+            if isempty(x) && isempty(y)
+                obj.clearRenderCache_();
+            else
+                obj.RenderDataCache_ = struct('x', x, 'y', y);
+            end
         end
     end
 
@@ -442,9 +446,10 @@ classdef FastSenseWidget < DashboardWidget
                 obj.updateTimeRangeCache();
             end
 
-            % 260610-ov3: clear render-scoped cache so live refresh/update
-            % paths never see stale render-time data.
-            obj.clearRenderCache_();
+            % 260610-ov3: the render cache stays warm here on purpose — the
+            % engine's post-render preview pass (computePreviewEnvelope ->
+            % getPreviewSeries) consumes and clears it. refresh()/update()
+            % clear it on entry so live ticks never see render-time data.
 
             % Listen for manual zoom/pan to disable global time for this widget
             try
@@ -467,6 +472,8 @@ classdef FastSenseWidget < DashboardWidget
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            % 260610-ov3: live ticks must never read render-scoped data.
+            obj.clearRenderCache_();
             % Handle identity: MATLAB overloads == for handle subclasses;
             % Octave does not, so fall back to Key-equality (Phase 1006
             % precedent) — semantically equivalent for the refresh fast-path
@@ -533,6 +540,8 @@ classdef FastSenseWidget < DashboardWidget
 
             if isempty(obj.Tag), return; end
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
+            % 260610-ov3: live ticks must never read render-scoped data.
+            obj.clearRenderCache_();
             if ~obj.ShowingEmptyState_ && ~isempty(obj.FastSenseObj) && obj.FastSenseObj.IsRendered
                 try
                     [x, y] = obj.pullData_();
@@ -1027,13 +1036,12 @@ classdef FastSenseWidget < DashboardWidget
                 nBuckets = double(floor(nBuckets));
 
                 % Fetch raw [x, y] from Tag, or from XData/YData.
-                % 260610-ov3: when the render-scoped cache is warm (load-time
-                % computePreviewEnvelope runs inside the render pass), reuse
-                % the already-resolved arrays without calling Tag.getXY again.
-                % Read-only reuse — getPreviewSeries never warms the cache.
-                % At live-tick time the cache is always cold (clearRenderCache_
-                % ran at end of render/rebuildForTag), so the cold path is
-                % byte-identical to pre-260610-ov3 behavior.
+                % 260610-ov3: when the render-scoped cache is warm (the engine's
+                % post-render computePreviewEnvelope pass), reuse the already-
+                % resolved arrays without calling Tag.getXY again, then clear —
+                % the cache is consume-once so later calls (live ticks, detach
+                % mirrors) always re-resolve and stay byte-identical to the
+                % pre-260610-ov3 behavior.
                 x = []; y = [];
                 if ~isempty(obj.Tag)
                     try
@@ -1043,6 +1051,7 @@ classdef FastSenseWidget < DashboardWidget
                                 isfield(obj.RenderDataCache_, 'y')
                             x = obj.RenderDataCache_.x;
                             y = obj.RenderDataCache_.y;
+                            obj.clearRenderCache_();
                         else
                             [x, y] = obj.Tag.getXY();
                         end
@@ -1557,9 +1566,10 @@ classdef FastSenseWidget < DashboardWidget
         %PULLDATACACHED_ 260610-ov3 render-scoped cache wrapper around pullData_.
         %   Returns RenderDataCache_.x/.y when the cache is warm (set by
         %   cacheRenderData_); otherwise calls pullData_(), caches the result,
-        %   and returns it.  The cache is cleared by clearRenderCache_() at the
-        %   end of render()/rebuildForTag_() — it NEVER outlives a single render
-        %   pass, so live refresh/update ticks always see a cold cache.
+        %   and returns it.  The cache lives until the engine's post-render
+        %   preview pass consumes it (getPreviewSeries), the end of
+        %   rebuildForTag_(), or a live refresh()/update() tick clears it on
+        %   entry — live paths always see a cold cache.
             if ~isempty(obj.RenderDataCache_) && ...
                     isstruct(obj.RenderDataCache_) && ...
                     isfield(obj.RenderDataCache_, 'x') && ...
@@ -1583,9 +1593,9 @@ classdef FastSenseWidget < DashboardWidget
 
         function clearRenderCache_(obj)
         %CLEARRENDERCACHE_ 260610-ov3 — reset RenderDataCache_ to [].
-        %   Called at the END of render() and rebuildForTag_() so the cache
-        %   never outlives the render pass that created it.  refresh()/update()
-        %   paths are completely unaffected — they never warm or read this cache.
+        %   Called when getPreviewSeries consumes the warm cache, at the end of
+        %   rebuildForTag_(), and on entry to refresh()/update() so live ticks
+        %   never read render-scoped data.
             obj.RenderDataCache_ = [];
         end
 
@@ -1761,18 +1771,33 @@ classdef FastSenseWidget < DashboardWidget
                     if nargin >= 2 && ~isempty(x)
                         % Use the already-pulled x — avoids a redundant getXY().
                         n = numel(x);
+                        tMin = x(1);
+                        tMax = x(n);
+                    elseif ismethod(obj.Tag, 'getTimeRange')
+                        % 260610-ov3: only the extent is needed here, so ask the
+                        % Tag for its range instead of pulling the full arrays.
+                        % O(1) for SensorTag/StateTag; disk-backed sensors read
+                        % the DataStore extent (getXY returns empty for those,
+                        % which previously left the cache at inf/-inf).
+                        [tMin, tMax] = obj.Tag.getTimeRange();
+                        n = double(isscalar(tMin) && isscalar(tMax) && ...
+                                   ~isnan(tMin) && ~isnan(tMax));
                     else
                         [x, ~] = obj.Tag.getXY();
                         n = numel(x);
+                        if n > 0
+                            tMin = x(1);
+                            tMax = x(n);
+                        end
                     end
                     if n == 0
                         obj.CachedXMin = inf;
                         obj.CachedXMax = -inf;
                         return;
                     end
-                    obj.CachedXMax = x(n);
+                    obj.CachedXMax = tMax;
                     if isinf(obj.CachedXMin)
-                        obj.CachedXMin = x(1);
+                        obj.CachedXMin = tMin;
                     end
                 catch
                     obj.CachedXMin = inf;

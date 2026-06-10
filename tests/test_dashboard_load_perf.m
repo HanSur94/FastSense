@@ -7,8 +7,9 @@ function test_dashboard_load_perf()
 %     test_bound_array_parity       — inner FastSense line XData/YData equals the
 %                                     raw Tag X/Y (cache must not corrupt arrays).
 %     test_preview_parity           — getPreviewSeries output is byte-identical
-%                                     with cache warm (post-render seam) vs cold.
-%     test_cache_cold_after_render  — getRenderCacheForTest_ returns [] after render().
+%                                     with cache warm (post-render) vs cold.
+%     test_cache_lifecycle          — cache warm after render(), consumed by
+%                                     getPreviewSeries, cleared by refresh().
 %     test_state_tag_fallback       — StateTag still uses fp.addTag (staircase path).
 %
 %   Run:
@@ -87,37 +88,38 @@ function test_dashboard_load_perf()
     % ==================================================================
     % test_preview_parity
     % ==================================================================
-    % getPreviewSeries with a warm render cache (forced via Hidden seam)
-    % must produce byte-identical output to cold cache (Tag.getXY path).
+    % getPreviewSeries with a warm render cache must produce byte-identical
+    % output to the cold cache (Tag.getXY) path. Two widgets bound to the
+    % same data are used so each starts with an empty PreviewCache_ (the
+    % shape cache would otherwise short-circuit the second call).
     try
         N = 500;
         xi = linspace(0, 20, N);
         yi = sin(xi / 2) .* exp(-xi / 30);
-        tag = SensorTag('ov3-prev-1', 'X', xi, 'Y', yi);
-        w   = FastSenseWidget('Tag', tag, 'Title', 'Preview Parity');
+        tagA = SensorTag('ov3-prev-1', 'X', xi, 'Y', yi);
+        tagB = SensorTag('ov3-prev-2', 'X', xi, 'Y', yi);
+        wCold = FastSenseWidget('Tag', tagA, 'Title', 'Preview Cold');
+        wWarm = FastSenseWidget('Tag', tagB, 'Title', 'Preview Warm');
         fig = figure('Visible', 'off');
         cleanupFig3 = onCleanup(@() close(fig));
-        hp = uipanel(fig, 'Position', [0 0 1 1]);
+        hpA = uipanel(fig, 'Position', [0 0 0.5 1]);
+        hpB = uipanel(fig, 'Position', [0.5 0 0.5 1]);
 
         % Render first so FastSenseObj (with hAxes) is available, which
         % getPreviewSeries needs to read YLim for normalization.
-        w.render(hp);
+        wCold.render(hpA);
+        wWarm.render(hpB);
 
         nBuckets = 50;
-        % Cold call (cache is [] after render completed).
-        seriesCold = w.getPreviewSeries(nBuckets);
+        % Cold path: force-clear the warm post-render cache so this read
+        % goes through Tag.getXY.
+        wCold.setRenderCacheForTest_([], []);
+        seriesCold = wCold.getPreviewSeries(nBuckets);
 
-        % Force-warm the cache via Hidden seam.
-        w.setRenderCacheForTest_(xi, yi);
-        seriesWarm = w.getPreviewSeries(nBuckets);
-
-        % Clear again to be safe.
-        w.setRenderCacheForTest_(xi, []);  % won't match struct check — clears naturally
-        % Actually clear properly:
-        w.getRenderCacheForTest_();  % just a read; clearing requires the seam to set []
-        % Re-clear with the empty-struct workaround — setRenderCacheForTest_ accepts any x,y
-        % but the actual clearing is done by clearRenderCache_() internally.
-        % Simplest: just compare the two series.
+        % Warm path: render left the cache warm; the read consumes it.
+        seriesWarm = wWarm.getPreviewSeries(nBuckets);
+        assert(isempty(wWarm.getRenderCacheForTest_()), ...
+            'warm preview read must consume (clear) the render cache');
 
         if ~isempty(seriesCold) && ~isempty(seriesWarm)
             % xCenters must be identical (same data, same bucket count).
@@ -143,27 +145,32 @@ function test_dashboard_load_perf()
     end
 
     % ==================================================================
-    % test_cache_cold_after_render
+    % test_cache_lifecycle
     % ==================================================================
-    % RenderDataCache_ must be [] after render() returns (never leaks into
-    % live refresh/update paths).
+    % Cache is warm after render() (the engine's post-render preview pass
+    % consumes it) and is cleared on entry by live refresh()/update() so it
+    % never leaks into live paths (T-ov3-02).
     try
         N = 120;
         xi = linspace(0, 4, N);
         yi = xi .^ 2 - xi;
         tag = SensorTag('ov3-cold-2', 'X', xi, 'Y', yi);
-        w   = FastSenseWidget('Tag', tag, 'Title', 'Cold After Render');
+        w   = FastSenseWidget('Tag', tag, 'Title', 'Cache Lifecycle');
         fig = figure('Visible', 'off');
         cleanupFig4 = onCleanup(@() close(fig));
         hp = uipanel(fig, 'Position', [0 0 1 1]);
         w.render(hp);
         cache = w.getRenderCacheForTest_();
+        assert(~isempty(cache), ...
+            'RenderDataCache_ must stay warm after render() for the preview pass');
+        w.update();
+        cache = w.getRenderCacheForTest_();
         assert(isempty(cache), ...
-            'RenderDataCache_ must be [] after render() completes (T-ov3-02)');
+            'update() must clear the render cache on entry (T-ov3-02)');
         passed = passed + 1;
     catch ME
         failed = failed + 1;
-        failures{end+1} = sprintf('test_cache_cold_after_render: %s', ME.message);
+        failures{end+1} = sprintf('test_cache_lifecycle: %s', ME.message);
     end
 
     % ==================================================================
@@ -175,7 +182,7 @@ function test_dashboard_load_perf()
         if exist('StateTag', 'class')
             t0 = 0; t1 = 10;
             sTag = StateTag('ov3-state-1', 'X', [t0, 5, t1], 'Y', [1, 2, 1], ...
-                'States', {'idle', 'run', 'idle'});
+                'Labels', {'idle', 'run', 'idle'});
             w = FastSenseWidget('Tag', sTag, 'Title', 'State Fallback');
             fig = figure('Visible', 'off');
             cleanupFig5 = onCleanup(@() close(fig));
