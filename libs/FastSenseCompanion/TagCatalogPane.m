@@ -58,8 +58,11 @@ classdef TagCatalogPane < handle
 
             % Snapshot tags from registry. Phase 1044 — Registry_ may be a
             % Machine (fleet mode); branch explicitly to keep the static
-            % TagRegistry call MISS_HIT-clean and Octave-safe.
-            if isa(obj.Registry_, 'TagRegistry')
+            % TagRegistry call MISS_HIT-clean and Octave-safe. An empty
+            % Registry_ takes the static path (WR-05) — the pre-1044 static
+            % call tolerated [] and callers like setProject perform no
+            % registry validation, so [] must not reach the dot-call branch.
+            if isempty(obj.Registry_) || isa(obj.Registry_, 'TagRegistry')
                 obj.AllTags_ = TagRegistry.find(@(t) true);
             else
                 obj.AllTags_ = obj.Registry_.find(@(t) true);
@@ -208,8 +211,9 @@ classdef TagCatalogPane < handle
         %REFRESH Re-snapshot all tags from the registry and rebuild the listbox.
         %   Preserves SelectedKeys_ (drops keys no longer in snapshot).
         %   Call after externally registering or unregistering tags.
-        %   Phase 1044 — Registry_ may be a Machine (fleet mode).
-            if isa(obj.Registry_, 'TagRegistry')
+        %   Phase 1044 — Registry_ may be a Machine (fleet mode). Empty
+        %   Registry_ takes the static path (WR-05; matches attach).
+            if isempty(obj.Registry_) || isa(obj.Registry_, 'TagRegistry')
                 obj.AllTags_ = TagRegistry.find(@(t) true);
             else
                 obj.AllTags_ = obj.Registry_.find(@(t) true);
