@@ -289,6 +289,32 @@ classdef CanonicalMapper < handle
             end
         end
 
+        function e = resolve(obj, logicalId, machineId)
+            %RESOLVE Return the mapping entry for (logicalId,machineId), or [] if none.
+            %   e = resolve(logicalId, machineId)
+            %
+            %   Looks up the entry struct for the given logical-sensor / machine
+            %   pair without any confidence gate or side effects (Entries_ and
+            %   LastTagInfos_ are never mutated). This is the read seam Phase 1045
+            %   resolves ONCE at compare-open time; the confidence gate lives in
+            %   the dialog/helper layer (buildCompareResolution_), not here.
+            %
+            %   Returns the entry struct (fields: logicalId, machineId, localKey,
+            %   localName, localUnits, similarity, confidence, status, unitMismatch)
+            %   or [] when the logicalId is absent or no bucket entry matches machineId.
+            e = [];
+            if ~isKey(obj.Entries_, logicalId)
+                return;
+            end
+            bucket = obj.Entries_(logicalId);
+            for i = 1:numel(bucket)
+                if strcmp(bucket{i}.machineId, machineId)
+                    e = bucket{i};
+                    return;
+                end
+            end
+        end
+
         function ok = isResolvable(obj, logicalId, machineId)
             %ISRESOLVABLE Whether a (logicalId,machineId) entry is safe to compare (CANON-04).
             %   False for LOW+AUTO entries and for unconfirmed unit mismatches; true otherwise.

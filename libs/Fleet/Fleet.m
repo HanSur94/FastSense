@@ -117,6 +117,17 @@ classdef Fleet < handle
             ids = obj.MachineIds_;
         end
 
+        function m = mapper(obj)
+            %MAPPER Return the CanonicalMapper handle for cross-machine resolution.
+            %   m = fleet.mapper()
+            %
+            %   Public accessor (mirrors machineIds()) so callers reach the
+            %   embedded CanonicalMapper through a documented seam rather than
+            %   the private Mapper_ field. Used by the Phase 1045 cross-machine
+            %   comparison helpers (buildCompareResolution_).
+            m = obj.Mapper_;
+        end
+
         function ms = filterByName(obj, pattern)
             %FILTERBYNAME Case-insensitive substring filter on Machine Name.
             %   ms = fleet.filterByName(pattern)
