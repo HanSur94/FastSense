@@ -1643,6 +1643,109 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
             end
         end
 
+        % ---- Phase 1044: Companion Machine Dimension (MACH-02..05) ----
+
+        function testMachineSwitch_ActiveContext(testCase)
+            %TESTMACHINESWITCH_ACTIVECONTEXT Selecting a machine repoints the tag catalog.
+            % MACH-02: the catalog snapshot must come from the active machine's
+            % isolated catalog — not the global TagRegistry, not the prior machine.
+            fleet = Fleet();
+            m1 = fleet.addMachine('Id', 'M01', 'Name', 'Press Line 3');
+            m2 = fleet.addMachine('Id', 'M02', 'Name', 'Pump Station 1');
+            m1.addTag(SensorTag('temp_a', 'Name', 'Temp A', 'X', 0:9, 'Y', 0:9));
+            m2.addTag(SensorTag('temp_b', 'Name', 'Temp B', 'X', 0:9, 'Y', 0:9));
+            m2.addTag(SensorTag('temp_c', 'Name', 'Temp C', 'X', 0:9, 'Y', 0:9));
+            app = FastSenseCompanion('Fleet', fleet);
+            testCase.addTeardown(@() closeIfOpen_(app));
+            s = struct(app);
+            % Auto-select-first: catalog reflects M01 (exactly temp_a)
+            keys1 = cellfun(@(t) t.Key, struct(s.CatalogPane_).AllTags_, ...
+                'UniformOutput', false);
+            testCase.verifyEqual(keys1, {'temp_a'}, ...
+                'MACH-02: after construction the catalog must hold exactly M01''s tags');
+            % Switch to M02: catalog repopulates from M02's catalog
+            s.MachineSelectorPane_.selectById('M02');
+            drawnow;
+            s2 = struct(app);
+            keys2 = sort(cellfun(@(t) t.Key, struct(s2.CatalogPane_).AllTags_, ...
+                'UniformOutput', false));
+            testCase.verifyEqual(keys2, {'temp_b', 'temp_c'}, ...
+                'MACH-02: after switching, the catalog must hold exactly M02''s tags');
+        end
+
+        function testActiveMachineLabel(testCase)
+            %TESTACTIVEMACHINELABEL Toolbar label always names the active machine.
+            % MACH-03: label text carries 'Name [Id]' for the active machine and
+            % updates on switch. Prefix glyph (char(9658) vs '>') is not asserted.
+            fleet = Fleet();
+            fleet.addMachine('Id', 'M01', 'Name', 'Press Line 3');
+            fleet.addMachine('Id', 'M02', 'Name', 'Pump Station 1');
+            app = FastSenseCompanion('Fleet', fleet);
+            testCase.addTeardown(@() closeIfOpen_(app));
+            s = struct(app);
+            testCase.verifyTrue(~isempty(s.hActiveMachineLabel_) && ...
+                isvalid(s.hActiveMachineLabel_), ...
+                'MACH-03: fleet mode must create the toolbar active-machine label');
+            testCase.verifyTrue(~isempty(strfind(s.hActiveMachineLabel_.Text, ...
+                'Press Line 3 [M01]')), ...
+                ['MACH-03: label must read ''Press Line 3 [M01]''; got: ', ...
+                 s.hActiveMachineLabel_.Text]);
+            s.MachineSelectorPane_.selectById('M02');
+            drawnow;
+            testCase.verifyTrue(~isempty(strfind(s.hActiveMachineLabel_.Text, ...
+                'Pump Station 1 [M02]')), ...
+                ['MACH-03: label must read ''Pump Station 1 [M02]'' after switch; got: ', ...
+                 s.hActiveMachineLabel_.Text]);
+        end
+
+        function testMachineSwitch_TimerStable(testCase)
+            %TESTMACHINESWITCH_TIMERSTABLE timerfindall flat across live switches.
+            % MACH-04: switching machines with live mode ON must stop the old
+            % context's timer use before starting the new one — the absolute
+            % timer count never grows across repeated switches.
+            fleet = Fleet();
+            for k = 1:3
+                mk = fleet.addMachine('Id', sprintf('M%02d', k), ...
+                    'Name', sprintf('Machine %d', k));
+                mk.Dashboards = {DashboardEngine(sprintf('Dash %d', k))};
+            end
+            app = FastSenseCompanion('Fleet', fleet);
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.startLiveMode();
+            timersBefore = numel(timerfindall);
+            s = struct(app);
+            ids = fleet.machineIds();
+            for i = 1:5
+                s.MachineSelectorPane_.selectById(ids{mod(i, 2) + 1});
+                drawnow;
+            end
+            testCase.verifyEqual(numel(timerfindall), timersBefore, ...
+                'MACH-04: timerfindall count must be stable across machine switches');
+            testCase.verifyTrue(app.IsLive, ...
+                'MACH-04: live mode must remain ON across machine switches');
+        end
+
+        function testLegacyConstruction_Unchanged(testCase)
+            %TESTLEGACYCONSTRUCTION_UNCHANGED No-Fleet construction is byte-identical.
+            % MACH-05: legacy 'Dashboards'/'Registry' construction keeps the
+            % [3 3] grid, no machine-selector panel, no active-machine label,
+            % and the [1 10] toolbar.
+            d = DashboardEngine('LegacyDash');
+            app = FastSenseCompanion('Dashboards', {d});
+            testCase.addTeardown(@() closeIfOpen_(app));
+            s = struct(app);
+            testCase.verifyEqual(numel(s.hLayout_.ColumnWidth), 3, ...
+                'MACH-05: legacy root grid must keep 3 columns ([3 3])');
+            testCase.verifyTrue(isempty(s.hMachineSelectorPanel_), ...
+                'MACH-05: legacy mode must not create hMachineSelectorPanel_');
+            testCase.verifyTrue(isempty(s.hActiveMachineLabel_), ...
+                'MACH-05: legacy mode must not create hActiveMachineLabel_');
+            tbGrid = s.hToolbarPanel_.Children;
+            tbGrid = tbGrid(arrayfun(@(h) isa(h, 'matlab.ui.container.GridLayout'), tbGrid));
+            testCase.verifyEqual(numel(tbGrid(1).ColumnWidth), 10, ...
+                'MACH-05: legacy toolbar inner grid must keep 10 columns');
+        end
+
     end
 
     methods (Access = private)
