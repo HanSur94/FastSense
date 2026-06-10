@@ -270,6 +270,23 @@ classdef FastSenseCompanion < handle
             obj.LivePeriod  = userLivePeriod;
             % Phase 1044 — store the optional Fleet handle (or [] in legacy mode).
             obj.Fleet_      = userFleet;
+            % Phase 1044 — fleet mode auto-selects the first machine as the
+            % initial active context BEFORE the panes attach, so the catalog
+            % and dashboard list are machine-scoped from first render. Doing
+            % it here (not via setProject) avoids a mid-construction pane
+            % rebuild and double listener wiring. Empty fleet: keep defaults.
+            if ~isempty(obj.Fleet_)
+                ids = obj.Fleet_.machineIds();
+                if ~isempty(ids)
+                    firstMachine = obj.Fleet_.getMachine(ids{1});
+                    firstDash    = firstMachine.Dashboards;
+                    if ~iscell(firstDash); firstDash = {firstDash}; end
+                    obj.Engines_    = firstDash;
+                    obj.Dashboards  = firstDash;
+                    obj.Registry_   = firstMachine;
+                    obj.Registry    = firstMachine;
+                end
+            end
 
             % --- Cluster mode resolution (Phase 1033 Plan 01; OPS-01 partial) ---
             obj.SharedRoot_     = userSharedRoot;
@@ -607,12 +624,26 @@ classdef FastSenseCompanion < handle
             obj.ListPane_.attach(obj.hMidPanel_, obj.hFig_, obj.Engines_, obj.Theme_);
             obj.InspectorPane_.attach(obj.hRightPanel_, obj.hFig_, obj.CatalogPane_, obj, obj.Theme_);
             % Phase 1044 — fleet mode: instantiate + attach the left-rail
-            % MachineSelectorPane into its col-1 panel. The MachineSelectionChanged
-            % listener wiring and auto-select-first happen in Plan 04.
+            % MachineSelectorPane into its col-1 panel, listen for machine
+            % selection, and auto-select the first machine so the active
+            % context is never empty when a Fleet is present.
             if ~isempty(obj.Fleet_)
                 obj.MachineSelectorPane_ = MachineSelectorPane();
                 obj.MachineSelectorPane_.attach(obj.hMachineSelectorPanel_, obj.hFig_, ...
                     obj.Fleet_, obj.Theme_);
+                % Reflect the auto-selected first machine (Step 6) in the list
+                % highlight + toolbar indicator. selectById fires the pane
+                % event, but the MachineSelectionChanged listener is wired
+                % AFTER this block, so construction performs no redundant
+                % setProject round-trip.
+                ids = obj.Fleet_.machineIds();
+                if ~isempty(ids)
+                    obj.MachineSelectorPane_.selectById(ids{1});
+                    obj.updateActiveMachineIndicator_(obj.Fleet_.getMachine(ids{1}));
+                end
+                obj.Listeners_{end+1} = addlistener(obj.MachineSelectorPane_, ...
+                    'MachineSelectionChanged', ...
+                    @(s, e) obj.onMachineSelected_(e.MachineId));
             end
             % Wire pane event listeners (append to Listeners_)
             obj.Listeners_{end+1} = addlistener(obj.ListPane_, 'DashboardSelected', ...
@@ -818,7 +849,8 @@ classdef FastSenseCompanion < handle
         %   Previously opened dashboard or ad-hoc plot figures are not affected.
         %
         %   dashboards — cell array of DashboardEngine (same validation as constructor)
-        %   registry   — TagRegistry instance
+        %   registry   — TagRegistry instance, or a Machine handle (Phase 1044
+        %                fleet mode — Machine duck-types the find/get read API)
             if ~iscell(dashboards)
                 dashboards = {dashboards};
             end
@@ -886,6 +918,14 @@ classdef FastSenseCompanion < handle
             if ~isempty(obj.LiveLogPane_) && isvalid(obj.LiveLogPane_)
                 obj.Listeners_{end+1} = addlistener(obj.LiveLogPane_, 'DetachRequested', ...
                     @(~,~) obj.setLogState_('live', 'Detached'));
+            end
+            % Phase 1044 -- re-register the machine-selector listener. The
+            % clear-all above deletes it; without this re-wire the left rail
+            % would go dead after the first machine switch.
+            if ~isempty(obj.MachineSelectorPane_) && isvalid(obj.MachineSelectorPane_)
+                obj.Listeners_{end+1} = addlistener(obj.MachineSelectorPane_, ...
+                    'MachineSelectionChanged', ...
+                    @(s, e) obj.onMachineSelected_(e.MachineId));
             end
             obj.applyPlaceholderColors_();
         end
@@ -1711,10 +1751,20 @@ classdef FastSenseCompanion < handle
             %   the live log is not flooded with derived-tag noise.
             scanAll = obj.shouldScanForStatusTable_();
             try
-                if scanAll
-                    tags = TagRegistry.find(@(t) isa(t, 'Tag'));
+                % Phase 1044 — fleet mode scans the active machine's isolated
+                % catalog; legacy mode keeps the original static registry scan.
+                if isempty(obj.Fleet_)
+                    if scanAll
+                        tags = TagRegistry.find(@(t) isa(t, 'Tag'));
+                    else
+                        tags = TagRegistry.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'));
+                    end
                 else
-                    tags = TagRegistry.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'));
+                    if scanAll
+                        tags = obj.Registry_.find(@(t) isa(t, 'Tag'));
+                    else
+                        tags = obj.Registry_.find(@(t) isa(t, 'SensorTag') || isa(t, 'StateTag'));
+                    end
                 end
             catch
                 return;
@@ -1893,6 +1943,53 @@ classdef FastSenseCompanion < handle
                     end
                 end
             end
+        end
+
+        function onMachineSelected_(obj, selectedId)
+        %ONMACHINESELECTED_ Switch the active machine context (Phase 1044).
+        %   Listener target for MachineSelectorPane.MachineSelectionChanged.
+        %   Sequence (MACH-02/04): snapshot live state -> stop live timer ->
+        %   setProject(machine.Dashboards, machine) -> update toolbar
+        %   indicator -> restart live if it was on. stopLiveMode stops but
+        %   does NOT delete the timer and startLiveMode reuses it, so
+        %   timerfindall stays stable across switches (no accumulation).
+        %   Listener rewiring is owned by setProject — never addlistener here.
+            try
+                if isempty(obj.Fleet_); return; end
+                wasLive = obj.IsLive;
+                if wasLive
+                    obj.stopLiveMode();
+                end
+                newMachine = obj.Fleet_.getMachine(selectedId);
+                obj.setProject(newMachine.Dashboards, newMachine);
+                obj.updateActiveMachineIndicator_(newMachine);
+                if wasLive
+                    obj.startLiveMode();
+                end
+            catch ME
+                try
+                    uialert(obj.hFig_, ME.message, 'Machine Switch Failed', ...
+                        'Icon', 'error');
+                catch
+                end
+            end
+        end
+
+        function updateActiveMachineIndicator_(obj, machine)
+        %UPDATEACTIVEMACHINEINDICATOR_ Refresh the toolbar active-machine label.
+        %   Text format (UI-SPEC locked copy): '<prefix> Name [Id]' where
+        %   prefix is char(9658) on desktop MATLAB and '>' headless (no JVM).
+            if isempty(obj.hActiveMachineLabel_) || ~isvalid(obj.hActiveMachineLabel_)
+                return;
+            end
+            prefix = char(9658);
+            if ~usejava('desktop')
+                prefix = '>';
+            end
+            obj.hActiveMachineLabel_.Text = ...
+                [prefix ' ' machine.Name ' [' machine.Id ']'];
+            obj.hActiveMachineLabel_.Tooltip = ...
+                ['Active machine: ' machine.Name ' (Id: ' machine.Id ')'];
         end
 
         function onDashboardSelected_(obj, ~, ed)

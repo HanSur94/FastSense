@@ -56,8 +56,14 @@ classdef TagCatalogPane < handle
             % Clear existing children
             delete(obj.hPanel_.Children);
 
-            % Snapshot tags from registry
-            obj.AllTags_ = TagRegistry.find(@(t) true);
+            % Snapshot tags from registry. Phase 1044 — Registry_ may be a
+            % Machine (fleet mode); branch explicitly to keep the static
+            % TagRegistry call MISS_HIT-clean and Octave-safe.
+            if isa(obj.Registry_, 'TagRegistry')
+                obj.AllTags_ = TagRegistry.find(@(t) true);
+            else
+                obj.AllTags_ = obj.Registry_.find(@(t) true);
+            end
 
             % Reset filter state
             obj.SelectedKeys_    = {};
@@ -199,10 +205,15 @@ classdef TagCatalogPane < handle
         end
 
         function refresh(obj)
-        %REFRESH Re-snapshot all tags from TagRegistry and rebuild the listbox.
+        %REFRESH Re-snapshot all tags from the registry and rebuild the listbox.
         %   Preserves SelectedKeys_ (drops keys no longer in snapshot).
         %   Call after externally registering or unregistering tags.
-            obj.AllTags_ = TagRegistry.find(@(t) true);
+        %   Phase 1044 — Registry_ may be a Machine (fleet mode).
+            if isa(obj.Registry_, 'TagRegistry')
+                obj.AllTags_ = TagRegistry.find(@(t) true);
+            else
+                obj.AllTags_ = obj.Registry_.find(@(t) true);
+            end
             % Prune SelectedKeys_ to only those still present in snapshot
             allKeys = cellfun(@(t) t.Key, obj.AllTags_, 'UniformOutput', false);
             obj.SelectedKeys_ = intersect(obj.SelectedKeys_, allKeys);
