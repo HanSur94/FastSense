@@ -747,6 +747,12 @@ classdef EventViewer < handle
             %FORMATDURATION Convert datenum duration to readable string.
             %   dur is in days (datenum units).
             secs = dur * 86400;
+            if isempty(secs) || ~isfinite(secs)
+                % Open events (IsOpen=true, Phase 1012) carry EndTime=NaN so
+                % Duration=NaN — render a readable marker, not 'NaNh NaNm'.
+                str = '(open)';
+                return;
+            end
             if secs < 60
                 str = sprintf('%.1f s', secs);
             elseif secs < 3600

@@ -4583,7 +4583,16 @@ classdef FastSense < handle
             members = FastSense.getLinkRegistry('get', obj.LinkGroup, []);
             for i = 1:numel(members)
                 other = members{i};
-                if other.hAxes ~= obj.hAxes && ishandle(other.hAxes)
+                % A deleted member raises on ANY property access (MATLAB and
+                % Octave). isvalid() is not Octave-portable for classdef
+                % handles (see computeEventMarkers precedent), so probe with
+                % try/catch; 'get' prunes dead entries on its next call.
+                try
+                    otherAxes = other.hAxes;
+                catch
+                    continue;  % member was delete()d — skip
+                end
+                if otherAxes ~= obj.hAxes && ishandle(otherAxes)
                     other.IsPropagating = true;
                     other.CachedXLim = newXLim;
                     set(other.hAxes, 'XLim', newXLim);
@@ -4637,6 +4646,12 @@ classdef FastSense < handle
                 case 'get'
                     safeGroup = matlab.lang.makeValidName(group);
                     if isfield(reg, safeGroup)
+                        % Prune dead members on read: delete()d FastSense
+                        % objects stay in the persistent registry otherwise
+                        % (nothing calls 'cleanup' today) and every zoom
+                        % would pay a skip per corpse forever.
+                        reg.(safeGroup) = reg.(safeGroup)( ...
+                            FastSense.liveRegistryMask(reg.(safeGroup)));
                         registry = reg.(safeGroup);
                     else
                         registry = {};
@@ -4646,11 +4661,28 @@ classdef FastSense < handle
                 case 'cleanup'
                     safeGroup = matlab.lang.makeValidName(group);
                     if isfield(reg, safeGroup)
-                        alive = cellfun(@(o) ishandle(o.hAxes), reg.(safeGroup));
-                        reg.(safeGroup) = reg.(safeGroup)(alive);
+                        reg.(safeGroup) = reg.(safeGroup)( ...
+                            FastSense.liveRegistryMask(reg.(safeGroup)));
                     end
             end
             registry = [];
+        end
+
+        function alive = liveRegistryMask(members)
+            %LIVEREGISTRYMASK Logical mask of registry members safe to touch.
+            %   A member is live when its object is intact AND its axes handle
+            %   is valid. Deleted classdef handles raise on any property
+            %   access in both MATLAB and Octave; isvalid() is not
+            %   Octave-portable for non-timer handle objects, so probe with
+            %   try/catch instead.
+            alive = true(1, numel(members));
+            for k = 1:numel(members)
+                try
+                    alive(k) = ishandle(members{k}.hAxes);
+                catch
+                    alive(k) = false;
+                end
+            end
         end
     end
 
