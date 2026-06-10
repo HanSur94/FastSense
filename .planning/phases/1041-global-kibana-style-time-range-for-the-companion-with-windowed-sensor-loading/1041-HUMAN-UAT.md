@@ -3,7 +3,7 @@ status: partial
 phase: 1041-global-kibana-style-time-range-for-the-companion-with-windowed-sensor-loading
 source: [1041-VERIFICATION.md, 1041-MANUAL-VERIFY.md]
 started: 2026-06-02
-updated: 2026-06-03
+updated: 2026-06-10
 ---
 
 ## Current Test
@@ -45,8 +45,8 @@ result: passed
 
 ### 7. Empty-state widget for data outside the window
 expected: Opening a tag whose data does not overlap the active window shows a centered "No data in selected range" label (no axes, no crash).
-result: pending
-note: covered by automated out-of-extent getXYRange tests (test_sensor_tag_range); manual visual optional.
+result: passed
+note: covered by automated out-of-extent getXYRange tests (test_sensor_tag_range); manual visual optional. Verified 2026-06-10: test_sensor_tag_range 7/7 green under headless MATLAB R2025b.
 
 ### 8. Relative window slides on live tick; absolute stays fixed
 expected: With a relative range + live mode, the right edge tracks wall-clock "now" each tick (label unchanged); switching to an Absolute window keeps it fixed.
@@ -55,15 +55,15 @@ note: manual-only (requires live ticks); RangeChanged → setTimeWindow re-query
 
 ### 9. Theme restyle + persistence across reopen
 expected: Switching theme restyles the dropdown (and open strip); reopening the companion restores the last-used range from companionPrefs.
-result: pending
-note: theme restyle covered by TestCompanionTimeBar; persistence by automated companion tests.
+result: passed
+note: theme restyle covered by TestCompanionTimeBar; persistence by automated companion tests. Verified 2026-06-10: TestCompanionTimeBar 12/12 green; TestFastSenseCompanion 83/85 with the range/persistence subset green (the 1 failure, testPerTagModeSpawnsNFigures, is ad-hoc per-tag figure spawning under headless — unrelated to time-range; the 1 incomplete is the wiki-browser test, filtered by assumption).
 
 ## Summary
 
 total: 9
-passed: 6
+passed: 8
 issues: 0
-pending: 3
+pending: 1
 skipped: 0
 
 ## Gaps

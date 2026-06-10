@@ -89,12 +89,12 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 </details>
 
 <details>
-<summary>🚧 v2.1 Tag-API Tech Debt Cleanup (Phases 1012-1017) — in flight</summary>
+<summary>✅ v2.1 Tag-API Tech Debt Cleanup (Phases 1012-1017) — all phases complete 2026-06-10</summary>
 
 - [x] Phase 1012: Migrate examples to Tag API
 - [x] Phase 1013: Dead code deletion — EventDetector, IncrementalEventDetector, EventConfig
 - [x] Phase 1014: DashboardSerializer .m export for Tag-bound widgets
-- 🚧 Phase 1017: Tag system event auto-wiring — registry default EventStore, dual-key emission
+- [x] Phase 1017: Tag system event auto-wiring — registry default EventStore, dual-key emission (7/7 plans; code shipped via PR #99, last summary backfilled 2026-06-10)
 
 </details>
 
