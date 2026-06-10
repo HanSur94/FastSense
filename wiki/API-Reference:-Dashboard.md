@@ -1782,6 +1782,21 @@ obj = FastSenseWidget(varargin)
 
 ### Methods
 
+#### `c = getRenderCacheForTest_(obj)`
+
+GETRENDERCACHEFORTEST_ 260610-ov3 test seam — return RenderDataCache_ value.
+  Hidden (not public) so the DashboardWidget contract is unchanged.
+  Used by test_fastsense_widget_render_cache.m and
+  test_dashboard_load_perf.m to verify the cache lifecycle (cold on
+  construction, warm after render(), cleared by live-tick entry).
+
+#### `setRenderCacheForTest_(obj, x, y)`
+
+SETRENDERCACHEFORTEST_ 260610-ov3 test seam — force-warm RenderDataCache_.
+  Lets test_dashboard_load_perf.m call getPreviewSeries with a
+  warm cache without going through render(), verifying the
+  consume-once reuse. Passing empty x AND y clears the cache.
+
 #### `render(obj, parentPanel)`
 
 #### `refresh(obj)`
