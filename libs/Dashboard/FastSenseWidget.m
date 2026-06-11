@@ -2032,7 +2032,7 @@ function applyThresholds_(fp, spec)
     %   Accepts 'auto' / [] (no-op), numeric scalar/vector (upper lines),
     %   or a cell of structs: Value (scalar limit) or X / Y vectors
     %   (time-varying step limit; NaN Y = no limit), plus optional
-    %   Direction / Label.
+    %   Direction / Label / Color / LineStyle (severity styling).
     if isempty(spec)
         return;
     end
@@ -2068,6 +2068,12 @@ function applyThresholds_(fp, spec)
             args = {'Direction', dir};
             if ~isempty(lbl)
                 args = [args, {'Label', lbl}]; %#ok<AGROW>
+            end
+            if isfield(e, 'Color') && ~isempty(e.Color)
+                args = [args, {'Color', e.Color}]; %#ok<AGROW>
+            end
+            if isfield(e, 'LineStyle') && ~isempty(e.LineStyle)
+                args = [args, {'LineStyle', e.LineStyle}]; %#ok<AGROW>
             end
             if isTimeVarying
                 % Time-varying entry — forward to the core step-function

@@ -109,6 +109,40 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             testCase.verifyEqual(th(2).Direction, 'lower');
         end
 
+        function testThresholdSpecStyleReachesFastSense(testCase)
+            % Color / LineStyle on a Thresholds spec entry must reach the
+            % core threshold (severity styling: e.g. warn yellow solid,
+            % alarm red solid) for both scalar and time-varying entries.
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Units', 'normalized', ...
+                'Position', [0 0 1 1]);
+
+            warnColor = [0.93 0.69 0.13];
+            alarmColor = [0.7 0 0];
+            thX = 1:50;
+            thY = 4 * ones(1, 50);
+            w = FastSenseWidget('Thresholds', { ...
+                struct('Value', 5, 'Direction', 'upper', 'Label', 'UAL', ...
+                'Color', alarmColor, 'LineStyle', '-'), ...
+                struct('X', thX, 'Y', thY, 'Direction', 'upper', ...
+                'Label', 'UWL', 'Color', warnColor, 'LineStyle', '-')});
+            w.XData = 1:50;
+            w.YData = rand(1, 50);
+            w.render(hp);
+
+            th = w.FastSenseObj.Thresholds;
+            testCase.assertNumElements(th, 2);
+            testCase.verifyEqual(th(1).Color, alarmColor, ...
+                'scalar entry Color must pass through');
+            testCase.verifyEqual(th(1).LineStyle, '-', ...
+                'scalar entry LineStyle must pass through');
+            testCase.verifyEqual(th(2).Color, warnColor, ...
+                'time-varying entry Color must pass through');
+            testCase.verifyEqual(th(2).LineStyle, '-', ...
+                'time-varying entry LineStyle must pass through');
+        end
+
         function testToStructRoundTrip(testCase)
             w = FastSenseWidget('Title', 'My Plot', 'Position', [5 2 16 3]);
             w.XData = 1:10;
