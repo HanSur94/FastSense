@@ -225,6 +225,13 @@ classdef DashboardListPane < handle
                 % Create row grid inside scroll container
                 nRows = numel(filteredIdx);
                 obj.hRowGrid_ = uigridlayout(obj.hScroll_, [nRows 1]);
+                % Scrollable must live on the GRID: MATLAB ignores a
+                % uipanel's Scrollable when its child is a grid layout,
+                % so hScroll_ alone never scrolls and rows beyond the
+                % viewport are unreachable (showed up with 39 dashboards).
+                % Fixed 32px rows let the grid outgrow the viewport; same
+                % pattern as InspectorPane's per-renderer grids.
+                obj.hRowGrid_.Scrollable    = 'on';
                 obj.hRowGrid_.RowHeight     = repmat({32}, 1, nRows);
                 obj.hRowGrid_.ColumnWidth   = {'1x'};
                 obj.hRowGrid_.Padding       = [0 0 0 0];
