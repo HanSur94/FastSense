@@ -353,6 +353,8 @@ classdef FastSenseWidget < DashboardWidget
             %   'auto'                     — no-op (default)
             %   numeric scalar/vector      — one upper threshold per value
             %   cell of structs            — {struct('Value',..,'Direction',..,'Label',..), ...}
+            %                                entries may instead carry X/Y vectors for a
+            %                                time-varying limit: struct('X',..,'Y',..,'Direction',..)
             applyThresholds_(fp, obj.Thresholds);
 
             % Set title and axis labels.
@@ -894,9 +896,14 @@ classdef FastSenseWidget < DashboardWidget
             if iscell(obj.Thresholds)
                 for i = 1:numel(obj.Thresholds)
                     e = obj.Thresholds{i};
-                    if isstruct(e) && isfield(e, 'Value') && isfinite(e.Value)
+                    if isstruct(e) && isfield(e, 'Value') && ...
+                            ~isempty(e.Value) && isfinite(e.Value)
                         yMin = min(yMin, e.Value);
                         yMax = max(yMax, e.Value);
+                    elseif isstruct(e) && isfield(e, 'Y') && ...
+                            ~isempty(e.Y) && any(isfinite(e.Y(:)))
+                        yMin = min(yMin, min(e.Y(:), [], 'omitnan'));
+                        yMax = max(yMax, max(e.Y(:), [], 'omitnan'));
                     end
                 end
             elseif isnumeric(obj.Thresholds) && ~isempty(obj.Thresholds)
@@ -2023,7 +2030,9 @@ end
 function applyThresholds_(fp, spec)
     %APPLYTHRESHOLDS_ Push a Thresholds spec into a FastSense instance.
     %   Accepts 'auto' / [] (no-op), numeric scalar/vector (upper lines),
-    %   or a cell of structs with fields Value / Direction / Label.
+    %   or a cell of structs: Value (scalar limit) or X / Y vectors
+    %   (time-varying step limit; NaN Y = no limit), plus optional
+    %   Direction / Label / Color / LineStyle (severity styling).
     if isempty(spec)
         return;
     end
@@ -2040,7 +2049,12 @@ function applyThresholds_(fp, spec)
     if iscell(spec)
         for i = 1:numel(spec)
             e = spec{i};
-            if ~isstruct(e) || ~isfield(e, 'Value')
+            if ~isstruct(e)
+                continue;
+            end
+            isTimeVarying = isfield(e, 'X') && isfield(e, 'Y') && ...
+                ~isempty(e.X) && ~isempty(e.Y);
+            if ~isTimeVarying && ~isfield(e, 'Value')
                 continue;
             end
             dir = 'upper';
@@ -2051,10 +2065,23 @@ function applyThresholds_(fp, spec)
             if isfield(e, 'Label') && ~isempty(e.Label)
                 lbl = e.Label;
             end
-            if isempty(lbl)
-                fp.addThreshold(e.Value, 'Direction', dir);
+            args = {'Direction', dir};
+            if ~isempty(lbl)
+                args = [args, {'Label', lbl}]; %#ok<AGROW>
+            end
+            if isfield(e, 'Color') && ~isempty(e.Color)
+                args = [args, {'Color', e.Color}]; %#ok<AGROW>
+            end
+            if isfield(e, 'LineStyle') && ~isempty(e.LineStyle)
+                args = [args, {'LineStyle', e.LineStyle}]; %#ok<AGROW>
+            end
+            if isTimeVarying
+                % Time-varying entry — forward to the core step-function
+                % form addThreshold(thX, thY, ...). NaN samples in Y break
+                % the line where no limit applies (state-dependent limits).
+                fp.addThreshold(e.X, e.Y, args{:});
             else
-                fp.addThreshold(e.Value, 'Direction', dir, 'Label', lbl);
+                fp.addThreshold(e.Value, args{:});
             end
         end
     end
