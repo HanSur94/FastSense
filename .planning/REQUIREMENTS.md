@@ -57,8 +57,10 @@ Hand-built independent per-machine dashboards, made maintainable by canonical-ma
 
 - [ ] **DASH-01**: A machine's tag-bound dashboards serialize and reload correctly, resolving `(machineId, localKey)` via the Fleet→Machine resolver — including multi-page dashboards (closes the `FastSenseWidget.fromStruct:1516` + `DashboardEngine:4384` resolver gaps).
 - [ ] **DASH-02**: Pre-v5.0 single-machine dashboards (JSON and `.m`) continue to load unchanged via the global registry (resolver defaults to `TagRegistry.get`). *(backward compatibility)*
-- [ ] **DASH-03**: User can clone a dashboard from one machine onto another; tag bindings are rebound to the target machine's tags via the canonical map.
-- [ ] **DASH-04**: When a clone target lacks a sensor used by the source dashboard, the unresolved bindings are surfaced as a warnings list (not silent empty widgets).
+- ~~**DASH-03**: User can clone a dashboard from one machine onto another; tag bindings are rebound to the target machine's tags via the canonical map.~~ **DROPPED 2026-06-17** (see note).
+- ~~**DASH-04**: When a clone target lacks a sensor used by the source dashboard, the unresolved bindings are surfaced as a warnings list (not silent empty widgets).~~ **DROPPED 2026-06-17** (see note).
+
+> **DASH-03/04 dropped from v5.0 (2026-06-17).** Clone/remap (Phase 1046) was discussed, planned, and gsd-plan-checker-VERIFIED, but cut before execution. Rationale: its only user-facing value this milestone would have been a *programmatic-only* API (the companion "Clone to machine" UI hook was already deferred), and the milestone's headline value — cross-machine comparison — already shipped in Phase 1045; no concrete dashboard-cloning workflow was in demand. The enabling resolver seam (Phase 1043 `DashboardEngine.load` `TagResolver`) stays in place, and the 1046 plans remain in git history, so clone/remap can be revived cheaply (~1 hr) if a real need appears.
 
 ## Future Requirements (deferred to v5.x)
 
@@ -119,13 +121,13 @@ Each requirement maps to exactly one phase. Confirmed by roadmapper 2026-06-02.
 | CMP-04 | Phase 1045 (Cross-Machine Comparison View) | Pending |
 | CMP-05 | Phase 1045 (Cross-Machine Comparison View) | Pending |
 | CMP-06 | Phase 1045 (Cross-Machine Comparison View) | Pending |
-| DASH-03 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | Pending |
-| DASH-04 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | Pending |
+| DASH-03 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | **Dropped 2026-06-17** |
+| DASH-04 | Phase 1046 (Per-Machine Dashboard Clone/Remap) | **Dropped 2026-06-17** |
 
 **Coverage:**
 
-- v1 requirements: 26 total (FLEET 6, CANON 5, MACH 5, CMP 6, DASH 4)
-- Mapped to phases: 26/26 (100%)
+- v1 requirements: 26 defined; **24 delivered, 2 dropped** (DASH-03/04 — Phase 1046 cut pre-execution 2026-06-17). FLEET 6, CANON 5, MACH 5, CMP 6, DASH 2/4.
+- Mapped to phases: 24/24 in-scope (100%); Phase 1046 dropped.
 - Unmapped: 0
 
 ---

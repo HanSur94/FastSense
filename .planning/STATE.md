@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: milestone
-status: planning
-last_updated: "2026-06-17T12:00:00.000Z"
-last_activity: 2026-06-17 -- Phase 1046 planned (checker-verified)
+status: complete
+last_updated: "2026-06-17T13:00:00.000Z"
+last_activity: 2026-06-17 -- Phase 1046 DROPPED; milestone delivered at 5 phases
 progress:
-  total_phases: 6
+  total_phases: 5
   completed_phases: 5
-  total_plans: 23
+  total_plans: 21
   completed_plans: 21
-  percent: 83
+  percent: 100
+  phases_dropped: 1
 ---
 
 # State
@@ -24,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-02)
 
 ## Current Position
 
-Phase: 1046 discussed + planned -> execute pending
-Plan: 1046-01 (CanonicalMapper.logicalIdFor) + 1046-02 (DashboardSerializer.cloneForMachine + clone class-suite) — checker-VERIFIED, not yet executed
+Phase: Milestone v5.0 DELIVERED (5/5 in-scope phases) — Phase 1046 dropped
+Plan: none pending — 1041-1045 complete; 1046 (clone/remap) dropped 2026-06-17 before execution (plans retained in git history)
 Milestone: v5.0 Multi-Machine Fleet — started 2026-06-02 (continues phase numbering from 1040). Prior: v4.0 Multi-User LAN Concurrency (shipped); v3.0 FastSense Companion (shipped 2026-04-30).
-Status: Phase 1045 verified passed (5/5 SC, human-verify approved, code+UI reviewed). Phase 1046 (FINAL milestone phase) discussed + planned (2 plans, 2 waves, checker-VERIFIED); EXECUTE pending — paused for fresh context per user prefs.
-Last activity: 2026-06-17 -- Phase 1046 planned
+Status: v5.0 deliverable COMPLETE at 5 phases. 1041-1045 done + verified (1045 also code+UI reviewed, human-verify approved). Phase 1046 (DASH-03/04 clone/remap) was planned + checker-VERIFIED then DROPPED before execution — programmatic-only value, no concrete demand, headline value already shipped in 1045. Pending: optional milestone closeout (audit / mark shipped) at the user's call.
+Last activity: 2026-06-17 -- Phase 1046 dropped; milestone delivered at 5 phases
 
 ### Note on parallel v4.0 work (main branch state)
 
@@ -107,7 +108,7 @@ Phase 1042 [ ] 0% (0/? plans)
 Phase 1043 [ ] 0% (0/? plans)
 Phase 1044 [##########] 100% (5/5 plans, verified)
 Phase 1045 [##########] 100% (5/5 plans, verified)
-Phase 1046 [ ] 0% (0/2 plans — planned + checker-verified, execute pending)
+Phase 1046 [dropped] — planned + checker-verified, cut before execution 2026-06-17
 ```
 
 ## Accumulated Context

@@ -1,16 +1,19 @@
 ---
 milestone: v5.0
 milestone_name: Multi-Machine Fleet
-phases_total: 6
-phases_complete: 0
-last_updated: "2026-06-02"
+phases_total: 5
+phases_complete: 5
+phases_dropped: 1
+last_updated: "2026-06-17"
 ---
 
 # Roadmap: v5.0 Multi-Machine Fleet
 
 ## Overview
 
-Six dependency-ordered phases build the fleet layer from the inside out. CanonicalMapper ships first because the confidence schema must be correct before any mapping is persisted. Machine and Fleet follow with the pipeline DI seam, establishing the core invariant that machine tags never touch the global TagRegistry. The DashboardSerializer resolver seam is fixed in isolation with a backward-compat regression test before any fleet dashboard is serialized. Companion machine-dimension wiring then repoints the four static TagRegistry.find call sites and adds machine selection via setProject. Cross-machine comparison (machine-first compare-builder dialog, Approach A locked) builds on the machine selector and Fleet.resolveLogical. Clone/remap closes the milestone by applying canonical-map-driven rebinding to dashboard portability across machines.
+Six dependency-ordered phases were planned to build the fleet layer from the inside out. CanonicalMapper ships first because the confidence schema must be correct before any mapping is persisted. Machine and Fleet follow with the pipeline DI seam, establishing the core invariant that machine tags never touch the global TagRegistry. The DashboardSerializer resolver seam is fixed in isolation with a backward-compat regression test before any fleet dashboard is serialized. Companion machine-dimension wiring then repoints the four static TagRegistry.find call sites and adds machine selection via setProject. Cross-machine comparison (machine-first compare-builder dialog, Approach A locked) builds on the machine selector and Fleet.resolveLogical.
+
+> **Milestone delivered at 5 phases (2026-06-17).** Phase 1046 (Clone/Remap, DASH-03/04) was planned + checker-verified but **dropped before execution** — a programmatic-only clone API with no concrete demand, while the milestone's headline value (cross-machine comparison) already shipped in Phase 1045. The 1043 resolver seam that would enable it remains in place; the 1046 plans live in git history if revived.
 
 ## Phases
 
@@ -19,7 +22,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 - [x] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test (completed 2026-06-07)
 - [x] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch (completed 2026-06-10)
 - [x] **Phase 1045: Cross-Machine Comparison View** - Machine-first compare-builder dialog (Approach A); resolve-once caching; confidence gate; auto-color per machine (completed 2026-06-17)
-- [ ] **Phase 1046: Per-Machine Dashboard Clone/Remap** - Canonical-map-driven clone onto target machine; failed-remap warnings list
+- ~~**Phase 1046: Per-Machine Dashboard Clone/Remap**~~ — **DROPPED 2026-06-17** (planned + checker-verified, cut before execution; DASH-03/04 dropped — see Overview note)
 
 ## Phase Details
 
@@ -162,7 +165,9 @@ Plans:
 
 - [x] 1045-05-PLAN.md — Wave 4: fleet-mode Compare toolbar button + CompareBuilderDlg_ singleton + close() teardown + CMP class-suite tests + human-verify checkpoint (CMP-01/02/05/06)
 
-### Phase 1046: Per-Machine Dashboard Clone/Remap
+### Phase 1046: Per-Machine Dashboard Clone/Remap — DROPPED (2026-06-17)
+
+> **Dropped before execution.** Discussed, planned (2 plans, 2 waves), and gsd-plan-checker-VERIFIED, then cut: a programmatic-only clone API with no concrete demand; the milestone's headline value (cross-machine comparison) shipped in Phase 1045. The 1043 resolver seam remains; the 1046 CONTEXT + plans live in git history (commits `7e0477fc`, `e0803185`) if revived. The original specification is retained below for the record.
 
 **Goal**: User can clone a dashboard from one machine onto another with tag bindings rebound via the canonical map; failed remaps are surfaced as a warnings list, never silent empty widgets
 **Depends on**: Phase 1041, Phase 1042, Phase 1043, Phase 1044
