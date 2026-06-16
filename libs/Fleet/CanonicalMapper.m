@@ -315,6 +315,17 @@ classdef CanonicalMapper < handle
             end
         end
 
+        function ids = logicalIds(obj)
+            %LOGICALIDS Cellstr of all mapped logical-sensor ids (map keys).
+            %   ids = logicalIds()
+            %
+            %   Public accessor over Entries_ so callers (e.g. the Phase 1045
+            %   compare builder's quick-fill dropdown) do not poke the private
+            %   containers.Map storage shape. Mirrors the Fleet.machineIds()
+            %   seam. Order is containers.Map key order (lexicographic).
+            ids = keys(obj.Entries_);
+        end
+
         function ok = isResolvable(obj, logicalId, machineId)
             %ISRESOLVABLE Whether a (logicalId,machineId) entry is safe to compare (CANON-04).
             %   False for LOW+AUTO entries and for unconfirmed unit mismatches; true otherwise.

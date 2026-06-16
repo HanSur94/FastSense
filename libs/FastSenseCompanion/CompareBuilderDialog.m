@@ -67,6 +67,10 @@ classdef CompareBuilderDialog < handle
                 error('CompareBuilderDialog:invalidApp', ...
                     'CompareBuilderDialog requires a FastSenseCompanion handle.');
             end
+            if isempty(app.fleet())
+                error('CompareBuilderDialog:notFleetMode', ...
+                    'CompareBuilderDialog requires a fleet-mode FastSenseCompanion (no Fleet present).');
+            end
             obj.App_   = app;
             t          = CompanionTheme.get(app.Theme);
             obj.Theme_ = t;
@@ -117,7 +121,7 @@ classdef CompareBuilderDialog < handle
             obj.hSensorDD_ = uidropdown(gTop);
             obj.hSensorDD_.Layout.Column = 2;
             obj.hSensorDD_.FontSize      = 11;
-            obj.hSensorDD_.Items         = keys(app.fleet().mapper().Entries_);
+            obj.hSensorDD_.Items         = app.fleet().mapper().logicalIds();
             try
                 obj.hSensorDD_.Searchable = true;        % R2021a+
             catch
@@ -280,10 +284,21 @@ classdef CompareBuilderDialog < handle
                 if ~strcmp(event.SelectedOption, 'Promote')
                     return;
                 end
+                % Guard the async-captured row index: a re-resolve between opening
+                % the uiconfirm and this CloseFcn firing could shrink or reshape
+                % RowStates_. Bounds-check, then re-verify identity — only promote a
+                % row still in an unpromoted 'override' state — so a stale i can
+                % never write the wrong machine's mapping.
+                if i < 1 || i > numel(obj.RowStates_)
+                    return;
+                end
                 rs = obj.RowStates_{i};
+                if ~strcmp(rs.state, 'override') || (isfield(rs, 'promoted') && rs.promoted)
+                    return;
+                end
                 obj.App_.fleet().mapper().override(obj.CurrentLogicalId_, rs.machineId, rs.localKey);
                 rs.status   = 'OVERRIDDEN';
-                rs.promoted = true;
+                rs.promoted = true;   % discriminator: badgeSpec_/buildActionWidget_ test promoted BEFORE state
                 rs.checked  = true;
                 obj.RowStates_{i} = rs;
                 obj.refreshRowWidgets_(i);
@@ -571,6 +586,10 @@ classdef CompareBuilderDialog < handle
                     rs.state        = 'none';
                     rs.checked      = false;
                     rs.localKey     = '';
+                    rs.localUnits   = '';
+                    rs.localName    = '';
+                    rs.confidence   = '';
+                    rs.status       = '';
                     rs.unitMismatch = false;
                 else
                     rs.state        = 'override';
@@ -635,11 +654,17 @@ classdef CompareBuilderDialog < handle
         %INCLUDEDCOUNT_ Number of rows that are checked AND not in 'none' state.
             inc = 0;
             for i = 1:numel(obj.RowStates_)
-                rs = obj.RowStates_{i};
-                if rs.checked && ~strcmp(rs.state, 'none')
+                if obj.isIncluded_(obj.RowStates_{i})
                     inc = inc + 1;
                 end
             end
+        end
+
+        function tf = isIncluded_(~, rs)
+        %ISINCLUDED_ Single inclusion predicate: checked AND not in 'none' state.
+        %   Shared by includedCount_ + includedIndices_ so the count label, the
+        %   Open set, and the Open-button gating never drift out of sync.
+            tf = rs.checked && ~strcmp(rs.state, 'none');
         end
 
         % ---------------------------------------------------------------
@@ -698,8 +723,7 @@ classdef CompareBuilderDialog < handle
         %INCLUDEDINDICES_ Indices of rows checked AND not in 'none' state.
             idx = [];
             for i = 1:numel(obj.RowStates_)
-                rs = obj.RowStates_{i};
-                if rs.checked && ~strcmp(rs.state, 'none')
+                if obj.isIncluded_(obj.RowStates_{i})
                     idx(end+1) = i; %#ok<AGROW>
                 end
             end
@@ -712,8 +736,11 @@ classdef CompareBuilderDialog < handle
                 rs = obj.RowStates_{includedIdx(k)};
                 if isfield(rs, 'unitMismatch') && rs.unitMismatch
                     nm = fleet.getMachine(rs.machineId).Name;
+                    % Show the diverging TAG unit (the one that differs from the
+                    % shared sensor), not the canonical reference unit (rs.localUnits).
+                    tagUnits = obj.tagUnits_(fleet, rs.machineId, rs.localKey);
                     lines{end+1} = sprintf('  %s %s: %s (unit: %s)', ...
-                        char(8226), nm, rs.localKey, rs.localUnits); %#ok<AGROW>
+                        char(8226), nm, rs.localKey, tagUnits); %#ok<AGROW>
                 end
             end
             if isempty(lines); return; end
@@ -788,20 +815,22 @@ classdef CompareBuilderDialog < handle
             if isempty(canonicalUnits) || isempty(rs.localKey)
                 return;
             end
-            tagUnits = '';
-            try
-                tag = obj.App_.fleet().getMachine(rs.machineId).get(rs.localKey);
-                if isprop(tag, 'Units')
-                    tagUnits = tag.Units;
-                end
-            catch
-                return;
-            end
+            tagUnits = obj.tagUnits_(obj.App_.fleet(), rs.machineId, rs.localKey);
             if isempty(tagUnits)
                 return;
             end
-            if ~strcmpi(canonicalUnits, tagUnits)
-                tf = true;
+            tf = ~strcmpi(canonicalUnits, tagUnits);
+        end
+
+        function u = tagUnits_(~, fleet, machineId, localKey)
+        %TAGUNITS_ Best-effort 'Units' of a machine's local tag ('' on any failure).
+            u = '';
+            try
+                tag = fleet.getMachine(machineId).get(localKey);
+                if isprop(tag, 'Units')
+                    u = tag.Units;
+                end
+            catch
             end
         end
 
