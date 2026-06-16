@@ -18,7 +18,7 @@ Six dependency-ordered phases build the fleet layer from the inside out. Canonic
 - [x] **Phase 1042: Machine + Fleet + Pipeline DI Seam** - Isolated per-machine tag catalogs, fleet config persistence, lazy load, and pipeline tagSource_ DI (completed 2026-06-07)
 - [x] **Phase 1043: DashboardSerializer Resolver Seam + Backward Compat** - Fix fromStruct:1516 and multi-page resolver drop; backward-compat regression test (completed 2026-06-07)
 - [x] **Phase 1044: Companion Machine Dimension** - Machine selector, setProject wiring, active-machine indicator, timer lifecycle on machine switch (completed 2026-06-10)
-- [ ] **Phase 1045: Cross-Machine Comparison View** - Machine-first compare-builder dialog (Approach A); resolve-once caching; confidence gate; auto-color per machine
+- [x] **Phase 1045: Cross-Machine Comparison View** - Machine-first compare-builder dialog (Approach A); resolve-once caching; confidence gate; auto-color per machine (completed 2026-06-17)
 - [ ] **Phase 1046: Per-Machine Dashboard Clone/Remap** - Canonical-map-driven clone onto target machine; failed-remap warnings list
 
 ## Phase Details
@@ -147,20 +147,20 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 1045-01-PLAN.md — Wave 1: CanonicalMapper.resolve + buildCompareResolution_/compareSeriesColor_ pure helpers + flat test (CMP-02/03/04/05 seam)
-- [ ] 1045-02-PLAN.md — Wave 1: openAdHocPlot SeriesColors/SeriesLabels NV args + legacy byte-compat + NV-arg tests (CMP-02)
+- [x] 1045-01-PLAN.md — Wave 1: CanonicalMapper.resolve + buildCompareResolution_/compareSeriesColor_ pure helpers + flat test (CMP-02/03/04/05 seam)
+- [x] 1045-02-PLAN.md — Wave 1: openAdHocPlot SeriesColors/SeriesLabels NV args + legacy byte-compat + NV-arg tests (CMP-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 1045-03-PLAN.md — Wave 2: CompareBuilderDialog — modeless dialog shell + four-state row grid + resolve-once-at-open Open path (CMP-01/03/04/05/06)
+- [x] 1045-03-PLAN.md — Wave 2: CompareBuilderDialog — modeless dialog shell + four-state row grid + resolve-once-at-open Open path (CMP-01/03/04/05/06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 1045-04-PLAN.md — Wave 3: per-row Confirm + Promote (uiconfirm async, in-memory override) + theme refresh (CMP-06)
+- [x] 1045-04-PLAN.md — Wave 3: per-row Confirm + Promote (uiconfirm async, in-memory override) + theme refresh (CMP-06)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 1045-05-PLAN.md — Wave 4: fleet-mode Compare toolbar button + CompareBuilderDlg_ singleton + close() teardown + CMP class-suite tests + human-verify checkpoint (CMP-01/02/05/06)
+- [x] 1045-05-PLAN.md — Wave 4: fleet-mode Compare toolbar button + CompareBuilderDlg_ singleton + close() teardown + CMP class-suite tests + human-verify checkpoint (CMP-01/02/05/06)
 
 ### Phase 1046: Per-Machine Dashboard Clone/Remap
 
