@@ -65,6 +65,10 @@ classdef FastSenseCompanion < handle
         SettingsDlg_ = []     % CompanionSettingsDialog handle (or empty)
     end
 
+    properties (GetAccess = public, SetAccess = ?CompareBuilderDialog)
+        CompareBuilderDlg_ = []   % CompareBuilderDialog singleton handle ([] when closed)
+    end
+
     properties (Access = private)
         hFig_          = []   % uifigure handle
         hLayout_       = []   % root uigridlayout handle
@@ -129,6 +133,8 @@ classdef FastSenseCompanion < handle
         WikiBrowser_  = []   % shared WikiBrowser handle (or [])
         % Phase 1040 — toolbar bell: unacked-count indicator that opens the Event Viewer.
         hBellBtn_          = []   % toolbar bell uibutton with unacked-count badge
+        % Phase 1045 — fleet-only Compare button (cross-machine comparison builder).
+        hCompareBtn_       = []   % toolbar 'Compare' uibutton (fleet mode only; [] legacy)
     end
 
     methods (Access = public)
@@ -379,11 +385,13 @@ classdef FastSenseCompanion < handle
             %   col 9 = flex spacer                                     ('1x')
             %   col 10 = Settings gear                                  ( 36)
             % Phase 1044 — fleet mode inserts an active-machine label between the
-            % flex spacer (col 9) and the gear, so the grid grows [1 10] -> [1 11]
-            % with the gear shifted to the new last column. Legacy stays [1 10].
+            % flex spacer and the gear. Phase 1045 inserts a fleet-only 'Compare'
+            % button at col 9 (80 px), shifting the flex spacer -> 10, the
+            % active-machine label -> 11, and the gear -> 12. So fleet mode grows
+            % [1 11] -> [1 12]; legacy stays [1 10] byte-identical.
             if ~isempty(obj.Fleet_)
-                hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 11]);
-                hToolbarGrid.ColumnWidth = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 'fit', 36};
+                hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 12]);
+                hToolbarGrid.ColumnWidth = {110, 110, 110, 130, 70, 90, 70, 70, 80, '1x', 'fit', 36};
             else
                 hToolbarGrid = uigridlayout(obj.hToolbarPanel_, [1 10]);
                 hToolbarGrid.ColumnWidth = {110, 110, 110, 130, 70, 90, 70, 70, '1x', 36};
@@ -500,14 +508,30 @@ classdef FastSenseCompanion < handle
                 obj.hBellBtn_.Tooltip = 'No EventStore registered';
             end
 
-            % Phase 1044 — fleet mode: active-machine indicator label at col 10
-            % (text populated by updateActiveMachineIndicator_ in Plan 04). The
-            % gear then sits in the new last column (11). Legacy: gear stays col 10,
-            % no label created.
+            % Phase 1045 — fleet-only 'Compare' button at col 9 (cross-machine
+            % comparison builder). Legacy mode never creates it (the toolbar
+            % stays [1 10], byte-identical).
+            if ~isempty(obj.Fleet_)
+                obj.hCompareBtn_ = uibutton(hToolbarGrid, 'push');
+                obj.hCompareBtn_.Layout.Row    = 1;
+                obj.hCompareBtn_.Layout.Column = 9;
+                obj.hCompareBtn_.Text          = 'Compare';
+                obj.hCompareBtn_.FontSize      = 11;
+                obj.hCompareBtn_.FontWeight    = 'bold';
+                obj.hCompareBtn_.Tag           = 'CompanionCompareBtn';
+                obj.hCompareBtn_.Tooltip       = 'Open cross-machine comparison builder';
+                obj.hCompareBtn_.BackgroundColor = obj.Theme_.WidgetBorderColor;
+                obj.hCompareBtn_.FontColor       = obj.Theme_.ForegroundColor;
+                obj.hCompareBtn_.ButtonPushedFcn = @(~,~) obj.openCompareBuilder_();
+            end
+
+            % Phase 1044 — fleet mode: active-machine indicator label, shifted to
+            % col 11 by the Phase 1045 Compare button. The gear then sits in the
+            % new last column (12). Legacy: gear stays col 10, no label created.
             if ~isempty(obj.Fleet_)
                 obj.hActiveMachineLabel_ = uilabel(hToolbarGrid);
                 obj.hActiveMachineLabel_.Layout.Row    = 1;
-                obj.hActiveMachineLabel_.Layout.Column = 10;
+                obj.hActiveMachineLabel_.Layout.Column = 11;
                 obj.hActiveMachineLabel_.Text          = '';
                 obj.hActiveMachineLabel_.FontSize      = 11;
                 obj.hActiveMachineLabel_.FontWeight    = 'bold';
@@ -516,7 +540,7 @@ classdef FastSenseCompanion < handle
                 obj.hActiveMachineLabel_.HorizontalAlignment = 'left';
                 obj.hActiveMachineLabel_.VerticalAlignment   = 'center';
                 obj.hActiveMachineLabel_.Tag           = 'CompanionActiveMachineLabel';
-                gearColumn = 11;
+                gearColumn = 12;
             else
                 gearColumn = 10;
             end
@@ -841,6 +865,15 @@ classdef FastSenseCompanion < handle
                 fprintf(2, '[FastSenseCompanion] SettingsDlg cleanup failed: %s\n', err.message);
             end
             obj.SettingsDlg_ = [];
+            % Phase 1045 — tear down a still-open compare builder, if any.
+            try
+                if ~isempty(obj.CompareBuilderDlg_) && isvalid(obj.CompareBuilderDlg_)
+                    delete(obj.CompareBuilderDlg_);
+                end
+            catch err
+                fprintf(2, '[FastSenseCompanion] CompareBuilderDlg cleanup failed: %s\n', err.message);
+            end
+            obj.CompareBuilderDlg_ = [];
             % Always delete the uifigure last and unconditionally — this is
             % what makes the X click actually close the window.
             try
@@ -1153,6 +1186,16 @@ classdef FastSenseCompanion < handle
                 if ~isempty(obj.hActiveMachineLabel_) && isvalid(obj.hActiveMachineLabel_)
                     obj.hActiveMachineLabel_.FontColor = obj.Theme_.Accent;
                 end
+                % Phase 1045 -- refresh an open compare builder (own uifigure, not
+                % walked by applyThemeToChildren_). Guarded: a builder repaint
+                % failure must not roll back the companion theme.
+                try
+                    if ~isempty(obj.CompareBuilderDlg_) && isvalid(obj.CompareBuilderDlg_)
+                        obj.CompareBuilderDlg_.applyTheme_(obj.Theme);
+                    end
+                catch err
+                    fprintf(2, '[FastSenseCompanion] CompareBuilderDlg.applyTheme_ failed: %s\n', err.message);
+                end
                 % Phase 1027.1 -- both panes manage their own theming (walker
                 % skips both LogPaneRoot-tagged sub-panels). Companion calls
                 % applyTheme on each pane and updates each detached uifigure's
@@ -1224,6 +1267,20 @@ classdef FastSenseCompanion < handle
                 return;
             end
             obj.SettingsDlg_ = CompanionSettingsDialog(obj);
+        end
+
+        function openCompareBuilder_(obj)
+        %OPENCOMPAREBUILDER_ Open or focus the singleton CompareBuilderDialog (fleet mode).
+        %   Idempotent: a second call brings the existing builder window forward
+        %   instead of constructing a new one. Wired to the fleet-only Compare
+        %   toolbar button.
+            if ~isempty(obj.CompareBuilderDlg_) && isvalid(obj.CompareBuilderDlg_) && ...
+                    ~isempty(obj.CompareBuilderDlg_.hFig_) && ...
+                    isvalid(obj.CompareBuilderDlg_.hFig_)
+                figure(obj.CompareBuilderDlg_.hFig_);
+                return;
+            end
+            obj.CompareBuilderDlg_ = CompareBuilderDialog(obj);
         end
 
         function f = fleet(obj)

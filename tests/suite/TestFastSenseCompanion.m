@@ -1746,9 +1746,244 @@ classdef TestFastSenseCompanion < matlab.unittest.TestCase
                 'MACH-05: legacy toolbar inner grid must keep 10 columns');
         end
 
+        % ---- Phase 1045: Cross-Machine Comparison (CMP-01..06) ----
+
+        function testCompareButtonFleetOnly(testCase)
+            %TESTCOMPAREBUTTONFLEETONLY Compare button is fleet-mode only.
+            % CMP-01: fleet toolbar grows to 12 columns with a CompanionCompareBtn;
+            % legacy mode stays [1 10] with no Compare button (MACH-05 invariant).
+            fleet = Fleet();
+            fleet.addMachine('Id', 'M01', 'Name', 'Press Line 3');
+            fleet.addMachine('Id', 'M02', 'Name', 'Pump Station 1');
+            app = FastSenseCompanion('Fleet', fleet);
+            testCase.addTeardown(@() closeIfOpen_(app));
+            s = struct(app);
+            tb = s.hToolbarPanel_.Children;
+            tb = tb(arrayfun(@(h) isa(h, 'matlab.ui.container.GridLayout'), tb));
+            testCase.verifyEqual(numel(tb(1).ColumnWidth), 12, ...
+                'CMP-01: fleet toolbar inner grid must have 12 columns');
+            testCase.verifyNotEmpty(findall(s.hToolbarPanel_, 'Tag', 'CompanionCompareBtn'), ...
+                'CMP-01: fleet toolbar must hold a Compare button');
+
+            d = DashboardEngine('LegacyDash');
+            appL = FastSenseCompanion('Dashboards', {d});
+            testCase.addTeardown(@() closeIfOpen_(appL));
+            sL = struct(appL);
+            tbL = sL.hToolbarPanel_.Children;
+            tbL = tbL(arrayfun(@(h) isa(h, 'matlab.ui.container.GridLayout'), tbL));
+            testCase.verifyEqual(numel(tbL(1).ColumnWidth), 10, ...
+                'CMP-01: legacy toolbar inner grid must stay 10 columns');
+            testCase.verifyEmpty(findall(sL.hToolbarPanel_, 'Tag', 'CompanionCompareBtn'), ...
+                'CMP-01: legacy mode must not create a Compare button');
+        end
+
+        function testCompareBuilderSingleton(testCase)
+            %TESTCOMPAREBUILDERSINGLETON openCompareBuilder_ focuses, never duplicates.
+            % CMP-01: a second open brings the existing builder forward.
+            fleet = Fleet();
+            fleet.addMachine('Id', 'M01', 'Name', 'Press Line 3');
+            fleet.addMachine('Id', 'M02', 'Name', 'Pump Station 1');
+            app = FastSenseCompanion('Fleet', fleet);
+            testCase.addTeardown(@() closeIfOpen_(app));
+            app.openCompareBuilder_();
+            h1 = struct(app).CompareBuilderDlg_;
+            app.openCompareBuilder_();
+            h2 = struct(app).CompareBuilderDlg_;
+            testCase.verifyTrue(isscalar(h1) && isvalid(h1) && h1 == h2, ...
+                'CMP-01: openCompareBuilder_ must be a focus-or-create singleton');
+            testCase.verifyEqual( ...
+                numel(findall(groot, 'Type', 'figure', 'Name', 'Compare Machines')), 1, ...
+                'CMP-01: a second open must not create a second builder figure');
+        end
+
+        function testCompareBuilderClosesWithCompanion(testCase)
+            %TESTCOMPAREBUILDERCLOSESWITHCOMPANION Closing the companion tears down the builder.
+            % CMP-01: app.close() deletes CompareBuilderDlg_ and its figure.
+            fleet = Fleet();
+            fleet.addMachine('Id', 'M01', 'Name', 'Press Line 3');
+            fleet.addMachine('Id', 'M02', 'Name', 'Pump Station 1');
+            app = FastSenseCompanion('Fleet', fleet);
+            app.openCompareBuilder_();
+            dlg  = struct(app).CompareBuilderDlg_;
+            hFig = struct(dlg).hFig_;
+            app.close();
+            testCase.verifyEmpty(struct(app).CompareBuilderDlg_, ...
+                'CMP-01: app.close() must clear CompareBuilderDlg_');
+            testCase.verifyFalse(isvalid(hFig), ...
+                'CMP-01: app.close() must delete the builder figure');
+        end
+
+        function testOpenComparisonLaunchesOverlay(testCase)
+            %TESTOPENCOMPARISONLAUNCHESOVERLAY Open spawns one tracked overlay figure.
+            % CMP-01/02: 2 mapped machines -> 2 resolved tags -> 1 tracked overlay.
+            app = testCase.buildSharedSensorFleetApp_({'M01', 'M02'}, {});
+            testCase.addTeardown(@() closeIfOpen_(app));
+            dlg = testCase.openBuilderAndSelect_(app, 'temperature');
+            figsBefore = app.getOpenedFiguresForTest_();
+            feval(struct(dlg).hOpenBtn_.ButtonPushedFcn, [], []);
+            figsAfter = app.getOpenedFiguresForTest_();
+            spawned = setdiff(figsAfter, figsBefore);
+            testCase.addTeardown(@() closeSpawnedFigs_(spawned));
+            testCase.verifyEqual(numel(figsAfter), numel(figsBefore) + 1, ...
+                'CMP-01: Open must launch exactly one tracked overlay figure');
+            testCase.verifyEqual(numel(struct(dlg).ResolvedTags_), 2, ...
+                'CMP-02: both mapped machines must resolve into the cache');
+        end
+
+        function testCMP03_SkipGraceful(testCase)
+            %TESTCMP03_SKIPGRACEFUL A machine without the sensor is skipped, not fatal.
+            % CMP-03: M03 resolves to 'none'; Open skips it and still opens with M01/M02.
+            app = testCase.buildSharedSensorFleetApp_({'M01', 'M02'}, {'M03'});
+            testCase.addTeardown(@() closeIfOpen_(app));
+            dlg = testCase.openBuilderAndSelect_(app, 'temperature');
+            states = cellfun(@(r) r.state, struct(dlg).RowStates_, 'UniformOutput', false);
+            testCase.verifyEqual(states{3}, 'none', ...
+                'CMP-03: the machine without the shared sensor must resolve to none');
+            figsBefore = app.getOpenedFiguresForTest_();
+            feval(struct(dlg).hOpenBtn_.ButtonPushedFcn, [], []);
+            spawned = setdiff(app.getOpenedFiguresForTest_(), figsBefore);
+            testCase.addTeardown(@() closeSpawnedFigs_(spawned));
+            testCase.verifyEqual(numel(struct(dlg).ResolvedTags_), 2, ...
+                'CMP-03: the none machine is skipped; the cache holds only the 2 mapped machines');
+            testCase.verifyEqual(numel(spawned), 1, ...
+                'CMP-03: a tracked overlay must still open after a graceful skip');
+        end
+
+        function testCMP05_NoResolveInTick(testCase)
+            %TESTCMP05_NORESOLVEINTICK A live tick never re-resolves (invariant #5).
+            % CMP-05: across one engine tick the ResolvedTags_ cache handles stay
+            % identical and the canonical map is unmutated (no profiler needed).
+            app = testCase.buildSharedSensorFleetApp_({'M01', 'M02'}, {});
+            testCase.addTeardown(@() closeIfOpen_(app));
+            dlg = testCase.openBuilderAndSelect_(app, 'temperature');
+            figsBefore = app.getOpenedFiguresForTest_();
+            feval(struct(dlg).hOpenBtn_.ButtonPushedFcn, [], []);
+            spawned = setdiff(app.getOpenedFiguresForTest_(), figsBefore);
+            testCase.addTeardown(@() closeSpawnedFigs_(spawned));
+
+            sigBefore  = testCase.mapperSignature_(app.fleet().mapper());
+            tagsBefore = struct(dlg).ResolvedTags_;
+
+            % Force one deterministic tick on the spawned engine when reachable;
+            % otherwise let the 1.0 s-interval live timer fire once.
+            eng = [];
+            try
+                fns = functions(get(spawned(1), 'CloseRequestFcn'));
+                if ~isempty(fns.workspace) && isfield(fns.workspace{1}, 'engine')
+                    eng = fns.workspace{1}.engine;
+                end
+            catch
+            end
+            if ~isempty(eng) && isvalid(eng) && ismethod(eng, 'onLiveTick')
+                eng.onLiveTick(); drawnow;
+            else
+                pause(1.2); drawnow;
+            end
+
+            sigAfter  = testCase.mapperSignature_(app.fleet().mapper());
+            tagsAfter = struct(dlg).ResolvedTags_;
+            testCase.verifyEqual(sigAfter, sigBefore, ...
+                'CMP-05: a live tick must not mutate the canonical map (invariant #5)');
+            testCase.verifyEqual(numel(tagsAfter), numel(tagsBefore), ...
+                'CMP-05: the resolve-once cache size must be stable across a tick');
+            sameHandles = ~isempty(tagsBefore);
+            for i = 1:numel(tagsBefore)
+                if ~(isvalid(tagsBefore{i}) && isvalid(tagsAfter{i}) && tagsBefore{i} == tagsAfter{i})
+                    sameHandles = false; break;
+                end
+            end
+            testCase.verifyTrue(sameHandles, ...
+                'CMP-05: ResolvedTags_ handles must be identical across a tick (no re-resolve)');
+        end
+
+        function testPromoteUpdatesMapper(testCase)
+            %TESTPROMOTEUPDATESMAPPER Confirm + Promote writes an in-memory override.
+            % CMP-06: a LOW row confirmed then promoted makes the entry OVERRIDDEN.
+            app = testCase.buildLowConfidenceFleetApp_();
+            testCase.addTeardown(@() closeIfOpen_(app));
+            dlg = testCase.openBuilderAndSelect_(app, 'temperature');
+            testCase.verifyEqual(struct(dlg).RowStates_{2}.state, 'confirm_needed', ...
+                'CMP-06: the LOW match (M02) must resolve to confirm_needed');
+            dlg.onConfirm_(2);
+            testCase.verifyEqual(struct(dlg).RowStates_{2}.state, 'override', ...
+                'CMP-06: Confirm must promote the row to override (included)');
+            dlg.onPromoteConfirmed_(2, struct('SelectedOption', 'Promote'));
+            e = app.fleet().mapper().resolve('temperature', 'M02');
+            testCase.verifyEqual(e.status, 'OVERRIDDEN', ...
+                'CMP-06: Promote must mark the canonical entry OVERRIDDEN in memory');
+        end
+
     end
 
     methods (Access = private)
+
+        function app = buildSharedSensorFleetApp_(~, mappedIds, unmappedIds)
+        %BUILDSHAREDSENSORFLEETAPP_ Fleet app where mappedIds share logical 'temperature'.
+        %   mappedIds   : cellstr of machine ids that all carry a 'temperature'
+        %                 SensorTag and are suggested into the canonical map
+        %                 (>= 2 -> they seed a HIGH cluster -> state 'auto').
+        %   unmappedIds : cellstr of machine ids added with an unrelated tag and
+        %                 NOT suggested -> resolve to 'none'.
+            fleet = Fleet();
+            infos = {};
+            for i = 1:numel(mappedIds)
+                id = mappedIds{i};
+                m = fleet.addMachine('Id', id, 'Name', ['Machine ' id]);
+                m.addTag(SensorTag('temperature', 'Name', ['Temp ' id], ...
+                    'Units', 'degC', 'X', 0:9, 'Y', (0:9) * i));
+                infos{end+1} = struct('machineId', id, 'localKey', 'temperature', ...
+                    'name', ['Temp ' id], 'units', 'degC'); %#ok<AGROW>
+            end
+            for i = 1:numel(unmappedIds)
+                id = unmappedIds{i};
+                m = fleet.addMachine('Id', id, 'Name', ['Machine ' id]);
+                m.addTag(SensorTag('other_sensor', 'Name', ['Other ' id], ...
+                    'Units', 'bar', 'X', 0:9, 'Y', 0:9));
+            end
+            fleet.mapper().suggest(infos);
+            app = FastSenseCompanion('Fleet', fleet);
+        end
+
+        function app = buildLowConfidenceFleetApp_(~)
+        %BUILDLOWCONFIDENCEFLEETAPP_ 3-machine fleet with a LOW (confirm_needed) M02.
+        %   M01/M03 share identical 'temperature' (seed -> HIGH -> auto); M02's
+        %   'temp' attaches to the centroid at LOW similarity -> confirm_needed.
+            fleet = Fleet();
+            m1 = fleet.addMachine('Id', 'M01', 'Name', 'Press Line 3');
+            m2 = fleet.addMachine('Id', 'M02', 'Name', 'Pump Station 1');
+            m3 = fleet.addMachine('Id', 'M03', 'Name', 'Compressor A');
+            m1.addTag(SensorTag('temperature', 'Name', 'Temp 1', 'Units', 'degC', 'X', 0:9, 'Y', 0:9));
+            m2.addTag(SensorTag('temp',        'Name', 'Temp 2', 'Units', 'degC', 'X', 0:9, 'Y', (0:9) * 2));
+            m3.addTag(SensorTag('temperature', 'Name', 'Temp 3', 'Units', 'degC', 'X', 0:9, 'Y', (0:9) * 3));
+            fleet.mapper().suggest({ ...
+                struct('machineId', 'M01', 'localKey', 'temperature', 'name', 'Temp 1', 'units', 'degC'), ...
+                struct('machineId', 'M02', 'localKey', 'temp',        'name', 'Temp 2', 'units', 'degC'), ...
+                struct('machineId', 'M03', 'localKey', 'temperature', 'name', 'Temp 3', 'units', 'degC')});
+            app = FastSenseCompanion('Fleet', fleet);
+        end
+
+        function dlg = openBuilderAndSelect_(~, app, logicalId)
+        %OPENBUILDERANDSELECT_ Open the compare builder and resolve a shared sensor.
+            app.openCompareBuilder_();
+            dlg = struct(app).CompareBuilderDlg_;
+            sd = struct(dlg);
+            sd.hSensorDD_.Value = logicalId;
+            feval(sd.hSensorDD_.ValueChangedFcn, sd.hSensorDD_, []);
+            drawnow;
+        end
+
+        function sig = mapperSignature_(~, mapper)
+        %MAPPERSIGNATURE_ Order-independent signature of every (logicalId,machineId,status).
+            ks = keys(mapper.Entries_);
+            parts = {};
+            for i = 1:numel(ks)
+                b = mapper.Entries_(ks{i});
+                for j = 1:numel(b)
+                    parts{end+1} = sprintf('%s|%s|%s', ks{i}, b{j}.machineId, b{j}.status); %#ok<AGROW>
+                end
+            end
+            sig = strjoin(sort(parts), ';');
+        end
 
         function backupAndArmRestore_(testCase)
         %BACKUPANDARMRESTORE_ Back up prefdir/FastSenseCompanion.mat for restore on teardown.
@@ -1846,5 +2081,20 @@ function closeIfOpen_(app)
         end
     catch
         % Teardown must never throw.
+    end
+end
+
+function closeSpawnedFigs_(figs)
+%CLOSESPAWNEDFIGS_ Local helper: close companion-spawned overlay figures.
+%   Uses close() (NOT delete()) so each figure's CloseRequestFcn fires the
+%   owning DashboardEngine's stopLive + delete — delete() would bypass it and
+%   leak the overlay's live timer. Teardown must never throw.
+    for i = 1:numel(figs)
+        try
+            if isvalid(figs(i))
+                close(figs(i));
+            end
+        catch
+        end
     end
 end
