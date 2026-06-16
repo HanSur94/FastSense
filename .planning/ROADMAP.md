@@ -173,7 +173,15 @@ Plans:
   2. When a clone target lacks a sensor used by the source dashboard, the unresolved bindings appear in a returned warnings list (not silent empty widgets, not a crash); the cloned dashboard opens with the remaining widgets bound correctly
   3. An end-to-end round-trip passes: serialize a machine's dashboard, load it on a different machine (with machine-scoped resolver), all tags bound to the target machine's catalog
 
-**Plans**: TBD
+**Plans**: 2 plans (checker-VERIFIED 2026-06-17)
+Plans:
+**Wave 1**
+
+- [ ] 1046-01-PLAN.md — Wave 1: CanonicalMapper.logicalIdFor reverse lookup + flat Octave-safe test (DASH-03 seam)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 1046-02-PLAN.md — Wave 2: DashboardSerializer.cloneForMachine (target resolver + warnings + temp-json load) + TestFleetDashboardClone class-suite (DASH-03/04, A→B round-trip)
 
 ## Progress
 
