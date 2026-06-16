@@ -216,6 +216,83 @@ classdef CompareBuilderDialog < handle
             obj.close();
         end
 
+        function applyTheme_(obj, themeArg)
+        %APPLYTHEME_ Repaint the dialog for a new theme + re-assert post-walk overrides.
+        %   Public so the parent FastSenseCompanion can refresh an open builder
+        %   when the companion theme changes. Accepts a char preset ('dark' /
+        %   'light') or a resolved CompanionTheme struct. Re-asserts the
+        %   Open-button background (by includedCount), each row's badge FontColor
+        %   (by state), and each per-machine swatch color (a series color, NOT a
+        %   theme token) after the recursive walker runs.
+            try
+                if ischar(themeArg) || (isstring(themeArg) && isscalar(themeArg))
+                    t = CompanionTheme.get(char(themeArg));
+                else
+                    t = themeArg;   % already a resolved theme struct
+                end
+                obj.Theme_ = t;
+                if isempty(obj.hFig_) || ~isvalid(obj.hFig_); return; end
+                obj.hFig_.Color = t.DashboardBackground;
+                applyThemeToChildren_(obj.hFig_, t);
+                % Post-walk overrides: swatch series colors + badge colors + Open button.
+                for i = 1:numel(obj.RowHandles_)
+                    h  = obj.RowHandles_{i};
+                    rs = obj.RowStates_{i};
+                    if isfield(h, 'hSwatch') && isvalid(h.hSwatch) && ~isempty(rs.color)
+                        h.hSwatch.BackgroundColor = rs.color;
+                    end
+                    obj.applyBadge_(i);
+                end
+                obj.updateCountAndOpen_();
+            catch err
+                obj.alertError_(err, 'Compare Builder');
+            end
+        end
+
+        function onConfirm_(obj, i)
+        %ONCONFIRM_ Include a confirm_needed row: state -> override, checked.
+        %   Public so the class-suite can drive CMP-06 directly. The action
+        %   button flips 'Confirm' -> 'Promote' and the badge -> override via
+        %   the in-place row refresh (no full rebuild — RESEARCH Pitfall 6).
+            try
+                if i < 1 || i > numel(obj.RowStates_); return; end
+                rs = obj.RowStates_{i};
+                rs.state   = 'override';
+                rs.checked = true;
+                obj.RowStates_{i} = rs;
+                obj.refreshRowWidgets_(i);
+                obj.updateCountAndOpen_();
+            catch err
+                obj.alertError_(err, 'Compare Builder');
+            end
+        end
+
+        function onPromoteConfirmed_(obj, i, event)
+        %ONPROMOTECONFIRMED_ uiconfirm CloseFcn — apply the in-memory override.
+        %   Public so the class-suite can invoke it with a synthetic event
+        %   (struct('SelectedOption','Promote')) without driving the async
+        %   uiconfirm. Only fires on the 'Promote' option; calls
+        %   CanonicalMapper.override (in-memory only — never Fleet.save) and
+        %   marks the row promoted (badge -> '<check> promoted', no further
+        %   Promote button). Honors Pitfall 3: a freshly-deserialized mapper's
+        %   promoted entry may carry empty localName/localUnits — accepted.
+            try
+                if ~strcmp(event.SelectedOption, 'Promote')
+                    return;
+                end
+                rs = obj.RowStates_{i};
+                obj.App_.fleet().mapper().override(obj.CurrentLogicalId_, rs.machineId, rs.localKey);
+                rs.status   = 'OVERRIDDEN';
+                rs.promoted = true;
+                rs.checked  = true;
+                obj.RowStates_{i} = rs;
+                obj.refreshRowWidgets_(i);
+                obj.updateCountAndOpen_();
+            catch err
+                obj.alertError_(err, 'Promote Failed');
+            end
+        end
+
     end
 
     methods (Access = private)
@@ -422,15 +499,43 @@ classdef CompareBuilderDialog < handle
         end
 
         function onRowAction_(obj, i)
-        %ONROWACTION_ Per-row action button dispatch (Confirm / Promote).
-        %   Plan 03 placeholder: the CMP-06 Confirm/Promote handlers land in
-        %   Plan 04, which fills this dispatcher to route by row state. Kept
-        %   inert here (bounds-guard only) so the action button is harmless
-        %   until then.
-            if isempty(obj.RowStates_) || i < 1 || i > numel(obj.RowStates_)
-                return;
+        %ONROWACTION_ Per-row action button dispatch by row state.
+        %   confirm_needed -> onConfirm_ (include the LOW/unreviewed match);
+        %   override (unpromoted) -> onPromote_ (push into the canonical map).
+        %   auto / none / promoted have no action button, so never reach here.
+            try
+                if i < 1 || i > numel(obj.RowStates_); return; end
+                rs = obj.RowStates_{i};
+                switch rs.state
+                    case 'confirm_needed'
+                        obj.onConfirm_(i);
+                    case 'override'
+                        if ~(isfield(rs, 'promoted') && rs.promoted)
+                            obj.onPromote_(i);
+                        end
+                end
+            catch err
+                obj.alertError_(err, 'Compare Builder');
             end
-            % Intentionally inert until Plan 04 wires Confirm / Promote.
+        end
+
+        function onPromote_(obj, i)
+        %ONPROMOTE_ Show the promote-confirmation uiconfirm for an override row.
+        %   R2020b-safe async pattern: the override is applied in the CloseFcn
+        %   (onPromoteConfirmed_), never inline after uiconfirm (RESEARCH
+        %   Pitfall 4), so R2020b cannot fire override before the user responds.
+            try
+                rs  = obj.RowStates_{i};
+                msg = sprintf(['Add "%s" as the canonical mapping for "%s" on machine "%s"? ' ...
+                    'This updates the in-memory canonical map. Call Fleet.save() to persist.'], ...
+                    rs.localKey, obj.CurrentLogicalId_, rs.machineId);
+                uiconfirm(obj.hFig_, msg, 'Promote Override to Canonical Map', ...
+                    'Options', {'Promote', 'Cancel'}, ...
+                    'DefaultOption', 2, 'CancelOption', 2, ...
+                    'CloseFcn', @(~, event) obj.onPromoteConfirmed_(i, event));
+            catch err
+                obj.alertError_(err, 'Compare Builder');
+            end
         end
 
         % ---------------------------------------------------------------
