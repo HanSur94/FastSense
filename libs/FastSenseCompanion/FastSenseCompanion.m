@@ -1226,6 +1226,15 @@ classdef FastSenseCompanion < handle
             obj.SettingsDlg_ = CompanionSettingsDialog(obj);
         end
 
+        function f = fleet(obj)
+        %FLEET Return the Fleet handle (or [] in legacy single-machine mode).
+        %   Public read accessor mirroring the Fleet.mapper()/machineIds()
+        %   seam so sub-dialogs (Phase 1045 CompareBuilderDialog) reach the
+        %   fleet through a documented method rather than the private Fleet_
+        %   field. Legacy single-machine mode returns [].
+            f = obj.Fleet_;
+        end
+
         function w = openTagStatusTable(obj)
         %OPENTAGSTATUSTABLE Open or focus the singleton TagStatusTableWindow.
         %   Returns the handle so tests and external callers can drive it.
