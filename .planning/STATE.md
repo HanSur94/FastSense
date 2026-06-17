@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-06-02)
 Phase: Milestone v5.0 DELIVERED (5/5 in-scope phases) — Phase 1046 dropped
 Plan: none pending — 1041-1045 complete; 1046 (clone/remap) dropped 2026-06-17 before execution (plans retained in git history)
 Milestone: v5.0 Multi-Machine Fleet — started 2026-06-02 (continues phase numbering from 1040). Prior: v4.0 Multi-User LAN Concurrency (shipped); v3.0 FastSense Companion (shipped 2026-04-30).
-Status: v5.0 deliverable COMPLETE at 5 phases. 1041-1045 done + verified (1045 also code+UI reviewed, human-verify approved). Phase 1046 (DASH-03/04 clone/remap) was planned + checker-VERIFIED then DROPPED before execution — programmatic-only value, no concrete demand, headline value already shipped in 1045. Pending: optional milestone closeout (audit / mark shipped) at the user's call.
-Last activity: 2026-06-17 -- Phase 1046 dropped; milestone delivered at 5 phases
+Status: v5.0 deliverable COMPLETE at 5 phases — MILESTONE AUDIT PASSED (2026-06-17, .planning/v5.0-MILESTONE-AUDIT.md): 24/24 in-scope reqs satisfied, 4/4 cross-phase wirings WIRED, E2E flow holds, zero breaks. 1041-1045 done + verified (1045 also code+UI reviewed, human-verify approved). Phase 1046 (DASH-03/04) DROPPED before execution (out of scope). Tech-debt (non-blocking): 1043 TagResolver seam + Fleet.resolveLogical are dormant (consumer was 1046); nyquist PARTIAL on 1041-1044. Pending: actual ship (PR/merge to main) and/or formal archive (gsd-complete-milestone) at the user's call.
+Last activity: 2026-06-17 -- v5.0 milestone audit PASSED (5/5 phases)
 
 ### Note on parallel v4.0 work (main branch state)
 
