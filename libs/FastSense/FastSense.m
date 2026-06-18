@@ -1120,11 +1120,24 @@ classdef FastSense < handle
             set(obj.hAxes, 'YScale', obj.YScale);
 
             % --- Compute full X range (X is sorted, just check endpoints) ---
+            % lineXRange returns NaN for empty lines, which is inert here, so
+            % a line with no data contributes nothing to the range.
             xmin = Inf; xmax = -Inf;
             for i = 1:numel(obj.Lines)
                 [xiMin, xiMax] = obj.lineXRange(i);
                 if xiMin < xmin; xmin = xiMin; end
                 if xiMax > xmax; xmax = xiMax; end
+            end
+            % No line had data (all empty, or no lines) -> xmin/xmax are still
+            % Inf/-Inf; a single shared X collapses to xmin==xmax. Either span
+            % would make the bands, thresholds and the XLim set below invalid,
+            % so normalise to a finite, strictly increasing interval. The plot
+            % renders blank — the desired outcome when a real source is empty.
+            if ~(isfinite(xmin) && isfinite(xmax))
+                xmin = 0; xmax = 1;
+            elseif xmin >= xmax
+                pad = max(0.5, abs(xmax) * 1e-6);
+                xmin = xmin - pad; xmax = xmax + pad;
             end
 
             % --- Render bands (constant y, full x span, back layer) ---
@@ -1467,6 +1480,17 @@ classdef FastSense < handle
                 if yPad == 0; yPad = 1; end
                 yLimLow = ymin - yPad;
                 yLimHigh = ymax + yPad;
+            end
+
+            % Mirror the X-range guard for Y: with every line empty the linear
+            % branch above leaves ymin/ymax at Inf/-Inf (the log branch already
+            % falls back to [0.1 1]). Normalise to a finite, strictly
+            % increasing interval before applying the limits.
+            if ~(isfinite(yLimLow) && isfinite(yLimHigh))
+                yLimLow = 0; yLimHigh = 1;
+            elseif yLimLow >= yLimHigh
+                pad = max(0.5, abs(yLimHigh) * 1e-6);
+                yLimLow = yLimLow - pad; yLimHigh = yLimHigh + pad;
             end
 
             set(obj.hAxes, 'XLim', [xmin, xmax]);
@@ -2414,10 +2438,18 @@ classdef FastSense < handle
         end
 
         function [xMin, xMax] = lineXRange(obj, i)
-            %LINEXRANGE Return X endpoints for line i.
+            %LINEXRANGE Return X endpoints for line i (NaN if the line is empty).
             if obj.lineOnDisk(i)
                 xMin = obj.Lines(i).DataStore.XMin;
                 xMax = obj.Lines(i).DataStore.XMax;
+            elseif obj.Lines(i).NumPoints == 0
+                % Empty in-memory line — e.g. a tag bound to a real-mode
+                % source that was unreachable, so it holds zero samples.
+                % Indexing X(1)/X(end) would error; NaN is inert in the
+                % min/max comparisons every caller runs, so an empty line
+                % simply contributes nothing to the axis range.
+                xMin = NaN;
+                xMax = NaN;
             else
                 xMin = obj.Lines(i).X(1);
                 xMax = obj.Lines(i).X(end);
