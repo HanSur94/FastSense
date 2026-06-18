@@ -45,6 +45,14 @@ classdef BatchTagPipeline < handle
                                     % unchanged). The handle is created in this class's scope so resolution to the
                                     % private/ helper is captured at class load time. Tests override via
                                     % setWriteFnForTesting_ (Hidden); see LiveTagPipeline for full rationale.
+        readFn_   = @dispatchDelimitedParse_   % DI seam for the raw PARSER (symmetric to writeFn_).
+                                    % Default is the production delimited parser (MEX-preferred, with
+                                    % readRawDelimited_ fallback). Inject a custom parser via the 'ReadFn'
+                                    % constructor option for source formats the generic delimited reader
+                                    % cannot handle (e.g. an envlog '%'-header + split dd.mm.yyyy/HH:MM:SS
+                                    % timestamp). The handle takes an absolute path and returns the
+                                    % readRawDelimited_ output shape (.headers cellstr + .data matrix) that
+                                    % selectTimeAndValue_ consumes.
         cachedWriteFn_ = @writeTagMatCached_   % Phase 1028 plan 02d: cached append helper that skips load().
                                                % Mirrors LiveTagPipeline. Used only when the public run() is called
                                                % multiple times against the same OutputDir for the same registry.
@@ -82,7 +90,7 @@ classdef BatchTagPipeline < handle
             %   Errors:
             %     TagPipeline:invalidOutputDir      -- OutputDir missing/empty/non-char
             %     TagPipeline:cannotCreateOutputDir -- mkdir failed
-            opts = struct('OutputDir', '', 'Verbose', false);
+            opts = struct('OutputDir', '', 'Verbose', false, 'ReadFn', []);
             for k = 1:2:numel(varargin)
                 key = varargin{k};
                 if k + 1 > numel(varargin) || ~ischar(key)
@@ -94,6 +102,8 @@ classdef BatchTagPipeline < handle
                         opts.OutputDir = varargin{k+1};
                     case 'Verbose'
                         opts.Verbose = logical(varargin{k+1});
+                    case 'ReadFn'
+                        opts.ReadFn = varargin{k+1};
                     otherwise
                         error('TagPipeline:invalidOutputDir', ...
                             'Unknown option ''%s''.', key);
@@ -113,6 +123,13 @@ classdef BatchTagPipeline < handle
             end
             obj.OutputDir = opts.OutputDir;
             obj.Verbose   = opts.Verbose;
+            if ~isempty(opts.ReadFn)
+                if ~isa(opts.ReadFn, 'function_handle')
+                    error('TagPipeline:invalidReadFn', ...
+                        'ReadFn must be a function handle @(absPath)->parsed.');
+                end
+                obj.readFn_ = opts.ReadFn;
+            end
             obj.priorState_ = containers.Map('KeyType', 'char', 'ValueType', 'any');
         end
 
@@ -278,16 +295,19 @@ classdef BatchTagPipeline < handle
             obj.fileCache_(abspath) = parsed;
         end
 
-        function parsed = dispatchParse_(obj, abspath)  %#ok<INUSL>
+        function parsed = dispatchParse_(obj, abspath)
             %DISPATCHPARSE_ Internal parser dispatch (D-02 forward-compat shape).
-            %   Routes through dispatchDelimitedParse_ which prefers the
-            %   compiled delimited_parse_mex (Phase 1028 K1) and falls back
-            %   to readRawDelimited_ when the MEX binary is absent (D-09).
+            %   Routes through obj.readFn_ — by default dispatchDelimitedParse_,
+            %   which prefers the compiled delimited_parse_mex (Phase 1028 K1)
+            %   and falls back to readRawDelimited_ when the MEX binary is
+            %   absent (D-09). A custom 'ReadFn' (injected at construction) lets
+            %   a caller parse formats the generic delimited reader cannot, as
+            %   long as it returns the same parsed shape selectTimeAndValue_ uses.
             [~, ~, ext] = fileparts(abspath);
             ext = lower(ext);
             switch ext
                 case {'.csv', '.txt', '.dat'}
-                    parsed = dispatchDelimitedParse_(abspath);
+                    parsed = obj.readFn_(abspath);
                 otherwise
                     error('TagPipeline:unknownExtension', ...
                         'Unsupported extension ''%s''. Supported: .csv .txt .dat', ext);
