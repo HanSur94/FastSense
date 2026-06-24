@@ -73,7 +73,7 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --global core.protectNTFS false
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             libs
@@ -157,7 +157,7 @@ jobs:
     runs-on: ubuntu-22.04
     container: gnuoctave/octave:11.1.0
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Delete stale Octave binaries
         run: find libs -type f -name '*.mex' -delete || true
@@ -186,7 +186,7 @@ jobs:
     timeout-minutes: 30
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Octave
         run: brew install octave
@@ -221,7 +221,7 @@ jobs:
       - name: Allow paths with colons (wiki files)
         run: git config --global core.protectNTFS false
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             libs
@@ -300,7 +300,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Download ALL artifacts and overlay them onto libs/.
       # IMPORTANT: actions/upload-artifact trims the least-common-ancestor of
