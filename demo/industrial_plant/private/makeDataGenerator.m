@@ -107,8 +107,8 @@ function industrialPlantTick_(tObj, ~)
         b     = cfg.Baselines.(field);
         rng   = cfg.Ranges.(field);
 
-        y = b.mean + b.amp * sin(2*pi*tRel/b.period + b.phase) ...
-              + b.noise * randn();
+        y = b.mean + b.amp * sin(2*pi*tRel/b.period + b.phase) + ...
+              b.noise * randn();
 
         % Inject deliberate anomalies for event demo (D-11 in CONTEXT).
         if strcmp(key, 'reactor.pressure')

@@ -30,8 +30,8 @@ function y = buildSensorExcursions(cfg, key, tHist)
     tRel  = (tHist - tHist(1)) * 86400;   % seconds since first sample
 
     % Baseline: sine + Gaussian noise (matches makeDataGenerator's model).
-    y = b.mean + b.amp * sin(2*pi*tRel/b.period + b.phase) ...
-          + b.noise * randn(size(tRel));
+    y = b.mean + b.amp * sin(2*pi*tRel/b.period + b.phase) + ...
+          b.noise * randn(size(tRel));
 
     % Excursion overlay (monitored sensors only). Task 3 fills this in;
     % for now this is a no-op.
