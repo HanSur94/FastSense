@@ -124,7 +124,7 @@ The trick: per-pixel **MinMax** and **LTTB** downsampling (SIMD C kernels with p
 
 ## What's in the box
 
-- **Plotting engine** — 100M+ point time-series, 6 themes, linked axes, datetime support, optional MEX SIMD kernels
+- **Plotting engine** — 100M+ point time-series, light & dark themes, 4 color palettes, linked axes, datetime support, optional MEX SIMD kernels
 - **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, shared `TagRegistry`
 - **Event detection** — group violations into events, statistics, live pipeline, interactive Gantt viewer, notifications
 - **Dashboards** — 19 widget types, JSON persistence, multi-page, collapsible, detachable, live refresh
