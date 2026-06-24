@@ -8,7 +8,7 @@
 
 [![Tests](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml) [![Benchmark](https://github.com/HanSur94/FastSense/actions/workflows/benchmark.yml/badge.svg)](https://hansur94.github.io/FastSense/dev/bench/) [![codecov](https://codecov.io/gh/HanSur94/FastSense/graph/badge.svg)](https://codecov.io/gh/HanSur94/FastSense) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html) [![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org) [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#install)
 
-`100M+ points` · `Tags` · `live event detection` · `21 dashboard widgets` · `no toolboxes`
+`100M+ points` · `Tags` · `live event detection` · `19 dashboard widgets` · `no toolboxes`
 
 </div>
 
@@ -98,7 +98,7 @@ d.save('process.json');           % JSON-persist
 % later:  d = DashboardEngine.load('process.json');
 ```
 
-- **21 widget types** — plots, numbers, gauges, status lights, gantt timelines, heatmaps, tables, markdown, …
+- **19 widget types** — plots, numbers, gauges, status lights, gantt timelines, heatmaps, tables, markdown, …
 - **Multi-page tabs · collapsible groups · pop-out detached widgets**
 - **Live mode** — synchronised refresh on a configurable timer
 - **Browser bridge** — `WebBridge(d).serve()` exposes the dashboard over TCP to a FastAPI + uPlot frontend
@@ -127,7 +127,7 @@ The trick: per-pixel **MinMax** and **LTTB** downsampling (SIMD C kernels with p
 - **Plotting engine** — 100M+ point time-series, 6 themes, linked axes, datetime support, optional MEX SIMD kernels
 - **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, shared `TagRegistry`
 - **Event detection** — group violations into events, statistics, live pipeline, interactive Gantt viewer, notifications
-- **Dashboards** — 21 widget types, JSON persistence, multi-page, collapsible, detachable, live refresh
+- **Dashboards** — 19 widget types, JSON persistence, multi-page, collapsible, detachable, live refresh
 - **Browser bridge** — TCP → FastAPI → uPlot, bidirectional callbacks
 - **Disk-backed storage** — SQLite chunks with WAL for live reads, pyramid-cached downsamples
 - **Pure MATLAB / Octave** — no toolboxes, no internet, no licenses
