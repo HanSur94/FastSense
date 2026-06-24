@@ -655,7 +655,8 @@ classdef FastSense < handle
             defaults.Color = obj.Theme.ThresholdColor;
             defaults.LineStyle = obj.Theme.ThresholdStyle;
             defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, nvPairs, obj.Verbose);
+            [parsed, unmatched] = parseOpts(defaults, nvPairs);
+            warnUnknownOpts_('addThreshold', unmatched, fieldnames(defaults));
 
             t.Value          = [];
             t.X              = [];
@@ -722,7 +723,8 @@ classdef FastSense < handle
             defaults.FaceAlpha = obj.Theme.BandAlpha;
             defaults.EdgeColor = 'none';
             defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addBand', unmatched, fieldnames(defaults));
 
             b.YLow      = yLow;
             b.YHigh     = yHigh;
@@ -784,7 +786,8 @@ classdef FastSense < handle
             defaults.MarkerSize = 6;
             defaults.Color = obj.Theme.ThresholdColor;
             defaults.Label = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addMarker', unmatched, fieldnames(defaults));
 
             m.X          = x;
             m.Y          = y;
@@ -894,7 +897,8 @@ classdef FastSense < handle
             defaults.FaceAlpha = 0.15;
             defaults.EdgeColor = 'none';
             defaults.DisplayName = '';
-            [parsed, ~] = parseOpts(defaults, varargin, obj.Verbose);
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addShaded', unmatched, fieldnames(defaults));
 
             s.X           = x;
             s.Y1          = y1;
