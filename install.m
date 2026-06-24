@@ -296,7 +296,6 @@ function verify_installation(root)
     end
 end
 
-
 function tag = get_octave_platform_tag()
 %GET_OCTAVE_PLATFORM_TAG Return platform tag string for Octave subdir layout.
 %   Returns a char such as 'macos-arm64', 'linux-x86_64', etc., or '' when

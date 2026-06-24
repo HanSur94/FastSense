@@ -11,7 +11,7 @@ function benchmark_memory()
 %   Example:
 %     benchmark_memory();
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));install();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
 
     fprintf('=== FastSense Memory Benchmark ===\n\n');
 
@@ -128,7 +128,6 @@ function benchmark_memory()
 
     fprintf('\n=== Benchmark complete ===\n');
 end
-
 
 function s = formatPoints(n)
 %FORMATPOINTS Format point count as human-readable string.

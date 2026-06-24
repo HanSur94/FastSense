@@ -6,7 +6,7 @@ function profile_datastore()
 %     3. Full render with disk-backed lines
 %     4. Zoom/pan re-downsample cycle
 
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..'));install();
+    addpath(fullfile(fileparts(mfilename('fullpath')), '..')); install();
 
     n = 5e6;  % 5M points — enough to see bottlenecks, fast enough to iterate
     fprintf('Generating %dM points...\n', n/1e6);
@@ -108,7 +108,6 @@ function profile_datastore()
     fprintf('\n=== Profiling complete ===\n');
     fprintf('Run "profile viewer" to inspect detailed call trees.\n');
 end
-
 
 function printTopFunctions(label)
 %PRINTTOPFUNCTIONS Print top 15 functions by total time from profiler.

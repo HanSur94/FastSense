@@ -204,4 +204,3 @@ function waitForFirstSample_(tagKey, maxSeconds)
         pause(0.1);
     end
 end
-
