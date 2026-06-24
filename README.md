@@ -68,8 +68,8 @@ press.updateData(t, pressure_data);
 % Alarm whenever pressure > 55 bar
 alarm = MonitorTag('press_high', press, @(x, y) y > 55);
 
-TagRegistry.register(press);
-TagRegistry.register(alarm);
+TagRegistry.register('press_a', press);
+TagRegistry.register('press_high', alarm);
 
 fp = FastSense();
 fp.addTag(press);
