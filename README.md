@@ -89,9 +89,9 @@ Compose monitoring dashboards from widgets on a 24-column grid. The same Tags dr
 d = DashboardEngine('Process Monitor');
 d.Theme = 'dark';
 d.addWidget('fastsense', 'Position', [1 1 16 8],  'Tag', press);
-d.addWidget('number',    'Position', [17 1 8 4],  'Tag', press, 'Label', 'Pressure');
-d.addWidget('gauge',     'Position', [17 5 8 4],  'Tag', press, 'Label', 'Live');
-d.addWidget('status',    'Position', [1 9 24 2],  'Tag', alarm, 'Label', 'Alarm');
+d.addWidget('number',    'Position', [17 1 8 4],  'Tag', press, 'Title', 'Pressure');
+d.addWidget('gauge',     'Position', [17 5 8 4],  'Tag', press, 'Title', 'Live');
+d.addWidget('status',    'Position', [1 9 24 2],  'Threshold', alarm, 'Title', 'Alarm');
 d.render();
 
 d.save('process.json');           % JSON-persist
