@@ -592,7 +592,8 @@ classdef DerivedTag < Tag
                     ownArgs{end+1} = v; %#ok<AGROW>
                 else
                     error('DerivedTag:unknownOption', ...
-                        'Unknown NV key ''%s''.', k);
+                        'Unknown option ''%s''. Valid options: %s.', ...
+                        k, strjoin([tagKeys, ownKeys], ', '));
                 end
                 i = i + 2;
             end

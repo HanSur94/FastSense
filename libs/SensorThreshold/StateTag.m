@@ -288,7 +288,8 @@ classdef StateTag < Tag
                     hasRs = true;
                 else
                     error('StateTag:unknownOption', ...
-                        'Unknown option ''%s''.', char(k));
+                        'Unknown option ''%s''. Valid options: %s.', ...
+                        char(k), strjoin([tagKeys, {'X', 'Y', 'RawSource'}], ', '));
                 end
                 i = i + 2;
             end
