@@ -100,7 +100,7 @@ d.save('process.json');           % JSON-persist
 ```
 
 - **19 widget types** — plots, numbers, gauges, status lights, gantt timelines, heatmaps, tables, markdown, …
-- **Multi-page tabs · collapsible groups · pop-out detached widgets**
+- **Multi-page tabs · collapsible groups · per-widget info popups · pop-out detached widgets**
 - **Live mode** — synchronised refresh on a configurable timer
 - **Browser bridge** — `WebBridge(d).serve()` exposes the dashboard over TCP to a FastAPI + uPlot frontend
 
@@ -128,7 +128,7 @@ The trick: per-pixel **MinMax** and **LTTB** downsampling (SIMD C kernels with p
 - **Plotting engine** — 100M+ point time-series, light & dark themes, 4 color palettes, linked axes, datetime support, optional MEX SIMD kernels
 - **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `DerivedTag`, shared `TagRegistry`
 - **Event detection** — group violations into events, statistics, live pipeline, interactive Gantt viewer, notifications
-- **Dashboards** — 19 widget types, JSON persistence, multi-page, collapsible, detachable, live refresh
+- **Dashboards** — 19 widget types, JSON persistence, multi-page, collapsible, info popups, detachable, live refresh
 - **Browser bridge** — TCP → FastAPI → uPlot, bidirectional callbacks
 - **Disk-backed storage** — SQLite chunks with WAL for live reads, pyramid-cached downsamples
 - **Pure MATLAB / Octave** — no toolboxes, no internet, no licenses
