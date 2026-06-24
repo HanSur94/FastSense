@@ -50,14 +50,15 @@ That renders in **a few milliseconds and stays at 200+ FPS while you zoom and pa
 
 ## The core idea: Tags
 
-Everything in FastSense — sensors, machine states, alarms, derived signals — is a **Tag**. One unified type, four flavours:
+Everything in FastSense — sensors, machine states, alarms, derived signals — is a **Tag**. One unified type, five flavours:
 
-| Tag            | What it is                                                  |
-|----------------|-------------------------------------------------------------|
-| `SensorTag`    | A measured time-series (pressure, temperature, …)           |
-| `StateTag`     | A discrete system state (idle / running / fault, recipe)    |
-| `MonitorTag`   | A derived 0/1 alarm signal — "is this sensor out of spec?"  |
-| `CompositeTag` | An aggregation of other tags                                |
+| Tag            | What it is                                                   |
+|----------------|--------------------------------------------------------------|
+| `SensorTag`    | A measured time-series (pressure, temperature, …)            |
+| `StateTag`     | A discrete system state (idle / running / fault, recipe)     |
+| `MonitorTag`   | A derived 0/1 alarm signal — "is this sensor out of spec?"   |
+| `CompositeTag` | A 0/1 signal aggregated from multiple monitors               |
+| `DerivedTag`   | A continuous signal computed from other tags (power = V × I) |
 
 Tags carry their own metadata (units, criticality, labels) and live in a shared **`TagRegistry`** so every part of the system — plots, dashboards, event detection, the web bridge — speaks the same language.
 
@@ -125,7 +126,7 @@ The trick: per-pixel **MinMax** and **LTTB** downsampling (SIMD C kernels with p
 ## What's in the box
 
 - **Plotting engine** — 100M+ point time-series, light & dark themes, 4 color palettes, linked axes, datetime support, optional MEX SIMD kernels
-- **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, shared `TagRegistry`
+- **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `DerivedTag`, shared `TagRegistry`
 - **Event detection** — group violations into events, statistics, live pipeline, interactive Gantt viewer, notifications
 - **Dashboards** — 19 widget types, JSON persistence, multi-page, collapsible, detachable, live refresh
 - **Browser bridge** — TCP → FastAPI → uPlot, bidirectional callbacks
