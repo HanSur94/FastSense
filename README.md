@@ -38,10 +38,10 @@ install;   % run once: adds paths + builds MEX accelerators
 x = linspace(0, 100, 1e7);              % 10 million points
 y = sin(x) + 0.1 * randn(size(x));
 
-fp = FastSense('Theme', 'dark');
-fp.addLine(x, y, 'DisplayName', 'Sensor');
-fp.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
-fp.render();
+fs = FastSense('Theme', 'dark');
+fs.addLine(x, y, 'DisplayName', 'Sensor');
+fs.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
+fs.render();
 ```
 
 That renders in **a few milliseconds and stays at 200+ FPS while you zoom and pan**. MATLAB's built-in `plot()` takes ~3 seconds on the same data and crawls at ~2 FPS. ([benchmarks ↓](#performance))
@@ -72,10 +72,10 @@ alarm = MonitorTag('press_high', press, @(x, y) y > 55);
 TagRegistry.register('press_a', press);
 TagRegistry.register('press_high', alarm);
 
-fp = FastSense();
-fp.addTag(press);
-fp.addTag(alarm);     % overlaid as a 0/1 step trace
-fp.render();
+fs = FastSense();
+fs.addTag(press);
+fs.addTag(alarm);     % overlaid as a 0/1 step trace
+fs.render();
 ```
 
 The same `alarm` tag drives event detection, lights up status widgets in the dashboard, fires notifications, and shows up in the browser bridge — without you re-declaring the rule four times. For monitors that depend on multiple parents (e.g., a state-conditional alarm), compose them via `CompositeTag`.
