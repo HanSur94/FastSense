@@ -153,7 +153,7 @@ MEX is optional — pure-MATLAB fallbacks kick in if no C compiler is available.
 
 ## Examples & docs
 
-40+ runnable scripts in [`examples/`](examples/), grouped by topic (`01-basics` … `07-advanced`). Run them all with `run_all_examples`.
+70+ runnable scripts in [`examples/`](examples/), grouped by topic (`01-basics` … `07-advanced`). `run_all_examples` plays a guided tour of the highlights.
 
 Full reference lives in the [Wiki](https://github.com/HanSur94/FastSense/wiki): Getting Started · API Reference · Architecture · MEX details · Performance.
 
