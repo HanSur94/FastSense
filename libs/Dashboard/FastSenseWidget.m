@@ -1775,8 +1775,14 @@ classdef FastSenseWidget < DashboardWidget
         %   no second arg and get the existing pull behavior unchanged.
             if ~isempty(obj.Tag)
                 try
-                    if nargin >= 2 && ~isempty(x)
+                    if nargin >= 2 && ~isempty(x) && isempty(obj.TimeWindow_)
                         % Use the already-pulled x — avoids a redundant getXY().
+                        % Only trust it as the full extent when no TimeWindow_
+                        % is active: with a window set, callers pass the WINDOWED
+                        % pull (pullData_ -> getXYRange), which must not poison
+                        % the full-extent cache that getTimeRange() reports for
+                        % the navigator/preview. When windowed, fall through to
+                        % the Tag's own (full) range below.
                         n = numel(x);
                         tMin = x(1);
                         tMax = x(n);
