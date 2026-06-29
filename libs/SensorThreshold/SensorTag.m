@@ -53,6 +53,7 @@ classdef SensorTag < Tag
             %   Errors:
             %     Tag:invalidKey           -- key empty / not char
             %     SensorTag:unknownOption  -- unrecognized NV key
+            %     SensorTag:sizeMismatch   -- inline X and Y differ in length
             [tagArgs, sensorArgs, inlineX, inlineY] = SensorTag.splitArgs_(varargin);
             obj@Tag(key, tagArgs{:});              % MUST be first -- no obj access before
 
@@ -69,6 +70,14 @@ classdef SensorTag < Tag
             end
 
             if ~isempty(inlineX) || ~isempty(inlineY)
+                % Reject mismatched inline data early with a namespaced error
+                % (mirrors FastSense:sizeMismatch) instead of letting it slip
+                % through to a downstream failure at getXY/plot time.
+                if ~isempty(inlineX) && ~isempty(inlineY) && numel(inlineX) ~= numel(inlineY)
+                    error('SensorTag:sizeMismatch', ...
+                        'X and Y must have the same number of elements (got %d and %d).', ...
+                        numel(inlineX), numel(inlineY));
+                end
                 obj.X_ = inlineX;
                 obj.Y_ = inlineY;
             end

@@ -165,6 +165,16 @@ classdef DashboardEngine < handle
                         key, strjoin(properties(obj), ', '));
                 end
                 obj.(key) = varargin{k+1};
+                % Validate a string Theme preset eagerly (parity with
+                % FastSense, which throws FastSenseTheme:unknownPreset), so a
+                % typo fails here instead of silently falling back to 'light'.
+                % Struct / FastSenseTheme-object / empty themes pass through.
+                if strcmpi(key, 'Theme') && (ischar(obj.Theme) || isstring(obj.Theme)) && ~isempty(char(obj.Theme))
+                    if ~any(strcmpi(char(obj.Theme), {'light', 'dark', 'default', 'industrial', 'scientific', 'ocean'}))
+                        error('DashboardEngine:unknownTheme', ...
+                            'Unknown theme preset ''%s''. Valid presets: light, dark.', char(obj.Theme));
+                    end
+                end
             end
             obj.Layout = DashboardLayout();
             obj.Layout.EngineRef = obj;  % Phase 1032 PLOG-VIZ-05 — used by addPlantLogToggle callback

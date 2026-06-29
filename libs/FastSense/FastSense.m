@@ -666,6 +666,14 @@ classdef FastSense < handle
                 isTimeVarying = true;
             else
                 % Scalar: addThreshold(value, ...)
+                if isempty(varargin) || ~isnumeric(varargin{1})
+                    got = 'nothing';
+                    if ~isempty(varargin); got = class(varargin{1}); end
+                    error('FastSense:invalidThreshold', ...
+                        ['Threshold value must be numeric; got %s. Use ', ...
+                         'addThreshold(value) for a constant limit, or ', ...
+                         'addThreshold(thX, thY) for a time-varying one.'], got);
+                end
                 thX = [];
                 thY = [];
                 nvPairs = varargin(2:end);
@@ -977,6 +985,15 @@ classdef FastSense < handle
                     obj.IsDatetime = true;
                 end
             catch
+            end
+
+            % Accept a positional baseline: addFill(x, y, baselineValue) is a
+            % natural shorthand for addFill(x, y, 'Baseline', baselineValue).
+            % Promote a leading numeric scalar so it no longer fails with a raw
+            % MATLAB:badsubscript from the name-value parser (which expects an
+            % option name in that slot).
+            if ~isempty(varargin) && isnumeric(varargin{1}) && isscalar(varargin{1})
+                varargin = [{'Baseline'}, varargin];
             end
 
             fillDefaults.Baseline = 0;

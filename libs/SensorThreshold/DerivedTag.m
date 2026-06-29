@@ -205,6 +205,19 @@ classdef DerivedTag < Tag
                     'compute must be a function_handle or an object with a compute() method; got %s.', ...
                     class(compute));
             end
+            % Validate a function-handle compute's arity up front: it is called
+            % as compute(parents), so a wrong-shape handle (e.g. @(x, y) ...)
+            % would otherwise fail with a raw MATLAB:minrhs deep in recompute_.
+            % nargin < 0 means varargin (can accept the single parents cell).
+            if isFn
+                nComputeIn = nargin(compute);
+                if nComputeIn >= 0 && nComputeIn ~= 1
+                    error('DerivedTag:invalidCompute', ...
+                        ['a function-handle compute must accept a single parents cell ', ...
+                         '(@(parents) -> [X, Y]); got a handle taking %d input(s). ', ...
+                         'Example: @(p) deal(p{1}.X, p{1}.Y + p{2}.Y).'], nComputeIn);
+                end
+            end
 
             % --- Cycle detection (DFS over parents' ancestry; Key equality) ---
             DerivedTag.checkCycles_(key, parents);
