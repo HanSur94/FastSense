@@ -410,7 +410,10 @@ classdef DashboardEngine < handle
             %     'Tag'        — a Tag object OR a TagRegistry key string
             %     'XData','YData'      — inline numeric arrays
             %     'File','XVar','YVar' — load arrays from a .mat file
-            %     'Thresholds'         — 'auto' (from the Tag, default) or false
+            %     'Thresholds'         — 'auto' (from the Tag, default), false,
+            %                            a numeric scalar/vector of limit lines,
+            %                            or a cell of {Value|X/Y, Direction,
+            %                            Label, Color, LineStyle} structs
             %
             %   Example:
             %     d.addWidget('fastsense', 'Title', 'Temp', ...

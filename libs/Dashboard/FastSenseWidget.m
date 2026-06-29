@@ -14,6 +14,13 @@ classdef FastSenseWidget < DashboardWidget
         File         = ''
         XVar         = ''
         YVar         = ''
+        % Thresholds — limit lines drawn on the plot. Accepts:
+        %   'auto' (default) — derive from the bound Tag's MonitorTag limits
+        %   false / []       — no threshold lines
+        %   numeric scalar/vector — one upper limit line per value
+        %   cell of structs  — per-limit control via fields: Value (a constant
+        %                      limit) OR X/Y (a time-varying step limit), plus
+        %                      optional Direction, Label, Color, LineStyle
         Thresholds   = 'auto'
         XLabel       = ''    % X-axis label (auto-set from Sensor if empty)
         YLabel       = ''    % Y-axis label (auto-set from Sensor if empty)
