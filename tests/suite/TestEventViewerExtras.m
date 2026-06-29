@@ -209,6 +209,79 @@ classdef TestEventViewerExtras < matlab.unittest.TestCase
             testCase.verifyEqual(numel(labels), 0, ...
                 'getThresholdLabels: empty for empty events');
         end
+
+        % ------------------------------------------------------------- %
+        %  exportImage
+        % ------------------------------------------------------------- %
+
+        function testExportImagePngRoundtrip(testCase)
+            [events, sensorData] = TestEventViewerExtras.makeFixtureEvents();
+            viewer = EventViewer(events, sensorData);
+            testCase.addTeardown(@() TestEventViewerExtras.safeClose(viewer));
+
+            tmp = [tempname, '.png'];
+            testCase.addTeardown(@() TestEventViewerExtras.safeDelete(tmp));
+
+            viewer.exportImage(tmp);
+
+            testCase.verifyTrue(exist(tmp, 'file') == 2, ...
+                'exportImage PNG: file exists');
+            d = dir(tmp);
+            testCase.verifyGreaterThan(d.bytes, 0, ...
+                'exportImage PNG: file is non-empty');
+        end
+
+        function testExportImageJpegRoundtrip(testCase)
+            [events, sensorData] = TestEventViewerExtras.makeFixtureEvents();
+            viewer = EventViewer(events, sensorData);
+            testCase.addTeardown(@() TestEventViewerExtras.safeClose(viewer));
+
+            % Explicit format argument
+            tmp = [tempname, '.jpg'];
+            testCase.addTeardown(@() TestEventViewerExtras.safeDelete(tmp));
+            viewer.exportImage(tmp, 'jpeg');
+            testCase.verifyTrue(exist(tmp, 'file') == 2, ...
+                'exportImage JPEG explicit: file exists');
+            d = dir(tmp);
+            testCase.verifyGreaterThan(d.bytes, 0, ...
+                'exportImage JPEG explicit: file is non-empty');
+
+            % Extension inference (.jpeg)
+            tmp2 = [tempname, '.jpeg'];
+            testCase.addTeardown(@() TestEventViewerExtras.safeDelete(tmp2));
+            viewer.exportImage(tmp2);
+            testCase.verifyTrue(exist(tmp2, 'file') == 2, ...
+                'exportImage JPEG inferred: file exists');
+            d2 = dir(tmp2);
+            testCase.verifyGreaterThan(d2.bytes, 0, ...
+                'exportImage JPEG inferred: file is non-empty');
+        end
+
+        function testExportImageUnknownFormatErrors(testCase)
+            [events, sensorData] = TestEventViewerExtras.makeFixtureEvents();
+            viewer = EventViewer(events, sensorData);
+            testCase.addTeardown(@() TestEventViewerExtras.safeClose(viewer));
+
+            tmp = [tempname, '.png'];
+            testCase.addTeardown(@() TestEventViewerExtras.safeDelete(tmp));
+
+            testCase.verifyError(@() viewer.exportImage(tmp, 'gif'), ...
+                'EventViewer:unknownImageFormat');
+        end
+
+        function testExportImageNotRenderedAfterClose(testCase)
+            [events, sensorData] = TestEventViewerExtras.makeFixtureEvents();
+            viewer = EventViewer(events, sensorData);
+
+            fig = viewer.hFigure;
+            close(fig);
+
+            tmp = [tempname, '.png'];
+            testCase.addTeardown(@() TestEventViewerExtras.safeDelete(tmp));
+
+            testCase.verifyError(@() viewer.exportImage(tmp), ...
+                'EventViewer:notRendered');
+        end
     end
 
     methods (Static, Access = private)
