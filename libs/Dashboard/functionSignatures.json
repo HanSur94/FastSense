@@ -14,12 +14,15 @@
 
     "DashboardEngine.addWidget": {
         "inputs": [
-            {"name": "obj",      "kind": "required",  "type": ["DashboardEngine"]},
-            {"name": "type",     "kind": "required",  "type": ["choices={'barchart','chipbar','divider','fastsense','gauge','group','heatmap','histogram','iconcard','image','multistatus','number','rawaxes','scatter','sparkline','status','table','text','timeline'}"]},
-            {"name": "Position", "kind": "namevalue", "type": ["numeric", "size=1,4"]},
-            {"name": "Title",    "kind": "namevalue", "type": ["char"]},
-            {"name": "Tag",      "kind": "namevalue"},
-            {"name": "Label",    "kind": "namevalue", "type": ["char"]}
+            {"name": "obj",        "kind": "required",  "type": ["DashboardEngine"]},
+            {"name": "type",       "kind": "required",  "type": ["choices={'barchart','chipbar','divider','fastsense','gauge','group','heatmap','histogram','iconcard','image','multistatus','number','rawaxes','scatter','sparkline','status','table','text','timeline'}"]},
+            {"name": "Position",   "kind": "namevalue", "type": ["numeric", "size=1,4"]},
+            {"name": "Title",      "kind": "namevalue", "type": ["char"]},
+            {"name": "Tag",        "kind": "namevalue"},
+            {"name": "Label",      "kind": "namevalue", "type": ["char"]},
+            {"name": "XData",      "kind": "namevalue", "type": ["numeric"]},
+            {"name": "YData",      "kind": "namevalue", "type": ["numeric"]},
+            {"name": "Thresholds", "kind": "namevalue"}
         ]
     }
 }
