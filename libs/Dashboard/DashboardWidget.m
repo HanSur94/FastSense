@@ -62,9 +62,15 @@ classdef DashboardWidget < handle
                 % (house convention). The 'Sensor'->'Tag' remap above runs first,
                 % so legacy scripts and old serialized dashboards still work.
                 if ~isprop(obj, key)
+                    % Suggest only user-facing options: drop internal
+                    % graphics-handle properties (hPanel, hCellPanel,
+                    % hValueText, ...) that follow the h[A-Z] naming convention
+                    % and are never set via name-value pairs.
+                    validOpts = properties(obj);
+                    validOpts = validOpts(cellfun(@(p) isempty(regexp(p, '^h[A-Z]', 'once')), validOpts));
                     error('DashboardWidget:unknownOption', ...
                         'Unknown option ''%s''. Valid options: %s', ...
-                        key, strjoin(properties(obj), ', '));
+                        key, strjoin(validOpts, ', '));
                 end
                 obj.(key) = varargin{k+1};
             end
