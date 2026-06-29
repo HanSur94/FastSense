@@ -221,6 +221,28 @@ classdef FastSense < handle
             %     fp.render();
             %
             %   See also addLine, render, FastSenseTheme, FastSenseDefaults.
+            %
+            %   Note: this constructor takes ONLY name-value options. Plot data is
+            %   added after construction via addLine — there is no FastSense(x, y)
+            %   positional form (see error FastSense:positionalData).
+            %
+            %   Errors:
+            %     FastSense:positionalData — first argument is data, not an option name
+            %     FastSense:unknownOption  — unrecognized name-value option
+
+            % Guard the plot(x, y) reflex: a leading positional data array would
+            % otherwise fail with a cryptic MATLAB:mustBeFieldName from parseOpts.
+            % Every valid call starts with a char/string option name, so this only
+            % catches calls that already errored — point them at add-then-render.
+            if ~isempty(varargin) && ~(ischar(varargin{1}) || isstring(varargin{1}))
+                error('FastSense:positionalData', ...
+                    ['FastSense takes name-value options, not positional data ', ...
+                     '(got %s as the first argument). Use the one-liner ', ...
+                     'FastSense.plot(x, y), or add data after construction:\n', ...
+                     '    fp = FastSense();  fp.addLine(x, y);  fp.render();'], ...
+                    class(varargin{1}));
+            end
+
             cfg = getDefaults();
             defaults.Parent = [];
             defaults.LinkGroup = '';
