@@ -389,6 +389,35 @@ classdef DashboardEngine < handle
         end
 
         function w = addWidget(obj, type, varargin)
+            %ADDWIDGET Add a widget to the dashboard (active page in multi-page mode).
+            %   w = d.ADDWIDGET(type, Name, Value, ...) creates a widget of the
+            %   given type string, appends it, and returns the widget handle.
+            %   w = d.ADDWIDGET(widgetObj) appends a pre-constructed
+            %   DashboardWidget directly.
+            %
+            %   type — one of the registered widget types (see
+            %          DashboardEngine.widgetTypes): 'fastsense', 'number',
+            %          'status', 'gauge', 'table', 'text', 'timeline',
+            %          'rawaxes', 'group', 'heatmap', 'barchart', 'histogram',
+            %          'scatter', 'image', 'multistatus', 'divider', 'iconcard',
+            %          'chipbar', 'sparkline'. An unknown type raises
+            %          DashboardEngine:unknownType (which lists the valid types).
+            %
+            %   Common name-value options (forwarded to the widget):
+            %     'Position' — [col row width height] on the 24-column grid
+            %     'Title'    — widget title (auto-derived from a bound Tag)
+            %   FastSenseWidget data binding (choose one source):
+            %     'Tag'        — a Tag object OR a TagRegistry key string
+            %     'XData','YData'      — inline numeric arrays
+            %     'File','XVar','YVar' — load arrays from a .mat file
+            %     'Thresholds'         — 'auto' (from the Tag, default) or false
+            %
+            %   Example:
+            %     d.addWidget('fastsense', 'Title', 'Temp', ...
+            %                 'Position', [1 1 12 6], 'Tag', 'temperature');
+            %
+            %   See also widgetTypes, addPage, addCollapsible, render.
+
             % Accept a pre-constructed widget object directly
             if isa(type, 'DashboardWidget')
                 w = type;
@@ -934,6 +963,16 @@ classdef DashboardEngine < handle
         end
 
         function save(obj, filepath)
+            %SAVE Serialize the dashboard to a file (format from the extension).
+            %   d.SAVE('dash.json') writes a JSON config; d.SAVE('dash.m')
+            %   writes an executable .m builder script. The output format is
+            %   chosen from the file extension ('.json' or '.m').
+            %
+            %   Tags are serialized by KEY reference, not by their data: on
+            %   load, each key is re-resolved against TagRegistry, so register
+            %   the tags before loading. Reload with DashboardEngine.load.
+            %
+            %   See also load, exportScript, DashboardSerializer.
             [~, ~, ext] = fileparts(filepath);
             isMultiPage = numel(obj.Pages) > 1;
             isSingleImplicitPage = numel(obj.Pages) == 1 && strcmp(obj.Pages{1}.Name, 'Default');
@@ -4678,6 +4717,17 @@ classdef DashboardEngine < handle
         end
 
         function obj = load(filepath, varargin)
+            %LOAD Reconstruct a DashboardEngine from a saved file (static).
+            %   d = DashboardEngine.LOAD('dash.json') loads a JSON config (or a
+            %   '.m' builder script) written by save(). Returns an unrendered
+            %   DashboardEngine — call d.render() to display it.
+            %
+            %   Tag-bound widgets are restored by KEY: each tag key in the file
+            %   is resolved against TagRegistry, so register the tags first. A
+            %   missing key raises a clear error. Pass 'SensorResolver', fcn to
+            %   supply a custom key->Tag resolver for legacy 'sensor' sources.
+            %
+            %   See also save, exportScript, TagRegistry.register.
             resolver = [];
             for k = 1:2:numel(varargin)
                 if strcmp(varargin{k}, 'SensorResolver')

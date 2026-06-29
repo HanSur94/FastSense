@@ -1,7 +1,7 @@
 classdef DerivedTag < Tag
     %DERIVEDTAG Continuous (X, Y) signal derived from N parent Tags via compute fn.
     %
-    %   DerivedTag is the 5th concrete Tag class in the FastPlot Tag
+    %   DerivedTag is the 5th concrete Tag class in the FastSense Tag
     %   hierarchy — the continuous-output counterpart to MonitorTag
     %   (1 parent → 0/1) and CompositeTag (N children → 0/1). It produces
     %   a full (X, Y) time series by applying a user-supplied compute
@@ -397,7 +397,7 @@ classdef DerivedTag < Tag
         function addListener(obj, l)
             %ADDLISTENER Register a downstream listener.
             %   l must implement an invalidate() method (any Tag in the
-            %   FastPlot domain qualifies; struct/handle objects with a
+            %   FastSense domain qualifies; struct/handle objects with a
             %   bespoke invalidate also work). Listeners are held by
             %   strong reference — caller manages lifecycle.
             %

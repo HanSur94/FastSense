@@ -353,7 +353,12 @@ classdef SensorTag < Tag
 
     methods (Static)
         function obj = fromStruct(s)
-            %FROMSTRUCT Reconstruct SensorTag from a toStruct output.
+            %FROMSTRUCT Reconstruct a SensorTag from a toStruct output.
+            %   NOTE: toStruct intentionally omits the X/Y samples (it stores
+            %   only metadata), so the reconstructed tag has NO data — getXY
+            %   returns empty until you re-attach the data via load(matFile) or
+            %   a MatFile/DataStore binding. Round-tripping a tag does not
+            %   round-trip its samples.
             if ~isstruct(s) || ~isfield(s, 'key') || isempty(s.key)
                 error('SensorTag:invalidSource', ...
                     'fromStruct requires a struct with non-empty .key');

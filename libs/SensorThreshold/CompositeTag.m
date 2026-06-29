@@ -4,9 +4,9 @@ classdef CompositeTag < Tag
     %   CompositeTag < Tag -- a derived-signal Tag that aggregates 1..N
     %   MonitorTag/CompositeTag children into a single 0/1 (or 0..1
     %   severity-pre-threshold) time series via k-way merge-sort ZOH
-    %   streaming (implemented in Plan 02; Plan 01 ships the core API only:
-    %   constructor, addChild cycle-DFS + type-guard + listener hookup, and
-    %   the 7-mode aggregator helper).
+    %   streaming. The aggregation mode (AND/OR/MAJORITY/COUNT/WORST/
+    %   SEVERITY/USER_FN) is selected via the AggregateMode property; see
+    %   the truth table below.
     %
     %   Truth Table (binary 0/1 inputs; NaN = unknown):
     %
@@ -54,7 +54,7 @@ classdef CompositeTag < Tag
     %     getChildAt(i)                   -- i-th child Tag handle (3-deep descent)
     %     getKind()                       -- returns 'composite'
     %
-    %   Methods (Tag contract -- Plan 02 merge-sort + serialization):
+    %   Methods (Tag contract -- merge-sort aggregation + serialization):
     %     getXY()         -- lazy-memoized union-of-timestamps grid via
     %                        RESEARCH §5 vectorized sort-based merge
     %                        (no set union, no linear interpolation; ALIGN-03)
