@@ -8,7 +8,7 @@
 
 [![Tests](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml/badge.svg)](https://github.com/HanSur94/FastSense/actions/workflows/tests.yml) [![Benchmark](https://github.com/HanSur94/FastSense/actions/workflows/benchmark.yml/badge.svg)](https://hansur94.github.io/FastSense/dev/bench/) [![codecov](https://codecov.io/gh/HanSur94/FastSense/graph/badge.svg)](https://codecov.io/gh/HanSur94/FastSense) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html) [![Octave](https://img.shields.io/badge/GNU%20Octave-7%2B-blue.svg)](https://octave.org) [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#install)
 
-`100M+ points` · `Tags` · `live event detection` · `21 dashboard widgets` · `no toolboxes`
+`100M+ points` · `Tags` · `live event detection` · `19 dashboard widgets` · `no toolboxes`
 
 </div>
 
@@ -38,10 +38,10 @@ install;   % run once: adds paths + builds MEX accelerators
 x = linspace(0, 100, 1e7);              % 10 million points
 y = sin(x) + 0.1 * randn(size(x));
 
-fp = FastSense('Theme', 'dark');
-fp.addLine(x, y, 'DisplayName', 'Sensor');
-fp.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
-fp.render();
+fs = FastSense('Theme', 'dark');
+fs.addLine(x, y, 'DisplayName', 'Sensor');
+fs.addThreshold(0.8, 'Direction', 'upper', 'ShowViolations', true);
+fs.render();
 ```
 
 That renders in **a few milliseconds and stays at 200+ FPS while you zoom and pan**. MATLAB's built-in `plot()` takes ~3 seconds on the same data and crawls at ~2 FPS. ([benchmarks ↓](#performance))
@@ -50,14 +50,15 @@ That renders in **a few milliseconds and stays at 200+ FPS while you zoom and pa
 
 ## The core idea: Tags
 
-Everything in FastSense — sensors, machine states, alarms, derived signals — is a **Tag**. One unified type, four flavours:
+Everything in FastSense — sensors, machine states, alarms, derived signals — is a **Tag**. One unified type, five flavours:
 
-| Tag            | What it is                                                  |
-|----------------|-------------------------------------------------------------|
-| `SensorTag`    | A measured time-series (pressure, temperature, …)           |
-| `StateTag`     | A discrete system state (idle / running / fault, recipe)    |
-| `MonitorTag`   | A derived 0/1 alarm signal — "is this sensor out of spec?"  |
-| `CompositeTag` | An aggregation of other tags                                |
+| Tag            | What it is                                                   |
+|----------------|--------------------------------------------------------------|
+| `SensorTag`    | A measured time-series (pressure, temperature, …)            |
+| `StateTag`     | A discrete system state (idle / running / fault, recipe)     |
+| `MonitorTag`   | A derived 0/1 alarm signal — "is this sensor out of spec?"   |
+| `CompositeTag` | A 0/1 signal aggregated from multiple monitors               |
+| `DerivedTag`   | A continuous signal computed from other tags (power = V × I) |
 
 Tags carry their own metadata (units, criticality, labels) and live in a shared **`TagRegistry`** so every part of the system — plots, dashboards, event detection, the web bridge — speaks the same language.
 
@@ -74,10 +75,10 @@ alarm = MonitorTag('press_high', press, @(x, y) y > 55);
 TagRegistry.register('press_a', press);
 TagRegistry.register('press_high', alarm);
 
-fp = FastSense();
-fp.addTag(press);
-fp.addTag(alarm);     % overlaid as a 0/1 step trace
-fp.render();
+fs = FastSense();
+fs.addTag(press);
+fs.addTag(alarm);     % overlaid as a 0/1 step trace
+fs.render();
 ```
 
 The same `alarm` tag drives event detection, lights up status widgets in the dashboard, fires notifications, and shows up in the browser bridge — without you re-declaring the rule four times. For monitors that depend on multiple parents (e.g., a state-conditional alarm), compose them via `CompositeTag`.
@@ -101,8 +102,8 @@ d.save('process.json');           % JSON-persist
 % later:  d = DashboardEngine.load('process.json');
 ```
 
-- **21 widget types** — plots, numbers, gauges, status lights, gantt timelines, heatmaps, tables, markdown, …
-- **Multi-page tabs · collapsible groups · pop-out detached widgets**
+- **19 widget types** — plots, numbers, gauges, status lights, gantt timelines, heatmaps, tables, markdown, …
+- **Multi-page tabs · collapsible groups · per-widget info popups · pop-out detached widgets**
 - **Live mode** — synchronised refresh on a configurable timer
 - **Browser bridge** — `WebBridge(d).serve()` exposes the dashboard over TCP to a FastAPI + uPlot frontend
 
@@ -127,10 +128,10 @@ The trick: per-pixel **MinMax** and **LTTB** downsampling (SIMD C kernels with p
 
 ## What's in the box
 
-- **Plotting engine** — 100M+ point time-series, 6 themes, linked axes, datetime support, optional MEX SIMD kernels
-- **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, shared `TagRegistry`
+- **Plotting engine** — 100M+ point time-series, light & dark themes, 4 color palettes, linked axes, datetime support, optional MEX SIMD kernels
+- **Tag domain model** — `SensorTag`, `StateTag`, `MonitorTag`, `CompositeTag`, `DerivedTag`, shared `TagRegistry`
 - **Event detection** — group violations into events, statistics, live pipeline, interactive Gantt viewer, notifications
-- **Dashboards** — 21 widget types, JSON persistence, multi-page, collapsible, detachable, live refresh
+- **Dashboards** — 19 widget types, JSON persistence, multi-page, collapsible, info popups, detachable, live refresh
 - **Browser bridge** — TCP → FastAPI → uPlot, bidirectional callbacks
 - **Disk-backed storage** — SQLite chunks with WAL for live reads, pyramid-cached downsamples
 - **Pure MATLAB / Octave** — no toolboxes, no internet, no licenses
@@ -156,7 +157,7 @@ MEX is optional — pure-MATLAB fallbacks kick in if no C compiler is available.
 
 ## Examples & docs
 
-40+ runnable scripts in [`examples/`](examples/), grouped by topic (`01-basics` … `07-advanced`). Run them all with `run_all_examples`.
+70+ runnable scripts in [`examples/`](examples/), grouped by topic (`01-basics` … `07-advanced`). `run_all_examples` plays a guided tour of the highlights.
 
 Full reference lives in the [Wiki](https://github.com/HanSur94/FastSense/wiki): Getting Started · API Reference · Architecture · MEX details · Performance.
 

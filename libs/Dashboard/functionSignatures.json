@@ -1,0 +1,25 @@
+{
+    "_schemaVersion": "1.0.0",
+
+    "DashboardEngine.DashboardEngine": {
+        "inputs": [
+            {"name": "Name",          "kind": "ordered",   "type": ["char"]},
+            {"name": "Theme",         "kind": "namevalue", "type": ["choices={'light','dark'}"]},
+            {"name": "LiveInterval",  "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "InfoFile",      "kind": "namevalue", "type": ["char"]},
+            {"name": "ProgressMode",  "kind": "namevalue", "type": ["choices={'auto','on','off'}"]},
+            {"name": "ShowTimePanel", "kind": "namevalue", "type": ["logical", "scalar"]}
+        ]
+    },
+
+    "DashboardEngine.addWidget": {
+        "inputs": [
+            {"name": "obj",      "kind": "required",  "type": ["DashboardEngine"]},
+            {"name": "type",     "kind": "required",  "type": ["choices={'barchart','chipbar','divider','fastsense','gauge','group','heatmap','histogram','iconcard','image','multistatus','number','rawaxes','scatter','sparkline','status','table','text','timeline'}"]},
+            {"name": "Position", "kind": "namevalue", "type": ["numeric", "size=1,4"]},
+            {"name": "Title",    "kind": "namevalue", "type": ["char"]},
+            {"name": "Tag",      "kind": "namevalue"},
+            {"name": "Label",    "kind": "namevalue", "type": ["char"]}
+        ]
+    }
+}
