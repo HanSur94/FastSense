@@ -2,7 +2,7 @@ classdef FastSenseWidget < DashboardWidget
 %FASTSENSEWIDGET Dashboard widget wrapping a FastSense instance.
 %
 %   Supports data binding modes:
-%     Tag:       w = FastSenseWidget('Tag', tagObj)
+%     Tag:       w = FastSenseWidget('Tag', tagObj)   % or 'Tag', 'registryKey' (auto-resolved via TagRegistry.get)
 %     DataStore: w = FastSenseWidget('DataStore', dsObj)
 %     Inline:    w = FastSenseWidget('XData', x, 'YData', y)
 %     File:      w = FastSenseWidget('File', 'path.mat', 'XVar', 'x', 'YVar', 'y')
