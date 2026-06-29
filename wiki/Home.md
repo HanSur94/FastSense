@@ -95,4 +95,4 @@ Start with the [[Installation]] guide to set up FastPlot and compile MEX for you
 - [[Live Mode Guide]] — file polling, view modes, and live dashboards
 - [[Datetime Guide]] — working with absolute time axes
 - [[Dashboard Engine Guide]] — building and customising widget‑based dashboards
-- [[Examples]] — 40+ runnable examples covering all library features
+- [[Examples]] — 70+ runnable examples covering all library features

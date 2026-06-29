@@ -202,4 +202,4 @@ FastSense.distFig('Rows', 2, 'Cols', 3);
 - [[Live Mode Guide]] — live data polling
 - [[Datetime Guide]] — datetime axes
 - [[Dashboard Engine Guide]] — DashboardEngine + DashboardBuilder
-- [[Examples]] — 40+ runnable examples
+- [[Examples]] — 70+ runnable examples
