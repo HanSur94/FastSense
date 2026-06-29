@@ -72,6 +72,7 @@ classdef MonitorTag < Tag
     %   Error IDs:
     %     MonitorTag:invalidParent            — parentTag not a Tag
     %     MonitorTag:invalidCondition         — conditionFn not a function_handle
+    %     MonitorTag:invalidConditionArity    — conditionFn does not accept (x, y)
     %     MonitorTag:unknownOption            — unknown NV key or dangling key
     %     MonitorTag:dataMismatch             — fromStruct missing required fields
     %     MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
@@ -158,6 +159,7 @@ classdef MonitorTag < Tag
             %   Errors:
             %     MonitorTag:invalidParent    — parentTag not a Tag
             %     MonitorTag:invalidCondition — conditionFn not a function_handle
+            %     MonitorTag:invalidConditionArity — conditionFn does not accept (x, y)
             %     MonitorTag:unknownOption    — unrecognized or dangling NV key
 
             % Parse NV pairs BEFORE obj access (Pitfall 7 — super-call ordering).
@@ -172,6 +174,17 @@ classdef MonitorTag < Tag
                 error('MonitorTag:invalidCondition', ...
                     'conditionFn must be a function_handle @(x,y); got %s.', ...
                     class(conditionFn));
+            end
+            % Validate the condition's arity up front: it is called as
+            % conditionFn(x, y), so a handle taking fewer than 2 inputs
+            % (e.g. @() or @(x)) would otherwise fail with a raw
+            % MATLAB:TooManyInputs deep inside getXY/recompute_. nargin < 0
+            % means the handle takes varargin and can accept (x, y) — allow it.
+            nCondIn = nargin(conditionFn);
+            if nCondIn >= 0 && nCondIn < 2
+                error('MonitorTag:invalidConditionArity', ...
+                    ['conditionFn must accept (x, y); got a handle taking %d input(s). ', ...
+                     'Use @(x, y) ... — for example @(x, y) y > 50.'], nCondIn);
             end
 
             obj.Parent      = parentTag;
