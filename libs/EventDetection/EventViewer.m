@@ -4,6 +4,7 @@ classdef EventViewer < handle
     %   viewer = EventViewer(events, sensorData)
     %   viewer = EventViewer(events, sensorData, thresholdColors)
     %   viewer.update(newEvents)
+    %   viewer.exportImage('events.png')
 
     properties
         Events          % Event array
@@ -128,6 +129,155 @@ classdef EventViewer < handle
                 end
             end
             obj.RefreshTimer = [];
+        end
+
+        function exportImage(obj, filepath, format)
+        %EXPORTIMAGE Save the rendered event-timeline figure as PNG or JPEG at 150 DPI.
+        %   viewer.exportImage('events.png')           % format inferred from extension
+        %   viewer.exportImage('events.png', 'png')
+        %   viewer.exportImage('events.jpg', 'jpeg')
+        %
+        %   Requires the viewer figure to be open (raises
+        %   EventViewer:notRendered otherwise). Captures the entire figure
+        %   via print(); on Octave the print() builtin does NOT include
+        %   uicontrols (documented limitation), so the filter dropdowns,
+        %   refresh toolbar, and uitable will not appear in the exported
+        %   image on Octave. MATLAB captures uicontrols normally.
+        %
+        %   Inputs:
+        %     filepath - destination path. Parent directory must exist.
+        %     format   - 'png' or 'jpeg' (alias 'jpg'). Optional; inferred
+        %                from file extension if omitted (defaults to 'png').
+        %
+        %   Errors:
+        %     EventViewer:notRendered       - figure is empty or not a valid handle
+        %     EventViewer:unknownImageFormat - format is not png/jpeg/jpg
+        %     EventViewer:imageWriteFailed  - export backend raised any error
+
+            if nargin < 3 || isempty(format)
+                [~, ~, ext] = fileparts(filepath);
+                if strcmpi(ext, '.jpg') || strcmpi(ext, '.jpeg')
+                    format = 'jpeg';
+                else
+                    format = 'png';
+                end
+            end
+
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                error('EventViewer:notRendered', ...
+                    'exportImage requires the EventViewer figure to be open.');
+            end
+
+            switch lower(format)
+                case 'png'
+                    devFlag = '-dpng';
+                case {'jpeg', 'jpg'}
+                    devFlag = '-djpeg';
+                otherwise
+                    error('EventViewer:unknownImageFormat', ...
+                        'Unknown image format ''%s''. Use ''png'' or ''jpeg''.', format);
+            end
+
+            % Choose backend per platform/version (Phase 1006 MATLABFIX-F):
+            %   * MATLAB R2024a+       : exportapp() — print() in R2025b refuses
+            %     figures containing UI components and instructs the user to use
+            %     exportapp. exportapp handles uipanels/uicontrols correctly.
+            %     Resolution is implicit (figure pixel size + screen DPI).
+            %   * MATLAB R2020a-R2023b : exportgraphics() — explicitly supports
+            %     -nodisplay CI (unlike print). ContentType 'image' + Resolution
+            %     150 match the legacy -r150 print path for visual parity.
+            %     Available since R2020a, predates our R2020b pin target.
+            %   * All Octave           : print() + stub axes (existing behaviour
+            %     preserved). Octave's print() requires at least one axes object
+            %     DIRECTLY under the figure (it does not recurse into uipanels),
+            %     so we insert a hidden 1px stub axes when none exists and remove
+            %     it after the call. Octave CI uses xvfb-run (unchanged).
+            % Detection: exist() returns non-zero for both exportapp (P-file in
+            % MATLAB R2024a+) and exportgraphics (M-file in MATLAB R2020a+).
+            isOctave          = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            useExportApp      = ~isOctave && exist('exportapp') ~= 0;       %#ok<EXIST>
+            useExportGraphics = ~isOctave && exist('exportgraphics') ~= 0;  %#ok<EXIST>
+
+            % Both exportgraphics (MATLAB) and print (Octave) only find
+            % axes DIRECTLY under the figure — they do not recurse into
+            % uipanels. Insert a hidden 1px stub axes when none exists.
+            % exportapp handles uipanels on its own and does not need the stub.
+            stubAxes = [];
+            if ~useExportApp
+                topLevelChildren = get(obj.hFigure, 'children');
+                hasTopAxes = false;
+                for k = 1:numel(topLevelChildren)
+                    if strcmp(get(topLevelChildren(k), 'type'), 'axes')
+                        hasTopAxes = true;
+                        break;
+                    end
+                end
+                if ~hasTopAxes
+                    stubAxes = axes('Parent', obj.hFigure, ...
+                        'Units', 'pixels', 'Position', [0 0 1 1], ...
+                        'Visible', 'off', 'HitTest', 'off');
+                end
+            end
+
+            % Some MATLAB builds (notably R2020b headless) refuse to
+            % export an invisible figure with the opaque error
+            % "Specified handle is not valid for export" even when
+            % exportgraphics/print are used with a stub axes. Temporarily
+            % flip Visible='on' around the export call and restore it.
+            origVisible = get(obj.hFigure, 'Visible');
+            needsVisibilityToggle = ~useExportApp && strcmp(origVisible, 'off');
+            if needsVisibilityToggle
+                try set(obj.hFigure, 'Visible', 'on'); catch, end
+            end
+            try
+                if useExportApp
+                    % exportapp signature is exportapp(fig, filename) only
+                    % (introduced R2024a). Resolution is implicit. Trade-off:
+                    % we lose explicit 150 DPI on R2024a+ but gain working
+                    % export of UI-component figures.
+                    exportapp(obj.hFigure, filepath);
+                elseif useExportGraphics
+                    % MATLAB R2020a-R2023b headless path. Three-tier
+                    % fallback: exportgraphics -> print -> getframe.
+                    % R2020b headless CI rejects the first two with
+                    % "Specified handle is not valid for export" on
+                    % uipanel-only figures even with a stub axes; the
+                    % getframe+imwrite path always works when the
+                    % figure has rendered at least once.
+                    wrote = false;
+                    try
+                        exportgraphics(obj.hFigure, filepath, ...
+                            'ContentType', 'image', 'Resolution', 150);
+                        wrote = true;
+                    catch
+                    end
+                    if ~wrote
+                        try
+                            print(obj.hFigure, devFlag, '-r150', filepath);
+                            wrote = true;
+                        catch
+                        end
+                    end
+                    if ~wrote
+                        frame = getframe(obj.hFigure);
+                        imwrite(frame.cdata, filepath);
+                    end
+                else
+                    % Octave path (print) — stub axes already inserted above.
+                    print(obj.hFigure, devFlag, '-r150', filepath);
+                end
+                if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
+            catch ME
+                if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
+                error('EventViewer:imageWriteFailed', ...
+                    'Failed to write image ''%s'': %s', filepath, ME.message);
+            end
         end
     end
 
