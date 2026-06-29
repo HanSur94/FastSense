@@ -1223,7 +1223,8 @@ classdef MonitorTag < Tag
                     monArgs{end+1} = v; %#ok<AGROW>
                 else
                     error('MonitorTag:unknownOption', ...
-                        'Unknown option ''%s''.', k);
+                        'Unknown option ''%s''. Valid options: %s.', ...
+                        k, strjoin([tagKeys, monKeys], ', '));
                 end
             end
         end

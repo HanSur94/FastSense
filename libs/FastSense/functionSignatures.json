@@ -1,0 +1,97 @@
+{
+    "_schemaVersion": "1.0.0",
+
+    "FastSense.FastSense": {
+        "inputs": [
+            {"name": "Parent",                 "kind": "namevalue", "type": ["matlab.graphics.axis.Axes"]},
+            {"name": "LinkGroup",              "kind": "namevalue"},
+            {"name": "Theme",                  "kind": "namevalue", "type": ["choices={'light','dark'}"]},
+            {"name": "Verbose",                "kind": "namevalue", "type": ["logical", "scalar"]},
+            {"name": "XScale",                 "kind": "namevalue", "type": ["choices={'linear','log'}"]},
+            {"name": "YScale",                 "kind": "namevalue", "type": ["choices={'linear','log'}"]},
+            {"name": "DefaultDownsampleMethod","kind": "namevalue", "type": ["choices={'minmax','lttb'}"]},
+            {"name": "LiveInterval",           "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "HoverCrosshair",         "kind": "namevalue", "type": ["logical", "scalar"]},
+            {"name": "MinPointsForDownsample", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "DownsampleFactor",       "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "PyramidReduction",       "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "StorageMode",            "kind": "namevalue", "type": ["char"]},
+            {"name": "MemoryLimit",            "kind": "namevalue", "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "FastSense.addLine": {
+        "inputs": [
+            {"name": "obj",              "kind": "required", "type": ["FastSense"]},
+            {"name": "x",                "kind": "required", "type": ["numeric"]},
+            {"name": "y",                "kind": "required", "type": ["numeric"]},
+            {"name": "DownsampleMethod", "kind": "namevalue", "type": ["choices={'minmax','lttb'}"]},
+            {"name": "AssumeSorted",     "kind": "namevalue", "type": ["logical", "scalar"]},
+            {"name": "HasNaN",           "kind": "namevalue", "type": ["logical", "scalar"]},
+            {"name": "XType",            "kind": "namevalue", "type": ["choices={'numeric','datenum'}"]},
+            {"name": "Metadata",         "kind": "namevalue", "type": ["struct"]},
+            {"name": "Color",            "kind": "namevalue"},
+            {"name": "LineStyle",        "kind": "namevalue", "type": ["choices={'-','--',':','-.','none'}"]},
+            {"name": "LineWidth",        "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "DisplayName",      "kind": "namevalue", "type": ["char"]},
+            {"name": "Marker",           "kind": "namevalue"}
+        ]
+    },
+
+    "FastSense.addThreshold": {
+        "inputs": [
+            {"name": "obj",            "kind": "required", "type": ["FastSense"]},
+            {"name": "value",          "kind": "required", "type": ["numeric"]},
+            {"name": "Direction",      "kind": "namevalue", "type": ["choices={'upper','lower'}"]},
+            {"name": "ShowViolations", "kind": "namevalue", "type": ["logical", "scalar"]},
+            {"name": "Color",          "kind": "namevalue"},
+            {"name": "LineStyle",      "kind": "namevalue", "type": ["choices={'-','--',':','-.'}"]},
+            {"name": "Label",          "kind": "namevalue", "type": ["char"]}
+        ]
+    },
+
+    "FastSense.addBand": {
+        "inputs": [
+            {"name": "obj",       "kind": "required", "type": ["FastSense"]},
+            {"name": "yLow",      "kind": "required", "type": ["numeric", "scalar"]},
+            {"name": "yHigh",     "kind": "required", "type": ["numeric", "scalar"]},
+            {"name": "FaceColor", "kind": "namevalue"},
+            {"name": "FaceAlpha", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "EdgeColor", "kind": "namevalue"},
+            {"name": "Label",     "kind": "namevalue", "type": ["char"]}
+        ]
+    },
+
+    "FastSense.addMarker": {
+        "inputs": [
+            {"name": "obj",        "kind": "required", "type": ["FastSense"]},
+            {"name": "x",          "kind": "required", "type": ["numeric"]},
+            {"name": "y",          "kind": "required", "type": ["numeric"]},
+            {"name": "Marker",     "kind": "namevalue", "type": ["choices={'o','+','*','.','x','s','d','^','v'}"]},
+            {"name": "MarkerSize", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "Color",      "kind": "namevalue"},
+            {"name": "Label",      "kind": "namevalue", "type": ["char"]}
+        ]
+    },
+
+    "FastSense.addShaded": {
+        "inputs": [
+            {"name": "obj",         "kind": "required", "type": ["FastSense"]},
+            {"name": "x",           "kind": "required", "type": ["numeric"]},
+            {"name": "y1",          "kind": "required", "type": ["numeric"]},
+            {"name": "y2",          "kind": "required", "type": ["numeric"]},
+            {"name": "FaceColor",   "kind": "namevalue"},
+            {"name": "FaceAlpha",   "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "EdgeColor",   "kind": "namevalue"},
+            {"name": "DisplayName", "kind": "namevalue", "type": ["char"]}
+        ]
+    },
+
+    "FastSense.setScale": {
+        "inputs": [
+            {"name": "obj",    "kind": "required", "type": ["FastSense"]},
+            {"name": "XScale", "kind": "namevalue", "type": ["choices={'linear','log'}"]},
+            {"name": "YScale", "kind": "namevalue", "type": ["choices={'linear','log'}"]}
+        ]
+    }
+}
