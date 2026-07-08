@@ -1,0 +1,71 @@
+{
+  "_schemaVersion": "1.0.0",
+
+  "SensorTag": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]},
+      {"name": "Name", "kind": "namevalue", "type": ["char"]},
+      {"name": "Units", "kind": "namevalue", "type": ["char"]},
+      {"name": "Description", "kind": "namevalue", "type": ["char"]},
+      {"name": "X", "kind": "namevalue", "type": ["numeric"]},
+      {"name": "Y", "kind": "namevalue", "type": ["numeric"]},
+      {"name": "Labels", "kind": "namevalue", "type": ["cell"]},
+      {"name": "Criticality", "kind": "namevalue"},
+      {"name": "ID", "kind": "namevalue"},
+      {"name": "Source", "kind": "namevalue"},
+      {"name": "MatFile", "kind": "namevalue", "type": ["char"]},
+      {"name": "KeyName", "kind": "namevalue", "type": ["char"]}
+    ]
+  },
+
+  "StateTag": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]},
+      {"name": "X", "kind": "namevalue", "type": ["numeric"]},
+      {"name": "Y", "kind": "namevalue"},
+      {"name": "Name", "kind": "namevalue", "type": ["char"]},
+      {"name": "Units", "kind": "namevalue", "type": ["char"]}
+    ]
+  },
+
+  "MonitorTag": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]},
+      {"name": "parentTag", "kind": "required", "type": ["Tag"]},
+      {"name": "conditionFn", "kind": "required", "type": ["function_handle"]},
+      {"name": "AlarmOffConditionFn", "kind": "namevalue", "type": ["function_handle"]},
+      {"name": "MinDuration", "kind": "namevalue", "type": ["numeric", "scalar"]},
+      {"name": "Persist", "kind": "namevalue", "type": ["logical", "scalar"]}
+    ]
+  },
+
+  "CompositeTag": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]},
+      {"name": "AggregateMode", "kind": "namevalue", "type": ["choices={'and','or','majority','count','worst','severity','user_fn'}"]},
+      {"name": "UserFn", "kind": "namevalue", "type": ["function_handle"]},
+      {"name": "Threshold", "kind": "namevalue", "type": ["numeric", "scalar"]}
+    ]
+  },
+
+  "DerivedTag": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]},
+      {"name": "parents", "kind": "required", "type": ["cell"]},
+      {"name": "compute", "kind": "required", "type": ["function_handle"]}
+    ]
+  },
+
+  "TagRegistry.get": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]}
+    ]
+  },
+
+  "TagRegistry.register": {
+    "inputs": [
+      {"name": "key", "kind": "required", "type": ["char"]},
+      {"name": "tag", "kind": "required", "type": ["Tag"]}
+    ]
+  }
+}

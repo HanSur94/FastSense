@@ -6,30 +6,19 @@ classdef MonitorTag < Tag
     %   is cached on first read and recomputed only when invalidate() is
     %   called (directly or via parent.updateData listener notification).
     %
-    %   This Phase 1006 implementation is lazy-by-default, no persistence —
-    %   no FastSense data store writes, no disk footprint. Opt-in persistence
-    %   arrives in Phase 1007 (MONITOR-09).
+    %   By default it is lazy and in-memory: the binary series is computed on
+    %   first getXY() and held in memory only — no disk writes. Set Persist =
+    %   true (with a DataStore) to cache the derived series to disk.
     %
-    %   MONITOR-05 note: Phase 1006 (later plans) uses the existing Event
-    %   carrier fields SensorName = Parent.Key and ThresholdLabel = obj.Key.
-    %   Phase 1010 (EVENT-01) will migrate to a per-Tag keys field on Event.
-    %   Do NOT write a TagKeys field in this class — it does not exist on
-    %   Event yet (the carrier pattern uses SensorName + ThresholdLabel).
+    %   Only event-level callbacks (OnEventStart, OnEventEnd) are supported;
+    %   per-sample callbacks are intentionally not exposed (a side-effect
+    %   anti-pattern). Alignment is zero-order-hold on the parent's native grid
+    %   (parent.getXY) — never linear interpolation.
     %
-    %   MONITOR-10: Only event-level callbacks (OnEventStart, OnEventEnd)
-    %   are supported. Per-sample callbacks are a documented anti-pattern
-    %   (PI-AF side-effect pitfall). This class MUST NOT expose keywords
-    %   whose shape is a per-sample callback.
-    %
-    %   ALIGN: operates directly on parent's native grid via parent.getXY().
-    %   No interp1 linear ever — ZOH is the only legal alignment when
-    %   aggregating across parents (CompositeTag in a later phase will
-    %   re-assert this contract via valueAt-on-common-grid).
-    %
-    %   Lifecycle: MonitorTag holds a Parent handle; Parent holds a strong
-    %   reference to MonitorTag via its listeners_ cell. To dispose,
-    %   unregister the monitor via TagRegistry.unregister AND reset the
-    %   parent's listener cell (or construct a fresh parent).
+    %   Lifecycle: MonitorTag holds a Parent handle, and the Parent holds a
+    %   strong reference back via its listener cell. To dispose, call
+    %   TagRegistry.unregister and reset the parent's listener cell (or
+    %   construct a fresh parent).
     %
     %   Properties (public):
     %     Parent               — Tag handle (required at construction)
@@ -39,14 +28,10 @@ classdef MonitorTag < Tag
     %     EventStore           — EventStore handle; [] disables event emission
     %     OnEventStart         — function_handle @(event); [] disables
     %     OnEventEnd           — function_handle @(event); [] disables
-    %     Persist              — logical; when true, derived (X, Y) is
-    %                            cached to DataStore via storeMonitor on
-    %                            every recompute_()/appendData() and loaded
-    %                            on first getXY() (staleness-checked via
-    %                            quad-signature). Default false — the opt-in
-    %                            default enforces Pitfall 2 cache-invalidation
-    %                            discipline: consumers that do not opt in
-    %                            pay zero disk cost.
+    %     Persist              — logical; when true, the derived (X, Y) is
+    %                            cached to the DataStore and reloaded on first
+    %                            getXY() (staleness-checked). Default false, so
+    %                            consumers that do not opt in pay zero disk cost.
     %     DataStore            — FastSenseDataStore handle; required when
     %                            Persist=true. Provides storeMonitor /
     %                            loadMonitor / clearMonitor back-end.
@@ -58,11 +43,11 @@ classdef MonitorTag < Tag
     %     getKind              — returns 'monitor'
     %     toStruct             — serialize (no function handles, no data)
     %     fromStruct (Static)  — Pass-1 reconstruction (dummy parent)
-    %     resolveRefs(registry)— Pass-2 wire Parent + register listener
+    %     resolveRefs(registry)— resolve Parent from the registry + register listener
     %
     %   Methods (additional):
     %     invalidate           — clear cache + mark dirty
-    %     appendData(newX,newY) — Phase 1007 (MONITOR-08) streaming tail.
+    %     appendData(newX,newY) — incremental streaming tail.
     %                             Extends cache incrementally; preserves
     %                             hysteresis FSM state and MinDuration
     %                             bookkeeping across the append boundary.
@@ -72,29 +57,24 @@ classdef MonitorTag < Tag
     %   Error IDs:
     %     MonitorTag:invalidParent            — parentTag not a Tag
     %     MonitorTag:invalidCondition         — conditionFn not a function_handle
+    %     MonitorTag:invalidConditionArity    — conditionFn does not accept (x, y)
     %     MonitorTag:unknownOption            — unknown NV key or dangling key
     %     MonitorTag:dataMismatch             — fromStruct missing required fields
-    %     MonitorTag:unresolvedParent         — Pass-2 parent key not in registry
+    %     MonitorTag:unresolvedParent         — parent key not in registry during deserialization
     %     MonitorTag:invalidData              — appendData numeric/length mismatch
     %     MonitorTag:persistDataStoreRequired — Persist=true but DataStore empty
     %     MonitorTag:emitEventBadKind         — emitEvent_ called with kind not in {start,closed,end}
     %     MonitorTag:eventLogReentrantSkip    — (warning ID) cluster-mode emission skipped due to
-    %                                           re-entrant per-tag lock acquire (Plan 02 will handle)
+    %                                           a re-entrant per-tag lock acquire
     %
-    %   Deferred-notify (Pitfall 13 prevention):
-    %     OnEventStart / OnEventEnd callbacks are NOT invoked during the emission body.
-    %     They are queued on pendingNotify_ and flushed by flushPendingNotify_() AFTER
-    %     the emission loop completes, with inEmission_ = false.
-    %     Pre-refactor: listeners fired synchronously DURING EventStore.append.
-    %     Post-refactor: listeners fire immediately AFTER appendData/getXY returns,
-    %     but OUTSIDE the emission window. The "event was emitted" semantic is preserved;
-    %     only the timing changes from synchronous-during-append to post-emission-batch.
+    %   Event-callback timing: OnEventStart / OnEventEnd are queued during
+    %     emission and flushed immediately after getXY()/appendData() returns,
+    %     so they fire just outside the emission window rather than
+    %     synchronously inside it. The "event was emitted" semantic is preserved.
     %
-    %   Persistence (Phase 1007 MONITOR-09):
-    %     Opt-in via Persist=true + DataStore. Staleness detection uses a
-    %     quad-signature (parent_key, num_points, parent_xmin, parent_xmax)
-    %     stamped at write. Default-off preserves Pitfall 2 cache-invalidation
-    %     safety — consumers that do not opt in pay zero disk cost.
+    %   Persistence: opt in with Persist = true and a DataStore. The cached
+    %     series is staleness-checked against the parent before reuse;
+    %     default-off means no disk cost unless you opt in.
     %
     %   Example:
     %     st = SensorTag('press_a', 'X', 1:100, 'Y', sin((1:100)/10)*30 + 40);
@@ -158,6 +138,7 @@ classdef MonitorTag < Tag
             %   Errors:
             %     MonitorTag:invalidParent    — parentTag not a Tag
             %     MonitorTag:invalidCondition — conditionFn not a function_handle
+            %     MonitorTag:invalidConditionArity — conditionFn does not accept (x, y)
             %     MonitorTag:unknownOption    — unrecognized or dangling NV key
 
             % Parse NV pairs BEFORE obj access (Pitfall 7 — super-call ordering).
@@ -172,6 +153,17 @@ classdef MonitorTag < Tag
                 error('MonitorTag:invalidCondition', ...
                     'conditionFn must be a function_handle @(x,y); got %s.', ...
                     class(conditionFn));
+            end
+            % Validate the condition's arity up front: it is called as
+            % conditionFn(x, y), so a handle taking fewer than 2 inputs
+            % (e.g. @() or @(x)) would otherwise fail with a raw
+            % MATLAB:TooManyInputs deep inside getXY/recompute_. nargin < 0
+            % means the handle takes varargin and can accept (x, y) — allow it.
+            nCondIn = nargin(conditionFn);
+            if nCondIn >= 0 && nCondIn < 2
+                error('MonitorTag:invalidConditionArity', ...
+                    ['conditionFn must accept (x, y); got a handle taking %d input(s). ', ...
+                     'Use @(x, y) ... — for example @(x, y) y > 50.'], nCondIn);
             end
 
             obj.Parent      = parentTag;

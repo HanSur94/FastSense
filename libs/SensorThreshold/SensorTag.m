@@ -53,6 +53,7 @@ classdef SensorTag < Tag
             %   Errors:
             %     Tag:invalidKey           -- key empty / not char
             %     SensorTag:unknownOption  -- unrecognized NV key
+            %     SensorTag:sizeMismatch   -- inline X and Y differ in length
             [tagArgs, sensorArgs, inlineX, inlineY] = SensorTag.splitArgs_(varargin);
             obj@Tag(key, tagArgs{:});              % MUST be first -- no obj access before
 
@@ -69,6 +70,14 @@ classdef SensorTag < Tag
             end
 
             if ~isempty(inlineX) || ~isempty(inlineY)
+                % Reject mismatched inline data early with a namespaced error
+                % (mirrors FastSense:sizeMismatch) instead of letting it slip
+                % through to a downstream failure at getXY/plot time.
+                if ~isempty(inlineX) && ~isempty(inlineY) && numel(inlineX) ~= numel(inlineY)
+                    error('SensorTag:sizeMismatch', ...
+                        'X and Y must have the same number of elements (got %d and %d).', ...
+                        numel(inlineX), numel(inlineY));
+                end
                 obj.X_ = inlineX;
                 obj.Y_ = inlineY;
             end
@@ -344,7 +353,12 @@ classdef SensorTag < Tag
 
     methods (Static)
         function obj = fromStruct(s)
-            %FROMSTRUCT Reconstruct SensorTag from a toStruct output.
+            %FROMSTRUCT Reconstruct a SensorTag from a toStruct output.
+            %   NOTE: toStruct intentionally omits the X/Y samples (it stores
+            %   only metadata), so the reconstructed tag has NO data — getXY
+            %   returns empty until you re-attach the data via load(matFile) or
+            %   a MatFile/DataStore binding. Round-tripping a tag does not
+            %   round-trip its samples.
             if ~isstruct(s) || ~isfield(s, 'key') || isempty(s.key)
                 error('SensorTag:invalidSource', ...
                     'fromStruct requires a struct with non-empty .key');

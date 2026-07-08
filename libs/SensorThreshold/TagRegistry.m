@@ -28,6 +28,7 @@ classdef TagRegistry
     %     find            — tags matching predicate fn
     %     findByLabel     — tags carrying a given label (META-02)
     %     findByKind      — tags whose getKind() matches
+    %     keys            — sorted cell array of all registered keys
     %     list            — print sorted keys + names to command window
     %     printTable      — detailed table (Key/Name/Kind/Criticality/Units/Labels)
     %     viewer          — uitable GUI (Octave-safe)
@@ -209,6 +210,21 @@ classdef TagRegistry
                     ts{end+1} = t; %#ok<AGROW>
                 end
             end
+        end
+
+        function k = keys()
+            %KEYS Return registered tag keys as a sorted cell array.
+            %   k = TagRegistry.KEYS() returns a 1xN cellstr of every key in
+            %   the catalog (a 1x0 cell when empty), sorted ascending. This is
+            %   the programmatic counterpart to list() (which only prints to
+            %   the command window) and mirrors containers.Map.keys for callers
+            %   reaching for that reflex. Use find / findByKind / findByLabel
+            %   when you want the Tag objects rather than their keys.
+            %
+            %   Example:
+            %     for k = TagRegistry.keys();  disp(k{1});  end
+            map = TagRegistry.catalog();
+            k = sort(map.keys());
         end
 
         function list()

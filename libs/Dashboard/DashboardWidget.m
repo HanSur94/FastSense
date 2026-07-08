@@ -14,7 +14,7 @@ classdef DashboardWidget < handle
         ThemeOverride = struct()   % Per-widget theme overrides (merged on top of dashboard theme)
         UseGlobalTime = true       % false when user manually zooms this widget
         Description = ''           % Doc text shown in a popup when the widget's info (i) button is clicked
-        Tag         = []           % v2.0 Tag API — any Tag subclass
+        Tag         = []           % v2.0 Tag API — a Tag subclass or a TagRegistry key string (auto-resolved)
         ParentTheme = []           % Theme inherited from DashboardEngine
         Dirty       = true         % true when widget needs refresh (data changed)
     end
@@ -62,9 +62,15 @@ classdef DashboardWidget < handle
                 % (house convention). The 'Sensor'->'Tag' remap above runs first,
                 % so legacy scripts and old serialized dashboards still work.
                 if ~isprop(obj, key)
+                    % Suggest only user-facing options: drop internal
+                    % graphics-handle properties (hPanel, hCellPanel,
+                    % hValueText, ...) that follow the h[A-Z] naming convention
+                    % and are never set via name-value pairs.
+                    validOpts = properties(obj);
+                    validOpts = validOpts(cellfun(@(p) isempty(regexp(p, '^h[A-Z]', 'once')), validOpts));
                     error('DashboardWidget:unknownOption', ...
                         'Unknown option ''%s''. Valid options: %s', ...
-                        key, strjoin(properties(obj), ', '));
+                        key, strjoin(validOpts, ', '));
                 end
                 obj.(key) = varargin{k+1};
             end
@@ -90,6 +96,25 @@ classdef DashboardWidget < handle
         function set.Sensor(obj, s)
             %SET.SENSOR Backward-compat alias — maps to Tag property.
             obj.Tag = s;
+        end
+
+        function set.Tag(obj, v)
+            %SET.TAG Accept a Tag object, [], or a TagRegistry key string.
+            %   Passing a char/string resolves it via TagRegistry.get(key), so
+            %   addWidget(..., 'Tag', 'press_a') is a shortcut for
+            %   addWidget(..., 'Tag', TagRegistry.get('press_a')). A missing key
+            %   raises the namespaced TagRegistry:unknownKey instead of a raw
+            %   MATLAB:structRefFromNonStruct deep in the title cascade/render.
+            %   Tag objects and [] pass through unchanged, so existing scripts
+            %   and the fromStruct load path (which resolves keys to objects
+            %   before assigning) are unaffected.
+            if isstring(v) && isscalar(v)
+                v = char(v);
+            end
+            if ischar(v) && ~isempty(v)
+                v = TagRegistry.get(v);
+            end
+            obj.Tag = v;
         end
 
         function s = toStruct(obj)
