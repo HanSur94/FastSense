@@ -43,6 +43,15 @@ classdef StatusWidget < DashboardWidget
                     obj.Threshold = [];
                 end
             end
+            % A MonitorTag bound via 'Tag' (or its 'Sensor' alias) is a 0/1
+            % alarm signal, not a value series, so route it through the
+            % Threshold/monitor path — refresh() then uses
+            % deriveStatusFromMonitorTag_ instead of the SensorTag-only
+            % obj.Sensor.Y access (which errors on a MonitorTag).
+            if isempty(obj.Threshold) && thresholdIsMonitorKind_(obj.Sensor)
+                obj.Threshold = obj.Sensor;
+                obj.Sensor    = [];
+            end
             % Mutual exclusivity: Threshold wins (per D-08)
             if ~isempty(obj.Threshold) && ~isempty(obj.Sensor)
                 obj.Sensor = [];

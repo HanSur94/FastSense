@@ -106,6 +106,33 @@ classdef TestStatusWidget < matlab.unittest.TestCase
                 'No threshold rules means status should be ok');
         end
 
+        function testRefreshWithMonitorTag(testCase)
+            %% A MonitorTag bound via 'Tag' renders without error and maps
+            %  its latest 0/1 sample to violation/ok. Regression: MonitorTag
+            %  has no .Y, which the Sensor-value path assumed (#task_693ced52).
+            sHi = SensorTag('mw_press_hi', 'Name', 'Pressure Hi', 'Units', 'bar');
+            sHi.updateData([1 2 3], [50 52 60]);                  % last 60
+            monHi = MonitorTag('mw_mon_hi', sHi, @(x, y) y > 55); % last -> 1
+
+            wHi = StatusWidget('Tag', monHi, 'Title', 'Alarm');
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+            testCase.verifyWarningFree(@() wHi.render(hp));
+            testCase.verifyEqual(wHi.CurrentStatus, 'violation', ...
+                'MonitorTag with last sample > 0.5 should read as violation');
+
+            sLo = SensorTag('mw_press_lo', 'Name', 'Pressure Lo', 'Units', 'bar');
+            sLo.updateData([1 2 3], [50 51 52]);                  % last 52
+            monLo = MonitorTag('mw_mon_lo', sLo, @(x, y) y > 55); % last -> 0
+
+            wLo = StatusWidget('Tag', monLo, 'Title', 'Alarm');
+            hp2 = uipanel('Parent', hFig, 'Position', [0 0 1 1]);
+            testCase.verifyWarningFree(@() wLo.render(hp2));
+            testCase.verifyEqual(wLo.CurrentStatus, 'ok', ...
+                'MonitorTag with last sample <= 0.5 should read as ok');
+        end
+
         function testToStruct(testCase)
             %% Serialization includes type, title, position, and source
             s = SensorTag('V-100', 'Name', 'Valve');
