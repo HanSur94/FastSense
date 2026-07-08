@@ -164,6 +164,19 @@ classdef RawAxesWidget < DashboardWidget
                     obj.PlotFcn(obj.hAxes);
                 end
             end
+
+            % The user PlotFcn typically calls a high-level plot (histogram,
+            % plot, imagesc, ...) which runs newplot and resets the axes
+            % background + axis colors to light-mode defaults — a glaring white
+            % box in dark mode. Restore the widget's themed colors after every
+            % plot. Done here so render(), refresh() and setTimeRange() are all
+            % covered from one place.
+            if ~isempty(obj.hAxes) && ishandle(obj.hAxes)
+                theme = obj.getTheme();
+                set(obj.hAxes, 'Color', theme.AxesColor, ...
+                    'XColor', theme.ForegroundColor, ...
+                    'YColor', theme.ForegroundColor);
+            end
         end
 
     end

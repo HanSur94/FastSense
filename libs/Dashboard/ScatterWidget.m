@@ -104,6 +104,23 @@ classdef ScatterWidget < DashboardWidget
                 yl = obj.axisLabelForSensor_(obj.SensorY);
                 if ~isempty(yl), ylabel(obj.hAxes, yl); end
             end
+
+            % Re-apply theme after plot commands. cla()/scatter() run newplot,
+            % which resets the axes background + axis colors to their light-mode
+            % defaults — leaving a glaring white box with dark-on-dark labels in
+            % dark mode. Restore the themed colors (axes, ticks, labels, title)
+            % on every rebuild. (The in-place update path above returns early and
+            % never replots, so it needs no restore.)
+            theme = obj.getTheme();
+            set(obj.hAxes, 'Color', theme.WidgetBackground, ...
+                'XColor', theme.AxisColor, 'YColor', theme.AxisColor);
+            set(get(obj.hAxes, 'XLabel'), 'Color', theme.ForegroundColor);
+            set(get(obj.hAxes, 'YLabel'), 'Color', theme.ForegroundColor);
+            if ~isempty(obj.Title)
+                title(obj.hAxes, obj.Title, ...
+                    'Color', theme.ForegroundColor, ...
+                    'FontSize', theme.WidgetTitleFontSize);
+            end
         end
 
         function t = getType(~)
