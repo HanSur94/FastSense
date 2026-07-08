@@ -19,7 +19,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** None — all planned milestones shipped (v1.0–v4.0, Companion, Plant Log, polish through Phase 1041). Repo in polish/housekeeping; backlog Phase 999.1 (in-app help) remains unplanned.
+**Current focus:** Backlog Tag-analysis features from the 2026-07-08 issue triage. Phases 999.2 (Tag Analysis Toolkit) + 999.3 (EventViewer image export) COMPLETE on branch (see below). Backlog Phase 999.1 (in-app help) remains unplanned.
 
 ## Current Position
 
@@ -27,7 +27,9 @@ Phase: — (none active; latest shipped = Phase 1041, MERGED via PR #189 on 2026
 Plan: —
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v3.1 Plant Log Integration — SHIPPED 2026-05-19; v4.0 Multi-User LAN Concurrency — SHIPPED 2026-05 via PR #152 (parallel branch); v1.0 perf line — COMPLETE via PR #114. No milestone in flight.
 Status: Phase 1041 complete — inline time-range control (toolbar dropdown + Custom date strip) shipped; PR #189 MERGED 2026-06-03. No planned milestone in flight — repo in polish/housekeeping. Outstanding: 12 wiki-bot dup PRs were closed to 1 (#190) + workflow root-caused (260609-mcz); backlog Phase 999.1 (in-app help system) unplanned; ROADMAP v4.0 boxes stale (shipped on main via #152 — router misreports, see memory gsd-router-stale-v4-misroute).
-Last activity: 2026-06-24 - Completed quick task 260624-nvf: Fix StatusWidget crash when a status widget is bound to a MonitorTag via 'Tag' — the constructor now routes a monitor-kind Tag to the Threshold/monitor path so refresh() uses deriveStatusFromMonitorTag_ instead of the SensorTag-only obj.Sensor.Y access. Unblocks the README "Build a dashboard" quickstart. Verified in a fresh process: TestStatusWidget+MultiStatus 23/23, dashboard suites 68/68, README dashboard repro renders 4 widgets. Code 14b3d529; on branch claude/recursing-cray-0dbbac.
+Last activity: 2026-07-08 - Implemented the 8 approved features from the GitHub issue triage via GSD, on branch claude/github-issues-triage-df4390. Phase 999.2 Tag Analysis Toolkit (7 methods on libs/SensorThreshold/Tag.m, all toolbox-free/Octave-safe/additive): getStats #223 (keystone), resampleUniform #308, derivative #326, movingStat #312, exceedance #316, crossings #328, cumulativeIntegral #327 (commits d76e662e, b2754413). Phase 999.3 EventViewer.exportImage #321 (commit c15aed35). Verified via matlab MCP: 98 headless assertions across 8 new test files pass; static analysis clean; regression TestDerivedTag 35/35 + TestEventViewer 7/7. GitHub issues NOT yet closed — they close on PR merge to main. Not yet pushed / no PR.
+
+Previous: 2026-06-24 - Completed quick task 260624-nvf: Fix StatusWidget crash when a status widget is bound to a MonitorTag via 'Tag' (code 14b3d529).
 
 ### Note on parallel v4.0 work (main branch state)
 
