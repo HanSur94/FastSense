@@ -231,6 +231,396 @@ classdef Tag < handle
             s.Std  = std(yv);
         end
 
+        function [Xu, Yu] = resampleUniform(obj, dt, varargin)
+            %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
+            %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a
+            %   uniform grid of spacing dt over the tag's time range.
+            %   [Xu, Yu] = tag.resampleUniform(dt, 'Range', [t0 t1]) grids only
+            %   the given window. 'Method' overrides the interpolation method;
+            %   'MaxGap' (default Inf) NaN-fills grid points that fall inside an
+            %   original sample gap wider than MaxGap so data is not invented
+            %   across dropouts.
+            %
+            %   Kind-aware default interpolation: continuous tags use 'linear';
+            %   discrete tags (state/monitor) use 'previous' (zero-order hold),
+            %   honouring the ZOH-only invariant for state/monitor channels.
+            %
+            %   Toolbox-free (interp1 linear/previous is core MATLAB/Octave).
+            %
+            %   See also getXY, getKind.
+            if nargin < 2 || ~isnumeric(dt) || ~isscalar(dt) || ~(dt > 0)
+                error('Tag:resampleUniformBadDt', 'dt must be a positive scalar.');
+            end
+            [rangeVal, method, maxGap] = obj.parseResampleOpts_(varargin{:});
+            if isempty(rangeVal)
+                [X, Y] = obj.getXY();
+            else
+                [X, Y] = obj.getXYRange(rangeVal(1), rangeVal(2));
+            end
+            X = X(:);
+            Y = Y(:);
+            if isempty(method)
+                if obj.isDiscreteKind_()
+                    method = 'previous';
+                else
+                    method = 'linear';
+                end
+            end
+            if numel(X) < 2
+                Xu = X.';
+                Yu = Y.';
+                return;
+            end
+            % Grid spans the requested window (clipped to data extent); the
+            % padded slice above still bounds the grid edges for interpolation.
+            if isempty(rangeVal)
+                gStart = X(1);
+                gEnd = X(end);
+            else
+                gStart = max(X(1), rangeVal(1));
+                gEnd = min(X(end), rangeVal(2));
+            end
+            Xu = gStart:dt:gEnd;
+            Yu = interp1(X, Y, Xu, method);
+            if isfinite(maxGap)
+                gapIdx = find(diff(X) > maxGap);
+                for g = gapIdx(:).'
+                    inGap = Xu > X(g) & Xu < X(g + 1);
+                    Yu(inGap) = NaN;
+                end
+            end
+        end
+
+        function varargout = derivative(obj, varargin)
+            %DERIVATIVE Kind-aware rate-of-change series dY/dX (#326).
+            %   [t, dydt] = tag.derivative() returns central-difference rate of
+            %   change (correct on non-uniform spacing).
+            %   [t, dydt] = tag.derivative('Method', m) where m is 'central'
+            %   (default), 'forward', or 'backward'.
+            %   [t, dydt] = tag.derivative('Range', [t0 t1]) restricts the window.
+            %
+            %   NaN-safe: the rate is NaN wherever a contributing neighbour is
+            %   NaN. Intended for continuous numeric tags; on a discrete tag it
+            %   warns Tag:derivativeOnDiscrete (a step channel's slope is
+            %   ill-defined) but still computes.
+            %
+            %   Toolbox-free (gradient / diff are core MATLAB/Octave).
+            %
+            %   See also cumulativeIntegral, movingStat, getXY.
+            [rangeVal, method] = obj.parseMethodRangeOpts_('central', ...
+                {'central', 'forward', 'backward'}, 'derivative', varargin{:});
+            [X, Y] = obj.getSeries_(rangeVal);
+            if obj.isDiscreteKind_()
+                warning('Tag:derivativeOnDiscrete', ...
+                    'derivative() on a discrete (%s) tag: the slope of a step channel is ill-defined.', ...
+                    obj.getKind());
+            end
+            n = numel(X);
+            dydt = nan(size(Y));
+            if n >= 2
+                switch method
+                    case 'forward'
+                        dydt(1:n-1) = (Y(2:n) - Y(1:n-1)) ./ (X(2:n) - X(1:n-1));
+                        dydt(n) = dydt(n-1);
+                    case 'backward'
+                        dydt(2:n) = (Y(2:n) - Y(1:n-1)) ./ (X(2:n) - X(1:n-1));
+                        dydt(1) = dydt(2);
+                    otherwise  % central
+                        dydt = gradient(Y(:)) ./ gradient(X(:));
+                        dydt = reshape(dydt, size(Y));
+                end
+            end
+            varargout = {X, dydt};
+            varargout = varargout(1:max(1, nargout));
+        end
+
+        function varargout = cumulativeIntegral(obj, varargin)
+            %CUMULATIVEINTEGRAL Running trapezoidal integral of Y w.r.t. X (#327).
+            %   [t, cum] = tag.cumulativeIntegral() returns the cumulative
+            %   trapezoidal integral series; cum(end) is the grand total.
+            %   total = tag.cumulativeIntegral(...) (1-out) returns the scalar total.
+            %   'Range', [t0 t1] restricts the window.
+            %
+            %   NaN policy: a segment bounded by a NaN contributes zero area
+            %   (treated as a gap) rather than poisoning the running total.
+            %   Intended for continuous numeric tags; on a discrete tag it warns
+            %   Tag:integralOnDiscrete.
+            %
+            %   Toolbox-free: hand-rolled NaN-safe trapezoid (no cumtrapz).
+            %
+            %   See also derivative, getXY.
+            [rangeVal, ~] = obj.parseMethodRangeOpts_('', {}, 'cumulativeIntegral', varargin{:});
+            [X, Y] = obj.getSeries_(rangeVal);
+            if obj.isDiscreteKind_()
+                warning('Tag:integralOnDiscrete', ...
+                    'cumulativeIntegral() on a discrete (%s) tag: area under a step channel is rarely intended.', ...
+                    obj.getKind());
+            end
+            n = numel(X);
+            cum = zeros(size(Y));
+            for i = 2:n
+                dx = X(i) - X(i-1);
+                y0 = Y(i-1);
+                y1 = Y(i);
+                if isnan(y0) || isnan(y1)
+                    area = 0;              % gap: no contribution
+                else
+                    area = 0.5 * (y0 + y1) * dx;
+                end
+                cum(i) = cum(i-1) + area;
+            end
+            if nargout <= 1
+                if isempty(cum)
+                    varargout = {NaN};
+                else
+                    varargout = {cum(end)};
+                end
+            else
+                varargout = {X, cum};
+            end
+        end
+
+        function [X, Ys] = movingStat(obj, window, type)
+            %MOVINGSTAT Rolling-window statistic series (#312).
+            %   [X, Ys] = tag.movingStat(window) rolling mean over a centered
+            %   window of `window` samples (shrinking at the edges).
+            %   [X, Ys] = tag.movingStat(window, type) where type is one of
+            %   'mean' (default), 'std', 'max', 'min', 'rms', 'median'.
+            %
+            %   Continuous numeric tags only: a discrete (state/monitor) tag
+            %   raises Tag:movingStatNotContinuous (a rolling mean of a step
+            %   channel is meaningless). NaNs within a window are excluded; a
+            %   fully-NaN window yields NaN.
+            %
+            %   Toolbox-free / Octave-safe: computed with a hand-rolled window
+            %   loop (no movmean/movstd dependency).
+            %
+            %   See also getStats, resampleUniform, getXY.
+            if nargin < 3 || isempty(type)
+                type = 'mean';
+            end
+            if nargin < 2 || ~isnumeric(window) || ~isscalar(window) || window < 1 || mod(window, 1) ~= 0
+                error('Tag:movingStatBadWindow', 'window must be a positive integer number of samples.');
+            end
+            if obj.isDiscreteKind_()
+                error('Tag:movingStatNotContinuous', ...
+                    'movingStat() requires a continuous tag; %s is discrete.', obj.getKind());
+            end
+            [X, Y] = obj.getXY();
+            X = X(:);
+            Y = Y(:);
+            n = numel(Y);
+            Ys = nan(n, 1);
+            half = floor((window - 1) / 2);
+            for i = 1:n
+                lo = max(1, i - half);
+                hi = min(n, i + (window - 1 - half));
+                w = Y(lo:hi);
+                w = w(~isnan(w));
+                if isempty(w)
+                    continue;
+                end
+                switch type
+                    case 'mean',   Ys(i) = mean(w);
+                    case 'std',    Ys(i) = std(w);
+                    case 'max',    Ys(i) = max(w);
+                    case 'min',    Ys(i) = min(w);
+                    case 'rms',    Ys(i) = sqrt(mean(w.^2));
+                    case 'median', Ys(i) = median(w);
+                    otherwise
+                        error('Tag:movingStatBadType', ...
+                            'Unknown type "%s". Use mean|std|max|min|rms|median.', type);
+                end
+            end
+            X = X.';
+            Ys = Ys.';
+        end
+
+        function varargout = crossings(obj, level, varargin)
+            %CROSSINGS Level-crossing times and directions (#328).
+            %   c = tag.crossings(level) returns a struct with fields:
+            %     times     - interpolated crossing instants (row)
+            %     direction - +1 rising / -1 falling, same length
+            %     count     - numel(times)
+            %     periods   - diff of successive same-direction crossings
+            %   c = tag.crossings(level, 'Direction', d) with d 'both' (default),
+            %     'rising', or 'falling'.
+            %   c = tag.crossings(level, 'Range', [t0 t1]) restricts the window.
+            %   [t, dir] = tag.crossings(level) returns times + directions directly.
+            %
+            %   Continuous tags interpolate the exact crossing instant; a discrete
+            %   tag uses the transition sample (ZOH) and warns Tag:crossingsOnDiscrete.
+            %   A segment bounded by a NaN yields no crossing.
+            %
+            %   Toolbox-free (sign/find/diff + linear interpolation).
+            %
+            %   See also exceedance, derivative, getXY.
+            if nargin < 2 || ~isnumeric(level) || ~isscalar(level)
+                error('Tag:crossingsBadLevel', 'level must be a numeric scalar.');
+            end
+            [rangeVal, dirn] = obj.parseDirectionRangeOpts_('both', ...
+                {'both', 'rising', 'falling'}, varargin{:});
+            [X, Y] = obj.getSeries_(rangeVal);
+            discrete = obj.isDiscreteKind_();
+            if discrete
+                warning('Tag:crossingsOnDiscrete', ...
+                    'crossings() on a discrete (%s) tag uses the transition sample (ZOH), not interpolation.', ...
+                    obj.getKind());
+            end
+            times = [];
+            direction = [];
+            n = numel(X);
+            for i = 1:n-1
+                y0 = Y(i);
+                y1 = Y(i+1);
+                if isnan(y0) || isnan(y1)
+                    continue;                 % gap
+                end
+                s0 = y0 - level;
+                s1 = y1 - level;
+                if s0 == 0 && s1 == 0
+                    continue;                 % plateau exactly at level: no crossing
+                end
+                if s0 * s1 < 0 || (s0 == 0 && s1 ~= 0)
+                    % A crossing occurs entering this interval.
+                    d = sign(s1 - s0);
+                    if discrete || (y1 == y0)
+                        tc = X(i+1);          % ZOH: transition at the next sample
+                    else
+                        tc = X(i) + (level - y0) / (y1 - y0) * (X(i+1) - X(i));
+                    end
+                    times(end+1) = tc;        %#ok<AGROW>
+                    direction(end+1) = d;     %#ok<AGROW>
+                end
+            end
+            keep = true(1, numel(times));
+            if strcmp(dirn, 'rising')
+                keep = direction > 0;
+            elseif strcmp(dirn, 'falling')
+                keep = direction < 0;
+            end
+            times = times(keep);
+            direction = direction(keep);
+            if nargout >= 2
+                varargout = {times, direction};
+                return;
+            end
+            c = struct();
+            c.times = times;
+            c.direction = direction;
+            c.count = numel(times);
+            c.periods = diff(times);
+            varargout = {c};
+        end
+
+        function s = exceedance(obj, level, varargin)
+            %EXCEEDANCE Time-above/below-threshold analysis (#316).
+            %   s = tag.exceedance(level) analyses time where Y > level.
+            %   s = tag.exceedance(level, 'Direction', 'below') uses Y < level.
+            %   s = tag.exceedance(level, 'Range', [t0 t1]) restricts the window.
+            %
+            %   Returns a struct:
+            %     totalTime - total time the condition holds (tag X units)
+            %     fraction  - totalTime / (X(end)-X(1)) over the window
+            %     count     - number of separate excursions
+            %     longest   - longest single excursion duration
+            %     peak      - extreme value reached while exceeding
+            %
+            %   Continuous tags interpolate the exact crossing at each excursion
+            %   boundary; discrete tags (state/monitor) use zero-order hold.
+            %   NaN-bounded segments are treated as gaps.
+            %
+            %   Toolbox-free. See also crossings, getStats, getXY.
+            if nargin < 2 || ~isnumeric(level) || ~isscalar(level)
+                error('Tag:exceedanceBadLevel', 'level must be a numeric scalar.');
+            end
+            [rangeVal, dirn] = obj.parseDirectionRangeOpts_('above', ...
+                {'above', 'below'}, varargin{:});
+            [X, Y] = obj.getSeries_(rangeVal);
+            above = strcmp(dirn, 'above');
+            discrete = obj.isDiscreteKind_();
+
+            s = struct('totalTime', 0, 'fraction', 0, 'count', 0, ...
+                       'longest', 0, 'peak', NaN);
+            n = numel(X);
+            if n == 0
+                s.peak = NaN;
+                return;
+            end
+            span = X(end) - X(1);
+
+            condFn = @(v) (above && v > level) || (~above && v < level);
+            total = 0;
+            count = 0;
+            longest = 0;
+            runDur = 0;
+            inRun = false;
+            peak = NaN;
+
+            for i = 1:n-1
+                x0 = X(i); x1 = X(i+1);
+                y0 = Y(i); y1 = Y(i+1);
+                dx = x1 - x0;
+                if isnan(y0) || isnan(y1) || dx <= 0
+                    if inRun, longest = max(longest, runDur); end
+                    inRun = false; runDur = 0;
+                    continue;
+                end
+                if discrete
+                    % ZOH: y0 holds across the whole interval.
+                    if condFn(y0)
+                        total = total + dx;
+                        if ~inRun, count = count + 1; inRun = true; runDur = 0; end
+                        runDur = runDur + dx;
+                        peak = obj.peakUpdate_(peak, y0, above);
+                    else
+                        if inRun, longest = max(longest, runDur); end
+                        inRun = false; runDur = 0;
+                    end
+                else
+                    c0 = condFn(y0);
+                    c1 = condFn(y1);
+                    % exceeding sub-interval [a, b] within [x0, x1]
+                    a = []; b = [];
+                    if c0 && c1
+                        a = x0; b = x1;
+                    elseif c0 && ~c1
+                        a = x0; b = x0 + (level - y0) / (y1 - y0) * dx;
+                    elseif ~c0 && c1
+                        a = x0 + (level - y0) / (y1 - y0) * dx; b = x1;
+                    end
+                    if isempty(a)
+                        if inRun, longest = max(longest, runDur); end
+                        inRun = false; runDur = 0;
+                    else
+                        total = total + (b - a);
+                        startsAtLeft = (a <= x0 + eps) && c0;
+                        if inRun && startsAtLeft
+                            runDur = runDur + (b - a);
+                        else
+                            if inRun, longest = max(longest, runDur); end
+                            count = count + 1; runDur = (b - a); inRun = true;
+                        end
+                        if c0, peak = obj.peakUpdate_(peak, y0, above); end
+                        if c1, peak = obj.peakUpdate_(peak, y1, above); end
+                        if b < x1 - eps || ~c1
+                            longest = max(longest, runDur);
+                            inRun = false; runDur = 0;
+                        end
+                    end
+                end
+            end
+            if inRun, longest = max(longest, runDur); end
+
+            s.totalTime = total;
+            if span > 0
+                s.fraction = total / span;
+            end
+            s.count = count;
+            s.longest = longest;
+            s.peak = peak;
+        end
+
         function v = valueAt(obj, t) %#ok<STOUT,INUSD>
             %VALUEAT Return scalar value at time t.  Subclass must override.
             error('Tag:notImplemented', 'Subclass must implement valueAt(t).');
@@ -419,6 +809,131 @@ classdef Tag < handle
                 if ismethod(lh, 'invalidate')
                     lh.invalidate();
                 end
+            end
+        end
+    end
+
+    methods (Access = private)
+        % ---- Analysis-toolkit helpers (Phase 999.2) ----
+
+        function tf = isDiscreteKind_(obj)
+            %ISDISCRETEKIND_ True for state/monitor (ZOH-only) tags.
+            tf = any(strcmp(obj.getKind(), {'state', 'monitor'}));
+        end
+
+        function [X, Y] = getSeries_(obj, rangeVal)
+            %GETSERIES_ Column [X,Y] for the full series or a [t0 t1] window.
+            %   The base getXYRange pads by one sample each side; clip strictly
+            %   to [t0,t1] so a Range option means exactly the requested window.
+            if nargin < 2 || isempty(rangeVal)
+                [X, Y] = obj.getXY();
+                X = X(:);
+                Y = Y(:);
+                return;
+            end
+            [X, Y] = obj.getXYRange(rangeVal(1), rangeVal(2));
+            X = X(:);
+            Y = Y(:);
+            keep = X >= rangeVal(1) & X <= rangeVal(2);
+            X = X(keep);
+            Y = Y(keep);
+        end
+
+        function p = peakUpdate_(~, p, v, above)
+            %PEAKUPDATE_ Running max (above) / min (below), NaN-seeded.
+            if above
+                if isnan(p) || v > p, p = v; end
+            else
+                if isnan(p) || v < p, p = v; end
+            end
+        end
+
+        function rangeVal = parseRange_(~, val)
+            %PARSERANGE_ Validate a [t0 t1] Range value.
+            if ~(isnumeric(val) && numel(val) == 2)
+                error('Tag:badRange', 'Range must be a 2-element [t0 t1] vector.');
+            end
+            rangeVal = [val(1), val(2)];
+        end
+
+        function [rangeVal, method] = parseMethodRangeOpts_(obj, defMethod, allowed, fnName, varargin)
+            %PARSEMETHODRANGEOPTS_ Parse optional 'Method' / 'Range' name-values.
+            rangeVal = [];
+            method = defMethod;
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:danglingOption', '%s: option "%s" has no value.', fnName, char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'Range')
+                    rangeVal = obj.parseRange_(val);
+                elseif strcmpi(key, 'Method') && ~isempty(allowed)
+                    if ~any(strcmpi(val, allowed))
+                        error('Tag:badMethod', '%s: Method must be one of: %s.', fnName, strjoin(allowed, ', '));
+                    end
+                    method = lower(val);
+                else
+                    error('Tag:unknownOption', '%s: unknown option "%s".', fnName, char(string(key)));
+                end
+                k = k + 2;
+            end
+        end
+
+        function [rangeVal, dirn] = parseDirectionRangeOpts_(obj, defDir, allowed, varargin)
+            %PARSEDIRECTIONRANGEOPTS_ Parse optional 'Direction' / 'Range' name-values.
+            rangeVal = [];
+            dirn = defDir;
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:danglingOption', 'Option "%s" has no value.', char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'Range')
+                    rangeVal = obj.parseRange_(val);
+                elseif strcmpi(key, 'Direction')
+                    if ~any(strcmpi(val, allowed))
+                        error('Tag:badDirection', 'Direction must be one of: %s.', strjoin(allowed, ', '));
+                    end
+                    dirn = lower(val);
+                else
+                    error('Tag:unknownOption', 'unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
+            end
+        end
+
+        function [rangeVal, method, maxGap] = parseResampleOpts_(obj, varargin)
+            %PARSERESAMPLEOPTS_ Parse 'Range' / 'Method' / 'MaxGap' for resampleUniform.
+            rangeVal = [];
+            method = '';
+            maxGap = Inf;
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:danglingOption', 'resampleUniform: option "%s" has no value.', char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'Range')
+                    rangeVal = obj.parseRange_(val);
+                elseif strcmpi(key, 'Method')
+                    if ~any(strcmpi(val, {'linear', 'previous', 'nearest', 'next', 'spline', 'pchip'}))
+                        error('Tag:badMethod', 'resampleUniform: unsupported Method "%s".', char(string(val)));
+                    end
+                    method = lower(val);
+                elseif strcmpi(key, 'MaxGap')
+                    if ~(isnumeric(val) && isscalar(val) && val > 0)
+                        error('Tag:badMaxGap', 'MaxGap must be a positive scalar.');
+                    end
+                    maxGap = val;
+                else
+                    error('Tag:unknownOption', 'resampleUniform: unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
             end
         end
     end
