@@ -215,6 +215,7 @@ viewer = EventViewer(events)
   viewer = EventViewer(events, sensorData)
   viewer = EventViewer(events, sensorData, thresholdColors)
   viewer.update(newEvents)
+  viewer.exportImage('events.png')
 
 ### Constructor
 
@@ -260,6 +261,13 @@ STARTAUTOREFRESH Start polling the source file at given interval.
 #### `stopAutoRefresh(obj)`
 
 STOPAUTOREFRESH Stop the auto-refresh timer.
+
+#### `exportImage(obj, filepath, format)`
+
+EXPORTIMAGE Save the rendered event-timeline figure as PNG or JPEG at 150 DPI.
+  viewer.exportImage('events.png')           % format inferred from extension
+  viewer.exportImage('events.png', 'png')
+  viewer.exportImage('events.jpg', 'jpeg')
 
 ### Static Methods
 
