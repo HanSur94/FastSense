@@ -91,9 +91,15 @@ classdef BarChartWidget < DashboardWidget
                     set(obj.hAxes, 'XTick', 1:numel(cats), 'XTickLabel', cats);
                 end
             end
-            % Re-apply title after plot commands (bar/barh may clear via newplot)
+            % Re-apply theme after plot commands. bar/barh run newplot, which
+            % resets the axes Color (background) and XColor/YColor to their
+            % light-mode defaults — leaving a glaring white box in dark mode.
+            % Restore the themed colors (and the title) every refresh.
+            theme = obj.getTheme();
+            set(obj.hAxes, 'Color', theme.WidgetBackground, ...
+                'XColor', theme.AxisColor, ...
+                'YColor', theme.AxisColor);
             if ~isempty(obj.Title)
-                theme = obj.getTheme();
                 title(obj.hAxes, obj.Title, ...
                     'Color', theme.ForegroundColor, ...
                     'FontSize', theme.WidgetTitleFontSize);
