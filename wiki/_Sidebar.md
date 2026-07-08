@@ -24,6 +24,7 @@
 - [[Architecture]]
 - [[MEX Acceleration]]
 - [[Performance]]
+- [[Benchmarks]]
 
 **Resources**
 - [[Examples]]
