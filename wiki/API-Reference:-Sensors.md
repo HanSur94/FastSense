@@ -1192,6 +1192,7 @@ Enumerates TagRegistry for ingestable tags (SensorTag/StateTag
     TagPipeline:cannotCreateOutputDir -- mkdir failed
     TagPipeline:ingestFailed          -- 1+ tags failed (end-of-run throw)
     TagPipeline:unknownExtension      -- file ext not .csv/.txt/.dat
+    TagPipeline:invalidReadFn         -- 'ReadFn' option is not a function handle
 
 ### Constructor
 
@@ -1202,6 +1203,7 @@ obj = BatchTagPipeline(varargin)
 BATCHTAGPIPELINE Construct with required OutputDir NV-pair.
   p = BatchTagPipeline('OutputDir', dir)
   p = BatchTagPipeline('OutputDir', dir, 'Verbose', true)
+  p = BatchTagPipeline('OutputDir', dir, 'ReadFn', @myParser)
 
 ### Properties
 

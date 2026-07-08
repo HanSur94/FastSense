@@ -25,6 +25,7 @@ classdef BatchTagPipeline < handle
     %     TagPipeline:cannotCreateOutputDir -- mkdir failed
     %     TagPipeline:ingestFailed          -- 1+ tags failed (end-of-run throw)
     %     TagPipeline:unknownExtension      -- file ext not .csv/.txt/.dat
+    %     TagPipeline:invalidReadFn         -- 'ReadFn' option is not a function handle
     %
     %   See also LiveTagPipeline, SensorTag, StateTag, TagRegistry.
 
@@ -86,10 +87,19 @@ classdef BatchTagPipeline < handle
             %BATCHTAGPIPELINE Construct with required OutputDir NV-pair.
             %   p = BatchTagPipeline('OutputDir', dir)
             %   p = BatchTagPipeline('OutputDir', dir, 'Verbose', true)
+            %   p = BatchTagPipeline('OutputDir', dir, 'ReadFn', @myParser)
+            %
+            %   'ReadFn' (optional) injects a custom raw-file parser
+            %   @(absPath)->parsed, overriding the default delimited-file
+            %   parser for source formats it cannot handle (e.g. a
+            %   '%'-header log with a split dd.mm.yyyy/HH:MM:SS timestamp).
+            %   The handle must return the same shape the built-in parser
+            %   does (.headers cellstr + .data matrix).
             %
             %   Errors:
             %     TagPipeline:invalidOutputDir      -- OutputDir missing/empty/non-char
             %     TagPipeline:cannotCreateOutputDir -- mkdir failed
+            %     TagPipeline:invalidReadFn         -- ReadFn is not a function handle
             opts = struct('OutputDir', '', 'Verbose', false, 'ReadFn', []);
             for k = 1:2:numel(varargin)
                 key = varargin{k};
