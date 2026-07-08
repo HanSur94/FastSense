@@ -24,8 +24,8 @@ classdef TestFastSenseTheme < matlab.unittest.TestCase
         function testDefaultThemeWhenNoneSpecified(testCase)
             fp = FastSense();
             testCase.verifyTrue(isstruct(fp.Theme), 'testDefaultTheme: must have theme');
-            % Default theme is 'light'; Background is [0.98 0.98 0.98] since PR #68.
-            testCase.verifyEqual(fp.Theme.Background, [0.98 0.98 0.98], 'testDefaultTheme: default bg');
+            % Default theme is 'light'; clean-modern Background is [0.961 0.965 0.973].
+            testCase.verifyEqual(fp.Theme.Background, [0.961 0.965 0.973], 'testDefaultTheme: default bg');
         end
 
         function testThemeAppliedOnRender(testCase)

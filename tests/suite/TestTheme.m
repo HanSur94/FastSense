@@ -10,8 +10,9 @@ classdef TestTheme < matlab.unittest.TestCase
         function testDefaultPreset(testCase)
             t = FastSenseTheme('default');
             testCase.verifyTrue(isstruct(t), 'testDefaultPreset: must return struct');
-            % 'default' is aliased to 'light' since PR #68; Background is [0.98 0.98 0.98].
-            testCase.verifyEqual(t.Background, [0.98 0.98 0.98], 'testDefaultPreset: Background');
+            % 'default' is aliased to 'light' since PR #68; the clean-modern light
+            % preset uses Background [0.961 0.965 0.973].
+            testCase.verifyEqual(t.Background, [0.961 0.965 0.973], 'testDefaultPreset: Background');
             testCase.verifyTrue(isfield(t, 'AxesColor'), 'testDefaultPreset: AxesColor field');
             testCase.verifyTrue(isfield(t, 'ForegroundColor'), 'testDefaultPreset: ForegroundColor field');
             testCase.verifyTrue(isfield(t, 'GridColor'), 'testDefaultPreset: GridColor field');
@@ -41,7 +42,7 @@ classdef TestTheme < matlab.unittest.TestCase
             testCase.verifyEqual(t.FontSize, 14, 'testMergeOverrides: FontSize');
             testCase.verifyEqual(t.LineWidth, 2.0, 'testMergeOverrides: LineWidth');
             % 'default' aliases to 'light'; overrides do not affect Background.
-            testCase.verifyEqual(t.Background, [0.98 0.98 0.98], 'testMergeOverrides: Background unchanged');
+            testCase.verifyEqual(t.Background, [0.961 0.965 0.973], 'testMergeOverrides: Background unchanged');
         end
 
         function testInvalidPresetErrors(testCase)
@@ -86,12 +87,12 @@ classdef TestTheme < matlab.unittest.TestCase
 
         function testOceanPreset(testCase)
             % 'ocean' is aliased to 'light' since PR #68. The Background is
-            % now [0.98 0.98 0.98] (light preset) and AxesColor is [1 1 1].
+            % now [0.961 0.965 0.973] (light preset) and AxesColor is [1 1 1].
             % The 'ocean' palette name still resolves to 8 ocean-blue colours
             % via getPalette() when used as a LineColorOrder override, but the
             % preset itself uses the 'muted' palette (light preset default).
             t = FastSenseTheme('ocean');
-            testCase.verifyEqual(t.Background, [0.98 0.98 0.98], 'testOceanPreset: Background matches light preset');
+            testCase.verifyEqual(t.Background, [0.961 0.965 0.973], 'testOceanPreset: Background matches light preset');
             testCase.verifyEqual(t.AxesColor, [1 1 1], 'testOceanPreset: AxesColor should be white');
             testCase.verifyEqual(size(t.LineColorOrder, 2), 3, 'testOceanPreset: LineColorOrder Nx3');
             testCase.verifyEqual(size(t.LineColorOrder, 1), 8, 'testOceanPreset: 8 colors in muted palette');

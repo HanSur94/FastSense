@@ -69,22 +69,33 @@ function d = getDashboardDefaults(preset)
             d.TabInactiveBg       = [0.10 0.12 0.18];
             d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
             d.CurrentViewBoxColor = [0.95 0.62 0.20];   % Phase 1039: amber current-view box, contrasts with bluish-gray Selection
+            % Status colors are set per-preset (guarded shared block below) so
+            % the light preset can carry its own crisp trio without disturbing dark.
+            d.StatusOkColor       = [0.31 0.80 0.64];
+            d.StatusWarnColor     = [0.91 0.63 0.27];
+            d.StatusAlarmColor    = [0.91 0.27 0.38];
         otherwise % 'light' (also: legacy aliases default/industrial/scientific/ocean)
-            d.DashboardBackground = [0.96 0.96 0.97];
+            % Clean-modern light preset: white widget surfaces on a soft neutral
+            % canvas, hairline cool borders, blue #2563EB drag/drop accent.
+            d.DashboardBackground = [0.961 0.965 0.973];
             d.WidgetBackground    = [1.00 1.00 1.00];
-            d.WidgetBorderColor   = [0.85 0.85 0.87];
-            d.ToolbarBackground   = [0.94 0.94 0.95];
-            d.ToolbarFontColor    = [0.20 0.20 0.25];
-            d.DragHandleColor     = [0.20 0.60 0.86];
-            d.DropZoneColor       = [0.85 0.85 0.87];
-            d.GridLineColor       = [0.82 0.82 0.85];
-            d.GroupHeaderBg       = [0.90 0.92 0.95];
-            d.GroupHeaderFg       = [0.15 0.15 0.15];
-            d.GroupBorderColor    = [0.80 0.82 0.85];
-            d.TabActiveBg         = [0.90 0.92 0.95];
-            d.TabInactiveBg       = [0.82 0.84 0.88];
+            d.WidgetBorderColor   = [0.898 0.910 0.925];
+            d.ToolbarBackground   = [0.976 0.980 0.984];
+            d.ToolbarFontColor    = [0.392 0.455 0.545];
+            d.DragHandleColor     = [0.145 0.388 0.922];
+            d.DropZoneColor       = [0.918 0.945 0.996];
+            d.GridLineColor       = [0.914 0.929 0.949];
+            d.GroupHeaderBg       = [0.933 0.949 0.969];
+            d.GroupHeaderFg       = [0.118 0.161 0.231];
+            d.GroupBorderColor    = [0.898 0.910 0.925];
+            d.TabActiveBg         = [0.918 0.945 0.996];
+            d.TabInactiveBg       = [0.933 0.949 0.969];
             d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
             d.CurrentViewBoxColor = [0.85 0.45 0.05];    % Phase 1039: dark amber, contrasts with the dark-blue Selection on light bg
+            % Crisp semantic status trio, tuned for readability on white.
+            d.StatusOkColor       = [0.086 0.639 0.290];
+            d.StatusWarnColor     = [0.961 0.620 0.043];
+            d.StatusAlarmColor    = [0.937 0.267 0.267];
     end
 
     % Axis label/tick color — derive from toolbar font (readable on widget bg)
@@ -96,9 +107,17 @@ function d = getDashboardDefaults(preset)
     d.WidgetBorderWidth    = 1;
     d.HeaderFontSize       = 14;
     d.WidgetTitleFontSize  = 11;
-    d.StatusOkColor        = [0.31 0.80 0.64];
-    d.StatusWarnColor      = [0.91 0.63 0.27];
-    d.StatusAlarmColor     = [0.91 0.27 0.38];
+    % Status colors are now set per-preset above; guard so this shared block
+    % only supplies a fallback and never clobbers a preset's own values.
+    if ~isfield(d, 'StatusOkColor')
+        d.StatusOkColor    = [0.31 0.80 0.64];
+    end
+    if ~isfield(d, 'StatusWarnColor')
+        d.StatusWarnColor  = [0.91 0.63 0.27];
+    end
+    if ~isfield(d, 'StatusAlarmColor')
+        d.StatusAlarmColor = [0.91 0.27 0.38];
+    end
     d.InfoColor            = [0.27 0.52 0.85];
     d.GaugeArcWidth        = 8;
     d.KpiFontSize          = 28;
