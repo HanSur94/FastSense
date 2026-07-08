@@ -436,7 +436,8 @@ classdef SensorTag < Tag
                     inlineY = v;
                 else
                     error('SensorTag:unknownOption', ...
-                        'Unknown option ''%s''.', k);
+                        'Unknown option ''%s''. Valid options: %s.', ...
+                        k, strjoin([tagKeys, sensorKeys, {'X', 'Y'}], ', '));
                 end
             end
         end
