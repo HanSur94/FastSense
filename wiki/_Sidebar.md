@@ -1,4 +1,4 @@
-**FastPlot Wiki**
+**FastSense Wiki**
 
 - [[Home]]
 - [[Installation]]

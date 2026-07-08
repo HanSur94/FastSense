@@ -54,6 +54,95 @@ classdef TestFastSenseWidget < matlab.unittest.TestCase
             testCase.verifyTrue(isa(w.FastSenseObj, 'FastSense'));
         end
 
+        function testTimeVaryingThresholdSpecReachesFastSense(testCase)
+            % A 'Thresholds' entry with X/Y vectors must forward to the
+            % core's time-varying addThreshold(thX, thY, ...) so dashboards
+            % can draw state-dependent (dynamic) limits. NaN Y samples mean
+            % "no limit here" and break the drawn line.
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Units', 'normalized', ...
+                'Position', [0 0 1 1]);
+
+            thX = 1:100;
+            thY = 5 * ones(1, 100);
+            thY(40:60) = NaN;   % limit inactive mid-range
+            w = FastSenseWidget('Thresholds', ...
+                {struct('X', thX, 'Y', thY, ...
+                'Direction', 'upper', 'Label', 'UWL')});
+            w.XData = 1:100;
+            w.YData = rand(1, 100);
+            w.render(hp);
+
+            th = w.FastSenseObj.Thresholds;
+            testCase.assertNumElements(th, 1, ...
+                'X/Y spec entry must create exactly one threshold');
+            testCase.verifyNumElements(th(1).Y, 100, ...
+                'threshold must keep its per-sample Y series');
+            testCase.verifyEmpty(th(1).Value, ...
+                'time-varying threshold must not carry a scalar Value');
+            testCase.verifyEqual(th(1).Direction, 'upper');
+            testCase.verifyEqual(th(1).Label, 'UWL');
+        end
+
+        function testMixedScalarAndTimeVaryingThresholds(testCase)
+            % Scalar Value entries and X/Y entries must coexist in one spec.
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Units', 'normalized', ...
+                'Position', [0 0 1 1]);
+
+            thX = 1:50;
+            thY = [2 * ones(1, 25), NaN(1, 25)];
+            w = FastSenseWidget('Thresholds', { ...
+                struct('Value', 3, 'Direction', 'upper', 'Label', 'UAL'), ...
+                struct('X', thX, 'Y', thY, 'Direction', 'lower')});
+            w.XData = 1:50;
+            w.YData = rand(1, 50);
+            w.render(hp);
+
+            th = w.FastSenseObj.Thresholds;
+            testCase.assertNumElements(th, 2, ...
+                'both spec entries must create thresholds');
+            testCase.verifyEqual(th(1).Value, 3);
+            testCase.verifyNumElements(th(2).Y, 50);
+            testCase.verifyEqual(th(2).Direction, 'lower');
+        end
+
+        function testThresholdSpecStyleReachesFastSense(testCase)
+            % Color / LineStyle on a Thresholds spec entry must reach the
+            % core threshold (severity styling: e.g. warn yellow solid,
+            % alarm red solid) for both scalar and time-varying entries.
+            hFig = figure('Visible', 'off');
+            testCase.addTeardown(@() close(hFig));
+            hp = uipanel('Parent', hFig, 'Units', 'normalized', ...
+                'Position', [0 0 1 1]);
+
+            warnColor = [0.93 0.69 0.13];
+            alarmColor = [0.7 0 0];
+            thX = 1:50;
+            thY = 4 * ones(1, 50);
+            w = FastSenseWidget('Thresholds', { ...
+                struct('Value', 5, 'Direction', 'upper', 'Label', 'UAL', ...
+                'Color', alarmColor, 'LineStyle', '-'), ...
+                struct('X', thX, 'Y', thY, 'Direction', 'upper', ...
+                'Label', 'UWL', 'Color', warnColor, 'LineStyle', '-')});
+            w.XData = 1:50;
+            w.YData = rand(1, 50);
+            w.render(hp);
+
+            th = w.FastSenseObj.Thresholds;
+            testCase.assertNumElements(th, 2);
+            testCase.verifyEqual(th(1).Color, alarmColor, ...
+                'scalar entry Color must pass through');
+            testCase.verifyEqual(th(1).LineStyle, '-', ...
+                'scalar entry LineStyle must pass through');
+            testCase.verifyEqual(th(2).Color, warnColor, ...
+                'time-varying entry Color must pass through');
+            testCase.verifyEqual(th(2).LineStyle, '-', ...
+                'time-varying entry LineStyle must pass through');
+        end
+
         function testToStructRoundTrip(testCase)
             w = FastSenseWidget('Title', 'My Plot', 'Position', [5 2 16 3]);
             w.XData = 1:10;

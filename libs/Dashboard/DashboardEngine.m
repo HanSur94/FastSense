@@ -395,7 +395,8 @@ classdef DashboardEngine < handle
                     w = ctor(varargin{:});
                 else
                     error('DashboardEngine:unknownType', ...
-                        'Unknown widget type: %s', type);
+                        'Unknown widget type ''%s''. Valid types: %s. Call DashboardEngine.widgetTypes() for descriptions.', ...
+                        type, strjoin(DashboardWidgetRegistry.types(), ', '));
                 end
 
                 % Preserve timeline no-store warning

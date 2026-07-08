@@ -704,7 +704,8 @@ classdef CompositeTag < Tag
                     cmpArgs{end+1} = v; %#ok<AGROW>
                 else
                     error('CompositeTag:unknownOption', ...
-                        'Unknown option ''%s''.', k);
+                        'Unknown option ''%s''. Valid options: %s.', ...
+                        k, strjoin([tagKeys, cmpKeys], ', '));
                 end
                 i = i + 2;
             end

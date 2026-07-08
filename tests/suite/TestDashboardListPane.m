@@ -167,6 +167,31 @@ classdef TestDashboardListPane < matlab.unittest.TestCase
                 'BROWSER-01: expected 3 Open buttons');
         end
 
+        function testBROWSER01_rowGridIsScrollable(testCase)
+        %TESTBROWSER01_ROWGRIDISSCROLLABLE BROWSER-01: row grid carries Scrollable='on'.
+        %   MATLAB ignores a uipanel's Scrollable when its child is a grid
+        %   layout, so hScroll_ alone never scrolls — the row grid itself
+        %   must be scrollable or every dashboard beyond the viewport is
+        %   unreachable (showed up with a 39-dashboard companion). Same
+        %   pattern as InspectorPane's per-renderer grids.
+            hFig = testCase.findFig();
+            grids = findall(hFig, '-isa', 'matlab.ui.container.GridLayout');
+            rowGrid = [];
+            for i = 1:numel(grids)
+                p = grids(i).Parent;
+                if isa(p, 'matlab.ui.container.Panel') && ...
+                        strcmp(p.Scrollable, 'on') && ...
+                        numel(grids(i).RowHeight) == numel(testCase.Engines)
+                    rowGrid = grids(i);
+                    break;
+                end
+            end
+            testCase.assertNotEmpty(rowGrid, ...
+                'BROWSER-01: dashboard row grid not found in scroll panel');
+            testCase.assertEqual(char(rowGrid.Scrollable), 'on', ...
+                'BROWSER-01: row grid must be Scrollable — the scroll panel''s flag is ignored with a grid child');
+        end
+
         function testBROWSER01_widgetCountLabelPresent(testCase)
         %TESTBROWSER01_WIDGETCOUNTLABELPRESENT BROWSER-01: per-row widget count (N) label wired.
             % Engines are fresh DashboardEngine with no widgets: count = 0

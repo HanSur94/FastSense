@@ -25,15 +25,18 @@ classdef MultiStatusWidget < DashboardWidget
             % Re-layout on resize so pixel-scaled fonts/geometry stay correct.
             try obj.hPanel.SizeChangedFcn = @(~,~) obj.relayout_(); catch, end
             theme = obj.getTheme(); %#ok<NASGU>
-            % DataAspectRatio=[1 1 1] forces equal data units in pixels so
-            % circles drawn with cos/sin remain circular regardless of how
-            % the panel resizes. MATLAB letterboxes the axes if needed.
+            % The axes stretches to fill the panel (no DataAspectRatio):
+            % forcing DataAspectRatio=[1 1 1] with square [0 1]x[0 1] limits
+            % letterboxed the drawable area into a square sized by the
+            % SMALLER panel dimension, so short+wide widgets (e.g. grid
+            % height 2) clumped every dot/label into a tiny centred square.
+            % Circularity is preserved instead by scaling rx/ry with the
+            % panel's pixel aspect ratio in refresh().
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
                 'Position', [0.02 0.02 0.96 0.96], ...
                 'Visible', 'off', ...
-                'XLim', [0 1], 'YLim', [0 1], ...
-                'DataAspectRatio', [1 1 1]);
+                'XLim', [0 1], 'YLim', [0 1]);
             obj.hDots_ = [];
             obj.nDotsCached_ = 0;
             obj.refresh();
@@ -49,9 +52,18 @@ classdef MultiStatusWidget < DashboardWidget
             n = numel(expandedItems);
             if n == 0, return; end
 
+            % Pixel size of the drawable axes area — drives the aspect-aware
+            % auto column count and the rx/ry circularity correction below.
+            [pxW, pxH] = obj.axesPixelSize_();
+
             cols = obj.Columns;
             if isempty(cols)
-                cols = ceil(sqrt(n));
+                % Aspect-aware auto layout: pick the column count whose grid
+                % shape best matches the widget's pixel aspect ratio so cells
+                % stay roughly square. On a square panel this reduces to the
+                % historic ceil(sqrt(n)); on a short, wide strip (e.g. grid
+                % height 2) it yields a single horizontal row.
+                cols = min(n, max(1, ceil(sqrt(n * pxW / pxH))));
             end
 
             theme = obj.getTheme();
@@ -111,20 +123,33 @@ classdef MultiStatusWidget < DashboardWidget
 
             newDots = gobjects(1, n);
 
-            % Equal x/y radii — DataAspectRatio=[1 1 1] on the axes (set in
-            % render()) keeps the drawn ellipses perfectly circular at any
-            % panel aspect ratio. No pxW/pxH correction needed.
+            % Pixel-aware geometry: the axes stretches to fill the panel, so
+            % visually circular dots need rx/ry scaled by the inverse pixel
+            % size. The dot radius is 30% of the smaller cell dimension in
+            % pixels (matching the historic look on square panels), with a
+            % band reserved below the dot for the label when labels are shown
+            % so 8 pt text stays readable even at 2-grid-row widget heights.
+            cellWpx = pxW / cols;
+            cellHpx = pxH / rows;
+            labelHpx = 0;
+            if obj.ShowLabels
+                labelHpx = min(14, 0.4 * cellHpx);   % 8 pt label ~ 11 px tall
+            end
+            availHpx = cellHpx - labelHpx;
+            rPx = 0.3 * min(cellWpx, availHpx);
+            rx = rPx / pxW;
+            ry = rPx / pxH;
+            labelGapY = 2 / pxH;   % small fixed gap between dot edge and label top
+
             for i = 1:n
                 col = mod(i-1, cols);
                 row = floor((i-1) / cols);
 
                 cx = (col + 0.5) / cols;
-                cy = 1 - (row + 0.5) / rows;
+                % Dot centred in the cell area above the reserved label band.
+                cy = 1 - row / rows - (availHpx / 2) / pxH;
 
                 item = expandedItems{i};
-
-                ry = 0.3 / max(cols, rows);
-                rx = ry;
 
                 if isstruct(item)
                     % Tag-first dispatch (v2.0 Tag API) — falls through to legacy
@@ -145,8 +170,9 @@ classdef MultiStatusWidget < DashboardWidget
                             color, 'EdgeColor', 'none');
                     end
                     if obj.ShowLabels && isfield(item, 'label')
-                        text(obj.hAxes, cx, cy - ry - 0.02, item.label, ...
+                        text(obj.hAxes, cx, cy - ry - labelGapY, item.label, ...
                             'HorizontalAlignment', 'center', ...
+                            'VerticalAlignment', 'top', ...
                             'FontSize', 8, ...
                             'Color', theme.AxisColor);
                     end
@@ -164,8 +190,9 @@ classdef MultiStatusWidget < DashboardWidget
                     if obj.ShowLabels && ~isempty(item)
                         name = item.Name;
                         if isempty(name), name = item.Key; end
-                        text(obj.hAxes, cx, cy - ry - 0.02, name, ...
+                        text(obj.hAxes, cx, cy - ry - labelGapY, name, ...
                             'HorizontalAlignment', 'center', ...
+                            'VerticalAlignment', 'top', ...
                             'FontSize', 8, ...
                             'Color', theme.AxisColor);
                     end
@@ -278,6 +305,28 @@ classdef MultiStatusWidget < DashboardWidget
     end
 
     methods (Access = private)
+        function [pxW, pxH] = axesPixelSize_(obj)
+        %AXESPIXELSIZE_ Pixel size of the drawable axes area inside the panel.
+        %   Measures the axes via a units round-trip (Octave-safe, same
+        %   pattern as ChipBarWidget) so panel title bars and borders are
+        %   accounted for. Guards against degenerate sizes during early
+        %   construction; SizeChangedFcn -> relayout_ re-renders once the
+        %   panel reaches its final geometry, so a transient fallback is fine.
+            pxW = 100;
+            pxH = 100;
+            if isempty(obj.hAxes) || ~ishandle(obj.hAxes), return; end
+            try
+                oldUnits = get(obj.hAxes, 'Units');
+                set(obj.hAxes, 'Units', 'pixels');
+                pxPos = get(obj.hAxes, 'Position');
+                set(obj.hAxes, 'Units', oldUnits);
+                pxW = max(1, pxPos(3));
+                pxH = max(1, pxPos(4));
+            catch
+                % Keep fallback square geometry — matches the historic layout.
+            end
+        end
+
         function relayout_(obj)
         %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
             if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end

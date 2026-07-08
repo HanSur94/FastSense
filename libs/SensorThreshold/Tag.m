@@ -87,6 +87,8 @@ classdef Tag < handle
             obj.Key  = key;
             obj.Name = key;  % default Name = Key
 
+            validKeys = {'Name', 'Units', 'Description', 'Labels', ...
+                         'Metadata', 'Criticality', 'SourceRef'};
             for i = 1:2:numel(varargin)
                 switch varargin{i}
                     case 'Name',        obj.Name        = varargin{i+1};
@@ -98,7 +100,8 @@ classdef Tag < handle
                     case 'SourceRef',   obj.SourceRef   = varargin{i+1};
                     otherwise
                         error('Tag:unknownOption', ...
-                            'Unknown option ''%s''.', varargin{i});
+                            'Unknown option ''%s''. Valid options: %s.', ...
+                            varargin{i}, strjoin(validKeys, ', '));
                 end
             end
         end

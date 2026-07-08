@@ -11,25 +11,31 @@
 ## Setup
 
 1. Clone or download the repository
-2. In MATLAB/Octave, navigate to the FastPlot directory
+2. In MATLAB/Octave, navigate to the FastSense directory
 3. Run install:
 ```matlab
 install;
 ```
 
 This adds the library paths:
-- `libs/FastPlot` — core plotting engine
-- `libs/SensorThreshold` — sensor and threshold system
+- `libs/FastSense` — core plotting engine
+- `libs/SensorThreshold` — sensor, tag, and threshold system
 - `libs/EventDetection` — event detection and viewer
 - `libs/Dashboard` — dashboard engine and widgets
 - `libs/WebBridge` — TCP server for web-based visualization
+- `libs/FastSenseCompanion` — companion navigator app
+- `libs/PlantLog` — plant-log entry storage
+- `libs/Concurrency` — file-locking helpers for live/multi-process use
+- `libs/Help` — in-app wiki browser
+
+It also adds `examples/`, `benchmarks/`, and `tests/` to the path, so example and benchmark scripts can be run by name.
 
 ## MEX Compilation (Optional)
 
 For maximum performance, compile the C MEX accelerators:
 
 ```matlab
-cd libs/FastPlot
+cd libs/FastSense
 build_mex();
 ```
 
