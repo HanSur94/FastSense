@@ -335,48 +335,113 @@ classdef Tag < handle
         end
 
         function varargout = cumulativeIntegral(obj, varargin)
-            %CUMULATIVEINTEGRAL Running trapezoidal integral of Y w.r.t. X (#327).
-            %   [t, cum] = tag.cumulativeIntegral() returns the cumulative
-            %   trapezoidal integral series; cum(end) is the grand total.
-            %   total = tag.cumulativeIntegral(...) (1-out) returns the scalar total.
-            %   'Range', [t0 t1] restricts the window.
+            %CUMULATIVEINTEGRAL Running trapezoidal integral of Y w.r.t. X.
             %
-            %   NaN policy: a segment bounded by a NaN contributes zero area
-            %   (treated as a gap) rather than poisoning the running total.
-            %   Intended for continuous numeric tags; on a discrete tag it warns
-            %   Tag:integralOnDiscrete.
+            %   cum        = obj.cumulativeIntegral()              % grand total (scalar)
+            %   cum        = obj.cumulativeIntegral('Range',[t0 t1])  % total over window
+            %   [X, cum]   = obj.cumulativeIntegral(...)           % running series
             %
-            %   Toolbox-free: hand-rolled NaN-safe trapezoid (no cumtrapz).
+            %   Description:
+            %     Computes the running trapezoidal (area-under-curve) integral using
+            %     per-segment areas so that an interior NaN Y-value contributes zero
+            %     area instead of poisoning the entire tail.  The algorithm is
+            %     equivalent to cumtrapz(X,Y) when no NaNs are present; cum(1) is
+            %     always 0 (zero area at the first sample).
             %
-            %   See also derivative, getXY.
-            [rangeVal, ~] = obj.parseMethodRangeOpts_('', {}, 'cumulativeIntegral', varargin{:});
-            [X, Y] = obj.getSeries_(rangeVal);
-            if obj.isDiscreteKind_()
+            %   Empty-data policy:
+            %     When the tag returns no data (isempty(X)), the 1-out form
+            %     returns the scalar 0 ("empty series integrates to 0") and the
+            %     2-out form returns X=[], cum=[].
+            %
+            %   NaN-gap policy:
+            %     A trapezoid segment [i, i+1] whose either endpoint is NaN or
+            %     non-finite contributes ZERO area.  A single interior NaN does
+            %     NOT turn the running tail into all-NaN.
+            %
+            %   Discrete-channel warning:
+            %     If obj.getKind() == 'state', a Tag:integralOnDiscrete warning
+            %     is emitted because the area under a discrete/step channel is
+            %     rarely the intended computation.  The value is still returned.
+            %
+            %   Options (name-value):
+            %     'Range', [t0 t1] — restrict integration window to [t0, t1]
+            %                        using getXYRange().  Default: full series.
+            %
+            %   Error IDs:
+            %     Tag:unknownOption — unrecognized name-value key
+
+            % --- Parse the optional 'Range' name-value pair ---
+            t0 = [];
+            t1 = [];
+            for i = 1:2:numel(varargin)
+                switch varargin{i}
+                    case 'Range'
+                        rng = varargin{i+1};
+                        t0  = rng(1);
+                        t1  = rng(2);
+                    otherwise
+                        error('Tag:unknownOption', ...
+                            'Unknown option ''%s''.', varargin{i});
+                end
+            end
+
+            % --- Warn for discrete/step-function channels ---
+            if strcmp(obj.getKind(), 'state')
                 warning('Tag:integralOnDiscrete', ...
-                    'cumulativeIntegral() on a discrete (%s) tag: area under a step channel is rarely intended.', ...
-                    obj.getKind());
+                    ['cumulativeIntegral on a ''state'' (discrete/ZOH) channel ' ...
+                     'produces area-under-staircase which is rarely intended.']);
             end
-            n = numel(X);
-            cum = zeros(size(Y));
-            for i = 2:n
-                dx = X(i) - X(i-1);
-                y0 = Y(i-1);
-                y1 = Y(i);
-                if isnan(y0) || isnan(y1)
-                    area = 0;              % gap: no contribution
-                else
-                    area = 0.5 * (y0 + y1) * dx;
-                end
-                cum(i) = cum(i-1) + area;
-            end
-            if nargout <= 1
-                if isempty(cum)
-                    varargout = {NaN};
-                else
-                    varargout = {cum(end)};
-                end
+
+            % --- Fetch data ---
+            if ~isempty(t0) && ~isempty(t1)
+                [X, Y] = obj.getXYRange(t0, t1);
             else
-                varargout = {X, cum};
+                [X, Y] = obj.getXY();
+            end
+
+            % --- Ensure row vectors for consistent output shape ---
+            X = X(:)';
+            Y = Y(:)';
+
+            % --- Empty-data guard ---
+            if isempty(X)
+                if nargout <= 1
+                    varargout{1} = 0;
+                else
+                    varargout{1} = [];
+                    varargout{2} = [];
+                end
+                return;
+            end
+
+            % --- Single-sample guard (no interval = no area) ---
+            if numel(X) == 1
+                cum = 0;
+                if nargout <= 1
+                    varargout{1} = cum;
+                else
+                    varargout{1} = X;
+                    varargout{2} = cum;
+                end
+                return;
+            end
+
+            % --- Gap-robust trapezoidal accumulation ---
+            %   Per-segment area:  0.5 * dt * (Y_i + Y_{i+1})
+            %   Non-finite segments (any NaN/Inf endpoint) -> 0 area (gap).
+            %   This is algebraically identical to cumtrapz(X,Y) when no
+            %   NaNs are present (cum(1)=0, cumulative from the left).
+            dt   = diff(X);
+            area = 0.5 .* dt .* (Y(1:end-1) + Y(2:end));
+            area(~isfinite(area)) = 0;
+            cum = [0, cumsum(area)];
+
+            % --- Output dispatch ---
+            if nargout <= 1
+                varargout{1} = cum(end);
+            else
+                varargout{1} = X;
+                varargout{2} = cum;
             end
         end
 

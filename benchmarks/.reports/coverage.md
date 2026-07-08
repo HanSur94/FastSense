@@ -16,9 +16,48 @@ still lack isolated benchmark coverage. Newest entries first.
 | **`to_step_function_mex`** | SIMD step-function conversion — a compiled, deployed, correctness-tested kernel (`TestToStepFunctionMex`). | ⏸️ **DEFERRED** — no confirmed production caller. `MonitorTag.recompute_` emits a binary vector (no step conversion); `StateTag.getXY` is pass-through; only the test suite calls it. The `dispatchDelimitedParse_` comment citing it is stale. **Investigate whether it's still wired into any render path (or is vestigial) before benchmarking.** |
 | **Tag layer** (SensorTag/MonitorTag/CompositeTag getXY, resolve, append) | Live-tick recompute path. | ✅ `bench_sensortag_getxy`, `bench_monitortag_tick`, `bench_monitortag_append`, `bench_compositetag_merge`, `bench_consumer_migration_tick`, `bench_tag_pipeline_1k`. |
 | **Dashboard refresh / load** | Live dashboard refresh rate. | ✅ `bench_dashboard`, `bench_dashboard_live`, `bench_dashboard_load`. |
+| **Detached-mirror refresh** (`detachWidget` → `DetachedMirror.tick` inside `onLiveTick`) | The project's **headline constraint**: detached live mirrors must not degrade dashboard refresh rate. Mirrors tick inline on the same refresh path. | ✅ `bench_detached_mirror_refresh.m` (0/1/2/4 mirrors, amortized tick) — *added 2026-06-24*. MATLAB-only (Octave detach bug, filed). |
+| **Multi-line render/refresh** (single axes, many lines) | `updateData` re-downsamples **all** lines every live tick; multi-sensor overlay is common. Lines-per-axes was untested (existing benches use one line or vary widget count). | ✅ `bench_fastsense_multiline.m` (line-count sweep 1→64, refresh Hz) — *added 2026-06-24*. |
+| **DerivedTag resolve chain** (`DerivedTag.getXY` recompute + invalidate cascade) | Live invalidation cascades through derived-tag graphs; the leaf refresh recomputes the whole chain. | ✅ `bench_derived_resolve_chain.m` (depth sweep, cold recompute vs warm cache) — *added 2026-06-24*. Isolates the memoization + cascade **plumbing** (not the user `ComputeFn`) — addresses the recompute_ deferral noted below. |
 | **Full render vs plot(), zoom/pan, memory, features** | End-to-end render comparison. | ✅ `benchmark.m`, `benchmark_zoom.m`, `benchmark_memory.m`, `benchmark_features.m`. |
 
 ## Change log
+
+### 2026-06-24 — `bench_derived_resolve_chain.m`
+- **Gap closed:** DerivedTag resolve-graph recompute cost vs dependency depth.
+  Rather than timing a single `recompute_` (dominated by the user `ComputeFn` —
+  the reason it was deferred, see pivot note below), it builds a
+  sensor→T1→…→TD chain and isolates the FRAMEWORK plumbing: the invalidate
+  cascade + per-node `getXY` memoization walk.
+- **What it does:** sweeps depth 1→32 (1e6 pts/node); times COLD leaf `getXY`
+  after invalidating the whole chain (full recompute = live cost) vs WARM
+  `getXY` (memoized cache). Throughput bench (no gate); uses min-over-reps
+  (GC-robust for the per-node array allocations).
+- **First run (MATLAB R2025b):** cold 0.69→14.2 ms ~linear in depth; warm flat
+  ~0.02 ms (memo saves the whole chain walk). Verified portable (full Octave run).
+
+### 2026-06-24 — `bench_detached_mirror_refresh.m`
+- **Gap closed:** the project's **headline constraint** — detached live mirrors
+  must not degrade dashboard refresh rate — had no committed bench.
+- **What it does:** holds 8 widgets constant, detaches 0/1/2/4 as mirrors
+  (`detachWidget`), and times amortized active `onLiveTick` (mirrors tick inline
+  on the same path). Reports refresh ms / Hz / overhead vs baseline.
+- **First run (MATLAB R2025b):** baseline ~18 ms (≈55 Hz); mirrors add real,
+  increasing overhead (+35% → ~+120–200% at 4 mirrors). Methodology: needs ~20
+  warmup ticks to settle, and `onLiveTick` is BIMODAL under `drawnow('limitrate')`,
+  so the stable metric is the amortized average, not a per-tick median.
+- **Octave:** skips cleanly — the detach path hits an Octave-incompatible
+  `feval([className '.fromStruct'], s)` in `DashboardWidgetRegistry.fromStruct:92`,
+  which also breaks serialized dashboard load under Octave (filed as a task).
+
+### 2026-06-24 — `bench_fastsense_multiline.m`
+- **Gap closed:** multi-line scaling on a single FastSense axes (multi-sensor
+  overlay) — existing benches use one line or vary widget count, not lines/axes.
+- **What it does:** sweeps line count 1→64 at 100K pts/line; times `updateData`
+  (re-downsamples all lines) with `SkipViewMode`, reporting refresh Hz + us/line.
+  Headless invisible figure, progress bar silenced via `ShowProgress`.
+- **First run (MATLAB R2025b):** 564 Hz (1 line) → 39 Hz (64 lines); us/line
+  falls as fixed per-call overhead amortizes. Verified portable (Octave API smoke).
 
 ### 2026-06-24 — `bench_downsample_kernels.m`
 - **Gap closed:** isolated downsampling-kernel microbenchmark. Previously the

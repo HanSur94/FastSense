@@ -230,6 +230,120 @@ classdef TestTag < matlab.unittest.TestCase
                 sprintf('Expected exactly 6 abstract-by-convention stubs, got %d', count));
         end
 
+        % ---- cumulativeIntegral tests (Issue #327) ----
+
+        function testCumulativeIntegralUniformRamp(testCase)
+            %TESTCUMULATIVEINTEGRALUNIFORMRAMP Uniform spacing, constant Y=2.
+            %   X=0:4, Y=[2 2 2 2 2] => each segment area = 0.5*1*(2+2)=2.
+            %   Expected cum = [0 2 4 6 8].
+            t = SensorTag('ci_ramp', 'X', 0:1:4, 'Y', [2 2 2 2 2]);
+            [x, cum] = t.cumulativeIntegral();
+            testCase.verifyEqual(x, 0:1:4, 'AbsTol', 1e-12, ...
+                'X must equal input X');
+            testCase.verifyEqual(cum, [0 2 4 6 8], 'AbsTol', 1e-12, ...
+                'Running integral of constant-2 series must be [0 2 4 6 8]');
+        end
+
+        function testCumulativeIntegralNonUniform(testCase)
+            %TESTCUMULATIVEINTEGRALNON Nonuniform X spacing verification.
+            %   X=[0 1 3 7], Y=[1 3 3 1].
+            %   seg1: 0.5*1*(1+3)=2; seg2: 0.5*2*(3+3)=6; seg3: 0.5*4*(3+1)=8.
+            %   Expected cum=[0 2 8 16], total=16.
+            X = [0 1 3 7];
+            Y = [1 3 3 1];
+            t = SensorTag('ci_nonunif', 'X', X, 'Y', Y);
+            [xOut, cum] = t.cumulativeIntegral();
+            % Derive expected from the same formula used in the implementation
+            dt       = diff(X);
+            area     = 0.5 .* dt .* (Y(1:end-1) + Y(2:end));
+            expected = [0, cumsum(area)];
+            testCase.verifyEqual(xOut, X, 'AbsTol', 1e-12, 'X passthrough');
+            testCase.verifyEqual(cum, expected, 'AbsTol', 1e-12, ...
+                'Non-uniform spacing: running integral must match trapezoid formula');
+            testCase.verifyEqual(cum(end), 16, 'AbsTol', 1e-12, ...
+                'Grand total must equal 16');
+        end
+
+        function testCumulativeIntegralRangeWindow(testCase)
+            %TESTCUMULATIVEINTEGRALRANGE 'Range' option restricts the window.
+            %   Build a tag spanning 0:9; request [2 6]. Derive expected from
+            %   the actual getXYRange return (one-point boundary padding may
+            %   pull in a flanking sample).
+            X = 0:1:9;
+            Y = ones(1, 10);
+            t = SensorTag('ci_range', 'X', X, 'Y', Y);
+            t0 = 2; t1 = 6;
+            [xWin, cumWin] = t.cumulativeIntegral('Range', [t0 t1]);
+            % Derive expected from what getXYRange actually returns
+            [xExp, yExp] = t.getXYRange(t0, t1);
+            dt    = diff(xExp);
+            areas = 0.5 .* dt .* (yExp(1:end-1) + yExp(2:end));
+            cumExp = [0, cumsum(areas)];
+            testCase.verifyEqual(xWin, xExp, 'AbsTol', 1e-12, ...
+                'Windowed X must equal getXYRange return');
+            testCase.verifyEqual(cumWin, cumExp, 'AbsTol', 1e-12, ...
+                'Windowed running integral must start at 0');
+            testCase.verifyEqual(cumWin(1), 0, 'AbsTol', 1e-12, ...
+                'cum(1) must be 0 at the start of the window');
+        end
+
+        function testCumulativeIntegralScalarForm(testCase)
+            %TESTCUMULATIVEINTEGRALSCALAR 1-out form returns scalar equal to cum(end).
+            t = SensorTag('ci_scalar', 'X', 0:1:4, 'Y', [2 2 2 2 2]);
+            [~, cum] = t.cumulativeIntegral();
+            total    = t.cumulativeIntegral();
+            testCase.verifyEqual(numel(total), 1, '1-out form must be scalar');
+            testCase.verifyEqual(total, cum(end), 'AbsTol', 1e-12, ...
+                '1-out total must equal 2-out cum(end)');
+        end
+
+        function testCumulativeIntegralEmptyData(testCase)
+            %TESTCUMULATIVEINTEGRALEMPTY MockTag has no data; must return empty/0 without error.
+            m = MockTag('ci_empty');
+            [x, cum] = m.cumulativeIntegral();
+            testCase.verifyEmpty(x,   '2-out X must be empty for empty data');
+            testCase.verifyEmpty(cum, '2-out cum must be empty for empty data');
+            total = m.cumulativeIntegral();
+            testCase.verifyEqual(total, 0, 'AbsTol', 1e-12, ...
+                '1-out form of empty data must return scalar 0');
+        end
+
+        function testCumulativeIntegralNaNGap(testCase)
+            %TESTCUMULATIVEINTEGRALNANGAP Interior NaN must not poison the tail.
+            %   X=0:4, Y=[1 1 NaN 1 1]; segments 2-3 and 3-4 are non-finite.
+            %   Contributions zeroed; segments 1-2 and 4-5 must still accumulate.
+            X = 0:1:4;
+            Y = [1 1 NaN 1 1];
+            t = SensorTag('ci_nan', 'X', X, 'Y', Y);
+            [~, cum] = t.cumulativeIntegral();
+            testCase.verifyTrue(isfinite(cum(end)), ...
+                'cum(end) must be finite when interior NaN is zeroed');
+            testCase.verifyTrue(cum(end) > 0, ...
+                'Some area must accumulate outside the NaN gap');
+            testCase.verifyTrue(all(isfinite(cum)), ...
+                'All cum values after the gap must be finite (no NaN tail)');
+        end
+
+        function testCumulativeIntegralDiscreteWarns(testCase)
+            %TESTCUMULATIVEINTEGRALDISCRETEWARN StateTag must emit Tag:integralOnDiscrete.
+            st = StateTag('ci_disc', 'X', [0 1 2], 'Y', [0 1 0]);
+            testCase.verifyWarning(@() st.cumulativeIntegral(), ...
+                'Tag:integralOnDiscrete');
+            % Also verify it still returns a numeric value (suppress warning for capture)
+            warnState = warning('off', 'Tag:integralOnDiscrete');
+            cleanupWarn = onCleanup(@() warning(warnState));
+            total = st.cumulativeIntegral();
+            testCase.verifyTrue(isnumeric(total), ...
+                'cumulativeIntegral on StateTag must still return a numeric value');
+        end
+
+        function testCumulativeIntegralUnknownOption(testCase)
+            %TESTCUMULATIVEINTEGRALUNKNOWNOPTION Bogus key must throw Tag:unknownOption.
+            t = SensorTag('ci_bogus', 'X', 0:3, 'Y', [1 2 3 4]);
+            testCase.verifyError(@() t.cumulativeIntegral('Bogus', 1), ...
+                'Tag:unknownOption');
+        end
+
     end
 end
 

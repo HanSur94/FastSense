@@ -428,7 +428,7 @@ Plans:
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
 
-### Phase 999.2: Tag Analysis Toolkit ✅ COMPLETE 2026-07-08
+### Phase 999.2: Tag Analysis Toolkit ✅ COMPLETE 2026-07-08 (6 methods; #327 shipped separately on main via PR #331)
 
 **Goal:** Add a toolbox-free, kind-aware analysis API to the `Tag` family (`libs/SensorThreshold/Tag.m` + subclasses) so engineers can compute statistics and derived series directly from any tag without pulling in the Signal Processing / Statistics toolboxes. All additive, backward-compatible, Octave-safe. Build keystone-first — `getStats()` is the shared primitive the rest lean on.
 
@@ -443,11 +443,11 @@ Plans (build order — keystone first; all methods land in `libs/SensorThreshold
 - [x] 999.2-04-PLAN.md (Wave 2, depends 01) — #312 `Tag.movingStat(window, type)` rolling mean/std/max/min/rms/median series
 - [x] 999.2-05-PLAN.md (Wave 2, depends 01) — #316 `Tag.exceedance(level)` time-above/below-threshold analysis
 - [x] 999.2-06-PLAN.md (Wave 2, depends 01) — #328 `Tag.crossings(level)` level-crossing times + direction (cycle/period)
-- [x] 999.2-07-PLAN.md (Wave 2, depends 01) — #327 `Tag.cumulativeIntegral()` trapezoidal totalizer series (running integral)
+- [~] 999.2-07-PLAN.md — #327 `Tag.cumulativeIntegral()` SUPERSEDED: shipped independently on main (PR #331, quick 260629-tgy); this branch keeps main's canonical version
 
 > Note: all 7 plans append methods to the single shared file `libs/SensorThreshold/Tag.m`. The six Wave-2 plans are logically independent (star dependency on 01) but share this file — execute-phase must serialize edits to Tag.m across concurrently-running Wave-2 plans (each test file is distinct and never conflicts).
 
-### Phase 999.3: EventViewer image export parity ✅ COMPLETE 2026-07-08
+### Phase 999.3: EventViewer image export parity ✅ SHIPPED ON MAIN (PR #333, quick 260629-tt3) — this branch dropped its duplicate
 
 **Goal:** Give `EventViewer` (`libs/EventDetection/EventViewer.m`) an `exportImage(path)` method that saves the timeline figure as PNG/JPEG, matching the existing `DashboardEngine`/`DetachedMirror` export capability. Additive, backward-compatible; copy the existing single-figure capture backend.
 

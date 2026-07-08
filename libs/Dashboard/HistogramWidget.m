@@ -32,6 +32,11 @@ classdef HistogramWidget < DashboardWidget
                     'Color', theme.ForegroundColor, ...
                     'FontSize', theme.WidgetTitleFontSize);
             end
+            % A freshly created axes is always empty, so force a repopulate.
+            % Without this, a re-render (resize / theme toggle / page switch)
+            % recreates the axes but refresh() early-returns on ~Dirty (it was
+            % cleared by the previous plot) — leaving the histogram blank.
+            obj.Dirty = true;
             obj.refresh();
         end
 
@@ -77,9 +82,15 @@ classdef HistogramWidget < DashboardWidget
                 plot(obj.hAxes, xFit, yFit, 'r-', 'LineWidth', 1.5);
                 hold(obj.hAxes, 'off');
             end
-            % Re-apply title after plot commands (bar/plot may clear via newplot)
+            % Re-apply theme after plot commands. bar/plot run newplot, which
+            % resets the axes Color (background) and XColor/YColor to their
+            % light-mode defaults — a glaring white box in dark mode. Restore
+            % the themed colors (and the title) every refresh.
+            theme = obj.getTheme();
+            set(obj.hAxes, 'Color', theme.WidgetBackground, ...
+                'XColor', theme.AxisColor, ...
+                'YColor', theme.AxisColor);
             if ~isempty(obj.Title)
-                theme = obj.getTheme();
                 title(obj.hAxes, obj.Title, ...
                     'Color', theme.ForegroundColor, ...
                     'FontSize', theme.WidgetTitleFontSize);

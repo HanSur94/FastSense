@@ -308,7 +308,16 @@ LINENUMPOINTS Return total point count for line i.
 
 #### `[xMin, xMax] = lineXRange(obj, i)`
 
-LINEXRANGE Return X endpoints for line i.
+LINEXRANGE Return X endpoints for line i (NaN if the line is empty).
+
+#### `[xmin, xmax] = computeFullXRange(obj)`
+
+COMPUTEFULLXRANGE Full X span across all lines, normalised.
+  X is sorted, so only endpoints are checked. lineXRange returns
+  NaN for empty lines, which is inert in the min/max below, so a
+  line with no data contributes nothing. With no lines (or all
+  empty) the range stays Inf/-Inf and normalizeFiniteRange coerces
+  it to a valid, strictly increasing interval for render().
 
 #### `onEventMarkerClick_(obj, src, ~)`
 
