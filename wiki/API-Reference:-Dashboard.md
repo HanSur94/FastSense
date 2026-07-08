@@ -2561,6 +2561,10 @@ Sensor-first:
     w = StatusWidget('Title', 'Temp', 'Threshold', t, 'Value', 85);
     w = StatusWidget('Title', 'Temp', 'Threshold', 'temp_hi', 'ValueFcn', @getTemp);
 
+  MonitorTag bound via 'Tag'/'Sensor' (routed to the Threshold/monitor path
+  automatically — its 0/1 alarm signal maps to 'violation'/'ok'):
+    w = StatusWidget('Title', 'Alarm', 'Tag', alarmMonitorTag);
+
   Legacy (still supported):
     w = StatusWidget('Title', 'Pump 1', 'StatusFcn', @() 'ok');
 
