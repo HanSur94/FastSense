@@ -44,11 +44,11 @@ fp2 = FastSense();
 fp2.addLine(x2, y2, 'DisplayName', 'Exponential Growth');
 fp2.addThreshold(100, 'Direction', 'upper', 'ShowViolations', true, ...
     'Label', 'Warning');
-fp2.render();
-
 % Switch Y axis to log scale (can be called before or after render).
+% Setting it before render() lets the axis autoscale directly in log space.
 % Try fp2.setScale('YScale', 'linear') to toggle back.
 fp2.setScale('YScale', 'log');
+fp2.render();
 title(fp2.hAxes, 'setScale — Logarithmic Y Axis');
 fprintf('setScale() demo: Y axis switched to log scale.\n');
 

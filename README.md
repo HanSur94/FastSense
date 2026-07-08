@@ -63,6 +63,9 @@ Everything in FastSense — sensors, machine states, alarms, derived signals —
 Tags carry their own metadata (units, criticality, labels) and live in a shared **`TagRegistry`** so every part of the system — plots, dashboards, event detection, the web bridge — speaks the same language.
 
 ```matlab
+t = linspace(0, 100, 1e5);                          % your sensor's timestamps
+pressure_data = 50 + 8*sin(t/5) + randn(size(t));   % ...and its readings
+
 press = SensorTag('press_a', 'Name', 'Chamber Pressure', 'Units', 'bar');
 press.updateData(t, pressure_data);
 
@@ -92,7 +95,7 @@ d.Theme = 'dark';
 d.addWidget('fastsense', 'Position', [1 1 16 8],  'Tag', press);
 d.addWidget('number',    'Position', [17 1 8 4],  'Tag', press, 'Title', 'Pressure');
 d.addWidget('gauge',     'Position', [17 5 8 4],  'Tag', press, 'Title', 'Live');
-d.addWidget('status',    'Position', [1 9 24 2],  'Threshold', alarm, 'Title', 'Alarm');
+d.addWidget('status',    'Position', [1 9 24 2],  'Tag', alarm, 'Title', 'Alarm');
 d.render();
 
 d.save('process.json');           % JSON-persist
