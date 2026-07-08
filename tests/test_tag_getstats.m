@@ -34,8 +34,8 @@ function test_tag_getstats()
     assert(s.TimeStart == 1,                      'basic TimeStart');        nTests = nTests + 1;
     assert(s.TimeEnd == 5,                        'basic TimeEnd');          nTests = nTests + 1;
     % Field set is exactly the pinned 10, in order.
-    assert(isequal(fieldnames(s), {'N';'Min';'Max';'Mean';'Rms';'Std'; ...
-        'First';'Last';'TimeStart';'TimeEnd'}), 'field set + order');        nTests = nTests + 1;
+    assert(isequal(fieldnames(s), {'N'; 'Min'; 'Max'; 'Mean'; 'Rms'; 'Std'; ...
+        'First'; 'Last'; 'TimeStart'; 'TimeEnd'}), 'field set + order');     nTests = nTests + 1;
     TagRegistry.clear();
 
     % --- NaN exclusion -----------------------------------------------------
