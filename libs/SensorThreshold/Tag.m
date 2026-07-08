@@ -161,6 +161,76 @@ classdef Tag < handle
             Y = Y(iLo:iHi);
         end
 
+        function s = getStats(obj, tStart, tEnd)
+            %GETSTATS One-call statistics summary over the series or a time window.
+            %   s = tag.getStats() summarizes the whole resolved series.
+            %   s = tag.getStats(tStart, tEnd) restricts the reduction to the
+            %   windowed slice (via getXYRange, so every Tag subclass inherits
+            %   this with zero overrides).
+            %
+            %   Returns a struct with fields, in order:
+            %     N         - count of non-NaN numeric samples in the window
+            %     Min       - minimum          (NaNs excluded)
+            %     Max       - maximum          (NaNs excluded)
+            %     Mean      - mean             (NaNs excluded)
+            %     Rms       - sqrt(mean(y.^2)) (NaNs excluded)
+            %     Std       - standard deviation (NaNs excluded)
+            %     First     - first sample of the windowed series (raw; may be NaN)
+            %     Last      - last  sample of the windowed series (raw; may be NaN)
+            %     TimeStart - X(1)   of the window
+            %     TimeEnd   - X(end) of the window
+            %
+            %   The numeric reductions (Min/Max/Mean/Rms/Std) are numeric-only:
+            %   for a non-numeric (cellstr) StateTag series they return NaN while
+            %   N and the time bounds are still reported.
+            %
+            %   Toolbox-free and Octave-safe: NaNs are stripped by masking, not
+            %   via the 'omitnan' flag.
+            %
+            %   See also getXYRange, getXY.
+            if nargin < 3
+                tStart = [];
+                tEnd = [];
+            end
+            [x, y] = obj.getXYRange(tStart, tEnd);
+            x = x(:);
+            y = y(:);
+            if islogical(y)
+                y = double(y);
+            end
+
+            s = struct('N', 0, 'Min', NaN, 'Max', NaN, 'Mean', NaN, ...
+                       'Rms', NaN, 'Std', NaN, 'First', NaN, 'Last', NaN, ...
+                       'TimeStart', NaN, 'TimeEnd', NaN);
+
+            if isempty(x)
+                return;
+            end
+            s.TimeStart = x(1);
+            s.TimeEnd   = x(end);
+
+            if ~isnumeric(y)
+                % Non-numeric (e.g. cellstr StateTag) series: report the sample
+                % count and time bounds only; numeric reductions are undefined.
+                s.N = numel(x);
+                return;
+            end
+
+            s.First = y(1);
+            s.Last  = y(end);
+
+            yv = y(~isnan(y));
+            s.N = numel(yv);
+            if s.N == 0
+                return;
+            end
+            s.Min  = min(yv);
+            s.Max  = max(yv);
+            s.Mean = mean(yv);
+            s.Rms  = sqrt(mean(yv.^2));
+            s.Std  = std(yv);
+        end
+
         function v = valueAt(obj, t) %#ok<STOUT,INUSD>
             %VALUEAT Return scalar value at time t.  Subclass must override.
             error('Tag:notImplemented', 'Subclass must implement valueAt(t).');
