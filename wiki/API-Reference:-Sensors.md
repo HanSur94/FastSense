@@ -36,7 +36,8 @@ Tag is the root of the v2.0 domain hierarchy.  Subclasses
     fromStruct (Static) — reconstruct from struct
 
   Tag Methods (default hooks — override when needed):
-    resolveRefs(registry) — Pass-2 deserialization hook; default no-op
+    resolveRefs(registry)    — Pass-2 deserialization hook; default no-op
+    cumulativeIntegral(...)  — Running trapezoidal integral (concrete convenience)
 
 ### Constructor
 
@@ -76,6 +77,10 @@ GETXYRANGE Return X, Y sliced to the window [tStart, tEnd].
   Default implementation: call getXY() then binary-search-slice.
   Empty/[] bounds return the full series (delegates to getXY()).
   SensorTag overrides this for disk-backed efficiency.
+
+#### `varargout = cumulativeIntegral(obj, varargin)`
+
+CUMULATIVEINTEGRAL Running trapezoidal integral of Y w.r.t. X.
 
 #### `v = valueAt(obj, t)`
 
