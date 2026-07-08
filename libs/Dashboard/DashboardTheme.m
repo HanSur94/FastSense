@@ -105,6 +105,14 @@ function d = getDashboardDefaults(preset)
 
     % Shared defaults across all presets
     d.WidgetBorderWidth    = 1;
+    % Grid breathing room (Phase 1 UI refresh): inter-widget gutters + outer
+    % canvas padding, in normalized units. DashboardLayout.computePosition
+    % consumes GapH/GapV/Padding; DashboardEngine wires these in before
+    % allocatePanels so widgets read as separated cards. DashboardPad is
+    % [left bottom right top].
+    d.WidgetGapH           = 0.006;
+    d.WidgetGapV           = 0.010;
+    d.DashboardPad         = [0.008 0.010 0.008 0.010];
     d.HeaderFontSize       = 14;
     d.WidgetTitleFontSize  = 11;
     % Status colors are now set per-preset above; guard so this shared block
