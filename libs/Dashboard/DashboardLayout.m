@@ -435,6 +435,14 @@ classdef DashboardLayout < handle
                 widget.render(widget.hCellPanel);
             end
 
+            % Phase 2 UI refresh — de-clutter. Hide the floating MATLAB axes
+            % exploration toolbar on every axes this widget just rendered. The
+            % dashboard supplies its own controls (widget button bar + time
+            % navigator), so the redundant per-axes toolbar is pure visual
+            % noise. Central here so it covers all widget types and re-applies
+            % on scroll-realize.
+            DashboardLayout.hideAxesToolbars_(widget.hCellPanel);
+
             widget.markRealized();
             widget.Dirty = false;
         end
@@ -1346,6 +1354,24 @@ classdef DashboardLayout < handle
             x = pp(3) - btnW - offsetFromRight;
             y = pp(4) - btnH - 4;
             set(btn, 'Position', [x y btnW btnH]);
+        end
+
+        function hideAxesToolbars_(root)
+        %HIDEAXESTOOLBARS_ Hide the MATLAB exploration toolbar on all axes under root.
+        %   Walks every axes below the given handle and sets its Toolbar
+        %   Visible = 'off'. Wrapped per-axes in try/catch so an axes without
+        %   a Toolbar (or a deleted handle) never aborts the realize pass.
+            if isempty(root) || ~ishandle(root)
+                return;
+            end
+            axs = findall(root, 'Type', 'axes');
+            for i = 1:numel(axs)
+                try
+                    axs(i).Toolbar.Visible = 'off';
+                catch
+                    % axes has no toolbar / handle went stale — ignore
+                end
+            end
         end
 
     end
