@@ -215,6 +215,7 @@ classdef TestEventViewerExtras < matlab.unittest.TestCase
         % ------------------------------------------------------------- %
 
         function testExportImagePngRoundtrip(testCase)
+            TestEventViewerExtras.assumeExportWorks(testCase);
             [events, sensorData] = TestEventViewerExtras.makeFixtureEvents();
             viewer = EventViewer(events, sensorData);
             testCase.addTeardown(@() TestEventViewerExtras.safeClose(viewer));
@@ -232,6 +233,7 @@ classdef TestEventViewerExtras < matlab.unittest.TestCase
         end
 
         function testExportImageJpegRoundtrip(testCase)
+            TestEventViewerExtras.assumeExportWorks(testCase);
             [events, sensorData] = TestEventViewerExtras.makeFixtureEvents();
             viewer = EventViewer(events, sensorData);
             testCase.addTeardown(@() TestEventViewerExtras.safeClose(viewer));
@@ -285,6 +287,23 @@ classdef TestEventViewerExtras < matlab.unittest.TestCase
     end
 
     methods (Static, Access = private)
+        function assumeExportWorks(testCase)
+            %ASSUMEEXPORTWORKS Skip export round-trips when MATLAB is headless.
+            %   Mirrors TestDashboardToolbarImageExport.assumeExportWorks:
+            %   headless MATLAB (no display / -nodisplay) raises
+            %   "Specified handle is not valid for export" on uipanel/uicontrol
+            %   figures, so the round-trip tests are skipped there. The
+            %   error-path tests (unknownImageFormat, notRendered) fail before
+            %   reaching the export backend and stay active headless.
+            hasDisplay = true;
+            try
+                hasDisplay = logical(feature('ShowFigureWindows'));
+            catch
+            end
+            testCase.assumeTrue(hasDisplay, ...
+                'exportImage needs a display; headless MATLAB rejects uicontrol figures.');
+        end
+
         function [events, sensorData] = makeFixtureEvents()
             e1 = Event(10, 25, 'Temperature', 'warning high', 80, 'upper');
             e1.setStats(95.2, 150, 72, 95.2, 87.3, 88.1, 4.21);
