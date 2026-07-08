@@ -428,26 +428,26 @@ Plans:
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
 
-### Phase 999.2: Tag Analysis Toolkit (BACKLOG)
+### Phase 999.2: Tag Analysis Toolkit ✅ COMPLETE 2026-07-08
 
 **Goal:** Add a toolbox-free, kind-aware analysis API to the `Tag` family (`libs/SensorThreshold/Tag.m` + subclasses) so engineers can compute statistics and derived series directly from any tag without pulling in the Signal Processing / Statistics toolboxes. All additive, backward-compatible, Octave-safe. Build keystone-first — `getStats()` is the shared primitive the rest lean on.
 
 **Source:** GitHub issue triage 2026-07-08 (see `.planning/INBOX-TRIAGE.md`). All 7 issues carry the `approved` label on HanSur94/FastSense; full specs (problem/motivation, proposed API + examples, scope, alternatives) live in each issue body. Dependency graph: `getStats()` (#223) is cited by ~40 downstream open issues — the single highest-leverage item in the backlog.
 **Requirements:** TBD (each GitHub issue body is the working spec — #223/#308/#326/#312/#316/#328/#327)
-**Plans:** 7 plans
+**Plans:** 7/7 plans complete
 
 Plans (build order — keystone first; all methods land in `libs/SensorThreshold/Tag.m`):
-- [ ] 999.2-01-PLAN.md (Wave 1) — #223 `Tag.getStats()` public stats primitive (N/Min/Max/Mean/Rms/Std/First/Last/TimeStart/TimeEnd). KEYSTONE
-- [ ] 999.2-02-PLAN.md (Wave 2, depends 01) — #308 `Tag.resampleUniform(dt)` uniform-grid resample (kind-aware interpolation)
-- [ ] 999.2-03-PLAN.md (Wave 2, depends 01) — #326 `Tag.derivative()` kind-aware rate-of-change series (gradient over getXY)
-- [ ] 999.2-04-PLAN.md (Wave 2, depends 01) — #312 `Tag.movingStat(window, type)` rolling mean/std/max/min/rms/median series
-- [ ] 999.2-05-PLAN.md (Wave 2, depends 01) — #316 `Tag.exceedance(level)` time-above/below-threshold analysis
-- [ ] 999.2-06-PLAN.md (Wave 2, depends 01) — #328 `Tag.crossings(level)` level-crossing times + direction (cycle/period)
-- [ ] 999.2-07-PLAN.md (Wave 2, depends 01) — #327 `Tag.cumulativeIntegral()` trapezoidal totalizer series (running integral)
+- [x] 999.2-01-PLAN.md (Wave 1) — #223 `Tag.getStats()` public stats primitive (N/Min/Max/Mean/Rms/Std/First/Last/TimeStart/TimeEnd). KEYSTONE
+- [x] 999.2-02-PLAN.md (Wave 2, depends 01) — #308 `Tag.resampleUniform(dt)` uniform-grid resample (kind-aware interpolation)
+- [x] 999.2-03-PLAN.md (Wave 2, depends 01) — #326 `Tag.derivative()` kind-aware rate-of-change series (gradient over getXY)
+- [x] 999.2-04-PLAN.md (Wave 2, depends 01) — #312 `Tag.movingStat(window, type)` rolling mean/std/max/min/rms/median series
+- [x] 999.2-05-PLAN.md (Wave 2, depends 01) — #316 `Tag.exceedance(level)` time-above/below-threshold analysis
+- [x] 999.2-06-PLAN.md (Wave 2, depends 01) — #328 `Tag.crossings(level)` level-crossing times + direction (cycle/period)
+- [x] 999.2-07-PLAN.md (Wave 2, depends 01) — #327 `Tag.cumulativeIntegral()` trapezoidal totalizer series (running integral)
 
 > Note: all 7 plans append methods to the single shared file `libs/SensorThreshold/Tag.m`. The six Wave-2 plans are logically independent (star dependency on 01) but share this file — execute-phase must serialize edits to Tag.m across concurrently-running Wave-2 plans (each test file is distinct and never conflicts).
 
-### Phase 999.3: EventViewer image export parity (BACKLOG)
+### Phase 999.3: EventViewer image export parity ✅ COMPLETE 2026-07-08
 
 **Goal:** Give `EventViewer` (`libs/EventDetection/EventViewer.m`) an `exportImage(path)` method that saves the timeline figure as PNG/JPEG, matching the existing `DashboardEngine`/`DetachedMirror` export capability. Additive, backward-compatible; copy the existing single-figure capture backend.
 
@@ -456,7 +456,7 @@ Plans (build order — keystone first; all methods land in `libs/SensorThreshold
 **Plans:** 0 plans
 
 Plans:
-- [ ] #321 `EventViewer.exportImage(path)` — save timeline figure as PNG/JPEG (parity with DashboardEngine)
+- [x] #321 `EventViewer.exportImage(path)` — save timeline figure as PNG/JPEG (parity with DashboardEngine)
 
 ### Phase 1040: Companion Notification Center
 

@@ -57,6 +57,129 @@ classdef EventViewer < handle
             obj.applyFilters();
         end
 
+        function exportImage(obj, filepath, format)
+        %EXPORTIMAGE Save the viewer figure as PNG or JPEG at 150 DPI.
+        %   v.exportImage('events.png')          % format inferred from extension
+        %   v.exportImage('events.png', 'png')
+        %   v.exportImage('events.jpg', 'jpeg')
+        %
+        %   Captures obj.hFigure (the Gantt timeline + event table). Mirrors
+        %   DashboardEngine.exportImage's platform handling: exportapp on
+        %   MATLAB R2024a+, exportgraphics (with print/getframe fallbacks) on
+        %   R2020a-R2023b, print() + stub axes on Octave. On Octave the print()
+        %   builtin does not include uicontrols (documented limitation), so the
+        %   filter popups and toolbar buttons will not appear in the exported
+        %   image on Octave; MATLAB captures them normally.
+        %
+        %   Inputs:
+        %     filepath - destination path. Parent directory must exist.
+        %     format   - 'png' or 'jpeg' (alias 'jpg'). Optional; inferred from
+        %                the file extension if omitted (defaults to 'png').
+        %
+        %   Errors:
+        %     EventViewer:notRendered        - the viewer figure does not exist
+        %     EventViewer:unknownImageFormat - format is not png/jpeg/jpg
+        %     EventViewer:imageWriteFailed   - the export backend raised any error
+        %
+        %   See also DashboardEngine.exportImage.
+
+            if nargin < 3 || isempty(format)
+                [~, ~, ext] = fileparts(filepath);
+                if strcmpi(ext, '.jpg') || strcmpi(ext, '.jpeg')
+                    format = 'jpeg';
+                else
+                    format = 'png';
+                end
+            end
+
+            if isempty(obj.hFigure) || ~ishandle(obj.hFigure)
+                error('EventViewer:notRendered', ...
+                    'exportImage requires an open viewer figure.');
+            end
+
+            switch lower(format)
+                case 'png'
+                    devFlag = '-dpng';
+                case {'jpeg', 'jpg'}
+                    devFlag = '-djpeg';
+                otherwise
+                    error('EventViewer:unknownImageFormat', ...
+                        'Unknown image format ''%s''. Use ''png'' or ''jpeg''.', format);
+            end
+
+            % Backend per platform/version, ported from DashboardEngine.exportImage:
+            %   MATLAB R2024a+       : exportapp (handles UI components)
+            %   MATLAB R2020a-R2023b : exportgraphics -> print -> getframe fallback
+            %   Octave               : print() + hidden stub axes
+            isOctave          = exist('OCTAVE_VERSION', 'builtin') ~= 0;
+            useExportApp      = ~isOctave && exist('exportapp') ~= 0;       %#ok<EXIST>
+            useExportGraphics = ~isOctave && exist('exportgraphics') ~= 0;  %#ok<EXIST>
+
+            % exportgraphics (MATLAB) and print (Octave) only find axes directly
+            % under the figure; insert a hidden 1px stub when none exists.
+            stubAxes = [];
+            if ~useExportApp
+                topLevelChildren = get(obj.hFigure, 'children');
+                hasTopAxes = false;
+                for k = 1:numel(topLevelChildren)
+                    if strcmp(get(topLevelChildren(k), 'type'), 'axes')
+                        hasTopAxes = true;
+                        break;
+                    end
+                end
+                if ~hasTopAxes
+                    stubAxes = axes('Parent', obj.hFigure, ...
+                        'Units', 'pixels', 'Position', [0 0 1 1], ...
+                        'Visible', 'off', 'HitTest', 'off');
+                end
+            end
+
+            % Some MATLAB builds refuse to export an invisible figure; flip
+            % Visible='on' around the call and restore it.
+            origVisible = get(obj.hFigure, 'Visible');
+            needsVisibilityToggle = ~useExportApp && strcmp(origVisible, 'off');
+            if needsVisibilityToggle
+                try set(obj.hFigure, 'Visible', 'on'); catch, end
+            end
+            try
+                if useExportApp
+                    exportapp(obj.hFigure, filepath);
+                elseif useExportGraphics
+                    wrote = false;
+                    try
+                        exportgraphics(obj.hFigure, filepath, ...
+                            'ContentType', 'image', 'Resolution', 150);
+                        wrote = true;
+                    catch
+                    end
+                    if ~wrote
+                        try
+                            print(obj.hFigure, devFlag, '-r150', filepath);
+                            wrote = true;
+                        catch
+                        end
+                    end
+                    if ~wrote
+                        frame = getframe(obj.hFigure);
+                        imwrite(frame.cdata, filepath);
+                    end
+                else
+                    print(obj.hFigure, devFlag, '-r150', filepath);
+                end
+                if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
+            catch ME
+                if ~isempty(stubAxes) && ishandle(stubAxes); delete(stubAxes); end
+                if needsVisibilityToggle
+                    try set(obj.hFigure, 'Visible', origVisible); catch, end
+                end
+                error('EventViewer:imageWriteFailed', ...
+                    'Failed to write image ''%s'': %s', filepath, ME.message);
+            end
+        end
+
         function names = getSensorNames(obj)
             %GETSENSORNAMES Get unique sensor names from events.
             names = unique(arrayfun(@(e) e.SensorName, obj.Events, 'UniformOutput', false));
