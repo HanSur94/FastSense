@@ -428,6 +428,34 @@ Plans:
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
 
+### Phase 999.2: Tag Analysis Toolkit (BACKLOG)
+
+**Goal:** Add a toolbox-free, kind-aware analysis API to the `Tag` family (`libs/SensorThreshold/Tag.m` + subclasses) so engineers can compute statistics and derived series directly from any tag without pulling in the Signal Processing / Statistics toolboxes. All additive, backward-compatible, Octave-safe. Build keystone-first — `getStats()` is the shared primitive the rest lean on.
+
+**Source:** GitHub issue triage 2026-07-08 (see `.planning/INBOX-TRIAGE.md`). All 7 issues carry the `approved` label on HanSur94/FastSense; full specs (problem/motivation, proposed API + examples, scope, alternatives) live in each issue body. Dependency graph: `getStats()` (#223) is cited by ~40 downstream open issues — the single highest-leverage item in the backlog.
+**Requirements:** TBD (each GitHub issue body is the working spec)
+**Plans:** 0 plans
+
+Plans (build order — keystone first):
+- [ ] #223 `Tag.getStats()` — public stats primitive (N/Min/Max/Mean/Rms/Std). KEYSTONE, unblocks ~40 issues
+- [ ] #308 `Tag.resampleUniform(dt)` — resample onto a uniform time grid (kind-aware interpolation)
+- [ ] #326 `Tag.derivative()` — kind-aware rate-of-change series (gradient over getXY)
+- [ ] #312 `Tag.movingStat(window, type)` — rolling moving-average / std / max-min series
+- [ ] #316 `Tag.exceedance(level)` — time-above/below-threshold analysis
+- [ ] #328 `Tag.crossings(level)` — level-crossing times + direction (cycle/period analysis)
+- [ ] #327 `Tag.cumulativeIntegral()` — trapezoidal totalizer series (running integral)
+
+### Phase 999.3: EventViewer image export parity (BACKLOG)
+
+**Goal:** Give `EventViewer` (`libs/EventDetection/EventViewer.m`) an `exportImage(path)` method that saves the timeline figure as PNG/JPEG, matching the existing `DashboardEngine`/`DetachedMirror` export capability. Additive, backward-compatible; copy the existing single-figure capture backend.
+
+**Source:** GitHub issue triage 2026-07-08 (see `.planning/INBOX-TRIAGE.md`). Issue #321 carries `approved` + `good first issue` on HanSur94/FastSense. Low-risk parity win — good starter / parallel-track task.
+**Requirements:** TBD (GitHub issue #321 body is the working spec)
+**Plans:** 0 plans
+
+Plans:
+- [ ] #321 `EventViewer.exportImage(path)` — save timeline figure as PNG/JPEG (parity with DashboardEngine)
+
 ### Phase 1040: Companion Notification Center
 
 **Goal:** Add an acknowledgeable in-app notification inbox to `FastSenseCompanion` — a collapsible right-hand `NotificationCenterPane` (toggled by a toolbar bell + unacked-count badge) that live-lists unacknowledged threshold-violation events from the shared `EventStore` and lets operators acknowledge them (dismiss = `EventStore.acknowledgeEvent`, shared + audited). Predominantly a new UI surface over existing event + acknowledge infrastructure.
