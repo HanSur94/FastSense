@@ -1123,13 +1123,8 @@ classdef FastSense < handle
             set(obj.hAxes, 'XScale', obj.XScale);
             set(obj.hAxes, 'YScale', obj.YScale);
 
-            % --- Compute full X range (X is sorted, just check endpoints) ---
-            xmin = Inf; xmax = -Inf;
-            for i = 1:numel(obj.Lines)
-                [xiMin, xiMax] = obj.lineXRange(i);
-                if xiMin < xmin; xmin = xiMin; end
-                if xiMax > xmax; xmax = xiMax; end
-            end
+            % --- Compute full X range (normalised for empty/degenerate data) ---
+            [xmin, xmax] = obj.computeFullXRange();
 
             % --- Render bands (constant y, full x span, back layer) ---
             for i = 1:numel(obj.Bands)
@@ -1472,6 +1467,11 @@ classdef FastSense < handle
                 yLimLow = ymin - yPad;
                 yLimHigh = ymax + yPad;
             end
+
+            % Mirror the X-range guard for Y: with every line empty the linear
+            % branch above leaves ymin/ymax at Inf/-Inf (the log branch already
+            % falls back to [0.1 1]). Normalise before applying the limits.
+            [yLimLow, yLimHigh] = FastSense.normalizeFiniteRange(yLimLow, yLimHigh);
 
             set(obj.hAxes, 'XLim', [xmin, xmax]);
             set(obj.hAxes, 'YLim', [yLimLow, yLimHigh]);
@@ -2418,14 +2418,38 @@ classdef FastSense < handle
         end
 
         function [xMin, xMax] = lineXRange(obj, i)
-            %LINEXRANGE Return X endpoints for line i.
+            %LINEXRANGE Return X endpoints for line i (NaN if the line is empty).
             if obj.lineOnDisk(i)
                 xMin = obj.Lines(i).DataStore.XMin;
                 xMax = obj.Lines(i).DataStore.XMax;
+            elseif obj.Lines(i).NumPoints == 0
+                % Empty in-memory line — e.g. a tag bound to a real-mode
+                % source that was unreachable, so it holds zero samples.
+                % Indexing X(1)/X(end) would error; NaN is inert in the
+                % min/max comparisons every caller runs, so an empty line
+                % simply contributes nothing to the axis range.
+                xMin = NaN;
+                xMax = NaN;
             else
                 xMin = obj.Lines(i).X(1);
                 xMax = obj.Lines(i).X(end);
             end
+        end
+
+        function [xmin, xmax] = computeFullXRange(obj)
+            %COMPUTEFULLXRANGE Full X span across all lines, normalised.
+            %   X is sorted, so only endpoints are checked. lineXRange returns
+            %   NaN for empty lines, which is inert in the min/max below, so a
+            %   line with no data contributes nothing. With no lines (or all
+            %   empty) the range stays Inf/-Inf and normalizeFiniteRange coerces
+            %   it to a valid, strictly increasing interval for render().
+            xmin = Inf; xmax = -Inf;
+            for i = 1:numel(obj.Lines)
+                [xiMin, xiMax] = obj.lineXRange(i);
+                if xiMin < xmin; xmin = xiMin; end
+                if xiMax > xmax; xmax = xiMax; end
+            end
+            [xmin, xmax] = FastSense.normalizeFiniteRange(xmin, xmax);
         end
 
         function onEventMarkerClick_(obj, src, ~)
@@ -4617,6 +4641,23 @@ classdef FastSense < handle
     % ======================== STATIC HELPERS =============================
     % Persistent registry for linked FastSense groups.
     methods (Static, Access = private)
+        function [lo, hi] = normalizeFiniteRange(lo, hi)
+            %NORMALIZEFINITERANGE Coerce an axis range to a finite, increasing interval.
+            %   [lo, hi] = NORMALIZEFINITERANGE(lo, hi) guarantees a valid axis
+            %   span for set(...,'XLim'/'YLim',...). An empty/all-NaN source
+            %   leaves the accumulated range at Inf/-Inf, and a single shared
+            %   sample collapses lo==hi; both would make bands, thresholds and
+            %   the limit set invalid. Non-finite input normalises to [0 1]; a
+            %   zero-width span is padded symmetrically. The plot renders blank
+            %   — the desired outcome when a real source is empty.
+            if ~(isfinite(lo) && isfinite(hi))
+                lo = 0; hi = 1;
+            elseif lo >= hi
+                pad = max(0.5, abs(hi) * 1e-6);
+                lo = lo - pad; hi = hi + pad;
+            end
+        end
+
         function registry = getLinkRegistry(action, group, obj)
             %GETLINKREGISTRY Persistent registry for linked FastSense instances.
             %   registry = GETLINKREGISTRY(action, group, obj) manages a

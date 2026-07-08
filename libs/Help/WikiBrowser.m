@@ -610,11 +610,11 @@ classdef WikiBrowser < handle
                 return;
             end
             delete(obj.hTocTree_.Children);
-            toc = WikiPageIndex.buildToc(obj.WikiDir);
-            for gi = 1:numel(toc)
+            pageToc = WikiPageIndex.buildToc(obj.WikiDir);
+            for gi = 1:numel(pageToc)
                 groupNode = uitreenode(obj.hTocTree_);
-                groupNode.Text = toc(gi).group;
-                entries = toc(gi).entries;
+                groupNode.Text = pageToc(gi).group;
+                entries = pageToc(gi).entries;
                 for ei = 1:numel(entries)
                     leaf = uitreenode(groupNode);
                     leaf.Text     = entries(ei).title;

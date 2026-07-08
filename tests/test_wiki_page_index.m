@@ -112,11 +112,11 @@ function n = t4_buildtoc_excludes_sidebar(wikiDir)
 %T4_BUILDTOC_EXCLUDES_SIDEBAR _Sidebar.md is filtered out of buildToc
 %   because it is a TOC config artefact (Docsify-style), not a navigable
 %   page.
-    toc = WikiPageIndex.buildToc(wikiDir);
-    for i = 1:numel(toc)
-        for j = 1:numel(toc(i).entries)
-            assert(~strcmp(toc(i).entries(j).filename, '_Sidebar.md'), ...
-                '_Sidebar.md was leaked into TOC group %s', toc(i).group);
+    pageToc = WikiPageIndex.buildToc(wikiDir);
+    for i = 1:numel(pageToc)
+        for j = 1:numel(pageToc(i).entries)
+            assert(~strcmp(pageToc(i).entries(j).filename, '_Sidebar.md'), ...
+                '_Sidebar.md was leaked into TOC group %s', pageToc(i).group);
         end
     end
     n = 1;
@@ -125,27 +125,27 @@ end
 function n = t5_buildtoc_group_order(wikiDir)
 %T5_BUILDTOC_GROUP_ORDER buildToc returns exactly two groups in fixed
 %   order: 'Pages' first, 'API Reference' second.
-    toc = WikiPageIndex.buildToc(wikiDir);
-    assert(numel(toc) == 2, 'expected 2 TOC groups, got %d', numel(toc));
-    assert(strcmp(toc(1).group, 'Pages'), ...
-        'expected group 1 = Pages, got |%s|', toc(1).group);
-    assert(strcmp(toc(2).group, 'API Reference'), ...
-        'expected group 2 = API Reference, got |%s|', toc(2).group);
+    pageToc = WikiPageIndex.buildToc(wikiDir);
+    assert(numel(pageToc) == 2, 'expected 2 TOC groups, got %d', numel(pageToc));
+    assert(strcmp(pageToc(1).group, 'Pages'), ...
+        'expected group 1 = Pages, got |%s|', pageToc(1).group);
+    assert(strcmp(pageToc(2).group, 'API Reference'), ...
+        'expected group 2 = API Reference, got |%s|', pageToc(2).group);
     n = 1;
 end
 
 function n = t6_buildtoc_alphabetical_within_group(wikiDir)
 %T6_BUILDTOC_ALPHABETICAL_WITHIN_GROUP Entries within each group are
 %   sorted alphabetically by pageName (case-insensitive).
-    toc = WikiPageIndex.buildToc(wikiDir);
-    for i = 1:numel(toc)
-        names = cell(1, numel(toc(i).entries));
-        for j = 1:numel(toc(i).entries)
-            names{j} = lower(toc(i).entries(j).pageName);
+    pageToc = WikiPageIndex.buildToc(wikiDir);
+    for i = 1:numel(pageToc)
+        names = cell(1, numel(pageToc(i).entries));
+        for j = 1:numel(pageToc(i).entries)
+            names{j} = lower(pageToc(i).entries(j).pageName);
         end
         sortedNames = sort(names);
         assert(isequal(names, sortedNames), ...
-            'group %s entries are not sorted alphabetically', toc(i).group);
+            'group %s entries are not sorted alphabetically', pageToc(i).group);
     end
     n = 1;
 end

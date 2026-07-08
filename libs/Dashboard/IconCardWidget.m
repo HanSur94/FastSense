@@ -354,10 +354,23 @@ classdef IconCardWidget < DashboardWidget
     methods (Access = private)
         function relayout_(obj)
         %RELAYOUT_ Rebuild pixel-scaled elements on panel resize.
-            if isempty(obj.hPanel) || ~ishandle(obj.hPanel), return; end
-            try DashboardWidget.clearPanelControls(obj.hPanel); catch, end
-            try delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes')); catch, end
-            obj.render(obj.hPanel);
+            % Skip when the panel is gone or mid-teardown: a SizeChangedFcn can
+            % fire while the figure is closing, where the panel still passes
+            % ishandle() but its children (and any axes render() creates) die
+            % under us -> fill()/newplot throws. BeingDeleted catches that;
+            % the try/catch is belt-and-suspenders for the racy window since
+            % this relayout is purely cosmetic.
+            if isempty(obj.hPanel) || ~ishandle(obj.hPanel) || ...
+                    strcmp(get(obj.hPanel, 'BeingDeleted'), 'on')
+                return;
+            end
+            try
+                DashboardWidget.clearPanelControls(obj.hPanel);
+                delete(findobj(obj.hPanel, '-depth', 1, 'Type', 'axes'));
+                obj.render(obj.hPanel);
+            catch
+                % resize raced figure teardown; nothing to relayout.
+            end
         end
 
         function color = resolveIconColor(obj, theme)

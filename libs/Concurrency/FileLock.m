@@ -437,8 +437,8 @@ classdef FileLock < handle
             obj.identity_ = ClusterIdentity.resolve();
             pid           = double(obj.identity_.pid);
             rnd           = sprintf('%06d', randi([0, 999999]));
-            eps           = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
-            tmpBody       = sprintf('%s.tmp.%d.%s.%s', obj.bodyPath_, pid, eps, rnd);
+            stamp         = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
+            tmpBody       = sprintf('%s.tmp.%d.%s.%s', obj.bodyPath_, pid, stamp, rnd);
 
             % Write tentative body to temp file.
             txt = LockFileFormat.encodeBody(obj.identity_, obj.Key);
@@ -487,9 +487,9 @@ classdef FileLock < handle
             %WRITEBODY_ Write the identity body file atomically.
             txt    = LockFileFormat.encodeBody(obj.identity_, obj.Key);
             pid    = double(obj.identity_.pid);
-            eps    = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
+            stamp  = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
             rnd    = sprintf('%06d', randi([0, 999999]));
-            tmpBp  = sprintf('%s.tmp.%d.%s.%s', obj.bodyPath_, pid, eps, rnd);
+            tmpBp  = sprintf('%s.tmp.%d.%s.%s', obj.bodyPath_, pid, stamp, rnd);
             fid    = fopen(tmpBp, 'w');
             if fid < 0
                 % Non-fatal: body write failed; heartbeat will retry.
@@ -534,9 +534,9 @@ classdef FileLock < handle
                 fclose(fid);
                 txt = LockFileFormat.updateHeartbeat(txt);
                 pid = double(obj.identity_.pid);
-                eps = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
+                stamp = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
                 rnd = sprintf('%06d', randi([0, 999999]));
-                tmpBp = sprintf('%s.hb.%d.%s.%s', obj.bodyPath_, pid, eps, rnd);
+                tmpBp = sprintf('%s.hb.%d.%s.%s', obj.bodyPath_, pid, stamp, rnd);
                 fid2 = fopen(tmpBp, 'w');
                 if fid2 < 0; return; end
                 fprintf(fid2, '%s', txt);
