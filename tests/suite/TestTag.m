@@ -733,6 +733,60 @@ classdef TestTag < matlab.unittest.TestCase
                 'Tag:removeOutliersBadWindow');
         end
 
+        % ---- spectrum / dominantFrequency tests (Issue #338) ----
+
+        function testSpectrumDominantBin(testCase)
+            % 10 Hz sine sampled at 100 Hz -> peak at 10 Hz.
+            x = (0:99) / 100;
+            t = SensorTag('sp_sine', 'X', x, 'Y', sin(2 * pi * 10 * x));
+            testCase.verifyEqual(t.dominantFrequency(), 10, 'AbsTol', 1e-9);
+        end
+
+        function testSpectrumAmplitudeAndLength(testCase)
+            x = (0:99) / 100;
+            t = SensorTag('sp_amp', 'X', x, 'Y', 3 * sin(2 * pi * 10 * x));
+            [f, amp] = t.spectrum();
+            testCase.verifyEqual(numel(f), 51, 'floor(N/2)+1 bins');
+            testCase.verifyEqual(numel(amp), 51);
+            [pk, bi] = max(amp);
+            testCase.verifyEqual(f(bi), 10, 'AbsTol', 1e-9);
+            testCase.verifyEqual(pk, 3, 'AbsTol', 1e-6, 'single-sided amplitude ~ A');
+        end
+
+        function testSpectrumSampleRateOverride(testCase)
+            x = (0:99) / 100;
+            t = SensorTag('sp_fs', 'X', x, 'Y', sin(2 * pi * 10 * x));
+            % Claiming Fs=200 doubles the frequency axis: same bin -> 20 Hz.
+            testCase.verifyEqual(t.dominantFrequency('SampleRate', 200), 20, 'AbsTol', 1e-9);
+        end
+
+        function testSpectrumDetrendRemovesDC(testCase)
+            x = (0:99) / 100;
+            t = SensorTag('sp_dc', 'X', x, 'Y', 5 + sin(2 * pi * 10 * x));
+            [~, ampRaw] = t.spectrum();
+            [~, ampDet] = t.spectrum('Detrend', 'mean');
+            testCase.verifyGreaterThan(ampRaw(1), 4, 'DC bin large without detrend');
+            testCase.verifyLessThan(ampDet(1), 1e-6, 'mean-detrend zeroes the DC bin');
+        end
+
+        function testSpectrumTooFewPointsErrors(testCase)
+            t = SensorTag('sp_one', 'X', 1, 'Y', 5);
+            testCase.verifyError(@() t.spectrum(), 'Tag:spectrumTooFewPoints');
+        end
+
+        function testSpectrumNonNumericErrors(testCase)
+            st = StateTag('sp_state', 'X', [1 2 3], 'Y', {'a', 'b', 'c'});
+            testCase.verifyError(@() st.spectrum(), 'Tag:notNumeric');
+        end
+
+        function testSpectrumBadOptionsError(testCase)
+            x = (0:9) / 10;
+            t = SensorTag('sp_bad', 'X', x, 'Y', sin(x));
+            testCase.verifyError(@() t.spectrum('SampleRate', -1), 'Tag:spectrumBadRate');
+            testCase.verifyError(@() t.spectrum('Detrend', 'nope'), 'Tag:spectrumBadDetrend');
+            testCase.verifyError(@() t.spectrum('Bogus', 1), 'Tag:unknownOption');
+        end
+
     end
 end
 

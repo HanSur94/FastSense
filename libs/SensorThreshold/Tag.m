@@ -642,6 +642,123 @@ classdef Tag < handle
             end
         end
 
+        function [f, amp] = spectrum(obj, varargin)
+            %SPECTRUM Single-sided amplitude spectrum via core fft (#338).
+            %   [f, amp] = tag.spectrum() computes the single-sided amplitude
+            %   spectrum of the resolved series. Fs is inferred from the median
+            %   sample spacing of getXY unless given explicitly.
+            %   [f, amp] = tag.spectrum('SampleRate', Fs) overrides Fs (Hz).
+            %   [f, amp] = tag.spectrum('Detrend', true) removes a linear trend
+            %   before the FFT ('mean' removes only the mean; false = none).
+            %
+            %   Returns column vectors: f (0..Fs/2) and amp, with the non-DC,
+            %   non-Nyquist bins doubled so a pure tone of amplitude A reads ~A.
+            %
+            %   Assumes near-uniform sampling (a meaningful FFT requires it). For
+            %   irregular streams, resample first with resampleUniform (#308).
+            %
+            %   Toolbox-free — core fft/abs (NOT the Signal Processing Toolbox).
+            %
+            %   Errors:
+            %     Tag:notNumeric            - non-numeric series
+            %     Tag:spectrumTooFewPoints  - fewer than 2 samples
+            %     Tag:spectrumBadTimebase   - cannot infer a positive SampleRate
+            %     Tag:spectrumBadDetrend    - invalid Detrend value
+            %     Tag:spectrumBadRate       - invalid SampleRate
+            %     Tag:unknownOption         - unrecognized option key
+            fs          = [];
+            detrendMode = 'none';
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:unknownOption', 'spectrum: option "%s" has no value.', char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'SampleRate')
+                    if ~(isnumeric(val) && isscalar(val) && val > 0)
+                        error('Tag:spectrumBadRate', 'SampleRate must be a positive scalar (Hz).');
+                    end
+                    fs = val;
+                elseif strcmpi(key, 'Detrend')
+                    if islogical(val)
+                        if val, detrendMode = 'linear'; else, detrendMode = 'none'; end
+                    elseif ischar(val) || isstring(val)
+                        dv = lower(char(val));
+                        if ~any(strcmp(dv, {'none', 'mean', 'linear'}))
+                            error('Tag:spectrumBadDetrend', 'Detrend must be true/false, ''mean'', or ''linear''.');
+                        end
+                        detrendMode = dv;
+                    else
+                        error('Tag:spectrumBadDetrend', 'Detrend must be true/false, ''mean'', or ''linear''.');
+                    end
+                else
+                    error('Tag:unknownOption', 'spectrum: unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
+            end
+
+            [X, Y] = obj.getXY();
+            X = X(:);
+            Y = Y(:);
+            if islogical(Y), Y = double(Y); end
+            if ~isnumeric(Y)
+                error('Tag:notNumeric', ...
+                    'spectrum requires a numeric series; this tag''s Y is non-numeric.');
+            end
+            ok = ~isnan(X) & ~isnan(Y);
+            X  = X(ok);
+            Y  = Y(ok);
+            nS = numel(Y);
+            if nS < 2
+                error('Tag:spectrumTooFewPoints', ...
+                    'spectrum requires at least 2 samples; got %d.', nS);
+            end
+            if isempty(fs)
+                dt = median(diff(X));
+                if ~(dt > 0)
+                    error('Tag:spectrumBadTimebase', ...
+                        'Cannot infer SampleRate: median sample spacing is not positive.');
+                end
+                fs = 1 / dt;
+            end
+
+            switch detrendMode
+                case 'mean'
+                    Y = Y - mean(Y);
+                case 'linear'
+                    idx = (1:nS).';
+                    p   = polyfit(idx, Y, 1);
+                    Y   = Y - polyval(p, idx);
+                otherwise
+                    % 'none' — leave Y as is
+            end
+
+            yf   = fft(Y);
+            half = floor(nS / 2);
+            amp  = abs(yf(1:half + 1)) / nS;
+            if half >= 1
+                amp(2:end - 1) = 2 * amp(2:end - 1);
+            end
+            f = (0:half).' * fs / nS;
+        end
+
+        function fPeak = dominantFrequency(obj, varargin)
+            %DOMINANTFREQUENCY Frequency of the largest non-DC spectral peak (#338).
+            %   fPeak = tag.dominantFrequency() returns the frequency (Hz) of the
+            %   largest amplitude bin, ignoring DC. Accepts the same options as
+            %   spectrum ('SampleRate', 'Detrend').
+            %
+            %   See also spectrum.
+            [f, amp] = obj.spectrum(varargin{:});
+            if numel(amp) >= 2
+                [~, bi] = max(amp(2:end));
+                fPeak = f(bi + 1);
+            else
+                fPeak = f(1);
+            end
+        end
+
         function [Xu, Yu] = resampleUniform(obj, dt, varargin)
             %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
             %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a
