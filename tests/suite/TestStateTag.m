@@ -264,5 +264,40 @@ classdef TestStateTag < matlab.unittest.TestCase
                 'StateTag:unknownOption');
         end
 
+        % ---- transitions() tests (Issue #342) ----
+
+        function testTransitionsNumeric(testCase)
+            % States 0,0,1,1,2,0 -> changes at samples 3(0->1),5(1->2),6(2->0).
+            t = StateTag('tr_num', 'X', [1 2 3 4 5 6], 'Y', [0 0 1 1 2 0]);
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 3);
+            testCase.verifyEqual([S.Time], [3 5 6]);
+            testCase.verifyEqual([S.FromState], [0 1 2]);
+            testCase.verifyEqual([S.ToState], [1 2 0]);
+        end
+
+        function testTransitionsCellstr(testCase)
+            t = StateTag('tr_str', 'X', [1 5 10], 'Y', {'off', 'running', 'idle'});
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 2);
+            testCase.verifyEqual(S(1).FromState, 'off');
+            testCase.verifyEqual(S(1).ToState, 'running');
+            testCase.verifyEqual(S(2).Time, 10);
+            testCase.verifyEqual(S(2).ToState, 'idle');
+        end
+
+        function testTransitionsConstantIsEmpty(testCase)
+            t = StateTag('tr_const', 'X', [1 2 3], 'Y', [7 7 7]);
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 0);
+            testCase.verifyTrue(isfield(S, 'Time') && isfield(S, 'FromState') && isfield(S, 'ToState'));
+        end
+
+        function testTransitionsEmptyChannel(testCase)
+            t = StateTag('tr_empty');
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 0);
+        end
+
     end
 end

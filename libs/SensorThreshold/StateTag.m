@@ -129,6 +129,54 @@ classdef StateTag < Tag
             k = 'state';
         end
 
+        function S = transitions(obj)
+            %TRANSITIONS Enumerate state changes as a change-point event list (#342).
+            %   S = stateTag.transitions() returns a struct array, one element per
+            %   actual state change (repeated-value samples are skipped), with
+            %   fields:
+            %     Time      - timestamp of the change (X at the change sample)
+            %     FromState - state value immediately before the change
+            %     ToState   - state value at / after the change
+            %   FromState / ToState are numeric or char, matching the tag's Y
+            %   representation. Returns an empty struct with those fields for a
+            %   constant or empty channel.
+            %
+            %   The categorical analog of the numeric family's crossings (#328),
+            %   and the change-point complement to the aggregate stateDurations
+            %   (#258): transitions answer *when / what changed*, durations answer
+            %   *time spent per state*.
+            %
+            %   Toolbox-free — a compare loop over getXY, handling both numeric
+            %   and cellstr Y (via strcmp / isequaln, so a NaN->NaN run is not a
+            %   spurious change).
+            %
+            %   See also getXY, valueAt, getKind.
+            S = struct('Time', {}, 'FromState', {}, 'ToState', {});
+            [X, Y] = obj.getXY();
+            n = numel(X);
+            if n < 2
+                return;
+            end
+            isCellY = iscell(Y);
+            for i = 2:n
+                if isCellY
+                    changed = ~strcmp(Y{i}, Y{i - 1});
+                else
+                    changed = ~isequaln(Y(i), Y(i - 1));
+                end
+                if ~changed
+                    continue;
+                end
+                if isCellY
+                    S(end + 1) = struct('Time', X(i), ...
+                        'FromState', Y{i - 1}, 'ToState', Y{i}); %#ok<AGROW>
+                else
+                    S(end + 1) = struct('Time', X(i), ...
+                        'FromState', Y(i - 1), 'ToState', Y(i)); %#ok<AGROW>
+                end
+            end
+        end
+
         function s = toStruct(obj)
             %TOSTRUCT Serialize StateTag to a plain struct.
             %   Wraps cellstr Labels and cellstr Y once via {...} to survive
