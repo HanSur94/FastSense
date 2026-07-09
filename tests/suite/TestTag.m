@@ -668,6 +668,71 @@ classdef TestTag < matlab.unittest.TestCase
             testCase.verifyError(@() a.lagCorrelation(42), 'Tag:correlateBadOther');
         end
 
+        % ---- removeOutliers tests (Issue #343) ----
+
+        function testRemoveOutliersHampelDetectsSpike(testCase)
+            t = SensorTag('ro_h', 'X', 1:9, 'Y', [1 1 1 1 100 1 1 1 1]);
+            [cleanY, idx] = t.removeOutliers();   % hampel, Fill nan
+            testCase.verifyEqual(idx, 5, 'spike at index 5 flagged');
+            testCase.verifyTrue(isnan(cleanY(5)), 'offender NaN-filled');
+            testCase.verifyEqual(cleanY([1 9]), [1 1], 'non-outliers untouched');
+        end
+
+        function testRemoveOutliersNonMutating(testCase)
+            t = SensorTag('ro_nm', 'X', 1:5, 'Y', [1 1 50 1 1]);
+            t.removeOutliers();
+            [~, Y] = t.getXY();
+            testCase.verifyEqual(Y, [1 1 50 1 1], 'tag Y is unchanged');
+        end
+
+        function testRemoveOutliersFillLinear(testCase)
+            t = SensorTag('ro_lin', 'X', 1:5, 'Y', [1 2 100 4 5]);
+            cleanY = t.removeOutliers('Fill', 'linear');
+            testCase.verifyEqual(cleanY(3), 3, 'AbsTol', 1e-12, 'linear interp across spike');
+        end
+
+        function testRemoveOutliersFillPrevious(testCase)
+            t = SensorTag('ro_prev', 'X', 1:5, 'Y', [1 2 100 4 5]);
+            cleanY = t.removeOutliers('Fill', 'previous');
+            testCase.verifyEqual(cleanY(3), 2, 'carries previous good value');
+        end
+
+        function testRemoveOutliersFillRemoveShrinks(testCase)
+            t = SensorTag('ro_rm', 'X', 1:5, 'Y', [1 2 100 4 5]);
+            [cleanX, cleanY, idx] = t.removeOutliers('Fill', 'remove');
+            testCase.verifyEqual(numel(cleanY), 4, 'offender dropped');
+            testCase.verifyEqual(numel(cleanX), 4, 'cleanX shrinks to match');
+            testCase.verifyEqual(idx, 3);
+            testCase.verifyFalse(any(cleanY == 100));
+        end
+
+        function testRemoveOutliersIqrMethod(testCase)
+            t = SensorTag('ro_iqr', 'X', 1:7, 'Y', [10 11 9 10 12 11 500]);
+            [~, idx] = t.removeOutliers('Method', 'iqr');
+            testCase.verifyEqual(idx, 7, 'gross outlier flagged by IQR fence');
+        end
+
+        function testRemoveOutliersZscoreMethod(testCase)
+            t = SensorTag('ro_z', 'X', 1:9, 'Y', [1 2 1 3 2 50 2 1 3]);
+            [~, idx] = t.removeOutliers('Method', 'zscore');
+            testCase.verifyEqual(idx, 6, 'modified z-score flags the 50');
+        end
+
+        function testRemoveOutliersNonNumericErrors(testCase)
+            st = StateTag('ro_state', 'X', [1 2 3], 'Y', {'a', 'b', 'c'});
+            testCase.verifyError(@() st.removeOutliers(), 'Tag:notNumeric');
+        end
+
+        function testRemoveOutliersBadOptionsError(testCase)
+            t = SensorTag('ro_bad', 'X', 1:5, 'Y', [1 2 3 4 5]);
+            testCase.verifyError(@() t.removeOutliers('Method', 'nope'), ...
+                'Tag:removeOutliersBadMethod');
+            testCase.verifyError(@() t.removeOutliers('Fill', 'nope'), ...
+                'Tag:removeOutliersBadFill');
+            testCase.verifyError(@() t.removeOutliers('Window', 2.5), ...
+                'Tag:removeOutliersBadWindow');
+        end
+
     end
 end
 

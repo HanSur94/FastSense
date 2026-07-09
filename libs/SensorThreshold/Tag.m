@@ -487,6 +487,161 @@ classdef Tag < handle
             end
         end
 
+        function varargout = removeOutliers(obj, varargin)
+            %REMOVEOUTLIERS Toolbox-free despike / outlier rejection (#343).
+            %   [cleanY, outlierIdx]        = tag.removeOutliers(...)
+            %   [cleanX, cleanY, outlierIdx] = tag.removeOutliers(...)
+            %
+            %   Non-mutating: reads getXY, flags amplitude outliers with a robust
+            %   test, and returns a cleaned copy of the series plus the detected
+            %   outlier indices (into the original series). The tag is unchanged.
+            %
+            %   Name-value options:
+            %     'Method'    'hampel' (rolling median + MAD, default) | 'iqr'
+            %                 (Tukey fence) | 'zscore' (modified z-score)
+            %     'Window'    odd sample count for the hampel rolling median (default 7)
+            %     'Threshold' MAD / sigma / fence multiplier (default 3)
+            %     'Fill'      'nan' (default) | 'linear' | 'previous' | 'remove'
+            %
+            %   Fill semantics: 'nan' blanks offenders; 'linear' interpolates them
+            %   from surrounding good samples; 'previous' carries the last good
+            %   value; 'remove' drops them (cleanX shrinks to match). Existing NaN
+            %   input samples are never counted as outliers.
+            %
+            %   Numeric-Y tags only — a StateTag categorical series raises
+            %   Tag:notNumeric.
+            %
+            %   Toolbox-free (median/MAD + interp1) — deliberately NOT
+            %   isoutlier/filloutliers (absent in Octave).
+            %
+            %   Errors:
+            %     Tag:notNumeric              - non-numeric series
+            %     Tag:removeOutliersBadMethod - unknown Method
+            %     Tag:removeOutliersBadFill   - unknown Fill
+            %     Tag:removeOutliersBadWindow - Window not a positive integer
+            %     Tag:unknownOption           - unrecognized option key
+            method    = 'hampel';
+            window    = 7;
+            threshold = 3;
+            fillMode  = 'nan';
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:unknownOption', 'removeOutliers: option "%s" has no value.', char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'Method')
+                    method = lower(char(val));
+                elseif strcmpi(key, 'Window')
+                    window = val;
+                elseif strcmpi(key, 'Threshold')
+                    threshold = val;
+                elseif strcmpi(key, 'Fill')
+                    fillMode = lower(char(val));
+                else
+                    error('Tag:unknownOption', 'removeOutliers: unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
+            end
+            if ~(isnumeric(window) && isscalar(window) && window >= 1 && mod(window, 1) == 0)
+                error('Tag:removeOutliersBadWindow', 'Window must be a positive integer.');
+            end
+
+            [X, Y] = obj.getXY();
+            X = X(:).';
+            Y = Y(:).';
+            if islogical(Y), Y = double(Y); end
+            if ~isnumeric(Y)
+                error('Tag:notNumeric', ...
+                    'removeOutliers requires a numeric series; this tag''s Y is non-numeric.');
+            end
+            n = numel(Y);
+            mask = false(1, n);
+
+            switch method
+                case 'hampel'
+                    half = floor(window / 2);
+                    for i = 1:n
+                        if isnan(Y(i)), continue; end
+                        lo = max(1, i - half);
+                        hi = min(n, i + half);
+                        w  = Y(lo:hi);
+                        w  = w(~isnan(w));
+                        if numel(w) < 2, continue; end
+                        med   = median(w);
+                        sigma = 1.4826 * median(abs(w - med));
+                        if sigma > 0
+                            mask(i) = abs(Y(i) - med) > threshold * sigma;
+                        else
+                            % Zero spread in the window: any deviation from the
+                            % local median is a spike (MAD collapses to 0 when
+                            % most of the window shares one value).
+                            mask(i) = abs(Y(i) - med) > 0;
+                        end
+                    end
+                case 'iqr'
+                    ys = sort(Y(~isnan(Y)));
+                    m  = numel(ys);
+                    if m >= 2
+                        i1 = 25 / 100 * (m - 1) + 1;
+                        i3 = 75 / 100 * (m - 1) + 1;
+                        q1 = ys(floor(i1)) + (i1 - floor(i1)) * (ys(ceil(i1)) - ys(floor(i1)));
+                        q3 = ys(floor(i3)) + (i3 - floor(i3)) * (ys(ceil(i3)) - ys(floor(i3)));
+                        iqrv = q3 - q1;
+                        mask = ~isnan(Y) & (Y < q1 - threshold * iqrv | Y > q3 + threshold * iqrv);
+                    end
+                case 'zscore'
+                    yv = Y(~isnan(Y));
+                    if ~isempty(yv)
+                        med  = median(yv);
+                        madv = median(abs(yv - med));
+                        if madv > 0
+                            mz   = 0.6745 * (Y - med) / madv;
+                            mask = ~isnan(Y) & (abs(mz) > threshold);
+                        end
+                    end
+                otherwise
+                    error('Tag:removeOutliersBadMethod', ...
+                        'Unknown Method "%s". Use hampel | iqr | zscore.', method);
+            end
+
+            cleanX = X;
+            cleanY = Y;
+            switch fillMode
+                case 'nan'
+                    cleanY(mask) = NaN;
+                case 'remove'
+                    cleanX = X(~mask);
+                    cleanY = Y(~mask);
+                case 'linear'
+                    cleanY(mask) = NaN;
+                    good = ~mask & ~isnan(Y);
+                    if any(mask) && sum(good) >= 2
+                        cleanY(mask) = interp1(X(good), Y(good), X(mask), 'linear');
+                    end
+                case 'previous'
+                    last = NaN;
+                    for i = 1:n
+                        if mask(i)
+                            cleanY(i) = last;
+                        elseif ~isnan(Y(i))
+                            last = Y(i);
+                        end
+                    end
+                otherwise
+                    error('Tag:removeOutliersBadFill', ...
+                        'Unknown Fill "%s". Use nan | linear | previous | remove.', fillMode);
+            end
+            outlierIdx = find(mask);
+
+            if nargout >= 3
+                varargout = {cleanX, cleanY, outlierIdx};
+            else
+                varargout = {cleanY, outlierIdx};
+            end
+        end
+
         function [Xu, Yu] = resampleUniform(obj, dt, varargin)
             %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
             %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a
