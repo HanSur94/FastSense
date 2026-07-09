@@ -120,6 +120,74 @@ classdef TestEventStoreRw < matlab.unittest.TestCase
             testCase.verifyError(@() store.getEvent('no-such-id'), ...
                 'EventStore:unknownEventId');
         end
+
+        % ---- Issue #354: removeEvent(id) / removeEvents(ids) ----
+
+        function testRemoveEventDropsOne(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.5, 'a', 'HH', 100, 'upper');
+            ev2 = Event(now-0.3, now-0.1, 'b', 'LL', 10, 'lower');
+            store.append(ev1);
+            store.append(ev2);
+            n = store.removeEvent(ev1.Id);
+            testCase.verifyEqual(n, 1, 'returns count removed');
+            testCase.verifyEqual(store.numEvents(), 1, 'one event left');
+            testCase.verifyEqual(store.getEvent(ev2.Id).Id, ev2.Id, 'survivor intact');
+        end
+
+        function testRemoveEventUnknownIdThrows(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(now, now+0.01, 'x', 'H', 50, 'upper'));
+            testCase.verifyError(@() store.removeEvent('no-such-id'), ...
+                'EventStore:unknownEventId');
+        end
+
+        function testRemoveEventsBulkSkipsUnknown(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.9, 'a', 'HH', 1, 'upper');
+            ev2 = Event(now-0.8, now-0.7, 'b', 'LL', 2, 'lower');
+            ev3 = Event(now-0.6, now-0.5, 'c', 'HH', 3, 'upper');
+            store.append(ev1); store.append(ev2); store.append(ev3);
+            n = store.removeEvents({ev1.Id, 'ghost', ev3.Id});
+            testCase.verifyEqual(n, 2, 'only the two known ids removed');
+            testCase.verifyEqual(store.numEvents(), 1);
+            testCase.verifyEqual(store.getEvents().Id, ev2.Id, 'ev2 survives');
+        end
+
+        function testRemoveEventCascadesBindingDetach(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            EventBinding.clear();
+            testCase.addTeardown(@() EventBinding.clear());
+            store = EventStore(f);
+            ev = Event(now, now+0.01, 'a', 'H', 50, 'upper');
+            store.append(ev);
+            EventBinding.attach(ev.Id, 'tagA');
+            testCase.verifyEqual(numel(EventBinding.getTagKeysForEvent(ev.Id)), 1, ...
+                'binding present before removal');
+            store.removeEvent(ev.Id);
+            testCase.verifyEmpty(EventBinding.getTagKeysForEvent(ev.Id), ...
+                'binding detached after removal');
+        end
+
+        function testRemoveEventRoundTripsReducedSet(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.5, 'a', 'HH', 100, 'upper');
+            ev2 = Event(now-0.3, now-0.1, 'b', 'LL', 10, 'lower');
+            store.append(ev1); store.append(ev2);
+            store.removeEvent(ev1.Id);
+            store.save();
+            data = load(f);
+            testCase.verifyEqual(numel(data.events), 1, 'reduced set persisted');
+        end
     end
 
     methods (Static, Access = private)

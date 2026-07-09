@@ -193,6 +193,93 @@ classdef EventStore < handle
                 'Event id ''%s'' not found in store.', eventId);
         end
 
+        function n = removeEvents(obj, ids)
+            %REMOVEEVENTS Remove events by Id (bulk, lenient). Returns count removed.
+            %   n = es.removeEvents(ids) drops every in-memory event whose .Id is
+            %   in ids (char, string, string-array, or cell of ids) from events_,
+            %   and returns how many were actually removed. Unknown ids are
+            %   skipped silently (lenient bulk semantics).
+            %
+            %   Cascade: for each removed event, EventBinding.detach(id) unwires
+            %   its tag bindings, and (single-user mode) its ack records in acks_
+            %   are dropped so no dangling ack survives.
+            %
+            %   Like closeEvent, this does NOT auto-save() — the caller decides
+            %   when to persist (Pitfall 2).
+            %
+            %   See also removeEvent, getEvent, closeEvent, EventBinding.detach.
+            n = 0;
+            if nargin < 2 || isempty(ids)
+                return;
+            end
+            if ischar(ids)
+                ids = {ids};
+            elseif isstring(ids)
+                ids = cellstr(ids(:).');
+            elseif ~iscell(ids)
+                error('EventStore:invalidEventId', ...
+                    'ids must be a char, string, string array, or cell of event ids.');
+            end
+            ids = cellfun(@char, ids(:).', 'UniformOutput', false);
+
+            if isempty(obj.events_)
+                return;
+            end
+            keep = true(1, numel(obj.events_));
+            removedIds = {};
+            for i = 1:numel(obj.events_)
+                ev = obj.events_(i);
+                evId = '';
+                if isa(ev, 'Event'),                       evId = ev.Id;
+                elseif isstruct(ev) && isfield(ev, 'Id'),  evId = ev.Id;
+                end
+                if ~isempty(evId) && any(strcmp(evId, ids))
+                    keep(i) = false;
+                    removedIds{end+1} = evId; %#ok<AGROW>
+                end
+            end
+            obj.events_ = obj.events_(keep);
+            n = numel(removedIds);
+
+            % Cascade 1: unwire tag bindings (best-effort — a binding-registry
+            % hiccup must not abort the removal that already happened).
+            for i = 1:numel(removedIds)
+                try
+                    EventBinding.detach(removedIds{i});
+                catch
+                    % best-effort detach
+                end
+            end
+
+            % Cascade 2: drop single-user ack records for the removed events.
+            if n > 0 && ~obj.IsClusterMode_ && ~isempty(obj.acks_)
+                ackKeep = true(1, numel(obj.acks_));
+                for i = 1:numel(obj.acks_)
+                    if any(strcmp(obj.acks_(i).eventId, removedIds))
+                        ackKeep(i) = false;
+                    end
+                end
+                obj.acks_ = obj.acks_(ackKeep);
+            end
+        end
+
+        function n = removeEvent(obj, id)
+            %REMOVEEVENT Remove one event by Id. Returns count removed (0 or 1).
+            %   n = es.removeEvent(id) removes the single event whose .Id == id,
+            %   cascading binding + ack cleanup exactly as removeEvents. Unlike
+            %   the lenient bulk form, a missing id is a hard error
+            %   (EventStore:unknownEventId), uniform with acknowledgeEvent /
+            %   closeEvent / getEvent.
+            %
+            %   See also removeEvents, getEvent, closeEvent.
+            id = char(id);
+            n  = obj.removeEvents({id});
+            if n == 0
+                error('EventStore:unknownEventId', ...
+                    'Event id ''%s'' not found in store.', id);
+            end
+        end
+
         function events = getEventsForTag(obj, tagKey)
         %GETEVENTSFORTAG Return events bound to tagKey via EventBinding + carrier fallback.
         %   Primary path: uses EventBinding.getEventsForTag for events
