@@ -456,6 +456,101 @@ classdef TestTag < matlab.unittest.TestCase
             testCase.verifyError(@() t.percentile(-1),  'Tag:invalidPercentile');
         end
 
+        % ---- findPeaks tests (Issue #329) ----
+
+        function testFindPeaksSingle(testCase)
+            t = SensorTag('fp_one', 'X', 1:5, 'Y', [0 1 3 1 0]);
+            p = t.findPeaks();
+            testCase.verifyEqual(p.count, 1);
+            testCase.verifyEqual(p.times, 3, 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.values, 3, 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.prominences, 3, 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.polarity, 1);
+        end
+
+        function testFindPeaksMultipleCountAndIntervals(testCase)
+            t = SensorTag('fp_multi', 'X', 1:7, 'Y', [0 2 0 4 0 1 0]);
+            p = t.findPeaks();
+            testCase.verifyEqual(p.count, 3);
+            testCase.verifyEqual(p.times, [2 4 6], 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.values, [2 4 1], 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.intervals, [2 2], 'AbsTol', 1e-12);
+        end
+
+        function testFindPeaksProminenceFilter(testCase)
+            t = SensorTag('fp_prom', 'X', 1:7, 'Y', [0 2 0 4 0 1 0]);
+            p = t.findPeaks('MinProminence', 3);
+            testCase.verifyEqual(p.count, 1, 'only the prom-4 peak survives');
+            testCase.verifyEqual(p.times, 4, 'AbsTol', 1e-12);
+        end
+
+        function testFindPeaksSeparationMerge(testCase)
+            % Two peaks 1 x-unit apart; MinSeparation 2 keeps the more prominent.
+            t = SensorTag('fp_sep', 'X', 1:6, 'Y', [0 2 0 5 0 0]);
+            p = t.findPeaks('MinSeparation', 3);
+            testCase.verifyEqual(p.count, 1);
+            testCase.verifyEqual(p.times, 4, 'AbsTol', 1e-12, 'keeps prom-5 peak at t=4');
+        end
+
+        function testFindPeaksFlatTopPlateau(testCase)
+            t = SensorTag('fp_flat', 'X', 1:7, 'Y', [0 1 2 2 2 1 0]);
+            p = t.findPeaks();
+            testCase.verifyEqual(p.count, 1, 'one peak per plateau');
+            testCase.verifyEqual(p.values, 2, 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.times, 4, 'AbsTol', 1e-12, 'plateau midpoint');
+        end
+
+        function testFindPeaksMinimaPolarity(testCase)
+            t = SensorTag('fp_min', 'X', 1:5, 'Y', [0 -1 -3 -1 0]);
+            p = t.findPeaks('Polarity', 'min');
+            testCase.verifyEqual(p.count, 1);
+            testCase.verifyEqual(p.times, 3, 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.values, -3, 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.prominences, 3, 'AbsTol', 1e-12, 'positive depth');
+            testCase.verifyEqual(p.polarity, -1);
+        end
+
+        function testFindPeaksBothPolarity(testCase)
+            t = SensorTag('fp_both', 'X', 1:5, 'Y', [0 3 0 -3 0]);
+            p = t.findPeaks('Polarity', 'both');
+            testCase.verifyEqual(p.count, 2);
+            testCase.verifyEqual(p.times, [2 4], 'AbsTol', 1e-12);
+            testCase.verifyEqual(p.polarity, [1 -1]);
+        end
+
+        function testFindPeaksNaNGap(testCase)
+            t = SensorTag('fp_nan', 'X', 1:7, 'Y', [0 2 0 NaN 0 3 0]);
+            p = t.findPeaks();
+            testCase.verifyEqual(p.count, 2, 'NaN splits the series into segments');
+            testCase.verifyEqual(p.times, [2 6], 'AbsTol', 1e-12);
+        end
+
+        function testFindPeaksRangeSubset(testCase)
+            t = SensorTag('fp_rng', 'X', 1:7, 'Y', [0 2 0 4 0 1 0]);
+            p = t.findPeaks('Range', [3 7]);
+            testCase.verifyTrue(all(p.times >= 3 & p.times <= 7));
+            testCase.verifyTrue(ismember(4, p.times), 'peak at t=4 within window');
+        end
+
+        function testFindPeaksTwoOutForm(testCase)
+            t = SensorTag('fp_2out', 'X', 1:7, 'Y', [0 2 0 4 0 1 0]);
+            [tt, vv] = t.findPeaks();
+            testCase.verifyEqual(tt, [2 4 6], 'AbsTol', 1e-12);
+            testCase.verifyEqual(vv, [2 4 1], 'AbsTol', 1e-12);
+        end
+
+        function testFindPeaksUnknownOptionErrors(testCase)
+            t = SensorTag('fp_bad', 'X', 1:5, 'Y', [0 1 3 1 0]);
+            testCase.verifyError(@() t.findPeaks('Bogus', 1), 'Tag:unknownOption');
+            testCase.verifyError(@() t.findPeaks('Polarity', 'sideways'), ...
+                'Tag:findPeaksBadOption');
+        end
+
+        function testFindPeaksDiscreteWarns(testCase)
+            st = StateTag('fp_disc', 'X', 1:5, 'Y', [0 1 3 1 0]);
+            testCase.verifyWarning(@() st.findPeaks(), 'Tag:findPeaksOnDiscrete');
+        end
+
     end
 end
 

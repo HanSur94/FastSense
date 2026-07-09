@@ -707,6 +707,118 @@ classdef Tag < handle
             varargout = {c};
         end
 
+        function varargout = findPeaks(obj, varargin)
+            %FINDPEAKS Local maxima/minima with prominence — toolbox-free (#329).
+            %   p = tag.findPeaks()                     all local maxima
+            %   p = tag.findPeaks('MinProminence', 2)   reject peaks < 2 above baseline
+            %   p = tag.findPeaks('MinSeparation', 0.5) merge peaks closer than 0.5 (x-units)
+            %   p = tag.findPeaks('Polarity', 'min')    troughs instead of peaks
+            %   p = tag.findPeaks('Polarity', 'both')   peaks and troughs
+            %   p = tag.findPeaks('Range', [t0 t1])     within a time window
+            %   [t, v] = tag.findPeaks()                2-out: peak times + values
+            %
+            %   Output struct p (all row vectors, sorted by time):
+            %     times       - peak/trough instants (tag X units)
+            %     values      - Y at each extremum
+            %     prominences - height above baseline (descend-to-higher-ground rule);
+            %                   for troughs this is the positive depth below baseline
+            %     polarity    - +1 for a maximum, -1 for a minimum
+            %     count       - numel(times)
+            %     intervals   - diff(times), for immediate cycle/frequency analysis
+            %
+            %   Detection: a maximum is a strict rise into, then strict fall out of,
+            %   a sample (or a flat top plateau, which reports one peak). Prominence
+            %   walks left/right to the nearest strictly-higher sample (or the series
+            %   edge) and subtracts the higher of the two intervening valley minima.
+            %   Minima are the maxima of -Y. MinSeparation greedily keeps the most
+            %   prominent peak in each neighborhood.
+            %
+            %   NaN policy: NaNs split the series into segments; extrema are found
+            %   within segments only (consistent with derivative/crossings). A
+            %   discrete StateTag warns Tag:findPeaksOnDiscrete.
+            %
+            %   Toolbox-free — NOT the Signal Processing Toolbox findpeaks.
+            %
+            %   Errors:
+            %     Tag:findPeaksBadOption - bad MinProminence/MinSeparation/Polarity
+            %     Tag:unknownOption      - unrecognized option key
+            %     Tag:notNumeric         - non-numeric (cellstr) series
+            %
+            %   See also crossings, derivative, movingStat, getXY.
+            minProm  = 0;
+            minSep   = 0;
+            polarity = 'max';
+            rangeVal = [];
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:danglingOption', 'findPeaks: option "%s" has no value.', char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'MinProminence')
+                    if ~(isnumeric(val) && isscalar(val) && val >= 0)
+                        error('Tag:findPeaksBadOption', 'MinProminence must be a nonnegative scalar.');
+                    end
+                    minProm = val;
+                elseif strcmpi(key, 'MinSeparation')
+                    if ~(isnumeric(val) && isscalar(val) && val >= 0)
+                        error('Tag:findPeaksBadOption', 'MinSeparation must be a nonnegative scalar.');
+                    end
+                    minSep = val;
+                elseif strcmpi(key, 'Polarity')
+                    if ~any(strcmpi(val, {'max', 'min', 'both'}))
+                        error('Tag:findPeaksBadOption', 'Polarity must be max, min, or both.');
+                    end
+                    polarity = lower(val);
+                elseif strcmpi(key, 'Range')
+                    rangeVal = obj.parseRange_(val);
+                else
+                    error('Tag:unknownOption', 'findPeaks: unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
+            end
+
+            [X, Y] = obj.getSeries_(rangeVal);
+            if islogical(Y), Y = double(Y); end
+            if ~isnumeric(Y)
+                error('Tag:notNumeric', ...
+                    'findPeaks requires a numeric series; this tag''s Y is non-numeric.');
+            end
+            if obj.isDiscreteKind_()
+                warning('Tag:findPeaksOnDiscrete', ...
+                    'findPeaks() on a discrete (%s) tag treats step transitions as extrema.', ...
+                    obj.getKind());
+            end
+
+            times = []; values = []; proms = []; polv = [];
+            if any(strcmp(polarity, {'max', 'both'}))
+                [tM, vM, pM] = Tag.detectExtrema_(X, Y, minProm, minSep);
+                times = [times, tM]; values = [values, vM]; proms = [proms, pM];
+                polv  = [polv, ones(1, numel(tM))];
+            end
+            if any(strcmp(polarity, {'min', 'both'}))
+                [tN, vN, pN] = Tag.detectExtrema_(X, -Y, minProm, minSep);
+                times = [times, tN]; values = [values, -vN]; proms = [proms, pN];
+                polv  = [polv, -ones(1, numel(tN))];
+            end
+            [times, srt] = sort(times);
+            values = values(srt); proms = proms(srt); polv = polv(srt);
+
+            if nargout >= 2
+                varargout = {times, values};
+                return;
+            end
+            p = struct();
+            p.times       = times;
+            p.values      = values;
+            p.prominences = proms;
+            p.polarity    = polv;
+            p.count       = numel(times);
+            p.intervals   = diff(times);
+            varargout = {p};
+        end
+
         function s = exceedance(obj, level, varargin)
             %EXCEEDANCE Time-above/below-threshold analysis (#316).
             %   s = tag.exceedance(level) analyses time where Y > level.
@@ -1130,6 +1242,91 @@ classdef Tag < handle
                 k = k + 2;
             end
         end
+    end
+
+    methods (Static, Access = private)
+
+        function [times, values, proms] = detectExtrema_(X, Y, minProm, minSep)
+            %DETECTEXTREMA_ Local maxima of Y over X — toolbox-free (#329 helper).
+            %   NaNs split (X,Y) into maximal segments; within each segment a
+            %   maximum is a strict rise into, then strict fall out of, a sample
+            %   or flat-top plateau (one peak per plateau, reported at its
+            %   representative sample). Prominence = value - max(leftValleyMin,
+            %   rightValleyMin), where each side descends to the nearest strictly
+            %   higher sample or the series edge. Then applies MinProminence and a
+            %   greedy MinSeparation merge (keep the most prominent). Returns row
+            %   vectors. Call with (X, -Y, ...) to obtain minima.
+            times = []; values = []; proms = [];
+            n = numel(Y);
+            valid = ~isnan(Y);
+            k = 1;
+            while k <= n
+                if ~valid(k)
+                    k = k + 1;
+                    continue;
+                end
+                j = k;
+                while j < n && valid(j + 1)
+                    j = j + 1;
+                end
+                Xs = X(k:j);
+                Ys = Y(k:j);
+                m = numel(Ys);
+                i = 2;
+                while i <= m - 1
+                    if Ys(i) > Ys(i - 1)
+                        jj = i;
+                        while jj < m && Ys(jj + 1) == Ys(i)
+                            jj = jj + 1;
+                        end
+                        if jj < m && Ys(jj + 1) < Ys(i)
+                            rep = i + floor((jj - i) / 2);
+                            vp  = Ys(i);
+                            L = rep;
+                            while L > 1 && Ys(L - 1) <= vp
+                                L = L - 1;
+                            end
+                            R = rep;
+                            while R < m && Ys(R + 1) <= vp
+                                R = R + 1;
+                            end
+                            base = max(min(Ys(L:rep)), min(Ys(rep:R)));
+                            times(end + 1)  = Xs(rep);   %#ok<AGROW>
+                            values(end + 1) = vp;        %#ok<AGROW>
+                            proms(end + 1)  = vp - base; %#ok<AGROW>
+                            i = jj + 1;
+                            continue;
+                        else
+                            i = jj + 1;
+                            continue;
+                        end
+                    end
+                    i = i + 1;
+                end
+                k = j + 1;
+            end
+
+            if minProm > 0 && ~isempty(proms)
+                keep = proms >= minProm;
+                times = times(keep); values = values(keep); proms = proms(keep);
+            end
+
+            if minSep > 0 && numel(times) > 1
+                [~, order] = sort(proms, 'descend');
+                keptMask  = false(1, numel(times));
+                keptTimes = [];
+                for idx = order
+                    if isempty(keptTimes) || all(abs(keptTimes - times(idx)) >= minSep)
+                        keptMask(idx)      = true;
+                        keptTimes(end + 1) = times(idx); %#ok<AGROW>
+                    end
+                end
+                times = times(keptMask); values = values(keptMask); proms = proms(keptMask);
+                [times, srt] = sort(times);
+                values = values(srt); proms = proms(srt);
+            end
+        end
+
     end
 
     methods (Hidden)
