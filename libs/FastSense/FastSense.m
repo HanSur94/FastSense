@@ -84,6 +84,8 @@ classdef FastSense < handle
         ShowProgress = true           % show console progress bar during render
         XScale = 'linear'             % 'linear' or 'log' — X axis scale
         YScale = 'linear'             % 'linear' or 'log' — Y axis scale
+        XLabel = ''                   % X axis label ('' => unlabeled) — #356
+        YLabel = ''                   % Y axis label ('' => auto-derive from a single bound Tag) — #356
         ViolationsVisible = true      % global toggle for violation markers
         ShowThresholdLabels = false  % show inline name labels on threshold lines
         ShowEventMarkers = true     % toggle event round-marker overlay (EVENT-07)
@@ -149,6 +151,7 @@ classdef FastSense < handle
         LiveFileBytes  = 0         % last known file size in bytes
         MetadataFileDate  = 0         % last known metadata file datenum
         Tags_ = {}                    % cell of Tag handles added via addTag (for event overlay)
+        YLabelAutoDerived_ = false    % true when YLabel was auto-derived from a single tag (#356)
         EventMarkerHandles_ = {}      % cell of line handles for cleanup
         PrevWBDFcn_           = []        % saved WindowButtonDownFcn during details-open
         PrevKPFcn_            = []        % saved WindowKeyPressFcn during details-open
@@ -241,6 +244,8 @@ classdef FastSense < handle
             defaults.LiveInterval = cfg.LiveInterval;
             defaults.XScale = cfg.XScale;
             defaults.YScale = cfg.YScale;
+            defaults.XLabel = '';
+            defaults.YLabel = '';
             defaults.StorageMode = cfg.StorageMode;
             defaults.MemoryLimit = cfg.MemoryLimit;
             defaults.HoverCrosshair = true;
@@ -264,6 +269,8 @@ classdef FastSense < handle
             obj.LiveInterval = opts.LiveInterval;
             obj.XScale = opts.XScale;
             obj.YScale = opts.YScale;
+            obj.XLabel = opts.XLabel;
+            obj.YLabel = opts.YLabel;
             obj.StorageMode = opts.StorageMode;
             obj.MemoryLimit = opts.MemoryLimit;
             obj.HoverCrosshair = logical(opts.HoverCrosshair);
@@ -1179,6 +1186,26 @@ classdef FastSense < handle
                         'Unsupported tag kind ''%s''.', tag.getKind());
             end
             obj.Tags_{end+1} = tag;
+
+            % #356: auto-derive the Y-axis label from a single bound tag when
+            % YLabel is unset (Units -> Name -> Key, matching FastSenseWidget).
+            % An explicit YLabel always wins. Once a second tag is added, a
+            % previously auto-derived label is cleared (multi-tag -> unlabeled).
+            if numel(obj.Tags_) == 1
+                if isempty(obj.YLabel)
+                    if isprop(tag, 'Units') && ~isempty(tag.Units)
+                        obj.YLabel = tag.Units;
+                    elseif ~isempty(tag.Name)
+                        obj.YLabel = tag.Name;
+                    else
+                        obj.YLabel = tag.Key;
+                    end
+                    obj.YLabelAutoDerived_ = true;
+                end
+            elseif obj.YLabelAutoDerived_
+                obj.YLabel = '';
+                obj.YLabelAutoDerived_ = false;
+            end
         end
 
         function addStateTagAsStaircase_(obj, tag, varargin)
@@ -1287,6 +1314,15 @@ classdef FastSense < handle
             % Apply axis scale (linear or log)
             set(obj.hAxes, 'XScale', obj.XScale);
             set(obj.hAxes, 'YScale', obj.YScale);
+
+            % Axis labels (#356): draw only when non-empty so the default
+            % (both '') is byte-for-byte identical to the pre-#356 behaviour.
+            if ~isempty(obj.XLabel)
+                xlabel(obj.hAxes, obj.XLabel);
+            end
+            if ~isempty(obj.YLabel)
+                ylabel(obj.hAxes, obj.YLabel);
+            end
 
             % --- Compute full X range (normalised for empty/degenerate data) ---
             [xmin, xmax] = obj.computeFullXRange();
