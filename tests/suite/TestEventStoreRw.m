@@ -188,6 +188,85 @@ classdef TestEventStoreRw < matlab.unittest.TestCase
             data = load(f);
             testCase.verifyEqual(numel(data.events), 1, 'reduced set persisted');
         end
+
+        % ---- Issue #355: editEvent(id, ...) + Event.editWindow ----
+
+        function testEditWindowRecomputesDuration(testCase)
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            ev.editWindow(12, 30);
+            testCase.verifyEqual(ev.StartTime, 12);
+            testCase.verifyEqual(ev.EndTime, 30);
+            testCase.verifyEqual(ev.Duration, 18, 'Duration recomputed');
+        end
+
+        function testEditWindowRejectsInverted(testCase)
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            testCase.verifyError(@() ev.editWindow(30, 12), 'Event:invalidTimeRange');
+        end
+
+        function testEditEventWindowNotesSeverity(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            store.editEvent(ev.Id, 'StartTime', 11, 'EndTime', 25, ...
+                'Notes', 'corrected', 'Severity', 2, 'Category', 'maintenance');
+            got = store.getEvent(ev.Id);
+            testCase.verifyEqual(got.StartTime, 11);
+            testCase.verifyEqual(got.EndTime, 25);
+            testCase.verifyEqual(got.Duration, 14);
+            testCase.verifyEqual(got.Notes, 'corrected');
+            testCase.verifyEqual(got.Severity, 2);
+            testCase.verifyEqual(got.Category, 'maintenance');
+        end
+
+        function testEditEventUnknownIdThrows(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(1, 2, 'x', 'H', 5, 'upper'));
+            testCase.verifyError(@() store.editEvent('ghost', 'Notes', 'x'), ...
+                'EventStore:unknownEventId');
+        end
+
+        function testEditEventUnknownFieldThrowsAndLeavesUntouched(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            testCase.verifyError(@() store.editEvent(ev.Id, 'Bogus', 1), ...
+                'EventStore:unknownEditField');
+            % Unchanged — validation happens before any mutation.
+            testCase.verifyEqual(store.getEvent(ev.Id).StartTime, 10);
+        end
+
+        function testEditEventInvertedWindowLeavesUntouched(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            testCase.verifyError(@() store.editEvent(ev.Id, 'StartTime', 30, 'EndTime', 12), ...
+                'Event:invalidTimeRange');
+            got = store.getEvent(ev.Id);
+            testCase.verifyEqual(got.StartTime, 10, 'window unchanged after rejected edit');
+            testCase.verifyEqual(got.EndTime, 20);
+        end
+
+        function testEditEventRoundTrips(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            store.editEvent(ev.Id, 'Notes', 'persisted note', 'EndTime', 40);
+            store.save();
+            data = load(f);
+            testCase.verifyEqual(data.events(1).Notes, 'persisted note');
+            testCase.verifyEqual(data.events(1).EndTime, 40);
+        end
     end
 
     methods (Static, Access = private)

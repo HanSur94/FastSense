@@ -122,6 +122,29 @@ classdef Event < handle
             obj.ThresholdValue = newThresholdValue;
         end
 
+        function obj = editWindow(obj, newStart, newEnd)
+            %EDITWINDOW Correct an event's time window in place (#355).
+            %   ev.editWindow(newStart, newEnd) mutates the SetAccess=private
+            %   fields StartTime / EndTime and recomputes Duration. Unlike
+            %   close(), it works on an already-closed event, so a manual
+            %   annotation (closed on creation) can be nudged. Reuses the
+            %   constructor's guard: a non-NaN EndTime must be >= StartTime.
+            %
+            %   Inputs:
+            %     newStart, newEnd — numeric timestamps (newEnd may be NaN for an
+            %                        still-open event; then Duration becomes NaN).
+            %
+            %   Errors:
+            %     Event:invalidTimeRange — non-NaN newEnd < newStart
+            if ~isnan(newEnd) && newEnd < newStart
+                error('Event:invalidTimeRange', ...
+                    'EndTime (%g) must be >= StartTime (%g).', newEnd, newStart);
+            end
+            obj.StartTime = newStart;
+            obj.EndTime   = newEnd;
+            obj.Duration  = newEnd - newStart;
+        end
+
         function s = computeDisplayState(obj)
             %COMPUTEDISPLAYSTATE Return the ISA-18.2 / EEMUA-191 three-state alarm visual state name.
             %   States:

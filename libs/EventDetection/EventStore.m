@@ -280,6 +280,94 @@ classdef EventStore < handle
             end
         end
 
+        function editEvent(obj, id, varargin)
+            %EDITEVENT Correct an existing event's window / metadata in place (#355).
+            %   es.editEvent(id, 'Name', value, ...) locates the event by Id and
+            %   applies the given corrections. Editable name-value fields:
+            %     'StartTime' / 'EndTime' - time window (validated EndTime>=StartTime)
+            %     'Notes'                 - free-form annotation text
+            %     'Severity'              - 1|2|3
+            %     'Category'              - alarm|maintenance|process_change|...
+            %     'Label'                 - ThresholdLabel
+            %
+            %   The window change is delegated to Event.editWindow, which (unlike
+            %   close) works on an already-closed event — so a manual annotation,
+            %   closed on creation, can be nudged. Keys are validated before any
+            %   mutation, and the window guard runs first, so a bad key or an
+            %   inverted window leaves the event untouched.
+            %
+            %   Like closeEvent, this does NOT auto-save() — the caller persists
+            %   when ready (Pitfall 2).
+            %
+            %   Errors:
+            %     EventStore:badEditArgs      - odd number of name-value args
+            %     EventStore:unknownEventId   - id not in store
+            %     EventStore:notEditable      - matched a legacy struct row
+            %     EventStore:unknownEditField - unrecognized field name
+            %     Event:invalidTimeRange      - forwarded from Event.editWindow
+            %
+            %   See also getEvent, removeEvent, closeEvent, Event.editWindow.
+            id = char(id);
+            if mod(numel(varargin), 2) ~= 0
+                error('EventStore:badEditArgs', ...
+                    'editEvent expects name-value pairs after the id.');
+            end
+
+            ev = [];
+            if ~isempty(obj.events_)
+                for i = 1:numel(obj.events_)
+                    e = obj.events_(i);
+                    eId = '';
+                    if isa(e, 'Event'),                       eId = e.Id;
+                    elseif isstruct(e) && isfield(e, 'Id'),   eId = e.Id;
+                    end
+                    if strcmp(eId, id)
+                        ev = e;
+                        break;
+                    end
+                end
+            end
+            if isempty(ev)
+                error('EventStore:unknownEventId', ...
+                    'Event id ''%s'' not found in store.', id);
+            end
+            if ~isa(ev, 'Event')
+                error('EventStore:notEditable', ...
+                    'Event ''%s'' is a legacy struct row and cannot be edited in place.', id);
+            end
+
+            % Pass 1 — parse and validate keys before touching the event.
+            newStart = ev.StartTime; newEnd = ev.EndTime; haveWindow = false;
+            notes = ''; haveNotes = false;
+            sev   = []; haveSev   = false;
+            catg  = ''; haveCat   = false;
+            lbl   = ''; haveLbl   = false;
+            for k = 1:2:numel(varargin)
+                key = varargin{k};
+                val = varargin{k + 1};
+                switch lower(char(key))
+                    case 'starttime', newStart = val; haveWindow = true;
+                    case 'endtime',   newEnd   = val; haveWindow = true;
+                    case 'notes',     notes = char(val); haveNotes = true;
+                    case 'severity',  sev   = val;       haveSev   = true;
+                    case 'category',  catg  = char(val); haveCat   = true;
+                    case 'label',     lbl   = char(val); haveLbl   = true;
+                    otherwise
+                        error('EventStore:unknownEditField', ...
+                            ['editEvent: unknown field ''%s''. Valid: ' ...
+                             'StartTime, EndTime, Notes, Severity, Category, Label.'], ...
+                            char(string(key)));
+                end
+            end
+
+            % Pass 2 — apply (window first so its guard runs before any field change).
+            if haveWindow, ev.editWindow(newStart, newEnd); end
+            if haveNotes,  ev.Notes    = notes; end
+            if haveSev,    ev.Severity = sev;   end
+            if haveCat,    ev.Category = catg;  end
+            if haveLbl,    ev.escalateTo(lbl, ev.ThresholdValue); end
+        end
+
         function events = getEventsForTag(obj, tagKey)
         %GETEVENTSFORTAG Return events bound to tagKey via EventBinding + carrier fallback.
         %   Primary path: uses EventBinding.getEventsForTag for events
