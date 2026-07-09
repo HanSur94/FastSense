@@ -231,6 +231,94 @@ classdef Tag < handle
             s.Std  = std(yv);
         end
 
+        function pv = percentile(obj, levels, tStart, tEnd)
+            %PERCENTILE Order-statistic percentile value(s) of the series (#339).
+            %   pv = tag.percentile(95)            % scalar level  -> scalar value
+            %   pv = tag.percentile([5 50 95])     % vector levels -> vector values
+            %   pv = tag.percentile([5 95], t0, t1)% over a window (mirrors getStats)
+            %
+            %   Returns the percentile *values* of the resolved numeric series
+            %   using toolbox-free linear interpolation between order statistics:
+            %   for a level p over n sorted samples the fractional 1-based
+            %   position is i = p/100*(n-1) + 1, interpolated between
+            %   Ys(floor(i)) and Ys(ceil(i)). Inherited by every Tag subclass
+            %   via getXYRange, so it needs no per-kind override.
+            %
+            %   Inputs:
+            %     levels        - numeric scalar or array of percentile levels,
+            %                     each in [0, 100]. Output matches its shape.
+            %     tStart, tEnd  - optional window bounds (empty / omitted =>
+            %                     full series, same contract as getStats).
+            %
+            %   Output:
+            %     pv - percentile value(s), same shape as levels. NaN (matching
+            %          shape) when the window has no non-NaN samples.
+            %
+            %   NaN-robust and Octave-safe: NaNs are masked out before sorting.
+            %
+            %   Errors:
+            %     Tag:invalidPercentile - levels missing / non-numeric / outside [0,100]
+            %     Tag:notNumeric        - series Y is non-numeric (e.g. cellstr StateTag)
+            %
+            %   See also getStats, median, iqr, getXYRange.
+            if nargin < 3, tStart = []; end
+            if nargin < 4, tEnd   = []; end
+            if nargin < 2 || isempty(levels) || ~isnumeric(levels) || ...
+                    any(~isfinite(levels(:))) || any(levels(:) < 0 | levels(:) > 100)
+                error('Tag:invalidPercentile', ...
+                    'Percentile levels must be numeric and in [0, 100].');
+            end
+
+            [~, y] = obj.getXYRange(tStart, tEnd);
+            y = y(:);
+            if islogical(y), y = double(y); end
+            if ~isnumeric(y)
+                error('Tag:notNumeric', ...
+                    'percentile requires a numeric series; this tag''s Y is non-numeric.');
+            end
+
+            yv = sort(y(~isnan(y)));
+            n  = numel(yv);
+            pv = nan(size(levels));
+            if n == 0
+                return;                     % empty / all-NaN -> NaN(s), matching shape
+            end
+            if n == 1
+                pv(:) = yv(1);              % single sample -> that value at every level
+                return;
+            end
+
+            idx  = double(levels(:)) / 100 * (n - 1) + 1;   % 1-based fractional position
+            lo   = floor(idx);
+            hi   = ceil(idx);
+            frac = idx - lo;
+            vals = yv(lo) + frac .* (yv(hi) - yv(lo));
+            pv   = reshape(vals, size(levels));
+        end
+
+        function m = median(obj, tStart, tEnd)
+            %MEDIAN Robust central tendency == percentile(50) (#339).
+            %   m = tag.median() over the full series; m = tag.median(t0, t1)
+            %   over a window. Convenience wrapper over percentile.
+            %
+            %   See also percentile, iqr, getStats.
+            if nargin < 2, tStart = []; end
+            if nargin < 3, tEnd   = []; end
+            m = obj.percentile(50, tStart, tEnd);
+        end
+
+        function r = iqr(obj, tStart, tEnd)
+            %IQR Interquartile range == percentile(75) - percentile(25) (#339).
+            %   r = tag.iqr() over the full series; r = tag.iqr(t0, t1) over a
+            %   window. Robust spread, insensitive to outliers.
+            %
+            %   See also percentile, median, getStats.
+            if nargin < 2, tStart = []; end
+            if nargin < 3, tEnd   = []; end
+            q = obj.percentile([25 75], tStart, tEnd);
+            r = q(2) - q(1);
+        end
+
         function [Xu, Yu] = resampleUniform(obj, dt, varargin)
             %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
             %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a

@@ -400,6 +400,62 @@ classdef TestTag < matlab.unittest.TestCase
             testCase.verifyWarning(@() st.integral(), 'Tag:integralOnDiscrete');
         end
 
+        % ---- percentile / median / iqr tests (Issue #339) ----
+
+        function testPercentileScalarLevel(testCase)
+            %TESTPERCENTILESCALARLEVEL Y=1:10 => P50 = 5.5 (linear interp).
+            t = SensorTag('pc_scalar', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyEqual(t.percentile(50), 5.5, 'AbsTol', 1e-12);
+        end
+
+        function testPercentileVectorLevelsShape(testCase)
+            %TESTPERCENTILEVECTORLEVELS Vector levels => vector values, same shape.
+            t = SensorTag('pc_vec', 'X', 1:10, 'Y', 1:10);
+            pv = t.percentile([0 25 50 75 100]);
+            testCase.verifyEqual(size(pv), [1 5], 'shape matches levels');
+            testCase.verifyEqual(pv, [1 3.25 5.5 7.75 10], 'AbsTol', 1e-12);
+        end
+
+        function testMedianEqualsP50(testCase)
+            t = SensorTag('pc_med', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyEqual(t.median(), t.percentile(50), 'AbsTol', 1e-12);
+        end
+
+        function testIqrEqualsP75MinusP25(testCase)
+            %TESTIQR Y=1:10 => IQR = 7.75 - 3.25 = 4.5.
+            t = SensorTag('pc_iqr', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyEqual(t.iqr(), 4.5, 'AbsTol', 1e-12);
+        end
+
+        function testPercentileWindow(testCase)
+            %TESTPERCENTILEWINDOW Range args restrict the reduction window.
+            t = SensorTag('pc_win', 'X', 1:10, 'Y', 1:10);
+            [~, yWin] = t.getXYRange(3, 7);
+            ys = sort(yWin(~isnan(yWin))); ys = ys(:);
+            n = numel(ys);
+            i50  = 0.5 * (n - 1) + 1;
+            expected = ys(floor(i50)) + (i50 - floor(i50)) * ...
+                (ys(ceil(i50)) - ys(floor(i50)));
+            testCase.verifyEqual(t.percentile(50, 3, 7), expected, 'AbsTol', 1e-12);
+        end
+
+        function testPercentileNaNRobust(testCase)
+            %TESTPERCENTILENANROBUST NaNs are masked; P50 ignores them.
+            t = SensorTag('pc_nan', 'X', 1:5, 'Y', [1 NaN 3 NaN 5]);
+            testCase.verifyEqual(t.percentile(50), 3, 'AbsTol', 1e-12);
+        end
+
+        function testPercentileEmptyDataReturnsNaN(testCase)
+            m = MockTag('pc_empty');
+            testCase.verifyTrue(isnan(m.percentile(50)), 'empty -> NaN');
+        end
+
+        function testPercentileInvalidLevelErrors(testCase)
+            t = SensorTag('pc_bad', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() t.percentile(150), 'Tag:invalidPercentile');
+            testCase.verifyError(@() t.percentile(-1),  'Tag:invalidPercentile');
+        end
+
     end
 end
 
