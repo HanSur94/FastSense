@@ -114,6 +114,9 @@ classdef FastSense < handle
         Spans      = struct('T0', {}, 'T1', {}, 'FaceColor', {}, ...
                             'FaceAlpha', {}, 'EdgeColor', {}, 'Label', {}, ...
                             'hPatch', {})
+        Texts      = struct('X', {}, 'Y', {}, 'String', {}, 'Color', {}, ...
+                            'FontSize', {}, 'HorizontalAlignment', {}, ...
+                            'VerticalAlignment', {}, 'hText', {})
         Shadings   = struct('X', {}, 'Y1', {}, 'Y2', {}, ...
                             'FaceColor', {}, 'FaceAlpha', {}, ...
                             'EdgeColor', {}, 'DisplayName', {}, ...
@@ -845,6 +848,61 @@ classdef FastSense < handle
                 obj.Spans = sp;
             else
                 obj.Spans(end+1) = sp;
+            end
+        end
+
+        function addText(obj, x, y, str, varargin)
+            %ADDTEXT Add an on-plot text annotation / callout at (x, y) (#347).
+            %   fp.ADDTEXT(x, y, str) places the string str at data coordinates
+            %   (x, y) — the text member of the annotation family (alongside
+            %   addMarker, addThreshold, addBand).
+            %   fp.ADDTEXT(x, y, str, 'Color', [1 0 0], 'FontSize', 12, ...
+            %       'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom')
+            %   customises the callout.
+            %
+            %   Must be called BEFORE render().
+            %
+            %   Inputs:
+            %     x, y     — data coordinates for the text anchor
+            %     str      — char / string to display
+            %     varargin — name-value pairs:
+            %       'Color'               — RGB triplet or color string (default: Theme text color)
+            %       'FontSize'            — scalar points (default: 10)
+            %       'HorizontalAlignment' — 'left' (default) | 'center' | 'right'
+            %       'VerticalAlignment'   — 'middle' (default) | 'top' | 'bottom' | ...
+            %
+            %   See also addMarker, addThreshold, addBand.
+            if obj.IsRendered
+                error('FastSense:alreadyRendered', ...
+                    'Cannot add text after render() has been called.');
+            end
+            if ~isnumeric(x) || ~isscalar(x) || ~isnumeric(y) || ~isscalar(y)
+                error('FastSense:invalidText', 'x and y must be numeric scalars.');
+            end
+            if ~(ischar(str) || isstring(str))
+                error('FastSense:invalidText', 'str must be a char or string.');
+            end
+
+            defaults.Color = obj.Theme.ForegroundColor;
+            defaults.FontSize = 10;
+            defaults.HorizontalAlignment = 'left';
+            defaults.VerticalAlignment = 'middle';
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addText', unmatched, fieldnames(defaults));
+
+            tx.X                   = x;
+            tx.Y                   = y;
+            tx.String              = char(str);
+            tx.Color               = parsed.Color;
+            tx.FontSize            = parsed.FontSize;
+            tx.HorizontalAlignment = parsed.HorizontalAlignment;
+            tx.VerticalAlignment   = parsed.VerticalAlignment;
+            tx.hText               = [];
+
+            if isempty(obj.Texts)
+                obj.Texts = tx;
+            else
+                obj.Texts(end+1) = tx;
             end
         end
 
@@ -1645,6 +1703,25 @@ classdef FastSense < handle
                     % uistack unavailable — translucent patch is still readable
                 end
                 obj.Spans(i).hPatch = hSp;
+            end
+
+            % --- Render on-plot text annotations (#347), front layer ---
+            for i = 1:numel(obj.Texts)
+                T = obj.Texts(i);
+                hTx = text(obj.hAxes, T.X, T.Y, T.String, ...
+                    'Color', T.Color, ...
+                    'FontSize', T.FontSize, ...
+                    'HorizontalAlignment', T.HorizontalAlignment, ...
+                    'VerticalAlignment', T.VerticalAlignment, ...
+                    'Clipping', 'on', ...
+                    'HandleVisibility', 'off');
+                udTx.FastSense = struct( ...
+                    'Type', 'text', ...
+                    'Name', T.String, ...
+                    'LineIndex', [], ...
+                    'ThresholdValue', []);
+                set(hTx, 'UserData', udTx);
+                obj.Texts(i).hText = hTx;
             end
 
             % Auto-format datetime axis
