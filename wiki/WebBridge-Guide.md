@@ -100,7 +100,14 @@ if bridge.hasAction('reset_data')
     disp('Reset action is available');
 end
 
-% Actions are automatically broadcast to clients when registered
+% List every currently registered action
+names = bridge.listActions();   % cellstr, {} when none are registered
+
+% Remove a registered action (no-op if it isn't registered)
+bridge.unregisterAction('reset_data');
+
+% Actions are automatically broadcast to clients when registered or
+% unregistered (while a client is connected)
 ```
 
 ## Advanced Integration Patterns
