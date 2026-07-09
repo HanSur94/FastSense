@@ -1424,12 +1424,30 @@ classdef DashboardLayout < handle
                 % 260602-mri — CrosshairLinkButton: LEFTMOST chrome button,
                 % sits to the LEFT of the V/A cluster.
                 % Assumption: FastSenseWidget always has V/A, so xVisible is
-                % always set when CrosshairLinkButton is present. Add a brief
-                % comment noting the leftmost-button assumption.
+                % always set when CrosshairLinkButton is present. xLink is
+                % hoisted (computed unconditionally) so 260709-ikg's overflow
+                % anchor below can reuse it without recomputing.
+                xLink = xVisible - gap - bw;
                 linkBtn = findobj(bar(1), 'Tag', 'CrosshairLinkButton', '-depth', 1);
                 if ~isempty(linkBtn) && ishandle(linkBtn(1))
-                    xLink = xVisible - gap - bw;
                     set(linkBtn(1), 'Position', [xLink, 2, bw, bw]);
+                end
+                % 260709-ikg — OverflowMenuButton ('...') reuses the
+                % leftmost folded slot per redline (e): prefer the
+                % CrosshairLinkButton slot when present, else the
+                % YLimitVisibleBtn slot, else the YLimitAllBtn slot. The
+                % invisible folded buttons keep their computed positions
+                % (they're hidden, so no visual conflict with '...').
+                overflow = findobj(bar(1), 'Tag', 'OverflowMenuButton', '-depth', 1);
+                if ~isempty(overflow) && ishandle(overflow(1))
+                    if ~isempty(linkBtn) && ishandle(linkBtn(1))
+                        xOverflow = xLink;
+                    elseif ~isempty(visibleBtn) && ishandle(visibleBtn(1))
+                        xOverflow = xVisible;
+                    else
+                        xOverflow = xAll;
+                    end
+                    set(overflow(1), 'Position', [xOverflow, 2, bw, bw]);
                 end
             end
             if ~isempty(content) && ishandle(content(1))
