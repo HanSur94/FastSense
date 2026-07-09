@@ -611,6 +611,63 @@ classdef TestTag < matlab.unittest.TestCase
             testCase.verifyError(@() a.correlate(42), 'Tag:correlateBadOther');
         end
 
+        % ---- lagCorrelation(other, MaxLag) tests (Issue #341) ----
+
+        function testLagCorrelationRecoversDelay(testCase)
+            % Gaussian bump at t=8 (A) vs t=12 (B) => B lags A by +4.
+            t = 1:20;
+            a = SensorTag('lc_a', 'X', t, 'Y', exp(-((t - 8) .^ 2) / 4));
+            b = SensorTag('lc_b', 'X', t, 'Y', exp(-((t - 12) .^ 2) / 4));
+            [dt, r] = a.lagCorrelation(b);
+            testCase.verifyEqual(dt, 4, 'AbsTol', 1e-9, 'recovers the +4 delay');
+            testCase.verifyGreaterThan(r, 0.99, 'near-perfect match at best lag');
+        end
+
+        function testLagCorrelationIdenticalZeroLag(testCase)
+            t = 1:20;
+            y = exp(-((t - 10) .^ 2) / 4);
+            a = SensorTag('lc_i1', 'X', t, 'Y', y);
+            b = SensorTag('lc_i2', 'X', t, 'Y', y);
+            [dt, r] = a.lagCorrelation(b);
+            testCase.verifyEqual(dt, 0, 'AbsTol', 1e-9);
+            testCase.verifyEqual(r, 1, 'AbsTol', 1e-9);
+        end
+
+        function testLagCorrelationMaxLagClamps(testCase)
+            t = 1:20;
+            a = SensorTag('lc_c1', 'X', t, 'Y', exp(-((t - 8) .^ 2) / 4));
+            b = SensorTag('lc_c2', 'X', t, 'Y', exp(-((t - 12) .^ 2) / 4));
+            dt = a.lagCorrelation(b, 'MaxLag', 2);
+            testCase.verifyLessThanOrEqual(abs(dt), 2, 'search clamped to +/-MaxLag');
+        end
+
+        function testLagCorrelationFullCurve(testCase)
+            t = 1:20;
+            a = SensorTag('lc_f1', 'X', t, 'Y', exp(-((t - 8) .^ 2) / 4));
+            b = SensorTag('lc_f2', 'X', t, 'Y', exp(-((t - 12) .^ 2) / 4));
+            [~, ~, lags, rr] = a.lagCorrelation(b);
+            testCase.verifyEqual(numel(lags), numel(rr), 'lag axis matches curve');
+            testCase.verifyEqual(lags(1), -lags(end), 'AbsTol', 1e-12, 'symmetric lag axis');
+        end
+
+        function testLagCorrelationTooFewReturnsNaN(testCase)
+            p = SensorTag('lc_o1', 'X', 1, 'Y', 5);
+            q = SensorTag('lc_o2', 'X', 1, 'Y', 3);
+            testCase.verifyTrue(isnan(p.lagCorrelation(q)), 'n<2 -> NaN');
+        end
+
+        function testLagCorrelationZeroVarianceReturnsNaN(testCase)
+            t = 1:20;
+            a = SensorTag('lc_v1', 'X', t, 'Y', exp(-((t - 8) .^ 2) / 4));
+            c = SensorTag('lc_v2', 'X', t, 'Y', 3 * ones(1, 20));
+            testCase.verifyTrue(isnan(a.lagCorrelation(c)), 'constant channel -> NaN');
+        end
+
+        function testLagCorrelationBadOtherErrors(testCase)
+            a = SensorTag('lc_e', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() a.lagCorrelation(42), 'Tag:correlateBadOther');
+        end
+
     end
 end
 

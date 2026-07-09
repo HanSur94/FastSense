@@ -387,6 +387,106 @@ classdef Tag < handle
             end
         end
 
+        function varargout = lagCorrelation(obj, other, varargin)
+            %LAGCORRELATION Best time-lag & cross-correlation between two tags (#341).
+            %   dt = A.lagCorrelation(B)            best lag in TIME units — a
+            %                                       positive dt means B lags A by dt
+            %   [dt, r] = A.lagCorrelation(B)       + Pearson r at that lag
+            %   [dt, r, lags, rr] = A.lagCorrelation(B)  + full lag axis (time) and
+            %                                       the r-vs-lag curve (a plottable pair)
+            %   ... = A.lagCorrelation(B, 'MaxLag', L)   cap the search to |lag|<=L
+            %                                       (time units); default = half the window
+            %   ... = A.lagCorrelation(B, t0, t1)   restrict to a time window
+            %
+            %   The time-delay sibling of correlate (#340): transport delay,
+            %   propagation lag, control lead/lag. Both tags are ZOH-resampled
+            %   (valueAt) onto a uniform grid over A's (windowed) span — spacing =
+            %   median A sample spacing — so a lag index maps cleanly to a time
+            %   delay. The normalized cross-correlation is computed toolbox-free
+            %   (NOT xcorr/finddelay); the best lag is the argmax of the r-vs-lag
+            %   curve. Pairwise NaNs are dropped per lag; NaN is returned when the
+            %   overlap is < 2 samples or a channel is constant (zero variance).
+            %
+            %   Errors:
+            %     Tag:correlateBadOther - other is not a Tag
+            %     Tag:unknownOption     - unrecognized name-value key
+            %
+            %   See also correlate, resampleUniform, valueAt, getXYRange.
+            if nargin < 2 || ~isa(other, 'Tag')
+                error('Tag:correlateBadOther', ...
+                    'lagCorrelation requires another Tag as its first argument.');
+            end
+            args = varargin;
+            t0 = []; t1 = []; maxLag = [];
+            if ~isempty(args) && isnumeric(args{1})
+                t0 = args{1}; args(1) = [];
+                if ~isempty(args) && isnumeric(args{1})
+                    t1 = args{1}; args(1) = [];
+                end
+            end
+            k = 1;
+            while k <= numel(args)
+                key = args{k};
+                if k + 1 > numel(args)
+                    error('Tag:unknownOption', 'lagCorrelation: option "%s" has no value.', char(string(key)));
+                end
+                if strcmpi(key, 'MaxLag')
+                    maxLag = args{k + 1};
+                else
+                    error('Tag:unknownOption', 'lagCorrelation: unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
+            end
+
+            dtBest = NaN; rBest = NaN; lagsTime = []; rr = [];
+            [X, ~] = obj.getXYRange(t0, t1);
+            X = X(:);
+            if numel(X) >= 2
+                lo  = min(X);
+                hi  = max(X);
+                dtg = median(diff(sort(X)));
+                if dtg > 0 && hi > lo
+                    tg = lo:dtg:hi;
+                    a  = arrayfun(@(t) obj.valueAt(t), tg);
+                    b  = arrayfun(@(t) other.valueAt(t), tg);
+                    a  = a(:).'; b = b(:).';
+                    nG = numel(tg);
+                    if isempty(maxLag)
+                        maxLagS = floor((nG - 1) / 2);
+                    else
+                        maxLagS = min(round(maxLag / dtg), nG - 1);
+                        maxLagS = max(maxLagS, 0);
+                    end
+                    lagSamples = -maxLagS:maxLagS;
+                    rr = nan(1, numel(lagSamples));
+                    for idx = 1:numel(lagSamples)
+                        kk  = lagSamples(idx);
+                        iLo = max(1, 1 - kk);
+                        iHi = min(nG, nG - kk);
+                        if iHi - iLo + 1 >= 2
+                            rr(idx) = Tag.pearson_(a(iLo:iHi), b((iLo:iHi) + kk));
+                        end
+                    end
+                    lagsTime = lagSamples * dtg;
+                    if ~all(isnan(rr))
+                        [rBest, bi] = max(rr);
+                        dtBest = lagsTime(bi);
+                    end
+                end
+            end
+
+            switch nargout
+                case {0, 1}
+                    varargout = {dtBest};
+                case 2
+                    varargout = {dtBest, rBest};
+                case 3
+                    varargout = {dtBest, rBest, lagsTime};
+                otherwise
+                    varargout = {dtBest, rBest, lagsTime, rr};
+            end
+        end
+
         function [Xu, Yu] = resampleUniform(obj, dt, varargin)
             %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
             %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a
@@ -1313,6 +1413,25 @@ classdef Tag < handle
     end
 
     methods (Static, Access = private)
+
+        function r = pearson_(a, b)
+            %PEARSON_ Toolbox-free Pearson r of two equal-length vectors (#341 helper).
+            %   Drops pairwise NaN; returns NaN for fewer than 2 valid pairs or a
+            %   zero-variance (constant) input.
+            a = a(:); b = b(:);
+            ok = ~isnan(a) & ~isnan(b);
+            a = a(ok); b = b(ok);
+            r = NaN;
+            if numel(a) < 2
+                return;
+            end
+            am = a - mean(a);
+            bm = b - mean(b);
+            denom = sqrt(sum(am .^ 2) * sum(bm .^ 2));
+            if denom > 0
+                r = sum(am .* bm) / denom;
+            end
+        end
 
         function [times, values, proms] = detectExtrema_(X, Y, minProm, minSep)
             %DETECTEXTREMA_ Local maxima of Y over X — toolbox-free (#329 helper).
