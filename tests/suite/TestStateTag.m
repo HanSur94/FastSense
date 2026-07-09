@@ -299,5 +299,46 @@ classdef TestStateTag < matlab.unittest.TestCase
             testCase.verifyEqual(numel(S), 0);
         end
 
+        % ---- StateNames / nameAt tests (Issue #372) ----
+
+        function testNameAtScalar(testCase)
+            st = StateTag('mode', 'X', [1 5 10 20], 'Y', [0 1 2 3], ...
+                'StateNames', {0 'Idle'; 1 'Run'; 2 'Fault'; 3 'Maint'});
+            testCase.verifyEqual(st.valueAt(7), 1, 'valueAt unchanged (still numeric)');
+            testCase.verifyEqual(st.nameAt(7), 'Run');
+        end
+
+        function testNameAtVector(testCase)
+            st = StateTag('mode', 'X', [1 5 10 20], 'Y', [0 1 2 3], ...
+                'StateNames', {0 'Idle'; 1 'Run'; 2 'Fault'; 3 'Maint'});
+            testCase.verifyEqual(st.nameAt([0 7 15]), {'Idle', 'Run', 'Fault'});
+        end
+
+        function testNameAtUnmappedFallsBackToNumericString(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 9], ...
+                'StateNames', {0 'Idle'});
+            testCase.verifyEqual(st.nameAt(6), '9', 'unmapped code -> numeric string');
+        end
+
+        function testNameAtNoLegendFallsBack(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 2]);
+            testCase.verifyEqual(st.nameAt(6), '2', 'no legend -> numeric string');
+        end
+
+        function testStateNamesRoundTrips(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 1], ...
+                'StateNames', {0 'Idle'; 1 'Run'});
+            s = st.toStruct();
+            st2 = StateTag.fromStruct(s);
+            testCase.verifyEqual(st2.nameAt(6), 'Run', 'legend restored via round-trip');
+            testCase.verifyEqual(size(st2.StateNames), [2 2]);
+        end
+
+        function testStateNamesOmittedWhenEmpty(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 1]);
+            s = st.toStruct();
+            testCase.verifyFalse(isfield(s, 'statenames'), 'omit-when-empty');
+        end
+
     end
 end
