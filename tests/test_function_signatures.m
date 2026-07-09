@@ -1,8 +1,10 @@
 function test_function_signatures()
 %TEST_FUNCTION_SIGNATURES Validate functionSignatures.json files parse (#332).
 %   Ensures the SensorThreshold tab-completion signatures (and its FastSense /
-%   Dashboard siblings) are well-formed JSON with the expected schema and that
-%   the new Tag-family entries are present.
+%   Dashboard siblings) are well-formed JSON and that the new Tag-family entries
+%   are present. Field-name checks use the raw JSON text (not jsondecode field
+%   names) because MATLAB and Octave mangle keys like "_schemaVersion" and
+%   "Class.method" differently.
 
     repo = fileparts(fileparts(mfilename('fullpath')));
     addpath(repo); install();
@@ -15,24 +17,25 @@ function test_function_signatures()
     for i = 1:numel(files)
         assert(exist(files{i}, 'file') == 2, ...
             sprintf('test_function_signatures: missing %s', files{i}));
-        s = jsondecode(fileread(files{i}));   % throws on malformed JSON
-        assert(isfield(s, 'x_schemaVersion'), ...
-            sprintf('test_function_signatures: %s missing _schemaVersion', files{i}));
+        raw = fileread(files{i});
+        s = jsondecode(raw);                     % throws on malformed JSON
+        assert(isstruct(s) && ~isempty(fieldnames(s)), ...
+            sprintf('test_function_signatures: %s decoded to an empty struct', files{i}));
+        assert(~isempty(strfind(raw, '_schemaVersion')), ...
+            sprintf('test_function_signatures: %s missing _schemaVersion', files{i})); %#ok<STREMP>
     end
 
     % SensorThreshold: the new entry must expose the Tag family + factories.
-    st = jsondecode(fileread(files{1}));
-    expected = {'SensorTag_SensorTag', 'SensorTag_fromCsv', 'StateTag_StateTag', ...
-                'StateTag_nameAt', 'MonitorTag_level', 'MonitorTag_band', ...
-                'TagRegistry_toStructs', 'Tag_percentile', 'Tag_findPeaks', ...
-                'Tag_correlate', 'Tag_removeOutliers', 'Tag_spectrum', ...
-                'Tag_compareWindows'};
-    fn = fieldnames(st);
+    raw = fileread(files{1});
+    expected = {'"SensorTag.SensorTag"', '"SensorTag.fromCsv"', '"StateTag.StateTag"', ...
+                '"StateTag.nameAt"', '"MonitorTag.level"', '"MonitorTag.band"', ...
+                '"TagRegistry.toStructs"', '"Tag.percentile"', '"Tag.findPeaks"', ...
+                '"Tag.correlate"', '"Tag.removeOutliers"', '"Tag.spectrum"', ...
+                '"Tag.compareWindows"'};
     for i = 1:numel(expected)
-        assert(any(strcmp(expected{i}, fn)), ...
-            sprintf('test_function_signatures: missing entry %s', expected{i}));
+        assert(~isempty(strfind(raw, expected{i})), ...
+            sprintf('test_function_signatures: missing entry %s', expected{i})); %#ok<STREMP>
     end
 
-    fprintf('    All function-signature JSON files valid (%d SensorThreshold entries).\n', ...
-        numel(fn) - 1);
+    fprintf('    All function-signature JSON files valid.\n');
 end
