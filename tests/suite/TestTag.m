@@ -551,6 +551,66 @@ classdef TestTag < matlab.unittest.TestCase
             testCase.verifyWarning(@() st.findPeaks(), 'Tag:findPeaksOnDiscrete');
         end
 
+        % ---- correlate(other) tests (Issue #340) ----
+
+        function testCorrelateIdentical(testCase)
+            a = SensorTag('cr_a', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('cr_b', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyEqual(a.correlate(b), 1, 'AbsTol', 1e-10);
+        end
+
+        function testCorrelateAntiCorrelated(testCase)
+            a = SensorTag('cr_a2', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('cr_bn', 'X', 1:10, 'Y', -(1:10));
+            testCase.verifyEqual(a.correlate(b), -1, 'AbsTol', 1e-10);
+        end
+
+        function testCorrelateZero(testCase)
+            % A centered = [-1.5 -0.5 0.5 1.5], B = [1 -1 -1 1] -> dot product 0.
+            a = SensorTag('cr_z1', 'X', 1:4, 'Y', [1 2 3 4]);
+            b = SensorTag('cr_z2', 'X', 1:4, 'Y', [1 -1 -1 1]);
+            testCase.verifyEqual(a.correlate(b), 0, 'AbsTol', 1e-10);
+        end
+
+        function testCorrelateSampleCountOut(testCase)
+            a = SensorTag('cr_n1', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('cr_n2', 'X', 1:10, 'Y', 1:10);
+            [r, n] = a.correlate(b);
+            testCase.verifyEqual(r, 1, 'AbsTol', 1e-10);
+            testCase.verifyEqual(n, 10, 'aligned sample count');
+        end
+
+        function testCorrelateZeroVarianceReturnsNaN(testCase)
+            a = SensorTag('cr_v1', 'X', 1:5, 'Y', 1:5);
+            c = SensorTag('cr_const', 'X', 1:5, 'Y', [2 2 2 2 2]);
+            testCase.verifyTrue(isnan(a.correlate(c)), 'constant channel -> NaN');
+        end
+
+        function testCorrelateTooFewReturnsNaN(testCase)
+            p = SensorTag('cr_o1', 'X', 1, 'Y', 5);
+            q = SensorTag('cr_o2', 'X', 1, 'Y', 3);
+            testCase.verifyTrue(isnan(p.correlate(q)), 'n<2 -> NaN');
+        end
+
+        function testCorrelateZOHAlignment(testCase)
+            % B on a coarser grid; ZOH-sampled onto A's timestamps still tracks.
+            a = SensorTag('cr_ma', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('cr_mb', 'X', [1 5 10], 'Y', [1 5 10]);
+            % ZOH staircase vs a ramp tracks strongly (~0.885), not exactly 1.
+            testCase.verifyGreaterThan(a.correlate(b), 0.85);
+        end
+
+        function testCorrelateRangeWindow(testCase)
+            a = SensorTag('cr_r1', 'X', 1:10, 'Y', 1:10);
+            b = SensorTag('cr_r2', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyEqual(a.correlate(b, 3, 7), 1, 'AbsTol', 1e-10);
+        end
+
+        function testCorrelateBadOtherErrors(testCase)
+            a = SensorTag('cr_e', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() a.correlate(42), 'Tag:correlateBadOther');
+        end
+
     end
 end
 

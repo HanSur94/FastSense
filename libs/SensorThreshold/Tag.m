@@ -319,6 +319,74 @@ classdef Tag < handle
             r = q(2) - q(1);
         end
 
+        function varargout = correlate(obj, other, t0, t1)
+            %CORRELATE Pearson correlation coefficient between two tags (#340).
+            %   r = tagA.correlate(tagB)         Pearson r in [-1,1] over the
+            %                                    overlapping window
+            %   r = tagA.correlate(tagB, t0, t1) over a time window
+            %   [r, n] = tagA.correlate(tagB)    also returns aligned sample count
+            %
+            %   The first relational primitive of the Tag analysis family:
+            %   "do these two channels move together, and by how much?" — for
+            %   redundant-sensor agreement, drift-vs-reference, and cause/effect
+            %   screening.
+            %
+            %   Alignment: tagB is sampled onto tagA's timestamps by zero-order
+            %   hold (valueAt) over tagA's (windowed) series — the same ZOH
+            %   convention DerivedTag uses for mismatched parents. Pairwise-NaN
+            %   samples are dropped. Returns NaN when fewer than 2 aligned pairs
+            %   remain or either channel is constant (zero variance).
+            %
+            %   Toolbox-free (Pearson via sums; no Statistics Toolbox).
+            %
+            %   Inputs:
+            %     other   - the Tag to correlate against
+            %     t0, t1  - optional window bounds (empty/omitted => full overlap)
+            %
+            %   Errors:
+            %     Tag:correlateBadOther - other is not a Tag
+            %
+            %   See also getStats, percentile, valueAt, getXYRange.
+            if nargin < 2 || ~isa(other, 'Tag')
+                error('Tag:correlateBadOther', ...
+                    'correlate requires another Tag as its first argument.');
+            end
+            if nargin < 3, t0 = []; end
+            if nargin < 4, t1 = []; end
+
+            [X, YA] = obj.getXYRange(t0, t1);
+            X  = X(:);
+            YA = YA(:);
+            if islogical(YA), YA = double(YA); end
+
+            r = NaN;
+            n = 0;
+            if isnumeric(YA) && ~isempty(X)
+                YB = zeros(numel(X), 1);
+                for i = 1:numel(X)
+                    YB(i) = other.valueAt(X(i));
+                end
+                ok = ~isnan(YA) & ~isnan(YB);
+                a  = YA(ok);
+                b  = YB(ok);
+                n  = numel(a);
+                if n >= 2
+                    am = a - mean(a);
+                    bm = b - mean(b);
+                    denom = sqrt(sum(am .^ 2) * sum(bm .^ 2));
+                    if denom > 0
+                        r = sum(am .* bm) / denom;
+                    end
+                end
+            end
+
+            if nargout >= 2
+                varargout = {r, n};
+            else
+                varargout = {r};
+            end
+        end
+
         function [Xu, Yu] = resampleUniform(obj, dt, varargin)
             %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
             %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a
