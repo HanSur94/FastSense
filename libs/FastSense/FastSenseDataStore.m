@@ -207,6 +207,45 @@ classdef FastSenseDataStore < handle
             obj.ColumnNames{end+1} = name;
         end
 
+        function removeColumn(obj, name)
+            %REMOVECOLUMN Delete an extra data column (the DELETE of the column CRUD).
+            %   ds.removeColumn(name) removes the column stored under name.
+            %   Combined with addColumn this gives the supported "replace a
+            %   column" idiom: removeColumn(name) then addColumn(name, newData).
+            %
+            %   Requires the SQLite backend. Mirrors addColumn's guards and
+            %   BEGIN/COMMIT/ROLLBACK transaction wrapper.
+            %
+            %   Errors:
+            %     FastSenseDataStore:noSqlite      — no SQLite backend
+            %     FastSenseDataStore:notValid      — store not initialized
+            %     FastSenseDataStore:unknownColumn — name not among listColumns()
+            if ~obj.UseSqlite
+                error('FastSenseDataStore:noSqlite', ...
+                    'removeColumn requires mksqlite (SQLite backend).');
+            end
+            obj.ensureOpen();
+            if ~obj.IsValid
+                error('FastSenseDataStore:notValid', ...
+                    'DataStore is not initialized.');
+            end
+            idx = find(strcmp(name, obj.ColumnNames), 1);
+            if isempty(idx)
+                error('FastSenseDataStore:unknownColumn', ...
+                    'Column ''%s'' does not exist. Use listColumns() to see available columns.', ...
+                    name);
+            end
+            mksqlite(obj.DbId, 'BEGIN TRANSACTION');
+            try
+                mksqlite(obj.DbId, 'DELETE FROM columns WHERE col_name = ?', name);
+                mksqlite(obj.DbId, 'COMMIT');
+            catch ME
+                try mksqlite(obj.DbId, 'ROLLBACK'); catch; end
+                rethrow(ME);
+            end
+            obj.ColumnNames(idx) = [];
+        end
+
         function data = getColumnRange(obj, name, xMin, xMax)
             %GETCOLUMNRANGE Read a column's data within an X range.
             %   Converts the X range to a point-offset range using chunk
