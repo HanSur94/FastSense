@@ -29,6 +29,17 @@ classdef DashboardToolbar < handle
         hInfoBtn     = []
         Engine       = []
         Theme_       = []
+
+        % Custom-drawn compatibility-shim visual layer (light-mode redesign).
+        % Native controls above stay valid but hidden; this axes+patch
+        % layer draws the brand, flat action buttons/toggles, and the
+        % last-update label, routing every click back to the existing
+        % handlers so behavior + the handle contract survive unchanged.
+        hAxes_          = []   % custom-drawn axes, Tag 'DashboardToolbarAxes'
+        hBrandSquare_   = []   % brand patch (left)
+        hBrandText_     = []   % bold dashboard name text (left)
+        hLastUpdateText_ = []  % custom right-aligned last-update text
+        CustomBtns_     = struct()  % .(key).Patch / .(key).Label per button
     end
 
     methods
@@ -199,6 +210,14 @@ classdef DashboardToolbar < handle
                     theme.ToolbarBackground * 0.4, ...
                 'BackgroundColor', theme.ToolbarBackground, ...
                 'HorizontalAlignment', 'right');
+
+            % --- Compatibility shim: hide the native chrome above and
+            % paint the custom light-mode toolbar layer over it. All
+            % handles created above remain valid (never deleted) so
+            % DashboardEngine.applyTheme, DashboardConfigDialog, and the
+            % existing test suites keep working unchanged.
+            obj.hideNativeControls_();
+            obj.buildCustomLayer_();
         end
 
         function setLastUpdateTime(obj, t)
@@ -464,6 +483,188 @@ classdef DashboardToolbar < handle
             timePanelH = obj.Engine.TimePanelHeight;
             contentArea = [0, timePanelH, ...
                 1, 1 - obj.Engine.BannerHeight - obj.Height - timePanelH];
+        end
+    end
+
+    methods (Access = private)
+        function hideNativeControls_(obj)
+        %HIDENATIVECONTROLS_ Hide (never delete) every native uicontrol/uipanel.
+        %   All 14 handles remain valid — DashboardEngine.applyTheme,
+        %   DashboardConfigDialog, and existing tests read .Value /
+        %   .HighlightColor / .TooltipString / .String / .Position /
+        %   .BackgroundColor on them directly.
+            nativeHandles = {obj.hTitleText, obj.hLastUpdate, obj.hInfoBtn, ...
+                obj.hExportBtn, obj.hImageBtn, obj.hConfigBtn, obj.hSyncBtn, ...
+                obj.hResetBtn, obj.hLiveBtn, obj.hLivePanel, obj.hFollowBtn, ...
+                obj.hFollowPanel, obj.hEventsBtn, obj.hEventsPanel};
+            for k = 1:numel(nativeHandles)
+                h = nativeHandles{k};
+                if ~isempty(h) && ishandle(h)
+                    set(h, 'Visible', 'off');
+                end
+            end
+        end
+
+        function buildCustomLayer_(obj)
+        %BUILDCUSTOMLAYER_ Paint the custom light-mode toolbar visual layer.
+        %   Cheap-render only: flat fill rectangles, 1px hairline borders,
+        %   text. No gradients/shadows/blur/rounded corners. All colors
+        %   and font sizes come from obj.Theme_.
+            theme = obj.Theme_;
+
+            obj.hAxes_ = axes('Parent', obj.hPanel, ...
+                'Tag', 'DashboardToolbarAxes', ...
+                'Units', 'normalized', ...
+                'Position', [0 0 1 1], ...
+                'XLim', [0 1], ...
+                'YLim', [0 1], ...
+                'XTick', [], ...
+                'YTick', [], ...
+                'Box', 'off', ...
+                'Color', theme.ToolbarBackground, ...
+                'YDir', 'normal', ...
+                'HitTest', 'on', ...
+                'PickableParts', 'visible', ...
+                'Visible', 'off');
+            hold(obj.hAxes_, 'on');
+
+            % Brand: small filled square + bold dashboard name (left).
+            brandX = 0.01; brandSqW = 0.012; brandSqH = 0.6; brandY = 0.2;
+            obj.hBrandSquare_ = patch(obj.hAxes_, ...
+                [brandX, brandX + brandSqW, brandX + brandSqW, brandX], ...
+                [brandY, brandY, brandY + brandSqH, brandY + brandSqH], ...
+                theme.DragHandleColor, ...
+                'EdgeColor', 'none', ...
+                'HitTest', 'off');
+            obj.hBrandText_ = text(obj.hAxes_, brandX + brandSqW + 0.01, 0.5, ...
+                obj.Engine.Name, ...
+                'Color', theme.GroupHeaderFg, ...
+                'FontSize', theme.HeaderFontSize, ...
+                'FontWeight', 'bold', ...
+                'HorizontalAlignment', 'left', ...
+                'VerticalAlignment', 'middle', ...
+                'HitTest', 'on', ...
+                'PickableParts', 'visible', ...
+                'ButtonDownFcn', @(src, evt) obj.onNameClick_());
+
+            % Right-aligned group of flat action buttons + toggles, drawn
+            % left-to-right: Info, Sync, Redraw, Config, Image, Export,
+            % Live, Follow, Events — then the last-update text right-
+            % aligned at the far right edge.
+            btnW = 0.06;
+            step = btnW + 0.005;
+            x = 0.29;
+            obj.addCustomButton_('info', 'Info', x, btnW, @() obj.onInfo());
+            x = x + step;
+            obj.addCustomButton_('sync', 'Sync', x, btnW, ...
+                @() obj.Engine.resetGlobalTime());
+            x = x + step;
+            obj.addCustomButton_('redraw', 'Redraw', x, btnW, @() obj.onReset());
+            x = x + step;
+            obj.addCustomButton_('config', 'Config', x, btnW, @() obj.onConfig());
+            x = x + step;
+            obj.addCustomButton_('image', 'Image', x, btnW, @() obj.onImage());
+            x = x + step;
+            obj.addCustomButton_('export', 'Export', x, btnW, @() obj.onExport());
+            x = x + step;
+            obj.addCustomButton_('live', 'Live', x, btnW, ...
+                @() obj.customLiveClick_());
+            x = x + step;
+            obj.addCustomButton_('follow', 'Follow', x, btnW, ...
+                @() obj.customFollowClick_());
+            x = x + step;
+            obj.addCustomButton_('events', 'Events', x, btnW, ...
+                @() obj.customEventsClick_());
+
+            % Last-update text: right-aligned at the far right, lightened
+            % font color (scalar blend toward ToolbarBackground — same
+            % pattern as the hidden hLastUpdate label).
+            fadedFg = theme.ToolbarFontColor * 0.6 + theme.ToolbarBackground * 0.4;
+            obj.hLastUpdateText_ = text(obj.hAxes_, 0.99, 0.5, 'Last update: —', ...
+                'Color', fadedFg, ...
+                'FontSize', theme.HeaderFontSize - 3, ...
+                'HorizontalAlignment', 'right', ...
+                'VerticalAlignment', 'middle', ...
+                'HitTest', 'off');
+
+            hold(obj.hAxes_, 'off');
+        end
+
+        function addCustomButton_(obj, key, label, xLeft, width, onClickFcn)
+        %ADDCUSTOMBUTTON_ Draw one flat bordered "button" (patch + label).
+        %   Both the patch and the label route clicks to onClickFcn — the
+        %   SAME existing handler the equivalent native control calls.
+            theme = obj.Theme_;
+            btnY = 0.15;
+            btnH = 0.7;
+            hPatch = patch(obj.hAxes_, ...
+                [xLeft, xLeft + width, xLeft + width, xLeft], ...
+                [btnY, btnY, btnY + btnH, btnY + btnH], ...
+                theme.WidgetBackground, ...
+                'EdgeColor', theme.WidgetBorderColor, ...
+                'LineWidth', 1, ...
+                'HitTest', 'on', ...
+                'PickableParts', 'visible', ...
+                'ButtonDownFcn', @(src, evt) onClickFcn());
+            hLabel = text(obj.hAxes_, xLeft + width / 2, btnY + btnH / 2, label, ...
+                'Color', theme.ToolbarFontColor, ...
+                'FontSize', theme.HeaderFontSize - 3, ...
+                'HorizontalAlignment', 'center', ...
+                'VerticalAlignment', 'middle', ...
+                'HitTest', 'on', ...
+                'PickableParts', 'visible', ...
+                'ButtonDownFcn', @(src, evt) onClickFcn());
+            obj.CustomBtns_.(key) = struct('Patch', hPatch, 'Label', hLabel);
+        end
+
+        function onNameClick_(obj)
+        %ONNAMECLICK_ Prompt a rename via inputdlg, applying it exactly like
+        %   the existing onNameEdit path (Engine.Name + figure Name), then
+        %   updating both the custom brand text and the hidden hTitleText.
+            answer = inputdlg('Dashboard name:', 'Rename Dashboard', 1, ...
+                {obj.Engine.Name});
+            if isempty(answer) || isempty(answer{1})
+                return;
+            end
+            newName = answer{1};
+            obj.Engine.Name = newName;
+            set(obj.Engine.hFigure, 'Name', newName);
+            if ~isempty(obj.hBrandText_) && ishandle(obj.hBrandText_)
+                set(obj.hBrandText_, 'String', newName);
+            end
+            if ~isempty(obj.hTitleText) && ishandle(obj.hTitleText)
+                set(obj.hTitleText, 'String', newName);
+            end
+        end
+
+        function customLiveClick_(obj)
+        %CUSTOMLIVECLICK_ Flip the hidden Live Value, then call onLiveToggle
+        %   with the hidden handle — keeps Engine.startLive/stopLive in sync.
+            if isempty(obj.hLiveBtn) || ~ishandle(obj.hLiveBtn)
+                return;
+            end
+            set(obj.hLiveBtn, 'Value', ~get(obj.hLiveBtn, 'Value'));
+            obj.onLiveToggle(obj.hLiveBtn);
+        end
+
+        function customFollowClick_(obj)
+        %CUSTOMFOLLOWCLICK_ Flip the hidden Follow Value, then call
+        %   onFollowToggle with the hidden handle.
+            if isempty(obj.hFollowBtn) || ~ishandle(obj.hFollowBtn)
+                return;
+            end
+            set(obj.hFollowBtn, 'Value', ~get(obj.hFollowBtn, 'Value'));
+            obj.onFollowToggle(obj.hFollowBtn);
+        end
+
+        function customEventsClick_(obj)
+        %CUSTOMEVENTSCLICK_ Flip the hidden Events Value, then call
+        %   onEventsToggle with the hidden handle.
+            if isempty(obj.hEventsBtn) || ~ishandle(obj.hEventsBtn)
+                return;
+            end
+            set(obj.hEventsBtn, 'Value', ~get(obj.hEventsBtn, 'Value'));
+            obj.onEventsToggle(obj.hEventsBtn);
         end
     end
 end
