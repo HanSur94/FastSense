@@ -422,6 +422,14 @@ classdef MultiStatusWidget < DashboardWidget
                 try t = TagRegistry.get(char(t)); catch, return; end
             end
             if ~isa(t, 'Tag'), return; end
+            % Only monitor-kind tags carry a binary 0/1 alarm signal, so the
+            % >= 0.5 -> alarm mapping applies to them alone. A plain sensor
+            % returns its raw reading (e.g. 72.9), which is always >= 0.5 and
+            % previously painted every sensor alarm-red. getKind() keeps this
+            % polymorphic (Pitfall 1 — no isa-on-subclass).
+            isMonitor = false;
+            try isMonitor = strcmp(t.getKind(), 'monitor'); catch, end
+            if ~isMonitor, return; end
             try
                 v = t.valueAt(now);
             catch
@@ -494,10 +502,18 @@ classdef MultiStatusWidget < DashboardWidget
             end
             if isa(sensor, 'Tag')
                 try
-                    theme = obj.getTheme();
-                    v = sensor.valueAt(now);
-                    if ~isempty(v) && isnumeric(v) && ~any(isnan(v)) && v(1) >= 0.5
-                        color = theme.StatusAlarmColor;
+                    % Only monitor-kind tags carry a binary 0/1 alarm signal;
+                    % a plain sensor's raw value must not be thresholded at 0.5
+                    % (that painted every sensor >= 0.5 alarm-red). Non-monitor
+                    % tags with no threshold have no alarm state -> default.
+                    isMonitor = false;
+                    try isMonitor = strcmp(sensor.getKind(), 'monitor'); catch, end
+                    if isMonitor
+                        theme = obj.getTheme();
+                        v = sensor.valueAt(now);
+                        if ~isempty(v) && isnumeric(v) && ~any(isnan(v)) && v(1) >= 0.5
+                            color = theme.StatusAlarmColor;
+                        end
                     end
                 catch
                     % Defensive: any Tag-side failure falls through to default.
