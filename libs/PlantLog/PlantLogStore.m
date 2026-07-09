@@ -282,6 +282,31 @@ classdef PlantLogStore < handle
             n    = sum(drop);
             obj.entries_ = obj.entries_(~drop);
         end
+
+        function n = pruneEntriesBefore(obj, t)
+            %PRUNEENTRIESBEFORE Age-based retention: drop entries older than t.
+            %   n = store.pruneEntriesBefore(t) removes every entry with
+            %   Timestamp < t (keeps Timestamp >= t) and returns the count
+            %   removed. No-op (returns 0) when nothing is older than t; empties
+            %   the store when t is past the newest entry. For trimming a
+            %   long-running operator journal to a retention window — sibling of
+            %   the EventStore age-prune (#293).
+            %
+            %   Errors:
+            %     PlantLogStore:invalidInput — t is not a numeric scalar
+            if ~isnumeric(t) || ~isscalar(t)
+                error('PlantLogStore:invalidInput', ...
+                    't must be a numeric scalar; got %s.', class(t));
+            end
+            n = 0;
+            if isempty(obj.entries_)
+                return;
+            end
+            ts   = [obj.entries_.Timestamp];
+            drop = ts < t;
+            n    = sum(drop);
+            obj.entries_ = obj.entries_(~drop);
+        end
     end
 
     methods (Static)
