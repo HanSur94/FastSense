@@ -759,6 +759,90 @@ classdef Tag < handle
             end
         end
 
+        function series = compareWindows(obj, windows, varargin)
+            %COMPAREWINDOWS Phase-aligned multi-window overlay primitive (#358).
+            %   series = tag.compareWindows({[a0 a1], [b0 b1], ...}) resolves the
+            %   tag over each window and re-zeroes every window's time onto a
+            %   shared RELATIVE-time axis, ready to overlay (shift-vs-shift /
+            %   run-vs-run comparison).
+            %
+            %   Returns a struct array, one element per window:
+            %     RelT   — time re-zeroed to the window anchor (t - anchor)
+            %     Y      — values in that window
+            %     Window — the original [t0 t1] (for legend/labeling)
+            %
+            %   Overlay via the existing addLine path:
+            %     fs = FastSense(ax);
+            %     for k = 1:numel(series)
+            %         fs.addLine(series(k).RelT, series(k).Y, 'Name', sprintf('W%d', k));
+            %     end
+            %
+            %   Options:
+            %     'Anchor' — 'start' (default; re-zero at each window's t0),
+            %                'end' (align on t1), or a numeric scalar offset
+            %                subtracted from every window.
+            %
+            %   Toolbox-free: one getXYRange per window + a time shift. Inherited
+            %   by every Tag kind (Y passes through unchanged, so a categorical
+            %   StateTag also aligns on relative time).
+            %
+            %   Errors:
+            %     Tag:compareWindowsBadWindows - windows not a cell of [t0 t1] pairs
+            %     Tag:compareWindowsBadAnchor  - invalid Anchor value
+            %     Tag:unknownOption            - unrecognized option key
+            %
+            %   See also getXYRange, correlate.
+            if nargin < 2 || ~iscell(windows) || isempty(windows)
+                error('Tag:compareWindowsBadWindows', ...
+                    'windows must be a non-empty cell array of [t0 t1] pairs.');
+            end
+            anchorMode   = 'start';
+            anchorScalar = 0;
+            k = 1;
+            while k <= numel(varargin)
+                key = varargin{k};
+                if k + 1 > numel(varargin)
+                    error('Tag:unknownOption', 'compareWindows: option "%s" has no value.', char(string(key)));
+                end
+                val = varargin{k + 1};
+                if strcmpi(key, 'Anchor')
+                    if isnumeric(val) && isscalar(val)
+                        anchorMode   = 'scalar';
+                        anchorScalar = val;
+                    elseif (ischar(val) || isstring(val)) && any(strcmpi(char(val), {'start', 'end'}))
+                        anchorMode = lower(char(val));
+                    else
+                        error('Tag:compareWindowsBadAnchor', ...
+                            'Anchor must be ''start'', ''end'', or a numeric scalar.');
+                    end
+                else
+                    error('Tag:unknownOption', 'compareWindows: unknown option "%s".', char(string(key)));
+                end
+                k = k + 2;
+            end
+
+            series = struct('RelT', {}, 'Y', {}, 'Window', {});
+            for i = 1:numel(windows)
+                w = windows{i};
+                if ~isnumeric(w) || numel(w) ~= 2
+                    error('Tag:compareWindowsBadWindows', ...
+                        'Each window must be a numeric [t0 t1] pair.');
+                end
+                t0 = w(1);
+                t1 = w(2);
+                [X, Y] = obj.getXYRange(t0, t1);
+                X = X(:).';
+                switch anchorMode
+                    case 'start',  anchor = t0;
+                    case 'end',    anchor = t1;
+                    otherwise,     anchor = anchorScalar;
+                end
+                series(i).RelT   = X - anchor;
+                series(i).Y      = Y;
+                series(i).Window = [t0, t1];
+            end
+        end
+
         function [Xu, Yu] = resampleUniform(obj, dt, varargin)
             %RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
             %   [Xu, Yu] = tag.resampleUniform(dt) returns the series on a

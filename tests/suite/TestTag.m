@@ -787,6 +787,52 @@ classdef TestTag < matlab.unittest.TestCase
             testCase.verifyError(@() t.spectrum('Bogus', 1), 'Tag:unknownOption');
         end
 
+        % ---- compareWindows tests (Issue #358) ----
+
+        function testCompareWindowsStart(testCase)
+            t = SensorTag('cw', 'X', 1:20, 'Y', 1:20);
+            s = t.compareWindows({[1 5], [11 15]});
+            testCase.verifyEqual(numel(s), 2);
+            testCase.verifyEqual(s(1).Window, [1 5]);
+            testCase.verifyEqual(s(2).Window, [11 15]);
+            [x1, ~] = t.getXYRange(1, 5);
+            testCase.verifyEqual(s(1).RelT, x1(:).' - 1, 'AbsTol', 1e-12, ...
+                'start anchor re-zeroes at t0');
+            [x2, ~] = t.getXYRange(11, 15);
+            testCase.verifyEqual(s(2).RelT, x2(:).' - 11, 'AbsTol', 1e-12);
+        end
+
+        function testCompareWindowsEndAnchor(testCase)
+            t = SensorTag('cw2', 'X', 1:20, 'Y', 1:20);
+            s = t.compareWindows({[1 5]}, 'Anchor', 'end');
+            [x1, ~] = t.getXYRange(1, 5);
+            testCase.verifyEqual(s(1).RelT, x1(:).' - 5, 'AbsTol', 1e-12, ...
+                'end anchor aligns on t1');
+        end
+
+        function testCompareWindowsScalarAnchor(testCase)
+            t = SensorTag('cw3', 'X', 1:20, 'Y', 1:20);
+            s = t.compareWindows({[1 5]}, 'Anchor', 0);
+            [x1, ~] = t.getXYRange(1, 5);
+            testCase.verifyEqual(s(1).RelT, x1(:).', 'AbsTol', 1e-12, ...
+                'scalar 0 anchor leaves absolute time');
+        end
+
+        function testCompareWindowsCarriesY(testCase)
+            t = SensorTag('cw4', 'X', 1:20, 'Y', (1:20) * 10);
+            s = t.compareWindows({[5 8]});
+            [~, y1] = t.getXYRange(5, 8);
+            testCase.verifyEqual(s(1).Y(:).', y1(:).', 'Y passes through unchanged');
+        end
+
+        function testCompareWindowsBadArgsError(testCase)
+            t = SensorTag('cw5', 'X', 1:20, 'Y', 1:20);
+            testCase.verifyError(@() t.compareWindows([]), 'Tag:compareWindowsBadWindows');
+            testCase.verifyError(@() t.compareWindows({[1 2 3]}), 'Tag:compareWindowsBadWindows');
+            testCase.verifyError(@() t.compareWindows({[1 5]}, 'Anchor', 'middle'), ...
+                'Tag:compareWindowsBadAnchor');
+        end
+
     end
 end
 
