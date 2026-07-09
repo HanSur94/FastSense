@@ -231,13 +231,14 @@ What still has to change for the live app to match the frames. Ordered by visibi
 | a | Plot line palette (mock was brighter) | muted `fs-line-*` | **DONE** — Pencil reconciled to muted; no MATLAB change |
 | b | Font family | Inter (mock) vs Helvetica (app) | **Accept** — map Inter→Helvetica; no dependency |
 | c | Rounded corners on chips/cards/buttons | square (MATLAB) | **Accept** — treat `cornerRadius=0` |
-| d | Dashboard toolbar chrome (brand + Live pill + grouped icon actions) | match mock toolbar | **Open** — touches `DashboardToolbar` interaction code (was "Phase 5", deferred) |
-| e | Per-plot tool strip (`X V A L …` visible on every plot) | 6 grouped tool buttons / hover-reveal | **Open** — `FastSenseToolbar` layout; medium effort |
+| d | Dashboard toolbar chrome (brand + Live pill + grouped buttons) | match mock toolbar | **DONE** (260709-gp9) — custom-drawn axes+patch layer over hidden `uicontrol` shim in `DashboardToolbar`; green Live pill; classic-figure controls can't be styled, so this was the only cheap path |
+| e | Per-plot `X V A L +` strip (shared widget chrome) | fold into an overflow menu | **DONE** (260709-ikg) — `X`/`V`/`A`/`L`/`+` hidden (alive) behind a single `…` `OverflowMenuButton` in `DashboardLayout`; click posts a `uicontextmenu` routing to the same actions; Info + Detach stay visible |
 | f | Status pills (OK/WARN/ALARM) | pill w/ soft bg (`fs-*-soft`) | **Open** — only fits in tall status cells; add `fs-*-soft` fields |
 | g | Heatmap colormap | `fs-heat-1..6` ramp | **Open, optional** — only if a heatmap widget is in scope |
 
-Items **a–c** are settled (accepted or done). Items **d–g** are the real remaining work to make the
-live dashboard read like the mock; **d** and **e** are the two that most change the overall look.
+Items **a–c** are settled (accepted or done). **d** and **e** — the two that most changed the overall
+look — are now implemented via the hide-not-delete compatibility-shim pattern (native controls stay
+valid+hidden, a cheap custom layer is drawn over them). **f–g** remain optional polish.
 
 ---
 
