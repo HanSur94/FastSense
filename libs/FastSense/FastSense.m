@@ -84,6 +84,8 @@ classdef FastSense < handle
         ShowProgress = true           % show console progress bar during render
         XScale = 'linear'             % 'linear' or 'log' — X axis scale
         YScale = 'linear'             % 'linear' or 'log' — Y axis scale
+        XLabel = ''                   % X axis label ('' => unlabeled) — #356
+        YLabel = ''                   % Y axis label ('' => auto-derive from a single bound Tag) — #356
         ViolationsVisible = true      % global toggle for violation markers
         ShowThresholdLabels = false  % show inline name labels on threshold lines
         ShowEventMarkers = true     % toggle event round-marker overlay (EVENT-07)
@@ -109,6 +111,14 @@ classdef FastSense < handle
         Markers    = struct('X', {}, 'Y', {}, 'Marker', {}, ...
                             'MarkerSize', {}, 'Color', {}, 'Label', {}, ...
                             'hLine', {})
+        VLines     = struct('X', {}, 'Color', {}, 'LineStyle', {}, ...
+                            'LineWidth', {}, 'Label', {}, 'hLine', {})
+        Spans      = struct('T0', {}, 'T1', {}, 'FaceColor', {}, ...
+                            'FaceAlpha', {}, 'EdgeColor', {}, 'Label', {}, ...
+                            'hPatch', {})
+        Texts      = struct('X', {}, 'Y', {}, 'String', {}, 'Color', {}, ...
+                            'FontSize', {}, 'HorizontalAlignment', {}, ...
+                            'VerticalAlignment', {}, 'hText', {})
         Shadings   = struct('X', {}, 'Y1', {}, 'Y2', {}, ...
                             'FaceColor', {}, 'FaceAlpha', {}, ...
                             'EdgeColor', {}, 'DisplayName', {}, ...
@@ -141,6 +151,7 @@ classdef FastSense < handle
         LiveFileBytes  = 0         % last known file size in bytes
         MetadataFileDate  = 0         % last known metadata file datenum
         Tags_ = {}                    % cell of Tag handles added via addTag (for event overlay)
+        YLabelAutoDerived_ = false    % true when YLabel was auto-derived from a single tag (#356)
         EventMarkerHandles_ = {}      % cell of line handles for cleanup
         PrevWBDFcn_           = []        % saved WindowButtonDownFcn during details-open
         PrevKPFcn_            = []        % saved WindowKeyPressFcn during details-open
@@ -233,6 +244,8 @@ classdef FastSense < handle
             defaults.LiveInterval = cfg.LiveInterval;
             defaults.XScale = cfg.XScale;
             defaults.YScale = cfg.YScale;
+            defaults.XLabel = '';
+            defaults.YLabel = '';
             defaults.StorageMode = cfg.StorageMode;
             defaults.MemoryLimit = cfg.MemoryLimit;
             defaults.HoverCrosshair = true;
@@ -256,6 +269,8 @@ classdef FastSense < handle
             obj.LiveInterval = opts.LiveInterval;
             obj.XScale = opts.XScale;
             obj.YScale = opts.YScale;
+            obj.XLabel = opts.XLabel;
+            obj.YLabel = opts.YLabel;
             obj.StorageMode = opts.StorageMode;
             obj.MemoryLimit = opts.MemoryLimit;
             obj.HoverCrosshair = logical(opts.HoverCrosshair);
@@ -741,6 +756,163 @@ classdef FastSense < handle
             end
         end
 
+        function addVLine(obj, x, varargin)
+            %ADDVLINE Add a vertical reference line at a time/x value (#357).
+            %   fp.ADDVLINE(x) draws a vertical line at X = x spanning the full
+            %   Y range — the vertical partner of addThreshold's horizontal line.
+            %   fp.ADDVLINE(x, 'Color', [1 0 0], 'LineStyle', ':', ...
+            %       'LineWidth', 1.5, 'Label', 'trip') customises the line.
+            %
+            %   Useful for marking an event instant, a setpoint change, a shift
+            %   boundary, or any reference time. Must be called BEFORE render().
+            %
+            %   Inputs:
+            %     x        — scalar X (time) value for the line
+            %     varargin — name-value pairs:
+            %       'Color'     — RGB triplet or color string (default: Theme.ThresholdColor)
+            %       'LineStyle' — line style (default: Theme.ThresholdStyle)
+            %       'LineWidth' — scalar width (default: 1)
+            %       'Label'     — text label drawn near the top of the line
+            %
+            %   See also addThreshold, addBand, addMarker.
+            if obj.IsRendered
+                error('FastSense:alreadyRendered', ...
+                    'Cannot add vertical lines after render() has been called.');
+            end
+            if ~isnumeric(x) || ~isscalar(x)
+                error('FastSense:invalidVLine', 'x must be a numeric scalar.');
+            end
+
+            defaults.Color     = obj.Theme.ThresholdColor;
+            defaults.LineStyle = obj.Theme.ThresholdStyle;
+            defaults.LineWidth = 1;
+            defaults.Label     = '';
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addVLine', unmatched, fieldnames(defaults));
+
+            v.X         = x;
+            v.Color     = parsed.Color;
+            v.LineStyle = parsed.LineStyle;
+            v.LineWidth = parsed.LineWidth;
+            v.Label     = parsed.Label;
+            v.hLine     = [];
+
+            if isempty(obj.VLines)
+                obj.VLines = v;
+            else
+                obj.VLines(end+1) = v;
+            end
+        end
+
+        function addSpan(obj, t0, t1, varargin)
+            %ADDSPAN Add a vertical time-window highlight (#377).
+            %   fp.ADDSPAN(t0, t1) shades the vertical band X in [t0, t1] across
+            %   the full Y range — the vertical dual of addBand's horizontal
+            %   band. Ideal for highlighting a phase, a shift, or an event
+            %   window on a time axis.
+            %   fp.ADDSPAN(t0, t1, 'FaceColor', [1 0.95 0.8], 'FaceAlpha', 0.25, ...
+            %       'Label', 'startup') customises the highlight.
+            %
+            %   Spans are rendered as translucent patches pushed behind the data
+            %   lines. Must be called BEFORE render().
+            %
+            %   Inputs:
+            %     t0, t1   — window bounds on the X (time) axis (t0 <= t1)
+            %     varargin — name-value pairs:
+            %       'FaceColor' — RGB triplet (default: Theme.ThresholdColor)
+            %       'FaceAlpha' — scalar 0-1 (default: Theme.BandAlpha)
+            %       'EdgeColor' — edge color (default: 'none')
+            %       'Label'     — text label for the span
+            %
+            %   See also addBand, addVLine, addShaded.
+            if obj.IsRendered
+                error('FastSense:alreadyRendered', ...
+                    'Cannot add spans after render() has been called.');
+            end
+            if ~isnumeric(t0) || ~isscalar(t0) || ~isnumeric(t1) || ~isscalar(t1)
+                error('FastSense:invalidSpan', 't0 and t1 must be numeric scalars.');
+            end
+            if t0 > t1
+                error('FastSense:invalidSpan', 't0 (%g) must be <= t1 (%g).', t0, t1);
+            end
+
+            defaults.FaceColor = obj.Theme.ThresholdColor;
+            defaults.FaceAlpha = obj.Theme.BandAlpha;
+            defaults.EdgeColor = 'none';
+            defaults.Label = '';
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addSpan', unmatched, fieldnames(defaults));
+
+            sp.T0        = t0;
+            sp.T1        = t1;
+            sp.FaceColor = parsed.FaceColor;
+            sp.FaceAlpha = parsed.FaceAlpha;
+            sp.EdgeColor = parsed.EdgeColor;
+            sp.Label     = parsed.Label;
+            sp.hPatch    = [];
+
+            if isempty(obj.Spans)
+                obj.Spans = sp;
+            else
+                obj.Spans(end+1) = sp;
+            end
+        end
+
+        function addText(obj, x, y, str, varargin)
+            %ADDTEXT Add an on-plot text annotation / callout at (x, y) (#347).
+            %   fp.ADDTEXT(x, y, str) places the string str at data coordinates
+            %   (x, y) — the text member of the annotation family (alongside
+            %   addMarker, addThreshold, addBand).
+            %   fp.ADDTEXT(x, y, str, 'Color', [1 0 0], 'FontSize', 12, ...
+            %       'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom')
+            %   customises the callout.
+            %
+            %   Must be called BEFORE render().
+            %
+            %   Inputs:
+            %     x, y     — data coordinates for the text anchor
+            %     str      — char / string to display
+            %     varargin — name-value pairs:
+            %       'Color'               — RGB triplet or color string (default: Theme text color)
+            %       'FontSize'            — scalar points (default: 10)
+            %       'HorizontalAlignment' — 'left' (default) | 'center' | 'right'
+            %       'VerticalAlignment'   — 'middle' (default) | 'top' | 'bottom' | ...
+            %
+            %   See also addMarker, addThreshold, addBand.
+            if obj.IsRendered
+                error('FastSense:alreadyRendered', ...
+                    'Cannot add text after render() has been called.');
+            end
+            if ~isnumeric(x) || ~isscalar(x) || ~isnumeric(y) || ~isscalar(y)
+                error('FastSense:invalidText', 'x and y must be numeric scalars.');
+            end
+            if ~(ischar(str) || isstring(str))
+                error('FastSense:invalidText', 'str must be a char or string.');
+            end
+
+            defaults.Color = obj.Theme.ForegroundColor;
+            defaults.FontSize = 10;
+            defaults.HorizontalAlignment = 'left';
+            defaults.VerticalAlignment = 'middle';
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addText', unmatched, fieldnames(defaults));
+
+            tx.X                   = x;
+            tx.Y                   = y;
+            tx.String              = char(str);
+            tx.Color               = parsed.Color;
+            tx.FontSize            = parsed.FontSize;
+            tx.HorizontalAlignment = parsed.HorizontalAlignment;
+            tx.VerticalAlignment   = parsed.VerticalAlignment;
+            tx.hText               = [];
+
+            if isempty(obj.Texts)
+                obj.Texts = tx;
+            else
+                obj.Texts(end+1) = tx;
+            end
+        end
+
         function addMarker(obj, x, y, varargin)
             %ADDMARKER Add custom event markers at specific positions.
             %   fp.ADDMARKER(x, y) plots marker symbols at the given (x,y)
@@ -1014,6 +1186,116 @@ classdef FastSense < handle
                         'Unsupported tag kind ''%s''.', tag.getKind());
             end
             obj.Tags_{end+1} = tag;
+
+            % #356: auto-derive the Y-axis label from a single bound tag when
+            % YLabel is unset (Units -> Name -> Key, matching FastSenseWidget).
+            % An explicit YLabel always wins. Once a second tag is added, a
+            % previously auto-derived label is cleared (multi-tag -> unlabeled).
+            if numel(obj.Tags_) == 1
+                if isempty(obj.YLabel)
+                    if isprop(tag, 'Units') && ~isempty(tag.Units)
+                        obj.YLabel = tag.Units;
+                    elseif ~isempty(tag.Name)
+                        obj.YLabel = tag.Name;
+                    else
+                        obj.YLabel = tag.Key;
+                    end
+                    obj.YLabelAutoDerived_ = true;
+                end
+            elseif obj.YLabelAutoDerived_
+                obj.YLabel = '';
+                obj.YLabelAutoDerived_ = false;
+            end
+        end
+
+        function applyAxisLabels_(obj)
+            %APPLYAXISLABELS_ Draw XLabel/YLabel when non-empty (#356).
+            %   No-op when both are '' so the default is byte-for-byte identical
+            %   to the pre-#356 behaviour.
+            if ~isempty(obj.XLabel)
+                xlabel(obj.hAxes, obj.XLabel);
+            end
+            if ~isempty(obj.YLabel)
+                ylabel(obj.hAxes, obj.YLabel);
+            end
+        end
+
+        function renderCustomOverlays_(obj, yLimLow, yLimHigh)
+            %RENDERCUSTOMOVERLAYS_ Draw addVLine/addSpan/addText overlays.
+            %   Called from render() after the axis Y-limits are finalised so
+            %   the vertical members (#357 VLines, #377 Spans) span the axis;
+            %   text annotations (#347) sit on the front layer. Extracted from
+            %   render() to keep that method within the metric budget.
+
+            % Vertical reference lines (#357): full-Y span, excluded from limits.
+            for i = 1:numel(obj.VLines)
+                V = obj.VLines(i);
+                hV = line(obj.hAxes, [V.X, V.X], [yLimLow, yLimHigh], ...
+                    'Color', V.Color, ...
+                    'LineStyle', V.LineStyle, ...
+                    'LineWidth', V.LineWidth, ...
+                    'HandleVisibility', 'off', ...
+                    'XLimInclude', 'off', 'YLimInclude', 'off');
+                udV.FastSense = struct( ...
+                    'Type', 'vline', ...
+                    'Name', V.Label, ...
+                    'LineIndex', [], ...
+                    'ThresholdValue', []);
+                set(hV, 'UserData', udV);
+                if ~isempty(V.Label)
+                    text(obj.hAxes, V.X, yLimHigh, [' ', V.Label], ...
+                        'Color', V.Color, ...
+                        'VerticalAlignment', 'top', ...
+                        'HorizontalAlignment', 'left', ...
+                        'Clipping', 'on', ...
+                        'HandleVisibility', 'off');
+                end
+                obj.VLines(i).hLine = hV;
+            end
+
+            % Vertical spans (#377): full-Y highlight in [t0,t1], pushed behind.
+            for i = 1:numel(obj.Spans)
+                S = obj.Spans(i);
+                patchX = [S.T0, S.T1, S.T1, S.T0];
+                patchY = [yLimLow, yLimLow, yLimHigh, yLimHigh];
+                hSp = patch(patchX, patchY, S.FaceColor, ...
+                    'Parent', obj.hAxes, ...
+                    'FaceAlpha', S.FaceAlpha, ...
+                    'EdgeColor', S.EdgeColor, ...
+                    'YLimInclude', 'off', ...
+                    'HandleVisibility', 'off');
+                udSp.FastSense = struct( ...
+                    'Type', 'span', ...
+                    'Name', S.Label, ...
+                    'LineIndex', [], ...
+                    'ThresholdValue', []);
+                set(hSp, 'UserData', udSp);
+                try
+                    uistack(hSp, 'bottom');   % push behind data lines
+                catch
+                    % uistack unavailable — translucent patch is still readable
+                end
+                obj.Spans(i).hPatch = hSp;
+            end
+
+            % On-plot text annotations (#347): front layer.
+            for i = 1:numel(obj.Texts)
+                T = obj.Texts(i);
+                hTx = text(obj.hAxes, T.X, T.Y, T.String, ...
+                    'Color', T.Color, ...
+                    'FontSize', T.FontSize, ...
+                    'HorizontalAlignment', T.HorizontalAlignment, ...
+                    'VerticalAlignment', T.VerticalAlignment, ...
+                    'Clipping', 'on', ...
+                    'HandleVisibility', 'off');
+                udTx.FastSense = struct( ...
+                    'Type', 'text', ...
+                    'Name', T.String, ...
+                    'LineIndex', [], ...
+                    'ThresholdValue', []);
+                set(hTx, 'UserData', udTx);
+                obj.Texts(i).hText = hTx;
+            end
         end
 
         function addStateTagAsStaircase_(obj, tag, varargin)
@@ -1122,6 +1404,8 @@ classdef FastSense < handle
             % Apply axis scale (linear or log)
             set(obj.hAxes, 'XScale', obj.XScale);
             set(obj.hAxes, 'YScale', obj.YScale);
+
+            obj.applyAxisLabels_();   % #356 XLabel/YLabel (no-op when both empty)
 
             % --- Compute full X range (normalised for empty/degenerate data) ---
             [xmin, xmax] = obj.computeFullXRange();
@@ -1484,6 +1768,7 @@ classdef FastSense < handle
             obj.FullYLim = [yLimLow, yLimHigh];
             obj.CachedXLim = get(obj.hAxes, 'XLim');
             obj.updateThresholdLabels();
+            obj.renderCustomOverlays_(yLimLow, yLimHigh);   % #357/#377/#347
 
             % Auto-format datetime axis
             if strcmp(obj.XType, 'datenum')

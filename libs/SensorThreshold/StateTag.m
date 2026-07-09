@@ -36,6 +36,7 @@ classdef StateTag < Tag
     properties
         X = []   % 1xN numeric: sorted transition timestamps
         Y = []   % 1xN numeric OR 1xN cell of char: state values
+        StateNames = []  % optional Nx2 {code, name} legend for nameAt (#372); [] = numeric only
     end
 
     properties (Access = private)
@@ -54,12 +55,13 @@ classdef StateTag < Tag
             %   (Name, Units, Description, Labels, Metadata, Criticality, SourceRef).
             %   Raises StateTag:unknownOption for unrecognized or dangling keys.
             %   Raises TagPipeline:invalidRawSource if RawSource is malformed.
-            [tagArgs, xVal, yVal, hasX, hasY, rsVal, hasRs] = ...
+            [tagArgs, xVal, yVal, hasX, hasY, rsVal, hasRs, snVal, hasSn] = ...
                 StateTag.splitArgs_(varargin);
             obj@Tag(key, tagArgs{:});   % MUST be first — Pitfall 8
             if hasX,  obj.X = xVal; end
             if hasY,  obj.Y = yVal; end
             if hasRs, obj.RawSource_ = rsVal; end
+            if hasSn, obj.StateNames = snVal; end
         end
 
         function r = get.RawSource(obj)
@@ -129,6 +131,86 @@ classdef StateTag < Tag
             k = 'state';
         end
 
+        function nm = nameAt(obj, t)
+            %NAMEAT State NAME at time t via the StateNames legend (#372).
+            %   nm = st.nameAt(t) looks up valueAt(t) and maps the code through
+            %   StateNames (an Nx2 {code, name} cell). Mirrors valueAt's shape:
+            %   a scalar t returns a char name; a vector t returns a cellstr.
+            %   Unmapped codes (or no legend) fall back to the numeric string —
+            %   so nameAt is always safe to call.
+            %
+            %   See also valueAt, StateNames, transitions.
+            sn = obj.StateNames;
+            v  = obj.valueAt(t);
+            if isscalar(t)
+                if iscell(v)
+                    nm = StateTag.mapCode_(v{1}, sn);
+                else
+                    nm = StateTag.mapCode_(v, sn);
+                end
+                return;
+            end
+            n  = numel(v);
+            nm = cell(1, n);
+            if iscell(v)
+                for k = 1:n
+                    nm{k} = StateTag.mapCode_(v{k}, sn);
+                end
+            else
+                for k = 1:n
+                    nm{k} = StateTag.mapCode_(v(k), sn);
+                end
+            end
+        end
+
+        function S = transitions(obj)
+            %TRANSITIONS Enumerate state changes as a change-point event list (#342).
+            %   S = stateTag.transitions() returns a struct array, one element per
+            %   actual state change (repeated-value samples are skipped), with
+            %   fields:
+            %     Time      - timestamp of the change (X at the change sample)
+            %     FromState - state value immediately before the change
+            %     ToState   - state value at / after the change
+            %   FromState / ToState are numeric or char, matching the tag's Y
+            %   representation. Returns an empty struct with those fields for a
+            %   constant or empty channel.
+            %
+            %   The categorical analog of the numeric family's crossings (#328),
+            %   and the change-point complement to the aggregate stateDurations
+            %   (#258): transitions answer *when / what changed*, durations answer
+            %   *time spent per state*.
+            %
+            %   Toolbox-free — a compare loop over getXY, handling both numeric
+            %   and cellstr Y (via strcmp / isequaln, so a NaN->NaN run is not a
+            %   spurious change).
+            %
+            %   See also getXY, valueAt, getKind.
+            S = struct('Time', {}, 'FromState', {}, 'ToState', {});
+            [X, Y] = obj.getXY();
+            n = numel(X);
+            if n < 2
+                return;
+            end
+            isCellY = iscell(Y);
+            for i = 2:n
+                if isCellY
+                    changed = ~strcmp(Y{i}, Y{i - 1});
+                else
+                    changed = ~isequaln(Y(i), Y(i - 1));
+                end
+                if ~changed
+                    continue;
+                end
+                if isCellY
+                    S(end + 1) = struct('Time', X(i), ...
+                        'FromState', Y{i - 1}, 'ToState', Y{i}); %#ok<AGROW>
+                else
+                    S(end + 1) = struct('Time', X(i), ...
+                        'FromState', Y(i - 1), 'ToState', Y(i)); %#ok<AGROW>
+                end
+            end
+        end
+
         function s = toStruct(obj)
             %TOSTRUCT Serialize StateTag to a plain struct.
             %   Wraps cellstr Labels and cellstr Y once via {...} to survive
@@ -151,6 +233,9 @@ classdef StateTag < Tag
             end
             if ~isempty(fieldnames(obj.RawSource_))
                 s.rawsource = obj.RawSource_;
+            end
+            if ~isempty(obj.StateNames)          % omit-when-empty (#372)
+                s.statenames = {obj.StateNames}; % double-wrap (survives struct())
             end
         end
 
@@ -247,21 +332,48 @@ classdef StateTag < Tag
                     ~isempty(fieldnames(s.rawsource))
                 rsArg = {'RawSource', s.rawsource};
             end
+            snArg = {};
+            if isfield(s, 'statenames') && ~isempty(s.statenames)
+                SN = s.statenames;
+                % Unwrap the double-wrap from toStruct.
+                if iscell(SN) && numel(SN) == 1 && iscell(SN{1}), SN = SN{1}; end
+                if iscell(SN), snArg = {'StateNames', SN}; end
+            end
             obj = StateTag(s.key, ...
                 'Name', name, 'Units', units, 'Description', description, ...
                 'Labels', labels, 'Metadata', metadata, ...
                 'Criticality', criticality, 'SourceRef', sourceref, ...
-                'X', xVal, 'Y', yVal, rsArg{:});
+                'X', xVal, 'Y', yVal, rsArg{:}, snArg{:});
         end
     end
 
     methods (Static, Access = private)
-        function [tagArgs, xVal, yVal, hasX, hasY, rsVal, hasRs] = splitArgs_(args)
+        function nm = mapCode_(code, stateNames)
+            %MAPCODE_ Map a state code to its name via an Nx2 {code,name} legend.
+            %   Unmapped codes (or an empty/ill-formed legend) fall back to the
+            %   numeric string (or the code itself when it is already char).
+            if ~isempty(stateNames) && iscell(stateNames) && size(stateNames, 2) == 2
+                for r = 1:size(stateNames, 1)
+                    if isequaln(stateNames{r, 1}, code)
+                        nm = stateNames{r, 2};
+                        return;
+                    end
+                end
+            end
+            if ischar(code)
+                nm = code;
+            else
+                nm = num2str(code);
+            end
+        end
+
+        function [tagArgs, xVal, yVal, hasX, hasY, rsVal, hasRs, snVal, hasSn] = splitArgs_(args)
             %SPLITARGS_ Partition varargin into Tag universals vs. X/Y vs. RawSource.
             %   Unknown or dangling keys raise StateTag:unknownOption.
             %   Malformed RawSource raises TagPipeline:invalidRawSource via
             %   StateTag's OWN inline validateRawSource_ (NOT a cross-class
             %   call — revision-1 Major-3 decision for Octave reliability).
+            snVal = []; hasSn = false;
             tagKeys = {'Name', 'Units', 'Description', 'Labels', ...
                        'Metadata', 'Criticality', 'SourceRef'};
             tagArgs = {};
@@ -286,10 +398,12 @@ classdef StateTag < Tag
                 elseif strcmp(k, 'RawSource')
                     rsVal = StateTag.validateRawSource_(v);
                     hasRs = true;
+                elseif strcmp(k, 'StateNames')
+                    snVal = v; hasSn = true;
                 else
                     error('StateTag:unknownOption', ...
                         'Unknown option ''%s''. Valid options: %s.', ...
-                        char(k), strjoin([tagKeys, {'X', 'Y', 'RawSource'}], ', '));
+                        char(k), strjoin([tagKeys, {'X', 'Y', 'RawSource', 'StateNames'}], ', '));
                 end
                 i = i + 2;
             end

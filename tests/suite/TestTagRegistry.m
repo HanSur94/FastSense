@@ -303,5 +303,47 @@ classdef TestTagRegistry < matlab.unittest.TestCase
 
             TagRegistry.clear();
         end
+
+        % ---- Issue #363: toStructs() whole-catalog serializer ----
+
+        function testToStructsEmptyReturnsEmptyCell(testCase)
+            TagRegistry.clear();
+            structs = TagRegistry.toStructs();
+            testCase.verifyTrue(iscell(structs));
+            testCase.verifyEqual(numel(structs), 0);
+        end
+
+        function testToStructsSortedByKey(testCase)
+            % Insert out of order; output must be sorted by ascending key.
+            TagRegistry.clear();
+            TagRegistry.register('mid', MockTag('mid'));
+            TagRegistry.register('aaa', MockTag('aaa'));
+            TagRegistry.register('zzz', MockTag('zzz'));
+            structs = TagRegistry.toStructs();
+            testCase.verifyEqual(numel(structs), 3);
+            testCase.verifyEqual(structs{1}.key, 'aaa');
+            testCase.verifyEqual(structs{2}.key, 'mid');
+            testCase.verifyEqual(structs{3}.key, 'zzz');
+        end
+
+        function testToStructsRoundTripsThroughLoadFromStructs(testCase)
+            % SAVE with toStructs, LOAD with loadFromStructs -> catalog restored.
+            TagRegistry.clear();
+            TagRegistry.register('p', SensorTag('p', 'Name', 'Pump'));
+            TagRegistry.register('m', StateTag('m', 'X', [1 5 10], 'Y', [0 1 2]));
+            structs = TagRegistry.toStructs();
+
+            TagRegistry.clear();
+            TagRegistry.loadFromStructs(structs);
+
+            gotP = TagRegistry.get('p');
+            testCase.verifyEqual(gotP.Name, 'Pump');
+            testCase.verifyEqual(gotP.getKind(), 'sensor');
+            gotM = TagRegistry.get('m');
+            testCase.verifyEqual(gotM.getKind(), 'state');
+            [X, Y] = gotM.getXY();
+            testCase.verifyEqual(X, [1 5 10]);
+            testCase.verifyEqual(Y, [0 1 2]);
+        end
     end
 end

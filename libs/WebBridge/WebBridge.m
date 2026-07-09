@@ -80,6 +80,26 @@ classdef WebBridge < handle
             %HASACTION Check if an action is registered.
             tf = isfield(obj.Actions, name);
         end
+        function unregisterAction(obj, name)
+            %UNREGISTERACTION Remove a registered action (no-op if absent).
+            %   bridge.unregisterAction(name) drops the named action from the
+            %   registry and, if a client is connected, pushes the updated
+            %   action list. Silent no-op when the action is not registered —
+            %   the mirror of registerAction. Completes the registry lifecycle
+            %   alongside listActions / hasAction.
+            if isfield(obj.Actions, name)
+                obj.Actions = rmfield(obj.Actions, name);
+                if obj.IsServing && obj.ClientConnected
+                    obj.sendActionsChanged();
+                end
+            end
+        end
+        function names = listActions(obj)
+            %LISTACTIONS Return the names of all registered actions (cellstr).
+            %   Returns a column cellstr of action names, or {} when none are
+            %   registered.
+            names = fieldnames(obj.Actions);
+        end
         function notifyDataChanged(obj, signalId)
             %NOTIFYDATACHANGED Tell connected clients that signal data has updated.
             if ~obj.IsServing; return; end
