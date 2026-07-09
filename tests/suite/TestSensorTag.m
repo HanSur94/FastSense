@@ -320,9 +320,72 @@ classdef TestSensorTag < matlab.unittest.TestCase
             rsAfter = t.RawSource;
             testCase.verifyEqual(rsAfter.file, rsBefore.file);
         end
+
+        % ---- fromCsv tests (Issue #345) ----
+
+        function testFromCsvAutoColumns(testCase)
+            f = testCase.writeTempCsv_('t,v\n1,10\n2,20\n3,30\n');
+            tag = SensorTag.fromCsv(f);
+            [x, y] = tag.getXY();
+            testCase.verifyEqual(x(:).', [1 2 3]);
+            testCase.verifyEqual(y(:).', [10 20 30]);
+            testCase.verifyEqual(tag.Key, 'v', 'key defaults to value-column header');
+        end
+
+        function testFromCsvByHeaderName(testCase)
+            f = testCase.writeTempCsv_('time,temp,press\n1,5,100\n2,6,90\n');
+            tag = SensorTag.fromCsv(f, 'TimeCol', 'time', 'ValueCol', 'press');
+            [x, y] = tag.getXY();
+            testCase.verifyEqual(x(:).', [1 2]);
+            testCase.verifyEqual(y(:).', [100 90]);
+            testCase.verifyEqual(tag.Key, 'press');
+        end
+
+        function testFromCsvMultipleValueCols(testCase)
+            f = testCase.writeTempCsv_('t,a,b\n1,10,100\n2,20,200\n');
+            tags = SensorTag.fromCsv(f, 'ValueCol', {'a', 'b'});
+            testCase.verifyEqual(numel(tags), 2);
+            testCase.verifyEqual(tags(1).Key, 'a');
+            testCase.verifyEqual(tags(2).Key, 'b');
+            [~, yb] = tags(2).getXY();
+            testCase.verifyEqual(yb(:).', [100 200]);
+        end
+
+        function testFromCsvKeyOverrideAndPassthrough(testCase)
+            f = testCase.writeTempCsv_('t,v\n1,10\n2,20\n');
+            tag = SensorTag.fromCsv(f, 'Key', 'my_sensor', 'Units', 'degC');
+            testCase.verifyEqual(tag.Key, 'my_sensor');
+            testCase.verifyEqual(tag.Units, 'degC', 'passthrough NV forwarded');
+        end
+
+        function testFromCsvSortsByTime(testCase)
+            f = testCase.writeTempCsv_('t,v\n3,30\n1,10\n2,20\n');
+            tag = SensorTag.fromCsv(f);
+            [x, y] = tag.getXY();
+            testCase.verifyEqual(x(:).', [1 2 3], 'rows sorted by ascending time');
+            testCase.verifyEqual(y(:).', [10 20 30]);
+        end
+
+        function testFromCsvBadColumnErrors(testCase)
+            f = testCase.writeTempCsv_('t,v\n1,10\n2,20\n');
+            testCase.verifyError(@() SensorTag.fromCsv(f, 'ValueCol', 'nope'), ...
+                'SensorTag:csvBadColumn');
+            testCase.verifyError(@() SensorTag.fromCsv(f, 'ValueCol', 9), ...
+                'SensorTag:csvBadColumn');
+        end
     end
 
     methods (Access = private)
+        function csvFile = writeTempCsv_(testCase, contents)
+            %WRITETEMPCSV_ Write `contents` (with \n escapes) to a temp .csv and
+            %   schedule deletion via testCase.addTeardown.
+            csvFile = [tempname(), '.csv'];
+            fid = fopen(csvFile, 'w');
+            fprintf(fid, contents);   % fprintf interprets the \n escapes
+            fclose(fid);
+            testCase.addTeardown(@() deleteIfExists(csvFile));
+        end
+
         function matFile = writeTempMat_(testCase, key, x, y)
             %WRITETEMPMAT_ Create a .mat file with a struct under `key` and
             %   schedule deletion via testCase.addTeardown.
