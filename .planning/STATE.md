@@ -19,7 +19,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** A MATLAB engineer can ingest a million-sample sensor stream, monitor thresholds, build sub-second-responsive dashboards, and navigate it all from a single Companion app — without leaving MATLAB and without external toolboxes.
-**Current focus:** None — all planned milestones shipped (v1.0–v4.0, Companion, Plant Log, polish through Phase 1041). Repo in polish/housekeeping; backlog Phase 999.1 (in-app help) remains unplanned.
+**Current focus:** Backlog Tag-analysis features from the 2026-07-08 issue triage. Phases 999.2 (Tag Analysis Toolkit) + 999.3 (EventViewer image export) COMPLETE on branch (see below). Backlog Phase 999.1 (in-app help) remains unplanned.
 
 ## Current Position
 
@@ -27,7 +27,9 @@ Phase: — (none active; latest shipped = Phase 1041, MERGED via PR #189 on 2026
 Plan: —
 Milestone: v3.0 FastSense Companion — SHIPPED 2026-04-30; v3.1 Plant Log Integration — SHIPPED 2026-05-19; v4.0 Multi-User LAN Concurrency — SHIPPED 2026-05 via PR #152 (parallel branch); v1.0 perf line — COMPLETE via PR #114. No milestone in flight.
 Status: Phase 1041 complete — inline time-range control (toolbar dropdown + Custom date strip) shipped; PR #189 MERGED 2026-06-03. No planned milestone in flight — repo in polish/housekeeping. Outstanding: 12 wiki-bot dup PRs were closed to 1 (#190) + workflow root-caused (260609-mcz); backlog Phase 999.1 (in-app help system) unplanned; ROADMAP v4.0 boxes stale (shipped on main via #152 — router misreports, see memory gsd-router-stale-v4-misroute).
-Last activity: 2026-06-29 - Completed quick task 260629-tgy: Tag.cumulativeIntegral() trapezoidal totalizer (#327) — 32/32 TestTag pass, merged via PR #331. Prior: 260629-tt3 EventViewer.exportImage() PNG/JPEG export (#321) — merged via PR #333.
+Last activity: 2026-07-08 - Implemented the approved features from the GitHub issue triage via GSD (PR #376, branch claude/github-issues-triage-df4390). Phase 999.2 Tag Analysis Toolkit adds 6 methods to libs/SensorThreshold/Tag.m — getStats #223 (keystone), resampleUniform #308, derivative #326, movingStat #312, exceedance #316, crossings #328 — all toolbox-free/Octave-safe/additive. NOTE: #327 cumulativeIntegral and #321 EventViewer.exportImage were independently shipped on main first (PRs #331/#333, quick tasks 260629-tgy/tt3) while this branch was in flight; on merge of main, this branch keeps main's canonical cumulativeIntegral + exportImage and its duplicates/tests were dropped. Verified via matlab MCP: 6 new Tag-method test files pass; TestTag (main's #327 suite) + TestEventViewer green; TestDerivedTag 35/35 (no regression).
+
+Previous: 2026-06-29 - Completed quick task 260629-tgy: Tag.cumulativeIntegral() trapezoidal totalizer (#327) — 32/32 TestTag pass, merged via PR #331. Prior: 260629-tt3 EventViewer.exportImage() PNG/JPEG export (#321) — merged via PR #333. Earlier: 260624-nvf StatusWidget MonitorTag crash fix (code 14b3d529).
 
 ### Note on parallel v4.0 work (main branch state)
 
