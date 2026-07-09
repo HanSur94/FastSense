@@ -89,7 +89,7 @@ function d = getDashboardDefaults(preset)
             d.GroupHeaderFg       = [0.118 0.161 0.231];
             d.GroupBorderColor    = [0.898 0.910 0.925];
             d.TabActiveBg         = [0.918 0.945 0.996];
-            d.TabInactiveBg       = [0.933 0.949 0.969];
+            d.TabInactiveBg       = [0.850 0.870 0.900];  % darker gray so the accent-soft active tab clearly stands out (>=0.05 luminance delta)
             d.MarkerPlantLog      = [0 0 0];   % Phase 1031 PLOG-VIZ-09: black plant-log slider markers
             d.CurrentViewBoxColor = [0.85 0.45 0.05];    % Phase 1039: dark amber, contrasts with the dark-blue Selection on light bg
             % Crisp semantic status trio, tuned for readability on white.
