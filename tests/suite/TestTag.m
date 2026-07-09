@@ -344,6 +344,62 @@ classdef TestTag < matlab.unittest.TestCase
                 'Tag:unknownOption');
         end
 
+        % ---- integral(t0, t1) tests (Issue #351) ----
+
+        function testIntegralConstantFullSeries(testCase)
+            %TESTINTEGRALCONSTANTFULLSERIES Constant y=2 over [0,10] => area 20.
+            t = SensorTag('int_const', 'X', 0:1:10, 'Y', 2 * ones(1, 11));
+            testCase.verifyEqual(t.integral(), 20, 'AbsTol', 1e-12, ...
+                'Full-series integral of constant 2 over [0,10] must be 20');
+        end
+
+        function testIntegralTriangle(testCase)
+            %TESTINTEGRALTRIANGLE Triangle ramp 0->4 over X=0:4 => area 8.
+            %   trapz([0 1 2 3 4],[0 1 2 3 4]) = 8 (0.5*base*height = 0.5*4*4).
+            t = SensorTag('int_tri', 'X', 0:1:4, 'Y', 0:1:4);
+            testCase.verifyEqual(t.integral(), 8, 'AbsTol', 1e-12, ...
+                'Triangle 0..4 must integrate to 8');
+        end
+
+        function testIntegralWindowMatchesRange(testCase)
+            %TESTINTEGRALWINDOWMATCHESRANGE integral(t0,t1) == cumulativeIntegral('Range',...).
+            X = 0:1:9;
+            Y = (1:10) .^ 0.5;   % arbitrary non-uniform-value series
+            t = SensorTag('int_win', 'X', X, 'Y', Y);
+            t0 = 2; t1 = 6;
+            expected = t.cumulativeIntegral('Range', [t0 t1]);
+            testCase.verifyEqual(t.integral(t0, t1), expected, 'AbsTol', 1e-12, ...
+                'Windowed integral must equal cumulativeIntegral Range end value');
+        end
+
+        function testIntegralEmptyBoundsIsFullSeries(testCase)
+            %TESTINTEGRALEMPTYBOUNDS [] bounds integrate the full series.
+            t = SensorTag('int_eb', 'X', 0:1:4, 'Y', [2 2 2 2 2]);
+            testCase.verifyEqual(t.integral([], []), t.integral(), 'AbsTol', 1e-12, ...
+                'integral([],[]) must equal integral() (full series)');
+        end
+
+        function testIntegralEmptyDataReturnsZero(testCase)
+            %TESTINTEGRALEMPTYDATA No data => 0, no error.
+            m = MockTag('int_empty');
+            testCase.verifyEqual(m.integral(), 0, 'AbsTol', 1e-12, ...
+                'Empty-data integral must return scalar 0');
+        end
+
+        function testIntegralNaNRobust(testCase)
+            %TESTINTEGRALNANROBUST Interior NaN contributes zero area, no NaN result.
+            t = SensorTag('int_nan', 'X', 0:1:4, 'Y', [1 1 NaN 1 1]);
+            v = t.integral();
+            testCase.verifyTrue(isfinite(v) && v > 0, ...
+                'Integral with interior NaN must be finite and positive');
+        end
+
+        function testIntegralDiscreteWarns(testCase)
+            %TESTINTEGRALDISCRETEWARNS StateTag integral emits Tag:integralOnDiscrete.
+            st = StateTag('int_disc', 'X', [0 1 2], 'Y', [0 1 0]);
+            testCase.verifyWarning(@() st.integral(), 'Tag:integralOnDiscrete');
+        end
+
     end
 end
 

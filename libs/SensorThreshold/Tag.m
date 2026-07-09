@@ -445,6 +445,47 @@ classdef Tag < handle
             end
         end
 
+        function v = integral(obj, t0, t1)
+            %INTEGRAL Scalar definite integral (area under the curve) over a window.
+            %   v = tag.integral(t0, t1)  integrates Y w.r.t. time over [t0, t1].
+            %   v = tag.integral()        integrates the full series.
+            %   v = tag.integral([], [])  same as integral() — empty bounds
+            %                             integrate the full series (mirrors the
+            %                             empty-bounds contract of getXYRange).
+            %
+            %   Returns the single number a sensor engineer reports over a
+            %   window: energy = int power dt, dose = int concentration dt,
+            %   consumed volume = int flow dt, throughput/total over a shift.
+            %
+            %   This is the bounded-window end value of cumulativeIntegral, to
+            %   which it delegates — so it inherits the same toolbox-free,
+            %   gap-robust trapezoidal core and edge policy: an empty or
+            %   single-sample (degenerate) window integrates to 0, and interior
+            %   NaN/Inf segments contribute zero area rather than poisoning the
+            %   total.
+            %
+            %   Inputs:
+            %     t0, t1 — optional window bounds. Omit both (or pass []) to
+            %              integrate the full series.
+            %
+            %   Output:
+            %     v — scalar area under Y over the window.
+            %
+            %   Discrete channels:
+            %     For a 'state' (discrete/ZOH) channel a Tag:integralOnDiscrete
+            %     warning is emitted (area-under-staircase is rarely intended);
+            %     the value is still returned. Consistent with cumulativeIntegral.
+            %
+            %   See also cumulativeIntegral, getXYRange, getStats.
+            if nargin < 2, t0 = []; end
+            if nargin < 3, t1 = []; end
+            if ~isempty(t0) && ~isempty(t1)
+                v = obj.cumulativeIntegral('Range', [t0 t1]);
+            else
+                v = obj.cumulativeIntegral();
+            end
+        end
+
         function [X, Ys] = movingStat(obj, window, type)
             %MOVINGSTAT Rolling-window statistic series (#312).
             %   [X, Ys] = tag.movingStat(window) rolling mean over a centered
