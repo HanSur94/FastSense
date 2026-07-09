@@ -1170,6 +1170,78 @@ classdef MonitorTag < Tag
                 'SourceRef',   MonitorTag.fieldOr_(s, 'sourceref',   ''));
             obj.ParentKey_ = s.parentkey;
         end
+
+        function m = level(key, parentTag, tripLevel, varargin)
+            %LEVEL Factory: scalar level alarm with built-in Deadband hysteresis (#349).
+            %   m = MonitorTag.level(key, parentTag, tripLevel) builds a monitor
+            %   whose ConditionFn is @(x,y) y > tripLevel ('above', default).
+            %   m = MonitorTag.level(..., 'Direction', 'below') uses y < tripLevel.
+            %   m = MonitorTag.level(..., 'Deadband', d) adds hysteresis: the
+            %   alarm clears only past tripLevel-d ('above') / tripLevel+d
+            %   ('below'). Deadband 0 (default) => momentary alarm (no
+            %   AlarmOffConditionFn). All other name-value options (MinDuration,
+            %   EventStore, OnEventStart/End, Persist, DataStore, and Tag
+            %   universals) forward verbatim to the constructor.
+            %
+            %   Errors:
+            %     MonitorTag:invalidLevel    — tripLevel not a finite numeric scalar
+            %     MonitorTag:badDirection    — Direction not 'above'/'below'
+            %     MonitorTag:invalidDeadband — Deadband not a nonnegative finite scalar
+            %     MonitorTag:unknownOption   — dangling option (no value)
+            if ~(isnumeric(tripLevel) && isscalar(tripLevel) && isfinite(tripLevel))
+                error('MonitorTag:invalidLevel', 'tripLevel must be a finite numeric scalar.');
+            end
+            direction = 'above';
+            deadband  = 0;
+            rest = {};
+            i = 1;
+            while i <= numel(varargin)
+                keyI = varargin{i};
+                if i + 1 > numel(varargin)
+                    error('MonitorTag:unknownOption', ...
+                        'Option ''%s'' has no value.', char(string(keyI)));
+                end
+                val = varargin{i + 1};
+                if strcmpi(keyI, 'Direction')
+                    direction = lower(char(val));
+                elseif strcmpi(keyI, 'Deadband')
+                    deadband = val;
+                else
+                    rest{end + 1} = keyI;  %#ok<AGROW>
+                    rest{end + 1} = val;   %#ok<AGROW>
+                end
+                i = i + 2;
+            end
+            if ~any(strcmp(direction, {'above', 'below'}))
+                error('MonitorTag:badDirection', 'Direction must be ''above'' or ''below''.');
+            end
+            if ~(isnumeric(deadband) && isscalar(deadband) && isfinite(deadband) && deadband >= 0)
+                error('MonitorTag:invalidDeadband', 'Deadband must be a nonnegative finite scalar.');
+            end
+
+            % AlarmOffConditionFn is the CLEAR trigger: the FSM flips ON->OFF
+            % when it is true. So for an 'above' alarm the alarm clears once y
+            % has fallen back below the lower band (tripLevel - deadband); for
+            % 'below', once y has risen above the upper band (tripLevel + d).
+            offFn = [];
+            if strcmp(direction, 'above')
+                condFn = @(x, y) y > tripLevel;
+                if deadband > 0
+                    offFn = @(x, y) y < (tripLevel - deadband);
+                end
+            else
+                condFn = @(x, y) y < tripLevel;
+                if deadband > 0
+                    offFn = @(x, y) y > (tripLevel + deadband);
+                end
+            end
+
+            if ~isempty(offFn)
+                m = MonitorTag(key, parentTag, condFn, rest{:}, 'AlarmOffConditionFn', offFn);
+            else
+                m = MonitorTag(key, parentTag, condFn, rest{:});
+            end
+        end
     end
 
     methods (Static, Access = private)

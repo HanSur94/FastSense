@@ -363,5 +363,54 @@ classdef TestMonitorTag < matlab.unittest.TestCase
                 'MonitorTag.m must declare `classdef MonitorTag < Tag` exactly once.');
         end
 
+        % ---- level() factory tests (Issue #349) ----
+
+        function testLevelAboveDefault(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            m  = MonitorTag.level('m', st, 5);
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([0 0 0 0 0 1 1 1 1 1]), ...
+                'above: alarm where y > 5');
+            testCase.verifyEmpty(m.AlarmOffConditionFn, 'Deadband 0 => no off-condition');
+        end
+
+        function testLevelBelow(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            m  = MonitorTag.level('m', st, 5, 'Direction', 'below');
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([1 1 1 1 0 0 0 0 0 0]), ...
+                'below: alarm where y < 5');
+        end
+
+        function testLevelDeadbandExtendsAlarm(testCase)
+            % Up-then-down signal: hysteresis keeps the alarm on through the
+            % deadband zone (y in (3,5]) that a momentary alarm would drop.
+            st = SensorTag('stg', 'X', 1:6, 'Y', [0 3 6 4 2 0]);
+            plain = MonitorTag.level('mp', st, 5);
+            hyst  = MonitorTag.level('mh', st, 5, 'Deadband', 2);
+            [~, yp] = plain.getXY();
+            [~, yh] = hyst.getXY();
+            testCase.verifyEqual(yp(4), 0, 'no deadband: index 4 (y=4) not in alarm');
+            testCase.verifyEqual(yh(4), 1, 'deadband: index 4 held in alarm by hysteresis');
+            testCase.verifyNotEmpty(hyst.AlarmOffConditionFn, 'Deadband>0 sets off-condition');
+        end
+
+        function testLevelForwardsOptions(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            m  = MonitorTag.level('m', st, 5, 'Name', 'Hot', 'MinDuration', 3);
+            testCase.verifyEqual(m.Name, 'Hot', 'Tag universal forwarded');
+            testCase.verifyEqual(m.MinDuration, 3, 'MinDuration forwarded');
+        end
+
+        function testLevelValidationErrors(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() MonitorTag.level('m', st, [1 2]), ...
+                'MonitorTag:invalidLevel');
+            testCase.verifyError(@() MonitorTag.level('m', st, 5, 'Direction', 'sideways'), ...
+                'MonitorTag:badDirection');
+            testCase.verifyError(@() MonitorTag.level('m', st, 5, 'Deadband', -1), ...
+                'MonitorTag:invalidDeadband');
+        end
+
     end
 end
