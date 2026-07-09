@@ -218,20 +218,32 @@ classdef DashboardToolbar < handle
             % existing test suites keep working unchanged.
             obj.hideNativeControls_();
             obj.buildCustomLayer_();
+
+            % Prime the custom pills to match the hidden controls' initial
+            % Values (Events starts active by default).
+            obj.setLiveActiveIndicator(logical(get(obj.hLiveBtn, 'Value')));
+            obj.setFollowActiveIndicator(logical(get(obj.hFollowBtn, 'Value')));
+            obj.setEventsActiveIndicator(logical(get(obj.hEventsBtn, 'Value')));
         end
 
         function setLastUpdateTime(obj, t)
         %SETLASTUPDATETIME Update the last-update label with a timestamp.
         %   Hot-path note: called on every live tick. Uses datevec (no format
         %   string parsing) instead of datestr to avoid timefun/private overhead.
+        %   Dual-writes both the hidden hLastUpdate and the custom
+        %   hLastUpdateText_ so the visible custom layer stays in sync.
+            try
+                dv = datevec(t);
+                timeStr = sprintf('%02d:%02d:%02d', dv(4), dv(5), floor(dv(6)));
+            catch
+                timeStr = datestr(t, 'HH:MM:SS');
+            end
+            fullStr = ['Last update: ' timeStr];
             if ~isempty(obj.hLastUpdate) && ishandle(obj.hLastUpdate)
-                try
-                    dv = datevec(t);
-                    timeStr = sprintf('%02d:%02d:%02d', dv(4), dv(5), floor(dv(6)));
-                catch
-                    timeStr = datestr(t, 'HH:MM:SS');
-                end
-                set(obj.hLastUpdate, 'String', ['Last update: ' timeStr]);
+                set(obj.hLastUpdate, 'String', fullStr);
+            end
+            if ~isempty(obj.hLastUpdateText_) && ishandle(obj.hLastUpdateText_)
+                set(obj.hLastUpdateText_, 'String', fullStr);
             end
         end
 
@@ -252,15 +264,16 @@ classdef DashboardToolbar < handle
         end
 
         function setLiveActiveIndicator(obj, isActive)
-        %SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active.
-            if isempty(obj.hLivePanel) || ~ishandle(obj.hLivePanel)
-                return;
+        %SETLIVEACTIVEINDICATOR Show a blue surround when live mode is active,
+        %   and repaint the custom Live pill (StatusOkColor when active).
+            if ~isempty(obj.hLivePanel) && ishandle(obj.hLivePanel)
+                if isActive
+                    set(obj.hLivePanel, 'HighlightColor', obj.Theme_.InfoColor);
+                else
+                    set(obj.hLivePanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+                end
             end
-            if isActive
-                set(obj.hLivePanel, 'HighlightColor', obj.Theme_.InfoColor);
-            else
-                set(obj.hLivePanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
-            end
+            obj.paintToggleActive_('live', isActive, obj.Theme_.StatusOkColor);
         end
 
         function onFollowToggle(obj, src)
@@ -300,15 +313,16 @@ classdef DashboardToolbar < handle
         end
 
         function setFollowActiveIndicator(obj, isActive)
-        %SETFOLLOWACTIVEINDICATOR Show a blue surround when Follow is active.
-            if isempty(obj.hFollowPanel) || ~ishandle(obj.hFollowPanel)
-                return;
+        %SETFOLLOWACTIVEINDICATOR Show a blue surround when Follow is active,
+        %   and repaint the custom Follow pill (InfoColor when active).
+            if ~isempty(obj.hFollowPanel) && ishandle(obj.hFollowPanel)
+                if isActive
+                    set(obj.hFollowPanel, 'HighlightColor', obj.Theme_.InfoColor);
+                else
+                    set(obj.hFollowPanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+                end
             end
-            if isActive
-                set(obj.hFollowPanel, 'HighlightColor', obj.Theme_.InfoColor);
-            else
-                set(obj.hFollowPanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
-            end
+            obj.paintToggleActive_('follow', isActive, obj.Theme_.InfoColor);
         end
 
         function applyFollowToWidgets_(obj, widgets, mode, snap)
@@ -369,14 +383,14 @@ classdef DashboardToolbar < handle
         %   Matches the Live button's visual treatment so the toolbar
         %   reads consistently. Keeps the button label constant — the
         %   border colour is the active indicator; the tooltip explains
-        %   the function.
-            if isempty(obj.hEventsPanel) || ~ishandle(obj.hEventsPanel)
-                return;
-            end
-            if isActive
-                set(obj.hEventsPanel, 'HighlightColor', obj.Theme_.InfoColor);
-            else
-                set(obj.hEventsPanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+        %   the function. Also repaints the custom Events pill (InfoColor
+        %   when active).
+            if ~isempty(obj.hEventsPanel) && ishandle(obj.hEventsPanel)
+                if isActive
+                    set(obj.hEventsPanel, 'HighlightColor', obj.Theme_.InfoColor);
+                else
+                    set(obj.hEventsPanel, 'HighlightColor', obj.Theme_.ToolbarBackground);
+                end
             end
             if ~isempty(obj.hEventsBtn) && ishandle(obj.hEventsBtn)
                 if isActive
@@ -385,6 +399,7 @@ classdef DashboardToolbar < handle
                     set(obj.hEventsBtn, 'String', 'Events', 'Value', 0);
                 end
             end
+            obj.paintToggleActive_('events', isActive, obj.Theme_.InfoColor);
         end
 
         function onConfig(obj)
@@ -615,6 +630,28 @@ classdef DashboardToolbar < handle
                 'PickableParts', 'visible', ...
                 'ButtonDownFcn', @(src, evt) onClickFcn());
             obj.CustomBtns_.(key) = struct('Patch', hPatch, 'Label', hLabel);
+        end
+
+        function paintToggleActive_(obj, key, isActive, activeColor)
+        %PAINTTOGGLEACTIVE_ Repaint a custom toggle pill for active/inactive.
+        %   Active: patch fills with activeColor, label turns white (the
+        %   one explicit exception to theme-only colors — the semantic
+        %   "on-fill foreground", not a themed surface color).
+        %   Inactive: patch/label revert to WidgetBackground/ToolbarFontColor.
+            if ~isfield(obj.CustomBtns_, key)
+                return;
+            end
+            btn = obj.CustomBtns_.(key);
+            if isempty(btn.Patch) || ~ishandle(btn.Patch)
+                return;
+            end
+            if isActive
+                set(btn.Patch, 'FaceColor', activeColor);
+                set(btn.Label, 'Color', [1 1 1]);
+            else
+                set(btn.Patch, 'FaceColor', obj.Theme_.WidgetBackground);
+                set(btn.Label, 'Color', obj.Theme_.ToolbarFontColor);
+            end
         end
 
         function onNameClick_(obj)
