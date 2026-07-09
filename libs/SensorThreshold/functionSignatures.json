@@ -1,0 +1,201 @@
+{
+    "_schemaVersion": "1.0.0",
+
+    "SensorTag.SensorTag": {
+        "inputs": [
+            {"name": "key",         "kind": "required",  "type": ["char"]},
+            {"name": "X",           "kind": "namevalue", "type": ["numeric"]},
+            {"name": "Y",           "kind": "namevalue", "type": ["numeric"]},
+            {"name": "Name",        "kind": "namevalue", "type": ["char"]},
+            {"name": "Units",       "kind": "namevalue", "type": ["char"]},
+            {"name": "Description", "kind": "namevalue", "type": ["char"]},
+            {"name": "Labels",      "kind": "namevalue", "type": ["cell"]},
+            {"name": "Metadata",    "kind": "namevalue", "type": ["struct"]},
+            {"name": "Criticality", "kind": "namevalue", "type": ["choices={'low','medium','high','safety'}"]},
+            {"name": "SourceRef",   "kind": "namevalue", "type": ["char"]}
+        ]
+    },
+
+    "SensorTag.fromCsv": {
+        "inputs": [
+            {"name": "path",        "kind": "required",  "type": ["char"]},
+            {"name": "TimeCol",     "kind": "namevalue"},
+            {"name": "ValueCol",    "kind": "namevalue"},
+            {"name": "Key",         "kind": "namevalue", "type": ["char"]},
+            {"name": "Delimiter",   "kind": "namevalue", "type": ["char"]},
+            {"name": "Name",        "kind": "namevalue", "type": ["char"]},
+            {"name": "Units",       "kind": "namevalue", "type": ["char"]},
+            {"name": "Criticality", "kind": "namevalue", "type": ["choices={'low','medium','high','safety'}"]}
+        ]
+    },
+
+    "StateTag.StateTag": {
+        "inputs": [
+            {"name": "key",         "kind": "required",  "type": ["char"]},
+            {"name": "X",           "kind": "namevalue", "type": ["numeric"]},
+            {"name": "Y",           "kind": "namevalue"},
+            {"name": "StateNames",  "kind": "namevalue", "type": ["cell"]},
+            {"name": "Name",        "kind": "namevalue", "type": ["char"]},
+            {"name": "Units",       "kind": "namevalue", "type": ["char"]},
+            {"name": "Description", "kind": "namevalue", "type": ["char"]},
+            {"name": "Labels",      "kind": "namevalue", "type": ["cell"]},
+            {"name": "Metadata",    "kind": "namevalue", "type": ["struct"]},
+            {"name": "Criticality", "kind": "namevalue", "type": ["choices={'low','medium','high','safety'}"]},
+            {"name": "RawSource",   "kind": "namevalue", "type": ["struct"]}
+        ]
+    },
+
+    "StateTag.nameAt": {
+        "inputs": [
+            {"name": "obj", "kind": "required", "type": ["StateTag"]},
+            {"name": "t",   "kind": "required", "type": ["numeric"]}
+        ]
+    },
+
+    "StateTag.transitions": {
+        "inputs": [
+            {"name": "obj", "kind": "required", "type": ["StateTag"]}
+        ]
+    },
+
+    "MonitorTag.MonitorTag": {
+        "inputs": [
+            {"name": "key",                 "kind": "required",  "type": ["char"]},
+            {"name": "parentTag",           "kind": "required",  "type": ["Tag"]},
+            {"name": "conditionFn",         "kind": "required",  "type": ["function_handle"]},
+            {"name": "AlarmOffConditionFn", "kind": "namevalue", "type": ["function_handle"]},
+            {"name": "MinDuration",         "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "EventStore",          "kind": "namevalue"},
+            {"name": "Name",                "kind": "namevalue", "type": ["char"]},
+            {"name": "Criticality",         "kind": "namevalue", "type": ["choices={'low','medium','high','safety'}"]}
+        ]
+    },
+
+    "MonitorTag.level": {
+        "inputs": [
+            {"name": "key",         "kind": "required",  "type": ["char"]},
+            {"name": "parentTag",   "kind": "required",  "type": ["Tag"]},
+            {"name": "tripLevel",   "kind": "required",  "type": ["numeric", "scalar"]},
+            {"name": "Direction",   "kind": "namevalue", "type": ["choices={'above','below'}"]},
+            {"name": "Deadband",    "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "MinDuration", "kind": "namevalue", "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "MonitorTag.band": {
+        "inputs": [
+            {"name": "key",         "kind": "required",  "type": ["char"]},
+            {"name": "parentTag",   "kind": "required",  "type": ["Tag"]},
+            {"name": "lo",          "kind": "required",  "type": ["numeric", "scalar"]},
+            {"name": "hi",          "kind": "required",  "type": ["numeric", "scalar"]},
+            {"name": "Direction",   "kind": "namevalue", "type": ["choices={'outside','inside'}"]},
+            {"name": "Deadband",    "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "MinDuration", "kind": "namevalue", "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "CompositeTag.CompositeTag": {
+        "inputs": [
+            {"name": "key",           "kind": "required",  "type": ["char"]},
+            {"name": "aggregateMode", "kind": "ordered",   "type": ["choices={'and','or','majority','count','worst','severity','user_fn'}"]},
+            {"name": "UserFn",        "kind": "namevalue", "type": ["function_handle"]},
+            {"name": "Threshold",     "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "MinDuration",   "kind": "namevalue", "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "TagRegistry.toStructs": {
+        "inputs": []
+    },
+
+    "TagRegistry.get": {
+        "inputs": [
+            {"name": "key", "kind": "required", "type": ["char"]}
+        ]
+    },
+
+    "TagRegistry.register": {
+        "inputs": [
+            {"name": "key", "kind": "required", "type": ["char"]},
+            {"name": "tag", "kind": "required", "type": ["Tag"]}
+        ]
+    },
+
+    "Tag.getStats": {
+        "inputs": [
+            {"name": "obj",    "kind": "required", "type": ["Tag"]},
+            {"name": "tStart", "kind": "ordered",  "type": ["numeric", "scalar"]},
+            {"name": "tEnd",   "kind": "ordered",  "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "Tag.percentile": {
+        "inputs": [
+            {"name": "obj",    "kind": "required", "type": ["Tag"]},
+            {"name": "levels", "kind": "required", "type": ["numeric"]},
+            {"name": "tStart", "kind": "ordered",  "type": ["numeric", "scalar"]},
+            {"name": "tEnd",   "kind": "ordered",  "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "Tag.integral": {
+        "inputs": [
+            {"name": "obj", "kind": "required", "type": ["Tag"]},
+            {"name": "t0",  "kind": "ordered",  "type": ["numeric", "scalar"]},
+            {"name": "t1",  "kind": "ordered",  "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "Tag.correlate": {
+        "inputs": [
+            {"name": "obj",   "kind": "required", "type": ["Tag"]},
+            {"name": "other", "kind": "required", "type": ["Tag"]},
+            {"name": "t0",    "kind": "ordered",  "type": ["numeric", "scalar"]},
+            {"name": "t1",    "kind": "ordered",  "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "Tag.lagCorrelation": {
+        "inputs": [
+            {"name": "obj",    "kind": "required",  "type": ["Tag"]},
+            {"name": "other",  "kind": "required",  "type": ["Tag"]},
+            {"name": "MaxLag", "kind": "namevalue", "type": ["numeric", "scalar"]}
+        ]
+    },
+
+    "Tag.findPeaks": {
+        "inputs": [
+            {"name": "obj",           "kind": "required",  "type": ["Tag"]},
+            {"name": "MinProminence", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "MinSeparation", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "Polarity",      "kind": "namevalue", "type": ["choices={'max','min','both'}"]},
+            {"name": "Range",         "kind": "namevalue", "type": ["numeric"]}
+        ]
+    },
+
+    "Tag.removeOutliers": {
+        "inputs": [
+            {"name": "obj",       "kind": "required",  "type": ["Tag"]},
+            {"name": "Method",    "kind": "namevalue", "type": ["choices={'hampel','iqr','zscore'}"]},
+            {"name": "Window",    "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "Threshold", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "Fill",      "kind": "namevalue", "type": ["choices={'nan','linear','previous','remove'}"]}
+        ]
+    },
+
+    "Tag.spectrum": {
+        "inputs": [
+            {"name": "obj",        "kind": "required",  "type": ["Tag"]},
+            {"name": "SampleRate", "kind": "namevalue", "type": ["numeric", "scalar"]},
+            {"name": "Detrend",    "kind": "namevalue"}
+        ]
+    },
+
+    "Tag.compareWindows": {
+        "inputs": [
+            {"name": "obj",     "kind": "required",  "type": ["Tag"]},
+            {"name": "windows", "kind": "required",  "type": ["cell"]},
+            {"name": "Anchor",  "kind": "namevalue"}
+        ]
+    }
+}
