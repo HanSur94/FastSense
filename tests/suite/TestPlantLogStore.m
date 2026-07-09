@@ -182,5 +182,47 @@ classdef TestPlantLogStore < matlab.unittest.TestCase
             testCase.verifyTrue(isempty(evs));
             testCase.verifyEqual(ps.getCount(), 2);
         end
+
+        % ---- Issue #365: removeEntries / removeEntriesInRange ----
+
+        function testRemoveEntriesById(testCase)
+            s = PlantLogStore('x.csv');
+            s.addEntries(PlantLogEntry('Timestamp', 10, 'Message', 'a', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 20, 'Message', 'b', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 30, 'Message', 'c', 'Metadata', struct()));
+            n = s.removeEntries('plog_2');
+            testCase.verifyEqual(n, 1);
+            testCase.verifyEqual(s.getCount(), 2);
+            testCase.verifyEqual({s.getEntries().Id}, {'plog_1', 'plog_3'}, 'order preserved');
+        end
+
+        function testRemoveEntriesBulkSkipsUnknown(testCase)
+            s = PlantLogStore('x.csv');
+            s.addEntries(PlantLogEntry('Timestamp', 10, 'Message', 'a', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 20, 'Message', 'b', 'Metadata', struct()));
+            n = s.removeEntries({'plog_1', 'ghost'});
+            testCase.verifyEqual(n, 1, 'unknown id skipped');
+            testCase.verifyEqual(s.getCount(), 1);
+        end
+
+        function testRemoveEntriesBadInputErrors(testCase)
+            s = PlantLogStore('x.csv');
+            testCase.verifyError(@() s.removeEntries(42), 'PlantLogStore:invalidInput');
+        end
+
+        function testRemoveEntriesInRange(testCase)
+            s = PlantLogStore('x.csv');
+            for tt = [10 20 30 40]
+                s.addEntries(PlantLogEntry('Timestamp', tt, 'Message', 'x', 'Metadata', struct()));
+            end
+            n = s.removeEntriesInRange(20, 30);
+            testCase.verifyEqual(n, 2);
+            testCase.verifyEqual([s.getEntries().Timestamp], [10 40]);
+        end
+
+        function testRemoveEntriesInRangeBadBounds(testCase)
+            s = PlantLogStore('x.csv');
+            testCase.verifyError(@() s.removeEntriesInRange(5, 1), 'PlantLogStore:invalidInput');
+        end
     end
 end
