@@ -85,6 +85,76 @@ GETSTATS One-call statistics summary over the series or a time window.
   windowed slice (via getXYRange, so every Tag subclass inherits
   this with zero overrides).
 
+#### `pv = percentile(obj, levels, tStart, tEnd)`
+
+PERCENTILE Order-statistic percentile value(s) of the series (#339).
+  pv = tag.percentile(95)            % scalar level  -> scalar value
+  pv = tag.percentile([5 50 95])     % vector levels -> vector values
+  pv = tag.percentile([5 95], t0, t1)% over a window (mirrors getStats)
+
+#### `m = median(obj, tStart, tEnd)`
+
+MEDIAN Robust central tendency == percentile(50) (#339).
+  m = tag.median() over the full series; m = tag.median(t0, t1)
+  over a window. Convenience wrapper over percentile.
+
+#### `r = iqr(obj, tStart, tEnd)`
+
+IQR Interquartile range == percentile(75) - percentile(25) (#339).
+  r = tag.iqr() over the full series; r = tag.iqr(t0, t1) over a
+  window. Robust spread, insensitive to outliers.
+
+#### `varargout = correlate(obj, other, t0, t1)`
+
+CORRELATE Pearson correlation coefficient between two tags (#340).
+  r = tagA.correlate(tagB)         Pearson r in [-1,1] over the
+                                   overlapping window
+  r = tagA.correlate(tagB, t0, t1) over a time window
+  [r, n] = tagA.correlate(tagB)    also returns aligned sample count
+
+#### `varargout = lagCorrelation(obj, other, varargin)`
+
+LAGCORRELATION Best time-lag & cross-correlation between two tags (#341).
+  dt = A.lagCorrelation(B)            best lag in TIME units — a
+                                      positive dt means B lags A by dt
+  [dt, r] = A.lagCorrelation(B)       + Pearson r at that lag
+  [dt, r, lags, rr] = A.lagCorrelation(B)  + full lag axis (time) and
+                                      the r-vs-lag curve (a plottable pair)
+  ... = A.lagCorrelation(B, 'MaxLag', L)   cap the search to |lag|<=L
+                                      (time units); default = half the window
+  ... = A.lagCorrelation(B, t0, t1)   restrict to a time window
+
+#### `varargout = removeOutliers(obj, varargin)`
+
+REMOVEOUTLIERS Toolbox-free despike / outlier rejection (#343).
+  [cleanY, outlierIdx]        = tag.removeOutliers(...)
+  [cleanX, cleanY, outlierIdx] = tag.removeOutliers(...)
+
+#### `[f, amp] = spectrum(obj, varargin)`
+
+SPECTRUM Single-sided amplitude spectrum via core fft (#338).
+  [f, amp] = tag.spectrum() computes the single-sided amplitude
+  spectrum of the resolved series. Fs is inferred from the median
+  sample spacing of getXY unless given explicitly.
+  [f, amp] = tag.spectrum('SampleRate', Fs) overrides Fs (Hz).
+  [f, amp] = tag.spectrum('Detrend', true) removes a linear trend
+  before the FFT ('mean' removes only the mean; false = none).
+
+#### `fPeak = dominantFrequency(obj, varargin)`
+
+DOMINANTFREQUENCY Frequency of the largest non-DC spectral peak (#338).
+  fPeak = tag.dominantFrequency() returns the frequency (Hz) of the
+  largest amplitude bin, ignoring DC. Accepts the same options as
+  spectrum ('SampleRate', 'Detrend').
+
+#### `series = compareWindows(obj, windows, varargin)`
+
+COMPAREWINDOWS Phase-aligned multi-window overlay primitive (#358).
+  series = tag.compareWindows({[a0 a1], [b0 b1], ...}) resolves the
+  tag over each window and re-zeroes every window's time onto a
+  shared RELATIVE-time axis, ready to overlay (shift-vs-shift /
+  run-vs-run comparison).
+
 #### `[Xu, Yu] = resampleUniform(obj, dt, varargin)`
 
 RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
@@ -109,6 +179,15 @@ DERIVATIVE Kind-aware rate-of-change series dY/dX (#326).
 
 CUMULATIVEINTEGRAL Running trapezoidal integral of Y w.r.t. X.
 
+#### `v = integral(obj, t0, t1)`
+
+INTEGRAL Scalar definite integral (area under the curve) over a window.
+  v = tag.integral(t0, t1)  integrates Y w.r.t. time over [t0, t1].
+  v = tag.integral()        integrates the full series.
+  v = tag.integral([], [])  same as integral() — empty bounds
+                            integrate the full series (mirrors the
+                            empty-bounds contract of getXYRange).
+
 #### `[X, Ys] = movingStat(obj, window, type)`
 
 MOVINGSTAT Rolling-window statistic series (#312).
@@ -129,6 +208,17 @@ CROSSINGS Level-crossing times and directions (#328).
     'rising', or 'falling'.
   c = tag.crossings(level, 'Range', [t0 t1]) restricts the window.
   [t, dir] = tag.crossings(level) returns times + directions directly.
+
+#### `varargout = findPeaks(obj, varargin)`
+
+FINDPEAKS Local maxima/minima with prominence — toolbox-free (#329).
+  p = tag.findPeaks()                     all local maxima
+  p = tag.findPeaks('MinProminence', 2)   reject peaks < 2 above baseline
+  p = tag.findPeaks('MinSeparation', 0.5) merge peaks closer than 0.5 (x-units)
+  p = tag.findPeaks('Polarity', 'min')    troughs instead of peaks
+  p = tag.findPeaks('Polarity', 'both')   peaks and troughs
+  p = tag.findPeaks('Range', [t0 t1])     within a time window
+  [t, v] = tag.findPeaks()                2-out: peak times + values
 
 #### `s = exceedance(obj, level, varargin)`
 
@@ -331,6 +421,20 @@ GETLISTENERS_ Internal accessor for Tag.invalidateBatch_ (Phase 1028 plan 05).
 #### `SensorTag.obj = fromStruct(s)`
 
 FROMSTRUCT Reconstruct SensorTag from a toStruct output.
+
+#### `SensorTag.out = fromCsv(path, varargin)`
+
+FROMCSV One-shot, Octave-safe CSV/TSV -> SensorTag constructor (#345).
+  tag  = SensorTag.fromCsv('run.csv')  reads column 1 as time and
+         column 2 as value.
+  tag  = SensorTag.fromCsv(path, 'TimeCol', t, 'ValueCol', v) picks
+         the time/value columns by header NAME or 1-based INDEX.
+  tags = SensorTag.fromCsv(path, 'ValueCol', {'p','t'}) returns a
+         SensorTag array, one per value column keyed by its header.
+  ...  = SensorTag.fromCsv(path, 'Key', k)  overrides the key for the
+         single-value case.
+  Any other name-value pairs (Name / Units / Criticality / ...) are
+  forwarded to the SensorTag constructor.
 
 ---
 
@@ -554,6 +658,34 @@ FROMSTRUCT Pass-1 reconstruction from a toStruct output.
   ConditionFn / AlarmOffConditionFn / EventStore / callbacks
   are NOT restored — consumers must re-bind these after load.
 
+#### `MonitorTag.m = level(key, parentTag, tripLevel, varargin)`
+
+LEVEL Factory: scalar level alarm with built-in Deadband hysteresis (#349).
+  m = MonitorTag.level(key, parentTag, tripLevel) builds a monitor
+  whose ConditionFn is @(x,y) y > tripLevel ('above', default).
+  m = MonitorTag.level(..., 'Direction', 'below') uses y < tripLevel.
+  m = MonitorTag.level(..., 'Deadband', d) adds hysteresis: the
+  alarm clears only past tripLevel-d ('above') / tripLevel+d
+  ('below'). Deadband 0 (default) => momentary alarm (no
+  AlarmOffConditionFn). All other name-value options (MinDuration,
+  EventStore, OnEventStart/End, Persist, DataStore, and Tag
+  universals) forward verbatim to the constructor.
+
+#### `MonitorTag.m = band(key, parentTag, lo, hi, varargin)`
+
+BAND Factory: range / out-of-band alarm with optional hysteresis (#350).
+  m = MonitorTag.band(key, parentTag, lo, hi) builds a monitor whose
+  ConditionFn trips when y is OUTSIDE [lo, hi] ('outside', default):
+  @(x,y) y < lo | y > hi.
+  m = MonitorTag.band(..., 'Direction', 'inside') trips when y is
+  inside the band: @(x,y) y >= lo & y <= hi.
+  m = MonitorTag.band(..., 'Deadband', d) adds hysteresis. In
+  'outside' mode the alarm clears only once y is back inside the
+  shrunk band [lo+d, hi-d]; in 'inside' mode it clears once y is
+  outside the widened band [lo-d, hi+d]. Deadband 0 (default) =>
+  momentary alarm. All other name-value options forward verbatim to
+  the constructor (the level() sibling, #349).
+
 ---
 
 ## `CompositeTag` --- Aggregate MonitorTag/CompositeTag children into a 0/1 derived series.
@@ -665,6 +797,7 @@ COMPOSITETAG Construct a CompositeTag with aggregation mode + Tag NV pairs.
 | AggregateMode | `'and'` | 'and'\|'or'\|'majority'\|'count'\|'worst'\|'severity'\|'user_fn' |
 | UserFn | `[]` | function_handle; required for 'user_fn' |
 | Threshold | `0.5` | for COUNT/SEVERITY binarization |
+| MinDuration | `0` | native parent-X units; 0 disables debounce (#325) |
 
 ### Methods
 
@@ -1034,6 +1167,7 @@ STATETAG Construct a StateTag; delegates universals to Tag + parses X/Y + RawSou
 |----------|---------|-------------|
 | X | `[]` | 1xN numeric: sorted transition timestamps |
 | Y | `[]` | 1xN numeric OR 1xN cell of char: state values |
+| StateNames | `[]` | optional Nx2 {code, name} legend for nameAt (#372); [] = numeric only |
 
 ### Methods
 
@@ -1063,6 +1197,28 @@ GETTIMERANGE Return [X(1), X(end)]; [NaN NaN] if empty.
 #### `k = getKind(obj)`
 
 GETKIND Return the kind identifier 'state'.
+
+#### `nm = nameAt(obj, t)`
+
+NAMEAT State NAME at time t via the StateNames legend (#372).
+  nm = st.nameAt(t) looks up valueAt(t) and maps the code through
+  StateNames (an Nx2 {code, name} cell). Mirrors valueAt's shape:
+  a scalar t returns a char name; a vector t returns a cellstr.
+  Unmapped codes (or no legend) fall back to the numeric string —
+  so nameAt is always safe to call.
+
+#### `S = transitions(obj)`
+
+TRANSITIONS Enumerate state changes as a change-point event list (#342).
+  S = stateTag.transitions() returns a struct array, one element per
+  actual state change (repeated-value samples are skipped), with
+  fields:
+    Time      - timestamp of the change (X at the change sample)
+    FromState - state value immediately before the change
+    ToState   - state value at / after the change
+  FromState / ToState are numeric or char, matching the tag's Y
+  representation. Returns an empty struct with those fields for a
+  constant or empty channel.
 
 #### `s = toStruct(obj)`
 
@@ -1132,6 +1288,7 @@ TagRegistry provides a centralized, persistent catalog of all
     printTable      — detailed table (Key/Name/Kind/Criticality/Units/Labels)
     viewer          — uitable GUI (Octave-safe)
     loadFromStructs — two-phase JSON round-trip (TAG-06, TAG-07)
+    toStructs       — serialize whole catalog (SAVE half of loadFromStructs)
     instantiateByKind — dispatch s.kind -> the right fromStruct
 
 ### Static Methods
@@ -1208,6 +1365,16 @@ LOADFROMSTRUCTS Two-phase JSON deserialization (TAG-06, Pitfall 8).
           tag.  Any error raised during Pass 2 is wrapped
           and rethrown as TagRegistry unresolvedRef — never
           silently swallowed.
+
+#### `TagRegistry.structs = toStructs()`
+
+TOSTRUCTS Serialize the whole catalog to a cell of tag structs.
+  structs = TagRegistry.toStructs() returns a cell array holding
+  each registered tag's toStruct(), sorted by key so the output
+  is deterministic.  This is the SAVE half of the registry's
+  save/load contract: the returned cell is exactly the form
+  TagRegistry.loadFromStructs consumes, so the pair round-trips a
+  catalog to and from a serialized representation:
 
 #### `TagRegistry.tag = instantiateByKind(s)`
 

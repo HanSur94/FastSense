@@ -44,6 +44,8 @@ FASTSENSE Construct a FastSense instance.
 | ShowProgress | `true` | show console progress bar during render |
 | XScale | `'linear'` | 'linear' or 'log' — X axis scale |
 | YScale | `'linear'` | 'linear' or 'log' — Y axis scale |
+| XLabel | `''` | X axis label ('' => unlabeled) — #356 |
+| YLabel | `''` | Y axis label ('' => auto-derive from a single bound Tag) — #356 |
 | ViolationsVisible | `true` | global toggle for violation markers |
 | ShowThresholdLabels | `false` | show inline name labels on threshold lines |
 | ShowEventMarkers | `true` | toggle event round-marker overlay (EVENT-07) |
@@ -114,6 +116,34 @@ ADDBAND Add a horizontal band fill (constant y bounds).
   fp.ADDBAND(yLow, yHigh, 'FaceColor', [1 0.9 0.9], 'FaceAlpha', 0.3)
   uses custom color and transparency.
 
+#### `addVLine(obj, x, varargin)`
+
+ADDVLINE Add a vertical reference line at a time/x value (#357).
+  fp.ADDVLINE(x) draws a vertical line at X = x spanning the full
+  Y range — the vertical partner of addThreshold's horizontal line.
+  fp.ADDVLINE(x, 'Color', [1 0 0], 'LineStyle', ':', ...
+      'LineWidth', 1.5, 'Label', 'trip') customises the line.
+
+#### `addSpan(obj, t0, t1, varargin)`
+
+ADDSPAN Add a vertical time-window highlight (#377).
+  fp.ADDSPAN(t0, t1) shades the vertical band X in [t0, t1] across
+  the full Y range — the vertical dual of addBand's horizontal
+  band. Ideal for highlighting a phase, a shift, or an event
+  window on a time axis.
+  fp.ADDSPAN(t0, t1, 'FaceColor', [1 0.95 0.8], 'FaceAlpha', 0.25, ...
+      'Label', 'startup') customises the highlight.
+
+#### `addText(obj, x, y, str, varargin)`
+
+ADDTEXT Add an on-plot text annotation / callout at (x, y) (#347).
+  fp.ADDTEXT(x, y, str) places the string str at data coordinates
+  (x, y) — the text member of the annotation family (alongside
+  addMarker, addThreshold, addBand).
+  fp.ADDTEXT(x, y, str, 'Color', [1 0 0], 'FontSize', 12, ...
+      'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom')
+  customises the callout.
+
 #### `addMarker(obj, x, y, varargin)`
 
 ADDMARKER Add custom event markers at specific positions.
@@ -155,6 +185,20 @@ ADDTAG Polymorphic dispatch — route a Tag to the correct render path.
   fp.ADDTAG(monitorTag)    — routes to addLine via tag.getXY (0/1 binary series)
   fp.ADDTAG(compositeTag)  — routes to addLine via tag.getXY (aggregated 0/1 or 0..1 series)
   fp.ADDTAG(derivedTag)    — routes to addLine via tag.getXY (continuous derived series)
+
+#### `applyAxisLabels_(obj)`
+
+APPLYAXISLABELS_ Draw XLabel/YLabel when non-empty (#356).
+  No-op when both are '' so the default is byte-for-byte identical
+  to the pre-#356 behaviour.
+
+#### `renderCustomOverlays_(obj, yLimLow, yLimHigh)`
+
+RENDERCUSTOMOVERLAYS_ Draw addVLine/addSpan/addText overlays.
+  Called from render() after the axis Y-limits are finalised so
+  the vertical members (#357 VLines, #377 Spans) span the axis;
+  text annotations (#347) sit on the front layer. Extracted from
+  render() to keep that method within the metric budget.
 
 #### `addStateTagAsStaircase_(obj, tag, varargin)`
 
@@ -540,6 +584,13 @@ READSLICE Read a contiguous slice of data by row index.
 ADDCOLUMN Store an extra data column alongside X/Y.
   Categorical arrays auto-convert to codes+categories struct.
   String arrays auto-convert to cell of char.
+
+#### `removeColumn(obj, name)`
+
+REMOVECOLUMN Delete an extra data column (the DELETE of the column CRUD).
+  ds.removeColumn(name) removes the column stored under name.
+  Combined with addColumn this gives the supported "replace a
+  column" idiom: removeColumn(name) then addColumn(name, newData).
 
 #### `data = getColumnRange(obj, name, xMin, xMax)`
 

@@ -60,6 +60,15 @@ CLOSE Close an open event in place; update EndTime, Duration, and optional runni
 
 ESCALATETOP Escalate event to a higher severity threshold.
 
+#### `obj = editWindow(obj, newStart, newEnd)`
+
+EDITWINDOW Correct an event's time window in place (#355).
+  ev.editWindow(newStart, newEnd) mutates the SetAccess=private
+  fields StartTime / EndTime and recomputes Duration. Unlike
+  close(), it works on an already-closed event, so a manual
+  annotation (closed on creation) can be nudged. Reuses the
+  constructor's guard: a non-NaN EndTime must be >= StartTime.
+
 #### `s = computeDisplayState(obj)`
 
 COMPUTEDISPLAYSTATE Return the ISA-18.2 / EEMUA-191 three-state alarm visual state name.
@@ -144,6 +153,16 @@ GETEVENTS Return all events.
   <sharedRoot>/events/*.events.ndjson via EventLogReader.readAll().
   Best-effort merge — if NDJSON read fails, falls back to in-memory only.
 
+#### `ev = getEvent(obj, eventId)`
+
+GETEVENT Return the single event whose .Id == eventId (point-read).
+  ev = es.getEvent(eventId) fetches exactly one event by its id.
+  It searches the same event set as getEvents (in-memory events_
+  in single-user mode; in-memory merged with per-tag NDJSON logs
+  in cluster mode) and matches on Id for both Event-object and
+  struct rows, mirroring the lookup already used by
+  acknowledgeEvent / closeEvent.
+
 #### `closeEvent(obj, eventId, endTime, finalStats)`
 
 CLOSEEVENT Close an open event in place.
@@ -152,6 +171,34 @@ CLOSEEVENT Close an open event in place.
   the in-place mutation, and returns. finalStats may be []
   (empty) to skip stats update. Does NOT call save() — consumers
   decide when to persist (Pitfall 2).
+
+#### `n = removeEvents(obj, ids)`
+
+REMOVEEVENTS Remove events by Id (bulk, lenient). Returns count removed.
+  n = es.removeEvents(ids) drops every in-memory event whose .Id is
+  in ids (char, string, string-array, or cell of ids) from events_,
+  and returns how many were actually removed. Unknown ids are
+  skipped silently (lenient bulk semantics).
+
+#### `n = removeEvent(obj, id)`
+
+REMOVEEVENT Remove one event by Id. Returns count removed (0 or 1).
+  n = es.removeEvent(id) removes the single event whose .Id == id,
+  cascading binding + ack cleanup exactly as removeEvents. Unlike
+  the lenient bulk form, a missing id is a hard error
+  (EventStore:unknownEventId), uniform with acknowledgeEvent /
+  closeEvent / getEvent.
+
+#### `editEvent(obj, id, varargin)`
+
+EDITEVENT Correct an existing event's window / metadata in place (#355).
+  es.editEvent(id, 'Name', value, ...) locates the event by Id and
+  applies the given corrections. Editable name-value fields:
+    'StartTime' / 'EndTime' - time window (validated EndTime>=StartTime)
+    'Notes'                 - free-form annotation text
+    'Severity'              - 1|2|3
+    'Category'              - alarm|maintenance|process_change|...
+    'Label'                 - ThresholdLabel
 
 #### `events = getEventsForTag(obj, tagKey)`
 
@@ -183,6 +230,19 @@ GETACKRECORDS Return all ack rows from cluster-mode store.
 
 ACKNOWLEDGEEVENT Record an acknowledgement for an event (ACK-01/03 + IDENT-02).
   ack = es.acknowledgeEvent(eventId, opts)
+
+#### `n = acknowledgeEvents(obj, eventIds, opts)`
+
+ACKNOWLEDGEEVENTS Bulk-acknowledge a list of events by Id (#310).
+  n = es.acknowledgeEvents(ids)         acknowledge exactly this set
+  n = es.acknowledgeEvents(ids, opts)   with an audit-stamp opts struct
+
+#### `n = acknowledgeAll(obj, opts)`
+
+ACKNOWLEDGEALL Acknowledge every currently-unacknowledged event (#310).
+  n = es.acknowledgeAll() / es.acknowledgeAll(opts) acknowledges the
+  full unacknowledged set (AckedAt empty) and returns the count.
+  Thin convenience over acknowledgeEvents. Does NOT auto-save().
 
 #### `rows = getAckRecordsForEvent(obj, eventId)`
 
@@ -455,6 +515,14 @@ EventBinding stores (eventId, tagKey) pairs using two persistent
 ATTACH Bind an event to a tag (idempotent).
   EventBinding.attach(eventId, tagKey) adds the (eventId, tagKey)
   pair to both forward and reverse indexes. Silent on duplicate.
+
+#### `EventBinding.detach(eventId)`
+
+DETACH Remove all bindings for one event (mirror of attach).
+  EventBinding.detach(eventId) drops eventId from the forward
+  index and purges it from every tagKey list in the reverse index,
+  removing any tagKey entry left empty. Silent no-op when the event
+  has no bindings; idempotent.
 
 #### `EventBinding.keys = getTagKeysForEvent(eventId)`
 
