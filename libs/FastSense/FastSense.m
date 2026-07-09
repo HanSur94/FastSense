@@ -109,6 +109,8 @@ classdef FastSense < handle
         Markers    = struct('X', {}, 'Y', {}, 'Marker', {}, ...
                             'MarkerSize', {}, 'Color', {}, 'Label', {}, ...
                             'hLine', {})
+        VLines     = struct('X', {}, 'Color', {}, 'LineStyle', {}, ...
+                            'LineWidth', {}, 'Label', {}, 'hLine', {})
         Shadings   = struct('X', {}, 'Y1', {}, 'Y2', {}, ...
                             'FaceColor', {}, 'FaceAlpha', {}, ...
                             'EdgeColor', {}, 'DisplayName', {}, ...
@@ -738,6 +740,54 @@ classdef FastSense < handle
                 obj.Bands = b;
             else
                 obj.Bands(end+1) = b;
+            end
+        end
+
+        function addVLine(obj, x, varargin)
+            %ADDVLINE Add a vertical reference line at a time/x value (#357).
+            %   fp.ADDVLINE(x) draws a vertical line at X = x spanning the full
+            %   Y range — the vertical partner of addThreshold's horizontal line.
+            %   fp.ADDVLINE(x, 'Color', [1 0 0], 'LineStyle', ':', ...
+            %       'LineWidth', 1.5, 'Label', 'trip') customises the line.
+            %
+            %   Useful for marking an event instant, a setpoint change, a shift
+            %   boundary, or any reference time. Must be called BEFORE render().
+            %
+            %   Inputs:
+            %     x        — scalar X (time) value for the line
+            %     varargin — name-value pairs:
+            %       'Color'     — RGB triplet or color string (default: Theme.ThresholdColor)
+            %       'LineStyle' — line style (default: Theme.ThresholdStyle)
+            %       'LineWidth' — scalar width (default: 1)
+            %       'Label'     — text label drawn near the top of the line
+            %
+            %   See also addThreshold, addBand, addMarker.
+            if obj.IsRendered
+                error('FastSense:alreadyRendered', ...
+                    'Cannot add vertical lines after render() has been called.');
+            end
+            if ~isnumeric(x) || ~isscalar(x)
+                error('FastSense:invalidVLine', 'x must be a numeric scalar.');
+            end
+
+            defaults.Color     = obj.Theme.ThresholdColor;
+            defaults.LineStyle = obj.Theme.ThresholdStyle;
+            defaults.LineWidth = 1;
+            defaults.Label     = '';
+            [parsed, unmatched] = parseOpts(defaults, varargin);
+            warnUnknownOpts_('addVLine', unmatched, fieldnames(defaults));
+
+            v.X         = x;
+            v.Color     = parsed.Color;
+            v.LineStyle = parsed.LineStyle;
+            v.LineWidth = parsed.LineWidth;
+            v.Label     = parsed.Label;
+            v.hLine     = [];
+
+            if isempty(obj.VLines)
+                obj.VLines = v;
+            else
+                obj.VLines(end+1) = v;
             end
         end
 
@@ -1484,6 +1534,34 @@ classdef FastSense < handle
             obj.FullYLim = [yLimLow, yLimHigh];
             obj.CachedXLim = get(obj.hAxes, 'XLim');
             obj.updateThresholdLabels();
+
+            % --- Render vertical reference lines (#357), full Y span ---
+            % Drawn after YLim is finalised so each line spans the axis; its
+            % own extent is excluded from limit computation (YLimInclude off).
+            for i = 1:numel(obj.VLines)
+                V = obj.VLines(i);
+                hV = line(obj.hAxes, [V.X, V.X], [yLimLow, yLimHigh], ...
+                    'Color', V.Color, ...
+                    'LineStyle', V.LineStyle, ...
+                    'LineWidth', V.LineWidth, ...
+                    'HandleVisibility', 'off', ...
+                    'XLimInclude', 'off', 'YLimInclude', 'off');
+                udV.FastSense = struct( ...
+                    'Type', 'vline', ...
+                    'Name', V.Label, ...
+                    'LineIndex', [], ...
+                    'ThresholdValue', []);
+                set(hV, 'UserData', udV);
+                if ~isempty(V.Label)
+                    text(obj.hAxes, V.X, yLimHigh, [' ', V.Label], ...
+                        'Color', V.Color, ...
+                        'VerticalAlignment', 'top', ...
+                        'HorizontalAlignment', 'left', ...
+                        'Clipping', 'on', ...
+                        'HandleVisibility', 'off');
+                end
+                obj.VLines(i).hLine = hV;
+            end
 
             % Auto-format datetime axis
             if strcmp(obj.XType, 'datenum')
