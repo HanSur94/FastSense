@@ -97,6 +97,29 @@ classdef TestEventStoreRw < matlab.unittest.TestCase
             testCase.verifyTrue(isfield(data, 'pipelineConfig'), 'has_config');
             testCase.verifyEqual(data.pipelineConfig.sensors, {'a','b'}, 'config_matches');
         end
+        % ---- Issue #360: getEvent(id) id-addressed point-read ----
+
+        function testGetEventById(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.5, 'sensorA', 'HH', 100, 'upper');
+            ev2 = Event(now-0.3, now-0.1, 'sensorB', 'LL', 10, 'lower');
+            store.append(ev1);
+            store.append(ev2);
+            got = store.getEvent(ev2.Id);
+            testCase.verifyEqual(got.Id, ev2.Id, 'returns event matching id');
+            testCase.verifyEqual(got.SensorName, 'sensorB', 'correct event fetched');
+        end
+
+        function testGetEventUnknownIdThrows(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(now, now+0.01, 'x', 'H', 50, 'upper'));
+            testCase.verifyError(@() store.getEvent('no-such-id'), ...
+                'EventStore:unknownEventId');
+        end
     end
 
     methods (Static, Access = private)

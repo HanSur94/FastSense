@@ -120,6 +120,46 @@ classdef EventStore < handle
             end
         end
 
+        function ev = getEvent(obj, eventId)
+            %GETEVENT Return the single event whose .Id == eventId (point-read).
+            %   ev = es.getEvent(eventId) fetches exactly one event by its id.
+            %   It searches the same event set as getEvents (in-memory events_
+            %   in single-user mode; in-memory merged with per-tag NDJSON logs
+            %   in cluster mode) and matches on Id for both Event-object and
+            %   struct rows, mirroring the lookup already used by
+            %   acknowledgeEvent / closeEvent.
+            %
+            %   This is the id-addressed READ of the event CRUD surface: a
+            %   caller holding an id (handed back by append / acknowledgeEvent)
+            %   can re-fetch that one event without scanning getEvents by hand.
+            %
+            %   Input:
+            %     eventId — char / string, the Event.Id to fetch
+            %
+            %   Output:
+            %     ev — the matching Event (or struct row, in cluster mode)
+            %
+            %   Errors:
+            %     EventStore:unknownEventId — no event with that id (uniform
+            %                                 with acknowledgeEvent / closeEvent)
+            %
+            %   See also getEvents, acknowledgeEvent, closeEvent.
+            eventId = char(eventId);
+            events = obj.getEvents();
+            for i = 1:numel(events)
+                ev = events(i);
+                evId = '';
+                if isa(ev, 'Event'),                       evId = ev.Id;
+                elseif isstruct(ev) && isfield(ev, 'Id'),  evId = ev.Id;
+                end
+                if strcmp(evId, eventId)
+                    return;
+                end
+            end
+            error('EventStore:unknownEventId', ...
+                'Event id ''%s'' not found in store.', eventId);
+        end
+
         function closeEvent(obj, eventId, endTime, finalStats)
             %CLOSEEVENT Close an open event in place.
             %   es.closeEvent(eventId, endTime, finalStats) locates an open
