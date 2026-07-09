@@ -23,15 +23,12 @@ classdef HistogramWidget < DashboardWidget
             theme = obj.getTheme();
             obj.hAxes = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
-                'Position', [0.12 0.15 0.82 0.75], ...
+                'Position', [0.12 0.13 0.82 0.65], ...
                 'Color', theme.WidgetBackground, ...
                 'XColor', theme.AxisColor, ...
                 'YColor', theme.AxisColor);
-            if ~isempty(obj.Title)
-                title(obj.hAxes, obj.Title, ...
-                    'Color', theme.ForegroundColor, ...
-                    'FontSize', theme.WidgetTitleFontSize);
-            end
+            % Phase 3 — title as a header band above the axes (no in-axes overlap).
+            obj.drawPanelTitle_(parentPanel, theme);
             obj.refresh();
         end
 
@@ -77,13 +74,8 @@ classdef HistogramWidget < DashboardWidget
                 plot(obj.hAxes, xFit, yFit, 'r-', 'LineWidth', 1.5);
                 hold(obj.hAxes, 'off');
             end
-            % Re-apply title after plot commands (bar/plot may clear via newplot)
-            if ~isempty(obj.Title)
-                theme = obj.getTheme();
-                title(obj.hAxes, obj.Title, ...
-                    'Color', theme.ForegroundColor, ...
-                    'FontSize', theme.WidgetTitleFontSize);
-            end
+            % Title lives in a sibling header band (drawPanelTitle_), immune to
+            % newplot — no in-axes re-apply needed.
             obj.Dirty = false;
         end
 

@@ -246,6 +246,32 @@ classdef DashboardWidget < handle
                 end
             end
         end
+
+        function drawPanelTitle_(obj, parentPanel, theme)
+        %DRAWPANELTITLE_ Render obj.Title as a header band at the top of a widget.
+        %   Phase 3 UI refresh — a consistent title header above the plot area so
+        %   titles never overlap the axes (replaces the floating in-axes title()).
+        %   No-op when Title is empty. Callers should inset their axes so its top
+        %   sits at ~0.85 to leave room for this band.
+            if isempty(obj.Title)
+                return;
+            end
+            % Delete any prior header first so repeated render() calls (reflow /
+            % re-realize) never stack duplicate labels.
+            old = findobj(parentPanel, 'Tag', 'WidgetTitleHeader');
+            if ~isempty(old)
+                delete(old);
+            end
+            uicontrol('Parent', parentPanel, 'Style', 'text', ...
+                'Tag', 'WidgetTitleHeader', ...
+                'Units', 'normalized', 'Position', [0.03 0.80 0.94 0.18], ...
+                'String', obj.Title, ...
+                'HorizontalAlignment', 'center', ...
+                'FontSize', theme.WidgetTitleFontSize, ...
+                'FontWeight', 'bold', ...
+                'BackgroundColor', theme.WidgetBackground, ...
+                'ForegroundColor', theme.ForegroundColor);
+        end
     end
 
     % NOTE: Conceptually abstract -- every subclass MUST override these methods.
