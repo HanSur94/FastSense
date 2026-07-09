@@ -1242,6 +1242,83 @@ classdef MonitorTag < Tag
                 m = MonitorTag(key, parentTag, condFn, rest{:});
             end
         end
+
+        function m = band(key, parentTag, lo, hi, varargin)
+            %BAND Factory: range / out-of-band alarm with optional hysteresis (#350).
+            %   m = MonitorTag.band(key, parentTag, lo, hi) builds a monitor whose
+            %   ConditionFn trips when y is OUTSIDE [lo, hi] ('outside', default):
+            %   @(x,y) y < lo | y > hi.
+            %   m = MonitorTag.band(..., 'Direction', 'inside') trips when y is
+            %   inside the band: @(x,y) y >= lo & y <= hi.
+            %   m = MonitorTag.band(..., 'Deadband', d) adds hysteresis. In
+            %   'outside' mode the alarm clears only once y is back inside the
+            %   shrunk band [lo+d, hi-d]; in 'inside' mode it clears once y is
+            %   outside the widened band [lo-d, hi+d]. Deadband 0 (default) =>
+            %   momentary alarm. All other name-value options forward verbatim to
+            %   the constructor (the level() sibling, #349).
+            %
+            %   Errors:
+            %     MonitorTag:invalidBand     — lo/hi not finite scalars or lo > hi
+            %     MonitorTag:badDirection    — Direction not 'outside'/'inside'
+            %     MonitorTag:invalidDeadband — Deadband not a nonnegative finite scalar
+            %     MonitorTag:unknownOption   — dangling option (no value)
+            if ~(isnumeric(lo) && isscalar(lo) && isfinite(lo) && ...
+                    isnumeric(hi) && isscalar(hi) && isfinite(hi))
+                error('MonitorTag:invalidBand', 'lo and hi must be finite numeric scalars.');
+            end
+            if lo > hi
+                error('MonitorTag:invalidBand', 'lo (%g) must be <= hi (%g).', lo, hi);
+            end
+            direction = 'outside';
+            deadband  = 0;
+            rest = {};
+            i = 1;
+            while i <= numel(varargin)
+                keyI = varargin{i};
+                if i + 1 > numel(varargin)
+                    error('MonitorTag:unknownOption', ...
+                        'Option ''%s'' has no value.', char(string(keyI)));
+                end
+                val = varargin{i + 1};
+                if strcmpi(keyI, 'Direction')
+                    direction = lower(char(val));
+                elseif strcmpi(keyI, 'Deadband')
+                    deadband = val;
+                else
+                    rest{end + 1} = keyI;  %#ok<AGROW>
+                    rest{end + 1} = val;   %#ok<AGROW>
+                end
+                i = i + 2;
+            end
+            if ~any(strcmp(direction, {'outside', 'inside'}))
+                error('MonitorTag:badDirection', 'Direction must be ''outside'' or ''inside''.');
+            end
+            if ~(isnumeric(deadband) && isscalar(deadband) && isfinite(deadband) && deadband >= 0)
+                error('MonitorTag:invalidDeadband', 'Deadband must be a nonnegative finite scalar.');
+            end
+
+            % AlarmOffConditionFn is the CLEAR trigger (FSM flips ON->OFF when
+            % true). Outside-alarm clears back inside the shrunk band; inside-
+            % alarm clears once outside the widened band.
+            offFn = [];
+            if strcmp(direction, 'outside')
+                condFn = @(x, y) y < lo | y > hi;
+                if deadband > 0
+                    offFn = @(x, y) y >= (lo + deadband) & y <= (hi - deadband);
+                end
+            else
+                condFn = @(x, y) y >= lo & y <= hi;
+                if deadband > 0
+                    offFn = @(x, y) y < (lo - deadband) | y > (hi + deadband);
+                end
+            end
+
+            if ~isempty(offFn)
+                m = MonitorTag(key, parentTag, condFn, rest{:}, 'AlarmOffConditionFn', offFn);
+            else
+                m = MonitorTag(key, parentTag, condFn, rest{:});
+            end
+        end
     end
 
     methods (Static, Access = private)

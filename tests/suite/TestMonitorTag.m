@@ -412,5 +412,43 @@ classdef TestMonitorTag < matlab.unittest.TestCase
                 'MonitorTag:invalidDeadband');
         end
 
+        % ---- band() factory tests (Issue #350) ----
+
+        function testBandOutsideDefault(testCase)
+            st = SensorTag('stg', 'X', 1:5, 'Y', [50 70 95 80 40]);
+            m  = MonitorTag.band('m', st, 60, 90);
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([1 0 1 0 1]), 'trips outside [60,90]');
+            testCase.verifyEmpty(m.AlarmOffConditionFn, 'Deadband 0 => no off-condition');
+        end
+
+        function testBandInside(testCase)
+            st = SensorTag('stg', 'X', 1:3, 'Y', [50 70 95]);
+            m  = MonitorTag.band('m', st, 60, 90, 'Direction', 'inside');
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([0 1 0]), 'trips inside [60,90]');
+        end
+
+        function testBandDeadbandHoldsAlarm(testCase)
+            % Outside alarm at y=95; y=89 is in the deadband zone (88..90).
+            st = SensorTag('stg', 'X', 1:3, 'Y', [95 89 70]);
+            plain = MonitorTag.band('mp', st, 60, 90);
+            hyst  = MonitorTag.band('mh', st, 60, 90, 'Deadband', 2);
+            [~, yp] = plain.getXY();
+            [~, yh] = hyst.getXY();
+            testCase.verifyEqual(yp(2), 0, 'no deadband: y=89 back inside -> clear');
+            testCase.verifyEqual(yh(2), 1, 'deadband: y=89 above hi-d=88 -> alarm held');
+        end
+
+        function testBandValidationErrors(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() MonitorTag.band('m', st, 90, 60), ...
+                'MonitorTag:invalidBand');
+            testCase.verifyError(@() MonitorTag.band('m', st, [1 2], 90), ...
+                'MonitorTag:invalidBand');
+            testCase.verifyError(@() MonitorTag.band('m', st, 60, 90, 'Direction', 'nope'), ...
+                'MonitorTag:badDirection');
+        end
+
     end
 end
