@@ -36,8 +36,7 @@ Tag is the root of the v2.0 domain hierarchy.  Subclasses
     fromStruct (Static) — reconstruct from struct
 
   Tag Methods (default hooks — override when needed):
-    resolveRefs(registry)    — Pass-2 deserialization hook; default no-op
-    cumulativeIntegral(...)  — Running trapezoidal integral (concrete convenience)
+    resolveRefs(registry) — Pass-2 deserialization hook; default no-op
 
 ### Constructor
 
@@ -78,9 +77,65 @@ GETXYRANGE Return X, Y sliced to the window [tStart, tEnd].
   Empty/[] bounds return the full series (delegates to getXY()).
   SensorTag overrides this for disk-backed efficiency.
 
+#### `s = getStats(obj, tStart, tEnd)`
+
+GETSTATS One-call statistics summary over the series or a time window.
+  s = tag.getStats() summarizes the whole resolved series.
+  s = tag.getStats(tStart, tEnd) restricts the reduction to the
+  windowed slice (via getXYRange, so every Tag subclass inherits
+  this with zero overrides).
+
+#### `[Xu, Yu] = resampleUniform(obj, dt, varargin)`
+
+RESAMPLEUNIFORM Resample the series onto a uniform time grid (#308).
+  [Xu, Yu] = tag.resampleUniform(dt) returns the series on a
+  uniform grid of spacing dt over the tag's time range.
+  [Xu, Yu] = tag.resampleUniform(dt, 'Range', [t0 t1]) grids only
+  the given window. 'Method' overrides the interpolation method;
+  'MaxGap' (default Inf) NaN-fills grid points that fall inside an
+  original sample gap wider than MaxGap so data is not invented
+  across dropouts.
+
+#### `varargout = derivative(obj, varargin)`
+
+DERIVATIVE Kind-aware rate-of-change series dY/dX (#326).
+  [t, dydt] = tag.derivative() returns central-difference rate of
+  change (correct on non-uniform spacing).
+  [t, dydt] = tag.derivative('Method', m) where m is 'central'
+  (default), 'forward', or 'backward'.
+  [t, dydt] = tag.derivative('Range', [t0 t1]) restricts the window.
+
 #### `varargout = cumulativeIntegral(obj, varargin)`
 
 CUMULATIVEINTEGRAL Running trapezoidal integral of Y w.r.t. X.
+
+#### `[X, Ys] = movingStat(obj, window, type)`
+
+MOVINGSTAT Rolling-window statistic series (#312).
+  [X, Ys] = tag.movingStat(window) rolling mean over a centered
+  window of `window` samples (shrinking at the edges).
+  [X, Ys] = tag.movingStat(window, type) where type is one of
+  'mean' (default), 'std', 'max', 'min', 'rms', 'median'.
+
+#### `varargout = crossings(obj, level, varargin)`
+
+CROSSINGS Level-crossing times and directions (#328).
+  c = tag.crossings(level) returns a struct with fields:
+    times     - interpolated crossing instants (row)
+    direction - +1 rising / -1 falling, same length
+    count     - numel(times)
+    periods   - diff of successive same-direction crossings
+  c = tag.crossings(level, 'Direction', d) with d 'both' (default),
+    'rising', or 'falling'.
+  c = tag.crossings(level, 'Range', [t0 t1]) restricts the window.
+  [t, dir] = tag.crossings(level) returns times + directions directly.
+
+#### `s = exceedance(obj, level, varargin)`
+
+EXCEEDANCE Time-above/below-threshold analysis (#316).
+  s = tag.exceedance(level) analyses time where Y > level.
+  s = tag.exceedance(level, 'Direction', 'below') uses Y < level.
+  s = tag.exceedance(level, 'Range', [t0 t1]) restricts the window.
 
 #### `v = valueAt(obj, t)`
 
