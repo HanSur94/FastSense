@@ -32,6 +32,7 @@ classdef TagRegistry
     %     printTable      — detailed table (Key/Name/Kind/Criticality/Units/Labels)
     %     viewer          — uitable GUI (Octave-safe)
     %     loadFromStructs — two-phase JSON round-trip (TAG-06, TAG-07)
+    %     toStructs       — serialize whole catalog (SAVE half of loadFromStructs)
     %     instantiateByKind — dispatch s.kind -> the right fromStruct
     %
     %   Example:
@@ -359,6 +360,36 @@ classdef TagRegistry
                         'Tag ''%s'' failed to resolve refs: %s', ...
                         keys{i}, me.message);
                 end
+            end
+        end
+
+        function structs = toStructs()
+            %TOSTRUCTS Serialize the whole catalog to a cell of tag structs.
+            %   structs = TagRegistry.toStructs() returns a cell array holding
+            %   each registered tag's toStruct(), sorted by key so the output
+            %   is deterministic.  This is the SAVE half of the registry's
+            %   save/load contract: the returned cell is exactly the form
+            %   TagRegistry.loadFromStructs consumes, so the pair round-trips a
+            %   catalog to and from a serialized representation:
+            %
+            %     structs = TagRegistry.toStructs();      % SAVE
+            %     TagRegistry.clear();
+            %     TagRegistry.loadFromStructs(structs);   % LOAD (refs resolved)
+            %
+            %   Output:
+            %     structs — 1xN cell array of tag structs, ordered by ascending
+            %               key.  A 1x0 cell when the catalog is empty.
+            %
+            %   Pure assembly over each Tag subclass's existing toStruct — no
+            %   new per-tag serialization logic.
+            %
+            %   See also loadFromStructs, Tag/toStruct.
+
+            map = TagRegistry.catalog();
+            keys = sort(map.keys());
+            structs = cell(1, numel(keys));
+            for i = 1:numel(keys)
+                structs{i} = map(keys{i}).toStruct();
             end
         end
 
