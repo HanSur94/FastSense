@@ -267,6 +267,66 @@ classdef TestEventStoreRw < matlab.unittest.TestCase
             testCase.verifyEqual(data.events(1).Notes, 'persisted note');
             testCase.verifyEqual(data.events(1).EndTime, 40);
         end
+
+        % ---- Issue #310: acknowledgeEvents / acknowledgeAll ----
+
+        function testAcknowledgeEventsList(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(1, 2, 'a', 'H', 5, 'upper');
+            ev2 = Event(3, 4, 'b', 'H', 5, 'upper');
+            ev3 = Event(5, 6, 'c', 'H', 5, 'upper');
+            store.append(ev1); store.append(ev2); store.append(ev3);
+            n = store.acknowledgeEvents({ev1.Id, ev2.Id});
+            testCase.verifyEqual(n, 2, 'acked the two listed');
+            testCase.verifyNotEmpty(store.getEvent(ev1.Id).AckedAt);
+            testCase.verifyNotEmpty(store.getEvent(ev2.Id).AckedAt);
+            testCase.verifyEmpty(store.getEvent(ev3.Id).AckedAt, 'unlisted stays unacked');
+        end
+
+        function testAcknowledgeEventsSkipsAlreadyAcked(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(1, 2, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            testCase.verifyEqual(store.acknowledgeEvents({ev.Id}), 1);
+            testCase.verifyEqual(store.acknowledgeEvents({ev.Id}), 0, ...
+                'second ack of same event is a no-op');
+        end
+
+        function testAcknowledgeEventsSkipsUnknown(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(1, 2, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            n = store.acknowledgeEvents({ev.Id, 'ghost'});
+            testCase.verifyEqual(n, 1, 'unknown id skipped, known acked');
+        end
+
+        function testAcknowledgeAll(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(1, 2, 'a', 'H', 5, 'upper'));
+            store.append(Event(3, 4, 'b', 'H', 5, 'upper'));
+            n = store.acknowledgeAll();
+            testCase.verifyEqual(n, 2, 'all unacked acknowledged');
+            testCase.verifyEqual(store.acknowledgeAll(), 0, 'idempotent — none left');
+        end
+
+        function testAcknowledgeEventsPreservesAuditComment(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(1, 2, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            store.acknowledgeEvents({ev.Id}, struct('comment', 'flood-ack'));
+            testCase.verifyEqual(store.getEvent(ev.Id).AckComment, 'flood-ack', ...
+                'per-event audit stamp preserved through the bulk path');
+        end
     end
 
     methods (Static, Access = private)

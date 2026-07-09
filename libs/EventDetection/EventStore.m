@@ -652,6 +652,92 @@ classdef EventStore < handle
             end
         end
 
+        function n = acknowledgeEvents(obj, eventIds, opts)
+            %ACKNOWLEDGEEVENTS Bulk-acknowledge a list of events by Id (#310).
+            %   n = es.acknowledgeEvents(ids)         acknowledge exactly this set
+            %   n = es.acknowledgeEvents(ids, opts)   with an audit-stamp opts struct
+            %
+            %   Acknowledges each id in turn via acknowledgeEvent, so every ack
+            %   keeps the full {user, host, epoch, comment} audit stamp (IDENT-02).
+            %   Ids that are unknown or already acknowledged are skipped; returns
+            %   the count actually acknowledged. opts (optional) is forwarded to
+            %   acknowledgeEvent. Like acknowledgeEvent, does NOT auto-save().
+            %
+            %   ids may be a char, string, string array, or cell of ids.
+            %
+            %   See also acknowledgeEvent, acknowledgeAll.
+            if nargin < 3, opts = struct(); end
+            n = 0;
+            if nargin < 2 || isempty(eventIds)
+                return;
+            end
+            if ischar(eventIds)
+                eventIds = {eventIds};
+            elseif isstring(eventIds)
+                eventIds = cellstr(eventIds(:).');
+            elseif ~iscell(eventIds)
+                error('EventStore:invalidEventId', ...
+                    'eventIds must be a char, string, string array, or cell of ids.');
+            end
+            eventIds = cellfun(@char, eventIds(:).', 'UniformOutput', false);
+
+            allEv = obj.getEvents();
+            for i = 1:numel(eventIds)
+                id = eventIds{i};
+                found = false;
+                acked = false;
+                for j = 1:numel(allEv)
+                    e = allEv(j);
+                    eId = '';
+                    if isa(e, 'Event'),                      eId = e.Id;
+                    elseif isstruct(e) && isfield(e, 'Id'),  eId = e.Id;
+                    end
+                    if strcmp(eId, id)
+                        found = true;
+                        if isa(e, 'Event')
+                            acked = ~isempty(e.AckedAt);
+                        elseif isstruct(e) && isfield(e, 'AckedAt')
+                            acked = ~isempty(e.AckedAt);
+                        end
+                        break;
+                    end
+                end
+                if ~found || acked
+                    continue;               % skip unknown or already-acknowledged
+                end
+                obj.acknowledgeEvent(id, opts);
+                n = n + 1;
+            end
+        end
+
+        function n = acknowledgeAll(obj, opts)
+            %ACKNOWLEDGEALL Acknowledge every currently-unacknowledged event (#310).
+            %   n = es.acknowledgeAll() / es.acknowledgeAll(opts) acknowledges the
+            %   full unacknowledged set (AckedAt empty) and returns the count.
+            %   Thin convenience over acknowledgeEvents. Does NOT auto-save().
+            %
+            %   See also acknowledgeEvents, acknowledgeEvent.
+            if nargin < 2, opts = struct(); end
+            allEv = obj.getEvents();
+            ids = {};
+            for j = 1:numel(allEv)
+                e = allEv(j);
+                eId   = '';
+                acked = true;
+                if isa(e, 'Event')
+                    eId   = e.Id;
+                    acked = ~isempty(e.AckedAt);
+                elseif isstruct(e) && isfield(e, 'Id')
+                    eId   = e.Id;
+                    acked = isfield(e, 'AckedAt') && ~isempty(e.AckedAt);
+                end
+                if ~isempty(eId) && ~acked
+                    ids{end + 1} = eId; %#ok<AGROW>
+                end
+            end
+            n = obj.acknowledgeEvents(ids, opts);
+        end
+
         function rows = getAckRecordsForEvent(obj, eventId)
             %GETACKRECORDSFOREVENT Return ack records for a specific event.
             %   Single-user: filters obj.acks_; cluster: queries SQLite WHERE event_id = ?.
