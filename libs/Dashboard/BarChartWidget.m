@@ -88,8 +88,16 @@ classdef BarChartWidget < DashboardWidget
                     set(obj.hAxes, 'XTick', 1:numel(cats), 'XTickLabel', cats);
                 end
             end
-            % Title lives in a sibling header band (drawPanelTitle_), immune to
-            % newplot — no in-axes re-apply needed.
+            % Re-apply theme after plot commands. bar/barh run newplot, which
+            % resets the axes Color (background) and XColor/YColor to their
+            % light-mode defaults — leaving a glaring white box in dark mode.
+            % Restore the themed colors every refresh. The title lives in a
+            % sibling header band (drawPanelTitle_, immune to newplot), so no
+            % in-axes title re-apply is needed.
+            theme = obj.getTheme();
+            set(obj.hAxes, 'Color', theme.WidgetBackground, ...
+                'XColor', theme.AxisColor, ...
+                'YColor', theme.AxisColor);
         end
 
         function t = getType(~)

@@ -94,6 +94,7 @@ classdef CompositeTag < Tag
         AggregateMode = 'and'  % 'and'|'or'|'majority'|'count'|'worst'|'severity'|'user_fn'
         UserFn        = []     % function_handle; required for 'user_fn'
         Threshold     = 0.5    % for COUNT/SEVERITY binarization
+        MinDuration   = 0      % native parent-X units; 0 disables debounce (#325)
     end
 
     properties (Access = private)
@@ -141,6 +142,8 @@ classdef CompositeTag < Tag
                         obj.UserFn = cmpArgs{i+1};
                     case 'Threshold'
                         obj.Threshold = cmpArgs{i+1};
+                    case 'MinDuration'
+                        obj.MinDuration = cmpArgs{i+1};
                 end
             end
             if strcmp(obj.AggregateMode, 'user_fn') && isempty(obj.UserFn)
@@ -317,6 +320,9 @@ classdef CompositeTag < Tag
             s.sourceref     = obj.SourceRef;
             s.aggregatemode = obj.AggregateMode;
             s.threshold     = obj.Threshold;
+            if obj.MinDuration > 0                 % omit-when-zero (#325)
+                s.minduration = obj.MinDuration;
+            end
 
             nKids = numel(obj.children_);
             childKeys    = cell(1, nKids);
@@ -495,6 +501,11 @@ classdef CompositeTag < Tag
             X_out = sortedX(emitIdx);
             if ~isrow(X_out), X_out = X_out(:).'; end
             Y_out = Y_col(:).';                      % row-shape for consistency
+            if obj.MinDuration > 0
+                % #325: suppress aggregated 1-runs shorter than MinDuration
+                % (parent-X units) before caching. NaN "unknown" is preserved.
+                Y_out = minDurationFilter_(X_out, Y_out, obj.MinDuration);
+            end
             obj.cache_ = struct( ...
                 'x', X_out, ...
                 'y', Y_out);
@@ -685,7 +696,7 @@ classdef CompositeTag < Tag
             %   Unknown and dangling keys both raise CompositeTag:unknownOption.
             tagKeys = {'Name', 'Units', 'Description', 'Labels', ...
                        'Metadata', 'Criticality', 'SourceRef'};
-            cmpKeys = {'UserFn', 'Threshold'};
+            cmpKeys = {'UserFn', 'Threshold', 'MinDuration'};
             tagArgs = {};
             cmpArgs = {};
             i = 1;
@@ -776,6 +787,7 @@ classdef CompositeTag < Tag
             end
             aggMode = CompositeTag.fieldOr_(s, 'aggregatemode', 'and');
             thresh  = CompositeTag.fieldOr_(s, 'threshold',     0.5);
+            minDur  = CompositeTag.fieldOr_(s, 'minduration',   0);
             nvArgs = { ...
                 'Name',        CompositeTag.fieldOr_(s, 'name',        s.key), ...
                 'Labels',      labels, ...
@@ -784,7 +796,8 @@ classdef CompositeTag < Tag
                 'Units',       CompositeTag.fieldOr_(s, 'units',       ''), ...
                 'Description', CompositeTag.fieldOr_(s, 'description', ''), ...
                 'SourceRef',   CompositeTag.fieldOr_(s, 'sourceref',   ''), ...
-                'Threshold',   thresh};
+                'Threshold',   thresh, ...
+                'MinDuration', minDur};
             obj = CompositeTag(s.key, aggMode, nvArgs{:});
             obj.ChildKeys_    = childKeys;
             obj.ChildWeights_ = childWeights;

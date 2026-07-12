@@ -177,16 +177,24 @@ classdef SparklineCardWidget < DashboardWidget
             nPts  = min(obj.NSparkPoints, numel(yData));
             ySnip = yData(end - nPts + 1:end);
 
-            % Flat-data guard — ensure y-range is non-zero
-            yMin   = min(ySnip);
-            yMax   = max(ySnip);
+            % Range guards for empty / flat / all-NaN sparkdata (e.g. a
+            % real-mode sensor with no samples leaves ySnip all-NaN, so
+            % min/max are NaN). Keep the limits finite and strictly
+            % increasing so the set() below never throws on [NaN NaN], a
+            % zero-width span, or a single-point XLim — it just renders blank.
+            yMin = min(ySnip);
+            yMax = max(ySnip);
+            if ~isfinite(yMin) || ~isfinite(yMax)
+                yMin = 0; yMax = 1;
+            end
             yRange = yMax - yMin;
             if yRange == 0
                 yRange = 1;
             end
+            xHi = max(nPts, 2);
 
             if ~isempty(obj.hSparkAx) && ishandle(obj.hSparkAx)
-                set(obj.hSparkAx, 'XLim', [1 nPts], ...
+                set(obj.hSparkAx, 'XLim', [1 xHi], ...
                     'YLim', [yMin - 0.1 * yRange, yMax + 0.1 * yRange]);
             end
 

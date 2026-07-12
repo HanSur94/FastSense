@@ -494,6 +494,44 @@ classdef TestCompositeTag < matlab.unittest.TestCase
                 'Pitfall 1: FastSense.addTag must dispatch by getKind(), NOT isa(tag, subclass).');
         end
 
+        % ---- MinDuration debounce (Issue #325) ----
+
+        function testMinDurationSuppressesShortRun(testCase)
+            % Child boolean [0 1 0 0 1 1 1 0 0 0]: the single-sample run at
+            % index 2 is dropped; the 3-sample run (span 2) is kept.
+            s = SensorTag('s', 'X', 1:10, 'Y', [0 5 0 0 5 5 5 0 0 0]);
+            m = MonitorTag('m', s, @(x, y) y > 2);
+            c = CompositeTag('c', 'or', 'MinDuration', 1.5);
+            c.addChild(m);
+            [~, y] = c.getXY();
+            testCase.verifyEqual(y(:).', double([0 0 0 0 1 1 1 0 0 0]), ...
+                'short run suppressed, long run kept');
+        end
+
+        function testMinDurationZeroKeepsShortRun(testCase)
+            s = SensorTag('s', 'X', 1:10, 'Y', [0 5 0 0 5 5 5 0 0 0]);
+            m = MonitorTag('m', s, @(x, y) y > 2);
+            c = CompositeTag('c', 'or');   % default MinDuration 0
+            c.addChild(m);
+            [~, y] = c.getXY();
+            testCase.verifyEqual(y(:).', double([0 1 0 0 1 1 1 0 0 0]), ...
+                'default preserves the short run (backward compatible)');
+        end
+
+        function testMinDurationRoundTrips(testCase)
+            c = CompositeTag('cx', 'or', 'MinDuration', 5);
+            s = c.toStruct();
+            testCase.verifyEqual(s.minduration, 5);
+            c2 = CompositeTag.fromStruct(s);
+            testCase.verifyEqual(c2.MinDuration, 5, 'MinDuration restored from struct');
+        end
+
+        function testMinDurationOmittedWhenZero(testCase)
+            c = CompositeTag('c0', 'or');
+            s = c.toStruct();
+            testCase.verifyFalse(isfield(s, 'minduration'), 'omit-when-zero');
+        end
+
     end
 
     methods (Static, Access = private)

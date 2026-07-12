@@ -97,6 +97,236 @@ classdef TestEventStoreRw < matlab.unittest.TestCase
             testCase.verifyTrue(isfield(data, 'pipelineConfig'), 'has_config');
             testCase.verifyEqual(data.pipelineConfig.sensors, {'a','b'}, 'config_matches');
         end
+        % ---- Issue #360: getEvent(id) id-addressed point-read ----
+
+        function testGetEventById(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.5, 'sensorA', 'HH', 100, 'upper');
+            ev2 = Event(now-0.3, now-0.1, 'sensorB', 'LL', 10, 'lower');
+            store.append(ev1);
+            store.append(ev2);
+            got = store.getEvent(ev2.Id);
+            testCase.verifyEqual(got.Id, ev2.Id, 'returns event matching id');
+            testCase.verifyEqual(got.SensorName, 'sensorB', 'correct event fetched');
+        end
+
+        function testGetEventUnknownIdThrows(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(now, now+0.01, 'x', 'H', 50, 'upper'));
+            testCase.verifyError(@() store.getEvent('no-such-id'), ...
+                'EventStore:unknownEventId');
+        end
+
+        % ---- Issue #354: removeEvent(id) / removeEvents(ids) ----
+
+        function testRemoveEventDropsOne(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.5, 'a', 'HH', 100, 'upper');
+            ev2 = Event(now-0.3, now-0.1, 'b', 'LL', 10, 'lower');
+            store.append(ev1);
+            store.append(ev2);
+            n = store.removeEvent(ev1.Id);
+            testCase.verifyEqual(n, 1, 'returns count removed');
+            testCase.verifyEqual(store.numEvents(), 1, 'one event left');
+            testCase.verifyEqual(store.getEvent(ev2.Id).Id, ev2.Id, 'survivor intact');
+        end
+
+        function testRemoveEventUnknownIdThrows(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(now, now+0.01, 'x', 'H', 50, 'upper'));
+            testCase.verifyError(@() store.removeEvent('no-such-id'), ...
+                'EventStore:unknownEventId');
+        end
+
+        function testRemoveEventsBulkSkipsUnknown(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.9, 'a', 'HH', 1, 'upper');
+            ev2 = Event(now-0.8, now-0.7, 'b', 'LL', 2, 'lower');
+            ev3 = Event(now-0.6, now-0.5, 'c', 'HH', 3, 'upper');
+            store.append(ev1); store.append(ev2); store.append(ev3);
+            n = store.removeEvents({ev1.Id, 'ghost', ev3.Id});
+            testCase.verifyEqual(n, 2, 'only the two known ids removed');
+            testCase.verifyEqual(store.numEvents(), 1);
+            testCase.verifyEqual(store.getEvents().Id, ev2.Id, 'ev2 survives');
+        end
+
+        function testRemoveEventCascadesBindingDetach(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            EventBinding.clear();
+            testCase.addTeardown(@() EventBinding.clear());
+            store = EventStore(f);
+            ev = Event(now, now+0.01, 'a', 'H', 50, 'upper');
+            store.append(ev);
+            EventBinding.attach(ev.Id, 'tagA');
+            testCase.verifyEqual(numel(EventBinding.getTagKeysForEvent(ev.Id)), 1, ...
+                'binding present before removal');
+            store.removeEvent(ev.Id);
+            testCase.verifyEmpty(EventBinding.getTagKeysForEvent(ev.Id), ...
+                'binding detached after removal');
+        end
+
+        function testRemoveEventRoundTripsReducedSet(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(now-1, now-0.5, 'a', 'HH', 100, 'upper');
+            ev2 = Event(now-0.3, now-0.1, 'b', 'LL', 10, 'lower');
+            store.append(ev1); store.append(ev2);
+            store.removeEvent(ev1.Id);
+            store.save();
+            data = load(f);
+            testCase.verifyEqual(numel(data.events), 1, 'reduced set persisted');
+        end
+
+        % ---- Issue #355: editEvent(id, ...) + Event.editWindow ----
+
+        function testEditWindowRecomputesDuration(testCase)
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            ev.editWindow(12, 30);
+            testCase.verifyEqual(ev.StartTime, 12);
+            testCase.verifyEqual(ev.EndTime, 30);
+            testCase.verifyEqual(ev.Duration, 18, 'Duration recomputed');
+        end
+
+        function testEditWindowRejectsInverted(testCase)
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            testCase.verifyError(@() ev.editWindow(30, 12), 'Event:invalidTimeRange');
+        end
+
+        function testEditEventWindowNotesSeverity(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            store.editEvent(ev.Id, 'StartTime', 11, 'EndTime', 25, ...
+                'Notes', 'corrected', 'Severity', 2, 'Category', 'maintenance');
+            got = store.getEvent(ev.Id);
+            testCase.verifyEqual(got.StartTime, 11);
+            testCase.verifyEqual(got.EndTime, 25);
+            testCase.verifyEqual(got.Duration, 14);
+            testCase.verifyEqual(got.Notes, 'corrected');
+            testCase.verifyEqual(got.Severity, 2);
+            testCase.verifyEqual(got.Category, 'maintenance');
+        end
+
+        function testEditEventUnknownIdThrows(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(1, 2, 'x', 'H', 5, 'upper'));
+            testCase.verifyError(@() store.editEvent('ghost', 'Notes', 'x'), ...
+                'EventStore:unknownEventId');
+        end
+
+        function testEditEventUnknownFieldThrowsAndLeavesUntouched(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            testCase.verifyError(@() store.editEvent(ev.Id, 'Bogus', 1), ...
+                'EventStore:unknownEditField');
+            % Unchanged — validation happens before any mutation.
+            testCase.verifyEqual(store.getEvent(ev.Id).StartTime, 10);
+        end
+
+        function testEditEventInvertedWindowLeavesUntouched(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            testCase.verifyError(@() store.editEvent(ev.Id, 'StartTime', 30, 'EndTime', 12), ...
+                'Event:invalidTimeRange');
+            got = store.getEvent(ev.Id);
+            testCase.verifyEqual(got.StartTime, 10, 'window unchanged after rejected edit');
+            testCase.verifyEqual(got.EndTime, 20);
+        end
+
+        function testEditEventRoundTrips(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(10, 20, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            store.editEvent(ev.Id, 'Notes', 'persisted note', 'EndTime', 40);
+            store.save();
+            data = load(f);
+            testCase.verifyEqual(data.events(1).Notes, 'persisted note');
+            testCase.verifyEqual(data.events(1).EndTime, 40);
+        end
+
+        % ---- Issue #310: acknowledgeEvents / acknowledgeAll ----
+
+        function testAcknowledgeEventsList(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev1 = Event(1, 2, 'a', 'H', 5, 'upper');
+            ev2 = Event(3, 4, 'b', 'H', 5, 'upper');
+            ev3 = Event(5, 6, 'c', 'H', 5, 'upper');
+            store.append(ev1); store.append(ev2); store.append(ev3);
+            n = store.acknowledgeEvents({ev1.Id, ev2.Id});
+            testCase.verifyEqual(n, 2, 'acked the two listed');
+            testCase.verifyNotEmpty(store.getEvent(ev1.Id).AckedAt);
+            testCase.verifyNotEmpty(store.getEvent(ev2.Id).AckedAt);
+            testCase.verifyEmpty(store.getEvent(ev3.Id).AckedAt, 'unlisted stays unacked');
+        end
+
+        function testAcknowledgeEventsSkipsAlreadyAcked(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(1, 2, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            testCase.verifyEqual(store.acknowledgeEvents({ev.Id}), 1);
+            testCase.verifyEqual(store.acknowledgeEvents({ev.Id}), 0, ...
+                'second ack of same event is a no-op');
+        end
+
+        function testAcknowledgeEventsSkipsUnknown(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(1, 2, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            n = store.acknowledgeEvents({ev.Id, 'ghost'});
+            testCase.verifyEqual(n, 1, 'unknown id skipped, known acked');
+        end
+
+        function testAcknowledgeAll(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            store.append(Event(1, 2, 'a', 'H', 5, 'upper'));
+            store.append(Event(3, 4, 'b', 'H', 5, 'upper'));
+            n = store.acknowledgeAll();
+            testCase.verifyEqual(n, 2, 'all unacked acknowledged');
+            testCase.verifyEqual(store.acknowledgeAll(), 0, 'idempotent — none left');
+        end
+
+        function testAcknowledgeEventsPreservesAuditComment(testCase)
+            f = [tempname '.mat'];
+            testCase.addTeardown(@() TestEventStoreRw.deleteIfExists(f));
+            store = EventStore(f);
+            ev = Event(1, 2, 'a', 'H', 5, 'upper');
+            store.append(ev);
+            store.acknowledgeEvents({ev.Id}, struct('comment', 'flood-ack'));
+            testCase.verifyEqual(store.getEvent(ev.Id).AckComment, 'flood-ack', ...
+                'per-event audit stamp preserved through the bulk path');
+        end
     end
 
     methods (Static, Access = private)

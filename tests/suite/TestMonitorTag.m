@@ -363,5 +363,92 @@ classdef TestMonitorTag < matlab.unittest.TestCase
                 'MonitorTag.m must declare `classdef MonitorTag < Tag` exactly once.');
         end
 
+        % ---- level() factory tests (Issue #349) ----
+
+        function testLevelAboveDefault(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            m  = MonitorTag.level('m', st, 5);
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([0 0 0 0 0 1 1 1 1 1]), ...
+                'above: alarm where y > 5');
+            testCase.verifyEmpty(m.AlarmOffConditionFn, 'Deadband 0 => no off-condition');
+        end
+
+        function testLevelBelow(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            m  = MonitorTag.level('m', st, 5, 'Direction', 'below');
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([1 1 1 1 0 0 0 0 0 0]), ...
+                'below: alarm where y < 5');
+        end
+
+        function testLevelDeadbandExtendsAlarm(testCase)
+            % Up-then-down signal: hysteresis keeps the alarm on through the
+            % deadband zone (y in (3,5]) that a momentary alarm would drop.
+            st = SensorTag('stg', 'X', 1:6, 'Y', [0 3 6 4 2 0]);
+            plain = MonitorTag.level('mp', st, 5);
+            hyst  = MonitorTag.level('mh', st, 5, 'Deadband', 2);
+            [~, yp] = plain.getXY();
+            [~, yh] = hyst.getXY();
+            testCase.verifyEqual(yp(4), 0, 'no deadband: index 4 (y=4) not in alarm');
+            testCase.verifyEqual(yh(4), 1, 'deadband: index 4 held in alarm by hysteresis');
+            testCase.verifyNotEmpty(hyst.AlarmOffConditionFn, 'Deadband>0 sets off-condition');
+        end
+
+        function testLevelForwardsOptions(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            m  = MonitorTag.level('m', st, 5, 'Name', 'Hot', 'MinDuration', 3);
+            testCase.verifyEqual(m.Name, 'Hot', 'Tag universal forwarded');
+            testCase.verifyEqual(m.MinDuration, 3, 'MinDuration forwarded');
+        end
+
+        function testLevelValidationErrors(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() MonitorTag.level('m', st, [1 2]), ...
+                'MonitorTag:invalidLevel');
+            testCase.verifyError(@() MonitorTag.level('m', st, 5, 'Direction', 'sideways'), ...
+                'MonitorTag:badDirection');
+            testCase.verifyError(@() MonitorTag.level('m', st, 5, 'Deadband', -1), ...
+                'MonitorTag:invalidDeadband');
+        end
+
+        % ---- band() factory tests (Issue #350) ----
+
+        function testBandOutsideDefault(testCase)
+            st = SensorTag('stg', 'X', 1:5, 'Y', [50 70 95 80 40]);
+            m  = MonitorTag.band('m', st, 60, 90);
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([1 0 1 0 1]), 'trips outside [60,90]');
+            testCase.verifyEmpty(m.AlarmOffConditionFn, 'Deadband 0 => no off-condition');
+        end
+
+        function testBandInside(testCase)
+            st = SensorTag('stg', 'X', 1:3, 'Y', [50 70 95]);
+            m  = MonitorTag.band('m', st, 60, 90, 'Direction', 'inside');
+            [~, my] = m.getXY();
+            testCase.verifyEqual(my(:).', double([0 1 0]), 'trips inside [60,90]');
+        end
+
+        function testBandDeadbandHoldsAlarm(testCase)
+            % Outside alarm at y=95; y=89 is in the deadband zone (88..90).
+            st = SensorTag('stg', 'X', 1:3, 'Y', [95 89 70]);
+            plain = MonitorTag.band('mp', st, 60, 90);
+            hyst  = MonitorTag.band('mh', st, 60, 90, 'Deadband', 2);
+            [~, yp] = plain.getXY();
+            [~, yh] = hyst.getXY();
+            testCase.verifyEqual(yp(2), 0, 'no deadband: y=89 back inside -> clear');
+            testCase.verifyEqual(yh(2), 1, 'deadband: y=89 above hi-d=88 -> alarm held');
+        end
+
+        function testBandValidationErrors(testCase)
+            st = SensorTag('stg', 'X', 1:10, 'Y', 1:10);
+            testCase.verifyError(@() MonitorTag.band('m', st, 90, 60), ...
+                'MonitorTag:invalidBand');
+            testCase.verifyError(@() MonitorTag.band('m', st, [1 2], 90), ...
+                'MonitorTag:invalidBand');
+            testCase.verifyError(@() MonitorTag.band('m', st, 60, 90, 'Direction', 'nope'), ...
+                'MonitorTag:badDirection');
+        end
+
     end
 end

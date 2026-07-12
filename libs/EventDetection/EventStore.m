@@ -120,6 +120,46 @@ classdef EventStore < handle
             end
         end
 
+        function ev = getEvent(obj, eventId)
+            %GETEVENT Return the single event whose .Id == eventId (point-read).
+            %   ev = es.getEvent(eventId) fetches exactly one event by its id.
+            %   It searches the same event set as getEvents (in-memory events_
+            %   in single-user mode; in-memory merged with per-tag NDJSON logs
+            %   in cluster mode) and matches on Id for both Event-object and
+            %   struct rows, mirroring the lookup already used by
+            %   acknowledgeEvent / closeEvent.
+            %
+            %   This is the id-addressed READ of the event CRUD surface: a
+            %   caller holding an id (handed back by append / acknowledgeEvent)
+            %   can re-fetch that one event without scanning getEvents by hand.
+            %
+            %   Input:
+            %     eventId — char / string, the Event.Id to fetch
+            %
+            %   Output:
+            %     ev — the matching Event (or struct row, in cluster mode)
+            %
+            %   Errors:
+            %     EventStore:unknownEventId — no event with that id (uniform
+            %                                 with acknowledgeEvent / closeEvent)
+            %
+            %   See also getEvents, acknowledgeEvent, closeEvent.
+            eventId = char(eventId);
+            events = obj.getEvents();
+            for i = 1:numel(events)
+                ev = events(i);
+                evId = '';
+                if isa(ev, 'Event'),                       evId = ev.Id;
+                elseif isstruct(ev) && isfield(ev, 'Id'),  evId = ev.Id;
+                end
+                if strcmp(evId, eventId)
+                    return;
+                end
+            end
+            error('EventStore:unknownEventId', ...
+                'Event id ''%s'' not found in store.', eventId);
+        end
+
         function closeEvent(obj, eventId, endTime, finalStats)
             %CLOSEEVENT Close an open event in place.
             %   es.closeEvent(eventId, endTime, finalStats) locates an open
@@ -151,6 +191,181 @@ classdef EventStore < handle
             end
             error('EventStore:unknownEventId', ...
                 'Event id ''%s'' not found in store.', eventId);
+        end
+
+        function n = removeEvents(obj, ids)
+            %REMOVEEVENTS Remove events by Id (bulk, lenient). Returns count removed.
+            %   n = es.removeEvents(ids) drops every in-memory event whose .Id is
+            %   in ids (char, string, string-array, or cell of ids) from events_,
+            %   and returns how many were actually removed. Unknown ids are
+            %   skipped silently (lenient bulk semantics).
+            %
+            %   Cascade: for each removed event, EventBinding.detach(id) unwires
+            %   its tag bindings, and (single-user mode) its ack records in acks_
+            %   are dropped so no dangling ack survives.
+            %
+            %   Like closeEvent, this does NOT auto-save() — the caller decides
+            %   when to persist (Pitfall 2).
+            %
+            %   See also removeEvent, getEvent, closeEvent, EventBinding.detach.
+            n = 0;
+            if nargin < 2 || isempty(ids)
+                return;
+            end
+            if ischar(ids)
+                ids = {ids};
+            elseif isstring(ids)
+                ids = cellstr(ids(:).');
+            elseif ~iscell(ids)
+                error('EventStore:invalidEventId', ...
+                    'ids must be a char, string, string array, or cell of event ids.');
+            end
+            ids = cellfun(@char, ids(:).', 'UniformOutput', false);
+
+            if isempty(obj.events_)
+                return;
+            end
+            keep = true(1, numel(obj.events_));
+            removedIds = {};
+            for i = 1:numel(obj.events_)
+                ev = obj.events_(i);
+                evId = '';
+                if isa(ev, 'Event'),                       evId = ev.Id;
+                elseif isstruct(ev) && isfield(ev, 'Id'),  evId = ev.Id;
+                end
+                if ~isempty(evId) && any(strcmp(evId, ids))
+                    keep(i) = false;
+                    removedIds{end+1} = evId; %#ok<AGROW>
+                end
+            end
+            obj.events_ = obj.events_(keep);
+            n = numel(removedIds);
+
+            % Cascade 1: unwire tag bindings (best-effort — a binding-registry
+            % hiccup must not abort the removal that already happened).
+            for i = 1:numel(removedIds)
+                try
+                    EventBinding.detach(removedIds{i});
+                catch
+                    % best-effort detach
+                end
+            end
+
+            % Cascade 2: drop single-user ack records for the removed events.
+            if n > 0 && ~obj.IsClusterMode_ && ~isempty(obj.acks_)
+                ackKeep = true(1, numel(obj.acks_));
+                for i = 1:numel(obj.acks_)
+                    if any(strcmp(obj.acks_(i).eventId, removedIds))
+                        ackKeep(i) = false;
+                    end
+                end
+                obj.acks_ = obj.acks_(ackKeep);
+            end
+        end
+
+        function n = removeEvent(obj, id)
+            %REMOVEEVENT Remove one event by Id. Returns count removed (0 or 1).
+            %   n = es.removeEvent(id) removes the single event whose .Id == id,
+            %   cascading binding + ack cleanup exactly as removeEvents. Unlike
+            %   the lenient bulk form, a missing id is a hard error
+            %   (EventStore:unknownEventId), uniform with acknowledgeEvent /
+            %   closeEvent / getEvent.
+            %
+            %   See also removeEvents, getEvent, closeEvent.
+            id = char(id);
+            n  = obj.removeEvents({id});
+            if n == 0
+                error('EventStore:unknownEventId', ...
+                    'Event id ''%s'' not found in store.', id);
+            end
+        end
+
+        function editEvent(obj, id, varargin)
+            %EDITEVENT Correct an existing event's window / metadata in place (#355).
+            %   es.editEvent(id, 'Name', value, ...) locates the event by Id and
+            %   applies the given corrections. Editable name-value fields:
+            %     'StartTime' / 'EndTime' - time window (validated EndTime>=StartTime)
+            %     'Notes'                 - free-form annotation text
+            %     'Severity'              - 1|2|3
+            %     'Category'              - alarm|maintenance|process_change|...
+            %     'Label'                 - ThresholdLabel
+            %
+            %   The window change is delegated to Event.editWindow, which (unlike
+            %   close) works on an already-closed event — so a manual annotation,
+            %   closed on creation, can be nudged. Keys are validated before any
+            %   mutation, and the window guard runs first, so a bad key or an
+            %   inverted window leaves the event untouched.
+            %
+            %   Like closeEvent, this does NOT auto-save() — the caller persists
+            %   when ready (Pitfall 2).
+            %
+            %   Errors:
+            %     EventStore:badEditArgs      - odd number of name-value args
+            %     EventStore:unknownEventId   - id not in store
+            %     EventStore:notEditable      - matched a legacy struct row
+            %     EventStore:unknownEditField - unrecognized field name
+            %     Event:invalidTimeRange      - forwarded from Event.editWindow
+            %
+            %   See also getEvent, removeEvent, closeEvent, Event.editWindow.
+            id = char(id);
+            if mod(numel(varargin), 2) ~= 0
+                error('EventStore:badEditArgs', ...
+                    'editEvent expects name-value pairs after the id.');
+            end
+
+            ev = [];
+            if ~isempty(obj.events_)
+                for i = 1:numel(obj.events_)
+                    e = obj.events_(i);
+                    eId = '';
+                    if isa(e, 'Event'),                       eId = e.Id;
+                    elseif isstruct(e) && isfield(e, 'Id'),   eId = e.Id;
+                    end
+                    if strcmp(eId, id)
+                        ev = e;
+                        break;
+                    end
+                end
+            end
+            if isempty(ev)
+                error('EventStore:unknownEventId', ...
+                    'Event id ''%s'' not found in store.', id);
+            end
+            if ~isa(ev, 'Event')
+                error('EventStore:notEditable', ...
+                    'Event ''%s'' is a legacy struct row and cannot be edited in place.', id);
+            end
+
+            % Pass 1 — parse and validate keys before touching the event.
+            newStart = ev.StartTime; newEnd = ev.EndTime; haveWindow = false;
+            notes = ''; haveNotes = false;
+            sev   = []; haveSev   = false;
+            catg  = ''; haveCat   = false;
+            lbl   = ''; haveLbl   = false;
+            for k = 1:2:numel(varargin)
+                key = varargin{k};
+                val = varargin{k + 1};
+                switch lower(char(key))
+                    case 'starttime', newStart = val; haveWindow = true;
+                    case 'endtime',   newEnd   = val; haveWindow = true;
+                    case 'notes',     notes = char(val); haveNotes = true;
+                    case 'severity',  sev   = val;       haveSev   = true;
+                    case 'category',  catg  = char(val); haveCat   = true;
+                    case 'label',     lbl   = char(val); haveLbl   = true;
+                    otherwise
+                        error('EventStore:unknownEditField', ...
+                            ['editEvent: unknown field ''%s''. Valid: ' ...
+                             'StartTime, EndTime, Notes, Severity, Category, Label.'], ...
+                            char(string(key)));
+                end
+            end
+
+            % Pass 2 — apply (window first so its guard runs before any field change).
+            if haveWindow, ev.editWindow(newStart, newEnd); end
+            if haveNotes,  ev.Notes    = notes; end
+            if haveSev,    ev.Severity = sev;   end
+            if haveCat,    ev.Category = catg;  end
+            if haveLbl,    ev.escalateTo(lbl, ev.ThresholdValue); end
         end
 
         function events = getEventsForTag(obj, tagKey)
@@ -435,6 +650,92 @@ classdef EventStore < handle
                     obj.acks_(end+1) = ack;
                 end
             end
+        end
+
+        function n = acknowledgeEvents(obj, eventIds, opts)
+            %ACKNOWLEDGEEVENTS Bulk-acknowledge a list of events by Id (#310).
+            %   n = es.acknowledgeEvents(ids)         acknowledge exactly this set
+            %   n = es.acknowledgeEvents(ids, opts)   with an audit-stamp opts struct
+            %
+            %   Acknowledges each id in turn via acknowledgeEvent, so every ack
+            %   keeps the full {user, host, epoch, comment} audit stamp (IDENT-02).
+            %   Ids that are unknown or already acknowledged are skipped; returns
+            %   the count actually acknowledged. opts (optional) is forwarded to
+            %   acknowledgeEvent. Like acknowledgeEvent, does NOT auto-save().
+            %
+            %   ids may be a char, string, string array, or cell of ids.
+            %
+            %   See also acknowledgeEvent, acknowledgeAll.
+            if nargin < 3, opts = struct(); end
+            n = 0;
+            if nargin < 2 || isempty(eventIds)
+                return;
+            end
+            if ischar(eventIds)
+                eventIds = {eventIds};
+            elseif isstring(eventIds)
+                eventIds = cellstr(eventIds(:).');
+            elseif ~iscell(eventIds)
+                error('EventStore:invalidEventId', ...
+                    'eventIds must be a char, string, string array, or cell of ids.');
+            end
+            eventIds = cellfun(@char, eventIds(:).', 'UniformOutput', false);
+
+            allEv = obj.getEvents();
+            for i = 1:numel(eventIds)
+                id = eventIds{i};
+                found = false;
+                acked = false;
+                for j = 1:numel(allEv)
+                    e = allEv(j);
+                    eId = '';
+                    if isa(e, 'Event'),                      eId = e.Id;
+                    elseif isstruct(e) && isfield(e, 'Id'),  eId = e.Id;
+                    end
+                    if strcmp(eId, id)
+                        found = true;
+                        if isa(e, 'Event')
+                            acked = ~isempty(e.AckedAt);
+                        elseif isstruct(e) && isfield(e, 'AckedAt')
+                            acked = ~isempty(e.AckedAt);
+                        end
+                        break;
+                    end
+                end
+                if ~found || acked
+                    continue;               % skip unknown or already-acknowledged
+                end
+                obj.acknowledgeEvent(id, opts);
+                n = n + 1;
+            end
+        end
+
+        function n = acknowledgeAll(obj, opts)
+            %ACKNOWLEDGEALL Acknowledge every currently-unacknowledged event (#310).
+            %   n = es.acknowledgeAll() / es.acknowledgeAll(opts) acknowledges the
+            %   full unacknowledged set (AckedAt empty) and returns the count.
+            %   Thin convenience over acknowledgeEvents. Does NOT auto-save().
+            %
+            %   See also acknowledgeEvents, acknowledgeEvent.
+            if nargin < 2, opts = struct(); end
+            allEv = obj.getEvents();
+            ids = {};
+            for j = 1:numel(allEv)
+                e = allEv(j);
+                eId   = '';
+                acked = true;
+                if isa(e, 'Event')
+                    eId   = e.Id;
+                    acked = ~isempty(e.AckedAt);
+                elseif isstruct(e) && isfield(e, 'Id')
+                    eId   = e.Id;
+                    acked = isfield(e, 'AckedAt') && ~isempty(e.AckedAt);
+                end
+                if ~isempty(eId) && ~acked
+                    ids{end + 1} = eId; %#ok<AGROW>
+                end
+            end
+            n = obj.acknowledgeEvents(ids, opts);
         end
 
         function rows = getAckRecordsForEvent(obj, eventId)

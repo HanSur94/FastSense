@@ -247,10 +247,14 @@ classdef FastSenseWidget < DashboardWidget
                 end
             end
 
-            % Create axes inside the panel
+            % Create axes inside the panel.
+            % Top is held at 0.85 (height 0.73) — not 0.90 — so the axes
+            % title, which sits ABOVE the box, keeps clear headroom below the
+            % panel's chrome strip. At 0.90 the title's top inset (~20px)
+            % overshot short panels (~160px) and clipped the glyph tops.
             ax = axes('Parent', parentPanel, ...
                 'Units', 'normalized', ...
-                'Position', [0.08 0.12 0.88 0.78]);
+                'Position', [0.08 0.12 0.88 0.73]);
 
             % Create FastSense on this axes
             fp = FastSense('Parent', ax);
@@ -1848,9 +1852,11 @@ classdef FastSenseWidget < DashboardWidget
             ch = findobj(obj.hPanel, 'Type', 'axes');
             delete(ch);
 
+            % Title headroom: keep top at 0.85 (height 0.73) so the axes
+            % title is not clipped by the panel chrome (mirrors render()).
             ax = axes('Parent', obj.hPanel, ...
                 'Units', 'normalized', ...
-                'Position', [0.08 0.12 0.88 0.78]);
+                'Position', [0.08 0.12 0.88 0.73]);
 
             fp = FastSense('Parent', ax);
             obj.FastSenseObj = fp;

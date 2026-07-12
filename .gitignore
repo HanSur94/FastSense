@@ -45,3 +45,7 @@ wiki-gen-summary.md
 # .planning/ and docs/superpowers/ are tracked GSD planning docs (un-ignored intentionally).
 .superpowers/
 .matlab-tests-passed
+
+# Agent working files — machine-generated, not project docs.
+docs/.feature-ideas/
+.claude/scheduled_tasks.lock

@@ -52,7 +52,7 @@ function seedHistory(store, cfg)
     % --- Time vector ---------------------------------------------------
     nowRef = now();
     nDays  = 7;
-    tHist  = (nowRef - nDays : 1/86400 : nowRef)';
+    tHist  = (nowRef - nDays:1/86400:nowRef)';
 
     % --- 1) Sensor history --------------------------------------------
     for i = 1:numel(cfg.SensorKeys)

@@ -134,9 +134,9 @@ classdef AtomicWriter
             end
             stampId = AtomicWriter.optGet_(opts, 'StampIdentity', false);
             pid     = double(ClusterIdentity.pid());
-            eps     = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
+            stamp   = char(datetime('now', 'TimeZone', 'UTC'), 'yyyyMMddHHmmssSSS');
             rnd     = sprintf('%06d', randi([0 999999]));
-            tempPath = sprintf('%s.tmp.%d.%s.%s', finalPath, pid, eps, rnd);
+            tempPath = sprintf('%s.tmp.%d.%s.%s', finalPath, pid, stamp, rnd);
             try
                 payloadFn(tempPath);
             catch err
@@ -149,7 +149,7 @@ classdef AtomicWriter
 
             if stampId
                 sidecarTemp  = sprintf('%s.identity.tmp.%d.%s.%s', ...
-                                       finalPath, pid, eps, rnd);
+                                       finalPath, pid, stamp, rnd);
                 sidecarFinal = [finalPath, '.identity.json'];
                 fid = fopen(sidecarTemp, 'w');
                 if fid > 0

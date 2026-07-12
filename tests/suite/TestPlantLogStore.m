@@ -182,5 +182,79 @@ classdef TestPlantLogStore < matlab.unittest.TestCase
             testCase.verifyTrue(isempty(evs));
             testCase.verifyEqual(ps.getCount(), 2);
         end
+
+        % ---- Issue #365: removeEntries / removeEntriesInRange ----
+
+        function testRemoveEntriesById(testCase)
+            s = PlantLogStore('x.csv');
+            s.addEntries(PlantLogEntry('Timestamp', 10, 'Message', 'a', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 20, 'Message', 'b', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 30, 'Message', 'c', 'Metadata', struct()));
+            n = s.removeEntries('plog_2');
+            testCase.verifyEqual(n, 1);
+            testCase.verifyEqual(s.getCount(), 2);
+            testCase.verifyEqual({s.getEntries().Id}, {'plog_1', 'plog_3'}, 'order preserved');
+        end
+
+        function testRemoveEntriesBulkSkipsUnknown(testCase)
+            s = PlantLogStore('x.csv');
+            s.addEntries(PlantLogEntry('Timestamp', 10, 'Message', 'a', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 20, 'Message', 'b', 'Metadata', struct()));
+            n = s.removeEntries({'plog_1', 'ghost'});
+            testCase.verifyEqual(n, 1, 'unknown id skipped');
+            testCase.verifyEqual(s.getCount(), 1);
+        end
+
+        function testRemoveEntriesBadInputErrors(testCase)
+            s = PlantLogStore('x.csv');
+            testCase.verifyError(@() s.removeEntries(42), 'PlantLogStore:invalidInput');
+        end
+
+        function testRemoveEntriesInRange(testCase)
+            s = PlantLogStore('x.csv');
+            for tt = [10 20 30 40]
+                s.addEntries(PlantLogEntry('Timestamp', tt, 'Message', 'x', 'Metadata', struct()));
+            end
+            n = s.removeEntriesInRange(20, 30);
+            testCase.verifyEqual(n, 2);
+            testCase.verifyEqual([s.getEntries().Timestamp], [10 40]);
+        end
+
+        function testRemoveEntriesInRangeBadBounds(testCase)
+            s = PlantLogStore('x.csv');
+            testCase.verifyError(@() s.removeEntriesInRange(5, 1), 'PlantLogStore:invalidInput');
+        end
+
+        % ---- Issue #366: pruneEntriesBefore(t) ----
+
+        function testPruneEntriesBefore(testCase)
+            s = PlantLogStore('x.csv');
+            for tt = [10 20 30 40]
+                s.addEntries(PlantLogEntry('Timestamp', tt, 'Message', 'x', 'Metadata', struct()));
+            end
+            n = s.pruneEntriesBefore(25);
+            testCase.verifyEqual(n, 2, 'entries at 10,20 dropped');
+            testCase.verifyEqual([s.getEntries().Timestamp], [30 40], 'keeps Timestamp >= t');
+        end
+
+        function testPruneEntriesBeforeNoOp(testCase)
+            s = PlantLogStore('x.csv');
+            s.addEntries(PlantLogEntry('Timestamp', 100, 'Message', 'x', 'Metadata', struct()));
+            testCase.verifyEqual(s.pruneEntriesBefore(50), 0, 'nothing older -> no-op');
+            testCase.verifyEqual(s.getCount(), 1);
+        end
+
+        function testPruneEntriesBeforeEmptiesWhenPastNewest(testCase)
+            s = PlantLogStore('x.csv');
+            s.addEntries(PlantLogEntry('Timestamp', 10, 'Message', 'x', 'Metadata', struct()));
+            s.addEntries(PlantLogEntry('Timestamp', 20, 'Message', 'y', 'Metadata', struct()));
+            testCase.verifyEqual(s.pruneEntriesBefore(100), 2);
+            testCase.verifyEqual(s.getCount(), 0);
+        end
+
+        function testPruneEntriesBeforeBadInput(testCase)
+            s = PlantLogStore('x.csv');
+            testCase.verifyError(@() s.pruneEntriesBefore('x'), 'PlantLogStore:invalidInput');
+        end
     end
 end

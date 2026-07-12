@@ -264,5 +264,81 @@ classdef TestStateTag < matlab.unittest.TestCase
                 'StateTag:unknownOption');
         end
 
+        % ---- transitions() tests (Issue #342) ----
+
+        function testTransitionsNumeric(testCase)
+            % States 0,0,1,1,2,0 -> changes at samples 3(0->1),5(1->2),6(2->0).
+            t = StateTag('tr_num', 'X', [1 2 3 4 5 6], 'Y', [0 0 1 1 2 0]);
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 3);
+            testCase.verifyEqual([S.Time], [3 5 6]);
+            testCase.verifyEqual([S.FromState], [0 1 2]);
+            testCase.verifyEqual([S.ToState], [1 2 0]);
+        end
+
+        function testTransitionsCellstr(testCase)
+            t = StateTag('tr_str', 'X', [1 5 10], 'Y', {'off', 'running', 'idle'});
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 2);
+            testCase.verifyEqual(S(1).FromState, 'off');
+            testCase.verifyEqual(S(1).ToState, 'running');
+            testCase.verifyEqual(S(2).Time, 10);
+            testCase.verifyEqual(S(2).ToState, 'idle');
+        end
+
+        function testTransitionsConstantIsEmpty(testCase)
+            t = StateTag('tr_const', 'X', [1 2 3], 'Y', [7 7 7]);
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 0);
+            testCase.verifyTrue(isfield(S, 'Time') && isfield(S, 'FromState') && isfield(S, 'ToState'));
+        end
+
+        function testTransitionsEmptyChannel(testCase)
+            t = StateTag('tr_empty');
+            S = t.transitions();
+            testCase.verifyEqual(numel(S), 0);
+        end
+
+        % ---- StateNames / nameAt tests (Issue #372) ----
+
+        function testNameAtScalar(testCase)
+            st = StateTag('mode', 'X', [1 5 10 20], 'Y', [0 1 2 3], ...
+                'StateNames', {0 'Idle'; 1 'Run'; 2 'Fault'; 3 'Maint'});
+            testCase.verifyEqual(st.valueAt(7), 1, 'valueAt unchanged (still numeric)');
+            testCase.verifyEqual(st.nameAt(7), 'Run');
+        end
+
+        function testNameAtVector(testCase)
+            st = StateTag('mode', 'X', [1 5 10 20], 'Y', [0 1 2 3], ...
+                'StateNames', {0 'Idle'; 1 'Run'; 2 'Fault'; 3 'Maint'});
+            testCase.verifyEqual(st.nameAt([0 7 15]), {'Idle', 'Run', 'Fault'});
+        end
+
+        function testNameAtUnmappedFallsBackToNumericString(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 9], ...
+                'StateNames', {0 'Idle'});
+            testCase.verifyEqual(st.nameAt(6), '9', 'unmapped code -> numeric string');
+        end
+
+        function testNameAtNoLegendFallsBack(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 2]);
+            testCase.verifyEqual(st.nameAt(6), '2', 'no legend -> numeric string');
+        end
+
+        function testStateNamesRoundTrips(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 1], ...
+                'StateNames', {0 'Idle'; 1 'Run'});
+            s = st.toStruct();
+            st2 = StateTag.fromStruct(s);
+            testCase.verifyEqual(st2.nameAt(6), 'Run', 'legend restored via round-trip');
+            testCase.verifyEqual(size(st2.StateNames), [2 2]);
+        end
+
+        function testStateNamesOmittedWhenEmpty(testCase)
+            st = StateTag('mode', 'X', [1 5], 'Y', [0 1]);
+            s = st.toStruct();
+            testCase.verifyFalse(isfield(s, 'statenames'), 'omit-when-empty');
+        end
+
     end
 end

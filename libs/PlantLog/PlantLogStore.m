@@ -221,6 +221,92 @@ classdef PlantLogStore < handle
             %GETCOUNT Return number of stored entries.
             n = numel(obj.entries_);
         end
+
+        function n = removeEntries(obj, ids)
+            %REMOVEENTRIES Remove entries by Id (targeted delete). Returns count removed.
+            %   n = store.removeEntries(ids) drops every entry whose .Id is in
+            %   ids — a char id, or a cellstr / string array of ids — from the
+            %   store, preserving sorted-by-Timestamp order (no re-sort needed).
+            %   Unknown ids are skipped; returns the number actually removed.
+            %
+            %   The targeted DELETE that completes the store surface alongside
+            %   addEntries / mergeEntries / getEntries / clear — sibling of
+            %   EventStore.removeEvents (#354) and FastSenseDataStore.removeColumn
+            %   (#364).
+            %
+            %   Errors:
+            %     PlantLogStore:invalidInput — ids is not char / string / cell
+            n = 0;
+            if nargin < 2 || isempty(ids)
+                return;
+            end
+            if ischar(ids)
+                ids = {ids};
+            elseif isstring(ids)
+                ids = cellstr(ids(:).');
+            elseif ~iscell(ids)
+                error('PlantLogStore:invalidInput', ...
+                    'ids must be a char, string, string array, or cell of ids.');
+            end
+            ids = cellfun(@char, ids(:).', 'UniformOutput', false);
+            if isempty(obj.entries_)
+                return;
+            end
+            keep = ~ismember({obj.entries_.Id}, ids);
+            n = sum(~keep);
+            obj.entries_ = obj.entries_(keep);
+        end
+
+        function n = removeEntriesInRange(obj, t0, t1)
+            %REMOVEENTRIESINRANGE Remove entries with Timestamp in [t0,t1] inclusive.
+            %   n = store.removeEntriesInRange(t0, t1) drops entries whose
+            %   Timestamp lies in [t0, t1] and returns the count removed. Mirrors
+            %   getEntriesInRange; preserves sorted order.
+            %
+            %   Errors:
+            %     PlantLogStore:invalidInput — non-scalar bounds or t0 > t1
+            if ~isnumeric(t0) || ~isscalar(t0) || ~isnumeric(t1) || ~isscalar(t1)
+                error('PlantLogStore:invalidInput', ...
+                    't0 and t1 must be numeric scalars; got %s, %s.', class(t0), class(t1));
+            end
+            if t0 > t1
+                error('PlantLogStore:invalidInput', ...
+                    't0 (%g) must be <= t1 (%g).', t0, t1);
+            end
+            n = 0;
+            if isempty(obj.entries_)
+                return;
+            end
+            ts   = [obj.entries_.Timestamp];
+            drop = ts >= t0 & ts <= t1;
+            n    = sum(drop);
+            obj.entries_ = obj.entries_(~drop);
+        end
+
+        function n = pruneEntriesBefore(obj, t)
+            %PRUNEENTRIESBEFORE Age-based retention: drop entries older than t.
+            %   n = store.pruneEntriesBefore(t) removes every entry with
+            %   Timestamp < t (keeps Timestamp >= t) and returns the count
+            %   removed. No-op (returns 0) when nothing is older than t; empties
+            %   the store when t is past the newest entry. For trimming a
+            %   long-running operator journal to a retention window — sibling of
+            %   the EventStore age-prune (#293).
+            %
+            %   Errors:
+            %     PlantLogStore:invalidInput — t is not a numeric scalar
+            if ~isnumeric(t) || ~isscalar(t)
+                error('PlantLogStore:invalidInput', ...
+                    't must be a numeric scalar; got %s.', class(t));
+            end
+            n = 0;
+            if isempty(obj.entries_)
+                return;
+            end
+            ts   = [obj.entries_.Timestamp];
+            drop = ts < t;
+            n    = sum(drop);
+            obj.entries_ = obj.entries_(~drop);
+        end
     end
 
     methods (Static)

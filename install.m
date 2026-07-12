@@ -116,9 +116,9 @@ function varargout = install(varargin)
     % smoke) gets it.  Best-effort: honour FASTSENSE_SKIP_BUILD (CI with
     % cached/prebuilt binaries) and never block install() on a missing
     % C compiler (FileLock falls back to pure-MATLAB sidecar mode).
-    if isempty(getenv('FASTSENSE_SKIP_BUILD')) ...
-            && exist('lockfile_mex', 'file') ~= 3 ...
-            && exist('build_concurrency_mex', 'file') == 2
+    if isempty(getenv('FASTSENSE_SKIP_BUILD')) && ...
+            exist('lockfile_mex', 'file') ~= 3 && ...
+            exist('build_concurrency_mex', 'file') == 2
         try
             build_concurrency_mex();
         catch concErr
@@ -295,7 +295,6 @@ function verify_installation(root)
         fprintf('  %d/%d checks passed, %d warnings\n', n_ok, total, n_warn);
     end
 end
-
 
 function tag = get_octave_platform_tag()
 %GET_OCTAVE_PLATFORM_TAG Return platform tag string for Octave subdir layout.

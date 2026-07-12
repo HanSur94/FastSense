@@ -10,6 +10,7 @@ classdef EventBinding
     %
     %   Static methods:
     %     attach(eventId, tagKey)              — idempotent; adds binding
+    %     detach(eventId)                      — removes all bindings for one event
     %     getTagKeysForEvent(eventId)          — returns cell of tagKey strings
     %     getEventsForTag(tagKey, eventStore)  — returns Event array
     %     clear()                              — resets all bindings
@@ -53,6 +54,41 @@ classdef EventBinding
                 revMap(tagKey) = ids; %#ok<NASGU>
             else
                 revMap(tagKey) = {eventId}; %#ok<NASGU>
+            end
+        end
+
+        function detach(eventId)
+            %DETACH Remove all bindings for one event (mirror of attach).
+            %   EventBinding.detach(eventId) drops eventId from the forward
+            %   index and purges it from every tagKey list in the reverse index,
+            %   removing any tagKey entry left empty. Silent no-op when the event
+            %   has no bindings; idempotent.
+            %
+            %   Errors:
+            %     EventBinding:emptyId — eventId is empty char or empty string
+            if isempty(eventId)
+                error('EventBinding:emptyId', ...
+                    'eventId must be non-empty.');
+            end
+            eventId = char(eventId);
+            fwdMap = EventBinding.bindings_();
+            revMap = EventBinding.reverseIndex_();
+            if fwdMap.isKey(eventId)
+                remove(fwdMap, eventId);
+            end
+            % Purge eventId from every reverse list; drop now-empty tagKeys.
+            rk = revMap.keys();
+            for i = 1:numel(rk)
+                ids = revMap(rk{i});
+                mask = strcmp(ids, eventId);
+                if any(mask)
+                    ids(mask) = [];
+                    if isempty(ids)
+                        remove(revMap, rk{i});
+                    else
+                        revMap(rk{i}) = ids; %#ok<NASGU>
+                    end
+                end
             end
         end
 

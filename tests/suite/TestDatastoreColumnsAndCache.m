@@ -434,5 +434,37 @@ classdef TestDatastoreColumnsAndCache < matlab.unittest.TestCase
             testCase.verifyEmpty(xs, 'after cleanup: readSlice empty X');
             testCase.verifyEmpty(ys, 'after cleanup: readSlice empty Y');
         end
+
+        % ---- Issue #364: removeColumn ----
+
+        function testRemoveColumnDropsIt(testCase)
+            ds = FastSenseDataStore(1:100, rand(1, 100));
+            testCase.addTeardown(@() ds.cleanup());
+            ds.addColumn('a', 1:100);
+            ds.addColumn('b', (1:100) * 2);
+            ds.removeColumn('a');
+            testCase.verifyEqual(ds.listColumns(), {'b'}, 'a dropped, b kept');
+            testCase.verifyEmpty(ds.getColumnSlice('a', 1, 100), 'a data gone');
+        end
+
+        function testRemoveColumnUnknownThrows(testCase)
+            ds = FastSenseDataStore(1:100, rand(1, 100));
+            testCase.addTeardown(@() ds.cleanup());
+            ds.addColumn('present', 1:100);
+            testCase.verifyError(@() ds.removeColumn('nope'), ...
+                'FastSenseDataStore:unknownColumn');
+        end
+
+        function testRemoveThenAddReplacesColumn(testCase)
+            % The supported "replace a column" idiom.
+            ds = FastSenseDataStore(1:100, rand(1, 100));
+            testCase.addTeardown(@() ds.cleanup());
+            ds.addColumn('v', 1:100);
+            ds.removeColumn('v');
+            ds.addColumn('v', (1:100) * 10);
+            testCase.verifyEqual(ds.listColumns(), {'v'}, 'single v after replace');
+            got = ds.getColumnSlice('v', 1, 3);
+            testCase.verifyEqual(double(got(1:3)), [10 20 30], 'AbsTol', 1e-9, 'new data');
+        end
     end
 end

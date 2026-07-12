@@ -106,7 +106,7 @@ classdef WikiPageIndex
             end
         end
 
-        function toc = buildToc(wikiDir)
+        function tocStruct = buildToc(wikiDir)
             %BUILDTOC Build a grouped Table-of-Contents for the sidebar.
             %   toc = WikiPageIndex.buildToc(wikiDir) returns a 1x2 struct
             %   array with fields:
@@ -144,7 +144,7 @@ classdef WikiPageIndex
             % Construct the 1x2 grouped struct array with deterministic
             % field order. Using cell-form struct() so the empty groups
             % carry the same fields as populated ones.
-            toc = struct( ...
+            tocStruct = struct( ...
                 'group',   {'Pages', 'API Reference'}, ...
                 'entries', {pagesEntries, apiEntries});
         end

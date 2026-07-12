@@ -382,9 +382,133 @@ classdef SensorTag < Tag
 
             obj = SensorTag(s.key, nvArgs{:});
         end
+
+        function out = fromCsv(path, varargin)
+            %FROMCSV One-shot, Octave-safe CSV/TSV -> SensorTag constructor (#345).
+            %   tag  = SensorTag.fromCsv('run.csv')  reads column 1 as time and
+            %          column 2 as value.
+            %   tag  = SensorTag.fromCsv(path, 'TimeCol', t, 'ValueCol', v) picks
+            %          the time/value columns by header NAME or 1-based INDEX.
+            %   tags = SensorTag.fromCsv(path, 'ValueCol', {'p','t'}) returns a
+            %          SensorTag array, one per value column keyed by its header.
+            %   ...  = SensorTag.fromCsv(path, 'Key', k)  overrides the key for the
+            %          single-value case.
+            %   Any other name-value pairs (Name / Units / Criticality / ...) are
+            %   forwarded to the SensorTag constructor.
+            %
+            %   Reads through the library's toolbox-free, Octave-safe delimited
+            %   reader (readRawDelimited_, MEX-accelerated with a pure-MATLAB
+            %   fallback) — NOT readtable — which is what makes it Octave-safe.
+            %   The delimiter is auto-detected (a 'Delimiter' option is accepted
+            %   and ignored). Rows are sorted by ascending time.
+            %
+            %   Errors:
+            %     SensorTag:unknownOption — dangling option (no value)
+            %     SensorTag:csvBadColumn  — column index/name out of range or absent
+            %     SensorTag:csvNoHeaders  — column given by name but file has no header
+            %     SensorTag:csvBadTime    — time column not numeric
+            %     plus TagPipeline:* from the reader (file missing, empty, ambiguous)
+            timeCol     = 1;
+            valueCol    = 2;
+            keyOverride = '';
+            passthrough = {};
+            i = 1;
+            while i <= numel(varargin)
+                k = varargin{i};
+                if i + 1 > numel(varargin)
+                    error('SensorTag:unknownOption', 'Option ''%s'' has no value.', char(string(k)));
+                end
+                v = varargin{i + 1};
+                switch lower(char(k))
+                    case 'timecol',   timeCol  = v;
+                    case 'valuecol',  valueCol = v;
+                    case 'key',       keyOverride = char(v);
+                    case 'delimiter'  % auto-detected by the reader; accepted, ignored
+                    otherwise
+                        passthrough{end + 1} = k; %#ok<AGROW>
+                        passthrough{end + 1} = v; %#ok<AGROW>
+                end
+                i = i + 2;
+            end
+
+            raw     = readRawDelimited_(path);
+            headers = raw.headers;
+            data    = raw.data;
+            if iscell(data)
+                data = str2double(data);   % NaN where a cell is non-numeric
+            end
+            nCols = size(data, 2);
+
+            tIdx = SensorTag.resolveCsvCol_(timeCol, headers, nCols, 'TimeCol');
+            if any(isnan(data(:, tIdx)))
+                error('SensorTag:csvBadTime', ...
+                    'Time column contains non-numeric or missing values.');
+            end
+            [~, ord] = sort(data(:, tIdx));   % enforce ascending-time contract
+            data = data(ord, :);
+            x = data(:, tIdx);
+
+            if iscell(valueCol)
+                valSpecs = valueCol;
+            else
+                valSpecs = {valueCol};
+            end
+            multi = numel(valSpecs) > 1;
+
+            tags = SensorTag.empty(1, 0);
+            for j = 1:numel(valSpecs)
+                vIdx = SensorTag.resolveCsvCol_(valSpecs{j}, headers, nCols, 'ValueCol');
+                y = data(:, vIdx);
+                if ~multi && ~isempty(keyOverride)
+                    key = keyOverride;
+                else
+                    key = SensorTag.csvColName_(vIdx, headers);
+                end
+                tags(end + 1) = SensorTag(key, 'X', x(:).', 'Y', y(:).', passthrough{:}); %#ok<AGROW>
+            end
+
+            if multi
+                out = tags;
+            else
+                out = tags(1);
+            end
+        end
     end
 
     methods (Static, Access = private)
+        function idx = resolveCsvCol_(spec, headers, nCols, label)
+            %RESOLVECSVCOL_ Resolve a column spec (index or header name) to an index.
+            if isnumeric(spec) && isscalar(spec)
+                idx = spec;
+                if idx < 1 || idx > nCols || mod(idx, 1) ~= 0
+                    error('SensorTag:csvBadColumn', ...
+                        '%s index %g is out of range [1, %d].', label, spec, nCols);
+                end
+            elseif ischar(spec) || isstring(spec)
+                if isempty(headers)
+                    error('SensorTag:csvNoHeaders', ...
+                        '%s ''%s'' given by name but the file has no header row.', label, char(spec));
+                end
+                idx = find(strcmp(char(spec), headers), 1);
+                if isempty(idx)
+                    error('SensorTag:csvBadColumn', ...
+                        '%s ''%s'' not found in the header row.', label, char(spec));
+                end
+            else
+                error('SensorTag:csvBadColumn', ...
+                    '%s must be a column index or a header name.', label);
+            end
+        end
+
+        function name = csvColName_(idx, headers)
+            %CSVCOLNAME_ Header name for a column, or a colN fallback.
+            if ~isempty(headers) && idx <= numel(headers) && ~isempty(headers{idx})
+                name = headers{idx};
+            else
+                name = sprintf('col%d', idx);
+            end
+        end
+
         function v = fieldOr_(s, fieldName, defaultVal)
             %FIELDOR_ Return s.(fieldName) if present and non-empty, else defaultVal.
             if isfield(s, fieldName) && ~isempty(s.(fieldName))

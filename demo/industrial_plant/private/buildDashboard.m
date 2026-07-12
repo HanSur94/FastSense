@@ -78,13 +78,13 @@ function demoClose_(fig, ctx)
 %   down (writer + pipeline keep running so the companion's catalog
 %   stays live). If the companion is already closed or absent, a full
 %   teardownDemo runs so the writer + pipeline don't leak.
-    companionAlive = isfield(ctx, 'companion') && ~isempty(ctx.companion) ...
-        && isvalid(ctx.companion) && ctx.companion.IsOpen;
+    companionAlive = isfield(ctx, 'companion') && ~isempty(ctx.companion) && ...
+        isvalid(ctx.companion) && ctx.companion.IsOpen;
     if companionAlive
         % Stop dashboard's live timer; leave writer/pipeline running.
         try
-            if ~isempty(ctx.engine) && isvalid(ctx.engine) ...
-                    && ismethod(ctx.engine, 'stopLive')
+            if ~isempty(ctx.engine) && isvalid(ctx.engine) && ...
+                    ismethod(ctx.engine, 'stopLive')
                 ctx.engine.stopLive();
             end
         catch

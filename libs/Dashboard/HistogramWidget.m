@@ -29,6 +29,11 @@ classdef HistogramWidget < DashboardWidget
                 'YColor', theme.AxisColor);
             % Phase 3 — title as a header band above the axes (no in-axes overlap).
             obj.drawPanelTitle_(parentPanel, theme);
+            % A freshly created axes is always empty, so force a repopulate.
+            % Without this, a re-render (resize / theme toggle / page switch)
+            % recreates the axes but refresh() early-returns on ~Dirty (it was
+            % cleared by the previous plot) — leaving the histogram blank.
+            obj.Dirty = true;
             obj.refresh();
         end
 
@@ -74,8 +79,16 @@ classdef HistogramWidget < DashboardWidget
                 plot(obj.hAxes, xFit, yFit, 'r-', 'LineWidth', 1.5);
                 hold(obj.hAxes, 'off');
             end
-            % Title lives in a sibling header band (drawPanelTitle_), immune to
-            % newplot — no in-axes re-apply needed.
+            % Re-apply theme after plot commands. bar/plot run newplot, which
+            % resets the axes Color (background) and XColor/YColor to their
+            % light-mode defaults — a glaring white box in dark mode. Restore
+            % the themed colors every refresh. The title lives in a sibling
+            % header band (drawPanelTitle_, immune to newplot), so no in-axes
+            % title re-apply is needed.
+            theme = obj.getTheme();
+            set(obj.hAxes, 'Color', theme.WidgetBackground, ...
+                'XColor', theme.AxisColor, ...
+                'YColor', theme.AxisColor);
             obj.Dirty = false;
         end
 
