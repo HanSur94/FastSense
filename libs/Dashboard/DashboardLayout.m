@@ -423,6 +423,15 @@ classdef DashboardLayout < handle
                             'addCrosshairLinkToggle failed during realizeWidget: %s', ME.message);
                     end
                 end
+                % 260709-ikg — overflow '...' button. Runs AFTER all five
+                % folded buttons exist (crosshair is added last above) so the
+                % menu it builds can find every present folded control.
+                try
+                    obj.addOverflowMenu_(widget);
+                catch ME
+                    warning('DashboardLayout:overflowMenuFailed', ...
+                        'addOverflowMenu_ failed during realizeWidget: %s', ME.message);
+                end
                 % v4.0 260513-snt — settle final right-anchored button positions.
                 %   addInfoIcon runs BEFORE addCreateEventButton, so Info's
                 %   initial X collides with Create's slot. reflowChrome_ knows
@@ -434,6 +443,14 @@ classdef DashboardLayout < handle
                 % No chrome — render directly into the cell panel as before.
                 widget.render(widget.hCellPanel);
             end
+
+            % Phase 2 UI refresh — de-clutter. Hide the floating MATLAB axes
+            % exploration toolbar on every axes this widget just rendered. The
+            % dashboard supplies its own controls (widget button bar + time
+            % navigator), so the redundant per-axes toolbar is pure visual
+            % noise. Central here so it covers all widget types and re-applies
+            % on scroll-realize.
+            DashboardLayout.hideAxesToolbars_(widget.hCellPanel);
 
             widget.markRealized();
             widget.Dirty = false;
@@ -713,6 +730,7 @@ classdef DashboardLayout < handle
                 'Enable',          enableState, ...
                 'Tag',             'PlantLogToggleButton', ...
                 'TooltipString',   tipStr, ...
+                'Visible',         'off', ...
                 'Callback',        @(s, ~) obj.onPlantLogTogglePressed_(s, widget, engine));
             % 260526-info-icon-vanishes-after-plantlog-toggle:
             % The xPL above is hardcoded for a 3-button right cluster
@@ -725,6 +743,12 @@ classdef DashboardLayout < handle
             % toggle cycle. The initial call from realizeWidget is rescued
             % by the reflowChrome_ at the end of realizeWidget; subsequent
             % callback rebuilds need their own reflow.
+            try
+                obj.addOverflowMenu_(widget);
+            catch ME
+                warning('DashboardLayout:overflowMenuFailed', ...
+                    'addOverflowMenu_ failed during addPlantLogToggle: %s', ME.message);
+            end
             try
                 DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
             catch
@@ -811,7 +835,14 @@ classdef DashboardLayout < handle
                 'BackgroundColor', bgColor, ...
                 'Tag',             'CrosshairLinkButton', ...
                 'TooltipString',   tipStr, ...
+                'Visible',         'off', ...
                 'Callback',        @(s, ~) obj.onCrosshairLinkTogglePressed_(s, widget));
+            try
+                obj.addOverflowMenu_(widget);
+            catch ME
+                warning('DashboardLayout:overflowMenuFailed', ...
+                    'addOverflowMenu_ failed during addCrosshairLinkToggle: %s', ME.message);
+            end
             try
                 DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
             catch
@@ -1070,6 +1101,15 @@ classdef DashboardLayout < handle
 
             % Highlight the button matching the current YLimitMode.
             DashboardLayout.syncYLimitButtonsState_(bar, widget.YLimitMode);
+
+            % 260709-ikg — overflow '...' button. Rebuilt here too since
+            % this method is the callback-driven rebuild path for V/A.
+            try
+                obj.addOverflowMenu_(widget);
+            catch ME
+                warning('DashboardLayout:overflowMenuFailed', ...
+                    'addOverflowMenu_ failed during addYLimitButtons_: %s', ME.message);
+            end
         end
 
         function addYLimitButton_(obj, bar, widget, mode, x, glyph, tip, theme, tagName)
@@ -1087,6 +1127,7 @@ classdef DashboardLayout < handle
                 'BackgroundColor', theme.ToolbarBackground, ...
                 'Tag', tagName, ...
                 'TooltipString', tip, ...
+                'Visible', 'off', ...
                 'Callback', @(~,~) obj.onYLimitButtonClicked_(widget, mode, bar));
         end
 
@@ -1131,6 +1172,7 @@ classdef DashboardLayout < handle
                 'BackgroundColor', theme.ToolbarBackground, ...
                 'Tag', 'CreateEventButton', ...
                 'TooltipString', 'Create event from selection / current view', ...
+                'Visible', 'off', ...
                 'Callback', @(~,~) obj.invokeCreateEventCallback_(widget));
         end
 
@@ -1146,6 +1188,154 @@ classdef DashboardLayout < handle
             catch ME
                 warning('DashboardLayout:createEventCallbackFailed', ...
                     'Create-Event callback failed: %s', ME.message);
+            end
+        end
+
+        function addOverflowMenu_(obj, widget)
+        %ADDOVERFLOWMENU_ Add the overflow '...' button that folds the five
+        %   secondary chrome buttons (X/V/A/L/+) behind a single context
+        %   menu (redline (e), 260709-ikg). Idempotent: any prior
+        %   OverflowMenuButton + stale OverflowContextMenu are deleted
+        %   before the fresh button is created. No-op (returns without
+        %   creating a button) when none of the five folded buttons are
+        %   present on this bar — non-fold widgets get no ... button.
+            if isempty(widget.ParentTheme) || ~isstruct(widget.ParentTheme)
+                theme = DashboardTheme('light');
+            else
+                theme = widget.ParentTheme;
+            end
+            bar = obj.getOrCreateButtonBar_(widget);
+            % Idempotent: clear any prior OverflowMenuButton on this bar.
+            prior = findobj(bar, 'Tag', 'OverflowMenuButton', '-depth', 1);
+            if ~isempty(prior)
+                try delete(prior); catch, end
+            end
+            % Idempotent: clear any stale OverflowContextMenu on the figure
+            % so context menus never accumulate across rebuilds.
+            fig = ancestor(bar, 'figure');
+            if ~isempty(fig) && ishandle(fig)
+                priorMenu = findobj(fig, 'Tag', 'OverflowContextMenu');
+                if ~isempty(priorMenu)
+                    try delete(priorMenu); catch, end
+                end
+            end
+            % GUARD: only fold-eligible widgets (>=1 of the five folded
+            % buttons present on the bar) get an overflow button.
+            foldedTags = {'CrosshairLinkButton', 'YLimitVisibleBtn', ...
+                'YLimitAllBtn', 'PlantLogToggleButton', 'CreateEventButton'};
+            hasAnyFolded = false;
+            for i = 1:numel(foldedTags)
+                if ~isempty(findobj(bar, 'Tag', foldedTags{i}, '-depth', 1))
+                    hasAnyFolded = true;
+                    break;
+                end
+            end
+            if ~hasAnyFolded
+                return;
+            end
+            uicontrol('Parent', bar, ...
+                'Style', 'pushbutton', ...
+                'String', char(8230), ...
+                'Units', 'pixels', ...
+                'Position', [2 2 24 24], ...
+                'FontSize', 11, ...
+                'FontWeight', 'bold', ...
+                'ForegroundColor', theme.ToolbarFontColor, ...
+                'BackgroundColor', theme.ToolbarBackground, ...
+                'Tag', 'OverflowMenuButton', ...
+                'TooltipString', 'More chart controls', ...
+                'Callback', @(~,~) obj.showOverflowMenu_(widget, bar));
+            try
+                DashboardLayout.reflowChrome_(widget.hCellPanel, 28, 2);
+            catch
+                % Best-effort self-anchor — must not break button creation.
+            end
+        end
+
+        function showOverflowMenu_(obj, widget, bar)
+        %SHOWOVERFLOWMENU_ Build + post a FRESH uicontextmenu whose items
+        %   route to the SAME action methods the folded buttons drove
+        %   (260709-ikg). Rebuilt from scratch on every click so
+        %   Checked/label state always reflects the current widget state.
+        %   Entire body wrapped in try/catch: a menu-post failure must never
+        %   crash the dashboard refresh loop (mirrors the addPlantLogToggle /
+        %   addCrosshairLinkToggle guard pattern).
+            try
+                if isempty(bar) || ~ishandle(bar)
+                    return;
+                end
+                fig = ancestor(bar, 'figure');
+                if isempty(fig) || ~ishandle(fig)
+                    return;
+                end
+                % Delete any prior context menu before building a fresh one.
+                prior = findobj(fig, 'Tag', 'OverflowContextMenu');
+                if ~isempty(prior)
+                    try delete(prior); catch, end
+                end
+                cm = uicontextmenu('Parent', fig, 'Tag', 'OverflowContextMenu');
+
+                hLink = findobj(bar, 'Tag', 'CrosshairLinkButton', '-depth', 1);
+                if ~isempty(hLink) && ishandle(hLink(1))
+                    if widget.CrosshairLinked
+                        linkLabel   = 'Unlink crosshair (stop mirroring)';
+                        linkChecked = 'on';
+                    else
+                        linkLabel   = 'Link crosshair across page';
+                        linkChecked = 'off';
+                    end
+                    uimenu(cm, 'Label', linkLabel, 'Checked', linkChecked, ...
+                        'Callback', @(~,~) obj.onCrosshairLinkTogglePressed_(hLink(1), widget));
+                end
+
+                visBtn = findobj(bar, 'Tag', 'YLimitVisibleBtn', '-depth', 1);
+                if ~isempty(visBtn) && ishandle(visBtn(1))
+                    visChecked = 'off';
+                    if strcmp(widget.YLimitMode, 'auto-visible')
+                        visChecked = 'on';
+                    end
+                    uimenu(cm, 'Label', 'Auto-fit Y to visible X range', ...
+                        'Checked', visChecked, ...
+                        'Callback', @(~,~) obj.onYLimitButtonClicked_(widget, 'auto-visible', bar));
+                end
+
+                allBtn = findobj(bar, 'Tag', 'YLimitAllBtn', '-depth', 1);
+                if ~isempty(allBtn) && ishandle(allBtn(1))
+                    allChecked = 'off';
+                    if strcmp(widget.YLimitMode, 'auto-all')
+                        allChecked = 'on';
+                    end
+                    uimenu(cm, 'Label', 'Auto-fit Y to all data', ...
+                        'Checked', allChecked, ...
+                        'Callback', @(~,~) obj.onYLimitButtonClicked_(widget, 'auto-all', bar));
+                end
+
+                hPlant = findobj(bar, 'Tag', 'PlantLogToggleButton', '-depth', 1);
+                if ~isempty(hPlant) && ishandle(hPlant(1)) && ...
+                        strcmp(get(hPlant(1), 'Enable'), 'on')
+                    if isa(widget, 'FastSenseWidget') && widget.ShowPlantLog
+                        plLabel = 'Hide plant log lines';
+                    else
+                        plLabel = 'Show plant log lines';
+                    end
+                    uimenu(cm, 'Label', plLabel, ...
+                        'Callback', @(~,~) obj.onPlantLogTogglePressed_(hPlant(1), widget, obj.EngineRef));
+                end
+
+                createBtn = findobj(bar, 'Tag', 'CreateEventButton', '-depth', 1);
+                if ~isempty(createBtn) && ishandle(createBtn(1))
+                    uimenu(cm, 'Label', 'Create event from selection / current view', ...
+                        'Callback', @(~,~) obj.invokeCreateEventCallback_(widget));
+                end
+
+                % Post it at the current mouse position (classic-figure
+                % context-menu mechanism — Position/Visible are settable).
+                cp = get(fig, 'CurrentPoint');
+                set(cm, 'Position', cp);
+                set(cm, 'Visible', 'on');
+            catch ME
+                warning('DashboardLayout:overflowMenuFailed', ...
+                    'Overflow menu failed: %s', ME.message);
             end
         end
     end
@@ -1234,12 +1424,30 @@ classdef DashboardLayout < handle
                 % 260602-mri — CrosshairLinkButton: LEFTMOST chrome button,
                 % sits to the LEFT of the V/A cluster.
                 % Assumption: FastSenseWidget always has V/A, so xVisible is
-                % always set when CrosshairLinkButton is present. Add a brief
-                % comment noting the leftmost-button assumption.
+                % always set when CrosshairLinkButton is present. xLink is
+                % hoisted (computed unconditionally) so 260709-ikg's overflow
+                % anchor below can reuse it without recomputing.
+                xLink = xVisible - gap - bw;
                 linkBtn = findobj(bar(1), 'Tag', 'CrosshairLinkButton', '-depth', 1);
                 if ~isempty(linkBtn) && ishandle(linkBtn(1))
-                    xLink = xVisible - gap - bw;
                     set(linkBtn(1), 'Position', [xLink, 2, bw, bw]);
+                end
+                % 260709-ikg — OverflowMenuButton ('...') reuses the
+                % leftmost folded slot per redline (e): prefer the
+                % CrosshairLinkButton slot when present, else the
+                % YLimitVisibleBtn slot, else the YLimitAllBtn slot. The
+                % invisible folded buttons keep their computed positions
+                % (they're hidden, so no visual conflict with '...').
+                overflow = findobj(bar(1), 'Tag', 'OverflowMenuButton', '-depth', 1);
+                if ~isempty(overflow) && ishandle(overflow(1))
+                    if ~isempty(linkBtn) && ishandle(linkBtn(1))
+                        xOverflow = xLink;
+                    elseif ~isempty(visibleBtn) && ishandle(visibleBtn(1))
+                        xOverflow = xVisible;
+                    else
+                        xOverflow = xAll;
+                    end
+                    set(overflow(1), 'Position', [xOverflow, 2, bw, bw]);
                 end
             end
             if ~isempty(content) && ishandle(content(1))
@@ -1346,6 +1554,24 @@ classdef DashboardLayout < handle
             x = pp(3) - btnW - offsetFromRight;
             y = pp(4) - btnH - 4;
             set(btn, 'Position', [x y btnW btnH]);
+        end
+
+        function hideAxesToolbars_(root)
+        %HIDEAXESTOOLBARS_ Hide the MATLAB exploration toolbar on all axes under root.
+        %   Walks every axes below the given handle and sets its Toolbar
+        %   Visible = 'off'. Wrapped per-axes in try/catch so an axes without
+        %   a Toolbar (or a deleted handle) never aborts the realize pass.
+            if isempty(root) || ~ishandle(root)
+                return;
+            end
+            axs = findall(root, 'Type', 'axes');
+            for i = 1:numel(axs)
+                try
+                    axs(i).Toolbar.Visible = 'off';
+                catch
+                    % axes has no toolbar / handle went stale — ignore
+                end
+            end
         end
 
     end

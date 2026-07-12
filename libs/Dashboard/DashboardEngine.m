@@ -509,6 +509,25 @@ classdef DashboardEngine < handle
             [effToolbarH, effPageBarH, effTimeH] = obj.applyChromeVisibility(toolbarH, pageBarH);
             obj.Layout.ContentArea = [0, effTimeH, ...
                 1, 1 - obj.BannerHeight - effToolbarH - effPageBarH - effTimeH];
+            % Phase 1 UI refresh — grid breathing room. Pull inter-widget
+            % gutters + outer padding from the theme (isfield-guarded so older
+            % serialized themes still get the refreshed spacing rather than a
+            % flush grid). computePosition already consumes these knobs.
+            if isfield(themeStruct, 'WidgetGapH')
+                obj.Layout.GapH = themeStruct.WidgetGapH;
+            else
+                obj.Layout.GapH = 0.006;
+            end
+            if isfield(themeStruct, 'WidgetGapV')
+                obj.Layout.GapV = themeStruct.WidgetGapV;
+            else
+                obj.Layout.GapV = 0.010;
+            end
+            if isfield(themeStruct, 'DashboardPad')
+                obj.Layout.Padding = themeStruct.DashboardPad;
+            else
+                obj.Layout.Padding = [0.008 0.010 0.008 0.010];
+            end
             obj.Layout.DetachCallback = @(w) obj.detachWidget(w);
             % 260513-snt — wire the per-FastSenseWidget '+Event' button.
             obj.Layout.CreateEventCallback = @(w) obj.openCreateEventDialog_(w);
