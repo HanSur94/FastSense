@@ -33,7 +33,7 @@ jobs:
       concurrency: ${{ steps.filter.outputs.concurrency }}
       test_pattern: ${{ steps.test_pattern.outputs.pattern }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         id: filter
         with:
@@ -160,7 +160,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install MISS_HIT
         run: pip install miss_hit
@@ -189,7 +189,7 @@ jobs:
     if: github.event_name != 'pull_request' || needs.changes.outputs.matlab == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.mex == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v3
@@ -262,7 +262,7 @@ jobs:
       FASTSENSE_SKIP_BUILD: "1"
       FASTSENSE_RESULTS_FILE: /tmp/test-results.txt
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Download MEX binaries
         uses: actions/download-artifact@v8
@@ -330,7 +330,7 @@ jobs:
       matrix:
         os: [macos-latest]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Octave
         run: brew install octave
@@ -359,7 +359,7 @@ jobs:
       - name: Allow paths with colons (wiki files)
         run: git config --global core.protectNTFS false
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             libs
@@ -468,7 +468,7 @@ jobs:
       # Cost: ~30 s per CI run on top of the standard batch.
       FASTSENSE_STRESS_4: "1"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup MATLAB
         uses: matlab-actions/setup-matlab@v3
@@ -625,7 +625,7 @@ jobs:
       # Sparse-checkout skips wiki/ entirely on all OSes — fixes Windows checkout
       # by avoiding the colon-filename files, and trims clone size on the others.
       # Tests need libs/, tests/, scripts/, install.m. Nothing else.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             libs
