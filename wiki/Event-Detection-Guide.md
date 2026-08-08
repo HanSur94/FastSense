@@ -210,6 +210,10 @@ viewer.refreshFromFile();
 
 % Update with new events
 viewer.update(newEvents);
+
+% Save the rendered timeline as an image (format inferred from extension)
+viewer.exportImage('events.png');
+viewer.exportImage('events.jpg', 'jpeg');
 ```
 
 The EventViewer features:
@@ -217,7 +221,7 @@ The EventViewer features:
 - **Filterable table**: Filter by sensor, threshold, date range
 - **Click interaction**: Click Gantt bars to highlight table rows
 - **Auto-refresh**: Polls the source file for live updates
-- **Export**: Context menu options for data export
+- **Image export**: `exportImage(filepath, format)` saves the rendered timeline figure as PNG or JPEG at 150 DPI (format inferred from the file extension when omitted). Requires the viewer figure to be open — raises `EventViewer:notRendered` otherwise, or `EventViewer:unknownImageFormat` for an unsupported format.
 
 ## Notification System
 
