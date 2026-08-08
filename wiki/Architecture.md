@@ -80,7 +80,7 @@ FastPlot/
 │   └── WebBridge/                    # TCP server for web visualization
 │       ├── WebBridge.m
 │       └── WebBridgeProtocol.m
-├── examples/                         # 40+ runnable examples
+├── examples/                         # 70+ runnable examples
 └── tests/                            # 30+ test suites
 ```
 
